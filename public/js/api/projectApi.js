@@ -31,10 +31,18 @@ export const projectApi = {
   getFeatured: ()         => request(`${BASE}/featured`),
   getOne:      (id)       => request(`${BASE}/${id}`),
   getMedia:    (id)       => request(`${BASE}/${id}/media`),
-  create:      (data)     => request(BASE, { method: 'POST', body: JSON.stringify(data) }),
-  update:      (id, data) => request(`${BASE}/${id}`, { method: 'PUT',   body: JSON.stringify(data) }),
-  patch:       (id, data) => request(`${BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  remove:      (id)       => request(`${BASE}/${id}`, { method: 'DELETE' }),
+  async create(data) {
+    return request(BASE, { method: 'POST', headers: await csrfHeaders(), body: JSON.stringify(data) });
+  },
+  async update(id, data) {
+    return request(`${BASE}/${id}`, { method: 'PUT', headers: await csrfHeaders(), body: JSON.stringify(data) });
+  },
+  async patch(id, data) {
+    return request(`${BASE}/${id}`, { method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify(data) });
+  },
+  async remove(id) {
+    return request(`${BASE}/${id}`, { method: 'DELETE', headers: await csrfHeaders() });
+  },
 
   // ── Media management ──────────────────────────────────────────────────────
 

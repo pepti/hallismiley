@@ -61,9 +61,11 @@ function matchRoute(path) {
 
 export class Router {
   constructor(mountEl, navBar) {
-    this.mountEl = mountEl;
-    this.navBar  = navBar;
-    this._navigate = this._navigate.bind(this);
+    this.mountEl      = mountEl;
+    this.navBar       = navBar;
+    this._navigate    = this._navigate.bind(this);
+    this._currentView = null;
+    this._navSeq      = 0;
   }
 
   init() {
@@ -73,6 +75,7 @@ export class Router {
   }
 
   async _navigate() {
+    const seq  = ++this._navSeq;
     const raw  = window.location.hash.replace('#', '') || '/';
     const { path, qs } = parseHash(raw);
 
@@ -94,6 +97,18 @@ export class Router {
     const { factory, params, pattern } = matchRoute(path);
     const view = factory(params, qs);
     const el   = await view.render();
+
+    // Discard if a newer navigation started while we were awaiting render
+    if (seq !== this._navSeq) {
+      if (typeof view.destroy === 'function') view.destroy();
+      return;
+    }
+
+    // Destroy the outgoing view before replacing it
+    if (this._currentView && typeof this._currentView.destroy === 'function') {
+      this._currentView.destroy();
+    }
+    this._currentView = view;
 
     this.mountEl.innerHTML = '';
     this.mountEl.appendChild(el);

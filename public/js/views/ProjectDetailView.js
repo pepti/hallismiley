@@ -12,17 +12,25 @@ const CATEGORY_HERO = {
 
 export class ProjectDetailView {
   constructor(id) {
-    this.id        = id;
-    this._lb       = null;
-    this._media    = [];
-    this._project  = null;
-    this._editMode = false;
-    this._view     = null;
+    this.id            = id;
+    this._lb           = null;
+    this._media        = [];
+    this._project      = null;
+    this._editMode     = false;
+    this._view         = null;
+    this._onAuthChange = null;
   }
 
   async render() {
     this._view = document.createElement('div');
     this._view.className = 'view';
+
+    // Re-render when auth state changes (e.g. user logs in while on this page)
+    // so the Edit Project button appears/disappears without a full page reload.
+    this._onAuthChange = () => {
+      if (this._project && !this._editMode) this._renderContent();
+    };
+    window.addEventListener('authchange', this._onAuthChange);
 
     try {
       const [project, media] = await Promise.all([
@@ -506,8 +514,12 @@ export class ProjectDetailView {
     el.className   = `pd-upload-status${type ? ` pd-upload-status--${type}` : ''}`;
   }
 
-  // Called by the router when navigating away, to clean up the lightbox
+  // Called by the router when navigating away, to clean up event listeners
   destroy() {
+    if (this._onAuthChange) {
+      window.removeEventListener('authchange', this._onAuthChange);
+      this._onAuthChange = null;
+    }
     if (this._lb) {
       this._lb.destroy();
       this._lb = null;
