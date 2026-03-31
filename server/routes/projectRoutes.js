@@ -1,18 +1,22 @@
 const express = require('express');
+const multer  = require('multer');
 const router  = express.Router();
-const projectController               = require('../controllers/projectController');
-const { validateProject, validateQuery } = require('../middleware/validate');
-const { requireAuth }                 = require('../middleware/auth');
-const { requireRole }                 = require('../auth/roles');
-const { csrfProtect }                 = require('../middleware/csrf');
 
-// Public read endpoints (A03: query params validated)
-router.get('/',            validateQuery, projectController.getAll);
-router.get('/featured',    projectController.getFeatured);
-router.get('/:id/media',   projectController.getMedia);
-router.get('/:id',         projectController.getOne);
+const projectController                          = require('../controllers/projectController');
+const { validateProject, validateQuery,
+        validateMediaUpdate, validateReorder }   = require('../middleware/validate');
+const { requireAuth }                            = require('../middleware/auth');
+const { requireRole }                            = require('../auth/roles');
+const { csrfProtect }                            = require('../middleware/csrf');
+const { createProjectUpload }                    = require('../middleware/upload');
 
-// Create / update: admin or moderator
+// ── Public read endpoints (A03: query params validated) ───────────────────────
+router.get('/',          validateQuery, projectController.getAll);
+router.get('/featured',  projectController.getFeatured);
+router.get('/:id/media', projectController.getMedia);
+router.get('/:id',       projectController.getOne);
+
+// ── Project create / update (admin + moderator) ────────────────────────────────
 router.post('/',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateProject,
   projectController.create);
@@ -25,9 +29,46 @@ router.patch('/:id',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateProject,
   projectController.update);
 
-// Delete: admin only
+// ── Media management (admin + moderator) ──────────────────────────────────────
+// NOTE: /:id/media/reorder must be before /:id/media/:mediaId so Express
+// does not treat the literal string "reorder" as a numeric mediaId param.
+router.patch('/:id/media/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateReorder,
+  projectController.reorderMedia);
+
+router.patch('/:id/cover',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  projectController.setCover);
+
+// File upload — multer processes the multipart body; CSRF is still enforced via
+// the X-CSRF-Token *header* which is available before the body is parsed.
+router.post('/:id/media',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  (req, res, next) => {
+    const upload = createProjectUpload(req.params.id);
+    upload.single('file')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: `Upload error: ${err.message}`, code: 400 });
+      }
+      if (err) {
+        return res.status(400).json({ error: err.message, code: 400 });
+      }
+      next();
+    });
+  },
+  projectController.addMedia);
+
+router.patch('/:id/media/:mediaId',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateMediaUpdate,
+  projectController.updateMedia);
+
+// ── Delete (admin only) ────────────────────────────────────────────────────────
 router.delete('/:id',
   requireAuth, requireRole('admin'), csrfProtect,
   projectController.remove);
+
+router.delete('/:id/media/:mediaId',
+  requireAuth, requireRole('admin'), csrfProtect,
+  projectController.deleteMedia);
 
 module.exports = router;

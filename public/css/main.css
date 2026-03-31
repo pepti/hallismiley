@@ -5,6 +5,7 @@
 @import './home.css';
 @import './user-system.css';
 @import './gallery.css';
+@import './project-edit.css';
 
 body {
   font-family: var(--font-sans);

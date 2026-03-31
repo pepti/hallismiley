@@ -1,5 +1,21 @@
-const Project      = require('../models/Project');
-const db           = require('../config/database');
+const fs      = require('fs');
+const path    = require('path');
+const Project = require('../models/Project');
+const db      = require('../config/database');
+const { MAX_IMAGE_SIZE } = require('../middleware/upload');
+
+// Resolve path for a stored file_path like /assets/projects/5/img.jpg
+function _diskPath(filePath) {
+  return path.join(__dirname, '../../public', filePath);
+}
+
+// Safely delete a file from disk (does not throw on missing file)
+function _tryUnlink(filePath) {
+  if (!filePath || !filePath.startsWith('/assets/projects/')) return;
+  try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
+}
+
+const MEDIA_COLUMNS = 'id, project_id, file_path, media_type, sort_order, caption, created_at';
 
 const projectController = {
   async getAll(req, res, next) {
@@ -52,13 +68,217 @@ const projectController = {
       if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
 
       const { rows } = await db.query(
-        `SELECT id, project_id, file_path, media_type, sort_order, caption, created_at
+        `SELECT ${MEDIA_COLUMNS}
          FROM project_media
          WHERE project_id = $1
          ORDER BY sort_order ASC, id ASC`,
         [req.params.id]
       );
       res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  // ── Media management ───────────────────────────────────────────────────────
+
+  async addMedia(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const project   = await Project.findById(projectId);
+      if (!project) {
+        if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
+        return res.status(404).json({ error: 'Project not found', code: 404 });
+      }
+
+      let filePath, mediaType, caption, sortOrder;
+
+      if (req.file) {
+        // Multipart file upload
+        mediaType = req.file.mimetype.startsWith('image/') ? 'image' : 'video';
+
+        // Enforce per-type size limit (multer allows up to MAX_VIDEO_SIZE globally)
+        if (mediaType === 'image' && req.file.size > MAX_IMAGE_SIZE) {
+          _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
+          return res.status(400).json({ error: 'Image file size must not exceed 10 MB', code: 400 });
+        }
+
+        filePath  = `/assets/projects/${projectId}/${req.file.filename}`;
+        caption   = req.body.caption   || null;
+        sortOrder = req.body.sort_order ? parseInt(req.body.sort_order, 10) : 0;
+      } else {
+        // JSON body with existing file_path
+        const { file_path, media_type, caption: cap, sort_order } = req.body;
+
+        if (!file_path || typeof file_path !== 'string') {
+          return res.status(400).json({ error: 'file_path is required', code: 400 });
+        }
+        if (!['image', 'video'].includes(media_type)) {
+          return res.status(400).json({ error: 'media_type must be image or video', code: 400 });
+        }
+
+        filePath  = file_path;
+        mediaType = media_type;
+        caption   = cap  || null;
+        sortOrder = sort_order !== undefined ? parseInt(sort_order, 10) : 0;
+      }
+
+      const { rows } = await db.query(
+        `INSERT INTO project_media (project_id, file_path, media_type, sort_order, caption)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING ${MEDIA_COLUMNS}`,
+        [projectId, filePath, mediaType, sortOrder, caption]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      if (req.file) {
+        _tryUnlink(`/assets/projects/${req.params.id}/${req.file.filename}`);
+      }
+      next(err);
+    }
+  },
+
+  async updateMedia(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const mediaId   = Number(req.params.mediaId);
+
+      // Verify project exists
+      const project = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      // Only update fields that are allowed
+      const { caption, sort_order } = req.body;
+      const sets   = [];
+      const params = [];
+
+      if (caption !== undefined) {
+        params.push(caption);
+        sets.push(`caption = $${params.length}`);
+      }
+      if (sort_order !== undefined) {
+        params.push(parseInt(sort_order, 10));
+        sets.push(`sort_order = $${params.length}`);
+      }
+
+      if (sets.length === 0) {
+        // Nothing to update — return current state
+        const { rows } = await db.query(
+          `SELECT ${MEDIA_COLUMNS} FROM project_media WHERE id = $1 AND project_id = $2`,
+          [mediaId, projectId]
+        );
+        if (!rows[0]) return res.status(404).json({ error: 'Media item not found', code: 404 });
+        return res.json(rows[0]);
+      }
+
+      params.push(mediaId);
+      params.push(projectId);
+      const { rows } = await db.query(
+        `UPDATE project_media
+         SET ${sets.join(', ')}
+         WHERE id = $${params.length - 1} AND project_id = $${params.length}
+         RETURNING ${MEDIA_COLUMNS}`,
+        params
+      );
+      if (!rows[0]) return res.status(404).json({ error: 'Media item not found', code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async deleteMedia(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const mediaId   = Number(req.params.mediaId);
+
+      const project = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const { rows } = await db.query(
+        `DELETE FROM project_media
+         WHERE id = $1 AND project_id = $2
+         RETURNING file_path`,
+        [mediaId, projectId]
+      );
+      if (!rows[0]) return res.status(404).json({ error: 'Media item not found', code: 404 });
+
+      // Remove file from disk if it is a locally-stored asset
+      _tryUnlink(rows[0].file_path);
+
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  async reorderMedia(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+
+      const project = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const { order } = req.body; // [{ id, sort_order }, ...]
+
+      // Verify all supplied IDs belong to this project
+      const ids = order.map(item => item.id);
+      const { rows: existing } = await db.query(
+        `SELECT id FROM project_media WHERE project_id = $1 AND id = ANY($2::int[])`,
+        [projectId, ids]
+      );
+      if (existing.length !== ids.length) {
+        return res.status(400).json({
+          error: 'One or more media IDs do not belong to this project',
+          code: 400,
+        });
+      }
+
+      // Batch update inside a transaction
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const item of order) {
+          await client.query(
+            'UPDATE project_media SET sort_order = $1 WHERE id = $2 AND project_id = $3',
+            [item.sort_order, item.id, projectId]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      const { rows } = await db.query(
+        `SELECT ${MEDIA_COLUMNS}
+         FROM project_media
+         WHERE project_id = $1
+         ORDER BY sort_order ASC, id ASC`,
+        [projectId]
+      );
+      res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  async setCover(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+
+      const project = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const { media_id } = req.body;
+      if (!media_id || !Number.isInteger(Number(media_id))) {
+        return res.status(400).json({ error: 'media_id is required', code: 400 });
+      }
+
+      const { rows: mediaRows } = await db.query(
+        `SELECT file_path FROM project_media WHERE id = $1 AND project_id = $2`,
+        [Number(media_id), projectId]
+      );
+      if (!mediaRows[0]) {
+        return res.status(404).json({ error: 'Media item not found', code: 404 });
+      }
+
+      const updated = await Project.update(projectId, { image_url: mediaRows[0].file_path });
+      res.json(updated);
     } catch (err) { next(err); }
   },
 };

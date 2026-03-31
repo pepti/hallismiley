@@ -57,10 +57,14 @@ function validateProject(req, res, next) {
   if (featured !== undefined && typeof featured !== 'boolean') {
     errors.push('featured must be a boolean');
   }
-  // A03: only allow https:// image URLs — blocks javascript:, data:, and http:
+  // A03: allow https:// external URLs and /assets/ relative paths (for cover images
+  // set via the media management API).  Blocks javascript:, data:, and plain http:.
   if (image_url !== undefined && image_url !== null && image_url !== '') {
-    if (typeof image_url !== 'string' || !/^https:\/\/.+/i.test(image_url))
-      errors.push('image_url must be a valid https:// URL');
+    if (typeof image_url !== 'string') {
+      errors.push('image_url must be a string');
+    } else if (!/^https:\/\/.+/i.test(image_url) && !/^\/assets\//i.test(image_url)) {
+      errors.push('image_url must be a valid https:// URL or a relative /assets/ path');
+    }
   }
 
   if (errors.length) {
@@ -225,6 +229,62 @@ function validatePasswordChange(req, res, next) {
   next();
 }
 
+// ── Media validation ──────────────────────────────────────────────────────────
+
+const MAX_CAPTION_LEN = 500;
+const MAX_REORDER_LEN = 1000;
+
+// PATCH /api/v1/projects/:id/media/:mediaId
+function validateMediaUpdate(req, res, next) {
+  const { caption, sort_order } = req.body;
+  const errors = [];
+
+  if (caption !== undefined && caption !== null) {
+    if (typeof caption !== 'string')
+      errors.push('caption must be a string');
+    else if (caption.length > MAX_CAPTION_LEN)
+      errors.push(`caption must be at most ${MAX_CAPTION_LEN} characters`);
+  }
+
+  if (sort_order !== undefined) {
+    const s = Number(sort_order);
+    if (!Number.isInteger(s) || s < 0)
+      errors.push('sort_order must be a non-negative integer');
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
+// PATCH /api/v1/projects/:id/media/reorder
+function validateReorder(req, res, next) {
+  const { order } = req.body;
+  const errors = [];
+
+  if (!Array.isArray(order) || order.length === 0) {
+    errors.push('order must be a non-empty array');
+  } else if (order.length > MAX_REORDER_LEN) {
+    errors.push(`order must contain at most ${MAX_REORDER_LEN} items`);
+  } else {
+    for (let i = 0; i < order.length; i++) {
+      const item = order[i];
+      if (typeof item !== 'object' || item === null) {
+        errors.push(`order[${i}] must be an object`);
+        continue;
+      }
+      const id  = Number(item.id);
+      const so  = Number(item.sort_order);
+      if (!Number.isInteger(id) || id <= 0)
+        errors.push(`order[${i}].id must be a positive integer`);
+      if (!Number.isInteger(so) || so < 0)
+        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+    }
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
@@ -232,5 +292,7 @@ module.exports = {
   validateResetPassword,
   validateProfileUpdate,
   validatePasswordChange,
+  validateMediaUpdate,
+  validateReorder,
   ALLOWED_AVATARS,
 };
