@@ -1,13 +1,7 @@
-import { getToken } from '../services/auth.js';
-
 const BASE = '/api/v1/projects';
 
 async function request(url, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
-
-  // Attach Bearer token for write operations
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(url, { headers, credentials: 'include', ...options });
   if (res.status === 204) return null;
