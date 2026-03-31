@@ -47,7 +47,7 @@ describe('POST /api/v1/contact — valid submissions', () => {
 
 describe('POST /api/v1/contact — validation errors', () => {
   test('missing name returns 400', async () => {
-    const { name, ...rest } = validPayload();
+    const { name: _name, ...rest } = validPayload();
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
@@ -55,7 +55,7 @@ describe('POST /api/v1/contact — validation errors', () => {
   });
 
   test('missing email returns 400', async () => {
-    const { email, ...rest } = validPayload();
+    const { email: _email, ...rest } = validPayload();
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
@@ -72,7 +72,7 @@ describe('POST /api/v1/contact — validation errors', () => {
   });
 
   test('missing message returns 400', async () => {
-    const { message, ...rest } = validPayload();
+    const { message: _message, ...rest } = validPayload();
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);

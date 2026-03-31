@@ -1,8 +1,6 @@
 // HomeView — League of Legends inspired layout
 // Sections: Hero → Splash → News → Projects → Skills → Stats → Contact → Footer
 
-const TODAY = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
-
 // ── Bespoke news items — real work, real dates ─────────────────────────────
 const NEWS = [
   {

@@ -26,7 +26,7 @@
   function setConsent(value) {
     try {
       localStorage.setItem(STORAGE_KEY, value);
-    } catch (_) {}
+    } catch (_) { /* ignore storage errors */ }
   }
 
   function loadAnalytics() {
