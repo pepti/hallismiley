@@ -1,17 +1,6 @@
 import { projectApi } from '../api/projectApi.js';
-import { escHtml } from '../utils/escHtml.js';
-
-// Iceland placeholder images rotated per-project
-const DETAIL_IMAGES = [
-  'https://images.unsplash.com/photo-1477346611705-65d1883cee1e?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1562529074-e3ec282e9b60?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?w=1200&h=800&fit=crop&q=80&auto=format',
-  'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1200&h=800&fit=crop&q=80&auto=format',
-];
+import { escHtml }    from '../utils/escHtml.js';
+import { Lightbox }   from '../components/Lightbox.js';
 
 const CATEGORY_HERO = {
   tech:        'https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=1920&h=1080&fit=crop&q=80&auto=format',
@@ -22,7 +11,9 @@ const CATEGORY_HERO = {
 
 export class ProjectDetailView {
   constructor(id) {
-    this.id = id;
+    this.id       = id;
+    this._lb      = null;
+    this._media   = [];
   }
 
   async render() {
@@ -30,9 +21,15 @@ export class ProjectDetailView {
     view.className = 'view';
 
     try {
-      const project = await projectApi.getOne(this.id);
+      const [project, media] = await Promise.all([
+        projectApi.getOne(this.id),
+        projectApi.getMedia(this.id).catch(() => []),
+      ]);
       if (!project) throw new Error('Not found');
+
+      this._media = media || [];
       view.innerHTML = this._buildPage(project);
+      this._attachGallery(view);
     } catch {
       view.innerHTML = `
         <div class="pd-error">
@@ -46,7 +43,7 @@ export class ProjectDetailView {
 
   _buildPage(p) {
     const heroImg = p.image_url || CATEGORY_HERO[p.category] || CATEGORY_HERO.tech;
-    const photos  = this._pickImages(p.id, 4);
+    const hasMedia = this._media.length > 0;
 
     return `
       <div class="pd-hero">
@@ -80,31 +77,21 @@ export class ProjectDetailView {
             </p>
           </section>
 
+          ${p.tools_used && p.tools_used.length ? `
           <section class="pd-section" aria-label="Tools used">
             <h2 class="pd-section__heading">Tools &amp; Technologies</h2>
             <div class="pd-tools">
               ${p.tools_used.map(t => `<span class="tool-tag tool-tag--large">${escHtml(t)}</span>`).join('')}
             </div>
-          </section>
+          </section>` : ''}
 
-          <section class="pd-section" aria-label="Project videos">
-            <h2 class="pd-section__heading">Process Videos</h2>
-            <div class="pd-video-grid">
-              ${this._videoPlaceholder('Build walkthrough')}
-              ${this._videoPlaceholder('Final reveal')}
+          ${hasMedia ? `
+          <section class="pd-section pd-gallery-section" aria-label="Project gallery">
+            <h2 class="pd-section__heading">Project Gallery</h2>
+            <div class="gallery-grid" role="list">
+              ${this._media.map((item, i) => this._buildGridItem(item, i)).join('')}
             </div>
-          </section>
-
-          <section class="pd-section" aria-label="Project photos">
-            <h2 class="pd-section__heading">Project Photos</h2>
-            <div class="pd-photo-grid">
-              ${photos.map((url, i) => `
-                <figure class="pd-photo">
-                  <img src="${url}" alt="Project photo ${i + 1}" loading="lazy">
-                </figure>
-              `).join('')}
-            </div>
-          </section>
+          </section>` : ''}
 
           <div class="pd-back-wrap">
             <a href="#/projects" class="pd-back-btn">← Back to All Projects</a>
@@ -115,26 +102,67 @@ export class ProjectDetailView {
     `;
   }
 
-  _videoPlaceholder(label) {
+  _buildGridItem(item, index) {
+    const isVideo = item.media_type === 'video';
+    const thumb   = isVideo
+      ? ''
+      : `<img
+           class="gallery-grid__img"
+           src="${escHtml(item.file_path)}"
+           alt="${item.caption ? escHtml(item.caption) : `Photo ${index + 1}`}"
+           loading="lazy"
+         >`;
+
     return `
-      <div class="pd-video-placeholder" aria-label="${escHtml(label)}">
-        <div class="pd-video-placeholder__inner">
-          <svg class="pd-video-placeholder__play" viewBox="0 0 80 80" aria-hidden="true">
-            <circle cx="40" cy="40" r="38" fill="rgba(1,10,19,0.6)" stroke="rgba(200,170,110,0.5)" stroke-width="1.5"/>
+      <div
+        class="gallery-grid__item${isVideo ? ' gallery-grid__item--video' : ''}"
+        role="listitem"
+        data-gallery-index="${index}"
+        tabindex="0"
+        aria-label="${isVideo ? 'Play video' : `Open photo ${index + 1}`}"
+      >
+        ${thumb}
+        ${isVideo ? `
+        <div class="gallery-grid__video-thumb" aria-hidden="true">
+          <svg class="gallery-grid__play" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="38" fill="rgba(1,10,19,0.7)" stroke="rgba(200,170,110,0.5)" stroke-width="1.5"/>
             <polygon points="32,24 60,40 32,56" fill="#C8AA6E"/>
           </svg>
-          <p class="pd-video-placeholder__label">${escHtml(label)}</p>
-          <p class="pd-video-placeholder__note">Video coming soon</p>
-        </div>
+          <span class="gallery-grid__video-label">Video</span>
+        </div>` : `
+        <div class="gallery-grid__overlay" aria-hidden="true">
+          <svg class="gallery-grid__zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </div>`}
+        ${item.caption ? `<figcaption class="gallery-grid__caption">${escHtml(item.caption)}</figcaption>` : ''}
       </div>`;
   }
 
-  // Rotate through DETAIL_IMAGES starting at an offset based on project id
-  _pickImages(id, count) {
-    const start = (Number(id) || 0) % DETAIL_IMAGES.length;
-    return Array.from({ length: count }, (_, i) =>
-      DETAIL_IMAGES[(start + i) % DETAIL_IMAGES.length]
-    );
+  _attachGallery(view) {
+    if (!this._media.length) return;
+
+    this._lb = new Lightbox(this._media);
+    this._lb.mount();
+
+    view.querySelectorAll('[data-gallery-index]').forEach(el => {
+      const open = () => {
+        const idx = parseInt(el.dataset.galleryIndex, 10);
+        this._lb.open(idx);
+      };
+      el.addEventListener('click',   open);
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
+  }
+
+  // Called by the router when navigating away, to clean up the lightbox
+  destroy() {
+    if (this._lb) {
+      this._lb.destroy();
+      this._lb = null;
+    }
   }
 }
-
