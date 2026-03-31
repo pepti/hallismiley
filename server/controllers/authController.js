@@ -126,7 +126,7 @@ const authController = {
       const passwordHash = await scrypt.hash(password);
       const verifyToken  = makeToken();
       const verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
-      const chosenAvatar = avatar ?? 'avatar-01.png';
+      const chosenAvatar = avatar ?? 'avatar-01.svg';
 
       const { rows } = await dbQuery(
         `INSERT INTO users

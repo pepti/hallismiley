@@ -116,9 +116,9 @@ const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 // phone: E.164-ish — digits, spaces, dashes, parentheses, leading +
 const PHONE_RE    = /^\+?[\d\s\-().]{7,20}$/;
 
-// avatar-01.png … avatar-40.png
+// avatar-01.svg … avatar-40.svg
 const ALLOWED_AVATARS = Array.from({ length: 40 }, (_, i) =>
-  `avatar-${String(i + 1).padStart(2, '0')}.png`
+  `avatar-${String(i + 1).padStart(2, '0')}.svg`
 );
 
 function validatePassword(password, errors) {
@@ -161,7 +161,7 @@ function validateSignup(req, res, next) {
 
   if (avatar !== undefined) {
     if (!ALLOWED_AVATARS.includes(avatar))
-      errors.push(`avatar must be one of the allowed avatars (avatar-01.png to avatar-40.png)`);
+      errors.push(`avatar must be one of the allowed avatars (avatar-01.svg to avatar-40.svg)`);
   }
 
   if (errors.length) {
@@ -186,7 +186,7 @@ function validateProfileUpdate(req, res, next) {
 
   if (avatar !== undefined) {
     if (!ALLOWED_AVATARS.includes(avatar))
-      errors.push(`avatar must be one of the allowed avatars (avatar-01.png to avatar-40.png)`);
+      errors.push(`avatar must be one of the allowed avatars (avatar-01.svg to avatar-40.svg)`);
   }
 
   if (errors.length) {

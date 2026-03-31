@@ -1,7 +1,7 @@
 import { isAuthenticated, isAdmin, getUser, logout } from '../services/auth.js';
 import { LoginModal } from './LoginModal.js';
 
-const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01'}.svg`;
+const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
 
 export class NavBar {
   constructor() {

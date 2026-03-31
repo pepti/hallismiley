@@ -5,7 +5,7 @@ import { escHtml } from '../utils/escHtml.js';
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
 const avatarPath = n => `/assets/avatars/avatar-${pad(n)}.svg`;
-const avatarPathByName = name => `/assets/avatars/${name}.svg`;
+const avatarPathByName = name => `/assets/avatars/${name}`;
 
 function formatDate(str) {
   if (!str) return '—';
@@ -50,7 +50,7 @@ export class ProfileView {
   }
 
   _buildHTML(profile, sessions) {
-    const avatarName = profile.avatar || 'avatar-01';
+    const avatarName = profile.avatar || 'avatar-01.svg';
     const roleBadge  = profile.role === 'admin'
       ? `<span class="badge badge--admin">Admin</span>`
       : `<span class="badge badge--user">User</span>`;
@@ -186,7 +186,7 @@ export class ProfileView {
     const picker = el.querySelector('#edit-avatar-picker');
     if (!picker) return;
     for (let i = 1; i <= TOTAL_AVATARS; i++) {
-      const name = `avatar-${pad(i)}`;
+      const name = `avatar-${pad(i)}.svg`;
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'avatar-picker__item' + (name === currentAvatar ? ' avatar-picker__item--selected' : '');
@@ -210,7 +210,7 @@ export class ProfileView {
     editBtn.addEventListener('click', () => {
       section.hidden = false;
       editBtn.hidden = true;
-      this._buildAvatarPicker(el, profile.avatar || 'avatar-01');
+      this._buildAvatarPicker(el, profile.avatar || 'avatar-01.svg');
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 

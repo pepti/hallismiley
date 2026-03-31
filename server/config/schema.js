@@ -85,7 +85,7 @@ const migrations = [
       // Profile fields
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone        TEXT`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT NOT NULL DEFAULT 'avatar-01.png'`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT NOT NULL DEFAULT 'avatar-01.svg'`,
       // Email verification
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified       BOOLEAN     NOT NULL DEFAULT FALSE`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_token   TEXT`,
