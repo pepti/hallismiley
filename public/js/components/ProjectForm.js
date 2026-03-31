@@ -1,6 +1,5 @@
 import { projectApi } from '../api/projectApi.js';
 import { showToast }  from './Toast.js';
-import { escHtml } from '../utils/escHtml.js';
 
 export class ProjectForm {
   constructor(onSaved) {

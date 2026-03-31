@@ -15,7 +15,7 @@ export class ProjectCard {
   }
 
   render() {
-    const { title, description, category, year, tools_used, featured, image_url } = this.project;
+    const { title, description, category, year, featured, image_url } = this.project;
 
     const card = document.createElement('div');
     card.className = 'project-card';

@@ -2,7 +2,6 @@ export class PrivacyView {
   async render() {
     const view = document.createElement('div');
     view.className = 'view';
-    const year = new Date().getFullYear();
     view.innerHTML = `
       <main class="main legal-page" id="main-content">
         <article class="legal-article">

@@ -10,7 +10,8 @@
     "migrate": "node server/scripts/migrate.js",
     "seed": "node server/scripts/seed.js",
     "test": "jest",
-    "test:ci": "jest --ci --runInBand --forceExit"
+    "test:ci": "jest --ci --runInBand --forceExit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@sentry/node": "^10.46.0",
@@ -29,6 +30,7 @@
     "pino-http": "^11.0.0"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
     "jest": "^29.7.0",
     "nodemon": "^3.1.0",
     "supertest": "^7.0.0"

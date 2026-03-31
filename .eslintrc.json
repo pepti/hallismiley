@@ -1,0 +1,48 @@
+{
+  "root": true,
+  "extends": ["eslint:recommended"],
+  "rules": {
+    "no-unused-vars": ["error", { "varsIgnorePattern": "^_", "argsIgnorePattern": "^_" }]
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022
+  },
+  "overrides": [
+    {
+      "files": ["server/**/*.js", "jest.config.js"],
+      "env": {
+        "node": true,
+        "commonjs": true,
+        "es2022": true
+      },
+      "parserOptions": {
+        "sourceType": "script",
+        "ecmaVersion": 2022
+      }
+    },
+    {
+      "files": ["tests/**/*.js"],
+      "env": {
+        "node": true,
+        "commonjs": true,
+        "jest": true,
+        "es2022": true
+      },
+      "parserOptions": {
+        "sourceType": "script",
+        "ecmaVersion": 2022
+      }
+    },
+    {
+      "files": ["public/js/**/*.js"],
+      "env": {
+        "browser": true,
+        "es2022": true
+      },
+      "parserOptions": {
+        "sourceType": "module",
+        "ecmaVersion": 2022
+      }
+    }
+  ]
+}

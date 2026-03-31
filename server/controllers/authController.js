@@ -5,7 +5,7 @@ const jwt    = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { query: dbQuery, pool } = require('../config/database');
-const { privateKey, publicKey } = require('../config/keys');
+const { privateKey } = require('../config/keys');
 
 const ACCESS_TOKEN_TTL  = 15 * 60;           // 15 minutes (seconds)
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;  // 7 days (seconds)
