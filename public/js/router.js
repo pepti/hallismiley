@@ -1,36 +1,55 @@
-import { HomeView }          from './views/HomeView.js';
-import { ProjectsView }      from './views/ProjectsView.js';
-import { ProjectDetailView } from './views/ProjectDetailView.js';
-import { AboutView }         from './views/AboutView.js';
-import { AdminView }         from './views/AdminView.js';
-import { NotFoundView }      from './views/NotFoundView.js';
-import { PrivacyView }       from './views/PrivacyView.js';
-import { TermsView }         from './views/TermsView.js';
-import { isAuthenticated }   from './services/auth.js';
+import { HomeView }           from './views/HomeView.js';
+import { ProjectsView }       from './views/ProjectsView.js';
+import { ProjectDetailView }  from './views/ProjectDetailView.js';
+import { AboutView }          from './views/AboutView.js';
+import { AdminView }          from './views/AdminView.js';
+import { AdminUsersView }     from './views/AdminUsersView.js';
+import { NotFoundView }       from './views/NotFoundView.js';
+import { PrivacyView }        from './views/PrivacyView.js';
+import { TermsView }          from './views/TermsView.js';
+import { SignupView }         from './views/SignupView.js';
+import { ProfileView }        from './views/ProfileView.js';
+import { VerifyEmailView }    from './views/VerifyEmailView.js';
+import { ForgotPasswordView } from './views/ForgotPasswordView.js';
+import { ResetPasswordView }  from './views/ResetPasswordView.js';
+import { isAuthenticated, isAdmin } from './services/auth.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
-  { pattern: '/',             factory: ()  => new HomeView() },
-  { pattern: '/projects/:id', factory: (p) => new ProjectDetailView(p.id) },
-  { pattern: '/projects',     factory: ()  => new ProjectsView() },
-  { pattern: '/about',        factory: ()  => new AboutView() },
-  { pattern: '/admin',        factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
-  { pattern: '/privacy',      factory: ()  => new PrivacyView() },
-  { pattern: '/terms',        factory: ()  => new TermsView() },
+  { pattern: '/',                factory: ()  => new HomeView() },
+  { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
+  { pattern: '/projects',        factory: ()  => new ProjectsView() },
+  { pattern: '/about',           factory: ()  => new AboutView() },
+  { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
+  { pattern: '/signup',          factory: ()  => new SignupView() },
+  { pattern: '/login',           factory: ()  => { /* handled by modal — redirect home */ window.location.hash = '#/'; return new HomeView(); } },
+  { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },
+  { pattern: '/verify-email',    factory: (_, qs) => new VerifyEmailView(qs) },
+  { pattern: '/forgot-password', factory: ()  => new ForgotPasswordView() },
+  { pattern: '/reset-password',  factory: (_, qs) => new ResetPasswordView(qs) },
+  { pattern: '/privacy',         factory: ()  => new PrivacyView() },
+  { pattern: '/terms',           factory: ()  => new TermsView() },
 ];
 
-function matchRoute(hash) {
-  const hashParts = hash.split('/');
+function parseHash(rawHash) {
+  // rawHash may include query string: /path?key=val
+  const [path, qs = ''] = rawHash.split('?');
+  return { path, qs };
+}
+
+function matchRoute(path) {
+  const pathParts = path.split('/');
   for (const route of ROUTES) {
     const patternParts = route.pattern.split('/');
-    if (patternParts.length !== hashParts.length) continue;
+    if (patternParts.length !== pathParts.length) continue;
 
     const params = {};
     let matched = true;
     for (let i = 0; i < patternParts.length; i++) {
       if (patternParts[i].startsWith(':')) {
-        params[patternParts[i].slice(1)] = hashParts[i];
-      } else if (patternParts[i] !== hashParts[i]) {
+        params[patternParts[i].slice(1)] = pathParts[i];
+      } else if (patternParts[i] !== pathParts[i]) {
         matched = false;
         break;
       }
@@ -54,15 +73,26 @@ export class Router {
   }
 
   async _navigate() {
-    const hash = window.location.hash.replace('#', '') || '/';
+    const raw  = window.location.hash.replace('#', '') || '/';
+    const { path, qs } = parseHash(raw);
 
-    if (hash === '/admin' && !isAuthenticated()) {
+    // Guard admin routes
+    if (path === '/admin' && !isAuthenticated()) {
       window.location.hash = '#/';
       return;
     }
+    if (path === '/admin/users' && (!isAuthenticated() || !isAdmin())) {
+      window.location.hash = '#/';
+      return;
+    }
+    // Guard profile
+    if (path === '/profile' && !isAuthenticated()) {
+      window.location.hash = '#/login';
+      return;
+    }
 
-    const { factory, params, pattern } = matchRoute(hash);
-    const view = factory(params);
+    const { factory, params, pattern } = matchRoute(path);
+    const view = factory(params, qs);
     const el   = await view.render();
 
     this.mountEl.innerHTML = '';

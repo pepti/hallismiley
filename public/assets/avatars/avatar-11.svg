@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Film Reel -->
+  <circle cx="100" cy="100" r="75" fill="#1A1A1A" stroke="#C8AA6E" stroke-width="4"/>
+  <circle cx="100" cy="100" r="55" fill="none" stroke="#C8AA6E" stroke-width="2" stroke-dasharray="8 4"/>
+  <!-- Sprocket holes -->
+  <circle cx="100" cy="30"  r="10" fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="100" cy="170" r="10" fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="30"  cy="100" r="10" fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="170" cy="100" r="10" fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="147" cy="47"  r="9"  fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="53"  cy="47"  r="9"  fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="147" cy="153" r="9"  fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <circle cx="53"  cy="153" r="9"  fill="#0A1428" stroke="#C8AA6E" stroke-width="2"/>
+  <!-- Center hub -->
+  <circle cx="100" cy="100" r="22" fill="#C8AA6E"/>
+  <circle cx="100" cy="100" r="12" fill="#0A1428"/>
+  <circle cx="100" cy="100" r="5"  fill="#C8AA6E"/>
+</svg>

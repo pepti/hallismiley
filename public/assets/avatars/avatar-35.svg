@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Scroll -->
+  <!-- Left roller -->
+  <ellipse cx="38" cy="100" rx="16" ry="72" fill="#C8A870"/>
+  <ellipse cx="38" cy="100" rx="10" ry="66" fill="#D4B880"/>
+  <!-- Right roller -->
+  <ellipse cx="162" cy="100" rx="16" ry="72" fill="#C8A870"/>
+  <ellipse cx="162" cy="100" rx="10" ry="66" fill="#D4B880"/>
+  <!-- Scroll body -->
+  <rect x="38" y="40" width="124" height="120" fill="#F0E0B8"/>
+  <!-- Curl shadows -->
+  <path d="M38,40 Q50,52 38,64" fill="#D4C090" stroke="none"/>
+  <path d="M162,40 Q150,52 162,64" fill="#D4C090" stroke="none"/>
+  <path d="M38,136 Q50,148 38,160" fill="#D4C090" stroke="none"/>
+  <path d="M162,136 Q150,148 162,160" fill="#D4C090" stroke="none"/>
+  <!-- Text lines on scroll -->
+  <line x1="62" y1="72"  x2="138" y2="72"  stroke="#8B6914" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="62" y1="88"  x2="138" y2="88"  stroke="#8B6914" stroke-width="2" stroke-linecap="round"/>
+  <line x1="62" y1="104" x2="138" y2="104" stroke="#8B6914" stroke-width="2" stroke-linecap="round"/>
+  <line x1="62" y1="120" x2="118" y2="120" stroke="#8B6914" stroke-width="2" stroke-linecap="round"/>
+  <line x1="62" y1="136" x2="128" y2="136" stroke="#8B6914" stroke-width="2" stroke-linecap="round"/>
+  <!-- Decorative seal -->
+  <circle cx="100" cy="104" r="18" fill="#C8AA6E" opacity="0.6"/>
+  <circle cx="100" cy="104" r="12" fill="#B89040"/>
+  <text x="100" y="109" text-anchor="middle" font-size="12" fill="#6A4A10" font-weight="bold" font-family="serif">⚜</text>
+  <!-- Roller end caps -->
+  <ellipse cx="38"  cy="28"  rx="16" ry="8" fill="#B89040"/>
+  <ellipse cx="38"  cy="172" rx="16" ry="8" fill="#B89040"/>
+  <ellipse cx="162" cy="28"  rx="16" ry="8" fill="#B89040"/>
+  <ellipse cx="162" cy="172" rx="16" ry="8" fill="#B89040"/>
+</svg>

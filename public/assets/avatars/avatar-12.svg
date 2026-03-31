@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Popcorn bucket -->
+  <!-- Popcorn pieces on top -->
+  <ellipse cx="72"  cy="72"  rx="18" ry="14" fill="#F5E642"/>
+  <ellipse cx="100" cy="62"  rx="20" ry="15" fill="#FFF0A0"/>
+  <ellipse cx="128" cy="70"  rx="18" ry="14" fill="#F5E642"/>
+  <ellipse cx="60"  cy="85"  rx="14" ry="12" fill="#FFF0A0"/>
+  <ellipse cx="88"  cy="78"  rx="16" ry="13" fill="#F5E642"/>
+  <ellipse cx="114" cy="76"  rx="16" ry="13" fill="#FFF0A0"/>
+  <ellipse cx="140" cy="84"  rx="14" ry="12" fill="#F5E642"/>
+  <!-- Bucket -->
+  <path d="M55,95 L65,175 L135,175 L145,95 Z" fill="#E74C3C"/>
+  <!-- Stripes -->
+  <path d="M70,95 L75,175 L85,175 L80,95 Z" fill="#F5F5F5"/>
+  <path d="M95,95 L98,175 L108,175 L105,95 Z" fill="#F5F5F5"/>
+  <path d="M120,95 L121,175 L131,175 L130,95 Z" fill="#F5F5F5"/>
+  <!-- Bucket rim -->
+  <rect x="53" y="90" width="94" height="12" rx="4" fill="#C0392B"/>
+</svg>

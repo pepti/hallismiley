@@ -1,5 +1,7 @@
 // A03 Injection + A04 Insecure Design: strict input validation for all routes
 
+// ── Project validation ────────────────────────────────────────────────────────
+
 const VALID_CATEGORIES = ['carpentry', 'tech'];
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
@@ -103,4 +105,132 @@ function validateQuery(req, res, next) {
   next();
 }
 
-module.exports = { validateProject, validateQuery };
+// ── User / auth validation ────────────────────────────────────────────────────
+
+const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
+// phone: E.164-ish — digits, spaces, dashes, parentheses, leading +
+const PHONE_RE    = /^\+?[\d\s\-().]{7,20}$/;
+
+// avatar-01.png … avatar-40.png
+const ALLOWED_AVATARS = Array.from({ length: 40 }, (_, i) =>
+  `avatar-${String(i + 1).padStart(2, '0')}.png`
+);
+
+function validatePassword(password, errors) {
+  if (!password || typeof password !== 'string') {
+    errors.push('password is required');
+    return;
+  }
+  if (password.length < 8)         errors.push('password must be at least 8 characters');
+  if (!/[a-zA-Z]/.test(password))  errors.push('password must contain at least one letter');
+  if (!/[0-9]/.test(password))     errors.push('password must contain at least one number');
+}
+
+// POST /auth/signup
+function validateSignup(req, res, next) {
+  const { username, email, password, phone, display_name, avatar } = req.body;
+  const errors = [];
+
+  if (!username || typeof username !== 'string') {
+    errors.push('username is required');
+  } else if (!USERNAME_RE.test(username)) {
+    errors.push('username must be 3-30 characters, letters/numbers/underscore only');
+  }
+
+  if (!email || typeof email !== 'string') {
+    errors.push('email is required');
+  } else if (!EMAIL_RE.test(email.trim())) {
+    errors.push('email must be a valid email address');
+  }
+
+  validatePassword(password, errors);
+
+  if (phone !== undefined && phone !== null && phone !== '') {
+    if (!PHONE_RE.test(phone)) errors.push('phone must be a valid phone number');
+  }
+
+  if (display_name !== undefined && display_name !== null) {
+    if (typeof display_name !== 'string' || display_name.trim().length > 100)
+      errors.push('display_name must be a string of at most 100 characters');
+  }
+
+  if (avatar !== undefined) {
+    if (!ALLOWED_AVATARS.includes(avatar))
+      errors.push(`avatar must be one of the allowed avatars (avatar-01.png to avatar-40.png)`);
+  }
+
+  if (errors.length) {
+    return res.status(400).json({ error: errors.join('; '), code: 400 });
+  }
+  next();
+}
+
+// PATCH /api/v1/users/me
+function validateProfileUpdate(req, res, next) {
+  const { display_name, phone, avatar } = req.body;
+  const errors = [];
+
+  if (display_name !== undefined && display_name !== null) {
+    if (typeof display_name !== 'string' || display_name.trim().length > 100)
+      errors.push('display_name must be a string of at most 100 characters');
+  }
+
+  if (phone !== undefined && phone !== null && phone !== '') {
+    if (!PHONE_RE.test(phone)) errors.push('phone must be a valid phone number');
+  }
+
+  if (avatar !== undefined) {
+    if (!ALLOWED_AVATARS.includes(avatar))
+      errors.push(`avatar must be one of the allowed avatars (avatar-01.png to avatar-40.png)`);
+  }
+
+  if (errors.length) {
+    return res.status(400).json({ error: errors.join('; '), code: 400 });
+  }
+  next();
+}
+
+// POST /auth/reset-password
+function validateResetPassword(req, res, next) {
+  const { token, password } = req.body;
+  const errors = [];
+
+  if (!token || typeof token !== 'string') {
+    errors.push('token is required');
+  }
+
+  validatePassword(password, errors);
+
+  if (errors.length) {
+    return res.status(400).json({ error: errors.join('; '), code: 400 });
+  }
+  next();
+}
+
+// PATCH /api/v1/users/me/password
+function validatePasswordChange(req, res, next) {
+  const { current_password, new_password } = req.body;
+  const errors = [];
+
+  if (!current_password || typeof current_password !== 'string') {
+    errors.push('current_password is required');
+  }
+
+  validatePassword(new_password, errors);
+
+  if (errors.length) {
+    return res.status(400).json({ error: errors.join('; '), code: 400 });
+  }
+  next();
+}
+
+module.exports = {
+  validateProject,
+  validateQuery,
+  validateSignup,
+  validateResetPassword,
+  validateProfileUpdate,
+  validatePasswordChange,
+  ALLOWED_AVATARS,
+};

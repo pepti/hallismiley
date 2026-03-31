@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Robot Head -->
+  <!-- Neck -->
+  <rect x="82" y="158" width="36" height="24" rx="3" fill="#556677"/>
+  <rect x="86" y="162" width="10" height="16" rx="2" fill="#667788"/>
+  <rect x="104" y="162" width="10" height="16" rx="2" fill="#667788"/>
+  <!-- Head -->
+  <rect x="30" y="55" width="140" height="108" rx="12" fill="#445566"/>
+  <rect x="30" y="55" width="140" height="108" rx="12" fill="none" stroke="#0BC4E3" stroke-width="2"/>
+  <!-- Eye sockets -->
+  <rect x="46" y="78" width="44" height="34" rx="6" fill="#1A2A3A"/>
+  <rect x="110" y="78" width="44" height="34" rx="6" fill="#1A2A3A"/>
+  <!-- Eyes (glowing) -->
+  <circle cx="68"  cy="95" r="13" fill="#0BC4E3"/>
+  <circle cx="132" cy="95" r="13" fill="#0BC4E3"/>
+  <circle cx="68"  cy="95" r="7"  fill="#88EEFF"/>
+  <circle cx="132" cy="95" r="7"  fill="#88EEFF"/>
+  <circle cx="68"  cy="95" r="3"  fill="white"/>
+  <circle cx="132" cy="95" r="3"  fill="white"/>
+  <!-- Eye glow -->
+  <circle cx="68"  cy="95" r="16" fill="none" stroke="rgba(11,196,227,0.3)" stroke-width="4"/>
+  <circle cx="132" cy="95" r="16" fill="none" stroke="rgba(11,196,227,0.3)" stroke-width="4"/>
+  <!-- Mouth panel -->
+  <rect x="52" y="126" width="96" height="24" rx="4" fill="#1A2A3A"/>
+  <!-- Mouth lights -->
+  <circle cx="68"  cy="138" r="5" fill="#E74C3C"/>
+  <circle cx="84"  cy="138" r="5" fill="#F4C542"/>
+  <circle cx="100" cy="138" r="5" fill="#2ECC71"/>
+  <circle cx="116" cy="138" r="5" fill="#0BC4E3"/>
+  <circle cx="132" cy="138" r="5" fill="#9B59B6"/>
+  <!-- Antenna -->
+  <rect x="96" y="28" width="8" height="30" rx="3" fill="#556677"/>
+  <circle cx="100" cy="24" r="10" fill="#0BC4E3"/>
+  <circle cx="100" cy="24" r="5"  fill="#88EEFF"/>
+  <!-- Ear bolts -->
+  <circle cx="30" cy="90"  r="8" fill="#334455"/>
+  <circle cx="30" cy="110" r="8" fill="#334455"/>
+  <circle cx="170" cy="90"  r="8" fill="#334455"/>
+  <circle cx="170" cy="110" r="8" fill="#334455"/>
+</svg>

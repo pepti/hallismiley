@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- DeLorean DMC-12 side view -->
+  <g transform="translate(10,60)">
+    <!-- Body -->
+    <path d="M20,80 L20,50 Q22,30 60,22 L110,18 Q140,16 155,28 L175,50 L175,80 Z" fill="#AAAAAA"/>
+    <!-- Windows -->
+    <path d="M58,22 L58,50 L108,50 L108,20 Z" fill="#4A7FA0" opacity="0.8"/>
+    <path d="M112,20 L112,50 L152,50 L148,26 Z" fill="#4A7FA0" opacity="0.8"/>
+    <!-- Window frame -->
+    <path d="M58,22 L58,50 L108,50 L108,20 Z" fill="none" stroke="#888" stroke-width="1.5"/>
+    <path d="M112,20 L112,50 L152,50 L148,26 Z" fill="none" stroke="#888" stroke-width="1.5"/>
+    <!-- Gull-wing door line -->
+    <line x1="56" y1="22" x2="56" y2="80" stroke="#888" stroke-width="1.5"/>
+    <line x1="110" y1="18" x2="110" y2="80" stroke="#888" stroke-width="1.5"/>
+    <!-- Undercarriage -->
+    <rect x="20" y="78" width="155" height="12" rx="2" fill="#888"/>
+    <!-- Wheels -->
+    <circle cx="52"  cy="92" r="18" fill="#222"/>
+    <circle cx="52"  cy="92" r="10" fill="#555"/>
+    <circle cx="52"  cy="92" r="5"  fill="#888"/>
+    <circle cx="148" cy="92" r="18" fill="#222"/>
+    <circle cx="148" cy="92" r="10" fill="#555"/>
+    <circle cx="148" cy="92" r="5"  fill="#888"/>
+    <!-- Flux capacitor glow -->
+    <rect x="78" y="28" width="24" height="16" rx="2" fill="#FFD700" opacity="0.7"/>
+    <text x="90" y="40" text-anchor="middle" font-size="8" fill="#FFF" font-family="monospace">88mph</text>
+  </g>
+</svg>

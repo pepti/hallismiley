@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Mario Question Block -->
+  <rect x="28" y="28" width="144" height="144" rx="10" fill="#E8A800"/>
+  <rect x="28" y="28" width="144" height="144" rx="10" fill="none" stroke="#C87800" stroke-width="4"/>
+  <!-- Top highlight -->
+  <rect x="32" y="32" width="136" height="20" rx="6" fill="rgba(255,220,80,0.5)"/>
+  <!-- Corner studs -->
+  <circle cx="46"  cy="46"  r="8" fill="#C87800"/>
+  <circle cx="154" cy="46"  r="8" fill="#C87800"/>
+  <circle cx="46"  cy="154" r="8" fill="#C87800"/>
+  <circle cx="154" cy="154" r="8" fill="#C87800"/>
+  <!-- Question mark -->
+  <text x="100" y="126" text-anchor="middle" font-size="90" font-weight="900"
+        fill="#FFF" font-family="Arial Black, sans-serif" opacity="0.95">?</text>
+</svg>

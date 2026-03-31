@@ -11,8 +11,11 @@ const path       = require('path');
 const projectRoutes  = require('./routes/projectRoutes');
 const authRoutes     = require('./routes/authRoutes');
 const contactRoutes  = require('./routes/contactRoutes');
+const userRoutes     = require('./routes/userRoutes');
+const adminRoutes    = require('./routes/adminRoutes');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
+const { generateCsrfToken } = require('./middleware/csrf');
 
 const app = express();
 
@@ -55,7 +58,7 @@ app.use(cors({
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   credentials: true, // required for httpOnly session cookie
 }));
 
@@ -137,6 +140,12 @@ app.get('/health', async (req, res) => {
 // ── Gzip/deflate compression for all responses ────────────────────────────────
 app.use(compression());
 
+// ── CSRF token endpoint — call before any state-changing request ──────────────
+app.get('/api/v1/csrf-token', (req, res) => {
+  const token = generateCsrfToken(req, res);
+  return res.json({ token });
+});
+
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
@@ -149,9 +158,11 @@ app.use(express.static(path.join(__dirname, '../public'), {
     }
   },
 }));
-app.use('/auth',            authRoutes);
-app.use('/api/v1/projects', projectRoutes);
-app.use('/api/v1/contact',  contactRoutes);
+app.use('/auth',              authRoutes);
+app.use('/api/v1/projects',   projectRoutes);
+app.use('/api/v1/contact',    contactRoutes);
+app.use('/api/v1/users',      userRoutes);
+app.use('/api/v1/admin',      adminRoutes);
 
 // Fallback SPA route — never cache, browser must revalidate on every navigation
 app.get('*', (req, res) => {

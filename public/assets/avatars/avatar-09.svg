@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Game Boy -->
+  <rect x="55" y="25" width="90" height="150" rx="12" fill="#C8C8B0"/>
+  <rect x="55" y="25" width="90" height="150" rx="12" fill="none" stroke="#A0A088" stroke-width="2"/>
+  <!-- Screen bezel -->
+  <rect x="65" y="38" width="70" height="58" rx="4" fill="#8A9060"/>
+  <!-- Screen -->
+  <rect x="70" y="43" width="60" height="48" rx="2" fill="#9DB088"/>
+  <!-- Screen content - simple game scene -->
+  <rect x="76" y="55" width="8" height="8" fill="#3A4830"/>
+  <rect x="84" y="47" width="8" height="8" fill="#3A4830"/>
+  <rect x="92" y="47" width="8" height="8" fill="#3A4830"/>
+  <rect x="100" y="55" width="8" height="8" fill="#3A4830"/>
+  <rect x="108" y="63" width="8" height="8" fill="#3A4830"/>
+  <!-- Brand text area -->
+  <rect x="70" y="96" width="60" height="8" rx="2" fill="#B0B098"/>
+  <!-- D-pad -->
+  <rect x="70" y="112" width="14" height="38" rx="3" fill="#555"/>
+  <rect x="63" y="119" width="28" height="14" rx="3" fill="#555"/>
+  <circle cx="77" cy="131" r="5" fill="#444"/>
+  <!-- Buttons -->
+  <circle cx="128" cy="122" r="8" fill="#AA3355"/>
+  <circle cx="112" cy="130" r="8" fill="#AA3355"/>
+  <!-- Start/Select -->
+  <rect x="83" y="148" width="14" height="5" rx="2" fill="#888"/>
+  <rect x="103" y="148" width="14" height="5" rx="2" fill="#888"/>
+  <!-- Speaker dots -->
+  <circle cx="130" cy="148" r="2" fill="#999"/>
+  <circle cx="136" cy="148" r="2" fill="#999"/>
+  <circle cx="142" cy="148" r="2" fill="#999"/>
+  <circle cx="133" cy="154" r="2" fill="#999"/>
+  <circle cx="139" cy="154" r="2" fill="#999"/>
+</svg>

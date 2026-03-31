@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Arcade Cabinet -->
+  <!-- Cabinet body -->
+  <path d="M45,185 L45,75 Q47,40 65,30 L135,30 Q153,40 155,75 L155,185 Z" fill="#1A1A2E"/>
+  <path d="M45,185 L45,75 Q47,40 65,30 L135,30 Q153,40 155,75 L155,185 Z" fill="none" stroke="#C8AA6E" stroke-width="2"/>
+  <!-- Marquee top -->
+  <rect x="52" y="28" width="96" height="28" rx="3" fill="#C8AA6E"/>
+  <text x="100" y="48" text-anchor="middle" font-size="14" font-weight="bold" fill="#0A1428" font-family="monospace">ARCADE</text>
+  <!-- Screen bezel -->
+  <rect x="55" y="62" width="90" height="72" rx="4" fill="#111"/>
+  <!-- Screen -->
+  <rect x="60" y="67" width="80" height="62" rx="2" fill="#0D2B0D"/>
+  <!-- Screen content -->
+  <rect x="70" y="77" width="8" height="8" fill="#44FF44"/>
+  <rect x="82" y="71" width="8" height="8" fill="#44FF44"/>
+  <rect x="94" y="71" width="8" height="8" fill="#44FF44"/>
+  <rect x="106" y="77" width="8" height="8" fill="#44FF44"/>
+  <rect x="118" y="83" width="8" height="8" fill="#44FF44"/>
+  <text x="100" y="122" text-anchor="middle" font-size="8" fill="#44FF44" font-family="monospace">SCORE: 9999</text>
+  <!-- Control panel -->
+  <rect x="52" y="138" width="96" height="32" rx="3" fill="#222"/>
+  <!-- Joystick -->
+  <circle cx="80" cy="154" r="10" fill="#333"/>
+  <circle cx="80" cy="154" r="5"  fill="#E74C3C"/>
+  <!-- Buttons -->
+  <circle cx="116" cy="150" r="7" fill="#E74C3C"/>
+  <circle cx="132" cy="150" r="7" fill="#3498DB"/>
+  <circle cx="124" cy="163" r="7" fill="#F1C40F"/>
+  <!-- Coin slot -->
+  <rect x="88" y="178" width="24" height="4" rx="2" fill="#C8AA6E"/>
+</svg>

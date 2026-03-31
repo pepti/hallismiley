@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Sonic Ring -->
+  <circle cx="100" cy="100" r="62" fill="none" stroke="#F4C542" stroke-width="22"/>
+  <circle cx="100" cy="100" r="62" fill="none" stroke="#FFE87A" stroke-width="8"
+          stroke-dasharray="80 310" stroke-dashoffset="-30"/>
+  <!-- Inner glow ring -->
+  <circle cx="100" cy="100" r="48" fill="none" stroke="rgba(244,197,66,0.2)" stroke-width="3"/>
+  <!-- Sparkles -->
+  <g fill="#FFE87A">
+    <polygon points="100,22 103,31 113,31 105,37 108,46 100,40 92,46 95,37 87,31 97,31" transform="scale(0.6) translate(67,-18)"/>
+    <polygon points="100,22 103,31 113,31 105,37 108,46 100,40 92,46 95,37 87,31 97,31" transform="scale(0.4) translate(230,170)"/>
+  </g>
+</svg>
