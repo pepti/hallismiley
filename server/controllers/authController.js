@@ -1,4 +1,4 @@
-// Session-based auth using Lucia v3 — replaces RS256 JWT + refresh token flow.
+// Session-based auth using Lucia v3.
 // Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
 // Account lockout: 5 failures → 15-min lock.
 const { query: dbQuery }  = require('../config/database');
