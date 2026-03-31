@@ -43,7 +43,7 @@ export class SignupView {
             <div class="form-group">
               <span class="form-label">Choose Avatar</span>
               <div class="avatar-picker" id="avatar-picker"></div>
-              <input type="hidden" id="signup-avatar" name="avatar" value="avatar-01"/>
+              <input type="hidden" id="signup-avatar" name="avatar" value=""/>
             </div>
 
             <!-- Email + Username -->
@@ -126,10 +126,12 @@ export class SignupView {
 
   _buildAvatarPicker(el) {
     const picker = el.querySelector('#avatar-picker');
+    const defaultIndex = Math.floor(Math.random() * TOTAL_AVATARS) + 1;
+    el.querySelector('#signup-avatar').value = `avatar-${pad(defaultIndex)}`;
     for (let i = 1; i <= TOTAL_AVATARS; i++) {
       const item = document.createElement('button');
       item.type = 'button';
-      item.className = 'avatar-picker__item' + (i === 1 ? ' avatar-picker__item--selected' : '');
+      item.className = 'avatar-picker__item' + (i === defaultIndex ? ' avatar-picker__item--selected' : '');
       item.dataset.avatar = `avatar-${pad(i)}`;
       item.setAttribute('aria-label', `Avatar ${i}`);
       item.innerHTML = `<img src="${avatarPath(i)}" alt="Avatar ${i}" loading="lazy"/>`;
