@@ -6,16 +6,13 @@
 const request = require('supertest');
 const app     = require('../server/app');
 const db      = require('../server/config/database');
-const { generateToken, cleanTables, validProject } = require('./helpers');
+const { getTestSessionCookie, cleanTables, validProject } = require('./helpers');
 
-let token;
-
-beforeAll(() => {
-  token = generateToken();
-});
+let sessionCookie;
 
 beforeEach(async () => {
   await cleanTables();
+  sessionCookie = await getTestSessionCookie();
 });
 
 afterAll(async () => {
@@ -28,7 +25,7 @@ describe('Input sanitization — XSS stripping', () => {
   test('HTML tags are stripped from project title', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ title: '<script>alert(1)</script>My Project' }));
 
     expect(res.status).toBe(201);
@@ -39,7 +36,7 @@ describe('Input sanitization — XSS stripping', () => {
   test('HTML tags are stripped from project description', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ description: '<img src=x onerror=alert(1)>Nice description here.' }));
 
     expect(res.status).toBe(201);
@@ -62,7 +59,7 @@ describe('Input sanitization — XSS stripping', () => {
   test('null bytes are stripped from project title', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ title: 'Project\u0000Title' }));
 
     expect(res.status).toBe(201);
@@ -72,7 +69,7 @@ describe('Input sanitization — XSS stripping', () => {
   test('javascript: URL is rejected as image_url', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ image_url: 'javascript:alert(document.cookie)' }));
 
     expect(res.status).toBe(400);
@@ -81,7 +78,7 @@ describe('Input sanitization — XSS stripping', () => {
   test('data: URL is rejected as image_url', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ image_url: 'data:text/html,<script>alert(1)</script>' }));
 
     expect(res.status).toBe(400);
@@ -95,7 +92,7 @@ describe('SQL injection prevention', () => {
     const malicious = "'; DROP TABLE projects; --";
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ title: malicious }));
 
     // The sanitizer strips <> but single quotes and SQL keywords should be stored as text
@@ -126,7 +123,7 @@ describe('Malformed request handling', () => {
   test('non-JSON body to JSON endpoint returns 400', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .set('Content-Type', 'application/json')
       .send('{ this is not valid json }');
 
@@ -138,7 +135,7 @@ describe('Malformed request handling', () => {
 
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .set('Content-Type', 'application/json')
       .send(bigBody);
 
@@ -148,7 +145,7 @@ describe('Malformed request handling', () => {
   test('extra unknown fields in body are ignored (not stored)', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send({ ...validProject(), __proto__: { admin: true }, isAdmin: true });
 
     expect(res.status).toBe(201);

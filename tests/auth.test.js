@@ -1,10 +1,11 @@
 const request = require('supertest');
 const app     = require('../server/app');
 const db      = require('../server/config/database');
-const { cleanTables } = require('./helpers');
+const { cleanTables, createTestAdminUser } = require('./helpers');
 
 beforeEach(async () => {
   await cleanTables();
+  await createTestAdminUser();
 });
 
 afterAll(async () => {
@@ -14,19 +15,20 @@ afterAll(async () => {
 // ── POST /auth/login ──────────────────────────────────────────────────────────
 
 describe('POST /auth/login', () => {
-  test('valid credentials return access_token and set refresh cookie', async () => {
+  test('valid credentials return user info and set session cookie', async () => {
     const res = await request(app)
       .post('/auth/login')
       .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      access_token: expect.any(String),
-      token_type:   'Bearer',
-      expires_in:   900,
+      user: {
+        username: process.env.ADMIN_USERNAME,
+        role:     'admin',
+      },
     });
     const cookies = res.headers['set-cookie'] ?? [];
-    expect(cookies.some(c => c.startsWith('refresh_token='))).toBe(true);
+    expect(cookies.some(c => c.startsWith('auth_session='))).toBe(true);
   });
 
   test('wrong password returns 401 with generic message', async () => {
@@ -71,100 +73,54 @@ describe('POST /auth/login', () => {
 
   test('does not leak which credential was wrong', async () => {
     const [badUser, badPass] = await Promise.all([
-      request(app).post('/auth/login').send({ username: 'nobody',                      password: process.env.ADMIN_PASSWORD }),
-      request(app).post('/auth/login').send({ username: process.env.ADMIN_USERNAME,    password: 'wrongpass' }),
+      request(app).post('/auth/login').send({ username: 'nobody',                   password: process.env.ADMIN_PASSWORD }),
+      request(app).post('/auth/login').send({ username: process.env.ADMIN_USERNAME, password: 'wrongpass' }),
     ]);
-    // Both should return identical error messages
     expect(badUser.body.error).toBe(badPass.body.error);
   });
 });
 
-// ── POST /auth/refresh ────────────────────────────────────────────────────────
+// ── Account lockout ───────────────────────────────────────────────────────────
 
-describe('POST /auth/refresh', () => {
-  test('valid refresh token issues new access token and rotates cookie', async () => {
-    const agent = request.agent(app);
+describe('Account lockout', () => {
+  test('account is locked after 5 failed attempts', async () => {
+    // 5 bad attempts
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/auth/login')
+        .send({ username: process.env.ADMIN_USERNAME, password: 'bad' });
+    }
 
-    await agent
-      .post('/auth/login')
-      .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
-
-    const res = await agent.post('/auth/refresh');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
-      access_token: expect.any(String),
-      token_type:   'Bearer',
-      expires_in:   900,
-    });
-    const cookies = res.headers['set-cookie'] ?? [];
-    expect(cookies.some(c => c.startsWith('refresh_token='))).toBe(true);
-  });
-
-  test('no refresh token returns 401', async () => {
-    const res = await request(app).post('/auth/refresh');
-
-    expect(res.status).toBe(401);
-    expect(res.body.error).toBe('No refresh token');
-  });
-
-  test('fake/random refresh token returns 401', async () => {
+    // 6th attempt should trigger the lockout response
     const res = await request(app)
-      .post('/auth/refresh')
-      .set('Cookie', 'refresh_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+      .post('/auth/login')
+      .send({ username: process.env.ADMIN_USERNAME, password: 'bad' });
 
     expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/locked/i);
   });
 
-  test('token rotation: old token is revoked after first refresh', async () => {
-    const agent = request.agent(app);
+  test('correct password after lockout still returns locked', async () => {
+    // Exhaust the attempts
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/auth/login')
+        .send({ username: process.env.ADMIN_USERNAME, password: 'bad' });
+    }
 
-    // Login
-    const loginRes = await agent
+    const res = await request(app)
       .post('/auth/login')
       .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
 
-    // Capture the original cookie
-    const originalCookie = loginRes.headers['set-cookie'].find(c => c.startsWith('refresh_token='));
-    const originalToken  = originalCookie.split(';')[0].replace('refresh_token=', '');
-
-    // First refresh — succeeds and issues a new token
-    await agent.post('/auth/refresh');
-
-    // Replay the old token — should be rejected
-    const replayRes = await request(app)
-      .post('/auth/refresh')
-      .set('Cookie', `refresh_token=${originalToken}`);
-
-    expect(replayRes.status).toBe(401);
-  });
-
-  test('used refresh token cannot be used again (replay attack prevention)', async () => {
-    const agent = request.agent(app);
-
-    const loginRes = await agent
-      .post('/auth/login')
-      .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
-
-    // Capture the token issued at login before it gets rotated
-    const loginCookie = loginRes.headers['set-cookie'].find(c => c.startsWith('refresh_token='));
-    const loginToken  = loginCookie.split(';')[0].replace('refresh_token=', '');
-
-    // First refresh succeeds and rotates to a new token
-    await agent.post('/auth/refresh');
-
-    // Replaying the original (now-revoked) login token must fail
-    const second = await request(app)
-      .post('/auth/refresh')
-      .set('Cookie', `refresh_token=${loginToken}`);
-    expect(second.status).toBe(401);
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/locked/i);
   });
 });
 
 // ── POST /auth/logout ─────────────────────────────────────────────────────────
 
 describe('POST /auth/logout', () => {
-  test('logout returns 204 and clears the cookie', async () => {
+  test('logout returns 204 and clears the session cookie', async () => {
     const agent = request.agent(app);
 
     await agent
@@ -173,9 +129,15 @@ describe('POST /auth/logout', () => {
 
     const res = await agent.post('/auth/logout');
     expect(res.status).toBe(204);
+
+    // Cookie should be cleared (Max-Age=0 or empty value)
+    const cookies = res.headers['set-cookie'] ?? [];
+    const sessionCookie = cookies.find(c => c.startsWith('auth_session='));
+    expect(sessionCookie).toBeDefined();
+    expect(sessionCookie).toMatch(/Max-Age=0|auth_session=;/i);
   });
 
-  test('refresh after logout is rejected with 401', async () => {
+  test('session is invalid after logout', async () => {
     const agent = request.agent(app);
 
     await agent
@@ -184,8 +146,9 @@ describe('POST /auth/logout', () => {
 
     await agent.post('/auth/logout');
 
-    const res = await agent.post('/auth/refresh');
-    expect(res.status).toBe(401);
+    const res = await agent.get('/auth/session');
+    expect(res.status).toBe(200);
+    expect(res.body.authenticated).toBe(false);
   });
 
   test('logout without a session returns 204 (idempotent)', async () => {
@@ -203,5 +166,39 @@ describe('POST /auth/logout', () => {
     await agent.post('/auth/logout');
     const second = await agent.post('/auth/logout');
     expect(second.status).toBe(204);
+  });
+});
+
+// ── GET /auth/session ─────────────────────────────────────────────────────────
+
+describe('GET /auth/session', () => {
+  test('returns authenticated=true with user info when logged in', async () => {
+    const agent = request.agent(app);
+
+    await agent
+      .post('/auth/login')
+      .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
+
+    const res = await agent.get('/auth/session');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      authenticated: true,
+      user: { username: process.env.ADMIN_USERNAME, role: 'admin' },
+    });
+  });
+
+  test('returns authenticated=false without a session cookie', async () => {
+    const res = await request(app).get('/auth/session');
+    expect(res.status).toBe(200);
+    expect(res.body.authenticated).toBe(false);
+  });
+
+  test('returns authenticated=false with a bogus session cookie', async () => {
+    const res = await request(app)
+      .get('/auth/session')
+      .set('Cookie', 'auth_session=notarealsessionid');
+
+    expect(res.status).toBe(200);
+    expect(res.body.authenticated).toBe(false);
   });
 });
