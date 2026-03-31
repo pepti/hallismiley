@@ -1,5 +1,6 @@
-// Inserts the Stofan Bakhús carpentry project into the database
+// Inserts the Stofan Bakhús carpentry project and its media gallery into the database.
 // Run: node server/scripts/seed-stofan-bakhus.js
+// Idempotent: safe to run multiple times.
 require('dotenv').config();
 const { pool } = require('../config/database');
 
@@ -14,34 +15,101 @@ const PROJECT = {
   featured: true,
 };
 
+// All media files in chronological / filename sort order.
+// sort_order matches the position in this array (1-based).
+const MEDIA = [
+  { file: '20160423_103728.jpg',              type: 'image' },
+  { file: '20160423_103818.jpg',              type: 'image' },
+  { file: '20160423_103846.jpg',              type: 'image' },
+  { file: '20160511_204545.jpg',              type: 'image' },
+  { file: '20160511_204553.jpg',              type: 'image' },
+  { file: '20160511_204559.jpg',              type: 'image' },
+  { file: '20160511_204607.jpg',              type: 'image' },
+  { file: '20160511_204620.jpg',              type: 'image' },
+  { file: '20160511_204637.jpg',              type: 'image' },
+  { file: '20160511_204703.jpg',              type: 'image' },
+  { file: '20160511_204717.jpg',              type: 'image' },
+  { file: '20160511_204731.jpg',              type: 'image' },
+  { file: '20160511_204829.jpg',              type: 'image' },
+  { file: '20160511_204900.jpg',              type: 'image' },
+  { file: '20160511_204938.jpg',              type: 'image' },
+  { file: '20160511_205004.jpg',              type: 'image' },
+  { file: '20160511_205037.jpg',              type: 'image' },
+  { file: '20160511_205233.jpg',              type: 'image' },
+  { file: '20160511_205238.jpg',              type: 'image' },
+  { file: '20160511_205302.mp4',              type: 'video' },
+  { file: '20160511_205907 - Copy.jpg',       type: 'image' },
+  { file: '20160511_205907.jpg',              type: 'image' },
+  { file: '20160511_205910.jpg',              type: 'image' },
+  { file: '20160511_205914.jpg',              type: 'image' },
+  { file: '20160511_205917.jpg',              type: 'image' },
+  { file: '20160511_205920.jpg',              type: 'image' },
+  { file: 'Snapchat-3367257921085106.jpg',    type: 'image' },
+  { file: 'Snapchat-6587181982239862811.jpg', type: 'image' },
+  { file: 'Snapchat-8066994157689694971.jpg', type: 'image' },
+];
+
+const BASE_PATH = '/assets/projects/stofan-bakhus/';
+
 async function seed() {
-  // Idempotency — skip if a project with this exact title already exists
+  // ── 1. Get or create the project ──────────────────────────────────────────
+  let projectId;
+
   const { rows: existing } = await pool.query(
     'SELECT id FROM projects WHERE title = $1',
     [PROJECT.title]
   );
+
   if (existing.length > 0) {
-    console.log(`Project "${PROJECT.title}" already exists (id=${existing[0].id}). Skipping.`);
-    await pool.end();
-    return;
+    projectId = existing[0].id;
+    console.log(`Project "${PROJECT.title}" already exists (id=${projectId}).`);
+  } else {
+    const { rows } = await pool.query(
+      `INSERT INTO projects (title, description, category, year, tools_used, image_url, featured)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, title`,
+      [
+        PROJECT.title,
+        PROJECT.description,
+        PROJECT.category,
+        PROJECT.year,
+        PROJECT.tools_used,
+        PROJECT.image_url,
+        PROJECT.featured,
+      ]
+    );
+    projectId = rows[0].id;
+    console.log(`Inserted "${rows[0].title}" with id=${projectId}`);
   }
 
-  const { rows } = await pool.query(
-    `INSERT INTO projects (title, description, category, year, tools_used, image_url, featured)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, title`,
-    [
-      PROJECT.title,
-      PROJECT.description,
-      PROJECT.category,
-      PROJECT.year,
-      PROJECT.tools_used,
-      PROJECT.image_url,
-      PROJECT.featured,
-    ]
-  );
+  // ── 2. Seed media (idempotent — skip files already present) ───────────────
+  let inserted = 0;
+  let skipped  = 0;
 
-  console.log(`Inserted "${rows[0].title}" with id=${rows[0].id}`);
+  for (let i = 0; i < MEDIA.length; i++) {
+    const { file, type } = MEDIA[i];
+    const filePath   = `${BASE_PATH}${file}`;
+    const sortOrder  = i + 1;
+
+    const { rows: existingMedia } = await pool.query(
+      'SELECT id FROM project_media WHERE project_id = $1 AND file_path = $2',
+      [projectId, filePath]
+    );
+
+    if (existingMedia.length > 0) {
+      skipped++;
+      continue;
+    }
+
+    await pool.query(
+      `INSERT INTO project_media (project_id, file_path, media_type, sort_order)
+       VALUES ($1, $2, $3, $4)`,
+      [projectId, filePath, type, sortOrder]
+    );
+    inserted++;
+  }
+
+  console.log(`Media: ${inserted} inserted, ${skipped} already existed.`);
   await pool.end();
 }
 

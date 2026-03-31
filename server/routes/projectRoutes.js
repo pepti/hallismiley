@@ -7,9 +7,10 @@ const { requireRole }                 = require('../auth/roles');
 const { csrfProtect }                 = require('../middleware/csrf');
 
 // Public read endpoints (A03: query params validated)
-router.get('/',         validateQuery, projectController.getAll);
-router.get('/featured', projectController.getFeatured);
-router.get('/:id',      projectController.getOne);
+router.get('/',            validateQuery, projectController.getAll);
+router.get('/featured',    projectController.getFeatured);
+router.get('/:id/media',   projectController.getMedia);
+router.get('/:id',         projectController.getOne);
 
 // Create / update: admin or moderator
 router.post('/',
