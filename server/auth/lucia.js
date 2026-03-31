@@ -1,4 +1,4 @@
-// Lucia v3 session management — replaces RS256 JWT + refresh token flow
+// Lucia v3 session management — httpOnly session cookie, stored in user_sessions table
 // Sessions are stored in user_sessions table; cookies are httpOnly + secure in prod
 const { Lucia }               = require('lucia');
 const { NodePostgresAdapter } = require('@lucia-auth/adapter-postgresql');

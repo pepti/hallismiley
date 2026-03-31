@@ -56,7 +56,7 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // required for httpOnly refresh token cookie
+  credentials: true, // required for httpOnly session cookie
 }));
 
 // ── A03 Injection: HTTP Parameter Pollution protection ────────────────────────
