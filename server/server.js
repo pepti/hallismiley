@@ -7,17 +7,10 @@ if (process.env.SENTRY_DSN) {
 }
 
 // ── Required env var validation — fail fast on misconfiguration ────────────────
-const REQUIRED_ENV = ['DATABASE_URL', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH', 'ALLOWED_ORIGINS'];
+const REQUIRED_ENV = ['DATABASE_URL', 'ALLOWED_ORIGINS'];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length) {
   console.error(`[server] Missing required environment variables: ${missing.join(', ')}`);
-  process.exit(1);
-}
-
-// ── RSA key assertion — verify keys loaded before accepting traffic ────────────
-const { privateKey, publicKey } = require('./config/keys');
-if (!privateKey || !publicKey) {
-  console.error('[server] RSA keys failed to load — cannot start without JWT signing keys');
   process.exit(1);
 }
 
@@ -47,7 +40,7 @@ async function start() {
     logger.info({ port: PORT }, 'Portfolio server started');
   });
 
-  // Start periodic cleanup of expired/revoked refresh tokens (runs every 24h)
+  // Start periodic cleanup of expired sessions (runs every 24h)
   const cleanupTimer = startTokenCleanup();
 
   // Graceful shutdown — finish in-flight requests before exiting

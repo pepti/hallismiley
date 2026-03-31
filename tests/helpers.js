@@ -1,32 +1,47 @@
-const jwt  = require('jsonwebtoken');
-const fs   = require('fs');
-const path = require('path');
-const db   = require('../server/config/database');
+const db     = require('../server/config/database');
+const { lucia } = require('../server/auth/lucia');
+const { Scrypt } = require('oslo/password');
 
-const privateKey = fs.readFileSync(path.join(__dirname, '../keys/private.pem'), 'utf8');
+const scrypt = new Scrypt();
 
-/** Generate a valid RS256 access token for the test admin user. */
-function generateToken(overrides = {}) {
-  return jwt.sign(
-    { sub: process.env.ADMIN_USERNAME, role: 'admin', ...overrides },
-    privateKey,
-    { algorithm: 'RS256', expiresIn: '15m', issuer: 'halliprojects' }
+/**
+ * Inserts the test admin user (hashing ADMIN_PASSWORD with oslo Scrypt).
+ * Uses ON CONFLICT so it is safe to call multiple times per test run.
+ * Returns the user's id.
+ */
+async function createTestAdminUser() {
+  const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
+  const { rows } = await db.query(
+    `INSERT INTO users (id, email, username, password_hash, role)
+     VALUES ('test-admin-id', 'admin@test.com', $1, $2, 'admin')
+     ON CONFLICT (username) DO UPDATE
+       SET password_hash = EXCLUDED.password_hash,
+           failed_login_attempts = 0,
+           locked_until = NULL
+     RETURNING id`,
+    [process.env.ADMIN_USERNAME, hash]
   );
+  return rows[0].id;
 }
 
-/** Generate a token that is already expired. */
-function generateExpiredToken() {
-  return jwt.sign(
-    { sub: process.env.ADMIN_USERNAME, role: 'admin' },
-    privateKey,
-    { algorithm: 'RS256', expiresIn: -1, issuer: 'halliprojects' }
-  );
+/**
+ * Creates the test admin user and a Lucia session for it.
+ * Returns the full `Cookie: auth_session=<id>` string ready for supertest.
+ */
+async function getTestSessionCookie() {
+  const userId = await createTestAdminUser();
+  const session = await lucia.createSession(userId, {
+    ip_address: '127.0.0.1',
+    user_agent:  'test-agent',
+  });
+  const cookie = lucia.createSessionCookie(session.id);
+  return `${cookie.name}=${cookie.value}`;
 }
 
-/** Truncate both tables and reset sequences between tests. */
+/** Truncate all mutable tables and reset sequences between tests. */
 async function cleanTables() {
   await db.query(
-    'TRUNCATE TABLE projects, refresh_tokens RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE projects, user_sessions, users RESTART IDENTITY CASCADE'
   );
 }
 
@@ -43,4 +58,4 @@ function validProject(overrides = {}) {
   };
 }
 
-module.exports = { generateToken, generateExpiredToken, cleanTables, validProject };
+module.exports = { createTestAdminUser, getTestSessionCookie, cleanTables, validProject };

@@ -1,41 +1,14 @@
-// OAuth 2.0-style auth flow using RS256 JWT — mirrors how Azure AD issues tokens
-// Access token:  short-lived (15 min), signed with RSA private key
-// Refresh token: long-lived (7 days),  stored hashed in DB for revocation support
-const jwt    = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
-const { query: dbQuery, pool } = require('../config/database');
-const { privateKey } = require('../config/keys');
+// Session-based auth using Lucia v3 — replaces RS256 JWT + refresh token flow.
+// Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
+// Account lockout: 5 failures → 15-min lock.
+const { query: dbQuery }  = require('../config/database');
+const { lucia }           = require('../auth/lucia');
+const { Scrypt }          = require('oslo/password');
 
-const ACCESS_TOKEN_TTL  = 15 * 60;           // 15 minutes (seconds)
-const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;  // 7 days (seconds)
+const scrypt = new Scrypt();
 
-// Cookie options — httpOnly prevents JS access (mirrors Azure's secure cookie handling)
-const REFRESH_COOKIE_OPTS = {
-  httpOnly: true,
-  secure:   process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  maxAge:   REFRESH_TOKEN_TTL * 1000,
-  path:     '/auth/refresh',
-};
-
-function issueAccessToken(sub) {
-  return jwt.sign(
-    { sub, role: 'admin' },
-    privateKey,
-    { algorithm: 'RS256', expiresIn: ACCESS_TOKEN_TTL, issuer: 'halliprojects' }
-  );
-}
-
-async function storeRefreshToken(rawToken, client) {
-  const hash      = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL * 1000);
-  const runner    = client || { query: dbQuery };
-  await runner.query(
-    'INSERT INTO refresh_tokens (token_hash, expires_at) VALUES ($1, $2)',
-    [hash, expiresAt]
-  );
-}
+const MAX_ATTEMPTS      = 5;
+const LOCKOUT_MS        = 15 * 60 * 1000; // 15 minutes
 
 const authController = {
   // POST /auth/login  { username, password }
@@ -47,76 +20,114 @@ const authController = {
         return res.status(400).json({ error: 'username and password are required', code: 400 });
       }
 
-      // Validate against admin credentials stored in env
-      const validUser = username === process.env.ADMIN_USERNAME;
-      const validPass = validUser
-        ? await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH)
-        : false;
+      const { rows } = await dbQuery(
+        `SELECT id, username, email, role, password_hash,
+                failed_login_attempts, locked_until
+         FROM users WHERE username = $1`,
+        [username]
+      );
+      const user = rows[0] ?? null;
 
-      // Constant-time-ish rejection — don't reveal which field was wrong
-      if (!validUser || !validPass) {
+      // Check lockout before password work — a locked account already reveals
+      // the username exists, so an early return is acceptable here.
+      if (user && user.locked_until && new Date(user.locked_until) > new Date()) {
+        return res.status(401).json({ error: 'Account temporarily locked', code: 401 });
+      }
+
+      // Always perform hash work to prevent timing-based username enumeration.
+      // If no user was found, hash the password anyway (result discarded).
+      let validPass = false;
+      if (user) {
+        try {
+          validPass = await scrypt.verify(user.password_hash, password);
+        } catch { validPass = false; }
+      } else {
+        // Simulate cost — result intentionally ignored
+        await scrypt.hash(password).catch(() => {});
+      }
+
+      if (!user || !validPass) {
+        // Increment failed attempts if the user exists
+        if (user) {
+          const attempts = (user.failed_login_attempts || 0) + 1;
+          if (attempts >= MAX_ATTEMPTS) {
+            const lockedUntil = new Date(Date.now() + LOCKOUT_MS);
+            await dbQuery(
+              'UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
+              [attempts, lockedUntil, user.id]
+            );
+          } else {
+            await dbQuery(
+              'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
+              [attempts, user.id]
+            );
+          }
+        }
         return res.status(401).json({ error: 'Invalid credentials', code: 401 });
       }
 
-      const accessToken  = issueAccessToken(username);
-      const refreshToken = crypto.randomBytes(64).toString('hex');
-      await storeRefreshToken(refreshToken, null);
-
-      res.cookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTS);
-      res.json({ access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL });
-    } catch (err) { next(err); }
-  },
-
-  // POST /auth/refresh  (refresh token arrives via httpOnly cookie)
-  async refresh(req, res, next) {
-    try {
-      const rawToken = req.cookies?.refresh_token;
-      if (!rawToken) return res.status(401).json({ error: 'No refresh token', code: 401 });
-
-      const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
-      const { rows } = await dbQuery(
-        'SELECT id, token_hash, expires_at, revoked FROM refresh_tokens WHERE token_hash = $1',
-        [hash]
+      // Successful login — reset counters, create session
+      await dbQuery(
+        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
+        [user.id]
       );
 
-      const stored = rows[0];
-      if (!stored || stored.revoked || new Date(stored.expires_at) < new Date()) {
-        res.clearCookie('refresh_token', { path: '/auth/refresh' });
-        return res.status(401).json({ error: 'Refresh token invalid or expired', code: 401 });
-      }
+      const session = await lucia.createSession(user.id, {
+        ip_address: req.ip ?? null,
+        user_agent: req.headers['user-agent'] ?? null,
+      });
+      res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
-      // Token rotation — revoke old + store new in a single transaction to prevent
-      // a window where both tokens are simultaneously valid or both are gone.
-      const newRefresh = crypto.randomBytes(64).toString('hex');
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1', [stored.id]);
-        await storeRefreshToken(newRefresh, client);
-        await client.query('COMMIT');
-      } catch (txErr) {
-        await client.query('ROLLBACK');
-        throw txErr;
-      } finally {
-        client.release();
-      }
-
-      const accessToken = issueAccessToken(process.env.ADMIN_USERNAME);
-      res.cookie('refresh_token', newRefresh, REFRESH_COOKIE_OPTS);
-      res.json({ access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL });
+      return res.json({
+        user: {
+          id:       user.id,
+          username: user.username,
+          email:    user.email,
+          role:     user.role,
+        },
+      });
     } catch (err) { next(err); }
   },
 
   // POST /auth/logout
   async logout(req, res, next) {
     try {
-      const rawToken = req.cookies?.refresh_token;
-      if (rawToken) {
-        const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
-        await dbQuery('UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1', [hash]);
+      const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
+      if (sessionId) {
+        await lucia.invalidateSession(sessionId);
       }
-      res.clearCookie('refresh_token', { path: '/auth/refresh' });
-      res.status(204).send();
+      res.setHeader('Set-Cookie', lucia.createBlankSessionCookie().serialize());
+      return res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // GET /auth/session — returns current session/user info (replaces refresh flow)
+  async session(req, res, next) {
+    try {
+      const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
+      if (!sessionId) {
+        return res.json({ authenticated: false });
+      }
+
+      const { session, user } = await lucia.validateSession(sessionId);
+      if (!session) {
+        res.setHeader('Set-Cookie', lucia.createBlankSessionCookie().serialize());
+        return res.json({ authenticated: false });
+      }
+
+      if (session.fresh) {
+        res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
+      }
+
+      return res.json({
+        authenticated: true,
+        user: {
+          id:       user.id,
+          username: user.username,
+          email:    user.email,
+          role:     user.role,
+        },
+      });
     } catch (err) { next(err); }
   },
 };

@@ -2,15 +2,17 @@
 
 Base URL: `https://halliprojects.is`
 
-All API endpoints are under `/api/v1/`. Authenticated endpoints require a valid RS256 JWT Bearer token obtained via `POST /auth/login`.
+All API endpoints are under `/api/v1/`. Authenticated endpoints require a valid session cookie (`auth_session`) obtained via `POST /auth/login`.
 
 ---
 
 ## Authentication
 
+Authentication uses Lucia v3 session-based cookies. The `auth_session` httpOnly cookie is set by the server on login and cleared on logout — the browser handles it automatically. No tokens are stored in the frontend.
+
 ### POST /auth/login
 
-Authenticate as admin and receive an access token.
+Authenticate as admin and start a session.
 
 **Rate limit:** 10 requests / 15 min per IP.
 
@@ -22,46 +24,57 @@ Authenticate as admin and receive an access token.
 **Response `200 OK`:**
 ```json
 {
-  "access_token": "<jwt>",
-  "token_type": "Bearer",
-  "expires_in": 900
+  "user": {
+    "id": "uuid",
+    "username": "admin",
+    "email": "admin@example.com",
+    "role": "admin"
+  }
 }
 ```
-Sets an `httpOnly` `refresh_token` cookie (7-day TTL, path `/auth/refresh`).
+Sets an `httpOnly`, `SameSite=Strict` `auth_session` cookie.
 
-**Errors:** `400` missing fields · `401` invalid credentials
-
----
-
-### POST /auth/refresh
-
-Exchange the refresh token cookie for a new access token (token rotation).
-
-**Rate limit:** 20 requests / 15 min per IP.
-
-**Request:** No body. Refresh token is read from the `refresh_token` httpOnly cookie.
-
-**Response `200 OK`:**
-```json
-{
-  "access_token": "<jwt>",
-  "token_type": "Bearer",
-  "expires_in": 900
-}
-```
-Issues a new `refresh_token` cookie and revokes the old one (atomic DB transaction).
-
-**Errors:** `401` no/invalid/expired refresh token
+**Errors:** `400` missing fields · `401` invalid credentials · `401` account temporarily locked (after 5 failed attempts)
 
 ---
 
 ### POST /auth/logout
 
-Revoke the current refresh token and clear the cookie.
+Invalidate the current session and clear the cookie.
 
-**Request:** No body.
+**Request:** No body. Session is read from the `auth_session` httpOnly cookie.
 
 **Response:** `204 No Content`
+
+Safe to call when not logged in (idempotent).
+
+---
+
+### GET /auth/session
+
+Return the current session/user info without requiring auth.
+
+**Request:** No body. Session is read from the `auth_session` httpOnly cookie.
+
+**Response `200 OK`** (logged in):
+```json
+{
+  "authenticated": true,
+  "user": {
+    "id": "uuid",
+    "username": "admin",
+    "email": "admin@example.com",
+    "role": "admin"
+  }
+}
+```
+
+**Response `200 OK`** (not logged in):
+```json
+{ "authenticated": false }
+```
+
+Use this on page load to restore session state.
 
 ---
 
@@ -127,8 +140,6 @@ Return a single project by ID.
 
 Create a new project. **Requires auth.**
 
-**Headers:** `Authorization: Bearer <access_token>`
-
 **Rate limit:** 30 write requests / 15 min per IP.
 
 **Request body:**
@@ -147,7 +158,7 @@ Create a new project. **Requires auth.**
 
 **Response `201 Created`:** Created project object.
 
-**Errors:** `400` validation failure · `401` missing/invalid token
+**Errors:** `400` validation failure · `401` no valid session
 
 ---
 
@@ -211,7 +222,13 @@ All errors return JSON:
 |-------|-------|
 | Global (all endpoints) | 200 req / 15 min |
 | Auth login | 10 req / 15 min |
-| Auth refresh | 20 req / 15 min |
 | Project writes (POST/PUT/PATCH/DELETE) | 30 req / 15 min |
 
 Rate limit responses use HTTP `429` with standard `RateLimit-*` headers.
+
+## Admin Setup
+
+After deploying and running migrations, create the first admin user:
+```bash
+node server/scripts/setup-admin.js <username> <email> <password>
+```

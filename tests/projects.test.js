@@ -1,16 +1,13 @@
 const request = require('supertest');
 const app     = require('../server/app');
 const db      = require('../server/config/database');
-const { generateToken, generateExpiredToken, cleanTables, validProject } = require('./helpers');
+const { getTestSessionCookie, cleanTables, validProject } = require('./helpers');
 
-let token;
-
-beforeAll(() => {
-  token = generateToken();
-});
+let sessionCookie;
 
 beforeEach(async () => {
   await cleanTables();
+  sessionCookie = await getTestSessionCookie();
 });
 
 afterAll(async () => {
@@ -28,8 +25,8 @@ describe('GET /api/v1/projects', () => {
   });
 
   test('returns all created projects', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject());
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ title: 'Second' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject());
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ title: 'Second' }));
 
     const res = await request(app).get('/api/v1/projects');
     expect(res.status).toBe(200);
@@ -37,8 +34,8 @@ describe('GET /api/v1/projects', () => {
   });
 
   test('filters by category=tech', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ category: 'tech' }));
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ title: 'Wood', category: 'carpentry' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ category: 'tech' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ title: 'Wood', category: 'carpentry' }));
 
     const res = await request(app).get('/api/v1/projects?category=tech');
     expect(res.status).toBe(200);
@@ -47,8 +44,8 @@ describe('GET /api/v1/projects', () => {
   });
 
   test('filters by category=carpentry', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ category: 'tech' }));
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ title: 'Wood', category: 'carpentry' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ category: 'tech' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ title: 'Wood', category: 'carpentry' }));
 
     const res = await request(app).get('/api/v1/projects?category=carpentry');
     expect(res.status).toBe(200);
@@ -56,8 +53,8 @@ describe('GET /api/v1/projects', () => {
   });
 
   test('filters by featured=true', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ featured: true }));
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ title: 'Not featured' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ featured: true }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ title: 'Not featured' }));
 
     const res = await request(app).get('/api/v1/projects?featured=true');
     expect(res.status).toBe(200);
@@ -65,8 +62,8 @@ describe('GET /api/v1/projects', () => {
   });
 
   test('filters by year', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ year: 2020 }));
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ title: 'Other year', year: 2023 }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ year: 2020 }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ title: 'Other year', year: 2023 }));
 
     const res = await request(app).get('/api/v1/projects?year=2020');
     expect(res.status).toBe(200);
@@ -100,8 +97,8 @@ describe('GET /api/v1/projects', () => {
 
 describe('GET /api/v1/projects/featured', () => {
   test('returns only featured projects', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ featured: true, title: 'Featured A' }));
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ featured: false }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ featured: true, title: 'Featured A' }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ featured: false }));
 
     const res = await request(app).get('/api/v1/projects/featured');
     expect(res.status).toBe(200);
@@ -110,7 +107,7 @@ describe('GET /api/v1/projects/featured', () => {
   });
 
   test('returns empty array when no projects are featured', async () => {
-    await request(app).post('/api/v1/projects').set('Authorization', `Bearer ${token}`).send(validProject({ featured: false }));
+    await request(app).post('/api/v1/projects').set('Cookie', sessionCookie).send(validProject({ featured: false }));
 
     const res = await request(app).get('/api/v1/projects/featured');
     expect(res.status).toBe(200);
@@ -124,7 +121,7 @@ describe('GET /api/v1/projects/:id', () => {
   test('returns a project by id', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     const id  = create.body.id;
@@ -147,51 +144,40 @@ describe('POST /api/v1/projects', () => {
   test('creates a project and returns 201 with the new resource', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
-      id:          expect.any(Number),
-      title:       validProject().title,
-      category:    'tech',
-      year:        2024,
-      featured:    false,
-      tools_used:  ['Node.js', 'PostgreSQL'],
+      id:         expect.any(Number),
+      title:      validProject().title,
+      category:   'tech',
+      year:       2024,
+      featured:   false,
+      tools_used: ['Node.js', 'PostgreSQL'],
     });
   });
 
-  test('returns 401 without Authorization header', async () => {
+  test('returns 401 without session cookie', async () => {
     const res = await request(app).post('/api/v1/projects').send(validProject());
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Unauthorized');
   });
 
-  test('returns 401 with a malformed Bearer token', async () => {
+  test('returns 401 with an invalid session cookie', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', 'Bearer thisisnotajwt')
+      .set('Cookie', 'auth_session=notarealsession')
       .send(validProject());
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Invalid token');
-  });
-
-  test('returns 401 with an expired token', async () => {
-    const expired = generateExpiredToken();
-    const res = await request(app)
-      .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${expired}`)
-      .send(validProject());
-
-    expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Token expired');
+    expect(res.body.error).toBe('Unauthorized');
   });
 
   test('missing required fields returns 400', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send({ title: 'Only a title' });
 
     expect(res.status).toBe(400);
@@ -201,7 +187,7 @@ describe('POST /api/v1/projects', () => {
   test('invalid category value returns 400', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ category: 'furniture' }));
 
     expect(res.status).toBe(400);
@@ -211,7 +197,7 @@ describe('POST /api/v1/projects', () => {
   test('year out of allowed range returns 400', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ year: 3000 }));
 
     expect(res.status).toBe(400);
@@ -221,7 +207,7 @@ describe('POST /api/v1/projects', () => {
   test('non-boolean featured returns 400', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ featured: 'yes' }));
 
     expect(res.status).toBe(400);
@@ -231,7 +217,7 @@ describe('POST /api/v1/projects', () => {
   test('http:// image_url rejected — must be https://', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ image_url: 'http://example.com/img.jpg' }));
 
     expect(res.status).toBe(400);
@@ -241,7 +227,7 @@ describe('POST /api/v1/projects', () => {
   test('https:// image_url is accepted', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ image_url: 'https://example.com/img.jpg' }));
 
     expect(res.status).toBe(201);
@@ -251,7 +237,7 @@ describe('POST /api/v1/projects', () => {
   test('tools_used must be an array', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ tools_used: 'Node.js' }));
 
     expect(res.status).toBe(400);
@@ -261,7 +247,7 @@ describe('POST /api/v1/projects', () => {
   test('title exceeding 200 chars returns 400', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ title: 'A'.repeat(201) }));
 
     expect(res.status).toBe(400);
@@ -275,13 +261,13 @@ describe('PUT /api/v1/projects/:id', () => {
   test('replaces a project with valid data', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     const id  = create.body.id;
     const res = await request(app)
       .put(`/api/v1/projects/${id}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject({ title: 'Updated Title', year: 2023 }));
 
     expect(res.status).toBe(200);
@@ -289,7 +275,7 @@ describe('PUT /api/v1/projects/:id', () => {
     expect(res.body.year).toBe(2023);
   });
 
-  test('requires auth — 401 without token', async () => {
+  test('requires auth — 401 without session cookie', async () => {
     const res = await request(app).put('/api/v1/projects/1').send(validProject());
     expect(res.status).toBe(401);
   });
@@ -297,7 +283,7 @@ describe('PUT /api/v1/projects/:id', () => {
   test('returns 404 for non-existent id', async () => {
     const res = await request(app)
       .put('/api/v1/projects/99999')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     expect(res.status).toBe(404);
@@ -310,13 +296,13 @@ describe('PATCH /api/v1/projects/:id', () => {
   test('partially updates a project', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     const id  = create.body.id;
     const res = await request(app)
       .patch(`/api/v1/projects/${id}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send({ title: 'Patched Title' });
 
     expect(res.status).toBe(200);
@@ -325,7 +311,7 @@ describe('PATCH /api/v1/projects/:id', () => {
     expect(res.body.year).toBe(2024);       // unchanged
   });
 
-  test('requires auth — 401 without token', async () => {
+  test('requires auth — 401 without session cookie', async () => {
     const res = await request(app).patch('/api/v1/projects/1').send({ title: 'Oops' });
     expect(res.status).toBe(401);
   });
@@ -333,13 +319,13 @@ describe('PATCH /api/v1/projects/:id', () => {
   test('PATCH with invalid field value returns 400', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     const id  = create.body.id;
     const res = await request(app)
       .patch(`/api/v1/projects/${id}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send({ category: 'notvalid' });
 
     expect(res.status).toBe(400);
@@ -352,13 +338,13 @@ describe('DELETE /api/v1/projects/:id', () => {
   test('deletes an existing project and returns 204', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
       .send(validProject());
 
     const id  = create.body.id;
     const del = await request(app)
       .delete(`/api/v1/projects/${id}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', sessionCookie);
 
     expect(del.status).toBe(204);
 
@@ -367,7 +353,7 @@ describe('DELETE /api/v1/projects/:id', () => {
     expect(get.status).toBe(404);
   });
 
-  test('requires auth — 401 without token', async () => {
+  test('requires auth — 401 without session cookie', async () => {
     const res = await request(app).delete('/api/v1/projects/1');
     expect(res.status).toBe(401);
   });
@@ -375,7 +361,7 @@ describe('DELETE /api/v1/projects/:id', () => {
   test('returns 404 for non-existent id', async () => {
     const res = await request(app)
       .delete('/api/v1/projects/99999')
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', sessionCookie);
 
     expect(res.status).toBe(404);
   });
