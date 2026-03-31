@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Keys and secrets
+keys/
+ClaudeHalliProjectskeys/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Data / database files
+data/
+
+# Claude IDE files
+.claude/
+.claude.zip
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+dist/
+build/

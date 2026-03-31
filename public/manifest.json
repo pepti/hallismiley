@@ -1,0 +1,17 @@
+{
+  "name": "Halli Smiley",
+  "short_name": "Halli",
+  "description": "Portfolio of Halli — Icelandic carpenter and computer scientist.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#010A13",
+  "background_color": "#010A13",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

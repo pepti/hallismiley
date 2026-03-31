@@ -1,0 +1,61 @@
+:root {
+  /* LoL-inspired palette */
+  --bg-base:     #0A1428;
+  --bg-surface:  #1E2328;
+  --bg-elevated: #16213E;
+  --bg-nav:      #010A13;
+  --bg-hover:    #2A2D31;
+
+  --border:       rgba(120, 90, 40, 0.6);
+  --border-dim:   rgba(120, 90, 40, 0.3);
+  --border-light: rgba(200, 170, 110, 0.2);
+
+  --gold:         #C8AA6E;
+  --gold-light:   #F0E6D3;
+  --gold-dark:    #785A28;
+  --gold-glow:    rgba(200, 170, 110, 0.12);
+  --teal:         #0BC4E3;
+  --teal-dim:     rgba(11, 196, 227, 0.12);
+
+  /* Legacy aliases used in components */
+  --accent-amber:     #C8AA6E;
+  --accent-amber-dim: rgba(200, 170, 110, 0.12);
+  --accent-blue:      #0BC4E3;
+  --accent-blue-dim:  rgba(11, 196, 227, 0.12);
+
+  --text-primary:   #F0E6D3;
+  --text-secondary: #A9B4C0;
+  --text-muted:     #5B5A56;
+
+  --success: #4caf78;
+  --error:   #e05c5c;
+
+  /* Spacing scale */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  24px;
+  --sp-6:  32px;
+  --sp-7:  48px;
+  --sp-8:  64px;
+
+  /* Typography */
+  --font-display: 'Cinzel', 'Georgia', serif;
+  --font-sans:    'Barlow', 'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Sharp corners — LoL aesthetic */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 4px;
+
+  /* Shadows */
+  --shadow-card:  0 4px 24px rgba(0,0,0,0.6), 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-modal: 0 16px 64px rgba(0,0,0,0.85);
+  --shadow-gold:  0 0 24px rgba(200,170,110,0.2);
+
+  /* Transitions */
+  --transition: 200ms ease;
+}

@@ -1,0 +1,634 @@
+/* ═══════════════════════════════════════════════════════
+   HOME PAGE  —  League of Legends inspired sections
+   ═══════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────
+   SECTION 1: Hero — Full viewport
+   ───────────────────────────────── */
+.lol-hero {
+  position: relative;
+  height: 100vh; min-height: 600px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; overflow: hidden;
+  background: #010A13;
+}
+
+.lol-hero__bg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+@keyframes subtleDrift {
+  from { background-position: center 40%; }
+  to   { background-position: center 60%; }
+}
+
+.lol-hero__overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(1,10,19,0.25) 0%,
+    rgba(1,10,19,0.45) 40%,
+    rgba(1,10,19,0.75) 100%
+  );
+}
+
+.lol-hero__content {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+}
+
+/* Gold metallic title — like LoL logo */
+.lol-hero__title {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(2.8rem, 8vw, 7.5rem);
+  font-weight: 900;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  line-height: 0.92;
+  color: #C8AA6E;
+  text-shadow:
+    0 0 80px rgba(200,170,110,0.6),
+    0 2px 4px rgba(0,0,0,0.9),
+    0 0 200px rgba(200,170,110,0.2);
+  margin-bottom: 0.4em;
+}
+.lol-hero__title span {
+  display: block;
+  font-size: 0.52em;
+  letter-spacing: 0.25em;
+  color: #D4B97A;
+}
+.lol-hero__title span.lol-hero__title-second {
+  text-transform: none;
+  font-size: 1em;
+  letter-spacing: 0.06em;
+  color: #C8AA6E;
+}
+
+/* Italic uppercase subtitle — LoL style */
+.lol-hero__subtitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(0.7rem, 1.4vw, 0.95rem);
+  font-weight: 700; font-style: italic;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: #FFFFFF;
+  margin: 1.8rem 0 2.8rem;
+  opacity: 0.92;
+}
+
+/* Gold bordered CTA — exactly like LoL "PLAY FOR FREE" */
+.lol-hero__cta {
+  display: inline-block;
+  padding: 16px 52px;
+  background: transparent;
+  border: 2px solid #C8AA6E;
+  color: #C8AA6E;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  cursor: pointer; transition: all 300ms ease;
+  text-decoration: none;
+}
+.lol-hero__cta:hover {
+  background: rgba(200,170,110,0.12);
+  box-shadow: 0 0 32px rgba(200,170,110,0.45);
+  color: #F0E6D3; border-color: #F0E6D3;
+}
+
+/* Scroll indicator */
+.lol-hero__scroll {
+  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+  z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  animation: bounce 2s ease-in-out infinite;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%       { transform: translateX(-50%) translateY(8px); }
+}
+.lol-hero__scroll span {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+.lol-hero__scroll-line {
+  width: 1px; height: 40px;
+  background: linear-gradient(180deg, rgba(200,170,110,0.6), transparent);
+}
+
+/* ─────────────────────────────────────────────────
+   SECTION 2: Featured News — LIGHT background
+   ───────────────────────────────────────────────── */
+.lol-news {
+  background: #F5F3EE;
+  padding: 80px 0;
+}
+
+.lol-news__inner {
+  max-width: 1300px; margin: 0 auto; padding: 0 48px;
+}
+
+.lol-news__header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 40px;
+}
+
+/* Bold italic heading — exact LoL style */
+.lol-news__heading {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: #1E2328; letter-spacing: 0.02em;
+}
+
+.lol-news__view-all {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: #1E2328; text-decoration: none; cursor: pointer;
+  background: none; border: none;
+  transition: color 200ms ease;
+}
+.lol-news__view-all:hover { color: #C89B3C; }
+
+.lol-news__grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+}
+
+.lol-news__card { cursor: pointer; transition: transform 200ms ease; }
+.lol-news__card:hover { transform: translateY(-4px); }
+
+.lol-news__card-img {
+  width: 100%; aspect-ratio: 16/9;
+  object-fit: cover; display: block;
+}
+
+.lol-news__card-body { padding: 16px 0; }
+
+.lol-news__card-meta {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+}
+
+.lol-news__card-tag {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+}
+.lol-news__card-tag--tech        { color: #0BC4E3; }
+.lol-news__card-tag--carpentry   { color: #C89B3C; }
+.lol-news__card-tag--ai          { color: #9B7BC8; }
+.lol-news__card-tag--remodelling { color: #4CAF78; }
+
+.lol-news__card-date {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.68rem; color: #5B5A56;
+}
+
+.lol-news__card-title {
+  font-family: 'Barlow', sans-serif;
+  font-size: 1.05rem; font-weight: 700;
+  color: #1E2328; margin-bottom: 8px; line-height: 1.35;
+}
+
+.lol-news__card-desc {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.875rem; color: #5B5A56; line-height: 1.65;
+  display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ────────────────────────────────────────────────────────
+   SECTION 4: Projects — champion-style, LIGHT background
+   ──────────────────────────────────────────────────────── */
+.lol-projects {
+  background: #EDEBE5; padding: 80px 0; overflow: hidden;
+}
+
+.lol-projects__inner {
+  max-width: 1300px; margin: 0 auto; padding: 0 48px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 60px; align-items: center;
+}
+
+.lol-projects__eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.1rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(30,35,40,0.55); margin-bottom: 4px;
+}
+
+.lol-projects__heading {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(2.8rem, 5vw, 4.8rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: #1E2328; line-height: 0.9; margin-bottom: 1.4rem;
+}
+
+.lol-projects__desc {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.95rem; color: #5B5A56;
+  line-height: 1.75; max-width: 420px; margin-bottom: 2rem;
+}
+
+.lol-projects__btns {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 3rem;
+}
+
+/* Gold button — same as LoL "DISCOVER MORE CHAMPIONS" */
+.lol-btn--gold {
+  padding: 13px 30px;
+  background: #C89B3C; color: #010A13;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  border: none; cursor: pointer;
+  transition: all 200ms ease;
+  text-decoration: none; display: inline-block;
+}
+.lol-btn--gold:hover { background: #D4A843; box-shadow: 0 4px 20px rgba(200,152,60,0.4); }
+
+/* Teal button — same as LoL "PLAY NOW" */
+.lol-btn--teal {
+  padding: 13px 30px;
+  background: #0BC4E3; color: #010A13;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  border: none; cursor: pointer;
+  transition: all 200ms ease;
+  text-decoration: none; display: inline-block;
+}
+.lol-btn--teal:hover { background: #0DD4F5; box-shadow: 0 4px 20px rgba(11,196,227,0.4); }
+
+/* Category icon row — like LoL champion class icons */
+.lol-projects__categories {
+  display: flex; gap: 36px; flex-wrap: wrap;
+}
+
+.lol-projects__cat {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer; opacity: 0.45; transition: opacity 200ms ease;
+}
+.lol-projects__cat:hover { opacity: 0.8; }
+.lol-projects__cat.active { opacity: 1; }
+
+.lol-projects__cat-icon {
+  width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  color: #C8AA6E;
+}
+.lol-projects__cat-icon svg { width: 36px; height: 36px; }
+
+.lol-projects__cat-label {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: #1E2328;
+}
+
+/* Right side — circular project preview */
+.lol-projects__right {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+
+.lol-projects__circle {
+  width: min(420px, 80vw); height: min(420px, 80vw);
+  border-radius: 50%;
+  border: 1px solid rgba(200,170,110,0.7);
+  overflow: hidden; position: relative;
+  box-shadow: 0 0 60px rgba(200,170,110,0.1);
+}
+
+.lol-projects__preview-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transition: opacity 400ms ease;
+}
+
+.lol-projects__preview-name {
+  margin-top: 28px; text-align: center;
+}
+
+.lol-projects__preview-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.4rem; font-weight: 900; font-style: italic;
+  text-transform: uppercase; color: #1E2328;
+}
+
+.lol-projects__preview-type {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.75rem; color: #5B5A56; margin-top: 4px;
+}
+
+/* ─────────────────────────────────────────────────────
+   SECTION 5 (Optional): Skills showcase — dark + image
+   ───────────────────────────────────────────────────── */
+.lol-skills {
+  position: relative; padding: 100px 0;
+  overflow: hidden; background: #010A13;
+}
+
+.lol-skills__bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1560184828-12c746deb4c3?w=1920&h=1080&fit=crop&q=80&auto=format') center/cover no-repeat;
+  opacity: 0.12;
+}
+
+.lol-skills__inner {
+  max-width: 1300px; margin: 0 auto; padding: 0 48px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 80px; align-items: center;
+  position: relative; z-index: 2;
+}
+
+.lol-skills__tag {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem; font-weight: 700; font-style: italic;
+  letter-spacing: 0.25em; text-transform: uppercase;
+  color: #C8AA6E; margin-bottom: 0.5rem;
+}
+
+/* Large italic title — like LoL "SLAY WITH STYLE" */
+.lol-skills__title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(3rem, 5.5vw, 6rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: #FFFFFF; line-height: 0.9; margin-bottom: 1.5rem;
+}
+
+.lol-skills__desc {
+  font-family: 'Barlow', sans-serif;
+  font-size: 1rem; color: #A9B4C0;
+  line-height: 1.8; margin-bottom: 2.5rem;
+}
+
+.lol-skills__grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+}
+
+.lol-skills__item {
+  border-left: 2px solid #C8AA6E;
+  padding-left: 16px;
+}
+
+.lol-skills__item-label {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: #C8AA6E; margin-bottom: 4px;
+}
+
+.lol-skills__item-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.6rem; font-weight: 900; font-style: italic;
+  color: #FFFFFF; line-height: 1;
+}
+
+/* Right side — image in diamond clip */
+.lol-skills__img-wrap { position: relative; }
+.lol-skills__img {
+  width: 100%; aspect-ratio: 4/5; object-fit: cover;
+  clip-path: polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%);
+}
+.lol-skills__img-border {
+  position: absolute; inset: 0;
+  clip-path: polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%);
+  border: 1px solid rgba(200,170,110,0.4);
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────
+   SECTION 6 (Optional): Stats — dark mid section
+   ───────────────────────────────────────────── */
+.lol-stats {
+  background: #1E2328; padding: 64px 0;
+  border-top: 1px solid rgba(200,170,110,0.15);
+  border-bottom: 1px solid rgba(200,170,110,0.15);
+}
+
+.lol-stats__inner {
+  max-width: 1300px; margin: 0 auto; padding: 0 48px;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 40px; text-align: center;
+}
+
+.lol-stats__num {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-weight: 900; font-style: italic;
+  color: #C8AA6E; line-height: 1;
+}
+
+.lol-stats__label {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: #A9B4C0; margin-top: 8px;
+}
+
+/* ─────────────────────────────────────────────────
+   SECTION 7 (Optional): Contact CTA — dramatic dark
+   ───────────────────────────────────────────────── */
+.lol-contact {
+  position: relative; padding: 120px 0;
+  overflow: hidden; background: #010A13;
+}
+
+.lol-contact__bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1473425021274-58232d06e88b?w=1920&h=1080&fit=crop&q=80&auto=format') center/cover no-repeat;
+  opacity: 0.1;
+  animation: subtleDrift 30s ease-in-out infinite alternate;
+}
+
+.lol-contact__inner {
+  position: relative; z-index: 2;
+  max-width: 720px; margin: 0 auto; padding: 0 48px;
+  text-align: center;
+}
+
+.lol-contact__eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.85rem; font-weight: 700; font-style: italic;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: #C8AA6E; margin-bottom: 1rem;
+}
+
+.lol-contact__title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(2.5rem, 5.5vw, 5.5rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: #FFFFFF; line-height: 0.92; margin-bottom: 1.5rem;
+}
+
+.lol-contact__desc {
+  font-family: 'Barlow', sans-serif;
+  font-size: 1rem; color: #A9B4C0;
+  line-height: 1.75; margin-bottom: 3rem;
+}
+
+.lol-contact__btn {
+  display: inline-block;
+  padding: 18px 60px;
+  background: transparent;
+  border: 2px solid #C8AA6E; color: #C8AA6E;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  cursor: pointer; transition: all 300ms ease;
+  text-decoration: none;
+}
+.lol-contact__btn:hover {
+  background: rgba(200,170,110,0.1);
+  box-shadow: 0 0 40px rgba(200,170,110,0.35);
+  color: #F0E6D3;
+}
+
+/* ── Contact form ── */
+.contact-form {
+  margin-top: 2.5rem; text-align: left;
+}
+.contact-form__row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-bottom: 16px;
+}
+.contact-form__field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.contact-form__row .contact-form__field { margin-bottom: 0; }
+.contact-form__label {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: #A9B4C0;
+}
+.contact-form__input,
+.contact-form__textarea {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(200,170,110,0.25);
+  color: #F0E6D3;
+  font-family: 'Barlow', sans-serif; font-size: 0.92rem;
+  padding: 12px 14px;
+  outline: none; resize: vertical;
+  transition: border-color 200ms ease;
+  width: 100%; box-sizing: border-box;
+  min-height: 44px;
+}
+.contact-form__input:focus,
+.contact-form__textarea:focus {
+  border-color: #C8AA6E;
+  box-shadow: 0 0 0 2px rgba(200,170,110,0.18);
+}
+.contact-form__input::placeholder,
+.contact-form__textarea::placeholder { color: #5B5A56; }
+.contact-form__status {
+  font-family: 'Barlow', sans-serif; font-size: 0.85rem;
+  margin-bottom: 16px; min-height: 1.4em;
+}
+.contact-form__status--success { color: #4caf78; }
+.contact-form__status--error   { color: #e05c5c; }
+.contact-form__submit { display: block; width: 100%; cursor: pointer; }
+.contact-form__submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.required-mark { color: #C8AA6E; margin-left: 2px; }
+
+@media (max-width: 640px) {
+  .contact-form__row { grid-template-columns: 1fr; }
+}
+
+/* ────────────────────────────────────────────────
+   FOOTER — enterprise-grade LoL-inspired footer
+   ──────────────────────────────────────────────── */
+.lol-footer {
+  background: #010A13;
+  border-top: 1px solid rgba(200,170,110,0.12);
+}
+
+/* Top nav row */
+.lol-footer__top {
+  display: flex; justify-content: center;
+  gap: 40px; flex-wrap: wrap;
+  padding: 40px 48px 30px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.lol-footer__nav-link {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: #A9B4C0; text-decoration: none; cursor: pointer;
+  background: none; border: none;
+  transition: color 200ms ease;
+}
+.lol-footer__nav-link:hover { color: #C8AA6E; }
+
+/* Social icons row */
+.lol-footer__social {
+  display: flex; justify-content: center;
+  gap: 20px; padding: 28px 48px;
+}
+
+.lol-footer__social-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.12);
+  display: flex; align-items: center; justify-content: center;
+  color: #A9B4C0; cursor: pointer;
+  transition: all 200ms ease;
+  font-size: 0.85rem; text-decoration: none;
+}
+.lol-footer__social-icon:hover {
+  border-color: #C8AA6E; color: #C8AA6E;
+  box-shadow: 0 0 12px rgba(200,170,110,0.2);
+}
+
+/* Brand + legal row */
+.lol-footer__brand {
+  text-align: center; padding: 24px 48px 36px;
+}
+
+.lol-footer__logo {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem; font-weight: 700;
+  letter-spacing: 0.35em; color: #C8AA6E;
+  text-transform: uppercase; margin-bottom: 14px;
+}
+
+.lol-footer__copy {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.68rem; color: #5B5A56;
+  line-height: 1.7; max-width: 520px;
+  margin: 0 auto 20px;
+}
+
+.lol-footer__legal {
+  display: flex; justify-content: center;
+  gap: 28px; flex-wrap: wrap;
+}
+
+.lol-footer__legal-link {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: #5B5A56; text-decoration: none; cursor: pointer;
+  background: none; border: none;
+  transition: color 200ms ease;
+}
+.lol-footer__legal-link:hover { color: #A9B4C0; }
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .lol-projects__inner { grid-template-columns: 1fr; }
+  .lol-skills__inner   { grid-template-columns: 1fr; }
+  .lol-news__grid      { grid-template-columns: repeat(2, 1fr); }
+  .lol-stats__inner    { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .lol-nav__center { display: none; }
+  .lol-news__grid  { grid-template-columns: 1fr; }
+  .lol-stats__inner { grid-template-columns: repeat(2, 1fr); }
+  .lol-news__inner, .lol-projects__inner,
+  .lol-skills__inner, .lol-stats__inner,
+  .lol-contact__inner, .lol-footer__top { padding-left: 20px; padding-right: 20px; }
+}
