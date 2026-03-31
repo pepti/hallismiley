@@ -112,7 +112,8 @@
   letter-spacing: 0.12em; text-transform: uppercase;
   border: none; cursor: pointer;
   transition: all 200ms ease;
-  white-space: nowrap; text-decoration: none; display: inline-block;
+  white-space: nowrap; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .lol-nav__cta:hover { background: #0DD4F5; box-shadow: 0 2px 12px rgba(11,196,227,0.4); }
 .lol-nav__cta--ghost {
