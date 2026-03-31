@@ -41,7 +41,7 @@ export class ProjectsView {
 
   async _loadProjects(view) {
     try {
-      this.allProjects = await projectApi.getAll();
+      this.allProjects = await projectApi.getAll({ limit: 100 });
       this._renderGrid(this.allProjects, view);
     } catch (err) {
       this.grid.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div>Failed to load projects.</div>`;
