@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Portal Companion Cube -->
+  <g transform="translate(100,100)">
+    <!-- Main cube face -->
+    <rect x="-58" y="-58" width="116" height="116" rx="8" fill="#7B6B8D"/>
+    <!-- Pink cross stripes -->
+    <rect x="-58" y="-18" width="116" height="36" rx="4" fill="#C989B8"/>
+    <rect x="-18" y="-58" width="36" height="116" rx="4" fill="#C989B8"/>
+    <!-- Center circle -->
+    <circle cx="0" cy="0" r="26" fill="#E8B4D8"/>
+    <circle cx="0" cy="0" r="18" fill="#C989B8"/>
+    <circle cx="0" cy="0" r="10" fill="#FFB3E0"/>
+    <!-- Corner circles -->
+    <circle cx="-42" cy="-42" r="10" fill="#9B7AAD"/>
+    <circle cx="42"  cy="-42" r="10" fill="#9B7AAD"/>
+    <circle cx="-42" cy="42"  r="10" fill="#9B7AAD"/>
+    <circle cx="42"  cy="42"  r="10" fill="#9B7AAD"/>
+    <!-- Shine -->
+    <rect x="-50" y="-50" width="35" height="12" rx="3" fill="rgba(255,255,255,0.18)" transform="rotate(-45,-33,-44)"/>
+  </g>
+</svg>

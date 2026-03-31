@@ -19,7 +19,10 @@ export class AdminView {
           <p class="admin-eyebrow">Admin</p>
           <h1 class="admin-title">Manage Projects</h1>
         </div>
-        <button class="btn btn--primary" id="add-project-btn">+ Add Project</button>
+        <div class="admin-header__actions">
+          <a href="#/admin/users" class="btn btn--outline" data-route="/admin/users">Manage Users</a>
+          <button class="btn btn--primary" id="add-project-btn">+ Add Project</button>
+        </div>
       </div>
       <div class="admin-table-wrap">
         <div class="admin-loading">Loading…</div>

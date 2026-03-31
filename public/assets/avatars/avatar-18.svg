@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Power-up Star (Super Mario style) -->
+  <polygon points="100,18 116,68 170,68 126,100 142,150 100,118 58,150 74,100 30,68 84,68"
+           fill="#F4C542" stroke="#E8A800" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Eyes -->
+  <circle cx="82"  cy="88" r="9" fill="white"/>
+  <circle cx="118" cy="88" r="9" fill="white"/>
+  <circle cx="85"  cy="90" r="5" fill="#111"/>
+  <circle cx="121" cy="90" r="5" fill="#111"/>
+  <!-- Shine dots on eyes -->
+  <circle cx="87"  cy="87" r="2" fill="white"/>
+  <circle cx="123" cy="87" r="2" fill="white"/>
+  <!-- Sparkles around star -->
+  <g fill="#FFE87A">
+    <circle cx="30"  cy="40"  r="5"/>
+    <circle cx="170" cy="40"  r="5"/>
+    <circle cx="20"  cy="130" r="4"/>
+    <circle cx="180" cy="130" r="4"/>
+    <circle cx="100" cy="185" r="4"/>
+  </g>
+  <g stroke="#FFE87A" stroke-width="2" fill="none">
+    <line x1="30"  y1="28" x2="30"  y2="52"/>
+    <line x1="18"  y1="40" x2="42"  y2="40"/>
+    <line x1="170" y1="28" x2="170" y2="52"/>
+    <line x1="158" y1="40" x2="182" y2="40"/>
+  </g>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Chess Knight -->
+  <!-- Base -->
+  <rect x="55" y="168" width="90" height="16" rx="4" fill="#C8AA6E"/>
+  <rect x="62" y="158" width="76" height="14" rx="3" fill="#D4B87A"/>
+  <!-- Body/neck -->
+  <path d="M75,158 Q72,130 78,115 Q85,98 80,80 Q88,60 100,52 Q120,45 130,58 Q145,72 135,95 Q128,110 132,130 L125,158 Z"
+        fill="#E8E0D0"/>
+  <!-- Head detail -->
+  <path d="M80,80 Q88,60 100,52 Q120,45 130,58 Q145,72 135,95 Q128,108 118,112 Q105,115 95,110 Q82,102 80,80 Z"
+        fill="#F0E8D8"/>
+  <!-- Mane -->
+  <path d="M80,80 Q72,68 74,55 Q80,48 88,52 Q82,62 84,74 Z" fill="#D4C8A8"/>
+  <!-- Eye -->
+  <circle cx="118" cy="72" r="7" fill="#222"/>
+  <circle cx="116" cy="70" r="3" fill="white" opacity="0.7"/>
+  <!-- Nostril -->
+  <ellipse cx="130" cy="90" rx="4" ry="3" fill="#C8B898" transform="rotate(20,130,90)"/>
+  <!-- Ear -->
+  <path d="M98,50 Q102,32 110,28 Q114,38 108,50 Z" fill="#E8E0D0"/>
+  <!-- Gold trim on base -->
+  <rect x="55" y="168" width="90" height="4" rx="2" fill="#B8942A"/>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Rocket -->
+  <!-- Exhaust flames -->
+  <path d="M78,172 Q85,195 100,188 Q115,195 122,172 Z" fill="#FF6600"/>
+  <path d="M82,172 Q88,190 100,185 Q112,190 118,172 Z" fill="#FFD700"/>
+  <!-- Body -->
+  <path d="M68,165 L68,85 Q68,30 100,18 Q132,30 132,85 L132,165 Z" fill="#E8E8E8"/>
+  <!-- Window -->
+  <circle cx="100" cy="90" r="22" fill="#1A3A5A" stroke="#C0C0C0" stroke-width="3"/>
+  <circle cx="100" cy="90" r="16" fill="#2A5A8A"/>
+  <circle cx="94"  cy="84" r="5"  fill="rgba(255,255,255,0.4)"/>
+  <!-- Body stripes -->
+  <rect x="68" y="125" width="64" height="12" fill="#E74C3C"/>
+  <rect x="68" y="145" width="64" height="8"  fill="#E74C3C"/>
+  <!-- Fins -->
+  <path d="M68,165 Q45,165 40,185 L68,180 Z" fill="#CC4444"/>
+  <path d="M132,165 Q155,165 160,185 L132,180 Z" fill="#CC4444"/>
+  <path d="M68,165 Q50,165 44,180 L68,175 Z" fill="#E85555"/>
+  <path d="M132,165 Q150,165 156,180 L132,175 Z" fill="#E85555"/>
+  <!-- Nose cone tip -->
+  <path d="M85,30 Q100,18 115,30 L100,18 Z" fill="#CCCCCC"/>
+</svg>

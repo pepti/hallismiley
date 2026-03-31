@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Pokeball -->
+  <circle cx="100" cy="100" r="72" fill="#E74C3C"/>
+  <path d="M28,100 A72,72 0 0,0 172,100 Z" fill="#F0F0F0"/>
+  <!-- Center band -->
+  <rect x="28" y="93" width="144" height="14" fill="#222"/>
+  <!-- Center button -->
+  <circle cx="100" cy="100" r="20" fill="#222"/>
+  <circle cx="100" cy="100" r="13" fill="white"/>
+  <circle cx="100" cy="100" r="6"  fill="#ddd"/>
+  <!-- Shine -->
+  <ellipse cx="72" cy="68" rx="18" ry="10" fill="rgba(255,255,255,0.2)" transform="rotate(-30,72,68)"/>
+</svg>

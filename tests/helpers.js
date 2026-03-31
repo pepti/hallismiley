@@ -17,9 +17,48 @@ async function createTestAdminUser() {
      ON CONFLICT (username) DO UPDATE
        SET password_hash = EXCLUDED.password_hash,
            failed_login_attempts = 0,
-           locked_until = NULL
+           locked_until = NULL,
+           disabled = FALSE
      RETURNING id`,
     [process.env.ADMIN_USERNAME, hash]
+  );
+  return rows[0].id;
+}
+
+/**
+ * Inserts a test moderator user. Returns the user's id.
+ */
+async function createTestModeratorUser() {
+  const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
+  const { rows } = await db.query(
+    `INSERT INTO users (id, email, username, password_hash, role)
+     VALUES ('test-mod-id', 'moderator@test.com', 'testmoderator', $1, 'moderator')
+     ON CONFLICT (username) DO UPDATE
+       SET password_hash = EXCLUDED.password_hash,
+           failed_login_attempts = 0,
+           locked_until = NULL,
+           disabled = FALSE
+     RETURNING id`,
+    [hash]
+  );
+  return rows[0].id;
+}
+
+/**
+ * Inserts a test regular user. Returns the user's id.
+ */
+async function createTestRegularUser() {
+  const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
+  const { rows } = await db.query(
+    `INSERT INTO users (id, email, username, password_hash, role)
+     VALUES ('test-user-id', 'user@test.com', 'testuser', $1, 'user')
+     ON CONFLICT (username) DO UPDATE
+       SET password_hash = EXCLUDED.password_hash,
+           failed_login_attempts = 0,
+           locked_until = NULL,
+           disabled = FALSE
+     RETURNING id`,
+    [hash]
   );
   return rows[0].id;
 }
@@ -28,9 +67,9 @@ async function createTestAdminUser() {
  * Creates the test admin user and a Lucia session for it.
  * Returns the full `Cookie: auth_session=<id>` string ready for supertest.
  */
-async function getTestSessionCookie() {
-  const userId = await createTestAdminUser();
-  const session = await lucia.createSession(userId, {
+async function getTestSessionCookie(userId) {
+  const id = userId ?? await createTestAdminUser();
+  const session = await lucia.createSession(id, {
     ip_address: '127.0.0.1',
     user_agent:  'test-agent',
   });
@@ -58,4 +97,11 @@ function validProject(overrides = {}) {
   };
 }
 
-module.exports = { createTestAdminUser, getTestSessionCookie, cleanTables, validProject };
+module.exports = {
+  createTestAdminUser,
+  createTestModeratorUser,
+  createTestRegularUser,
+  getTestSessionCookie,
+  cleanTables,
+  validProject,
+};

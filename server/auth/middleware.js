@@ -17,6 +17,14 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized', code: 401 });
   }
 
+  // Reject sessions belonging to disabled accounts
+  if (user.disabled) {
+    await lucia.invalidateSession(sessionId);
+    const blank = lucia.createBlankSessionCookie();
+    res.setHeader('Set-Cookie', blank.serialize());
+    return res.status(403).json({ error: 'Account has been disabled', code: 403 });
+  }
+
   // Extend expiry on active sessions (Lucia rotates cookie when session is "fresh")
   if (session.fresh) {
     const refreshed = lucia.createSessionCookie(session.id);

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Skull -->
+  <!-- Cranium -->
+  <ellipse cx="100" cy="85" rx="62" ry="60" fill="#E8E0D0"/>
+  <!-- Jaw -->
+  <path d="M52,115 Q48,148 65,162 L135,162 Q152,148 148,115 Z" fill="#E8E0D0"/>
+  <!-- Eye sockets -->
+  <ellipse cx="74"  cy="88" rx="22" ry="24" fill="#0A1428"/>
+  <ellipse cx="126" cy="88" rx="22" ry="24" fill="#0A1428"/>
+  <!-- Nose cavity -->
+  <path d="M94,112 L100,122 L106,112 Q106,106 100,104 Q94,106 94,112 Z" fill="#0A1428"/>
+  <!-- Teeth -->
+  <rect x="66"  y="148" width="14" height="18" rx="3" fill="#D0C8B8"/>
+  <rect x="82"  y="148" width="14" height="20" rx="3" fill="#D0C8B8"/>
+  <rect x="98"  y="148" width="14" height="20" rx="3" fill="#D0C8B8"/>
+  <rect x="114" y="148" width="14" height="18" rx="3" fill="#D0C8B8"/>
+  <!-- Jaw line -->
+  <line x1="65" y1="148" x2="135" y2="148" stroke="#B8B0A0" stroke-width="2"/>
+  <!-- Cheekbones -->
+  <path d="M38,100 Q42,116 52,120" stroke="#C8C0B0" stroke-width="3" fill="none"/>
+  <path d="M162,100 Q158,116 148,120" stroke="#C8C0B0" stroke-width="3" fill="none"/>
+  <!-- Crack -->
+  <path d="M100,28 Q104,50 98,68 Q104,80 100,95" stroke="#B8B0A0" stroke-width="1.5" fill="none"/>
+</svg>

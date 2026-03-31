@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Planet with rings -->
+  <!-- Ring shadow behind planet -->
+  <ellipse cx="100" cy="108" rx="82" ry="22" fill="none" stroke="#6644AA" stroke-width="10" opacity="0.4"/>
+  <!-- Planet body -->
+  <circle cx="100" cy="100" r="58" fill="#7B52AB"/>
+  <!-- Planet bands -->
+  <path d="M42,88 Q100,78 158,88" stroke="#9B72CB" stroke-width="12" fill="none"/>
+  <path d="M44,108 Q100,118 156,108" stroke="#9B72CB" stroke-width="10" fill="none"/>
+  <path d="M48,124 Q100,132 152,124" stroke="#8B62BB" stroke-width="7" fill="none"/>
+  <!-- Planet shine -->
+  <ellipse cx="75" cy="72" rx="22" ry="14" fill="rgba(200,180,255,0.2)" transform="rotate(-30,75,72)"/>
+  <!-- Rings in front -->
+  <ellipse cx="100" cy="108" rx="82" ry="22" fill="none" stroke="#9966DD" stroke-width="8"/>
+  <ellipse cx="100" cy="108" rx="72" ry="18" fill="none" stroke="#7744BB" stroke-width="4"/>
+  <!-- Ring clip over planet (front arc only) -->
+  <path d="M100,86 Q182,94 182,108 Q182,122 100,130" fill="none" stroke="#9966DD" stroke-width="8"/>
+  <path d="M100,90 Q174,97 174,108 Q174,119 100,126" fill="none" stroke="#7744BB" stroke-width="4"/>
+  <!-- Small moon -->
+  <circle cx="168" cy="48" r="14" fill="#AAAACC"/>
+  <circle cx="163" cy="44" r="5"  fill="#9999BB"/>
+</svg>

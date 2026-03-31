@@ -1,13 +1,19 @@
 const request = require('supertest');
 const app     = require('../server/app');
 const db      = require('../server/config/database');
-const { getTestSessionCookie, cleanTables, validProject } = require('./helpers');
+const {
+  getTestSessionCookie,
+  createTestModeratorUser,
+  createTestRegularUser,
+  cleanTables,
+  validProject,
+} = require('./helpers');
 
 let sessionCookie;
 
 beforeEach(async () => {
   await cleanTables();
-  sessionCookie = await getTestSessionCookie();
+  sessionCookie = await getTestSessionCookie(); // admin session
 });
 
 afterAll(async () => {
@@ -141,7 +147,7 @@ describe('GET /api/v1/projects/:id', () => {
 // ── POST /api/v1/projects ─────────────────────────────────────────────────────
 
 describe('POST /api/v1/projects', () => {
-  test('creates a project and returns 201 with the new resource', async () => {
+  test('admin can create a project', async () => {
     const res = await request(app)
       .post('/api/v1/projects')
       .set('Cookie', sessionCookie)
@@ -156,6 +162,30 @@ describe('POST /api/v1/projects', () => {
       featured:   false,
       tools_used: ['Node.js', 'PostgreSQL'],
     });
+  });
+
+  test('moderator can create a project', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+
+    const res = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', modCookie)
+      .send(validProject({ title: 'Mod Project' }));
+
+    expect(res.status).toBe(201);
+  });
+
+  test('regular user cannot create a project — 403', async () => {
+    const userId     = await createTestRegularUser();
+    const userCookie = await getTestSessionCookie(userId);
+
+    const res = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', userCookie)
+      .send(validProject());
+
+    expect(res.status).toBe(403);
   });
 
   test('returns 401 without session cookie', async () => {
@@ -275,6 +305,40 @@ describe('PUT /api/v1/projects/:id', () => {
     expect(res.body.year).toBe(2023);
   });
 
+  test('moderator can update a project', async () => {
+    const create = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject());
+
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+
+    const res = await request(app)
+      .put(`/api/v1/projects/${create.body.id}`)
+      .set('Cookie', modCookie)
+      .send(validProject({ title: 'Mod Update' }));
+
+    expect(res.status).toBe(200);
+  });
+
+  test('regular user cannot update — 403', async () => {
+    const create = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject());
+
+    const userId     = await createTestRegularUser();
+    const userCookie = await getTestSessionCookie(userId);
+
+    const res = await request(app)
+      .put(`/api/v1/projects/${create.body.id}`)
+      .set('Cookie', userCookie)
+      .send(validProject());
+
+    expect(res.status).toBe(403);
+  });
+
   test('requires auth — 401 without session cookie', async () => {
     const res = await request(app).put('/api/v1/projects/1').send(validProject());
     expect(res.status).toBe(401);
@@ -335,7 +399,7 @@ describe('PATCH /api/v1/projects/:id', () => {
 // ── DELETE /api/v1/projects/:id ───────────────────────────────────────────────
 
 describe('DELETE /api/v1/projects/:id', () => {
-  test('deletes an existing project and returns 204', async () => {
+  test('admin can delete a project', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
       .set('Cookie', sessionCookie)
@@ -348,9 +412,40 @@ describe('DELETE /api/v1/projects/:id', () => {
 
     expect(del.status).toBe(204);
 
-    // Verify it no longer exists
     const get = await request(app).get(`/api/v1/projects/${id}`);
     expect(get.status).toBe(404);
+  });
+
+  test('moderator cannot delete — 403', async () => {
+    const create = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject());
+
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+
+    const res = await request(app)
+      .delete(`/api/v1/projects/${create.body.id}`)
+      .set('Cookie', modCookie);
+
+    expect(res.status).toBe(403);
+  });
+
+  test('regular user cannot delete — 403', async () => {
+    const create = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject());
+
+    const userId     = await createTestRegularUser();
+    const userCookie = await getTestSessionCookie(userId);
+
+    const res = await request(app)
+      .delete(`/api/v1/projects/${create.body.id}`)
+      .set('Cookie', userCookie);
+
+    expect(res.status).toBe(403);
   });
 
   test('requires auth — 401 without session cookie', async () => {

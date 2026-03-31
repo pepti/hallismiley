@@ -15,7 +15,7 @@ export class LoginModal {
     overlay.innerHTML = `
       <div class="modal login-modal">
         <button class="modal__close" aria-label="Close">&times;</button>
-        <p class="login-modal__eyebrow">Admin Access</p>
+        <p class="login-modal__eyebrow">Welcome Back</p>
         <h2 class="modal__title" id="login-title">Sign in</h2>
         <form class="login-form" novalidate>
           <div class="form-group">
@@ -30,6 +30,13 @@ export class LoginModal {
           </div>
           <p class="form-error" aria-live="polite"></p>
           <button class="btn btn--primary btn--full" type="submit">Sign in</button>
+          <div class="login-modal__footer">
+            <a href="#/forgot-password" class="login-modal__link" data-route="/forgot-password"
+               id="login-forgot-link">Forgot password?</a>
+            <span class="login-modal__sep">·</span>
+            <a href="#/signup" class="login-modal__link" data-route="/signup"
+               id="login-signup-link">Create account</a>
+          </div>
         </form>
       </div>
     `;
@@ -38,6 +45,10 @@ export class LoginModal {
     overlay.addEventListener('click', e => { if (e.target === overlay) this.close(); });
     overlay.querySelector('.login-form').addEventListener('submit', e => this._onSubmit(e));
     document.addEventListener('keydown', e => { if (e.key === 'Escape') this.close(); });
+
+    // Close modal when navigating via footer links
+    overlay.querySelector('#login-forgot-link').addEventListener('click', () => this.close());
+    overlay.querySelector('#login-signup-link').addEventListener('click', () => this.close());
 
     document.body.appendChild(overlay);
     this._overlay = overlay;
@@ -59,9 +70,9 @@ export class LoginModal {
 
   async _onSubmit(e) {
     e.preventDefault();
-    const form   = e.currentTarget;
-    const errEl  = form.querySelector('.form-error');
-    const btn    = form.querySelector('[type=submit]');
+    const form     = e.currentTarget;
+    const errEl    = form.querySelector('.form-error');
+    const btn      = form.querySelector('[type=submit]');
     const username = form.username.value.trim();
     const password = form.password.value;
 

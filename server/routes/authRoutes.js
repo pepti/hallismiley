@@ -1,15 +1,48 @@
 const express        = require('express');
+const rateLimit      = require('express-rate-limit');
 const router         = express.Router();
 const authController = require('../controllers/authController');
-const authLimiter    = require('express-rate-limit')({
+const { validateSignup, validateResetPassword } = require('../middleware/validate');
+
+const isTest = () => process.env.NODE_ENV === 'test';
+
+// Brute-force protection on login
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,  // max 10 login attempts per 15 min — brute force protection
-  skip: () => process.env.NODE_ENV === 'test',
+  max: 10,
+  skip: isTest,
   message: { error: 'Too many auth attempts, try again later.', code: 429 },
 });
 
-router.post('/login',    authLimiter, authController.login);
+// Signup: 5 registrations per hour per IP
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  skip: isTest,
+  message: { error: 'Too many signup attempts, try again later.', code: 429 },
+});
+
+// Availability checks: tight limit to deter enumeration
+const checkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  skip: isTest,
+  message: { error: 'Too many requests, try again later.', code: 429 },
+});
+
+// ── Existing auth ─────────────────────────────────────────────────────────────
+router.post('/login',  authLimiter,   authController.login);
 router.post('/logout',               authController.logout);
 router.get('/session',               authController.session);
+
+// ── New auth endpoints ────────────────────────────────────────────────────────
+router.post('/signup',           signupLimiter, validateSignup, authController.signup);
+router.post('/verify-email',                                    authController.verifyEmail);
+router.post('/forgot-password',                                 authController.forgotPassword);
+router.post('/reset-password',         validateResetPassword,  authController.resetPassword);
+
+// ── Availability checks ───────────────────────────────────────────────────────
+router.get('/check-username/:username', checkLimiter, authController.checkUsername);
+router.get('/check-email/:email',       checkLimiter, authController.checkEmail);
 
 module.exports = router;

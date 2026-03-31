@@ -8,3 +8,4 @@ process.env.DB_SSL          = 'false';
 process.env.ADMIN_USERNAME  = 'testadmin';
 process.env.ADMIN_PASSWORD  = 'testpassword123';
 process.env.ALLOWED_ORIGINS = 'http://localhost:3000';
+process.env.CSRF_SECRET     = 'test-csrf-secret-not-used-in-test-mode';

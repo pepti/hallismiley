@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Lightsaber -->
+  <!-- Blade glow (outer) -->
+  <rect x="93" y="18" width="14" height="118" rx="7" fill="rgba(65,170,255,0.25)"/>
+  <!-- Blade glow (mid) -->
+  <rect x="96" y="18" width="8" height="118" rx="4" fill="rgba(65,170,255,0.5)"/>
+  <!-- Blade core -->
+  <rect x="98" y="18" width="4" height="118" rx="2" fill="#E0F4FF"/>
+  <!-- Blade tip -->
+  <ellipse cx="100" cy="18" rx="5" ry="8" fill="#E0F4FF"/>
+  <!-- Hilt -->
+  <rect x="85" y="136" width="30" height="50" rx="5" fill="#888"/>
+  <rect x="85" y="136" width="30" height="50" rx="5" fill="none" stroke="#555" stroke-width="1.5"/>
+  <!-- Hilt details -->
+  <rect x="85" y="148" width="30" height="6" fill="#666"/>
+  <rect x="85" y="162" width="30" height="6" fill="#666"/>
+  <rect x="85" y="136" width="30" height="10" rx="3" fill="#999"/>
+  <!-- Activation button -->
+  <circle cx="93" cy="174" r="5" fill="#41AAFF"/>
+  <circle cx="107" cy="174" r="4" fill="#666"/>
+  <!-- Pommel -->
+  <ellipse cx="100" cy="186" rx="14" ry="8" fill="#777"/>
+  <ellipse cx="100" cy="186" rx="8"  ry="4" fill="#999"/>
+</svg>
