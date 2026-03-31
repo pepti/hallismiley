@@ -130,7 +130,7 @@ export class NavBar {
 
       // Sign Up button
       const signUp = document.createElement('a');
-      signUp.className = 'lol-nav__cta';
+      signUp.className = 'lol-nav__cta lol-nav__cta--ghost';
       signUp.href = '#/signup';
       signUp.dataset.route = '/signup';
       signUp.textContent = 'Sign Up';

@@ -14,10 +14,10 @@ const authLimiter = rateLimit({
   message: { error: 'Too many auth attempts, try again later.', code: 429 },
 });
 
-// Signup: 5 registrations per hour per IP
+// Signup: 15 registrations per 10 minutes per IP
 const signupLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 5,
+  windowMs: 10 * 60 * 1000,
+  max: 15,
   skip: isTest,
   message: { error: 'Too many signup attempts, try again later.', code: 429 },
 });
