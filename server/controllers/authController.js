@@ -5,6 +5,9 @@ const crypto              = require('crypto');
 const { query: dbQuery }  = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { Scrypt }          = require('oslo/password');
+const securityLogger      = require('../observability/securityLogger');
+const { authLoginAttempts, authSignupTotal } = require('../observability/metrics');
+const { trackFailedLogin } = require('../observability/alerts');
 
 const scrypt = new Scrypt();
 
@@ -40,6 +43,8 @@ const authController = {
       // Check lockout before password work — a locked account already reveals
       // the username exists, so an early return is acceptable here.
       if (user && user.locked_until && new Date(user.locked_until) > new Date()) {
+        authLoginAttempts.inc({ result: 'locked' });
+        securityLogger.loginFailed(req.ip, username);
         return res.status(401).json({ error: 'Account temporarily locked', code: 401 });
       }
 
@@ -54,6 +59,9 @@ const authController = {
       }
 
       if (!user || !validPass) {
+        authLoginAttempts.inc({ result: 'failure' });
+        securityLogger.loginFailed(req.ip, username);
+        trackFailedLogin(req.ip);
         if (user) {
           const attempts = (user.failed_login_attempts || 0) + 1;
           if (attempts >= MAX_ATTEMPTS) {
@@ -62,6 +70,7 @@ const authController = {
               'UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
               [attempts, lockedUntil, user.id]
             );
+            securityLogger.accountLocked(req.ip, username, user.id);
           } else {
             await dbQuery(
               'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
@@ -74,6 +83,8 @@ const authController = {
 
       // Block disabled accounts after credentials are confirmed valid
       if (user.disabled) {
+        authLoginAttempts.inc({ result: 'failure' });
+        securityLogger.disabledAccountAccess(user.id, username, req.ip);
         return res.status(403).json({ error: 'Account has been disabled', code: 403 });
       }
 
@@ -82,6 +93,8 @@ const authController = {
         'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
         [user.id]
       );
+      authLoginAttempts.inc({ result: 'success' });
+      securityLogger.loginSuccess(req.ip, username, user.id);
 
       const session = await lucia.createSession(user.id, {
         ip_address: req.ip ?? null,
@@ -112,6 +125,7 @@ const authController = {
         [username]
       );
       if (uRows.length > 0) {
+        authSignupTotal.inc({ result: 'failure' });
         return res.status(409).json({ error: 'Username already taken', code: 409 });
       }
 
@@ -120,6 +134,7 @@ const authController = {
         [email.toLowerCase()]
       );
       if (eRows.length > 0) {
+        authSignupTotal.inc({ result: 'failure' });
         return res.status(409).json({ error: 'Email already registered', code: 409 });
       }
 
@@ -150,6 +165,8 @@ const authController = {
       // Log token — wire up a real email sender here when ready
       console.log(`[Auth] Email verification token for ${email}: ${verifyToken}`);
 
+      authSignupTotal.inc({ result: 'success' });
+      securityLogger.signupAttempt(req.ip, username, 'success');
       return res.status(201).json({
         message: 'Account created. Please verify your email.',
         user: rows[0],

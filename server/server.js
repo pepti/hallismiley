@@ -3,7 +3,21 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 // ── Sentry error tracking — init before anything else if DSN is configured ────
 if (process.env.SENTRY_DSN) {
   const Sentry = require('@sentry/node');
-  Sentry.init({ dsn: process.env.SENTRY_DSN });
+  Sentry.init({
+    dsn:         process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    // Tag releases from Railway's git commit SHA or package version
+    release: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.npm_package_version,
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+  });
+
+  // Capture unhandled rejections and uncaught exceptions with Sentry context
+  process.on('unhandledRejection', (reason) => {
+    Sentry.captureException(reason);
+  });
+  process.on('uncaughtException', (err) => {
+    Sentry.captureException(err);
+  });
 }
 
 // ── Required env var validation — fail fast on misconfiguration ────────────────
@@ -19,6 +33,7 @@ const app    = require('./app');
 const { pool } = require('./config/database');
 const { migrate } = require('./scripts/migrate');
 const { startTokenCleanup } = require('./services/tokenCleanup');
+const { checkMemory } = require('./observability/alerts');
 
 const PORT = process.env.PORT || 3000;
 
@@ -43,9 +58,14 @@ async function start() {
   // Start periodic cleanup of expired sessions (runs every 24h)
   const cleanupTimer = startTokenCleanup();
 
+  // Periodic memory alert check (every 5 minutes)
+  const memoryCheckTimer = setInterval(checkMemory, 5 * 60 * 1000);
+  memoryCheckTimer.unref();
+
   // Graceful shutdown — finish in-flight requests before exiting
   function shutdown(signal) {
     logger.info({ signal }, '[server] Shutting down gracefully');
+    clearInterval(memoryCheckTimer);
     server.close(async () => {
       clearInterval(cleanupTimer);
       logger.info('[server] HTTP server closed');
