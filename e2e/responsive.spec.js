@@ -1,3 +1,4 @@
+/* global document */
 const { test, expect } = require('@playwright/test');
 
 const MOBILE = { width: 375, height: 812 };

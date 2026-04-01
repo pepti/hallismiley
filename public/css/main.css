@@ -6,6 +6,7 @@
 @import './user-system.css';
 @import './gallery.css';
 @import './project-edit.css';
+@import './theme-light.css';
 
 body {
   font-family: var(--font-sans);
