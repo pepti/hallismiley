@@ -13,6 +13,7 @@ const authRoutes       = require('./routes/authRoutes');
 const contactRoutes    = require('./routes/contactRoutes');
 const userRoutes       = require('./routes/userRoutes');
 const adminRoutes      = require('./routes/adminRoutes');
+const contentRoutes    = require('./routes/contentRoutes');
 const errorHandler     = require('./middleware/errorHandler');
 const healthController = require('./controllers/healthController');
 const { sanitizeBody } = require('./middleware/sanitize');
@@ -205,6 +206,7 @@ app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/admin',      adminRoutes);
+app.use('/api/v1/content',    contentRoutes);
 
 // Fallback SPA route — never cache, browser must revalidate on every navigation
 app.get('*', (req, res) => {
