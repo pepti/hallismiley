@@ -1,5 +1,4 @@
 import { signup, checkUsername, checkEmail } from '../services/auth.js';
-import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 
 const TOTAL_AVATARS = 40;

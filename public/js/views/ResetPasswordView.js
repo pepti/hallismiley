@@ -1,5 +1,4 @@
 import { resetPassword } from '../services/auth.js';
-import { escHtml } from '../utils/escHtml.js';
 
 export class ResetPasswordView {
   constructor(queryString = '') {

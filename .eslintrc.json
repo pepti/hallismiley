@@ -43,6 +43,18 @@
         "sourceType": "module",
         "ecmaVersion": 2022
       }
+    },
+    {
+      "files": ["e2e/**/*.js", "playwright.config.js"],
+      "env": {
+        "node": true,
+        "commonjs": true,
+        "es2022": true
+      },
+      "parserOptions": {
+        "sourceType": "script",
+        "ecmaVersion": 2022
+      }
     }
   ]
 }
