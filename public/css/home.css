@@ -632,3 +632,81 @@
   .lol-skills__inner, .lol-stats__inner,
   .lol-contact__inner, .lol-footer__top { padding-left: 20px; padding-right: 20px; }
 }
+
+/* ─────────────────────────────────
+   ADMIN EDIT MODE
+   ───────────────────────────────── */
+
+/* Floating "Edit Page" button — top-right */
+.home-edit-btn {
+  position: fixed;
+  top: 80px; right: 20px;
+  z-index: 900;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  background: #1E2328;
+  border: 1px solid #785A28;
+  border-radius: 4px;
+  color: #C89B3C;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 200ms, border-color 200ms;
+}
+.home-edit-btn:hover { background: #2A2F34; border-color: #C89B3C; }
+
+/* Elements in edit mode */
+[contenteditable="true"].home-editable {
+  outline: 2px dashed #C89B3C;
+  outline-offset: 3px;
+  border-radius: 2px;
+  cursor: text;
+  min-width: 20px;
+}
+[contenteditable="true"].home-editable:focus {
+  outline-color: #F0C270;
+  background: rgba(200, 155, 60, 0.08);
+}
+
+/* Floating save/cancel bar */
+.home-edit-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  background: #010A13;
+  border-top: 2px solid #785A28;
+  transform: translateY(100%);
+  transition: transform 250ms ease;
+}
+.home-edit-bar--visible { transform: translateY(0); }
+.home-edit-bar__hint {
+  color: #A9B4C0;
+  font-size: 13px;
+}
+.home-edit-bar__actions { display: flex; gap: 10px; }
+
+.home-edit-bar__cancel,
+.home-edit-bar__save {
+  padding: 8px 18px;
+  border-radius: 4px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: background 200ms, border-color 200ms;
+}
+.home-edit-bar__cancel {
+  background: transparent;
+  border: 1px solid #4A4E57;
+  color: #A9B4C0;
+}
+.home-edit-bar__cancel:hover { border-color: #A9B4C0; color: #C8D0D8; }
+.home-edit-bar__save {
+  background: #C89B3C;
+  border: 1px solid #C89B3C;
+  color: #010A13;
+}
+.home-edit-bar__save:hover { background: #F0C270; border-color: #F0C270; }
+.home-edit-bar__save:disabled { opacity: 0.6; cursor: not-allowed; }

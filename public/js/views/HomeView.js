@@ -1,5 +1,9 @@
 // HomeView — League of Legends inspired layout
 // Sections: Hero → Splash → News → Projects → Skills → Stats → Contact → Footer
+// Homepage text is fetched from /api/v1/content and editable by admin/moderator.
+
+import { getUser }        from '../services/auth.js';
+import { getCsrfHeaders } from '../utils/api.js';
 
 // ── Bespoke news items — real work, real dates ─────────────────────────────
 const NEWS = [
@@ -75,13 +79,45 @@ const STATS = [
   { num: '2',   label: 'Core Disciplines' },
 ];
 
+// ── Default content (fallback when API is unavailable) ────────────────────
+const CONTENT_DEFAULTS = {
+  hero_subtitle:    'Carpenter &amp; Computer Scientist — Building with wood &amp; code',
+  hero_cta_text:    'View Projects',
+  news_heading:     'Latest Work',
+  projects_eyebrow: 'Browse by',
+  projects_heading: 'Discipline',
+  projects_desc:    'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
+  skills_tag:       'Two Decades of',
+  skills_title:     'Craft &amp; Code',
+  skills_desc:      'Twenty years of carpentry precision — reading grain, cutting to the line, fitting without gaps — applied to every line of code. The same principles that make a mortise-and-tenon joint last a century make software maintainable.',
+  contact_eyebrow:  "Let's build something",
+  contact_title:    'Get in Touch',
+  contact_desc:     "Whether it's a timber frame, a web platform, or a bespoke workshop fit-out — I'd love to hear what you're planning.",
+};
+
 // ─────────────────────────────────────────────────────────────────────────
 export class HomeView {
+  constructor() {
+    this._content     = { ...CONTENT_DEFAULTS };
+    this._editMode    = false;
+    this._savedValues = {}; // snapshot for cancel
+  }
+
   async render() {
+    // Fetch content from API — fall back to defaults on error
+    try {
+      const res = await fetch('/api/v1/content');
+      if (res.ok) {
+        const data = await res.json();
+        this._content = { ...CONTENT_DEFAULTS, ...data };
+      }
+    } catch { /* network error — use defaults */ }
+
     const view = document.createElement('div');
     view.className = 'view';
 
     view.innerHTML = `
+      ${this._editBtn()}
       ${this._hero()}
       ${this._news()}
       ${this._projects()}
@@ -89,12 +125,49 @@ export class HomeView {
       ${this._stats()}
       ${this._contact()}
       ${this._footer()}
+      ${this._editBar()}
     `;
 
+    this._view = view;
     this._initProjects(view);
     this._initContactForm(view);
     this._initHeroVideo(view);
+    this._initEditMode(view);
     return view;
+  }
+
+  // ── Edit button (admin/moderator only) ────────────────────────────────
+  _editBtn() {
+    const user = getUser();
+    if (!user || !['admin', 'moderator'].includes(user.role)) return '';
+    return `
+    <button class="home-edit-btn" id="home-edit-btn" aria-label="Edit page content">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit Page
+    </button>`;
+  }
+
+  // ── Floating save/cancel bar (hidden until edit mode) ─────────────────
+  _editBar() {
+    const user = getUser();
+    if (!user || !['admin', 'moderator'].includes(user.role)) return '';
+    return `
+    <div class="home-edit-bar" id="home-edit-bar" aria-hidden="true">
+      <span class="home-edit-bar__hint">Editing homepage text</span>
+      <div class="home-edit-bar__actions">
+        <button class="home-edit-bar__cancel" id="home-edit-cancel">Cancel</button>
+        <button class="home-edit-bar__save"   id="home-edit-save">Save Changes</button>
+      </div>
+    </div>`;
+  }
+
+  // ── c(key) — helper: returns content value for a key ──────────────────
+  _c(key) {
+    return this._content[key] ?? CONTENT_DEFAULTS[key] ?? '';
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
@@ -112,10 +185,8 @@ export class HomeView {
           <span>Halli</span>
           <span class="lol-hero__title-second">Smiley</span>
         </h1>
-        <p class="lol-hero__subtitle">
-          Carpenter &amp; Computer Scientist — Building with wood &amp; code
-        </p>
-        <a href="#/projects" class="lol-hero__cta">View Projects</a>
+        <p class="lol-hero__subtitle" data-content-key="hero_subtitle">${this._c('hero_subtitle')}</p>
+        <a href="#/projects" class="lol-hero__cta" data-content-key="hero_cta_text">${this._c('hero_cta_text')}</a>
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
@@ -146,7 +217,7 @@ export class HomeView {
     <section class="lol-news" id="news" aria-label="Latest updates">
       <div class="lol-news__inner">
         <div class="lol-news__header">
-          <h2 class="lol-news__heading">Latest Work</h2>
+          <h2 class="lol-news__heading" data-content-key="news_heading">${this._c('news_heading')}</h2>
           <a href="#/projects" class="lol-news__view-all">
             View All
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -184,12 +255,9 @@ export class HomeView {
       <div class="lol-projects__inner">
 
         <div class="lol-projects__left">
-          <p class="lol-projects__eyebrow">Browse by</p>
-          <h2 class="lol-projects__heading">Discipline</h2>
-          <p class="lol-projects__desc">
-            From precision timber frames and hand-cut joinery to full-stack
-            web applications — every project is built to last.
-          </p>
+          <p class="lol-projects__eyebrow" data-content-key="projects_eyebrow">${this._c('projects_eyebrow')}</p>
+          <h2 class="lol-projects__heading" data-content-key="projects_heading">${this._c('projects_heading')}</h2>
+          <p class="lol-projects__desc" data-content-key="projects_desc">${this._c('projects_desc')}</p>
           <div class="lol-projects__btns">
             <a href="#/projects" class="lol-btn--gold">View All Projects</a>
             <a href="#/" class="lol-btn--teal" id="contact-btn">Get in Touch</a>
@@ -231,13 +299,9 @@ export class HomeView {
       <div class="lol-skills__inner">
 
         <div>
-          <p class="lol-skills__tag">Two Decades of</p>
-          <h2 class="lol-skills__title">Craft<br>&amp; Code</h2>
-          <p class="lol-skills__desc">
-            Twenty years of carpentry precision — reading grain, cutting to the line,
-            fitting without gaps — applied to every line of code. The same principles
-            that make a mortise-and-tenon joint last a century make software maintainable.
-          </p>
+          <p class="lol-skills__tag" data-content-key="skills_tag">${this._c('skills_tag')}</p>
+          <h2 class="lol-skills__title" data-content-key="skills_title">${this._c('skills_title')}</h2>
+          <p class="lol-skills__desc" data-content-key="skills_desc">${this._c('skills_desc')}</p>
           <div class="lol-skills__grid" role="list" aria-label="Skill areas">
             ${items}
           </div>
@@ -275,14 +339,9 @@ export class HomeView {
     <section class="lol-contact" id="contact" aria-label="Contact">
       <div class="lol-contact__bg" aria-hidden="true"></div>
       <div class="lol-contact__inner">
-        <p class="lol-contact__eyebrow">Let's build something</p>
-        <h2 class="lol-contact__title">
-          Get in<br>Touch
-        </h2>
-        <p class="lol-contact__desc">
-          Whether it's a timber frame, a web platform, or a bespoke workshop fit-out —
-          I'd love to hear what you're planning.
-        </p>
+        <p class="lol-contact__eyebrow" data-content-key="contact_eyebrow">${this._c('contact_eyebrow')}</p>
+        <h2 class="lol-contact__title" data-content-key="contact_title">${this._c('contact_title')}</h2>
+        <p class="lol-contact__desc" data-content-key="contact_desc">${this._c('contact_desc')}</p>
 
         <form class="contact-form" id="contact-form" novalidate aria-label="Contact form">
           <!-- Honeypot — hidden from real users, bots fill it in -->
@@ -377,11 +436,8 @@ export class HomeView {
   _initHeroVideo(view) {
     const video = view.querySelector('.lol-hero__bg');
     if (!video) return;
-    // The `autoplay` attribute is set in HTML, but some browsers need an
-    // explicit play() call after the element is in a live document.
     requestAnimationFrame(() => {
       video.play().catch(() => {
-        // Autoplay still blocked — listen for first user interaction then try again
         this._resumeVideoHandler = () => {
           video.play().catch(() => {});
           document.removeEventListener('click', this._resumeVideoHandler);
@@ -444,6 +500,101 @@ export class HomeView {
     });
   }
 
+  // ── Edit mode ─────────────────────────────────────────────────────────
+  _initEditMode(view) {
+    const editBtn    = view.querySelector('#home-edit-btn');
+    const editBar    = view.querySelector('#home-edit-bar');
+    const saveBtn    = view.querySelector('#home-edit-save');
+    const cancelBtn  = view.querySelector('#home-edit-cancel');
+
+    if (!editBtn) return; // not admin/moderator
+
+    const editables = () => view.querySelectorAll('[data-content-key]');
+
+    editBtn.addEventListener('click', () => {
+      this._editMode = true;
+      // Snapshot current text for cancel
+      editables().forEach(el => {
+        this._savedValues[el.dataset.contentKey] = el.textContent;
+      });
+
+      editables().forEach(el => {
+        el.contentEditable = 'true';
+        el.classList.add('home-editable');
+      });
+
+      editBar.removeAttribute('aria-hidden');
+      editBar.classList.add('home-edit-bar--visible');
+      editBtn.style.display = 'none';
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      editables().forEach(el => {
+        const key = el.dataset.contentKey;
+        if (key in this._savedValues) el.textContent = this._savedValues[key];
+        el.contentEditable = 'false';
+        el.classList.remove('home-editable');
+      });
+      this._savedValues = {};
+      this._editMode = false;
+      editBar.setAttribute('aria-hidden', 'true');
+      editBar.classList.remove('home-edit-bar--visible');
+      editBtn.style.display = '';
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const updates = {};
+      editables().forEach(el => {
+        updates[el.dataset.contentKey] = el.textContent.trim();
+      });
+
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/content', {
+          method:      'PATCH',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify(updates),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Save failed');
+        }
+
+        // Update internal content cache
+        const saved = await res.json();
+        this._content = { ...CONTENT_DEFAULTS, ...saved };
+
+        // Exit edit mode
+        editables().forEach(el => {
+          el.contentEditable = 'false';
+          el.classList.remove('home-editable');
+        });
+        this._savedValues = {};
+        this._editMode = false;
+        editBar.setAttribute('aria-hidden', 'true');
+        editBar.classList.remove('home-edit-bar--visible');
+        editBtn.style.display = '';
+      } catch (err) {
+        // Show error but stay in edit mode
+        const hint = editBar.querySelector('.home-edit-bar__hint');
+        hint.textContent = `Error: ${err.message}`;
+        hint.style.color = '#e74c3c';
+        setTimeout(() => {
+          hint.textContent = 'Editing homepage text';
+          hint.style.color = '';
+        }, 3000);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
+      }
+    });
+  }
+
   // ── Contact form — fetch submission ───────────────────────────────────
   _initContactForm(view) {
     const form   = view.querySelector('#contact-form');
@@ -453,6 +604,10 @@ export class HomeView {
 
     form.addEventListener('submit', async e => {
       e.preventDefault();
+
+      // Block submission while in edit mode (contenteditable interferes)
+      if (this._editMode) return;
+
       const honeypot = form.querySelector('#contact-honeypot').value;
       const name    = form.querySelector('#contact-name').value.trim();
       const email   = form.querySelector('#contact-email').value.trim();
