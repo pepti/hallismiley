@@ -1,4 +1,4 @@
-import { isAuthenticated, getUser, getProfile, updateProfile, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
+import { isAuthenticated, getProfile, updateProfile, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 
@@ -308,7 +308,7 @@ export class ProfileView {
     });
   }
 
-  _bindSessions(el, sessions) {
+  _bindSessions(el, _sessions) {
     const tbody = el.querySelector('#sessions-tbody');
 
     tbody.addEventListener('click', async e => {

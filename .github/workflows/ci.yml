@@ -52,6 +52,58 @@ jobs:
           # ADMIN_USERNAME / ADMIN_PASSWORD_HASH are set by tests/env.js
         run: npm run test:ci
 
+  e2e:
+    name: E2E tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER:     postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB:       halliprojects_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        env:
+          CI:              "true"
+          NODE_ENV:        test
+          DATABASE_URL:    postgresql://postgres:postgres@localhost:5432/halliprojects_e2e
+          ALLOWED_ORIGINS: http://localhost:3000
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

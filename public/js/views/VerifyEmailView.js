@@ -1,5 +1,4 @@
 import { verifyEmail } from '../services/auth.js';
-import { escHtml } from '../utils/escHtml.js';
 
 export class VerifyEmailView {
   constructor(queryString = '') {

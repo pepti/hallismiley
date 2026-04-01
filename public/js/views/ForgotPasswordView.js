@@ -1,5 +1,4 @@
 import { forgotPassword } from '../services/auth.js';
-import { escHtml } from '../utils/escHtml.js';
 
 export class ForgotPasswordView {
   async render() {
