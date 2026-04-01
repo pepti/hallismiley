@@ -1,4 +1,4 @@
-import { getCSRFToken } from '../services/auth.js';
+import { getCSRFToken, getCsrfHeaders as csrfHeaders } from '../utils/api.js';
 
 const BASE = '/api/v1/projects';
 
@@ -10,15 +10,6 @@ async function request(url, options = {}) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
-}
-
-// Build headers that include the CSRF token for state-changing requests.
-async function csrfHeaders() {
-  const token = await getCSRFToken();
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'X-CSRF-Token': token } : {}),
-  };
 }
 
 export const projectApi = {

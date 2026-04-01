@@ -1,12 +1,9 @@
 import { signup, checkUsername, checkEmail } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { avatarPath } from '../utils/avatar.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
-
-function avatarPath(n) {
-  return `/assets/avatars/avatar-${pad(n)}.svg`;
-}
 
 function passwordStrength(pw) {
   if (!pw) return { score: 0, label: '' };
@@ -213,6 +210,11 @@ export class SignupView {
 
     // Form submit
     el.querySelector('#signup-form').addEventListener('submit', e => this._onSubmit(e, el));
+  }
+
+  destroy() {
+    clearTimeout(_usernameTimer);
+    clearTimeout(_emailTimer);
   }
 
   async _onSubmit(e, el) {

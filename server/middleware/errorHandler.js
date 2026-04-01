@@ -1,7 +1,7 @@
 // A09 Security Logging & Monitoring + A05 Security Misconfiguration
 // Log full details server-side; return only a generic message to the client
 
-const logger = require('../logger');
+const logger = require('../observability/logger');
 const { trackRequest } = require('../observability/alerts');
 
 const SAFE_STATUSES = new Set([400, 401, 403, 404, 409, 422, 429]);

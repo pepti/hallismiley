@@ -28,7 +28,7 @@ if (missing.length) {
   process.exit(1);
 }
 
-const logger = require('./logger');
+const logger = require('./observability/logger');
 const app    = require('./app');
 const { pool } = require('./config/database');
 const { migrate } = require('./scripts/migrate');

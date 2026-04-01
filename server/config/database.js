@@ -1,7 +1,7 @@
 // PostgreSQL connection pool
 // Uses a single pool shared across the app — pg manages idle/max connections automatically
 const { Pool } = require('pg');
-const logger = require('../logger');
+const logger = require('../observability/logger');
 const { dbQueryDuration, dbPoolTotal, dbPoolIdle, dbPoolWaiting } = require('../observability/metrics');
 const { dbCircuitBreaker } = require('../observability/circuitBreaker');
 

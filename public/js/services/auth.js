@@ -2,8 +2,11 @@
 // The auth_session cookie is httpOnly (set/cleared by the server only).
 // No tokens are stored in the browser — session state lives in the DB.
 
+import { getCSRFToken, clearCSRFToken, getCsrfHeaders } from '../utils/api.js';
+
+export { getCSRFToken };
+
 let _user = null; // cached user info from last successful session check
-let _csrfToken = null;
 
 function _dispatch() {
   window.dispatchEvent(new CustomEvent('authchange', { detail: { authenticated: isAuthenticated() } }));
@@ -13,28 +16,6 @@ export function getUser()         { return _user; }
 export function isAuthenticated() { return !!_user; }
 export function hasRole(role)     { return _user?.role === role; }
 export function isAdmin()         { return _user?.role === 'admin'; }
-
-// ── CSRF ──────────────────────────────────────────────────────────────────────
-
-export async function getCSRFToken() {
-  if (_csrfToken) return _csrfToken;
-  try {
-    const res  = await fetch('/api/v1/csrf-token', { credentials: 'include' });
-    const data = await res.json();
-    _csrfToken = data.token;
-    return _csrfToken;
-  } catch {
-    return null;
-  }
-}
-
-async function _csrfHeaders() {
-  const token = await getCSRFToken();
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'X-CSRF-Token': token } : {}),
-  };
-}
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
@@ -48,15 +29,15 @@ export async function login(username, password) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Login failed');
   _user = data.user;
-  _csrfToken = null; // refresh CSRF after login
+  clearCSRFToken(); // refresh CSRF after login
   _dispatch();
   return data;
 }
 
 export async function logout() {
   _user = null;
-  _csrfToken = null;
-  const headers = await _csrfHeaders();
+  clearCSRFToken();
+  const headers = await getCsrfHeaders();
   await fetch('/auth/logout', { method: 'POST', credentials: 'include', headers }).catch(() => {});
   _dispatch();
 }
@@ -146,7 +127,7 @@ export async function getProfile() {
 }
 
 export async function updateProfile(updates) {
-  const headers = await _csrfHeaders();
+  const headers = await getCsrfHeaders();
   const res = await fetch('/api/v1/users/me', {
     method:      'PATCH',
     credentials: 'include',
@@ -160,7 +141,7 @@ export async function updateProfile(updates) {
 }
 
 export async function changePassword(currentPassword, newPassword) {
-  const headers = await _csrfHeaders();
+  const headers = await getCsrfHeaders();
   const res = await fetch('/api/v1/users/me/password', {
     method:      'POST',
     credentials: 'include',
@@ -182,7 +163,7 @@ export async function getSessions() {
 }
 
 export async function revokeSession(sessionId) {
-  const headers = await _csrfHeaders();
+  const headers = await getCsrfHeaders();
   const res = await fetch(`/api/v1/users/me/sessions/${sessionId}`, {
     method:      'DELETE',
     credentials: 'include',
@@ -194,7 +175,7 @@ export async function revokeSession(sessionId) {
 }
 
 export async function revokeAllSessions() {
-  const headers = await _csrfHeaders();
+  const headers = await getCsrfHeaders();
   const res = await fetch('/api/v1/users/me/sessions', {
     method:      'DELETE',
     credentials: 'include',
@@ -216,7 +197,7 @@ export async function adminGetUsers(params = {}) {
 }
 
 export async function adminUpdateUser(userId, updates) {
-  const headers = await _csrfHeaders();
+  const headers = await getCsrfHeaders();
   const res = await fetch(`/api/v1/admin/users/${userId}`, {
     method:      'PATCH',
     credentials: 'include',

@@ -1,6 +1,6 @@
 const crypto     = require('crypto');
 const express    = require('express');
-const logger     = require('./logger');
+const logger     = require('./observability/logger');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
@@ -8,18 +8,18 @@ const hpp        = require('hpp');
 const cookieParser = require('cookie-parser');
 const compression = require('compression');
 const path       = require('path');
-const projectRoutes  = require('./routes/projectRoutes');
-const authRoutes     = require('./routes/authRoutes');
-const contactRoutes  = require('./routes/contactRoutes');
-const userRoutes     = require('./routes/userRoutes');
-const adminRoutes    = require('./routes/adminRoutes');
-const errorHandler   = require('./middleware/errorHandler');
+const projectRoutes    = require('./routes/projectRoutes');
+const authRoutes       = require('./routes/authRoutes');
+const contactRoutes    = require('./routes/contactRoutes');
+const userRoutes       = require('./routes/userRoutes');
+const adminRoutes      = require('./routes/adminRoutes');
+const errorHandler     = require('./middleware/errorHandler');
+const healthController = require('./controllers/healthController');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register }   = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
-const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
-const { healthCheckFailed } = require('./observability/alerts');
+const { dbCircuitBreakerMiddleware } = require('./observability/circuitBreaker');
 const { trackRequest } = require('./observability/alerts');
 
 const app = express();
@@ -143,84 +143,10 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ── Liveness probe — returns 200 if the process is alive ──────────────────────
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status:    'ok',
-    uptime:    Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-  });
-});
+app.get('/health', healthController.liveness);
 
 // ── Readiness probe — checks DB and system health before accepting traffic ─────
-app.get('/ready', async (req, res) => {
-  const { query: dbQuery, pool } = require('./config/database');
-
-  async function measureEventLoopLag() {
-    return new Promise(resolve => {
-      const start = process.hrtime.bigint();
-      setImmediate(() => resolve(Number(process.hrtime.bigint() - start) / 1e6));
-    });
-  }
-
-  const checks = {};
-  let overallOk = true;
-
-  // DB connectivity
-  try {
-    await Promise.race([
-      dbQuery('SELECT 1'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-    ]);
-    checks.database = { status: 'ok' };
-  } catch (err) {
-    checks.database = { status: 'error', message: err.message };
-    overallOk = false;
-    healthCheckFailed('database', { message: err.message });
-  }
-
-  // DB pool health
-  checks.dbPool = {
-    status:   pool.waitingCount > 5 ? 'degraded' : 'ok',
-    total:    pool.totalCount,
-    idle:     pool.idleCount,
-    waiting:  pool.waitingCount,
-  };
-  if (pool.waitingCount > 5) overallOk = false;
-
-  // Circuit breaker state
-  checks.circuitBreaker = {
-    status: dbCircuitBreaker.state === 'closed' ? 'ok' : 'degraded',
-    state:  dbCircuitBreaker.state,
-  };
-  if (dbCircuitBreaker.state === 'open') overallOk = false;
-
-  // Memory usage
-  const mem = process.memoryUsage();
-  const heapRatio = mem.heapUsed / mem.heapTotal;
-  checks.memory = {
-    status:    heapRatio > 0.9 ? 'critical' : heapRatio > 0.8 ? 'degraded' : 'ok',
-    heapUsedMb:  Math.round(mem.heapUsed  / 1024 / 1024),
-    heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
-    ratio:       `${(heapRatio * 100).toFixed(1)}%`,
-  };
-  if (heapRatio > 0.9) overallOk = false;
-
-  // Event loop lag
-  const lagMs = await measureEventLoopLag();
-  checks.eventLoop = {
-    status: lagMs > 100 ? 'degraded' : 'ok',
-    lagMs:  Math.round(lagMs),
-  };
-  if (lagMs > 100) overallOk = false;
-
-  const status = overallOk ? 200 : 503;
-  res.status(status).json({
-    status:    overallOk ? 'ok' : 'degraded',
-    uptime:    Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-    checks,
-  });
-});
+app.get('/ready', healthController.readiness);
 
 // ── Prometheus metrics endpoint ───────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
