@@ -1,15 +1,15 @@
 const request = require('supertest');
 const path    = require('path');
 const fs      = require('fs');
-const app     = require('../server/app');
-const db      = require('../server/config/database');
+const app     = require('../../server/app');
+const db      = require('../../server/config/database');
 const {
   getTestSessionCookie,
   createTestModeratorUser,
   createTestRegularUser,
   cleanTables,
   validProject,
-} = require('./helpers');
+} = require('../helpers');
 
 // Minimal 1×1 transparent PNG for upload tests
 const PNG_BUFFER = Buffer.from(
@@ -26,7 +26,7 @@ let projectId;
 const uploadDirs = new Set();
 
 function cleanupUploadDir(id) {
-  const dir = path.join(__dirname, '../public/assets/projects', String(id));
+  const dir = path.join(__dirname, '../../public/assets/projects', String(id));
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -281,7 +281,7 @@ describe('POST /api/v1/projects/:id/media', () => {
       .attach('file', PNG_BUFFER, { filename: 'disk-test.png', contentType: 'image/png' });
 
     expect(res.status).toBe(201);
-    const diskPath = path.join(__dirname, '../public', res.body.file_path);
+    const diskPath = path.join(__dirname, '../../public', res.body.file_path);
     expect(fs.existsSync(diskPath)).toBe(true);
   });
 });
@@ -448,7 +448,7 @@ describe('DELETE /api/v1/projects/:id/media/:mediaId', () => {
       .attach('file', PNG_BUFFER, { filename: 'del-test.png', contentType: 'image/png' });
 
     expect(uploadRes.status).toBe(201);
-    const diskPath  = path.join(__dirname, '../public', uploadRes.body.file_path);
+    const diskPath  = path.join(__dirname, '../../public', uploadRes.body.file_path);
     expect(fs.existsSync(diskPath)).toBe(true);
 
     const delRes = await request(app)

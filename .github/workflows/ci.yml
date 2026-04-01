@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Integration tests
+    name: Lint + Integration tests
     runs-on: ubuntu-latest
 
     services:
@@ -42,7 +42,10 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
-      - name: Run tests
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests with coverage
         env:
           NODE_ENV:            test
           TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/halliprojects_test

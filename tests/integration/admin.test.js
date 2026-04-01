@@ -1,13 +1,13 @@
 const request = require('supertest');
-const app     = require('../server/app');
-const db      = require('../server/config/database');
+const app     = require('../../server/app');
+const db      = require('../../server/config/database');
 const {
   createTestAdminUser,
   createTestModeratorUser,
   createTestRegularUser,
   getTestSessionCookie,
   cleanTables,
-} = require('./helpers');
+} = require('../helpers');
 
 let adminCookie;
 let adminId;

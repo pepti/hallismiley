@@ -1,13 +1,13 @@
 const request = require('supertest');
-const app     = require('../server/app');
-const db      = require('../server/config/database');
+const app     = require('../../server/app');
+const db      = require('../../server/config/database');
 const {
   getTestSessionCookie,
   createTestModeratorUser,
   createTestRegularUser,
   cleanTables,
   validProject,
-} = require('./helpers');
+} = require('../helpers');
 
 let sessionCookie;
 

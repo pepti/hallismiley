@@ -33,3 +33,6 @@ Thumbs.db
 # Build output
 dist/
 build/
+
+# Test coverage reports (generated, not committed)
+coverage/
