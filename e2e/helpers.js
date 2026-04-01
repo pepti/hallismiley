@@ -41,4 +41,24 @@ async function createTestUser(page) {
   return { username, email, password };
 }
 
-module.exports = { loginAsAdmin, createTestUser, TEST_ADMIN };
+/**
+ * Sign up a brand-new unique user via the signup form UI.
+ * Returns { username, email, password }.
+ * Alias for createTestUser — use when the intent is signing up (not just creating).
+ */
+async function signupUser(page) {
+  return createTestUser(page);
+}
+
+/**
+ * Navigate to the Stofan Bakhús project detail page from the projects list.
+ * Works whether logged in or not.
+ */
+async function navigateToProject(page, name = /Stofan Bakhús/i) {
+  await page.goto('/#/projects');
+  await page.waitForSelector('.project-card', { timeout: 10_000 });
+  await page.getByRole('button', { name }).click();
+  await page.waitForSelector('.pd-hero__title', { timeout: 10_000 });
+}
+
+module.exports = { loginAsAdmin, createTestUser, signupUser, navigateToProject, TEST_ADMIN };
