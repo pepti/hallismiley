@@ -80,7 +80,9 @@ async function getTestSessionCookie(userId) {
 /** Truncate all mutable tables and reset sequences between tests. */
 async function cleanTables() {
   await db.query(
-    'TRUNCATE TABLE projects, user_sessions, users RESTART IDENTITY CASCADE'
+    `TRUNCATE TABLE projects, user_sessions, users,
+       party_invites, party_rsvps, party_guestbook, party_photos
+     RESTART IDENTITY CASCADE`
   );
 }
 

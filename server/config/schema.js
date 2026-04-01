@@ -139,6 +139,7 @@ const migrations = [
   },
   {
     name: '006_enriched_profiles',
+
     statements: [
       // Bio (max 500 chars)
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`,
@@ -166,6 +167,61 @@ const migrations = [
       )`,
       `CREATE INDEX IF NOT EXISTS idx_user_favorites_user_id    ON user_favorites (user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_user_favorites_project_id ON user_favorites (project_id)`,
+    ],
+  },
+  {
+    name: '007_birthday_party',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_invites (
+        id           SERIAL      PRIMARY KEY,
+        email        TEXT        NOT NULL UNIQUE,
+        invite_token TEXT        UNIQUE,
+        invited_by   TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        status       TEXT        NOT NULL DEFAULT 'pending'
+                                 CHECK (status IN ('pending', 'accepted', 'declined')),
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_invites_email ON party_invites (email)`,
+      `CREATE INDEX IF NOT EXISTS idx_party_invites_token ON party_invites (invite_token)`,
+      `DROP TRIGGER IF EXISTS trg_party_invites_updated_at ON party_invites`,
+      `CREATE TRIGGER trg_party_invites_updated_at
+         BEFORE UPDATE ON party_invites
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS party_rsvps (
+        id               SERIAL      PRIMARY KEY,
+        user_id          TEXT        NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        attending        BOOLEAN     NOT NULL,
+        dietary_needs    TEXT,
+        plus_one         BOOLEAN     NOT NULL DEFAULT FALSE,
+        plus_one_name    TEXT,
+        plus_one_dietary TEXT,
+        message          TEXT,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_rsvps_user_id ON party_rsvps (user_id)`,
+      `DROP TRIGGER IF EXISTS trg_party_rsvps_updated_at ON party_rsvps`,
+      `CREATE TRIGGER trg_party_rsvps_updated_at
+         BEFORE UPDATE ON party_rsvps
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS party_guestbook (
+        id         SERIAL      PRIMARY KEY,
+        user_id    TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message    TEXT        NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT party_guestbook_message_length CHECK (LENGTH(message) <= 1000)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_guestbook_user_id ON party_guestbook (user_id)`,
+      `CREATE TABLE IF NOT EXISTS party_photos (
+        id         SERIAL      PRIMARY KEY,
+        user_id    TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        file_path  TEXT        NOT NULL,
+        caption    TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT party_photos_caption_length CHECK (LENGTH(caption) <= 200)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_photos_user_id ON party_photos (user_id)`,
     ],
   },
 ];

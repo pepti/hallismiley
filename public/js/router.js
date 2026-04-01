@@ -13,6 +13,8 @@ import { PublicProfileView }  from './views/PublicProfileView.js';
 import { VerifyEmailView }    from './views/VerifyEmailView.js';
 import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
+import { PartyView }          from './views/PartyView.js';
+import { PartyAdminView }     from './views/PartyAdminView.js';
 import { isAuthenticated, isAdmin } from './services/auth.js';
 
 // More specific patterns must come before generic ones
@@ -32,6 +34,8 @@ const ROUTES = [
   { pattern: '/reset-password',  factory: (_, qs) => new ResetPasswordView(qs) },
   { pattern: '/privacy',         factory: ()  => new PrivacyView() },
   { pattern: '/terms',           factory: ()  => new TermsView() },
+  { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && isAdmin()) ? new PartyAdminView() : new PartyView() },
+  { pattern: '/party',           factory: ()  => new PartyView() },
 ];
 
 function parseHash(rawHash) {
