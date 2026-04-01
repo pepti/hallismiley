@@ -186,6 +186,49 @@ export async function revokeAllSessions() {
   return data;
 }
 
+// ── Favorites ─────────────────────────────────────────────────────────────────
+
+export async function getFavorites() {
+  const res  = await fetch('/api/v1/users/me/favorites', { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load favorites');
+  return data;
+}
+
+export async function addFavorite(projectId) {
+  const headers = await getCsrfHeaders();
+  const res = await fetch(`/api/v1/users/me/favorites/${projectId}`, {
+    method:      'POST',
+    credentials: 'include',
+    headers,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to add favorite');
+  return data;
+}
+
+export async function removeFavorite(projectId) {
+  const headers = await getCsrfHeaders();
+  const res = await fetch(`/api/v1/users/me/favorites/${projectId}`, {
+    method:      'DELETE',
+    credentials: 'include',
+    headers,
+  });
+  if (res.status === 204) return;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to remove favorite');
+  return data;
+}
+
+// ── Public profile ────────────────────────────────────────────────────────────
+
+export async function getPublicProfile(username) {
+  const res  = await fetch(`/api/v1/users/${encodeURIComponent(username)}/profile`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'User not found');
+  return data;
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 export async function adminGetUsers(params = {}) {

@@ -88,10 +88,16 @@ const authController = {
         return res.status(403).json({ error: 'Account has been disabled', code: 403 });
       }
 
-      // Successful login — reset counters, create session
+      // Successful login — reset counters, record IP/UA, create session
       await dbQuery(
-        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
-        [user.id]
+        `UPDATE users
+         SET failed_login_attempts = 0,
+             locked_until   = NULL,
+             last_login_at  = NOW(),
+             last_login_ip  = $2,
+             last_login_ua  = $3
+         WHERE id = $1`,
+        [user.id, req.ip ?? null, req.headers['user-agent'] ?? null]
       );
       authLoginAttempts.inc({ result: 'success' });
       securityLogger.loginSuccess(req.ip, username, user.id);

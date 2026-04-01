@@ -170,9 +170,17 @@ function validateSignup(req, res, next) {
   next();
 }
 
+const VALID_THEMES = ['dark', 'light'];
+const GITHUB_USERNAME_RE   = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
+const LINKEDIN_USERNAME_RE = /^[a-zA-Z0-9_-]{3,100}$/;
+
 // PATCH /api/v1/users/me
 function validateProfileUpdate(req, res, next) {
-  const { display_name, phone, avatar } = req.body;
+  const {
+    display_name, phone, avatar,
+    bio, theme, notify_comments, notify_updates,
+    github_username, linkedin_username,
+  } = req.body;
   const errors = [];
 
   if (display_name !== undefined && display_name !== null) {
@@ -187,6 +195,36 @@ function validateProfileUpdate(req, res, next) {
   if (avatar !== undefined) {
     if (!ALLOWED_AVATARS.includes(avatar))
       errors.push(`avatar must be one of the allowed avatars (avatar-01.svg to avatar-40.svg)`);
+  }
+
+  if (bio !== undefined && bio !== null) {
+    if (typeof bio !== 'string')
+      errors.push('bio must be a string');
+    else if (bio.length > 500)
+      errors.push('bio must be at most 500 characters');
+  }
+
+  if (theme !== undefined) {
+    if (!VALID_THEMES.includes(theme))
+      errors.push(`theme must be one of: ${VALID_THEMES.join(', ')}`);
+  }
+
+  if (notify_comments !== undefined && typeof notify_comments !== 'boolean') {
+    errors.push('notify_comments must be a boolean');
+  }
+
+  if (notify_updates !== undefined && typeof notify_updates !== 'boolean') {
+    errors.push('notify_updates must be a boolean');
+  }
+
+  if (github_username !== undefined && github_username !== null && github_username !== '') {
+    if (!GITHUB_USERNAME_RE.test(github_username))
+      errors.push('github_username must be a valid GitHub username (1-39 chars, letters/numbers/hyphens)');
+  }
+
+  if (linkedin_username !== undefined && linkedin_username !== null && linkedin_username !== '') {
+    if (!LINKEDIN_USERNAME_RE.test(linkedin_username))
+      errors.push('linkedin_username must be a valid LinkedIn username (3-100 chars)');
   }
 
   if (errors.length) {
@@ -295,4 +333,5 @@ module.exports = {
   validateMediaUpdate,
   validateReorder,
   ALLOWED_AVATARS,
+  VALID_THEMES,
 };
