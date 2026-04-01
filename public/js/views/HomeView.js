@@ -382,10 +382,21 @@ export class HomeView {
     requestAnimationFrame(() => {
       video.play().catch(() => {
         // Autoplay still blocked — listen for first user interaction then try again
-        const resume = () => { video.play().catch(() => {}); document.removeEventListener('click', resume); };
-        document.addEventListener('click', resume, { once: true });
+        this._resumeVideoHandler = () => {
+          video.play().catch(() => {});
+          document.removeEventListener('click', this._resumeVideoHandler);
+          this._resumeVideoHandler = null;
+        };
+        document.addEventListener('click', this._resumeVideoHandler, { once: true });
       });
     });
+  }
+
+  destroy() {
+    if (this._resumeVideoHandler) {
+      document.removeEventListener('click', this._resumeVideoHandler);
+      this._resumeVideoHandler = null;
+    }
   }
 
   // ── Projects section — category switching logic ────────────────────────

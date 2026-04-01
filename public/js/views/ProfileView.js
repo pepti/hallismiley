@@ -1,11 +1,10 @@
 import { isAuthenticated, getProfile, updateProfile, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
+import { avatarPath, avatarPathByName } from '../utils/avatar.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
-const avatarPath = n => `/assets/avatars/avatar-${pad(n)}.svg`;
-const avatarPathByName = name => `/assets/avatars/${name}`;
 
 function formatDate(str) {
   if (!str) return '—';
@@ -306,6 +305,10 @@ export class ProfileView {
         btn.textContent = 'Update Password';
       }
     });
+  }
+
+  destroy() {
+    // No window/document listeners to remove; all listeners are on child elements.
   }
 
   _bindSessions(el, _sessions) {
