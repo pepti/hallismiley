@@ -1,6 +1,6 @@
 const request = require('supertest');
-const app     = require('../server/app');
-const db      = require('../server/config/database');
+const app     = require('../../server/app');
+const db      = require('../../server/config/database');
 
 afterAll(async () => {
   await db.pool.end();

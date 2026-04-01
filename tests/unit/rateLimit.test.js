@@ -91,7 +91,7 @@ describe('Rate limiter — 429 response', () => {
 describe('Auth limiter — configuration check', () => {
   test('authRoutes applies a rate limiter to POST /login', () => {
     // Load the router and confirm it has middleware on the login route
-    const authRouter = require('../server/routes/authRoutes');
+    const authRouter = require('../../server/routes/authRoutes');
     const loginLayer = authRouter.stack.find(l => {
       const methods = l.route?.methods ?? {};
       return methods.post && l.route?.path === '/login';
@@ -106,7 +106,7 @@ describe('Auth limiter — configuration check', () => {
 
 describe('Contact limiter — configuration check', () => {
   test('contactRoutes applies a rate limiter to POST /', () => {
-    const contactRouter = require('../server/routes/contactRoutes');
+    const contactRouter = require('../../server/routes/contactRoutes');
     const postLayer = contactRouter.stack.find(l => {
       const methods = l.route?.methods ?? {};
       return methods.post && l.route?.path === '/';

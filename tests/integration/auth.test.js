@@ -1,7 +1,7 @@
 const request = require('supertest');
-const app     = require('../server/app');
-const db      = require('../server/config/database');
-const { cleanTables, createTestAdminUser } = require('./helpers');
+const app     = require('../../server/app');
+const db      = require('../../server/config/database');
+const { cleanTables, createTestAdminUser } = require('../helpers');
 
 beforeEach(async () => {
   await cleanTables();

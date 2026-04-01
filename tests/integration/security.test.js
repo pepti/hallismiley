@@ -4,9 +4,9 @@
  * malformed requests, 404 handling, oversized bodies, and header hardening.
  */
 const request = require('supertest');
-const app     = require('../server/app');
-const db      = require('../server/config/database');
-const { getTestSessionCookie, cleanTables, validProject } = require('./helpers');
+const app     = require('../../server/app');
+const db      = require('../../server/config/database');
+const { getTestSessionCookie, cleanTables, validProject } = require('../helpers');
 
 let sessionCookie;
 

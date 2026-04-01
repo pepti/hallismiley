@@ -10,7 +10,7 @@
     "migrate": "node server/scripts/migrate.js",
     "seed": "node server/scripts/seed.js",
     "test": "jest",
-    "test:ci": "jest --ci --runInBand --forceExit",
+    "test:ci": "jest --ci --runInBand --forceExit --detectOpenHandles --coverage",
     "lint": "eslint ."
   },
   "dependencies": {

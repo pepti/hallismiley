@@ -3,7 +3,10 @@ module.exports = {
   globalSetup:      './tests/globalSetup.js',
   globalTeardown:   './tests/globalTeardown.js',
   setupFiles:       ['./tests/env.js'],
-  testMatch:        ['**/tests/**/*.test.js'],
+  testMatch: [
+    '**/tests/unit/**/*.test.js',
+    '**/tests/integration/**/*.test.js',
+  ],
   testTimeout:      30000,
   forceExit:        true,
   // Run test files serially — avoids DB race conditions between suites
@@ -14,4 +17,15 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(lucia|@lucia-auth|oslo|@oslojs)/)',
   ],
+  // Coverage configuration
+  collectCoverageFrom: [
+    'server/**/*.js',
+    '!server/scripts/**',
+    '!server/migrations/**',
+  ],
+  coverageThreshold: {
+    global: {
+      lines: 70,
+    },
+  },
 };
