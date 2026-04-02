@@ -54,11 +54,17 @@ const seedData = [
 
   // --- Tech Projects ---
   {
-    title: 'Portfolio API',
-    description: 'This very application — a Node.js/Express REST API with a PostgreSQL backend, serving a vanilla JS frontend. MVC architecture, parameterised queries, hash router.',
+    title: 'Halli Smiley — Portfolio Platform',
+    description: `A full-stack web platform built from the ground up to showcase carpentry craftsmanship and software engineering work. Features a custom CMS with inline admin editing, a multi-role user system with session-based authentication, an invite-only event hub with real-time countdown, and a complete media gallery with lightbox. Designed with a distinctive dark theme inspired by premium gaming interfaces, the platform delivers a seamless single-page experience without relying on any frontend framework.
+
+Engineered for production from day one — the codebase includes structured logging with Pino, Prometheus metrics, circuit breakers, CI/CD with 398+ automated tests across unit, integration, and end-to-end suites, and a comprehensive observability stack. Every component, from the Lucia-powered auth system to the admin-controlled site content, was hand-crafted to demonstrate full-stack craftsmanship at every layer of the stack.`,
     category: 'tech',
-    year: 2024,
-    tools_used: ['Node.js', 'Express', 'PostgreSQL', 'pg', 'Vanilla JS', 'CSS custom properties'],
+    year: 2025,
+    tools_used: [
+      'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth', 'Vanilla JS SPA',
+      'Pino', 'Prometheus', 'Sentry', 'Docker', 'GitHub Actions',
+      'Playwright', 'ESLint', 'oslo',
+    ],
     image_url: null,
     featured: true,
   },
