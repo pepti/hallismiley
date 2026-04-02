@@ -192,10 +192,29 @@ export class PartyView {
   _renderVenue(info) {
     const venueName    = escHtml(info.venue_name    || 'TBD — details coming soon');
     const venueAddress = escHtml(info.venue_address || '');
-    const venueLink    = escHtml(info.venue_link    || 'https://www.salir.is/index.php/is/skoda/1169');
-    const mapsLink     = venueAddress
-      ? `https://www.google.com/maps/search/${encodeURIComponent(venueAddress)}`
-      : '';
+    const venueLink    = escHtml(info.venue_link    || '');
+    const venueRating  = escHtml(info.venue_rating  || '');
+    const mapsLink     = info.venue_maps_link
+      ? escHtml(info.venue_maps_link)
+      : venueAddress
+        ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address || '')}`
+        : '';
+
+    let detailsHtml = '';
+    if (info.venue_details) {
+      try {
+        const details = typeof info.venue_details === 'string'
+          ? JSON.parse(info.venue_details)
+          : info.venue_details;
+        const hallItems = (details.hall || []).map(d => `<li>${escHtml(d)}</li>`).join('');
+        const spaItems  = (details.spa  || []).map(d => `<li>${escHtml(d)}</li>`).join('');
+        detailsHtml = `
+          <div class="party-venue__details">
+            ${hallItems ? `<div class="party-venue__details-section"><h3 class="party-venue__details-title">🏠 Party Hall</h3><ul class="party-venue__details-list">${hallItems}</ul></div>` : ''}
+            ${spaItems  ? `<div class="party-venue__details-section"><h3 class="party-venue__details-title">🛁 SPA</h3><ul class="party-venue__details-list">${spaItems}</ul></div>` : ''}
+          </div>`;
+      } catch { /* ignore malformed details */ }
+    }
 
     return `
       <section class="party-section party-venue" aria-labelledby="venue-heading">
@@ -204,10 +223,12 @@ export class PartyView {
           <div class="party-venue__card">
             <div class="party-venue__name">${venueName}</div>
             ${venueAddress ? `<div class="party-venue__address">${venueAddress}</div>` : ''}
+            ${venueRating  ? `<div class="party-venue__rating">⭐ ${venueRating}</div>` : ''}
             <div class="party-venue__links">
-              ${mapsLink ? `<a href="${mapsLink}" target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">📍 Google Maps</a>` : ''}
-              <a href="${venueLink}" target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">🏠 View Venue</a>
+              ${mapsLink  ? `<a href="${mapsLink}"  target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">📍 Google Maps</a>` : ''}
+              ${venueLink ? `<a href="${venueLink}" target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">🏠 View Venue</a>` : ''}
             </div>
+            ${detailsHtml}
           </div>
         </div>
       </section>`;
