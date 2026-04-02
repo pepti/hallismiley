@@ -10,6 +10,14 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
+    // Pre-dismiss the cookie consent banner so it never blocks test interactions
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: 'http://localhost:3000',
+        localStorage: [{ name: 'cookie_consent', value: 'declined' }],
+      }],
+    },
   },
 
   projects: [
