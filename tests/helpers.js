@@ -81,7 +81,8 @@ async function getTestSessionCookie(userId) {
 async function cleanTables() {
   await db.query(
     `TRUNCATE TABLE projects, user_sessions, users,
-       party_invites, party_rsvps, party_guestbook, party_photos
+       party_invites, party_rsvps, party_guestbook, party_photos,
+       news_articles
      RESTART IDENTITY CASCADE`
   );
 }
@@ -99,6 +100,18 @@ function validProject(overrides = {}) {
   };
 }
 
+/** A minimal valid news article body for POST requests. */
+function validArticle(overrides = {}) {
+  return {
+    title:     'Test Article',
+    summary:   'A short summary of the test article for integration tests.',
+    body:      '<p>This is the full body of the test article.</p>',
+    category:  'news',
+    published: false,
+    ...overrides,
+  };
+}
+
 module.exports = {
   createTestAdminUser,
   createTestModeratorUser,
@@ -106,4 +119,5 @@ module.exports = {
   getTestSessionCookie,
   cleanTables,
   validProject,
+  validArticle,
 };

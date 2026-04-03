@@ -15,6 +15,8 @@ import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
 import { PartyView }          from './views/PartyView.js';
 import { PartyAdminView }     from './views/PartyAdminView.js';
+import { NewsView }           from './views/NewsView.js';
+import { ArticleView }        from './views/ArticleView.js';
 import { isAuthenticated, isAdmin } from './services/auth.js';
 
 // More specific patterns must come before generic ones
@@ -22,6 +24,8 @@ const ROUTES = [
   { pattern: '/',                factory: ()  => new HomeView() },
   { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
   { pattern: '/projects',        factory: ()  => new ProjectsView() },
+  { pattern: '/news/:slug',      factory: (p) => new ArticleView(p.slug) },
+  { pattern: '/news',            factory: ()  => new NewsView() },
   { pattern: '/about',           factory: ()  => new AboutView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },

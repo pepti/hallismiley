@@ -8,6 +8,7 @@
 @import './project-edit.css';
 @import './theme-light.css';
 @import './party.css';
+@import './news.css';
 
 body {
   font-family: var(--font-sans);

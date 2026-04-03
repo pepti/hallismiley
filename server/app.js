@@ -15,6 +15,7 @@ const userRoutes       = require('./routes/userRoutes');
 const adminRoutes      = require('./routes/adminRoutes');
 const contentRoutes    = require('./routes/contentRoutes');
 const partyRoutes      = require('./routes/partyRoutes');
+const newsRoutes       = require('./routes/newsRoutes');
 const errorHandler     = require('./middleware/errorHandler');
 const healthController = require('./controllers/healthController');
 const { sanitizeBody } = require('./middleware/sanitize');
@@ -125,6 +126,12 @@ app.use('/api/v1/party', (req, res, next) => {
   }
   next();
 });
+app.use('/api/v1/news', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
 
 // ── Request ID + Trace ID — attach to every request for log correlation ────────
 app.use((req, res, next) => {
@@ -215,6 +222,7 @@ app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/party',      partyRoutes);
+app.use('/api/v1/news',       newsRoutes);
 
 // Fallback SPA route — never cache, browser must revalidate on every navigation
 app.get('*', (req, res) => {
