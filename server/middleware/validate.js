@@ -323,6 +323,74 @@ function validateReorder(req, res, next) {
   next();
 }
 
+// ── News validation ───────────────────────────────────────────────────────────
+
+const MAX_NEWS_TITLE_LEN   = 200;
+const MAX_NEWS_SUMMARY_LEN = 300;
+const SLUG_RE              = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+// POST /api/v1/news  and  PATCH /api/v1/news/:id
+function validateNews(req, res, next) {
+  const { title, slug, summary, body, cover_image, category, published } = req.body;
+  const errors  = [];
+  const isPOST  = req.method === 'POST';
+
+  // Required on creation
+  if (isPOST) {
+    if (!title?.trim())   errors.push('title is required');
+    if (!summary?.trim()) errors.push('summary is required');
+    if (!body?.trim())    errors.push('body is required');
+  }
+
+  if (title !== undefined) {
+    if (typeof title !== 'string' || title.trim().length === 0)
+      errors.push('title must be a non-empty string');
+    else if (title.length > MAX_NEWS_TITLE_LEN)
+      errors.push(`title must be at most ${MAX_NEWS_TITLE_LEN} characters`);
+  }
+
+  if (slug !== undefined && slug !== null && slug !== '') {
+    if (typeof slug !== 'string' || !SLUG_RE.test(slug))
+      errors.push('slug must contain only lowercase letters, numbers and hyphens');
+    else if (slug.length > 100)
+      errors.push('slug must be at most 100 characters');
+  }
+
+  if (summary !== undefined) {
+    if (typeof summary !== 'string' || summary.trim().length === 0)
+      errors.push('summary must be a non-empty string');
+    else if (summary.length > MAX_NEWS_SUMMARY_LEN)
+      errors.push(`summary must be at most ${MAX_NEWS_SUMMARY_LEN} characters`);
+  }
+
+  if (body !== undefined) {
+    if (typeof body !== 'string' || body.trim().length === 0)
+      errors.push('body must be a non-empty string');
+  }
+
+  if (cover_image !== undefined && cover_image !== null && cover_image !== '') {
+    if (typeof cover_image !== 'string') {
+      errors.push('cover_image must be a string');
+    } else if (!/^https:\/\/.+/i.test(cover_image) && !/^\/assets\//i.test(cover_image)) {
+      errors.push('cover_image must be a valid https:// URL or a relative /assets/ path');
+    }
+  }
+
+  if (category !== undefined) {
+    if (typeof category !== 'string' || category.trim().length === 0)
+      errors.push('category must be a non-empty string');
+    else if (category.length > 50)
+      errors.push('category must be at most 50 characters');
+  }
+
+  if (published !== undefined && typeof published !== 'boolean') {
+    errors.push('published must be a boolean');
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
@@ -332,6 +400,7 @@ module.exports = {
   validatePasswordChange,
   validateMediaUpdate,
   validateReorder,
+  validateNews,
   ALLOWED_AVATARS,
   VALID_THEMES,
 };

@@ -5,28 +5,6 @@
 import { getUser }        from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 
-// ── Bespoke news items — real work, real dates ─────────────────────────────
-const NEWS = [
-  {
-    tag: 'CARPENTRY', tagClass: 'carpentry', date: '10/03/2026',
-    title: 'Hand-Cut Dovetails on a Cherry Side Table',
-    desc:  'Walking through the layout, chopping, and fitting of hand-cut through-dovetails on American cherry — no jigs, no router. Just a marking gauge, a sharp chisel, and patience.',
-    img:   'https://images.unsplash.com/photo-1575044577556-9f59571a0828?w=800&h=450&fit=crop&q=80&auto=format',
-  },
-  {
-    tag: 'TECH', tagClass: 'tech', date: '20/02/2026',
-    title: 'RS256 JWT Auth: Access Tokens & Refresh Token Rotation',
-    desc:  'A deep dive into the authentication system built for this portfolio — asymmetric signing with RS256, httpOnly refresh cookies, and automatic token rotation to prevent replay attacks.',
-    img:   'https://images.unsplash.com/photo-1509529711801-deac231925ac?w=800&h=450&fit=crop&q=80&auto=format',
-  },
-  {
-    tag: 'CARPENTRY', tagClass: 'carpentry', date: '05/01/2026',
-    title: 'Installing a French Cleat Wall in the Workshop',
-    desc:  'Replaced a cluttered pegboard setup with a full French cleat wall — 16mm birch ply ripped at 45°, spanning 4 metres. Every tool now has a custom holder made from offcuts.',
-    img:   'https://images.unsplash.com/photo-1630320455830-0caa7e8c9527?w=800&h=450&fit=crop&q=80&auto=format',
-  },
-];
-
 // ── Project categories (champion-selector style) ──────────────────────────
 const CATEGORIES = [
   {
@@ -101,17 +79,25 @@ export class HomeView {
     this._content     = { ...CONTENT_DEFAULTS };
     this._editMode    = false;
     this._savedValues = {}; // snapshot for cancel
+    this._newsArticles = [];
   }
 
   async render() {
-    // Fetch content from API — fall back to defaults on error
-    try {
-      const res = await fetch('/api/v1/content');
-      if (res.ok) {
-        const data = await res.json();
-        this._content = { ...CONTENT_DEFAULTS, ...data };
-      }
-    } catch { /* network error — use defaults */ }
+    // Fetch content and news in parallel — fall back to defaults on error
+    const [contentRes, newsRes] = await Promise.allSettled([
+      fetch('/api/v1/content'),
+      fetch('/api/v1/news?limit=3'),
+    ]);
+
+    if (contentRes.status === 'fulfilled' && contentRes.value.ok) {
+      const data = await contentRes.value.json();
+      this._content = { ...CONTENT_DEFAULTS, ...data };
+    }
+
+    if (newsRes.status === 'fulfilled' && newsRes.value.ok) {
+      const data = await newsRes.value.json();
+      this._newsArticles = data.articles || [];
+    }
 
     const view = document.createElement('div');
     view.className = 'view';
@@ -198,27 +184,40 @@ export class HomeView {
 
   // ── SECTION 2: Featured News ───────────────────────────────────────────
   _news() {
-    const cards = NEWS.map(n => `
-      <article class="lol-news__card">
-        <img class="lol-news__card-img"
-             src="${n.img}" alt="${n.title}" loading="lazy" width="800" height="450">
-        <div class="lol-news__card-body">
-          <div class="lol-news__card-meta">
-            <span class="lol-news__card-tag lol-news__card-tag--${n.tagClass}">${n.tag}</span>
-            <time class="lol-news__card-date" datetime="${this._isoDate(n.date)}">${n.date}</time>
-          </div>
-          <h3 class="lol-news__card-title">${n.title}</h3>
-          <p class="lol-news__card-desc">${n.desc}</p>
-        </div>
-      </article>
-    `).join('');
+    const articles = this._newsArticles;
+
+    const cards = articles.length
+      ? articles.map(a => {
+          const date   = a.published_at ? new Date(a.published_at) : new Date(a.created_at);
+          const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+          const catClass = a.category === 'announcement' ? 'announcement'
+                         : a.category === 'carpentry'    ? 'carpentry'
+                         : 'tech';
+          const imgHtml = a.cover_image
+            ? `<img class="lol-news__card-img" src="${a.cover_image}" alt="${this._esc(a.title)}" loading="lazy" width="800" height="450">`
+            : `<div class="lol-news__card-img lol-news__card-img--placeholder lol-news__card-img--${catClass}" aria-hidden="true"></div>`;
+
+          return `
+          <a href="#/news/${a.slug}" class="lol-news__card lol-news__card--link">
+            ${imgHtml}
+            <div class="lol-news__card-body">
+              <div class="lol-news__card-meta">
+                <span class="lol-news__card-tag lol-news__card-tag--${catClass}">${this._esc(a.category.toUpperCase())}</span>
+                <time class="lol-news__card-date" datetime="${date.toISOString()}">${dateStr}</time>
+              </div>
+              <h3 class="lol-news__card-title">${this._esc(a.title)}</h3>
+              <p class="lol-news__card-desc">${this._esc(a.summary)}</p>
+            </div>
+          </a>`;
+        }).join('')
+      : `<p class="lol-news__empty">No news yet — check back soon.</p>`;
 
     return `
     <section class="lol-news" id="news" aria-label="Latest updates">
       <div class="lol-news__inner">
         <div class="lol-news__header">
           <h2 class="lol-news__heading" data-content-key="news_heading">${this._c('news_heading')}</h2>
-          <a href="#/projects" class="lol-news__view-all">
+          <a href="#/news" class="lol-news__view-all">
             View All
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -231,10 +230,14 @@ export class HomeView {
     </section>`;
   }
 
-  // ── Converts DD/MM/YYYY → YYYY-MM-DD for <time datetime> ─────────────
-  _isoDate(dmy) {
-    const [d, m, y] = dmy.split('/');
-    return `${y}-${m}-${d}`;
+  // ── Minimal HTML-entity escape for text rendered into innerHTML ───────
+  _esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   // ── SECTION 4: Projects — champion-selector style ──────────────────────

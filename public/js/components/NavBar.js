@@ -35,7 +35,7 @@ export class NavBar {
       <div class="lol-nav__center" id="nav-menu">
         <a href="#/" class="lol-nav__link" data-route="/">Home</a>
         <a href="#/projects" class="lol-nav__link" data-route="/projects">Projects</a>
-        <a href="#/" class="lol-nav__link" data-scroll="news">News</a>
+        <a href="#/news" class="lol-nav__link" data-route="/news">News</a>
         <a href="#/about" class="lol-nav__link" data-route="/about">Skills</a>
         <a href="#/" class="lol-nav__link" data-scroll="contact">Contact</a>
         <a href="#/party" class="lol-nav__link lol-nav__party-link" data-route="/party" id="nav-party-link"
