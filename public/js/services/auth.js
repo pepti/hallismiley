@@ -216,8 +216,18 @@ export async function adminGetUsers(params = {}) {
 }
 
 export async function adminUpdateUser(userId, updates) {
+  // Dispatches to the correct sub-path based on which field is being updated.
   const headers = await _csrfHeaders();
-  const res = await fetch(`/api/v1/admin/users/${userId}`, {
+  const pathByField = {
+    role:         'role',
+    disabled:     'disable',
+    party_access: 'party-access',
+  };
+  const [field] = Object.keys(updates);
+  const sub = pathByField[field];
+  if (!sub) throw new Error(`Unsupported admin update: ${field}`);
+
+  const res = await fetch(`/api/v1/admin/users/${userId}/${sub}`, {
     method:      'PATCH',
     credentials: 'include',
     headers,

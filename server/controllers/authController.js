@@ -308,6 +308,7 @@ const authController = {
           display_name:   user.display_name,
           phone:          user.phone,
           email_verified: user.email_verified,
+          party_access:   user.party_access,
         },
       });
     } catch (err) { next(err); }

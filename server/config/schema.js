@@ -157,6 +157,12 @@ const migrations = [
          FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
     ],
   },
+  {
+    name: '009_user_party_access',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS party_access BOOLEAN NOT NULL DEFAULT FALSE`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

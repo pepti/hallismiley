@@ -79,6 +79,7 @@ export class AdminUsersView {
             <th>Role</th>
             <th>Verified</th>
             <th>Status</th>
+            <th>Party</th>
             <th>Joined</th>
             <th class="admin-table__actions-col">Actions</th>
           </tr>
@@ -112,6 +113,14 @@ export class AdminUsersView {
                   <span class="toggle-text">${u.disabled ? 'Disabled' : 'Active'}</span>
                 </label>
               </td>
+              <td>
+                <label class="toggle-label" title="${u.party_access ? 'Revoke party access' : 'Grant party access'}">
+                  <input type="checkbox" class="toggle-input" data-action="toggle-party"
+                         data-user-id="${escHtml(String(u.id))}" ${u.party_access ? 'checked' : ''}/>
+                  <span class="toggle-track"></span>
+                  <span class="toggle-text">${u.party_access ? '🎂 On' : 'Off'}</span>
+                </label>
+              </td>
               <td class="user-joined">${formatDate(u.createdAt)}</td>
               <td class="admin-table__actions">
                 <span class="user-id-badge">#${escHtml(String(u.id))}</span>
@@ -130,6 +139,25 @@ export class AdminUsersView {
     wrap.querySelectorAll('[data-action=toggle-disabled]').forEach(chk => {
       chk.addEventListener('change', () => this._onToggleDisabled(chk));
     });
+
+    // Wire party-access toggles
+    wrap.querySelectorAll('[data-action=toggle-party]').forEach(chk => {
+      chk.addEventListener('change', () => this._onTogglePartyAccess(chk));
+    });
+  }
+
+  async _onTogglePartyAccess(checkbox) {
+    const userId  = checkbox.dataset.userId;
+    const enabled = checkbox.checked;
+    const textEl  = checkbox.closest('label').querySelector('.toggle-text');
+    try {
+      await adminUpdateUser(userId, { party_access: enabled });
+      if (textEl) textEl.textContent = enabled ? '🎂 On' : 'Off';
+      showToast(enabled ? 'Party access granted' : 'Party access revoked', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+      checkbox.checked = !checkbox.checked; // revert
+    }
   }
 
   async _onRoleChange(select) {

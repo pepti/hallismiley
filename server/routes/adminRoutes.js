@@ -11,6 +11,7 @@ router.use(requireAuth, requireRole('admin'));
 router.get('/users',                          adminController.listUsers);
 router.patch('/users/:id/role',    csrfProtect, adminController.changeRole);
 router.patch('/users/:id/disable', csrfProtect, adminController.disableUser);
+router.patch('/users/:id/party-access', csrfProtect, adminController.setPartyAccess);
 router.delete('/users/:id',        csrfProtect, adminController.deleteUser);
 
 module.exports = router;

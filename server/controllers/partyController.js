@@ -87,11 +87,15 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
-/** Check if the authenticated user's email is on the invite list. */
+/** Check party access: either on the invite list OR has the party_access flag. */
 async function _checkInviteAccess(email) {
+  const lower = email.toLowerCase();
   const { rows } = await db.query(
-    'SELECT id FROM party_invites WHERE email = $1',
-    [email.toLowerCase()]
+    `SELECT 1 FROM party_invites WHERE email = $1
+     UNION
+     SELECT 1 FROM users WHERE LOWER(email) = $1 AND party_access = TRUE
+     LIMIT 1`,
+    [lower]
   );
   return rows.length > 0;
 }

@@ -14,7 +14,7 @@ const adminController = {
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
-                created_at, last_login_at
+                party_access, created_at, last_login_at
          FROM users
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`,
@@ -60,6 +60,26 @@ const adminController = {
         return res.status(404).json({ error: 'User not found', code: 404 });
       }
 
+      return res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/admin/users/:id/party-access  { party_access: boolean }
+  async setPartyAccess(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { party_access } = req.body;
+      if (typeof party_access !== 'boolean') {
+        return res.status(400).json({ error: 'party_access must be a boolean', code: 400 });
+      }
+      const { rows } = await dbQuery(
+        `UPDATE users SET party_access = $1 WHERE id = $2
+         RETURNING id, username, email, party_access`,
+        [party_access, id]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'User not found', code: 404 });
+      }
       return res.json(rows[0]);
     } catch (err) { next(err); }
   },
