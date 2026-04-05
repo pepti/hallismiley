@@ -43,13 +43,19 @@ Engineered for production from day one — the codebase includes structured logg
   },
 ];
 
-async function seed() {
-  console.log('Seeding database...');
+async function seedProjects({ closePool = false } = {}) {
+  console.log('Seeding projects…');
   for (const data of seedData) {
     await Project.create(data);
   }
   console.log(`Done. ${seedData.length} projects seeded.`);
-  await pool.end();
+  if (closePool) await pool.end();
 }
 
-seed().catch(err => { console.error('Seed failed:', err.message); process.exit(1); });
+module.exports = { seedProjects };
+
+// When invoked directly: node server/scripts/seed.js
+if (require.main === module) {
+  seedProjects({ closePool: true })
+    .catch(err => { console.error('Seed failed:', err.message); process.exit(1); });
+}

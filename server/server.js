@@ -36,6 +36,23 @@ async function start() {
   // Run pending database migrations before accepting traffic
   await migrate();
 
+  // First-boot seed: populate sample data if core tables are empty.
+  // Safe to leave enabled — each check is a no-op once data exists.
+  try {
+    const { rows: p } = await pool.query('SELECT COUNT(*)::int AS n FROM projects');
+    if (p[0].n === 0) {
+      const { seedProjects } = require('./scripts/seed');
+      await seedProjects();
+    }
+    const { rows: n } = await pool.query('SELECT COUNT(*)::int AS n FROM news_articles');
+    if (n[0].n === 0) {
+      const { seedNews } = require('./scripts/seed-news');
+      await seedNews();
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, '[server] First-boot seed skipped');
+  }
+
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
   });

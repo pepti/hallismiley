@@ -86,10 +86,15 @@ async function seedNews() {
     }
   } catch (err) {
     console.error('Failed to seed news:', err.message);
-    process.exit(1);
-  } finally {
-    await db.pool.end();
+    throw err;
   }
 }
 
-seedNews();
+module.exports = { seedNews };
+
+// When invoked directly: node server/scripts/seed-news.js
+if (require.main === module) {
+  seedNews()
+    .then(() => db.pool.end())
+    .catch(err => { console.error('Seed failed:', err.message); db.pool.end(); process.exit(1); });
+}
