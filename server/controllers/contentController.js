@@ -12,10 +12,15 @@ const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'content
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  destination: (_req, _file, cb) => {
+    try {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      cb(null, UPLOAD_DIR);
+    } catch (err) {
+      cb(err);
+    }
+  },
   filename:    (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
     const key = String(req.params.key || 'content').replace(/[^\w-]/g, '');

@@ -23,6 +23,9 @@ COPY server/   ./server/
 COPY public/   ./public/
 COPY package.json ./
 
+# Ensure writable upload dir exists with correct ownership before dropping privileges
+RUN mkdir -p /app/public/assets/content && chown -R appuser:appgroup /app/public/assets
+
 # Drop to non-root user
 USER appuser
 
