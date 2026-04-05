@@ -153,9 +153,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Redirect HTTP → HTTPS in production
+// Redirect HTTP → HTTPS in production (skip /health so internal probes aren't redirected)
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
+    if (req.path === '/health') return next();
     if (req.headers['x-forwarded-proto'] !== 'https') {
       return res.redirect(301, `https://${req.headers.host}${req.url}`);
     }
