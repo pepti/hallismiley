@@ -194,7 +194,7 @@ describe('GET /auth/session', () => {
       user: {
         username:       process.env.ADMIN_USERNAME,
         role:           'admin',
-        email_verified: false,
+        email_verified: true,
       },
     });
     // Full profile fields present
@@ -342,7 +342,7 @@ describe('POST /auth/verify-email', () => {
     const token = 'a'.repeat(64);
     const expiry = new Date(Date.now() + 60 * 60 * 1000);
     await db.query(
-      `UPDATE users SET email_verify_token = $1, email_verify_expires = $2
+      `UPDATE users SET email_verified = FALSE, email_verify_token = $1, email_verify_expires = $2
        WHERE username = $3`,
       [token, expiry, process.env.ADMIN_USERNAME]
     );
@@ -362,7 +362,7 @@ describe('POST /auth/verify-email', () => {
     const token = 'b'.repeat(64);
     const expiry = new Date(Date.now() - 1000); // already expired
     await db.query(
-      `UPDATE users SET email_verify_token = $1, email_verify_expires = $2
+      `UPDATE users SET email_verified = FALSE, email_verify_token = $1, email_verify_expires = $2
        WHERE username = $3`,
       [token, expiry, process.env.ADMIN_USERNAME]
     );

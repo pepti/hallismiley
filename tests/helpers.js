@@ -12,13 +12,14 @@ const scrypt = new Scrypt();
 async function createTestAdminUser() {
   const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
   const { rows } = await db.query(
-    `INSERT INTO users (id, email, username, password_hash, role)
-     VALUES ('test-admin-id', 'admin@test.com', $1, $2, 'admin')
+    `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+     VALUES ('test-admin-id', 'admin@test.com', $1, $2, 'admin', TRUE)
      ON CONFLICT (username) DO UPDATE
        SET password_hash = EXCLUDED.password_hash,
            failed_login_attempts = 0,
            locked_until = NULL,
-           disabled = FALSE
+           disabled = FALSE,
+           email_verified = TRUE
      RETURNING id`,
     [process.env.ADMIN_USERNAME, hash]
   );
@@ -31,13 +32,14 @@ async function createTestAdminUser() {
 async function createTestModeratorUser() {
   const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
   const { rows } = await db.query(
-    `INSERT INTO users (id, email, username, password_hash, role)
-     VALUES ('test-mod-id', 'moderator@test.com', 'testmoderator', $1, 'moderator')
+    `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+     VALUES ('test-mod-id', 'moderator@test.com', 'testmoderator', $1, 'moderator', TRUE)
      ON CONFLICT (username) DO UPDATE
        SET password_hash = EXCLUDED.password_hash,
            failed_login_attempts = 0,
            locked_until = NULL,
-           disabled = FALSE
+           disabled = FALSE,
+           email_verified = TRUE
      RETURNING id`,
     [hash]
   );
@@ -50,13 +52,14 @@ async function createTestModeratorUser() {
 async function createTestRegularUser() {
   const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
   const { rows } = await db.query(
-    `INSERT INTO users (id, email, username, password_hash, role)
-     VALUES ('test-user-id', 'user@test.com', 'testuser', $1, 'user')
+    `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+     VALUES ('test-user-id', 'user@test.com', 'testuser', $1, 'user', TRUE)
      ON CONFLICT (username) DO UPDATE
        SET password_hash = EXCLUDED.password_hash,
            failed_login_attempts = 0,
            locked_until = NULL,
-           disabled = FALSE
+           disabled = FALSE,
+           email_verified = TRUE
      RETURNING id`,
     [hash]
   );

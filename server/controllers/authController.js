@@ -123,17 +123,24 @@ const authController = {
         return res.status(409).json({ error: 'Email already registered', code: 409 });
       }
 
-      const passwordHash = await scrypt.hash(password);
-      const verifyToken  = makeToken();
-      const verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
-      const chosenAvatar = avatar ?? 'avatar-01.svg';
+      const passwordHash    = await scrypt.hash(password);
+      const chosenAvatar    = avatar ?? 'avatar-01.svg';
+      const requireVerify   = process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
+
+      let verifyToken  = null;
+      let verifyExpiry = null;
+      if (requireVerify) {
+        verifyToken  = makeToken();
+        verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
+      }
 
       const { rows } = await dbQuery(
         `INSERT INTO users
            (username, email, password_hash, role,
             display_name, phone, avatar,
+            email_verified,
             email_verify_token, email_verify_expires)
-         VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8)
+         VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8, $9)
          RETURNING id, username, email, role`,
         [
           username,
@@ -142,16 +149,23 @@ const authController = {
           display_name ?? null,
           phone ?? null,
           chosenAvatar,
+          !requireVerify, // email_verified = true unless verification is required
           verifyToken,
           verifyExpiry,
         ]
       );
 
-      // Log token — wire up a real email sender here when ready
-      console.log(`[Auth] Email verification token for ${email}: ${verifyToken}`);
+      if (requireVerify) {
+        // Log token — wire up a real email sender here when ready
+        console.log(`[Auth] Email verification token for ${email}: ${verifyToken}`);
+        return res.status(201).json({
+          message: 'Account created. Please verify your email.',
+          user: rows[0],
+        });
+      }
 
       return res.status(201).json({
-        message: 'Account created. Please verify your email.',
+        message: 'Account created successfully.',
         user: rows[0],
       });
     } catch (err) { next(err); }

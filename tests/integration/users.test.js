@@ -33,7 +33,7 @@ describe('GET /api/v1/users/me', () => {
       username:       process.env.ADMIN_USERNAME,
       email:          'admin@test.com',
       role:           'admin',
-      email_verified: false,
+      email_verified: true,
     });
     expect(res.body).toHaveProperty('avatar');
     expect(res.body).toHaveProperty('display_name');
