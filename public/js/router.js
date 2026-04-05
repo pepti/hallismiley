@@ -5,6 +5,7 @@ import { AboutView }          from './views/AboutView.js';
 import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
+import { NewsView }           from './views/NewsView.js';
 import { PrivacyView }        from './views/PrivacyView.js';
 import { TermsView }          from './views/TermsView.js';
 import { SignupView }         from './views/SignupView.js';
@@ -21,6 +22,8 @@ const ROUTES = [
   { pattern: '/',                factory: ()  => new HomeView() },
   { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
   { pattern: '/projects',        factory: ()  => new ProjectsView() },
+  { pattern: '/news/:slug',      factory: ()  => new NewsView() },
+  { pattern: '/news',            factory: ()  => new NewsView() },
   { pattern: '/about',           factory: ()  => new AboutView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
