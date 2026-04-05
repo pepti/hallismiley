@@ -80,7 +80,7 @@ async function getTestSessionCookie(userId) {
 /** Truncate all mutable tables and reset sequences between tests. */
 async function cleanTables() {
   await db.query(
-    'TRUNCATE TABLE projects, user_sessions, users RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
   );
 }
 
@@ -97,6 +97,18 @@ function validProject(overrides = {}) {
   };
 }
 
+/** A minimal valid news article body for POST /api/v1/news requests. */
+function validArticle(overrides = {}) {
+  return {
+    title:    'Test Article',
+    summary:  'A short summary of the test article.',
+    body:     'The full body content of the test article.',
+    category: 'news',
+    published: false,
+    ...overrides,
+  };
+}
+
 module.exports = {
   createTestAdminUser,
   createTestModeratorUser,
@@ -104,4 +116,5 @@ module.exports = {
   getTestSessionCookie,
   cleanTables,
   validProject,
+  validArticle,
 };

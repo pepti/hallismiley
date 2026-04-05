@@ -14,6 +14,7 @@ const contactRoutes  = require('./routes/contactRoutes');
 const userRoutes     = require('./routes/userRoutes');
 const adminRoutes    = require('./routes/adminRoutes');
 const contentRoutes  = require('./routes/contentRoutes');
+const newsRoutes     = require('./routes/newsRoutes');
 const partyRoutes    = require('./routes/partyRoutes');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
@@ -302,6 +303,7 @@ app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',   contentRoutes);
+app.use('/api/v1/news',      newsRoutes);
 app.use('/api/v1/party',     partyRoutes);
 
 // Fallback SPA route — never cache, browser must revalidate on every navigation
