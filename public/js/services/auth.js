@@ -165,7 +165,7 @@ export async function changePassword(currentPassword, newPassword) {
     method:      'PATCH',
     credentials: 'include',
     headers,
-    body:        JSON.stringify({ currentPassword, newPassword }),
+    body:        JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Password change failed');
