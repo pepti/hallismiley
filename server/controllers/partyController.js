@@ -87,15 +87,13 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
-/** Check party access: either on the invite list OR has the party_access flag. */
+/** Check party access via the users.party_access flag.
+ *  The email-invite pathway (party_invites table) was removed with the old
+ *  party scope; access is now granted purely by the admin-toggleable flag. */
 async function _checkInviteAccess(email) {
-  const lower = email.toLowerCase();
   const { rows } = await db.query(
-    `SELECT 1 FROM party_invites WHERE email = $1
-     UNION
-     SELECT 1 FROM users WHERE LOWER(email) = $1 AND party_access = TRUE
-     LIMIT 1`,
-    [lower]
+    `SELECT 1 FROM users WHERE LOWER(email) = $1 AND party_access = TRUE LIMIT 1`,
+    [email.toLowerCase()]
   );
   return rows.length > 0;
 }
