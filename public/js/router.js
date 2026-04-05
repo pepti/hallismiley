@@ -9,30 +9,24 @@ import { PrivacyView }        from './views/PrivacyView.js';
 import { TermsView }          from './views/TermsView.js';
 import { SignupView }         from './views/SignupView.js';
 import { ProfileView }        from './views/ProfileView.js';
-import { PublicProfileView }  from './views/PublicProfileView.js';
 import { VerifyEmailView }    from './views/VerifyEmailView.js';
 import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
-import { PartyView }          from './views/PartyView.js';
-import { PartyAdminView }     from './views/PartyAdminView.js';
-import { NewsView }           from './views/NewsView.js';
-import { ArticleView }        from './views/ArticleView.js';
 import { isAuthenticated, isAdmin } from './services/auth.js';
+import { PartyView }      from './views/PartyView.js';
+import { PartyAdminView } from './views/PartyAdminView.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
   { pattern: '/',                factory: ()  => new HomeView() },
   { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
   { pattern: '/projects',        factory: ()  => new ProjectsView() },
-  { pattern: '/news/:slug',      factory: (p) => new ArticleView(p.slug) },
-  { pattern: '/news',            factory: ()  => new NewsView() },
   { pattern: '/about',           factory: ()  => new AboutView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { /* handled by modal — redirect home */ window.location.hash = '#/'; return new HomeView(); } },
   { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },
-  { pattern: '/users/:username', factory: (p) => new PublicProfileView(p.username) },
   { pattern: '/verify-email',    factory: (_, qs) => new VerifyEmailView(qs) },
   { pattern: '/forgot-password', factory: ()  => new ForgotPasswordView() },
   { pattern: '/reset-password',  factory: (_, qs) => new ResetPasswordView(qs) },

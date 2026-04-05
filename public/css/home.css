@@ -633,80 +633,120 @@
   .lol-contact__inner, .lol-footer__top { padding-left: 20px; padding-right: 20px; }
 }
 
-/* ─────────────────────────────────
-   ADMIN EDIT MODE
-   ───────────────────────────────── */
+/* ─────────────────────────────────────────────
+   SKILLS SECTION — Admin / Moderator edit mode
+   ───────────────────────────────────────────── */
 
-/* Floating "Edit Page" button — top-right */
-.home-edit-btn {
-  position: fixed;
-  top: 80px; right: 20px;
-  z-index: 900;
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 16px;
-  background: #1E2328;
-  border: 1px solid #785A28;
+/* Edit button — top-right of section */
+.lol-skills__edit-btn {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem .85rem;
+  background: rgba(200,155,60,.15);
+  border: 1px solid rgba(200,155,60,.5);
   border-radius: 4px;
   color: #C89B3C;
-  font-size: 13px; font-weight: 600; letter-spacing: 0.05em;
+  font-size: .75rem;
+  font-family: inherit;
+  letter-spacing: .06em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 200ms, border-color 200ms;
+  transition: background .2s, border-color .2s;
+  z-index: 10;
 }
-.home-edit-btn:hover { background: #2A2F34; border-color: #C89B3C; }
+.lol-skills__edit-btn:hover { background: rgba(200,155,60,.28); border-color: #C89B3C; }
+.lol-skills__edit-btn--hidden { display: none; }
 
-/* Elements in edit mode */
-[contenteditable="true"].home-editable {
-  outline: 2px dashed #C89B3C;
-  outline-offset: 3px;
-  border-radius: 2px;
-  cursor: text;
-  min-width: 20px;
-}
-[contenteditable="true"].home-editable:focus {
-  outline-color: #F0C270;
-  background: rgba(200, 155, 60, 0.08);
-}
-
-/* Floating save/cancel bar */
-.home-edit-bar {
-  position: fixed;
+/* Save / cancel controls bar */
+.lol-skills__edit-controls {
+  position: absolute;
   bottom: 0; left: 0; right: 0;
-  z-index: 1000;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 24px;
-  background: #010A13;
-  border-top: 2px solid #785A28;
-  transform: translateY(100%);
-  transition: transform 250ms ease;
+  gap: .75rem;
+  padding: .75rem 1.5rem;
+  background: rgba(10,12,18,.92);
+  border-top: 1px solid rgba(200,155,60,.3);
+  z-index: 10;
 }
-.home-edit-bar--visible { transform: translateY(0); }
-.home-edit-bar__hint {
-  color: #A9B4C0;
-  font-size: 13px;
-}
-.home-edit-bar__actions { display: flex; gap: 10px; }
+.lol-skills__edit-controls--hidden { display: none; }
 
-.home-edit-bar__cancel,
-.home-edit-bar__save {
-  padding: 8px 18px;
+.lol-skills__save-btn,
+.lol-skills__cancel-btn {
+  padding: .4rem 1rem;
   border-radius: 4px;
-  font-size: 13px; font-weight: 600;
+  font-size: .8rem;
+  font-family: inherit;
+  letter-spacing: .05em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 200ms, border-color 200ms;
+  transition: background .2s;
 }
-.home-edit-bar__cancel {
-  background: transparent;
-  border: 1px solid #4A4E57;
-  color: #A9B4C0;
-}
-.home-edit-bar__cancel:hover { border-color: #A9B4C0; color: #C8D0D8; }
-.home-edit-bar__save {
+.lol-skills__save-btn {
   background: #C89B3C;
   border: 1px solid #C89B3C;
   color: #010A13;
+  font-weight: 700;
 }
-.home-edit-bar__save:hover { background: #F0C270; border-color: #F0C270; }
-.home-edit-bar__save:disabled { opacity: 0.6; cursor: not-allowed; }
+.lol-skills__save-btn:hover { background: #dbb04a; }
+.lol-skills__cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.3);
+  color: #ccc;
+}
+.lol-skills__cancel-btn:hover { border-color: #fff; color: #fff; }
+
+.lol-skills__edit-status {
+  font-size: .8rem;
+  color: #C89B3C;
+  margin-left: .25rem;
+}
+
+/* Editable fields — subtle gold underline while in edit mode */
+.lol-skills--editing [contenteditable="true"] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-radius: 0;
+  cursor: text;
+  min-width: 2ch;
+  transition: border-color .2s;
+}
+.lol-skills--editing [contenteditable="true"]:focus {
+  border-bottom-color: #C89B3C;
+}
+
+/* Image change overlay */
+.lol-skills__img-wrap { position: relative; }
+
+.lol-skills__img-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: .85rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: inherit;
+  transition: background .2s;
+}
+.lol-skills__img-overlay:hover { background: rgba(0,0,0,.7); }
+
+/* Hide the file input visually but keep it clickable over the overlay */
+.lol-img-file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}

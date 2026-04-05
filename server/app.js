@@ -1,6 +1,6 @@
 const crypto     = require('crypto');
 const express    = require('express');
-const logger     = require('./observability/logger');
+const logger     = require('./logger');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
@@ -8,21 +8,20 @@ const hpp        = require('hpp');
 const cookieParser = require('cookie-parser');
 const compression = require('compression');
 const path       = require('path');
-const projectRoutes    = require('./routes/projectRoutes');
-const authRoutes       = require('./routes/authRoutes');
-const contactRoutes    = require('./routes/contactRoutes');
-const userRoutes       = require('./routes/userRoutes');
-const adminRoutes      = require('./routes/adminRoutes');
-const contentRoutes    = require('./routes/contentRoutes');
-const partyRoutes      = require('./routes/partyRoutes');
-const newsRoutes       = require('./routes/newsRoutes');
-const errorHandler     = require('./middleware/errorHandler');
-const healthController = require('./controllers/healthController');
+const projectRoutes  = require('./routes/projectRoutes');
+const authRoutes     = require('./routes/authRoutes');
+const contactRoutes  = require('./routes/contactRoutes');
+const userRoutes     = require('./routes/userRoutes');
+const adminRoutes    = require('./routes/adminRoutes');
+const contentRoutes  = require('./routes/contentRoutes');
+const partyRoutes    = require('./routes/partyRoutes');
+const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register }   = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
-const { dbCircuitBreakerMiddleware } = require('./observability/circuitBreaker');
+const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
+const { healthCheckFailed } = require('./observability/alerts');
 const { trackRequest } = require('./observability/alerts');
 
 const app = express();
@@ -59,6 +58,11 @@ app.use(helmet({
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
       objectSrc:  ["'none'"],
       frameSrc:   ["'none'"],
+      // Helmet 8 adds upgrade-insecure-requests by default; disable it so the
+      // site works over plain HTTP on LAN IPs (e.g. phone testing on 192.168.x.x).
+      // The directive upgrades sub-resource requests to HTTPS — fine in production
+      // but breaks dev because 192.168.x.x has no TLS cert.
+      upgradeInsecureRequests: null,
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -76,7 +80,15 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
 
 app.use(cors({
   origin(origin, cb) {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    // Allow any localhost or private LAN IP in development for preview/phone testing
+    if (process.env.NODE_ENV !== 'production' && (
+      /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+      /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)
+    )) {
+      return cb(null, true);
+    }
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -97,10 +109,10 @@ app.use(sanitizeBody);
 // ── A01 Broken Access Control: global rate limiter ───────────────────────────
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 400,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV,
   message: { error: 'Too many requests, please try again later.', code: 429 },
 });
 app.use(globalLimiter);
@@ -111,7 +123,7 @@ const writeLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV,
   message: { error: 'Too many write requests, please try again later.', code: 429 },
 });
 app.use('/api/v1/projects', (req, res, next) => {
@@ -121,12 +133,6 @@ app.use('/api/v1/projects', (req, res, next) => {
   next();
 });
 app.use('/api/v1/party', (req, res, next) => {
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    return writeLimiter(req, res, next);
-  }
-  next();
-});
-app.use('/api/v1/news', (req, res, next) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }
@@ -158,10 +164,84 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ── Liveness probe — returns 200 if the process is alive ──────────────────────
-app.get('/health', healthController.liveness);
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status:    'ok',
+    uptime:    Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // ── Readiness probe — checks DB and system health before accepting traffic ─────
-app.get('/ready', healthController.readiness);
+app.get('/ready', async (req, res) => {
+  const { query: dbQuery, pool } = require('./config/database');
+
+  async function measureEventLoopLag() {
+    return new Promise(resolve => {
+      const start = process.hrtime.bigint();
+      setImmediate(() => resolve(Number(process.hrtime.bigint() - start) / 1e6));
+    });
+  }
+
+  const checks = {};
+  let overallOk = true;
+
+  // DB connectivity
+  try {
+    await Promise.race([
+      dbQuery('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
+    checks.database = { status: 'ok' };
+  } catch (err) {
+    checks.database = { status: 'error', message: err.message };
+    overallOk = false;
+    healthCheckFailed('database', { message: err.message });
+  }
+
+  // DB pool health
+  checks.dbPool = {
+    status:   pool.waitingCount > 5 ? 'degraded' : 'ok',
+    total:    pool.totalCount,
+    idle:     pool.idleCount,
+    waiting:  pool.waitingCount,
+  };
+  if (pool.waitingCount > 5) overallOk = false;
+
+  // Circuit breaker state
+  checks.circuitBreaker = {
+    status: dbCircuitBreaker.state === 'closed' ? 'ok' : 'degraded',
+    state:  dbCircuitBreaker.state,
+  };
+  if (dbCircuitBreaker.state === 'open') overallOk = false;
+
+  // Memory usage
+  const mem = process.memoryUsage();
+  const heapRatio = mem.heapUsed / mem.heapTotal;
+  checks.memory = {
+    status:    heapRatio > 0.9 ? 'critical' : heapRatio > 0.8 ? 'degraded' : 'ok',
+    heapUsedMb:  Math.round(mem.heapUsed  / 1024 / 1024),
+    heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
+    ratio:       `${(heapRatio * 100).toFixed(1)}%`,
+  };
+  if (heapRatio > 0.9) overallOk = false;
+
+  // Event loop lag
+  const lagMs = await measureEventLoopLag();
+  checks.eventLoop = {
+    status: lagMs > 100 ? 'degraded' : 'ok',
+    lagMs:  Math.round(lagMs),
+  };
+  if (lagMs > 100) overallOk = false;
+
+  const status = overallOk ? 200 : 503;
+  res.status(status).json({
+    status:    overallOk ? 'ok' : 'degraded',
+    uptime:    Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    checks,
+  });
+});
 
 // ── Prometheus metrics endpoint ───────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
@@ -220,9 +300,8 @@ app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/admin',      adminRoutes);
-app.use('/api/v1/content',    contentRoutes);
-app.use('/api/v1/party',      partyRoutes);
-app.use('/api/v1/news',       newsRoutes);
+app.use('/api/v1/content',   contentRoutes);
+app.use('/api/v1/party',     partyRoutes);
 
 // Fallback SPA route — never cache, browser must revalidate on every navigation
 app.get('*', (req, res) => {

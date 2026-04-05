@@ -1,17 +1,18 @@
-const express    = require('express');
-const router     = express.Router();
+'use strict';
+const express         = require('express');
+const router          = express.Router();
+const { requireAuth } = require('../auth/middleware');
+const { requireRole } = require('../auth/roles');
+const { csrfProtect } = require('../middleware/csrf');
+const ctrl            = require('../controllers/contentController');
 
-const siteContentController = require('../controllers/siteContentController');
-const { requireAuth }       = require('../auth/middleware');
-const { requireRole }       = require('../auth/roles');
-const { csrfProtect }       = require('../middleware/csrf');
+// Public — anyone can read site content
+router.get('/:key', ctrl.getContent);
 
-// Public — returns all homepage content key/value pairs
-router.get('/', siteContentController.getAll);
+// Admin + moderator — update text content
+router.put('/:key', requireAuth, requireRole('admin', 'moderator'), csrfProtect, ctrl.putContent);
 
-// Admin / moderator — upsert content key/value pairs
-router.patch('/',
-  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
-  siteContentController.update);
+// Admin + moderator — upload a replacement image (multipart; CSRF token sent as header)
+router.post('/:key/image', requireAuth, requireRole('admin', 'moderator'), csrfProtect, ctrl.uploadImage);
 
 module.exports = router;

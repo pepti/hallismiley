@@ -12,13 +12,14 @@ const CATEGORY_HERO = {
 
 export class ProjectDetailView {
   constructor(id) {
-    this.id            = id;
-    this._lb           = null;
-    this._media        = [];
-    this._project      = null;
-    this._editMode     = false;
-    this._view         = null;
-    this._onAuthChange = null;
+    this.id             = id;
+    this._lb            = null;
+    this._media         = [];
+    this._project       = null;
+    this._editMode      = false;
+    this._view          = null;
+    this._onAuthChange  = null;
+    this._actionsAbort  = null; // aborted on each re-render to avoid stacking listeners
   }
 
   async render() {
@@ -58,6 +59,10 @@ export class ProjectDetailView {
   _renderContent() {
     if (this._lb) { this._lb.destroy(); this._lb = null; }
 
+    // Abort previous view-level listeners before re-rendering to prevent stacking
+    if (this._actionsAbort) this._actionsAbort.abort();
+    this._actionsAbort = new AbortController();
+
     const user      = getUser();
     const canEdit   = !!(user && (user.role === 'admin' || user.role === 'moderator'));
     const canDelete = !!(user && user.role === 'admin');
@@ -69,7 +74,7 @@ export class ProjectDetailView {
     if (!this._editMode) {
       this._attachGallery(this._view);
     }
-    this._attachEventHandlers(this._view, canEdit, canDelete);
+    this._attachEventHandlers(this._view, canEdit, canDelete, this._actionsAbort.signal);
   }
 
   _buildPage(p, canEdit) {
@@ -282,6 +287,7 @@ export class ProjectDetailView {
         role="listitem"
         data-media-id="${item.id}"
         data-media-index="${index}"
+        draggable="true"
         tabindex="0"
       >
         ${thumb}
@@ -331,7 +337,7 @@ export class ProjectDetailView {
     });
   }
 
-  _attachEventHandlers(view, canEdit, canDelete) {
+  _attachEventHandlers(view, canEdit, canDelete, signal) {
     // Read-only mode: toggle into edit
     const toggleBtn = view.querySelector('.pd-edit-toggle');
     if (toggleBtn) {
@@ -352,7 +358,8 @@ export class ProjectDetailView {
       this._renderContent();
     });
 
-    // Gallery action buttons via event delegation
+    // Gallery action buttons via event delegation — signal removes this listener
+    // on the next _renderContent() call so it never stacks across re-renders.
     view.addEventListener('click', e => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
@@ -362,7 +369,10 @@ export class ProjectDetailView {
       if (action === 'delete-media') this._handleDeleteMedia(mediaId, canDelete);
       if (action === 'move-up')      this._handleReorder(mediaId, -1);
       if (action === 'move-down')    this._handleReorder(mediaId, +1);
-    });
+    }, { signal });
+
+    // Drag-and-drop reorder for gallery items
+    this._attachDragReorder(view);
 
     // Add media
     const addBtn    = view.querySelector('#pd-add-media-btn');
@@ -449,24 +459,98 @@ export class ProjectDetailView {
 
   // ── Reorder media ──────────────────────────────────────────────────────────
 
-  async _handleReorder(mediaId, direction) {
+  /** Debounced API persist — shared by arrow buttons and drag-and-drop */
+  _commitReorder() {
+    clearTimeout(this._reorderTimer);
+    this._reorderTimer = setTimeout(async () => {
+      const order = this._media.map((item, i) => ({ id: item.id, sort_order: i }));
+      try {
+        const reordered = await projectApi.reorderMedia(this._project.id, order);
+        this._media = reordered;
+      } catch (err) {
+        alert('Could not reorder media: ' + err.message);
+      }
+    }, 500);
+  }
+
+  _handleReorder(mediaId, direction) {
     const idx = this._media.findIndex(m => m.id === mediaId);
     if (idx === -1) return;
     const targetIdx = idx + direction;
     if (targetIdx < 0 || targetIdx >= this._media.length) return;
 
-    // Swap locally then send new sort_order array
     const arr = [...this._media];
     [arr[idx], arr[targetIdx]] = [arr[targetIdx], arr[idx]];
-    const order = arr.map((item, i) => ({ id: item.id, sort_order: i }));
+    this._media = arr.map((item, i) => ({ ...item, sort_order: i }));
+    this._renderContent();
+    this._commitReorder();
+  }
 
-    try {
-      const reordered = await projectApi.reorderMedia(this._project.id, order);
-      this._media     = reordered;
+  // ── Drag-and-drop reorder ─────────────────────────────────────────────────
+
+  _attachDragReorder(view) {
+    const grid = view.querySelector('.gallery-grid--edit');
+    if (!grid) return;
+
+    let dragMediaId = null;
+
+    grid.addEventListener('dragstart', e => {
+      const item = e.target.closest('.gallery-grid__item');
+      if (!item) return;
+      dragMediaId = Number(item.dataset.mediaId);
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Use a transparent 1x1 image so the browser's ghost doesn't obscure the grid
+      const ghost = document.createElement('canvas');
+      ghost.width = 1; ghost.height = 1;
+      e.dataTransfer.setDragImage(ghost, 0, 0);
+    });
+
+    grid.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const target = e.target.closest('.gallery-grid__item');
+      // Clear previous drag-over indicators
+      grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      if (target && Number(target.dataset.mediaId) !== dragMediaId) {
+        target.classList.add('drag-over');
+      }
+    });
+
+    grid.addEventListener('dragleave', e => {
+      const target = e.target.closest('.gallery-grid__item');
+      if (target) target.classList.remove('drag-over');
+    });
+
+    grid.addEventListener('drop', e => {
+      e.preventDefault();
+      grid.querySelectorAll('.drag-over, .dragging').forEach(el =>
+        el.classList.remove('drag-over', 'dragging'));
+
+      const target = e.target.closest('.gallery-grid__item');
+      if (!target) return;
+      const dropMediaId = Number(target.dataset.mediaId);
+      if (dropMediaId === dragMediaId) return;
+
+      const fromIdx = this._media.findIndex(m => m.id === dragMediaId);
+      const toIdx   = this._media.findIndex(m => m.id === dropMediaId);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      // Move the dragged item to the drop position
+      const arr = [...this._media];
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      this._media = arr.map((item, i) => ({ ...item, sort_order: i }));
       this._renderContent();
-    } catch (err) {
-      alert('Could not reorder media: ' + err.message);
-    }
+      this._commitReorder();
+    });
+
+    grid.addEventListener('dragend', () => {
+      grid.querySelectorAll('.drag-over, .dragging').forEach(el =>
+        el.classList.remove('drag-over', 'dragging'));
+      dragMediaId = null;
+    });
   }
 
   // ── File upload ────────────────────────────────────────────────────────────
@@ -519,6 +603,10 @@ export class ProjectDetailView {
     if (this._onAuthChange) {
       window.removeEventListener('authchange', this._onAuthChange);
       this._onAuthChange = null;
+    }
+    if (this._actionsAbort) {
+      this._actionsAbort.abort();
+      this._actionsAbort = null;
     }
     if (this._lb) {
       this._lb.destroy();

@@ -1,4 +1,5 @@
-import { isAuthenticated, getUser, isAdmin, getCsrfHeaders } from '../services/auth.js';
+import { isAuthenticated, getUser, isAdmin } from '../services/auth.js';
+import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
@@ -23,14 +24,15 @@ function pad(n) { return String(n).padStart(2, '0'); }
 
 export class PartyView {
   constructor() {
-    this._el         = null;
-    this._timerLoop  = null;
-    this._lightbox   = null;
-    this._partyInfo  = null;
-    this._rsvp       = null;
-    this._guestbook  = [];
-    this._photos     = [];
-    this._rsvpCount  = 0;
+    this._el            = null;
+    this._timerLoop     = null;
+    this._lightbox      = null;
+    this._venueLightbox = null;
+    this._partyInfo     = null;
+    this._rsvp          = null;
+    this._guestbook     = [];
+    this._photos        = [];
+    this._rsvpCount     = 0;
   }
 
   async render() {
@@ -65,6 +67,7 @@ export class PartyView {
       this._bindAll();
       this._startCountdown();
     } catch (err) {
+      console.error('[PartyView] render failed:', err);
       el.innerHTML = `<div class="party-error"><p>Failed to load party page. Please refresh.</p></div>`;
     }
 
@@ -216,6 +219,31 @@ export class PartyView {
       } catch { /* ignore malformed details */ }
     }
 
+    const venuePhotos = [
+      'Mýrarkot_veislusalur.jpg',
+      'Mýrarkot_salur_til_leigu.jpg',
+      'mýrarkot_salur_veislutjald.jpg',
+      'salur_við_bauhaus_mýrarkot.jpg',
+      'Myrarkot_við_bauhaus.jpg',
+      'lambhagi_salur_til_leigu.jpg',
+      'mýrarkot_lambhagi.jpg',
+      'mýrarkot_SPA.jpg',
+      'mýrakot_spa_salur.jpg',
+      'fyrir_gjæsun_SPA_mýrarkot.jpg',
+      'Gæsun_steggjun_myrarkot.jpg',
+      'Steggjun_myrarkot.jpg',
+      'myrarkot_fyrir_hópefli.jpg',
+    ];
+
+    const photoGrid = venuePhotos.map((file, i) => `
+      <button class="party-venue__photo-btn" data-photo-index="${i}"
+              aria-label="View venue photo ${i + 1}">
+        <img class="party-venue__photo"
+             src="/assets/party/venue/${encodeURIComponent(file)}"
+             alt="Mýrarkot venue photo ${i + 1}"
+             loading="lazy" width="400" height="300">
+      </button>`).join('');
+
     return `
       <section class="party-section party-venue" aria-labelledby="venue-heading">
         <div class="party-section__inner">
@@ -229,6 +257,9 @@ export class PartyView {
               ${venueLink ? `<a href="${venueLink}" target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">🏠 View Venue</a>` : ''}
             </div>
             ${detailsHtml}
+          </div>
+          <div class="party-venue__gallery" role="list" aria-label="Venue photos">
+            ${photoGrid}
           </div>
         </div>
       </section>`;
@@ -439,7 +470,6 @@ export class PartyView {
   // ── Binding ───────────────────────────────────────────────────────────────────
 
   _bindAll() {
-    this._bindCountdown();
     this._bindRsvp();
     this._bindGuestbook();
     this._bindPhotos();
@@ -724,6 +754,27 @@ export class PartyView {
 
   _bindLightbox() {
     this._rebuildLightbox();
+    this._bindVenueLightbox();
+  }
+
+  _bindVenueLightbox() {
+    if (this._venueLightbox) { this._venueLightbox.destroy(); this._venueLightbox = null; }
+
+    const btns = Array.from(this._el.querySelectorAll('.party-venue__photo-btn'));
+    if (!btns.length) return;
+
+    const items = btns.map(btn => ({
+      file_path:  btn.querySelector('img').src,
+      media_type: 'image',
+      caption:    btn.querySelector('img').alt,
+    }));
+
+    this._venueLightbox = new Lightbox(items);
+    this._venueLightbox.mount();
+
+    btns.forEach((btn, i) => {
+      btn.addEventListener('click', () => this._venueLightbox.open(i));
+    });
   }
 
   _rebuildLightbox() {
@@ -760,6 +811,10 @@ export class PartyView {
     if (this._lightbox) {
       this._lightbox.destroy();
       this._lightbox = null;
+    }
+    if (this._venueLightbox) {
+      this._venueLightbox.destroy();
+      this._venueLightbox = null;
     }
   }
 }

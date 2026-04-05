@@ -1,7 +1,6 @@
 import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
-import { avatarPathByName } from '../utils/avatar.js';
 
 const PAGE_SIZE = 20;
 
@@ -9,6 +8,8 @@ function formatDate(str) {
   if (!str) return '—';
   return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
+
+const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01'}.svg`;
 
 export class AdminUsersView {
   constructor() {
@@ -156,10 +157,6 @@ export class AdminUsersView {
       showToast(err.message, 'error');
       checkbox.checked = !checkbox.checked; // revert
     }
-  }
-
-  destroy() {
-    // No window/document listeners to remove; all listeners are on child elements.
   }
 
   _renderPagination() {

@@ -6,24 +6,16 @@ const CATEGORY_IMAGES = {
   tools:       'https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=800&h=500&fit=crop&q=80&auto=format',
 };
 
-import { escHtml }                      from '../utils/escHtml.js';
-import { isAuthenticated }              from '../services/auth.js';
-import { addFavorite, removeFavorite }  from '../services/auth.js';
+import { escHtml } from '../utils/escHtml.js';
 
 export class ProjectCard {
-  /**
-   * @param {object}   project
-   * @param {Function} onClick
-   * @param {boolean}  isFavorited  — whether the current user has favorited this project
-   */
-  constructor(project, onClick, isFavorited = false) {
-    this.project     = project;
-    this.onClick     = onClick;
-    this.isFavorited = isFavorited;
+  constructor(project, onClick) {
+    this.project = project;
+    this.onClick  = onClick;
   }
 
   render() {
-    const { title, description, category, year, featured, image_url, id } = this.project;
+    const { title, description, category, year, featured, image_url } = this.project;
 
     const card = document.createElement('div');
     card.className = 'project-card';
@@ -34,15 +26,6 @@ export class ProjectCard {
 
     const bgImg = image_url || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.tech;
 
-    const favBtn = isAuthenticated()
-      ? `<button class="project-card__fav-btn${this.isFavorited ? ' project-card__fav-btn--active' : ''}"
-                 data-action="favorite" data-id="${id}"
-                 aria-label="${this.isFavorited ? 'Remove from favorites' : 'Add to favorites'}"
-                 title="${this.isFavorited ? 'Remove from favorites' : 'Add to favorites'}">
-           ${this.isFavorited ? '♥' : '♡'}
-         </button>`
-      : '';
-
     card.innerHTML = `
       <div class="project-card__image">
         <img class="project-card__image-bg"
@@ -51,7 +34,6 @@ export class ProjectCard {
         <span class="project-card__category project-card__category--${escHtml(category)}">${escHtml(category)}</span>
         <span class="project-card__year">${year}</span>
         ${featured ? '<span class="project-card__featured-star" title="Featured">★</span>' : ''}
-        ${favBtn}
       </div>
       <div class="project-card__body">
         <h3 class="project-card__title">${escHtml(title)}</h3>
@@ -65,30 +47,7 @@ export class ProjectCard {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
     });
 
-    // Favorite button — stop propagation so it doesn't also open the project modal
-    const favBtnEl = card.querySelector('[data-action="favorite"]');
-    if (favBtnEl) {
-      favBtnEl.addEventListener('click', async e => {
-        e.stopPropagation();
-        const active = favBtnEl.classList.contains('project-card__fav-btn--active');
-        try {
-          if (active) {
-            await removeFavorite(id);
-            favBtnEl.classList.remove('project-card__fav-btn--active');
-            favBtnEl.textContent = '♡';
-            favBtnEl.setAttribute('aria-label', 'Add to favorites');
-            favBtnEl.title = 'Add to favorites';
-          } else {
-            await addFavorite(id);
-            favBtnEl.classList.add('project-card__fav-btn--active');
-            favBtnEl.textContent = '♥';
-            favBtnEl.setAttribute('aria-label', 'Remove from favorites');
-            favBtnEl.title = 'Remove from favorites';
-          }
-        } catch { /* silent fail — user may not be logged in */ }
-      });
-    }
-
     return card;
   }
 }
+

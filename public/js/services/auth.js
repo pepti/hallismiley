@@ -2,11 +2,8 @@
 // The auth_session cookie is httpOnly (set/cleared by the server only).
 // No tokens are stored in the browser — session state lives in the DB.
 
-import { getCSRFToken, clearCSRFToken, getCsrfHeaders } from '../utils/api.js';
-
-export { getCSRFToken };
-
 let _user = null; // cached user info from last successful session check
+let _csrfToken = null;
 
 function _dispatch() {
   window.dispatchEvent(new CustomEvent('authchange', { detail: { authenticated: isAuthenticated() } }));
@@ -16,6 +13,28 @@ export function getUser()         { return _user; }
 export function isAuthenticated() { return !!_user; }
 export function hasRole(role)     { return _user?.role === role; }
 export function isAdmin()         { return _user?.role === 'admin'; }
+
+// ── CSRF ──────────────────────────────────────────────────────────────────────
+
+export async function getCSRFToken() {
+  if (_csrfToken) return _csrfToken;
+  try {
+    const res  = await fetch('/api/v1/csrf-token', { credentials: 'include' });
+    const data = await res.json();
+    _csrfToken = data.token;
+    return _csrfToken;
+  } catch {
+    return null;
+  }
+}
+
+async function _csrfHeaders() {
+  const token = await getCSRFToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'X-CSRF-Token': token } : {}),
+  };
+}
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
@@ -29,15 +48,15 @@ export async function login(username, password) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Login failed');
   _user = data.user;
-  clearCSRFToken(); // refresh CSRF after login
+  _csrfToken = null; // refresh CSRF after login
   _dispatch();
   return data;
 }
 
 export async function logout() {
   _user = null;
-  clearCSRFToken();
-  const headers = await getCsrfHeaders();
+  _csrfToken = null;
+  const headers = await _csrfHeaders();
   await fetch('/auth/logout', { method: 'POST', credentials: 'include', headers }).catch(() => {});
   _dispatch();
 }
@@ -106,13 +125,13 @@ export async function resetPassword(token, password) {
 // ── Availability checks (debounced by callers) ────────────────────────────────
 
 export async function checkUsername(username) {
-  const res  = await fetch(`/auth/check-username?username=${encodeURIComponent(username)}`, { credentials: 'include' });
+  const res  = await fetch(`/auth/check-username/${encodeURIComponent(username)}`, { credentials: 'include' });
   const data = await res.json();
   return data; // { available: bool }
 }
 
 export async function checkEmail(email) {
-  const res  = await fetch(`/auth/check-email?email=${encodeURIComponent(email)}`, { credentials: 'include' });
+  const res  = await fetch(`/auth/check-email/${encodeURIComponent(email)}`, { credentials: 'include' });
   const data = await res.json();
   return data; // { available: bool }
 }
@@ -127,7 +146,7 @@ export async function getProfile() {
 }
 
 export async function updateProfile(updates) {
-  const headers = await getCsrfHeaders();
+  const headers = await _csrfHeaders();
   const res = await fetch('/api/v1/users/me', {
     method:      'PATCH',
     credentials: 'include',
@@ -141,7 +160,7 @@ export async function updateProfile(updates) {
 }
 
 export async function changePassword(currentPassword, newPassword) {
-  const headers = await getCsrfHeaders();
+  const headers = await _csrfHeaders();
   const res = await fetch('/api/v1/users/me/password', {
     method:      'POST',
     credentials: 'include',
@@ -163,7 +182,7 @@ export async function getSessions() {
 }
 
 export async function revokeSession(sessionId) {
-  const headers = await getCsrfHeaders();
+  const headers = await _csrfHeaders();
   const res = await fetch(`/api/v1/users/me/sessions/${sessionId}`, {
     method:      'DELETE',
     credentials: 'include',
@@ -175,7 +194,7 @@ export async function revokeSession(sessionId) {
 }
 
 export async function revokeAllSessions() {
-  const headers = await getCsrfHeaders();
+  const headers = await _csrfHeaders();
   const res = await fetch('/api/v1/users/me/sessions', {
     method:      'DELETE',
     credentials: 'include',
@@ -183,49 +202,6 @@ export async function revokeAllSessions() {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to revoke sessions');
-  return data;
-}
-
-// ── Favorites ─────────────────────────────────────────────────────────────────
-
-export async function getFavorites() {
-  const res  = await fetch('/api/v1/users/me/favorites', { credentials: 'include' });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to load favorites');
-  return data;
-}
-
-export async function addFavorite(projectId) {
-  const headers = await getCsrfHeaders();
-  const res = await fetch(`/api/v1/users/me/favorites/${projectId}`, {
-    method:      'POST',
-    credentials: 'include',
-    headers,
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to add favorite');
-  return data;
-}
-
-export async function removeFavorite(projectId) {
-  const headers = await getCsrfHeaders();
-  const res = await fetch(`/api/v1/users/me/favorites/${projectId}`, {
-    method:      'DELETE',
-    credentials: 'include',
-    headers,
-  });
-  if (res.status === 204) return;
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to remove favorite');
-  return data;
-}
-
-// ── Public profile ────────────────────────────────────────────────────────────
-
-export async function getPublicProfile(username) {
-  const res  = await fetch(`/api/v1/users/${encodeURIComponent(username)}/profile`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'User not found');
   return data;
 }
 
@@ -240,7 +216,7 @@ export async function adminGetUsers(params = {}) {
 }
 
 export async function adminUpdateUser(userId, updates) {
-  const headers = await getCsrfHeaders();
+  const headers = await _csrfHeaders();
   const res = await fetch(`/api/v1/admin/users/${userId}`, {
     method:      'PATCH',
     credentials: 'include',

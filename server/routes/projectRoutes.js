@@ -5,7 +5,7 @@ const router  = express.Router();
 const projectController                          = require('../controllers/projectController');
 const { validateProject, validateQuery,
         validateMediaUpdate, validateReorder }   = require('../middleware/validate');
-const { requireAuth }                            = require('../auth/middleware');
+const { requireAuth }                            = require('../middleware/auth');
 const { requireRole }                            = require('../auth/roles');
 const { csrfProtect }                            = require('../middleware/csrf');
 const { createProjectUpload }                    = require('../middleware/upload');

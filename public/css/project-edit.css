@@ -197,8 +197,13 @@
 .gallery-grid__item:hover .gallery-grid__edit-controls,
 .gallery-grid__item:focus-within .gallery-grid__edit-controls {
   background: rgba(1, 10, 19, 0.55);
-  pointer-events: auto;
+  pointer-events: none;
   opacity: 1;
+}
+
+/* Only buttons receive pointer events — overlay stays click-through for drag */
+.gallery-grid__edit-controls .gallery-btn {
+  pointer-events: auto;
 }
 
 /* Individual action buttons on gallery items */
@@ -259,6 +264,11 @@
 .gallery-grid__item:hover .gallery-grid__reorder,
 .gallery-grid__item:focus-within .gallery-grid__reorder {
   opacity: 1;
+  pointer-events: none;
+}
+
+/* Only arrow buttons receive pointer events — container stays click-through for drag */
+.gallery-grid__reorder .gallery-btn {
   pointer-events: auto;
 }
 
@@ -282,6 +292,28 @@
 .gallery-btn--order:disabled {
   opacity: 0.25;
   cursor: default;
+}
+
+/* ── Drag-and-drop reorder ────────────────────────────────────────────────── */
+
+.gallery-grid--edit .gallery-grid__item {
+  cursor: grab;
+}
+
+.gallery-grid--edit .gallery-grid__item:active {
+  cursor: grabbing;
+}
+
+.gallery-grid--edit .gallery-grid__item.dragging {
+  opacity: 0.35;
+  outline: 2px dashed var(--gold-dark);
+  outline-offset: -2px;
+}
+
+.gallery-grid--edit .gallery-grid__item.drag-over {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px rgba(200, 170, 110, 0.25);
 }
 
 /* ── Add-media section ────────────────────────────────────────────────────── */

@@ -1,4 +1,5 @@
-import { isAuthenticated, isAdmin, getCsrfHeaders } from '../services/auth.js';
+import { isAuthenticated, isAdmin } from '../services/auth.js';
+import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 

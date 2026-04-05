@@ -1,22 +1,7 @@
-// Shared CSRF utilities used by both auth.js and projectApi.js.
+// Shared CSRF utilities — delegates to services/auth.js to keep one shared token cache.
+import { getCSRFToken } from '../services/auth.js';
 
-let _csrfToken = null;
-
-export async function getCSRFToken() {
-  if (_csrfToken) return _csrfToken;
-  try {
-    const res  = await fetch('/api/v1/csrf-token', { credentials: 'include' });
-    const data = await res.json();
-    _csrfToken = data.token;
-    return _csrfToken;
-  } catch {
-    return null;
-  }
-}
-
-export function clearCSRFToken() {
-  _csrfToken = null;
-}
+export { getCSRFToken };
 
 export async function getCsrfHeaders() {
   const token = await getCSRFToken();

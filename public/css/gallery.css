@@ -187,6 +187,13 @@ body.lb-open { overflow: hidden; }
   display: block;
 }
 
+/* Ensure JS .hidden toggling works — display:block above overrides the
+   HTML hidden attribute without this explicit override. */
+.lb-img[hidden],
+.lb-video[hidden] {
+  display: none;
+}
+
 .lb-video { width: 100%; }
 
 /* Navigation arrows */

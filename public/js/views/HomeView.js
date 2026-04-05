@@ -1,22 +1,43 @@
 // HomeView — League of Legends inspired layout
 // Sections: Hero → Splash → News → Projects → Skills → Stats → Contact → Footer
-// Homepage text is fetched from /api/v1/content and editable by admin/moderator.
 
-import { getUser }        from '../services/auth.js';
-import { getCsrfHeaders } from '../utils/api.js';
+import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
+import { escHtml } from '../utils/escHtml.js';
+
+// ── Bespoke news items — real work, real dates ─────────────────────────────
+const NEWS = [
+  {
+    tag: 'CARPENTRY', tagClass: 'carpentry', date: '10/03/2026',
+    title: 'Hand-Cut Dovetails on a Cherry Side Table',
+    desc:  'Walking through the layout, chopping, and fitting of hand-cut through-dovetails on American cherry — no jigs, no router. Just a marking gauge, a sharp chisel, and patience.',
+    img:   'https://images.unsplash.com/photo-1575044577556-9f59571a0828?w=800&h=450&fit=crop&q=80&auto=format',
+  },
+  {
+    tag: 'TECH', tagClass: 'tech', date: '20/02/2026',
+    title: 'RS256 JWT Auth: Access Tokens & Refresh Token Rotation',
+    desc:  'A deep dive into the authentication system built for this portfolio — asymmetric signing with RS256, httpOnly refresh cookies, and automatic token rotation to prevent replay attacks.',
+    img:   'https://images.unsplash.com/photo-1509529711801-deac231925ac?w=800&h=450&fit=crop&q=80&auto=format',
+  },
+  {
+    tag: 'CARPENTRY', tagClass: 'carpentry', date: '05/01/2026',
+    title: 'Installing a French Cleat Wall in the Workshop',
+    desc:  'Replaced a cluttered pegboard setup with a full French cleat wall — 16mm birch ply ripped at 45°, spanning 4 metres. Every tool now has a custom holder made from offcuts.',
+    img:   'https://images.unsplash.com/photo-1630320455830-0caa7e8c9527?w=800&h=450&fit=crop&q=80&auto=format',
+  },
+];
 
 // ── Project categories (champion-selector style) ──────────────────────────
 const CATEGORIES = [
   {
     id: 'tech', label: 'Tech', type: 'Full-Stack Applications',
-    img: 'https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=800&h=800&fit=crop&q=80&auto=format',
+    img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format',
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
              <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
            </svg>`,
   },
   {
     id: 'carpentry', label: 'Carpentry', type: 'Joinery & Timber Work',
-    img: 'https://images.unsplash.com/photo-1529515244555-c2d86b8fad59?w=800&h=800&fit=crop&q=80&auto=format',
+    img: '/assets/projects/arnarhraun/img_1795.jpg',
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
              <polyline points="9 22 9 12 15 12 15 22"/>
@@ -24,7 +45,7 @@ const CATEGORIES = [
   },
   {
     id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',
-    img: 'https://images.unsplash.com/photo-1570278471644-584117df4584?w=800&h=800&fit=crop&q=80&auto=format',
+    img: '/assets/projects/arnarhraun/img_1071.jpg',
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
            </svg>`,
@@ -39,15 +60,21 @@ const CATEGORIES = [
   },
 ];
 
-// ── Skills data ───────────────────────────────────────────────────────────
-const SKILLS = [
-  { label: 'Languages',   value: 'JS · Python · SQL' },
-  { label: 'Backend',     value: 'Node · Express · REST' },
-  { label: 'Database',    value: 'PostgreSQL · Redis' },
-  { label: 'Carpentry',   value: '20+ yrs hand &amp; power tools' },
-  { label: 'Cloud',       value: 'Azure · Railway' },
-  { label: 'Security',    value: 'OWASP · OAuth 2.0 · RS256' },
-];
+// ── Default skills content — used as fallback if API is unavailable ───────
+const DEFAULT_SKILLS_CONTENT = {
+  eyebrow:     'Two Decades of',
+  title:       'Craft\n& Code',
+  description: 'Twenty years of carpentry precision — reading grain, cutting to the line, fitting without gaps — applied to every line of code. The same principles that make a mortise-and-tenon joint last a century make software maintainable.',
+  items: [
+    { label: 'Languages', value: 'JS · Python · SQL' },
+    { label: 'Backend',   value: 'Node · Express · REST' },
+    { label: 'Database',  value: 'PostgreSQL · Redis' },
+    { label: 'Carpentry', value: '20+ yrs hand & power tools' },
+    { label: 'Cloud',     value: 'Azure · Railway' },
+    { label: 'Security',  value: 'OWASP · OAuth 2.0 · RS256' },
+  ],
+  image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+};
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 const STATS = [
@@ -57,53 +84,19 @@ const STATS = [
   { num: '2',   label: 'Core Disciplines' },
 ];
 
-// ── Default content (fallback when API is unavailable) ────────────────────
-const CONTENT_DEFAULTS = {
-  hero_subtitle:    'Carpenter &amp; Computer Scientist — Building with wood &amp; code',
-  hero_cta_text:    'View Projects',
-  news_heading:     'Latest Work',
-  projects_eyebrow: 'Browse by',
-  projects_heading: 'Discipline',
-  projects_desc:    'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
-  skills_tag:       'Two Decades of',
-  skills_title:     'Craft &amp; Code',
-  skills_desc:      'Twenty years of carpentry precision — reading grain, cutting to the line, fitting without gaps — applied to every line of code. The same principles that make a mortise-and-tenon joint last a century make software maintainable.',
-  contact_eyebrow:  "Let's build something",
-  contact_title:    'Get in Touch',
-  contact_desc:     "Whether it's a timber frame, a web platform, or a bespoke workshop fit-out — I'd love to hear what you're planning.",
-};
-
 // ─────────────────────────────────────────────────────────────────────────
 export class HomeView {
   constructor() {
-    this._content     = { ...CONTENT_DEFAULTS };
-    this._editMode    = false;
-    this._savedValues = {}; // snapshot for cancel
-    this._newsArticles = [];
+    this._content = null; // loaded from API in render()
   }
 
   async render() {
-    // Fetch content and news in parallel — fall back to defaults on error
-    const [contentRes, newsRes] = await Promise.allSettled([
-      fetch('/api/v1/content'),
-      fetch('/api/v1/news?limit=3'),
-    ]);
-
-    if (contentRes.status === 'fulfilled' && contentRes.value.ok) {
-      const data = await contentRes.value.json();
-      this._content = { ...CONTENT_DEFAULTS, ...data };
-    }
-
-    if (newsRes.status === 'fulfilled' && newsRes.value.ok) {
-      const data = await newsRes.value.json();
-      this._newsArticles = data.articles || [];
-    }
+    await this._loadContent();
 
     const view = document.createElement('div');
     view.className = 'view';
 
     view.innerHTML = `
-      ${this._editBtn()}
       ${this._hero()}
       ${this._news()}
       ${this._projects()}
@@ -111,49 +104,25 @@ export class HomeView {
       ${this._stats()}
       ${this._contact()}
       ${this._footer()}
-      ${this._editBar()}
     `;
 
-    this._view = view;
     this._initProjects(view);
     this._initContactForm(view);
     this._initHeroVideo(view);
-    this._initEditMode(view);
+    this._initSkillsEdit(view);
     return view;
   }
 
-  // ── Edit button (admin/moderator only) ────────────────────────────────
-  _editBtn() {
-    const user = getUser();
-    if (!user || !['admin', 'moderator'].includes(user.role)) return '';
-    return `
-    <button class="home-edit-btn" id="home-edit-btn" aria-label="Edit page content">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-      </svg>
-      Edit Page
-    </button>`;
-  }
-
-  // ── Floating save/cancel bar (hidden until edit mode) ─────────────────
-  _editBar() {
-    const user = getUser();
-    if (!user || !['admin', 'moderator'].includes(user.role)) return '';
-    return `
-    <div class="home-edit-bar" id="home-edit-bar" aria-hidden="true">
-      <span class="home-edit-bar__hint">Editing homepage text</span>
-      <div class="home-edit-bar__actions">
-        <button class="home-edit-bar__cancel" id="home-edit-cancel">Cancel</button>
-        <button class="home-edit-bar__save"   id="home-edit-save">Save Changes</button>
-      </div>
-    </div>`;
-  }
-
-  // ── c(key) — helper: returns content value for a key ──────────────────
-  _c(key) {
-    return this._content[key] ?? CONTENT_DEFAULTS[key] ?? '';
+  // ── Load skills content from API ───────────────────────────────────────
+  async _loadContent() {
+    try {
+      const res = await fetch('/api/v1/content/home_skills');
+      if (res.ok) {
+        this._content = await res.json();
+        return;
+      }
+    } catch { /* network error — fall through to default */ }
+    this._content = { ...DEFAULT_SKILLS_CONTENT };
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
@@ -171,8 +140,10 @@ export class HomeView {
           <span>Halli</span>
           <span class="lol-hero__title-second">Smiley</span>
         </h1>
-        <p class="lol-hero__subtitle" data-content-key="hero_subtitle">${this._c('hero_subtitle')}</p>
-        <a href="#/projects" class="lol-hero__cta" data-content-key="hero_cta_text">${this._c('hero_cta_text')}</a>
+        <p class="lol-hero__subtitle">
+          Carpenter &amp; Computer Scientist — Building with wood &amp; code
+        </p>
+        <a href="#/projects" class="lol-hero__cta">View Projects</a>
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
@@ -184,40 +155,27 @@ export class HomeView {
 
   // ── SECTION 2: Featured News ───────────────────────────────────────────
   _news() {
-    const articles = this._newsArticles;
-
-    const cards = articles.length
-      ? articles.map(a => {
-          const date   = a.published_at ? new Date(a.published_at) : new Date(a.created_at);
-          const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-          const catClass = a.category === 'announcement' ? 'announcement'
-                         : a.category === 'carpentry'    ? 'carpentry'
-                         : 'tech';
-          const imgHtml = a.cover_image
-            ? `<img class="lol-news__card-img" src="${a.cover_image}" alt="${this._esc(a.title)}" loading="lazy" width="800" height="450">`
-            : `<div class="lol-news__card-img lol-news__card-img--placeholder lol-news__card-img--${catClass}" aria-hidden="true"></div>`;
-
-          return `
-          <a href="#/news/${a.slug}" class="lol-news__card lol-news__card--link">
-            ${imgHtml}
-            <div class="lol-news__card-body">
-              <div class="lol-news__card-meta">
-                <span class="lol-news__card-tag lol-news__card-tag--${catClass}">${this._esc(a.category.toUpperCase())}</span>
-                <time class="lol-news__card-date" datetime="${date.toISOString()}">${dateStr}</time>
-              </div>
-              <h3 class="lol-news__card-title">${this._esc(a.title)}</h3>
-              <p class="lol-news__card-desc">${this._esc(a.summary)}</p>
-            </div>
-          </a>`;
-        }).join('')
-      : `<p class="lol-news__empty">No news yet — check back soon.</p>`;
+    const cards = NEWS.map(n => `
+      <article class="lol-news__card">
+        <img class="lol-news__card-img"
+             src="${n.img}" alt="${n.title}" loading="lazy" width="800" height="450">
+        <div class="lol-news__card-body">
+          <div class="lol-news__card-meta">
+            <span class="lol-news__card-tag lol-news__card-tag--${n.tagClass}">${n.tag}</span>
+            <time class="lol-news__card-date" datetime="${this._isoDate(n.date)}">${n.date}</time>
+          </div>
+          <h3 class="lol-news__card-title">${n.title}</h3>
+          <p class="lol-news__card-desc">${n.desc}</p>
+        </div>
+      </article>
+    `).join('');
 
     return `
     <section class="lol-news" id="news" aria-label="Latest updates">
       <div class="lol-news__inner">
         <div class="lol-news__header">
-          <h2 class="lol-news__heading" data-content-key="news_heading">${this._c('news_heading')}</h2>
-          <a href="#/news" class="lol-news__view-all">
+          <h2 class="lol-news__heading">Latest Work</h2>
+          <a href="#/projects" class="lol-news__view-all">
             View All
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -230,14 +188,10 @@ export class HomeView {
     </section>`;
   }
 
-  // ── Minimal HTML-entity escape for text rendered into innerHTML ───────
-  _esc(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  // ── Converts DD/MM/YYYY → YYYY-MM-DD for <time datetime> ─────────────
+  _isoDate(dmy) {
+    const [d, m, y] = dmy.split('/');
+    return `${y}-${m}-${d}`;
   }
 
   // ── SECTION 4: Projects — champion-selector style ──────────────────────
@@ -258,9 +212,12 @@ export class HomeView {
       <div class="lol-projects__inner">
 
         <div class="lol-projects__left">
-          <p class="lol-projects__eyebrow" data-content-key="projects_eyebrow">${this._c('projects_eyebrow')}</p>
-          <h2 class="lol-projects__heading" data-content-key="projects_heading">${this._c('projects_heading')}</h2>
-          <p class="lol-projects__desc" data-content-key="projects_desc">${this._c('projects_desc')}</p>
+          <p class="lol-projects__eyebrow">Browse by</p>
+          <h2 class="lol-projects__heading">Discipline</h2>
+          <p class="lol-projects__desc">
+            From precision timber frames and hand-cut joinery to full-stack
+            web applications — every project is built to last.
+          </p>
           <div class="lol-projects__btns">
             <a href="#/projects" class="lol-btn--gold">View All Projects</a>
             <a href="#/" class="lol-btn--teal" id="contact-btn">Get in Touch</a>
@@ -289,10 +246,12 @@ export class HomeView {
 
   // ── SECTION 5: Skills ──────────────────────────────────────────────────
   _skills() {
-    const items = SKILLS.map(s => `
-      <div class="lol-skills__item">
-        <div class="lol-skills__item-label">${s.label}</div>
-        <div class="lol-skills__item-value">${s.value}</div>
+    const c         = this._content;
+    const titleHtml = escHtml(c.title).replace(/\n/g, '<br>');
+    const items     = c.items.map((s, i) => `
+      <div class="lol-skills__item" data-item-index="${i}" role="listitem">
+        <div class="lol-skills__item-label" data-item="label">${escHtml(s.label)}</div>
+        <div class="lol-skills__item-value" data-item="value">${escHtml(s.value)}</div>
       </div>
     `).join('');
 
@@ -302,9 +261,9 @@ export class HomeView {
       <div class="lol-skills__inner">
 
         <div>
-          <p class="lol-skills__tag" data-content-key="skills_tag">${this._c('skills_tag')}</p>
-          <h2 class="lol-skills__title" data-content-key="skills_title">${this._c('skills_title')}</h2>
-          <p class="lol-skills__desc" data-content-key="skills_desc">${this._c('skills_desc')}</p>
+          <p class="lol-skills__tag" data-field="eyebrow">${escHtml(c.eyebrow)}</p>
+          <h2 class="lol-skills__title" data-field="title">${titleHtml}</h2>
+          <p class="lol-skills__desc" data-field="desc">${escHtml(c.description)}</p>
           <div class="lol-skills__grid" role="list" aria-label="Skill areas">
             ${items}
           </div>
@@ -312,8 +271,8 @@ export class HomeView {
 
         <div class="lol-skills__img-wrap">
           <img class="lol-skills__img"
-               src="https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format"
-               alt="Icelandic landscape with mountains" loading="lazy"
+               src="${escHtml(c.image_url)}"
+               alt="Skills section image" loading="lazy"
                width="700" height="900">
         </div>
 
@@ -342,9 +301,14 @@ export class HomeView {
     <section class="lol-contact" id="contact" aria-label="Contact">
       <div class="lol-contact__bg" aria-hidden="true"></div>
       <div class="lol-contact__inner">
-        <p class="lol-contact__eyebrow" data-content-key="contact_eyebrow">${this._c('contact_eyebrow')}</p>
-        <h2 class="lol-contact__title" data-content-key="contact_title">${this._c('contact_title')}</h2>
-        <p class="lol-contact__desc" data-content-key="contact_desc">${this._c('contact_desc')}</p>
+        <p class="lol-contact__eyebrow">Let's build something</p>
+        <h2 class="lol-contact__title">
+          Get in<br>Touch
+        </h2>
+        <p class="lol-contact__desc">
+          Whether it's a timber frame, a web platform, or a bespoke workshop fit-out —
+          I'd love to hear what you're planning.
+        </p>
 
         <form class="contact-form" id="contact-form" novalidate aria-label="Contact form">
           <!-- Honeypot — hidden from real users, bots fill it in -->
@@ -441,21 +405,10 @@ export class HomeView {
     if (!video) return;
     requestAnimationFrame(() => {
       video.play().catch(() => {
-        this._resumeVideoHandler = () => {
-          video.play().catch(() => {});
-          document.removeEventListener('click', this._resumeVideoHandler);
-          this._resumeVideoHandler = null;
-        };
-        document.addEventListener('click', this._resumeVideoHandler, { once: true });
+        const resume = () => { video.play().catch(() => {}); document.removeEventListener('click', resume); };
+        document.addEventListener('click', resume, { once: true });
       });
     });
-  }
-
-  destroy() {
-    if (this._resumeVideoHandler) {
-      document.removeEventListener('click', this._resumeVideoHandler);
-      this._resumeVideoHandler = null;
-    }
   }
 
   // ── Projects section — category switching logic ────────────────────────
@@ -503,99 +456,181 @@ export class HomeView {
     });
   }
 
-  // ── Edit mode ─────────────────────────────────────────────────────────
-  _initEditMode(view) {
-    const editBtn    = view.querySelector('#home-edit-btn');
-    const editBar    = view.querySelector('#home-edit-bar');
-    const saveBtn    = view.querySelector('#home-edit-save');
-    const cancelBtn  = view.querySelector('#home-edit-cancel');
+  // ── Skills section — inline edit for admin/moderator ──────────────────
+  _initSkillsEdit(view) {
+    if (!isAdmin() && !hasRole('moderator')) return;
 
-    if (!editBtn) return; // not admin/moderator
+    const section = view.querySelector('.lol-skills');
+    if (!section) return;
 
-    const editables = () => view.querySelectorAll('[data-content-key]');
+    // Edit button
+    const editBtn = document.createElement('button');
+    editBtn.className   = 'lol-skills__edit-btn';
+    editBtn.type        = 'button';
+    editBtn.setAttribute('aria-label', 'Edit skills section');
+    editBtn.innerHTML   = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit Section`;
+    section.style.position = 'relative';
+    section.appendChild(editBtn);
+
+    // Save / cancel bar
+    const controls = document.createElement('div');
+    controls.className  = 'lol-skills__edit-controls lol-skills__edit-controls--hidden';
+    controls.innerHTML  = `
+      <button type="button" class="lol-skills__save-btn">Save Changes</button>
+      <button type="button" class="lol-skills__cancel-btn">Cancel</button>
+      <span   class="lol-skills__edit-status" aria-live="polite"></span>`;
+    section.appendChild(controls);
+
+    let _snapshot = null; // saved copy for cancel
 
     editBtn.addEventListener('click', () => {
-      this._editMode = true;
-      // Snapshot current text for cancel
-      editables().forEach(el => {
-        this._savedValues[el.dataset.contentKey] = el.textContent;
-      });
-
-      editables().forEach(el => {
-        el.contentEditable = 'true';
-        el.classList.add('home-editable');
-      });
-
-      editBar.removeAttribute('aria-hidden');
-      editBar.classList.add('home-edit-bar--visible');
-      editBtn.style.display = 'none';
+      _snapshot = JSON.parse(JSON.stringify(this._content));
+      this._enterEdit(section, editBtn, controls);
     });
 
-    cancelBtn.addEventListener('click', () => {
-      editables().forEach(el => {
-        const key = el.dataset.contentKey;
-        if (key in this._savedValues) el.textContent = this._savedValues[key];
-        el.contentEditable = 'false';
-        el.classList.remove('home-editable');
-      });
-      this._savedValues = {};
-      this._editMode = false;
-      editBar.setAttribute('aria-hidden', 'true');
-      editBar.classList.remove('home-edit-bar--visible');
-      editBtn.style.display = '';
+    controls.querySelector('.lol-skills__save-btn').addEventListener('click', () =>
+      this._saveEdit(section, controls)
+    );
+
+    controls.querySelector('.lol-skills__cancel-btn').addEventListener('click', () => {
+      this._exitEdit(section, editBtn, controls);
+      if (_snapshot) this._restoreEdit(section, _snapshot);
+    });
+  }
+
+  _enterEdit(section, editBtn, controls) {
+    section.classList.add('lol-skills--editing');
+    editBtn.classList.add('lol-skills__edit-btn--hidden');
+    controls.classList.remove('lol-skills__edit-controls--hidden');
+
+    // Make text fields editable
+    section.querySelectorAll('[data-field], [data-item]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck      = true;
     });
 
-    saveBtn.addEventListener('click', async () => {
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
+    // Image overlay
+    const imgWrap = section.querySelector('.lol-skills__img-wrap');
+    const overlay = document.createElement('div');
+    overlay.className = 'lol-skills__img-overlay';
+    overlay.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+      <span>Change Image</span>
+      <input type="file" accept="image/jpeg,image/png,image/webp"
+             class="lol-img-file-input" aria-label="Upload replacement image">`;
+    imgWrap.appendChild(overlay);
 
-      const updates = {};
-      editables().forEach(el => {
-        updates[el.dataset.contentKey] = el.textContent.trim();
-      });
-
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/content', {
-          method:      'PATCH',
-          credentials: 'include',
-          headers,
-          body:        JSON.stringify(updates),
-        });
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || 'Save failed');
-        }
-
-        // Update internal content cache
-        const saved = await res.json();
-        this._content = { ...CONTENT_DEFAULTS, ...saved };
-
-        // Exit edit mode
-        editables().forEach(el => {
-          el.contentEditable = 'false';
-          el.classList.remove('home-editable');
-        });
-        this._savedValues = {};
-        this._editMode = false;
-        editBar.setAttribute('aria-hidden', 'true');
-        editBar.classList.remove('home-edit-bar--visible');
-        editBtn.style.display = '';
-      } catch (err) {
-        // Show error but stay in edit mode
-        const hint = editBar.querySelector('.home-edit-bar__hint');
-        hint.textContent = `Error: ${err.message}`;
-        hint.style.color = '#e74c3c';
-        setTimeout(() => {
-          hint.textContent = 'Editing homepage text';
-          hint.style.color = '';
-        }, 3000);
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Changes';
-      }
+    overlay.querySelector('.lol-img-file-input').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) this._uploadImage(file, section, controls);
     });
+  }
+
+  _exitEdit(section, editBtn, controls) {
+    section.classList.remove('lol-skills--editing');
+    editBtn.classList.remove('lol-skills__edit-btn--hidden');
+    controls.classList.add('lol-skills__edit-controls--hidden');
+    controls.querySelector('.lol-skills__edit-status').textContent = '';
+
+    section.querySelectorAll('[data-field], [data-item]').forEach(el => {
+      el.contentEditable = 'false';
+      el.removeAttribute('contenteditable');
+    });
+
+    section.querySelector('.lol-skills__img-overlay')?.remove();
+  }
+
+  _restoreEdit(section, snapshot) {
+    const titleHtml = escHtml(snapshot.title).replace(/\n/g, '<br>');
+    section.querySelector('[data-field="eyebrow"]').innerHTML = escHtml(snapshot.eyebrow);
+    section.querySelector('[data-field="title"]').innerHTML   = titleHtml;
+    section.querySelector('[data-field="desc"]').innerHTML    = escHtml(snapshot.description);
+    section.querySelector('.lol-skills__img').src             = snapshot.image_url;
+
+    section.querySelectorAll('[data-item-index]').forEach(el => {
+      const i = parseInt(el.dataset.itemIndex, 10);
+      if (!snapshot.items[i]) return;
+      el.querySelector('[data-item="label"]').innerHTML = escHtml(snapshot.items[i].label);
+      el.querySelector('[data-item="value"]').innerHTML = escHtml(snapshot.items[i].value);
+    });
+
+    this._content = snapshot;
+  }
+
+  async _uploadImage(file, section, controls) {
+    const status = controls.querySelector('.lol-skills__edit-status');
+    status.textContent = 'Uploading…';
+
+    try {
+      const token = await getCSRFToken();
+      const fd    = new FormData();
+      fd.append('file', file);
+
+      const res = await fetch('/api/v1/content/home_skills/image', {
+        method:      'POST',
+        credentials: 'include',
+        headers:     token ? { 'X-CSRF-Token': token } : {},
+        body:        fd,
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Upload failed');
+
+      const { image_url } = await res.json();
+      section.querySelector('.lol-skills__img').src = image_url;
+      this._content = { ...this._content, image_url };
+      status.textContent = 'Image updated.';
+    } catch (err) {
+      status.textContent = `Upload error: ${err.message}`;
+    }
+  }
+
+  async _saveEdit(section, controls) {
+    const status = controls.querySelector('.lol-skills__edit-status');
+    status.textContent = 'Saving…';
+
+    // Collect text from DOM
+    const eyebrow = section.querySelector('[data-field="eyebrow"]')?.innerText.trim() ?? this._content.eyebrow;
+    const title   = section.querySelector('[data-field="title"]')?.innerText.trim()   ?? this._content.title;
+    const desc    = section.querySelector('[data-field="desc"]')?.innerText.trim()    ?? this._content.description;
+
+    const items = [];
+    section.querySelectorAll('[data-item-index]').forEach(el => {
+      items.push({
+        label: el.querySelector('[data-item="label"]')?.innerText.trim() ?? '',
+        value: el.querySelector('[data-item="value"]')?.innerText.trim() ?? '',
+      });
+    });
+
+    const updated = { ...this._content, eyebrow, title, description: desc, items };
+
+    try {
+      const token = await getCSRFToken();
+      const res   = await fetch('/api/v1/content/home_skills', {
+        method:      'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'X-CSRF-Token': token } : {}),
+        },
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+
+      this._content  = await res.json();
+      status.textContent = 'Saved!';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    }
   }
 
   // ── Contact form — fetch submission ───────────────────────────────────
@@ -607,10 +642,6 @@ export class HomeView {
 
     form.addEventListener('submit', async e => {
       e.preventDefault();
-
-      // Block submission while in edit mode (contenteditable interferes)
-      if (this._editMode) return;
-
       const honeypot = form.querySelector('#contact-honeypot').value;
       const name    = form.querySelector('#contact-name').value.trim();
       const email   = form.querySelector('#contact-email').value.trim();
