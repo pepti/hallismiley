@@ -162,7 +162,7 @@ export async function updateProfile(updates) {
 export async function changePassword(currentPassword, newPassword) {
   const headers = await _csrfHeaders();
   const res = await fetch('/api/v1/users/me/password', {
-    method:      'POST',
+    method:      'PATCH',
     credentials: 'include',
     headers,
     body:        JSON.stringify({ currentPassword, newPassword }),
