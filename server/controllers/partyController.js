@@ -1,7 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
-const crypto = require('crypto');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -102,58 +101,16 @@ async function _checkInviteAccess(email) {
 
 const partyController = {
 
-  async addInvites(req, res, next) {
-    try {
-      const { emails } = req.body;
-      if (!Array.isArray(emails) || emails.length === 0) {
-        return res.status(400).json({ error: 'emails must be a non-empty array', code: 400 });
-      }
-
-      const results = [];
-      for (const rawEmail of emails) {
-        if (typeof rawEmail !== 'string') continue;
-        const email = rawEmail.trim().toLowerCase();
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
-
-        const token = crypto.randomBytes(24).toString('hex');
-        const { rows } = await db.query(
-          `INSERT INTO party_invites (email, invite_token, invited_by)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (email) DO UPDATE
-             SET invited_by = EXCLUDED.invited_by,
-                 updated_at = NOW()
-           RETURNING id, email, invite_token, status, created_at`,
-          [email, token, req.user.id]
-        );
-        results.push(rows[0]);
-      }
-
-      res.status(201).json(results);
-    } catch (err) { next(err); }
+  async addInvites(req, res) {
+    res.status(410).json({ error: 'Email invite management was removed. Grant access via the party_access flag instead.', code: 410 });
   },
 
-  async listInvites(req, res, next) {
-    try {
-      const { rows } = await db.query(
-        `SELECT pi.id, pi.email, pi.invite_token, pi.status, pi.created_at, pi.updated_at,
-                u.username AS invited_by_username
-         FROM party_invites pi
-         LEFT JOIN users u ON u.id = pi.invited_by
-         ORDER BY pi.created_at DESC`
-      );
-      res.json(rows);
-    } catch (err) { next(err); }
+  async listInvites(req, res) {
+    res.status(410).json({ error: 'Email invite management was removed. Grant access via the party_access flag instead.', code: 410 });
   },
 
-  async deleteInvite(req, res, next) {
-    try {
-      const { rows } = await db.query(
-        'DELETE FROM party_invites WHERE id = $1 RETURNING id',
-        [req.params.id]
-      );
-      if (!rows[0]) return res.status(404).json({ error: 'Invite not found', code: 404 });
-      res.status(204).send();
-    } catch (err) { next(err); }
+  async deleteInvite(req, res) {
+    res.status(410).json({ error: 'Email invite management was removed. Grant access via the party_access flag instead.', code: 410 });
   },
 
   // ── Access check ─────────────────────────────────────────────────────────────
@@ -197,12 +154,6 @@ const partyController = {
           plus_one_dietary || null,
           message         || null,
         ]
-      );
-
-      // Update invite status
-      await db.query(
-        `UPDATE party_invites SET status = $1, updated_at = NOW() WHERE email = $2`,
-        [attending ? 'accepted' : 'declined', req.user.email.toLowerCase()]
       );
 
       res.json(rows[0]);

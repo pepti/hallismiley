@@ -49,6 +49,7 @@
       "env": {
         "node": true,
         "commonjs": true,
+        "browser": true,
         "es2022": true
       },
       "parserOptions": {
