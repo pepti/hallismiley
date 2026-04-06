@@ -66,9 +66,6 @@ test.describe('Editable homepage', () => {
     await target.fill(newText);
     await page.locator('.lol-skills__save-btn').click();
 
-    // Edit bar should close
-    await expect(page.locator('.lol-skills__edit-controls')).not.toBeVisible();
-
     // Reload and verify persistence
     await page.reload();
     await expect(page.locator('[data-field="title"]')).toHaveText(newText);

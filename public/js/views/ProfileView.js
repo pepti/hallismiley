@@ -61,14 +61,14 @@ export class ProfileView {
     const sessionRows = (Array.isArray(sessions) ? sessions : []).map(s => `
       <tr data-session-id="${escHtml(s.id)}">
         <td class="session-device">
-          <span class="session-device__icon">${s.isCurrent ? '●' : '○'}</span>
-          ${escHtml(s.userAgent || 'Unknown device')}
-          ${s.isCurrent ? '<span class="session-current-badge">Current</span>' : ''}
+          <span class="session-device__icon">${s.is_current ? '●' : '○'}</span>
+          ${escHtml(s.user_agent || 'Unknown device')}
+          ${s.is_current ? '<span class="session-current-badge">Current</span>' : ''}
         </td>
-        <td class="session-ip">${escHtml(s.ip || '—')}</td>
-        <td class="session-date">${formatDateTime(s.createdAt)}</td>
+        <td class="session-ip">${escHtml(s.ip_address || '—')}</td>
+        <td class="session-date">${formatDateTime(s.created_at)}</td>
         <td>
-          ${!s.isCurrent ? `<button class="btn btn--sm btn--danger" data-action="revoke" data-id="${escHtml(s.id)}">Revoke</button>` : '—'}
+          ${!s.is_current ? `<button class="btn btn--sm btn--danger" data-action="revoke" data-id="${escHtml(s.id)}">Revoke</button>` : '—'}
         </td>
       </tr>`).join('');
 
