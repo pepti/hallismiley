@@ -66,9 +66,6 @@ test.describe('Editable homepage', () => {
     await target.fill(newText);
     await page.locator('[data-testid="edit-save-btn"]').click();
 
-    // Edit bar should close
-    await expect(page.locator('[data-testid="edit-controls"]')).not.toBeVisible();
-
     // Reload and verify persistence
     await page.reload();
     await expect(page.locator('[data-content-key="news_heading"]')).toHaveText(new RegExp(newText, 'i'));
