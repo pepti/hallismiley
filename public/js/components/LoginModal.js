@@ -17,7 +17,7 @@ export class LoginModal {
         <button class="modal__close" aria-label="Close">&times;</button>
         <p class="login-modal__eyebrow">Welcome Back</p>
         <h2 class="modal__title" id="login-title">Sign in</h2>
-        <form class="login-form" novalidate>
+        <form class="login-form" novalidate data-testid="login-form">
           <div class="form-group">
             <label class="form-label" for="login-username">Username</label>
             <input class="form-input" id="login-username" name="username"
@@ -29,7 +29,7 @@ export class LoginModal {
               type="password" autocomplete="current-password" required />
           </div>
           <p class="form-error" aria-live="polite"></p>
-          <button class="btn btn--primary btn--full" type="submit">Sign in</button>
+          <button class="btn btn--primary btn--full" type="submit" data-testid="login-submit">Sign in</button>
           <div class="login-modal__footer">
             <a href="#/forgot-password" class="login-modal__link" data-route="/forgot-password"
                id="login-forgot-link">Forgot password?</a>

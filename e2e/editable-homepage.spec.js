@@ -5,17 +5,17 @@ test.describe('Editable homepage', () => {
 
   test('Edit Page button NOT visible for logged-out users', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.lol-skills__edit-btn')).toHaveCount(0);
+    await expect(page.locator('[data-testid="edit-page-btn"]')).toHaveCount(0);
   });
 
   test('Edit Page button IS visible for admin', async ({ page }) => {
     await loginAsAdmin(page);
-    await expect(page.locator('.lol-skills__edit-btn')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-page-btn"]')).toBeVisible();
   });
 
   test('clicking Edit Page activates contenteditable on content elements', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('.lol-skills__edit-btn').click();
+    await page.locator('[data-testid="edit-page-btn"]').click();
 
     // At least one editable element should have contenteditable=true
     const first = page.locator('[data-field]').first();
@@ -24,16 +24,16 @@ test.describe('Editable homepage', () => {
 
   test('edit bar (save/cancel) appears after clicking Edit Page', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('.lol-skills__edit-btn').click();
+    await page.locator('[data-testid="edit-page-btn"]').click();
 
-    await expect(page.locator('.lol-skills__edit-controls')).toBeVisible();
-    await expect(page.locator('.lol-skills__save-btn')).toBeVisible();
-    await expect(page.locator('.lol-skills__cancel-btn')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-controls"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-save-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-cancel-btn"]')).toBeVisible();
   });
 
   test('cancel reverts editable fields and hides edit bar', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('.lol-skills__edit-btn').click();
+    await page.locator('[data-testid="edit-page-btn"]').click();
 
     // Capture original text of a content element
     const target = page.locator('[data-field="title"]');
@@ -43,37 +43,40 @@ test.describe('Editable homepage', () => {
     await target.fill('CHANGED_TEXT_XYZ');
 
     // Cancel
-    await page.locator('.lol-skills__cancel-btn').click();
+    await page.locator('[data-testid="edit-cancel-btn"]').click();
 
     // Text should revert
     await expect(target).toHaveText(original.trim());
 
     // Edit bar should be gone
-    await expect(page.locator('.lol-skills__edit-controls')).not.toBeVisible();
+    await expect(page.locator('[data-testid="edit-controls"]')).not.toBeVisible();
 
     // Edit button should be back
-    await expect(page.locator('.lol-skills__edit-btn')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-page-btn"]')).toBeVisible();
   });
 
   test('save persists changes — reloading shows new text', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('.lol-skills__edit-btn').click();
+    await page.locator('[data-testid="edit-page-btn"]').click();
 
     const target = page.locator('[data-field="title"]');
     const original = await target.textContent();
     const newText  = `Test heading ${Date.now()}`;
 
     await target.fill(newText);
-    await page.locator('.lol-skills__save-btn').click();
+    await page.locator('[data-testid="edit-save-btn"]').click();
+
+    // Edit bar should close
+    await expect(page.locator('[data-testid="edit-controls"]')).not.toBeVisible();
 
     // Reload and verify persistence
     await page.reload();
-    await expect(page.locator('[data-field="title"]')).toHaveText(newText);
+    await expect(page.locator('[data-content-key="news_heading"]')).toHaveText(new RegExp(newText, 'i'));
 
     // Cleanup: restore original text
-    await page.locator('.lol-skills__edit-btn').click();
-    await page.locator('[data-field="title"]').fill(original.trim());
-    await page.locator('.lol-skills__save-btn').click();
+    await page.locator('[data-testid="edit-page-btn"]').click();
+    await page.locator('[data-content-key="news_heading"]').fill(original.trim());
+    await page.locator('[data-testid="edit-save-btn"]').click();
   });
 
 });

@@ -54,23 +54,23 @@ test.describe('Auth flows', () => {
   test.describe('Login', () => {
     test('valid credentials succeed — navbar shows username', async ({ page }) => {
       await page.goto('/');
-      await page.getByRole('button', { name: 'Sign In' }).click();
+      await page.locator('[data-testid="nav-signin"]').click();
       await page.fill('#login-username', TEST_ADMIN.username);
       await page.fill('#login-password', TEST_ADMIN.password);
-      await page.click('.login-form [type=submit]');
+      await page.locator('[data-testid="login-submit"]').click();
 
-      await expect(page.locator('.lol-nav__user-btn')).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[data-testid="nav-user-btn"]')).toBeVisible({ timeout: 10_000 });
       await expect(page.locator('.lol-nav__user-name')).toContainText(TEST_ADMIN.username);
     });
 
     test('wrong password shows error message', async ({ page }) => {
       await page.goto('/');
-      await page.getByRole('button', { name: 'Sign In' }).click();
+      await page.locator('[data-testid="nav-signin"]').click();
       await page.fill('#login-username', TEST_ADMIN.username);
       await page.fill('#login-password', 'wrong-password');
-      await page.click('.login-form [type=submit]');
+      await page.locator('[data-testid="login-submit"]').click();
 
-      await expect(page.locator('.login-form .form-error')).not.toBeEmpty({ timeout: 8_000 });
+      await expect(page.locator('[data-testid="login-form"] .form-error')).not.toBeEmpty({ timeout: 8_000 });
     });
   });
 
@@ -78,19 +78,19 @@ test.describe('Auth flows', () => {
     test('logout clears session and shows Sign In / Sign Up', async ({ page }) => {
       // Log in first
       await page.goto('/');
-      await page.getByRole('button', { name: 'Sign In' }).click();
+      await page.locator('[data-testid="nav-signin"]').click();
       await page.fill('#login-username', TEST_ADMIN.username);
       await page.fill('#login-password', TEST_ADMIN.password);
-      await page.click('.login-form [type=submit]');
-      await page.waitForSelector('.lol-nav__user-btn', { timeout: 10_000 });
+      await page.locator('[data-testid="login-submit"]').click();
+      await page.locator('[data-testid="nav-user-btn"]').waitFor({ timeout: 10_000 });
 
       // Open dropdown and sign out
-      await page.click('.lol-nav__user-btn');
-      await page.locator('#nav-signout-btn').click();
+      await page.locator('[data-testid="nav-user-btn"]').click();
+      await page.locator('[data-testid="nav-signout"]').click();
 
       // Nav should revert to guest state
-      await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 8_000 });
-      await expect(page.getByRole('link', { name: 'Sign Up' })).toBeVisible();
+      await expect(page.locator('[data-testid="nav-signin"]')).toBeVisible({ timeout: 8_000 });
+      await expect(page.locator('[data-testid="nav-signup"]')).toBeVisible();
     });
   });
 

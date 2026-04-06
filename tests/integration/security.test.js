@@ -199,6 +199,7 @@ describe('GET /health', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       status: 'ok',
+      uptime: expect.any(Number),
     });
   });
 

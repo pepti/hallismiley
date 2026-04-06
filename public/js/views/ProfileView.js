@@ -87,7 +87,7 @@ export class ProfileView {
           <p class="profile-header__email">${escHtml(profile.email)}</p>
           <p class="profile-header__joined">Member since ${formatDate(profile.createdAt)}</p>
         </div>
-        <button class="btn btn--outline profile-edit-btn" id="profile-edit-btn">Edit Profile</button>
+        <button class="btn btn--outline profile-edit-btn" id="profile-edit-btn" data-testid="edit-profile-btn">Edit Profile</button>
       </div>
 
       <!-- Edit panel (hidden by default) -->
@@ -125,7 +125,7 @@ export class ProfileView {
       <!-- Change password -->
       <section class="profile-section">
         <h2 class="profile-section__title">Change Password</h2>
-        <form class="profile-form" id="pw-form" novalidate>
+        <form class="profile-form" id="pw-form" novalidate data-testid="change-password-form">
           <div class="form-group">
             <label class="form-label" for="pw-current">Current Password</label>
             <input class="form-input" id="pw-current" name="currentPassword" type="password"
@@ -163,7 +163,7 @@ export class ProfileView {
           <h2 class="profile-section__title">Active Sessions</h2>
           <button class="btn btn--sm btn--danger" id="revoke-all-btn">Revoke All Others</button>
         </div>
-        <div class="admin-table-wrap" id="sessions-wrap">
+        <div class="admin-table-wrap" id="sessions-wrap" data-testid="sessions-list">
           <table class="admin-table">
             <thead>
               <tr>

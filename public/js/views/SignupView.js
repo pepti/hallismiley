@@ -36,12 +36,12 @@ export class SignupView {
             <p class="signup-subtitle">Already have an account? <a href="#/login" class="signup-link" data-route="/login">Sign in</a></p>
           </div>
 
-          <form class="signup-form" id="signup-form" novalidate>
+          <form class="signup-form" id="signup-form" novalidate data-testid="signup-form">
 
             <!-- Avatar picker -->
             <div class="form-group">
               <span class="form-label">Choose Avatar</span>
-              <div class="avatar-picker" id="avatar-picker"></div>
+              <div class="avatar-picker" id="avatar-picker" data-testid="avatar-picker"></div>
               <input type="hidden" id="signup-avatar" name="avatar" value=""/>
             </div>
 
