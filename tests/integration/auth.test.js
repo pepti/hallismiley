@@ -329,7 +329,7 @@ describe('POST /auth/signup', () => {
       username: 'newuser7',
       email:    'u@example.com',
       password: 'password123',
-      avatar:   'avatar-15.png',
+      avatar:   'avatar-15.svg',
     });
     expect(res.status).toBe(201);
   });

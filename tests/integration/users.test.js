@@ -63,10 +63,10 @@ describe('PATCH /api/v1/users/me', () => {
     const res = await request(app)
       .patch('/api/v1/users/me')
       .set('Cookie', sessionCookie)
-      .send({ avatar: 'avatar-10.png' });
+      .send({ avatar: 'avatar-10.svg' });
 
     expect(res.status).toBe(200);
-    expect(res.body.avatar).toBe('avatar-10.png');
+    expect(res.body.avatar).toBe('avatar-10.svg');
   });
 
   test('invalid avatar returns 400', async () => {

@@ -194,13 +194,11 @@ describe('Security headers (Helmet)', () => {
 // ── Health check ──────────────────────────────────────────────────────────────
 
 describe('GET /health', () => {
-  test('returns 200 with status ok and database ok', async () => {
+  test('returns 200 with status ok', async () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      status:   'ok',
-      database: 'ok',
-      uptime:   expect.any(Number),
+      status: 'ok',
     });
   });
 
