@@ -91,6 +91,7 @@ export class NavBar {
       userBtn.setAttribute('aria-haspopup', 'true');
       userBtn.setAttribute('aria-expanded', 'false');
       userBtn.setAttribute('aria-label', 'User menu');
+      userBtn.setAttribute('data-testid', 'nav-user-btn');
       userBtn.innerHTML = `
         <img class="lol-nav__user-avatar" src="${avatarPathByName(user?.avatar)}"
              alt="${user?.username || 'User'}" />
@@ -114,7 +115,7 @@ export class NavBar {
           Manage Users
         </a>` : ''}
         <hr class="lol-nav__dropdown-divider"/>
-        <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" id="nav-signout-btn">
+        <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" id="nav-signout-btn" data-testid="nav-signout">
           Sign Out
         </button>
       `;
@@ -149,12 +150,14 @@ export class NavBar {
       // Sign In button
       const signIn = document.createElement('button');
       signIn.className = 'lol-nav__cta lol-nav__cta--ghost';
+      signIn.setAttribute('data-testid', 'nav-signin');
       signIn.textContent = 'Sign In';
       signIn.addEventListener('click', () => this._loginModal.open());
 
       // Sign Up button
       const signUp = document.createElement('a');
       signUp.className = 'lol-nav__cta lol-nav__cta--ghost';
+      signUp.setAttribute('data-testid', 'nav-signup');
       signUp.href = '#/signup';
       signUp.dataset.route = '/signup';
       signUp.textContent = 'Sign Up';

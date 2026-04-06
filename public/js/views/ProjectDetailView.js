@@ -96,7 +96,7 @@ export class ProjectDetailView {
         </div>
         ${canEdit ? `
         <div class="pd-edit-toggle-wrap">
-          <button class="pd-edit-toggle" type="button" aria-label="Enter edit mode">
+          <button class="pd-edit-toggle" type="button" aria-label="Enter edit mode" data-testid="edit-project-btn">
             &#x270E; Edit Project
           </button>
         </div>` : ''}

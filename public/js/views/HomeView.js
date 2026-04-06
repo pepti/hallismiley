@@ -466,8 +466,10 @@ export class HomeView {
     // Edit button
     const editBtn = document.createElement('button');
     editBtn.className   = 'lol-skills__edit-btn';
+    editBtn.id          = 'home-edit-btn';
     editBtn.type        = 'button';
     editBtn.setAttribute('aria-label', 'Edit skills section');
+    editBtn.setAttribute('data-testid', 'edit-page-btn');
     editBtn.innerHTML   = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -481,9 +483,11 @@ export class HomeView {
     // Save / cancel bar
     const controls = document.createElement('div');
     controls.className  = 'lol-skills__edit-controls lol-skills__edit-controls--hidden';
+    controls.id         = 'home-edit-bar';
+    controls.setAttribute('data-testid', 'edit-controls');
     controls.innerHTML  = `
-      <button type="button" class="lol-skills__save-btn">Save Changes</button>
-      <button type="button" class="lol-skills__cancel-btn">Cancel</button>
+      <button type="button" class="lol-skills__save-btn" id="home-edit-save" data-testid="edit-save-btn">Save Changes</button>
+      <button type="button" class="lol-skills__cancel-btn" id="home-edit-cancel" data-testid="edit-cancel-btn">Cancel</button>
       <span   class="lol-skills__edit-status" aria-live="polite"></span>`;
     section.appendChild(controls);
 
