@@ -163,6 +163,36 @@ const migrations = [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS party_access BOOLEAN NOT NULL DEFAULT FALSE`,
     ],
   },
+  {
+    name: '010_party_tables',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_rsvps (
+        id               SERIAL      PRIMARY KEY,
+        user_id          TEXT        NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        attending        BOOLEAN     NOT NULL,
+        dietary_needs    TEXT,
+        plus_one         BOOLEAN     NOT NULL DEFAULT FALSE,
+        plus_one_name    TEXT,
+        plus_one_dietary TEXT,
+        message          TEXT,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE TABLE IF NOT EXISTS party_guestbook (
+        id         SERIAL      PRIMARY KEY,
+        user_id    TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message    TEXT        NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE TABLE IF NOT EXISTS party_photos (
+        id         SERIAL      PRIMARY KEY,
+        user_id    TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        file_path  TEXT        NOT NULL,
+        caption    TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
