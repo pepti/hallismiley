@@ -86,7 +86,7 @@ test.describe('Auth flows', () => {
 
       // Open dropdown and sign out
       await page.click('.lol-nav__user-btn');
-      await page.getByRole('button', { name: 'Sign Out' }).click();
+      await page.locator('#nav-signout-btn').click();
 
       // Nav should revert to guest state
       await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 8_000 });
