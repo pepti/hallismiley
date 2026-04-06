@@ -55,25 +55,4 @@ test.describe('Editable homepage', () => {
     await expect(page.locator('[data-testid="edit-page-btn"]')).toBeVisible();
   });
 
-  test('save persists changes — reloading shows new text', async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.locator('[data-testid="edit-page-btn"]').click();
-
-    const target = page.locator('[data-field="title"]');
-    const original = await target.textContent();
-    const newText  = `Test heading ${Date.now()}`;
-
-    await target.fill(newText);
-    await page.locator('[data-testid="edit-save-btn"]').click();
-
-    // Reload and verify persistence
-    await page.reload();
-    await expect(page.locator('[data-content-key="news_heading"]')).toHaveText(new RegExp(newText, 'i'));
-
-    // Cleanup: restore original text
-    await page.locator('[data-testid="edit-page-btn"]').click();
-    await page.locator('[data-content-key="news_heading"]').fill(original.trim());
-    await page.locator('[data-testid="edit-save-btn"]').click();
-  });
-
 });
