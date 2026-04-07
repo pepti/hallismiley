@@ -139,10 +139,13 @@ async function seed() {
   }
 
   console.log(`Media: ${inserted} inserted, ${skipped} already existed.`);
-  await pool.end();
 }
 
-seed().catch(err => {
-  console.error('Seed failed:', err.message);
-  process.exit(1);
-});
+module.exports = { seedArnarhraun: seed };
+
+// When invoked directly: node server/scripts/seed-arnarhraun.js
+if (require.main === module) {
+  seed()
+    .then(() => pool.end())
+    .catch(err => { console.error('Seed failed:', err.message); process.exit(1); });
+}

@@ -53,6 +53,17 @@ async function start() {
     logger.warn({ err: err.message }, '[server] First-boot seed skipped');
   }
 
+  // Idempotent project seeds — ensure gallery projects exist with their media.
+  // Each seed checks for existing rows and skips duplicates.
+  try {
+    const { seedStofanBakhus } = require('./scripts/seed-stofan-bakhus');
+    await seedStofanBakhus();
+    const { seedArnarhraun } = require('./scripts/seed-arnarhraun');
+    await seedArnarhraun();
+  } catch (err) {
+    logger.warn({ err: err.message }, '[server] Project gallery seed skipped');
+  }
+
   // Admin bootstrap: create the initial admin user from env vars if none exists.
   // Required env: ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD. No-op once an admin exists.
   try {
