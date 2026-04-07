@@ -4,27 +4,6 @@
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 
-// ── Bespoke news items — real work, real dates ─────────────────────────────
-const NEWS = [
-  {
-    tag: 'CARPENTRY', tagClass: 'carpentry', date: '10/03/2026',
-    title: 'Hand-Cut Dovetails on a Cherry Side Table',
-    desc:  'Walking through the layout, chopping, and fitting of hand-cut through-dovetails on American cherry — no jigs, no router. Just a marking gauge, a sharp chisel, and patience.',
-    img:   'https://images.unsplash.com/photo-1575044577556-9f59571a0828?w=800&h=450&fit=crop&q=80&auto=format',
-  },
-  {
-    tag: 'TECH', tagClass: 'tech', date: '20/02/2026',
-    title: 'RS256 JWT Auth: Access Tokens & Refresh Token Rotation',
-    desc:  'A deep dive into the authentication system built for this portfolio — asymmetric signing with RS256, httpOnly refresh cookies, and automatic token rotation to prevent replay attacks.',
-    img:   'https://images.unsplash.com/photo-1509529711801-deac231925ac?w=800&h=450&fit=crop&q=80&auto=format',
-  },
-  {
-    tag: 'CARPENTRY', tagClass: 'carpentry', date: '05/01/2026',
-    title: 'Installing a French Cleat Wall in the Workshop',
-    desc:  'Replaced a cluttered pegboard setup with a full French cleat wall — 16mm birch ply ripped at 45°, spanning 4 metres. Every tool now has a custom holder made from offcuts.',
-    img:   'https://images.unsplash.com/photo-1630320455830-0caa7e8c9527?w=800&h=450&fit=crop&q=80&auto=format',
-  },
-];
 
 // ── Project categories (champion-selector style) ──────────────────────────
 const CATEGORIES = [
@@ -88,10 +67,11 @@ const STATS = [
 export class HomeView {
   constructor() {
     this._content = null; // loaded from API in render()
+    this._newsArticles = [];
   }
 
   async render() {
-    await this._loadContent();
+    await Promise.all([this._loadContent(), this._loadNews()]);
 
     const view = document.createElement('div');
     view.className = 'view';
@@ -153,29 +133,54 @@ export class HomeView {
     </section>`;
   }
 
-  // ── SECTION 2: Featured News ───────────────────────────────────────────
+  // ── Load news articles from API ─────────────────────────────────────────
+  async _loadNews() {
+    try {
+      const res = await fetch('/api/v1/news?limit=3');
+      if (res.ok) {
+        const data = await res.json();
+        this._newsArticles = data.articles || [];
+      }
+    } catch { /* network error — show empty */ }
+  }
+
+  // ── SECTION 2: News ───────────────────────────────────────────────────
   _news() {
-    const cards = NEWS.map(n => `
-      <article class="lol-news__card">
-        <img class="lol-news__card-img"
-             src="${n.img}" alt="${n.title}" loading="lazy" width="800" height="450">
+    if (this._newsArticles.length === 0) return '';
+
+    const catClass = cat => ['carpentry', 'tech', 'announcement'].includes(cat) ? cat : 'news';
+    const fmtDate = iso => {
+      if (!iso) return '';
+      return new Date(iso).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      });
+    };
+
+    const cards = this._newsArticles.map(a => {
+      const imgHtml = a.cover_image
+        ? `<img class="lol-news__card-img" src="${escHtml(a.cover_image)}" alt="${escHtml(a.title)}" loading="lazy" width="800" height="450">`
+        : `<div class="lol-news__card-img lol-news__card-img--placeholder" aria-hidden="true"></div>`;
+
+      return `
+      <a href="#/news/${escHtml(a.slug)}" class="lol-news__card lol-news__card--link">
+        ${imgHtml}
         <div class="lol-news__card-body">
           <div class="lol-news__card-meta">
-            <span class="lol-news__card-tag lol-news__card-tag--${n.tagClass}">${n.tag}</span>
-            <time class="lol-news__card-date" datetime="${this._isoDate(n.date)}">${n.date}</time>
+            <span class="lol-news__card-tag lol-news__card-tag--${catClass(a.category)}">${escHtml((a.category || 'news').toUpperCase())}</span>
+            <time class="lol-news__card-date" datetime="${escHtml(a.published_at || a.created_at)}">${fmtDate(a.published_at || a.created_at)}</time>
           </div>
-          <h3 class="lol-news__card-title">${n.title}</h3>
-          <p class="lol-news__card-desc">${n.desc}</p>
+          <h3 class="lol-news__card-title">${escHtml(a.title)}</h3>
+          <p class="lol-news__card-desc">${escHtml(a.summary)}</p>
         </div>
-      </article>
-    `).join('');
+      </a>`;
+    }).join('');
 
     return `
-    <section class="lol-news" id="news" aria-label="Latest updates">
+    <section class="lol-news" id="news" aria-label="Latest news">
       <div class="lol-news__inner">
         <div class="lol-news__header">
-          <h2 class="lol-news__heading">Latest Work</h2>
-          <a href="#/projects" class="lol-news__view-all">
+          <a href="#/news" class="lol-news__heading-link"><h2 class="lol-news__heading">News</h2></a>
+          <a href="#/news" class="lol-news__view-all">
             View All
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -186,12 +191,6 @@ export class HomeView {
         <div class="lol-news__grid">${cards}</div>
       </div>
     </section>`;
-  }
-
-  // ── Converts DD/MM/YYYY → YYYY-MM-DD for <time datetime> ─────────────
-  _isoDate(dmy) {
-    const [d, m, y] = dmy.split('/');
-    return `${y}-${m}-${d}`;
   }
 
   // ── SECTION 4: Projects — champion-selector style ──────────────────────

@@ -142,6 +142,10 @@
   font-weight: 900; font-style: italic; text-transform: uppercase;
   color: #1E2328; letter-spacing: 0.02em;
 }
+.lol-news__heading-link {
+  text-decoration: none; color: inherit;
+}
+.lol-news__heading-link:hover .lol-news__heading { color: #C89B3C; }
 
 .lol-news__view-all {
   display: inline-flex; align-items: center; gap: 8px;
@@ -160,6 +164,7 @@
 
 .lol-news__card { cursor: pointer; transition: transform 200ms ease; }
 .lol-news__card:hover { transform: translateY(-4px); }
+.lol-news__card--link { text-decoration: none; color: inherit; display: block; }
 
 .lol-news__card-img {
   width: 100%; aspect-ratio: 16/9;

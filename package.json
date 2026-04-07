@@ -9,6 +9,7 @@
     "dev": "nodemon server/server.js",
     "migrate": "node server/scripts/migrate.js",
     "seed": "node server/scripts/seed.js",
+    "seed:arnarhraun": "node server/scripts/seed-arnarhraun.js",
     "test": "jest",
     "test:ci": "jest --ci --runInBand --forceExit --detectOpenHandles --coverage",
     "test:e2e": "playwright test",

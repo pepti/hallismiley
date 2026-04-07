@@ -7,6 +7,10 @@ module.exports = {
     '**/tests/unit/**/*.test.js',
     '**/tests/integration/**/*.test.js',
   ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/.claude/',
+  ],
   testTimeout:      30000,
   forceExit:        true,
   // Run test files serially — avoids DB race conditions between suites
