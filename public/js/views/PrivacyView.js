@@ -13,7 +13,7 @@ export class PrivacyView {
 
           <section class="legal-section">
             <h2>1. Who We Are</h2>
-            <p>This website (<strong>halliprojects.is</strong>) is the personal portfolio of Halli, a carpenter and computer scientist. For privacy enquiries, contact: <a href="mailto:halli@halliprojects.is">halli@halliprojects.is</a></p>
+            <p>This website (<strong>halliprojects.is</strong>) is the personal portfolio of Halli, a carpenter and computer scientist. For privacy enquiries, contact: <a href="mailto:halli@hallismiley.is">halli@hallismiley.is</a></p>
           </section>
 
           <section class="legal-section">
@@ -42,7 +42,7 @@ export class PrivacyView {
 
           <section class="legal-section">
             <h2>5. Your Rights</h2>
-            <p>Under GDPR and applicable data protection law, you have the right to access, correct, or request deletion of any personal data we hold about you. To exercise these rights, contact <a href="mailto:halli@halliprojects.is">halli@halliprojects.is</a>.</p>
+            <p>Under GDPR and applicable data protection law, you have the right to access, correct, or request deletion of any personal data we hold about you. To exercise these rights, contact <a href="mailto:halli@hallismiley.is">halli@hallismiley.is</a>.</p>
           </section>
 
           <section class="legal-section">
