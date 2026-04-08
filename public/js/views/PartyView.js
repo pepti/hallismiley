@@ -151,12 +151,7 @@ export class PartyView {
       ${this._renderVenue(info)}
       ${this._renderSchedule(schedule)}
       ${this._renderRsvp()}
-      ${this._renderGames(games)}
-      ${this._renderGuestbook()}
-      ${this._renderPhotoWall()}
-      <footer class="party-footer">
-        <p>Can't wait to celebrate with you! 🎂</p>
-      </footer>`;
+      ${this._renderGames(games)}`;
   }
 
   _renderHero() {
@@ -209,12 +204,12 @@ export class PartyView {
         const details = typeof info.venue_details === 'string'
           ? JSON.parse(info.venue_details)
           : info.venue_details;
-        const hallItems = (details.hall || []).map(d => `<li>${escHtml(d)}</li>`).join('');
-        const spaItems  = (details.spa  || []).map(d => `<li>${escHtml(d)}</li>`).join('');
+        const hallItems = (details.hall || []).map(d => `<li data-detail="hall">${escHtml(d)}</li>`).join('');
+        const spaItems  = (details.spa  || []).map(d => `<li data-detail="spa">${escHtml(d)}</li>`).join('');
         detailsHtml = `
           <div class="party-venue__details">
-            ${hallItems ? `<div class="party-venue__details-section"><h3 class="party-venue__details-title">🏠 Party Hall</h3><ul class="party-venue__details-list">${hallItems}</ul></div>` : ''}
-            ${spaItems  ? `<div class="party-venue__details-section"><h3 class="party-venue__details-title">🛁 SPA</h3><ul class="party-venue__details-list">${spaItems}</ul></div>` : ''}
+            ${hallItems ? `<div class="party-venue__details-section" data-details-group="hall"><h3 class="party-venue__details-title">🏠 Party Hall</h3><ul class="party-venue__details-list">${hallItems}</ul></div>` : ''}
+            ${spaItems  ? `<div class="party-venue__details-section" data-details-group="spa"><h3 class="party-venue__details-title">🛁 SPA</h3><ul class="party-venue__details-list">${spaItems}</ul></div>` : ''}
           </div>`;
       } catch { /* ignore malformed details */ }
     }
@@ -244,14 +239,28 @@ export class PartyView {
              loading="lazy" width="400" height="300">
       </button>`).join('');
 
+    const editBtn = isAdmin() ? `
+      <button class="party-edit-btn" data-edit-section="venue" aria-label="Edit venue section">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </button>` : '';
+
+    const editControls = isAdmin() ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="venue">
+        <button class="party-edit-save" data-save-section="venue">Save</button>
+        <button class="party-edit-cancel" data-cancel-section="venue">Cancel</button>
+        <span class="party-edit-status" data-status="venue" aria-live="polite"></span>
+      </div>` : '';
+
     return `
       <section class="party-section party-venue" aria-labelledby="venue-heading">
+        ${editBtn}
         <div class="party-section__inner">
           <h2 class="party-section__title" id="venue-heading">📍 Venue</h2>
           <div class="party-venue__card">
-            <div class="party-venue__name">${venueName}</div>
-            ${venueAddress ? `<div class="party-venue__address">${venueAddress}</div>` : ''}
-            ${venueRating  ? `<div class="party-venue__rating">⭐ ${venueRating}</div>` : ''}
+            <div class="party-venue__name" data-field="venue_name">${venueName}</div>
+            <div class="party-venue__address" data-field="venue_address">${venueAddress || 'Address TBD'}</div>
+            <div class="party-venue__rating" data-field="venue_rating">${venueRating ? `⭐ ${venueRating}` : ''}</div>
             <div class="party-venue__links">
               ${mapsLink  ? `<a href="${mapsLink}"  target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">📍 Google Maps</a>` : ''}
               ${venueLink ? `<a href="${venueLink}" target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">🏠 View Venue</a>` : ''}
@@ -262,25 +271,46 @@ export class PartyView {
             ${photoGrid}
           </div>
         </div>
+        ${editControls}
       </section>`;
   }
 
   _renderSchedule(schedule) {
-    const items = schedule.map((item) => `
-      <li class="party-timeline__item">
-        <div class="party-timeline__time">${escHtml(item.time)}</div>
+    const admin = isAdmin();
+    const items = schedule.map((item, i) => `
+      <li class="party-timeline__item" data-schedule-index="${i}">
+        <div class="party-timeline__time" data-sched="time">${escHtml(item.time)}</div>
         <div class="party-timeline__dot" aria-hidden="true"></div>
-        <div class="party-timeline__event">${escHtml(item.event)}</div>
+        <div class="party-timeline__event" data-sched="event">${escHtml(item.event)}</div>
+        ${admin ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-schedule="${i}" aria-label="Remove this event" title="Remove">✕</button>` : ''}
       </li>`).join('');
+
+    const editBtn = isAdmin() ? `
+      <button class="party-edit-btn" data-edit-section="schedule" aria-label="Edit schedule section">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </button>` : '';
+
+    const editControls = isAdmin() ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="schedule">
+        <button class="party-edit-save" data-save-section="schedule">Save</button>
+        <button class="party-edit-cancel" data-cancel-section="schedule">Cancel</button>
+        <span class="party-edit-status" data-status="schedule" aria-live="polite"></span>
+      </div>` : '';
+
+    const addBtn = admin ? `<button class="party-edit-add party-edit-add--hidden" data-add-schedule aria-label="Add new event">+ Add Event</button>` : '';
 
     return `
       <section class="party-section party-schedule" aria-labelledby="schedule-heading">
+        ${editBtn}
         <div class="party-section__inner">
           <h2 class="party-section__title" id="schedule-heading">🗓 Schedule</h2>
           <ol class="party-timeline" aria-label="Party schedule">
             ${items}
           </ol>
+          ${addBtn}
         </div>
+        ${editControls}
       </section>`;
   }
 
@@ -379,21 +409,36 @@ export class PartyView {
   }
 
   _renderGames(games) {
-    const cards = games.map((g) => `
-      <div class="party-game-card">
-        <h3 class="party-game-card__name">${escHtml(g.name)}</h3>
-        <p class="party-game-card__desc">${escHtml(g.description)}</p>
-        <p class="party-game-card__rules"><strong>Rules:</strong> ${escHtml(g.rules)}</p>
+    const cards = games.map((g, i) => `
+      <div class="party-game-card" data-game-index="${i}">
+        <h3 class="party-game-card__name" data-game="name">${escHtml(g.name)}</h3>
+        <p class="party-game-card__desc" data-game="desc">${escHtml(g.description)}</p>
+        <p class="party-game-card__rules" data-game="rules"><strong>Rules:</strong> <span data-game="rules-text">${escHtml(g.rules)}</span></p>
       </div>`).join('');
+
+    const editBtn = isAdmin() ? `
+      <button class="party-edit-btn" data-edit-section="games" aria-label="Edit games section">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </button>` : '';
+
+    const editControls = isAdmin() ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="games">
+        <button class="party-edit-save" data-save-section="games">Save</button>
+        <button class="party-edit-cancel" data-cancel-section="games">Cancel</button>
+        <span class="party-edit-status" data-status="games" aria-live="polite"></span>
+      </div>` : '';
 
     return `
       <section class="party-section party-games" aria-labelledby="games-heading">
+        ${editBtn}
         <div class="party-section__inner">
           <h2 class="party-section__title" id="games-heading">🎮 Party Games</h2>
           <div class="party-games__grid">
             ${cards}
           </div>
         </div>
+        ${editControls}
       </section>`;
   }
 
@@ -471,14 +516,223 @@ export class PartyView {
 
   _bindAll() {
     this._bindRsvp();
-    this._bindGuestbook();
-    this._bindPhotos();
-    this._bindLightbox();
+    this._bindVenueLightbox();
+    if (isAdmin()) this._bindEditing();
 
     // Sign in button on landing (shouldn't be needed here but just in case)
     this._el.querySelector('#party-signin-btn')?.addEventListener('click', () => {
       document.getElementById('nav-auth')?.querySelector('button')?.click();
     });
+  }
+
+  // ── Inline Editing (admin only) ───────────────────────────────────────────
+
+  _bindEditing() {
+    this._editSnapshots = {};
+
+    this._el.querySelectorAll('[data-edit-section]').forEach(btn => {
+      btn.addEventListener('click', () => this._enterEdit(btn.dataset.editSection));
+    });
+    this._el.querySelectorAll('[data-save-section]').forEach(btn => {
+      btn.addEventListener('click', () => this._saveSection(btn.dataset.saveSection));
+    });
+    this._el.querySelectorAll('[data-cancel-section]').forEach(btn => {
+      btn.addEventListener('click', () => this._cancelEdit(btn.dataset.cancelSection));
+    });
+  }
+
+  _enterEdit(section) {
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl) return;
+
+    // Snapshot for cancel
+    this._editSnapshots[section] = sectionEl.querySelector('.party-section__inner').innerHTML;
+
+    // Show controls, hide edit button
+    sectionEl.classList.add('party-section--editing');
+    sectionEl.querySelector(`[data-edit-section="${section}"]`)?.classList.add('party-edit-btn--hidden');
+    sectionEl.querySelector(`[data-controls="${section}"]`)?.classList.remove('party-edit-controls--hidden');
+
+    // Enable contentEditable on data fields
+    const editableSelectors = {
+      venue:    '[data-field], [data-detail]',
+      schedule: '[data-sched]',
+      games:    '[data-game="name"], [data-game="desc"], [data-game="rules-text"]',
+    };
+    sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck = true;
+    });
+
+    // Show add/delete buttons for schedule
+    if (section === 'schedule') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.remove('party-edit-row-delete--hidden'));
+      sectionEl.querySelector('[data-add-schedule]')?.classList.remove('party-edit-add--hidden');
+      this._bindScheduleAddDelete(sectionEl);
+    }
+  }
+
+  _exitEdit(section) {
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl) return;
+
+    sectionEl.classList.remove('party-section--editing');
+    sectionEl.querySelector(`[data-edit-section="${section}"]`)?.classList.remove('party-edit-btn--hidden');
+    sectionEl.querySelector(`[data-controls="${section}"]`)?.classList.add('party-edit-controls--hidden');
+
+    const editableSelectors = {
+      venue:    '[data-field], [data-detail]',
+      schedule: '[data-sched]',
+      games:    '[data-game="name"], [data-game="desc"], [data-game="rules-text"]',
+    };
+    sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
+      el.contentEditable = 'false';
+    });
+
+    // Hide add/delete buttons
+    if (section === 'schedule') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.add('party-edit-row-delete--hidden'));
+      sectionEl.querySelector('[data-add-schedule]')?.classList.add('party-edit-add--hidden');
+    }
+
+    // Clear status
+    const statusEl = sectionEl.querySelector(`[data-status="${section}"]`);
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  _cancelEdit(section) {
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl || !this._editSnapshots[section]) return;
+
+    sectionEl.querySelector('.party-section__inner').innerHTML = this._editSnapshots[section];
+    this._exitEdit(section);
+
+    // Re-bind venue lightbox if venue was cancelled
+    if (section === 'venue') this._bindVenueLightbox();
+  }
+
+  async _saveSection(section) {
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl) return;
+
+    const statusEl = sectionEl.querySelector(`[data-status="${section}"]`);
+    if (statusEl) statusEl.textContent = 'Saving…';
+
+    const payload = {};
+
+    if (section === 'venue') {
+      const getName = (f) => sectionEl.querySelector(`[data-field="${f}"]`)?.innerText.trim() || '';
+      payload.venue_name    = getName('venue_name');
+      payload.venue_address = getName('venue_address');
+      // Strip the star emoji from rating if present
+      const rawRating = getName('venue_rating');
+      payload.venue_rating  = rawRating.replace(/^⭐\s*/, '').trim();
+
+      // Collect hall + spa detail lists
+      const hall = [];
+      sectionEl.querySelectorAll('[data-detail="hall"]').forEach(li => {
+        const text = li.innerText.trim();
+        if (text) hall.push(text);
+      });
+      const spa = [];
+      sectionEl.querySelectorAll('[data-detail="spa"]').forEach(li => {
+        const text = li.innerText.trim();
+        if (text) spa.push(text);
+      });
+      payload.venue_details = JSON.stringify({ hall, spa });
+    }
+
+    if (section === 'schedule') {
+      const items = [];
+      sectionEl.querySelectorAll('[data-schedule-index]').forEach(li => {
+        items.push({
+          time:  li.querySelector('[data-sched="time"]')?.innerText.trim()  || '',
+          event: li.querySelector('[data-sched="event"]')?.innerText.trim() || '',
+        });
+      });
+      payload.schedule = JSON.stringify(items);
+    }
+
+    if (section === 'games') {
+      const items = [];
+      sectionEl.querySelectorAll('[data-game-index]').forEach(card => {
+        items.push({
+          name:        card.querySelector('[data-game="name"]')?.innerText.trim()       || '',
+          description: card.querySelector('[data-game="desc"]')?.innerText.trim()       || '',
+          rules:       card.querySelector('[data-game="rules-text"]')?.innerText.trim() || '',
+        });
+      });
+      payload.games = JSON.stringify(items);
+    }
+
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch('/api/v1/party/info', {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body:        JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Save failed');
+      }
+
+      // Update local data
+      const updated = await res.json();
+      this._partyInfo = updated;
+
+      if (statusEl) {
+        statusEl.textContent = 'Saved!';
+        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+      }
+      this._exitEdit(section);
+    } catch (err) {
+      if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+    }
+  }
+
+  _bindScheduleAddDelete(sectionEl) {
+    // Delete buttons
+    sectionEl.querySelectorAll('[data-delete-schedule]').forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        newBtn.closest('[data-schedule-index]')?.remove();
+        // Re-index remaining items
+        sectionEl.querySelectorAll('[data-schedule-index]').forEach((li, i) => {
+          li.dataset.scheduleIndex = i;
+        });
+      });
+    });
+
+    // Add button
+    const addBtn = sectionEl.querySelector('[data-add-schedule]');
+    if (addBtn) {
+      const newAdd = addBtn.cloneNode(true);
+      addBtn.replaceWith(newAdd);
+      newAdd.addEventListener('click', () => {
+        const timeline = sectionEl.querySelector('.party-timeline');
+        if (!timeline) return;
+        const count = timeline.querySelectorAll('[data-schedule-index]').length;
+        const li = document.createElement('li');
+        li.className = 'party-timeline__item';
+        li.dataset.scheduleIndex = count;
+        li.innerHTML = `
+          <div class="party-timeline__time" data-sched="time" contenteditable="true" spellcheck="true">00:00</div>
+          <div class="party-timeline__dot" aria-hidden="true"></div>
+          <div class="party-timeline__event" data-sched="event" contenteditable="true" spellcheck="true">New event</div>
+          <button class="party-edit-row-delete" data-delete-schedule="${count}" aria-label="Remove this event" title="Remove">✕</button>`;
+        timeline.appendChild(li);
+        this._bindScheduleAddDelete(sectionEl);
+        li.querySelector('[data-sched="time"]')?.focus();
+      });
+    }
+  }
+
+  _getSectionEl(section) {
+    const map = { venue: '.party-venue', schedule: '.party-schedule', games: '.party-games' };
+    return this._el.querySelector(map[section]);
   }
 
   _startCountdown() {

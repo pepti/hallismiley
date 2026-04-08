@@ -1015,3 +1015,114 @@
     min-width: unset;
   }
 }
+
+/* ── Inline Editing (admin) ─────────────────────────────────────────────── */
+
+.party-section { position: relative; }
+
+.party-edit-btn {
+  position: absolute;
+  top: 1.25rem; right: 1.5rem;
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .4rem .85rem;
+  background: rgba(200,155,60,.15);
+  border: 1px solid rgba(200,155,60,.5);
+  border-radius: 4px;
+  color: #C89B3C;
+  font-family: 'Barlow', sans-serif;
+  font-size: .75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  cursor: pointer;
+  z-index: 10;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+.party-edit-btn:hover {
+  background: rgba(200,155,60,.3);
+  border-color: #C89B3C;
+}
+.party-edit-btn--hidden { display: none; }
+
+.party-edit-controls {
+  position: sticky; bottom: 0;
+  display: flex; align-items: center; gap: .75rem;
+  padding: .75rem 1.5rem;
+  background: rgba(10,12,18,.95);
+  border-top: 1px solid rgba(200,155,60,.3);
+  z-index: 10;
+}
+.party-edit-controls--hidden { display: none; }
+
+.party-edit-save,
+.party-edit-cancel {
+  padding: .4rem 1rem;
+  border-radius: 4px;
+  font-family: 'Barlow', sans-serif;
+  font-size: .8rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  cursor: pointer;
+  transition: opacity 200ms ease;
+}
+.party-edit-save {
+  background: #C89B3C; border: 1px solid #C89B3C; color: #010A13;
+}
+.party-edit-save:hover { opacity: .85; }
+.party-edit-cancel {
+  background: transparent; border: 1px solid rgba(255,255,255,.3); color: #ccc;
+}
+.party-edit-cancel:hover { border-color: #fff; color: #fff; }
+
+.party-edit-status {
+  font-size: .8rem; color: #C89B3C; margin-left: .25rem;
+}
+
+/* Editable field styling */
+.party-section--editing [contenteditable="true"] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  cursor: text;
+  min-width: 2ch;
+  padding-bottom: 1px;
+}
+.party-section--editing [contenteditable="true"]:focus {
+  border-bottom-color: #C89B3C;
+}
+.party-section--editing [contenteditable="true"]:empty::before {
+  content: 'Click to edit…';
+  color: rgba(200,155,60,.4);
+  font-style: italic;
+}
+
+/* Schedule/Games add & delete row buttons */
+.party-edit-row-delete {
+  background: rgba(220,50,50,.2);
+  border: 1px solid rgba(220,50,50,.5);
+  color: #e55;
+  border-radius: 50%;
+  width: 24px; height: 24px;
+  font-size: .75rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: .5rem;
+  transition: background 200ms ease;
+  flex-shrink: 0;
+}
+.party-edit-row-delete:hover { background: rgba(220,50,50,.4); }
+.party-edit-row-delete--hidden { display: none; }
+
+.party-edit-add {
+  display: inline-flex; align-items: center; gap: .3rem;
+  margin-top: 1rem;
+  padding: .4rem 1rem;
+  background: rgba(200,155,60,.15);
+  border: 1px dashed rgba(200,155,60,.5);
+  border-radius: 4px;
+  color: #C89B3C;
+  font-family: 'Barlow', sans-serif;
+  font-size: .8rem; font-weight: 700;
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+.party-edit-add:hover { background: rgba(200,155,60,.3); }
+.party-edit-add--hidden { display: none; }
+
+.party-timeline__item { display: flex; align-items: center; }
