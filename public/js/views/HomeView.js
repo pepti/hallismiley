@@ -57,10 +57,10 @@ const DEFAULT_SKILLS_CONTENT = {
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 const STATS = [
-  { num: '20+', label: 'Years Carpentry Experience' },
-  { num: '80+', label: 'Projects Completed' },
-  { num: '10+', label: 'Tech Projects Shipped' },
-  { num: '2',   label: 'Core Disciplines' },
+  { num: '22+', label: 'Years Carpentry Experience' },
+  { num: '15+', label: 'Years Coding Experience' },
+  { num: '6+',  label: 'Years Tech Management' },
+  { num: '40',  label: 'Years of creating all kinds of trouble' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -305,11 +305,6 @@ export class HomeView {
         <h2 class="lol-contact__title">
           Get in<br>Touch
         </h2>
-        <p class="lol-contact__desc">
-          Whether it's a timber frame, a web platform, or a bespoke workshop fit-out —
-          I'd love to hear what you're planning.
-        </p>
-
         <form class="contact-form" id="contact-form" novalidate aria-label="Contact form">
           <!-- Honeypot — hidden from real users, bots fill it in -->
           <input type="text" name="website" id="contact-honeypot"
@@ -330,7 +325,7 @@ export class HomeView {
           <div class="contact-form__field">
             <label for="contact-message" class="contact-form__label">Message <span aria-hidden="true" class="required-mark">*</span></label>
             <textarea id="contact-message" name="message" class="contact-form__textarea"
-                      required rows="5" placeholder="Tell me about your project…" maxlength="2000"></textarea>
+                      required rows="5" placeholder="What is on your mind?" maxlength="2000"></textarea>
           </div>
           <div aria-live="polite" id="contact-status" class="contact-form__status"></div>
           <button type="submit" class="lol-contact__btn contact-form__submit" id="contact-submit">
@@ -348,32 +343,26 @@ export class HomeView {
     <footer class="lol-footer">
 
       <nav class="lol-footer__top" aria-label="Footer navigation">
-        <a href="#/about"    class="lol-footer__nav-link">About</a>
+        <a href="#/halli"    class="lol-footer__nav-link">Halli</a>
         <a href="#/projects" class="lol-footer__nav-link">Projects</a>
-        <!-- TODO before launch: replace YOUR_GITHUB_USERNAME with your real username -->
-        <a href="https://github.com/YOUR_GITHUB_USERNAME" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">GitHub</a>
-        <!-- TODO before launch: replace YOUR_LINKEDIN_USERNAME with your real username -->
-        <a href="https://linkedin.com/in/YOUR_LINKEDIN_USERNAME" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">LinkedIn</a>
-        <a href="#contact" class="lol-footer__nav-link">Contact Us</a>
-        <a href="#/" class="lol-footer__nav-link">Resume</a>
+        <a href="https://github.com/pepti/hallismiley" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">GitHub</a>
+        <a href="https://www.linkedin.com/in/halliv/" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">LinkedIn</a>
       </nav>
 
       <div class="lol-footer__social">
-        <!-- TODO before launch: replace YOUR_GITHUB_USERNAME with your real username -->
-        <a href="https://github.com/YOUR_GITHUB_USERNAME" target="_blank" rel="noopener noreferrer"
+        <a href="https://github.com/pepti/hallismiley" target="_blank" rel="noopener noreferrer"
            class="lol-footer__social-icon" aria-label="GitHub profile">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
           </svg>
         </a>
-        <!-- TODO before launch: replace YOUR_LINKEDIN_USERNAME with your real username -->
-        <a href="https://linkedin.com/in/YOUR_LINKEDIN_USERNAME" target="_blank" rel="noopener noreferrer"
+        <a href="https://www.linkedin.com/in/halliv/" target="_blank" rel="noopener noreferrer"
            class="lol-footer__social-icon" aria-label="LinkedIn profile">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
           </svg>
         </a>
-        <a href="#contact" id="footer-email-icon"
+        <a id="footer-email-icon" href="#contact"
            class="lol-footer__social-icon" aria-label="Send email">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -386,13 +375,11 @@ export class HomeView {
       <div class="lol-footer__brand">
         <div class="lol-footer__logo">Halli Smiley</div>
         <p class="lol-footer__copy">
-          &copy; ${new Date().getFullYear()} Halli Smiley. A portfolio of carpentry
-          and software engineering work built with Node.js, PostgreSQL, and care.
+          &copy; ${new Date().getFullYear()} Halli Smiley. A portfolio of nothing and everything.
         </p>
         <nav class="lol-footer__legal" aria-label="Legal navigation">
           <a href="#/privacy" class="lol-footer__legal-link">Privacy Policy</a>
           <a href="#/terms"   class="lol-footer__legal-link">Terms of Service</a>
-          <a href="#contact" class="lol-footer__legal-link">Contact Us</a>
         </nav>
       </div>
 
@@ -403,7 +390,7 @@ export class HomeView {
   _initFooterLinks(view) {
     const icon = view.querySelector('#footer-email-icon');
     if (icon) {
-      const parts = ['halli', 'halliprojects', 'com'];
+      const parts = ['halli', 'hallismiley', 'is'];
       icon.href = `mailto:${parts[0]}@${parts[1]}.${parts[2]}`;
     }
   }
