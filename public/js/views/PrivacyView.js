@@ -13,7 +13,7 @@ export class PrivacyView {
 
           <section class="legal-section">
             <h2>1. Who We Are</h2>
-            <p>This website (<strong>halliprojects.is</strong>) is the personal portfolio of Halli, a carpenter and computer scientist. For privacy enquiries, contact: <a href="mailto:halli@halliprojects.is">halli@halliprojects.is</a></p>
+            <p>This website (<strong>halliprojects.is</strong>) is the personal portfolio of Halli, a carpenter and computer scientist. For privacy enquiries, contact: <span id="privacy-email-1"></span></p>
           </section>
 
           <section class="legal-section">
@@ -42,7 +42,7 @@ export class PrivacyView {
 
           <section class="legal-section">
             <h2>5. Your Rights</h2>
-            <p>Under GDPR and applicable data protection law, you have the right to access, correct, or request deletion of any personal data we hold about you. To exercise these rights, contact <a href="mailto:halli@halliprojects.is">halli@halliprojects.is</a>.</p>
+            <p>Under GDPR and applicable data protection law, you have the right to access, correct, or request deletion of any personal data we hold about you. To exercise these rights, contact <span id="privacy-email-2"></span>.</p>
           </section>
 
           <section class="legal-section">
@@ -61,6 +61,15 @@ export class PrivacyView {
         </article>
       </main>
     `;
+    // Obfuscate email — built from parts so scrapers can't harvest it from HTML source
+    [view.querySelector('#privacy-email-1'), view.querySelector('#privacy-email-2')].forEach(el => {
+      if (!el) return;
+      const a = document.createElement('a');
+      a.href = `mailto:${['halli', 'halliprojects.is'].join('@')}`;
+      a.textContent = ['halli', 'halliprojects.is'].join('@');
+      el.appendChild(a);
+    });
+
     return view;
   }
 }
