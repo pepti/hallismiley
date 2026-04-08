@@ -8,6 +8,7 @@
 @import './project-edit.css';
 @import './party.css';
 @import './news.css';
+@import './halli-bio.css';
 
 body {
   font-family: var(--font-sans);

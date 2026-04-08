@@ -33,9 +33,9 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.gallery-grid__item').first()).toBeVisible();
   });
 
-  test('About / Skills page loads', async ({ page }) => {
-    await page.goto('/#/about');
-    await expect(page.locator('.main')).toBeVisible();
+  test('Halli bio page loads', async ({ page }) => {
+    await page.goto('/#/halli');
+    await expect(page.locator('.halli-bio')).toBeVisible();
   });
 
   test('Contact section is reachable from the navbar', async ({ page }) => {

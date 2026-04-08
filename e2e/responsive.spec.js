@@ -51,9 +51,9 @@ test.describe('Responsive layout — 375px mobile', () => {
     await expect(page.locator('#signup-btn')).toBeVisible();
   });
 
-  test('about page loads at 375px', async ({ page }) => {
-    await page.goto('/#/about');
-    await expect(page.locator('.main')).toBeVisible();
+  test('halli bio page loads at 375px', async ({ page }) => {
+    await page.goto('/#/halli');
+    await expect(page.locator('.halli-bio')).toBeVisible();
   });
 
 });
