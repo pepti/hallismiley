@@ -27,6 +27,11 @@ const { trackRequest } = require('./observability/alerts');
 
 const app = express();
 
+// Trust the first proxy (Railway's reverse proxy) so req.ip and rate limiting work correctly
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // ── Prometheus HTTP metrics — must be first to capture all requests ────────────
 app.use(httpMetrics);
 

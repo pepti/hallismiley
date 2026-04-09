@@ -1,29 +1,17 @@
-// Email service using nodemailer with Google Workspace SMTP.
-// Falls back to console logging when SMTP is not configured (dev/test mode).
-const nodemailer = require('nodemailer');
+// Email service using Resend API.
+// Falls back to console logging when RESEND_API_KEY is not set (dev/test mode).
+const { Resend } = require('resend');
 
-const APP_URL     = process.env.APP_URL || 'https://www.hallismiley.is';
-const FROM_NAME   = 'Halli Smiley';
-const FROM_ADDR   = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@hallismiley.is';
-const FROM        = `${FROM_NAME} <${FROM_ADDR}>`;
+const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
+const FROM_ADDR = process.env.EMAIL_FROM || 'noreply@hallismiley.is';
+const FROM      = `Halli Smiley <${FROM_ADDR}>`;
 
-function isSmtpConfigured() {
-  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+function isConfigured() {
+  return !!process.env.RESEND_API_KEY;
 }
 
-function createTransport() {
-  return nodemailer.createTransport({
-    host:              'smtp.gmail.com',
-    port:              587,
-    secure:            false,
-    connectionTimeout: 10000,
-    greetingTimeout:   10000,
-    socketTimeout:     15000,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+function getClient() {
+  return new Resend(process.env.RESEND_API_KEY);
 }
 
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
@@ -76,8 +64,8 @@ function emailShell(title, bodyHtml) {
 async function sendVerificationEmail(to, token) {
   const link = `${APP_URL}/#/verify-email?token=${token}`;
 
-  if (!isSmtpConfigured()) {
-    console.log(`[EmailService] SMTP not configured — verification link for ${to}:`);
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — verification link for ${to}:`);
     console.log(`  ${link}`);
     return;
   }
@@ -106,9 +94,10 @@ async function sendVerificationEmail(to, token) {
     </p>
   `);
 
-  console.log(`[EmailService] Sending verification email to ${to} from ${FROM}`);
-  const info = await createTransport().sendMail({ from: FROM, to, subject, html });
-  console.log(`[EmailService] Verification email sent: messageId=${info.messageId}, response=${info.response}`);
+  console.log(`[EmailService] Sending verification email to ${to}`);
+  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Verification email sent: id=${data.id}`);
 }
 
 // ── Password reset email ──────────────────────────────────────────────────────
@@ -116,8 +105,8 @@ async function sendVerificationEmail(to, token) {
 async function sendPasswordResetEmail(to, token) {
   const link = `${APP_URL}/#/reset-password?token=${token}`;
 
-  if (!isSmtpConfigured()) {
-    console.log(`[EmailService] SMTP not configured — password reset link for ${to}:`);
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — password reset link for ${to}:`);
     console.log(`  ${link}`);
     return;
   }
@@ -149,9 +138,10 @@ async function sendPasswordResetEmail(to, token) {
     </p>
   `);
 
-  console.log(`[EmailService] Sending password reset email to ${to} from ${FROM}`);
-  const info = await createTransport().sendMail({ from: FROM, to, subject, html });
-  console.log(`[EmailService] Password reset email sent: messageId=${info.messageId}, response=${info.response}`);
+  console.log(`[EmailService] Sending password reset email to ${to}`);
+  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Password reset email sent: id=${data.id}`);
 }
 
 module.exports = { sendVerificationEmail, sendPasswordResetEmail };
