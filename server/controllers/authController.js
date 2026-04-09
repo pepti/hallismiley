@@ -2,7 +2,7 @@
 // Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
 // Account lockout: 5 failures → 15-min lock.
 const crypto              = require('crypto');
-const { query: dbQuery }  = require('../config/database');
+const { query: dbQuery, pool } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
@@ -135,38 +135,64 @@ const authController = {
         verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
       }
 
-      const { rows } = await dbQuery(
-        `INSERT INTO users
-           (username, email, password_hash, role,
-            display_name, phone, avatar,
-            email_verified,
-            email_verify_token, email_verify_expires)
-         VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8, $9)
-         RETURNING id, username, email, role`,
-        [
-          username,
-          email.toLowerCase(),
-          passwordHash,
-          display_name ?? null,
-          phone ?? null,
-          chosenAvatar,
-          !requireVerify, // email_verified = true unless verification is required
-          verifyToken,
-          verifyExpiry,
-        ]
-      );
+      // Use a transaction so an email-send failure rolls back the INSERT,
+      // preventing orphan accounts that cause confusing 409s on retry.
+      const client = await pool.connect();
+      let newUser = null;
+      try {
+        await client.query('BEGIN');
+
+        const { rows } = await client.query(
+          `INSERT INTO users
+             (username, email, password_hash, role,
+              display_name, phone, avatar,
+              email_verified,
+              email_verify_token, email_verify_expires)
+           VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8, $9)
+           RETURNING id, username, email, role`,
+          [
+            username,
+            email.toLowerCase(),
+            passwordHash,
+            display_name ?? null,
+            phone ?? null,
+            chosenAvatar,
+            !requireVerify, // email_verified = true unless verification is required
+            verifyToken,
+            verifyExpiry,
+          ]
+        );
+        newUser = rows[0];
+
+        if (requireVerify) {
+          await sendVerificationEmail(email.toLowerCase(), verifyToken);
+        }
+
+        await client.query('COMMIT');
+      } catch (txErr) {
+        await client.query('ROLLBACK');
+        if (newUser) {
+          // INSERT succeeded but email send failed — rollback succeeded, no orphan row.
+          return res.status(503).json({
+            error: 'Could not send verification email. Please try again later.',
+            code: 503,
+          });
+        }
+        throw txErr; // DB error — bubble up to the outer catch → next(err)
+      } finally {
+        client.release();
+      }
 
       if (requireVerify) {
-        await sendVerificationEmail(email.toLowerCase(), verifyToken);
         return res.status(201).json({
           message: 'Account created. Please verify your email.',
-          user: rows[0],
+          user: newUser,
         });
       }
 
       return res.status(201).json({
         message: 'Account created successfully.',
-        user: rows[0],
+        user: newUser,
       });
     } catch (err) { next(err); }
   },
