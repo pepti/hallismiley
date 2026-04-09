@@ -188,7 +188,7 @@ export class AdminUsersView {
   async _onDeleteUser(btn) {
     const userId   = btn.dataset.userId;
     const username = btn.dataset.username;
-    if (!confirm(`Delete user "${username}"? This will disable their account and revoke all sessions.`)) return;
+    if (!confirm(`Permanently delete user "${username}"? This cannot be undone.`)) return;
     try {
       await adminDeleteUser(userId);
       showToast(`User "${username}" deleted`, 'success');
