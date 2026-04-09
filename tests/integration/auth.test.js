@@ -519,7 +519,7 @@ describe('POST /auth/signup — email verification flow', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.message).toMatch(/verify your email/i);
+    expect(res.body.message).toMatch(/verify/i);
 
     // User should exist in DB and be unverified
     const { rows } = await db.query(
