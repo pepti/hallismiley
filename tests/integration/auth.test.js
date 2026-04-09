@@ -3,6 +3,13 @@ const app     = require('../../server/app');
 const db      = require('../../server/config/database');
 const { cleanTables, createTestAdminUser } = require('../helpers');
 
+// Mock emailService so tests never hit SMTP
+jest.mock('../../server/services/emailService', () => ({
+  sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+  sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+}));
+const emailService = require('../../server/services/emailService');
+
 beforeEach(async () => {
   await cleanTables();
   await createTestAdminUser();
@@ -487,5 +494,110 @@ describe('GET /auth/check-email/:email', () => {
     const res = await request(app).get('/auth/check-email/free@example.com');
     expect(res.status).toBe(200);
     expect(res.body.available).toBe(true);
+  });
+});
+
+// ── Signup with REQUIRE_EMAIL_VERIFICATION=true ───────────────────────────────
+
+describe('POST /auth/signup — email verification flow', () => {
+  const origEnv = process.env.REQUIRE_EMAIL_VERIFICATION;
+
+  beforeEach(() => {
+    process.env.REQUIRE_EMAIL_VERIFICATION = 'true';
+    emailService.sendVerificationEmail.mockClear();
+  });
+
+  afterAll(() => {
+    process.env.REQUIRE_EMAIL_VERIFICATION = origEnv;
+  });
+
+  test('creates unverified user and sends verification email', async () => {
+    const res = await request(app).post('/auth/signup').send({
+      username: 'unverifuser',
+      email:    'unverif@example.com',
+      password: 'password123',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.message).toMatch(/verify your email/i);
+
+    // User should exist in DB and be unverified
+    const { rows } = await db.query(
+      `SELECT email_verified, email_verify_token FROM users WHERE username = $1`,
+      ['unverifuser']
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].email_verified).toBe(false);
+    expect(rows[0].email_verify_token).not.toBeNull();
+
+    // emailService should have been called
+    expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
+    expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
+      'unverif@example.com',
+      expect.any(String)
+    );
+  });
+});
+
+// ── POST /auth/resend-verification ───────────────────────────────────────────
+
+describe('POST /auth/resend-verification', () => {
+  beforeEach(async () => {
+    emailService.sendVerificationEmail.mockClear();
+  });
+
+  test('missing email returns 400', async () => {
+    const res = await request(app).post('/auth/resend-verification').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/email/i);
+  });
+
+  test('nonexistent email returns 200 (no enumeration)', async () => {
+    const res = await request(app)
+      .post('/auth/resend-verification')
+      .send({ email: 'nobody@nowhere.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/pending verification/i);
+    expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  test('already-verified user returns 200 and does not send email', async () => {
+    // Admin user is email_verified = TRUE in helpers
+    const res = await request(app)
+      .post('/auth/resend-verification')
+      .send({ email: 'admin@test.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/pending verification/i);
+    expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  test('pending-verification user gets a new token and email', async () => {
+    // Create an unverified user
+    const token  = 'f'.repeat(64);
+    const expiry = new Date(Date.now() + 60 * 60 * 1000);
+    await db.query(
+      `INSERT INTO users (email, username, password_hash, role, email_verified,
+                          email_verify_token, email_verify_expires)
+       VALUES ('pending@example.com', 'pendinguser', 'fakehash', 'user', FALSE, $1, $2)`,
+      [token, expiry]
+    );
+
+    const res = await request(app)
+      .post('/auth/resend-verification')
+      .send({ email: 'pending@example.com' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/pending verification/i);
+    expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
+    expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
+      'pending@example.com',
+      expect.any(String)
+    );
+
+    // Token in DB should be rotated
+    const { rows } = await db.query(
+      `SELECT email_verify_token FROM users WHERE username = 'pendinguser'`
+    );
+    expect(rows[0].email_verify_token).not.toBe(token);
   });
 });

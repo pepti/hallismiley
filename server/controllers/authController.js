@@ -5,6 +5,7 @@ const crypto              = require('crypto');
 const { query: dbQuery }  = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { Scrypt }          = require('oslo/password');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
 const scrypt = new Scrypt();
 
@@ -156,8 +157,7 @@ const authController = {
       );
 
       if (requireVerify) {
-        // Log token — wire up a real email sender here when ready
-        console.log(`[Auth] Email verification token for ${email}: ${verifyToken}`);
+        await sendVerificationEmail(email.toLowerCase(), verifyToken);
         return res.status(201).json({
           message: 'Account created. Please verify your email.',
           user: rows[0],
@@ -230,8 +230,7 @@ const authController = {
           [resetToken, resetExpiry, rows[0].id]
         );
 
-        // Log token — wire up a real email sender here when ready
-        console.log(`[Auth] Password reset token for ${email}: ${resetToken}`);
+        await sendPasswordResetEmail(email.toLowerCase(), resetToken);
       }
 
       return res.json({ message: 'If that email is registered you will receive a reset link.' });
@@ -337,6 +336,40 @@ const authController = {
         [username]
       );
       return res.json({ available: rows.length === 0 });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/resend-verification  { email }
+  // Rate-limited to 1 per minute per email (enforced in the route layer).
+  async resendVerification(req, res, next) {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'email is required', code: 400 });
+      }
+
+      const { rows } = await dbQuery(
+        `SELECT id, email_verified, email_verify_token, email_verify_expires
+         FROM users WHERE email = $1 AND disabled = FALSE`,
+        [email.toLowerCase()]
+      );
+
+      // Always return 200 to prevent email enumeration
+      if (rows.length === 0 || rows[0].email_verified) {
+        return res.json({ message: 'If that email is pending verification you will receive a new link.' });
+      }
+
+      const newToken  = makeToken();
+      const newExpiry = new Date(Date.now() + VERIFY_TTL_MS);
+
+      await dbQuery(
+        `UPDATE users SET email_verify_token = $1, email_verify_expires = $2 WHERE id = $3`,
+        [newToken, newExpiry, rows[0].id]
+      );
+
+      await sendVerificationEmail(email.toLowerCase(), newToken);
+
+      return res.json({ message: 'If that email is pending verification you will receive a new link.' });
     } catch (err) { next(err); }
   },
 

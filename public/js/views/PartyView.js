@@ -45,6 +45,11 @@ export class PartyView {
       return el;
     }
 
+    if (!getUser()?.email_verified) {
+      el.innerHTML = this._renderUnverified();
+      return el;
+    }
+
     // Check access
     let hasAccess = false;
     try {
@@ -125,6 +130,18 @@ export class PartyView {
         <h2>Private Event</h2>
         <p>This is a private event. If you received an invitation, make sure you're using the same email address you were invited with.</p>
         <p class="party-no-access__email">Signed in as: <strong>${escHtml(getUser()?.email || '')}</strong></p>
+      </div>`;
+  }
+
+  _renderUnverified() {
+    return `
+      <div class="party-no-access">
+        <div class="party-no-access__icon" aria-hidden="true">✉️</div>
+        <h2>Verify Your Email First</h2>
+        <p>You need to verify your email address before you can access the party page.</p>
+        <p class="party-no-access__email">A verification link was sent to <strong>${escHtml(getUser()?.email || '')}</strong>.</p>
+        <p>Check your inbox (and spam folder), then reload this page once verified.</p>
+        <a href="#/signup" class="lol-btn lol-btn--primary" style="margin-top:1rem;">Back to Sign Up</a>
       </div>`;
   }
 
