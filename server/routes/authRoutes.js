@@ -30,6 +30,14 @@ const checkLimiter = rateLimit({
   message: { error: 'Too many requests, try again later.', code: 429 },
 });
 
+// Resend verification: 1 request per minute per IP
+const resendLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 1,
+  skip: isTest,
+  message: { error: 'Please wait 1 minute before requesting another verification email.', code: 429 },
+});
+
 // ── Existing auth ─────────────────────────────────────────────────────────────
 router.post('/login',  authLimiter,   authController.login);
 router.post('/logout',               authController.logout);
@@ -38,6 +46,7 @@ router.get('/session',               authController.session);
 // ── New auth endpoints ────────────────────────────────────────────────────────
 router.post('/signup',           signupLimiter, validateSignup, authController.signup);
 router.post('/verify-email',                                    authController.verifyEmail);
+router.post('/resend-verification', resendLimiter,              authController.resendVerification);
 router.post('/forgot-password',                                 authController.forgotPassword);
 router.post('/reset-password',         validateResetPassword,  authController.resetPassword);
 

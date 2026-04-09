@@ -40,6 +40,13 @@ const partyPhotoUpload = multer({
 // ── requirePartyAccess — invited users only ────────────────────────────────────
 async function requirePartyAccess(req, res, next) {
   try {
+    if (!req.user.email_verified) {
+      return res.status(403).json({
+        error: 'Please verify your email to access the party page.',
+        code: 403,
+        reason: 'email_not_verified',
+      });
+    }
     const hasAccess = await _checkInviteAccess(req.user.email);
     if (!hasAccess) {
       return res.status(403).json({ error: 'You are not on the guest list', code: 403 });

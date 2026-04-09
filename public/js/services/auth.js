@@ -98,6 +98,18 @@ export async function verifyEmail(token) {
   return body;
 }
 
+export async function resendVerification(email) {
+  const res = await fetch('/auth/resend-verification', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify({ email }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || 'Request failed');
+  return body;
+}
+
 export async function forgotPassword(email) {
   const res = await fetch('/auth/forgot-password', {
     method:      'POST',

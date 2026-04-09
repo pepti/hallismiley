@@ -1,4 +1,4 @@
-import { signup, checkUsername, checkEmail } from '../services/auth.js';
+import { signup, checkUsername, checkEmail, resendVerification } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 
 const TOTAL_AVATARS = 40;
@@ -112,6 +112,12 @@ export class SignupView {
               We've sent a verification link to <strong id="signup-success-email"></strong>.
               Click the link in the email to activate your account.
             </p>
+            <p class="signup-resend" id="signup-resend-wrap">
+              Didn't receive it?
+              <button type="button" class="signup-resend__btn" id="signup-resend-btn">Resend email</button>
+              <span class="signup-resend__countdown" id="signup-resend-countdown" hidden></span>
+            </p>
+            <p class="signup-resend__msg" id="signup-resend-msg" aria-live="polite"></p>
             <a href="#/login" class="btn btn--outline" data-route="/login">Go to Sign In</a>
           </div>
         </div>
@@ -261,11 +267,48 @@ export class SignupView {
       el.querySelector('#signup-success-email').textContent = email;
       el.querySelector('#signup-form').hidden = true;
       el.querySelector('#signup-success').hidden = false;
+      this._bindResend(el, email);
 
     } catch (err) {
       errEl.textContent = err.message;
       btn.disabled = false;
       btn.textContent = 'Create Account';
     }
+  }
+
+  _bindResend(el, email) {
+    const btn         = el.querySelector('#signup-resend-btn');
+    const countdown   = el.querySelector('#signup-resend-countdown');
+    const msgEl       = el.querySelector('#signup-resend-msg');
+    let   _timer      = null;
+
+    const startCountdown = () => {
+      let secs = 60;
+      btn.disabled = true;
+      countdown.hidden = false;
+      countdown.textContent = `(${secs}s)`;
+      _timer = setInterval(() => {
+        secs--;
+        if (secs <= 0) {
+          clearInterval(_timer);
+          btn.disabled = false;
+          countdown.hidden = true;
+          countdown.textContent = '';
+        } else {
+          countdown.textContent = `(${secs}s)`;
+        }
+      }, 1000);
+    };
+
+    btn.addEventListener('click', async () => {
+      msgEl.textContent = '';
+      try {
+        await resendVerification(email);
+        msgEl.textContent = 'Verification email sent!';
+        startCountdown();
+      } catch (err) {
+        msgEl.textContent = err.message || 'Could not resend. Please try again shortly.';
+      }
+    });
   }
 }
