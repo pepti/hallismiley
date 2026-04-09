@@ -38,7 +38,8 @@
 
 /* Make cards clickable links */
 .lol-news__card--link {
-  display: block;
+  display: flex;
+  flex-direction: column;
   text-decoration: none;
   color: inherit;
   cursor: pointer;

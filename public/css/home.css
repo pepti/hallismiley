@@ -162,19 +162,25 @@
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
 }
 
-.lol-news__card { cursor: pointer; transition: transform 200ms ease; }
+.lol-news__card {
+  cursor: pointer; transition: transform 200ms ease;
+  display: flex; flex-direction: column;
+}
 .lol-news__card:hover { transform: translateY(-4px); }
-.lol-news__card--link { text-decoration: none; color: inherit; display: block; }
+.lol-news__card--link { text-decoration: none; color: inherit; }
 
 .lol-news__card-img {
   width: 100%; aspect-ratio: 16/9;
   object-fit: cover; display: block;
 }
 
-.lol-news__card-body { padding: 16px 0; }
+.lol-news__card-body {
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 8px; flex: 1;
+}
 
 .lol-news__card-meta {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 12px;
 }
 
 .lol-news__card-tag {
@@ -195,7 +201,7 @@
 .lol-news__card-title {
   font-family: 'Barlow', sans-serif;
   font-size: 1.05rem; font-weight: 700;
-  color: #1E2328; margin-bottom: 8px; line-height: 1.35;
+  color: #1E2328; line-height: 1.35;
 }
 
 .lol-news__card-desc {
