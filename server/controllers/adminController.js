@@ -123,7 +123,7 @@ const adminController = {
     } catch (err) { next(err); }
   },
 
-  // DELETE /api/v1/admin/users/:id  — hard delete (removes the row permanently)
+  // DELETE /api/v1/admin/users/:id  — soft delete (disable, not hard delete)
   async deleteUser(req, res, next) {
     try {
       const { id } = req.params;
@@ -132,17 +132,19 @@ const adminController = {
         return res.status(400).json({ error: 'Cannot delete your own account', code: 400 });
       }
 
-      // Invalidate sessions before deleting so Lucia doesn't error on missing user
-      await lucia.invalidateUserSessions(id);
-
       const { rows } = await dbQuery(
-        `DELETE FROM users WHERE id = $1 RETURNING id`,
+        `UPDATE users
+         SET disabled = TRUE, disabled_at = NOW(), disabled_reason = 'Deleted by admin'
+         WHERE id = $1
+         RETURNING id`,
         [id]
       );
 
       if (rows.length === 0) {
         return res.status(404).json({ error: 'User not found', code: 404 });
       }
+
+      await lucia.invalidateUserSessions(id);
 
       return res.status(204).send();
     } catch (err) { next(err); }
