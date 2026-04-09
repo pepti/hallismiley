@@ -2,7 +2,7 @@
 // Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
 // Account lockout: 5 failures → 15-min lock.
 const crypto              = require('crypto');
-const { query: dbQuery, pool } = require('../config/database');
+const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
@@ -135,57 +135,42 @@ const authController = {
         verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
       }
 
-      // Use a transaction so an email-send failure rolls back the INSERT,
-      // preventing orphan accounts that cause confusing 409s on retry.
-      const client = await pool.connect();
-      let newUser = null;
-      try {
-        await client.query('BEGIN');
+      const { rows } = await dbQuery(
+        `INSERT INTO users
+           (username, email, password_hash, role,
+            display_name, phone, avatar,
+            email_verified,
+            email_verify_token, email_verify_expires)
+         VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8, $9)
+         RETURNING id, username, email, role`,
+        [
+          username,
+          email.toLowerCase(),
+          passwordHash,
+          display_name ?? null,
+          phone ?? null,
+          chosenAvatar,
+          !requireVerify, // email_verified = true unless verification is required
+          verifyToken,
+          verifyExpiry,
+        ]
+      );
+      const newUser = rows[0];
 
-        const { rows } = await client.query(
-          `INSERT INTO users
-             (username, email, password_hash, role,
-              display_name, phone, avatar,
-              email_verified,
-              email_verify_token, email_verify_expires)
-           VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8, $9)
-           RETURNING id, username, email, role`,
-          [
-            username,
-            email.toLowerCase(),
-            passwordHash,
-            display_name ?? null,
-            phone ?? null,
-            chosenAvatar,
-            !requireVerify, // email_verified = true unless verification is required
-            verifyToken,
-            verifyExpiry,
-          ]
-        );
-        newUser = rows[0];
-
-        if (requireVerify) {
+      // Send verification email after the INSERT commits.
+      // If email fails the account still exists (unverified) — user can resend.
+      if (requireVerify) {
+        try {
           await sendVerificationEmail(email.toLowerCase(), verifyToken);
+        } catch (emailErr) {
+          // Log but don't fail the request — account is created, resend flow covers this.
+          console.error('[signup] Verification email failed:', emailErr.message);
         }
-
-        await client.query('COMMIT');
-      } catch (txErr) {
-        await client.query('ROLLBACK');
-        if (newUser) {
-          // INSERT succeeded but email send failed — rollback succeeded, no orphan row.
-          return res.status(503).json({
-            error: 'Could not send verification email. Please try again later.',
-            code: 503,
-          });
-        }
-        throw txErr; // DB error — bubble up to the outer catch → next(err)
-      } finally {
-        client.release();
       }
 
       if (requireVerify) {
         return res.status(201).json({
-          message: 'Account created. Please verify your email.',
+          message: 'Account created. Please check your email to verify your account.',
           user: newUser,
         });
       }
@@ -256,7 +241,11 @@ const authController = {
           [resetToken, resetExpiry, rows[0].id]
         );
 
-        await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+        try {
+          await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+        } catch (emailErr) {
+          console.error('[forgot-password] Email failed:', emailErr.message);
+        }
       }
 
       return res.json({ message: 'If that email is registered you will receive a reset link.' });
@@ -393,7 +382,11 @@ const authController = {
         [newToken, newExpiry, rows[0].id]
       );
 
-      await sendVerificationEmail(email.toLowerCase(), newToken);
+      try {
+        await sendVerificationEmail(email.toLowerCase(), newToken);
+      } catch (emailErr) {
+        console.error('[resend-verification] Email failed:', emailErr.message);
+      }
 
       return res.json({ message: 'If that email is pending verification you will receive a new link.' });
     } catch (err) { next(err); }
