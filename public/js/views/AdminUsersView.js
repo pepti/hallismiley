@@ -1,6 +1,7 @@
-import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser } from '../services/auth.js';
+import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser, adminDeleteUser } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
+import { avatarPathByName } from '../utils/avatar.js';
 
 const PAGE_SIZE = 20;
 
@@ -8,8 +9,6 @@ function formatDate(str) {
   if (!str) return '—';
   return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
-
-const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01'}.svg`;
 
 export class AdminUsersView {
   constructor() {
@@ -91,17 +90,18 @@ export class AdminUsersView {
                 <img class="user-avatar-sm" src="${avatarPathByName(u.avatar)}"
                      alt="${escHtml(u.username)}" loading="lazy"/>
                 <span class="user-username">${escHtml(u.username)}</span>
-                ${u.displayName ? `<span class="user-displayname">${escHtml(u.displayName)}</span>` : ''}
+                ${u.display_name ? `<span class="user-displayname">${escHtml(u.display_name)}</span>` : ''}
               </td>
               <td class="user-email">${escHtml(u.email)}</td>
               <td>
                 <select class="form-input form-input--sm role-select" data-user-id="${escHtml(String(u.id))}" data-action="role">
-                  <option value="user"  ${u.role === 'user'  ? 'selected' : ''}>User</option>
-                  <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                  <option value="user"      ${u.role === 'user'      ? 'selected' : ''}>User</option>
+                  <option value="moderator" ${u.role === 'moderator' ? 'selected' : ''}>Moderator</option>
+                  <option value="admin"     ${u.role === 'admin'     ? 'selected' : ''}>Admin</option>
                 </select>
               </td>
               <td>
-                ${u.emailVerified
+                ${u.email_verified
                   ? '<span class="verified-badge">✓ Verified</span>'
                   : '<span class="unverified-badge">✗ Unverified</span>'}
               </td>
@@ -121,9 +121,14 @@ export class AdminUsersView {
                   <span class="toggle-text">${u.party_access ? '🎂 On' : 'Off'}</span>
                 </label>
               </td>
-              <td class="user-joined">${formatDate(u.createdAt)}</td>
+              <td class="user-joined">${formatDate(u.created_at)}</td>
               <td class="admin-table__actions">
                 <span class="user-id-badge">#${escHtml(String(u.id))}</span>
+                ${u.role !== 'admin' ? `
+                <button class="btn btn--sm btn--danger delete-user-btn"
+                        data-user-id="${escHtml(String(u.id))}"
+                        data-username="${escHtml(u.username)}"
+                        title="Delete user">Delete</button>` : ''}
               </td>
             </tr>`).join('')}
         </tbody>
@@ -132,6 +137,7 @@ export class AdminUsersView {
 
     // Wire role changes
     wrap.querySelectorAll('[data-action=role]').forEach(sel => {
+      sel.dataset.prevRole = sel.value;
       sel.addEventListener('change', () => this._onRoleChange(sel));
     });
 
@@ -143,6 +149,11 @@ export class AdminUsersView {
     // Wire party-access toggles
     wrap.querySelectorAll('[data-action=toggle-party]').forEach(chk => {
       chk.addEventListener('change', () => this._onTogglePartyAccess(chk));
+    });
+
+    // Wire delete buttons
+    wrap.querySelectorAll('.delete-user-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onDeleteUser(btn));
     });
   }
 
@@ -161,15 +172,29 @@ export class AdminUsersView {
   }
 
   async _onRoleChange(select) {
-    const userId  = select.dataset.userId;
-    const newRole = select.value;
-    const orig    = newRole === 'admin' ? 'user' : 'admin';
+    const userId   = select.dataset.userId;
+    const newRole  = select.value;
+    const prevRole = select.dataset.prevRole;
     try {
       await adminUpdateUser(userId, { role: newRole });
+      select.dataset.prevRole = newRole;
       showToast(`Role updated to ${newRole}`, 'success');
     } catch (err) {
       showToast(err.message, 'error');
-      select.value = orig;
+      select.value = prevRole;
+    }
+  }
+
+  async _onDeleteUser(btn) {
+    const userId   = btn.dataset.userId;
+    const username = btn.dataset.username;
+    if (!confirm(`Delete user "${username}"? This will disable their account and revoke all sessions.`)) return;
+    try {
+      await adminDeleteUser(userId);
+      showToast(`User "${username}" deleted`, 'success');
+      await this._load();
+    } catch (err) {
+      showToast(err.message, 'error');
     }
   }
 
