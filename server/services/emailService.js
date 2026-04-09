@@ -106,7 +106,9 @@ async function sendVerificationEmail(to, token) {
     </p>
   `);
 
-  await createTransport().sendMail({ from: FROM, to, subject, html });
+  console.log(`[EmailService] Sending verification email to ${to} from ${FROM}`);
+  const info = await createTransport().sendMail({ from: FROM, to, subject, html });
+  console.log(`[EmailService] Verification email sent: messageId=${info.messageId}, response=${info.response}`);
 }
 
 // ── Password reset email ──────────────────────────────────────────────────────
@@ -147,7 +149,9 @@ async function sendPasswordResetEmail(to, token) {
     </p>
   `);
 
-  await createTransport().sendMail({ from: FROM, to, subject, html });
+  console.log(`[EmailService] Sending password reset email to ${to} from ${FROM}`);
+  const info = await createTransport().sendMail({ from: FROM, to, subject, html });
+  console.log(`[EmailService] Password reset email sent: messageId=${info.messageId}, response=${info.response}`);
 }
 
 module.exports = { sendVerificationEmail, sendPasswordResetEmail };
