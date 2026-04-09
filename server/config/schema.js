@@ -202,6 +202,16 @@ const migrations = [
       ) ON CONFLICT (key) DO NOTHING`,
     ],
   },
+  {
+    // Backfill columns added to 003_user_system after it was already applied in production.
+    // email_verified and password_reset columns were retrofitted into 003 but never ran on prod.
+    name: '012_backfill_auth_columns',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified         BOOLEAN     NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token   TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
