@@ -16,12 +16,16 @@ const adminController = {
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, created_at, last_login_at
          FROM users
+         WHERE disabled_reason IS DISTINCT FROM 'Deleted by admin'
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`,
         [limit, offset]
       );
 
-      const { rows: countRows } = await dbQuery('SELECT COUNT(*)::int AS total FROM users');
+      const { rows: countRows } = await dbQuery(
+        `SELECT COUNT(*)::int AS total FROM users
+         WHERE disabled_reason IS DISTINCT FROM 'Deleted by admin'`
+      );
 
       return res.json({
         users: rows,
