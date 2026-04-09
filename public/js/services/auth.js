@@ -249,3 +249,16 @@ export async function adminUpdateUser(userId, updates) {
   if (!res.ok) throw new Error(data.error || 'Update failed');
   return data;
 }
+
+export async function adminDeleteUser(userId) {
+  const headers = await _csrfHeaders();
+  const res = await fetch(`/api/v1/admin/users/${userId}`, {
+    method:      'DELETE',
+    credentials: 'include',
+    headers,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Delete failed');
+  }
+}
