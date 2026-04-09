@@ -213,19 +213,19 @@ describe('PATCH /api/v1/admin/users/:id/disable', () => {
 // ── DELETE /api/v1/admin/users/:id ───────────────────────────────────────────
 
 describe('DELETE /api/v1/admin/users/:id', () => {
-  test('admin can soft-delete a user (sets disabled=true)', async () => {
+  test('admin can delete a user (hard delete)', async () => {
     const res = await request(app)
       .delete(`/api/v1/admin/users/${userId}`)
       .set('Cookie', adminCookie);
 
     expect(res.status).toBe(204);
 
-    // Verify user is disabled in DB
+    // Verify user is removed from DB
     const { rows } = await db.query(
-      'SELECT disabled FROM users WHERE id = $1',
+      'SELECT id FROM users WHERE id = $1',
       [userId]
     );
-    expect(rows[0].disabled).toBe(true);
+    expect(rows).toHaveLength(0);
   });
 
   test('admin cannot delete themselves', async () => {
