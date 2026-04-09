@@ -4,7 +4,7 @@ const nodemailer = require('nodemailer');
 
 const APP_URL     = process.env.APP_URL || 'https://www.hallismiley.is';
 const FROM_NAME   = 'Halli Smiley';
-const FROM_ADDR   = process.env.SMTP_FROM || 'noreply@hallismiley.is';
+const FROM_ADDR   = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@hallismiley.is';
 const FROM        = `${FROM_NAME} <${FROM_ADDR}>`;
 
 function isSmtpConfigured() {
