@@ -16,16 +16,12 @@ const adminController = {
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, created_at, last_login_at
          FROM users
-         WHERE disabled_reason IS DISTINCT FROM 'Deleted by admin'
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`,
         [limit, offset]
       );
 
-      const { rows: countRows } = await dbQuery(
-        `SELECT COUNT(*)::int AS total FROM users
-         WHERE disabled_reason IS DISTINCT FROM 'Deleted by admin'`
-      );
+      const { rows: countRows } = await dbQuery('SELECT COUNT(*)::int AS total FROM users');
 
       return res.json({
         users: rows,
@@ -127,7 +123,7 @@ const adminController = {
     } catch (err) { next(err); }
   },
 
-  // DELETE /api/v1/admin/users/:id  — soft delete (disable, not hard delete)
+  // DELETE /api/v1/admin/users/:id  — hard delete (removes row permanently)
   async deleteUser(req, res, next) {
     try {
       const { id } = req.params;
@@ -136,19 +132,17 @@ const adminController = {
         return res.status(400).json({ error: 'Cannot delete your own account', code: 400 });
       }
 
+      // Invalidate sessions before deleting so Lucia doesn't error on missing user
+      await lucia.invalidateUserSessions(id);
+
       const { rows } = await dbQuery(
-        `UPDATE users
-         SET disabled = TRUE, disabled_at = NOW(), disabled_reason = 'Deleted by admin'
-         WHERE id = $1
-         RETURNING id`,
+        'DELETE FROM users WHERE id = $1 RETURNING id',
         [id]
       );
 
       if (rows.length === 0) {
         return res.status(404).json({ error: 'User not found', code: 404 });
       }
-
-      await lucia.invalidateUserSessions(id);
 
       return res.status(204).send();
     } catch (err) { next(err); }
