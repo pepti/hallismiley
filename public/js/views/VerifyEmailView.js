@@ -32,7 +32,7 @@ export class VerifyEmailView {
       await verifyEmail(token);
       this._setResult(el, true, 'Your email has been verified! You can now sign in.');
     } catch (err) {
-      this._setResult(el, false, err.message || 'Verification failed. The link may have expired.');
+      this._setResult(el, false, 'Verification failed or you are already logged in');
     }
 
     return el;
