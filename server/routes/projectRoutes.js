@@ -5,7 +5,8 @@ const router  = express.Router();
 const projectController                          = require('../controllers/projectController');
 const { validateProject, validateQuery,
         validateMediaUpdate, validateReorder,
-        validateSection, validateSectionReorder } = require('../middleware/validate');
+        validateSection, validateSectionReorder,
+        validateVideoUpdate, validateVideoReorder } = require('../middleware/validate');
 const { requireAuth }                            = require('../auth/middleware');
 const { requireRole }                            = require('../auth/roles');
 const { csrfProtect }                            = require('../middleware/csrf');
@@ -16,6 +17,7 @@ router.get('/',             validateQuery, projectController.getAll);
 router.get('/featured',     projectController.getFeatured);
 router.get('/:id/media',    projectController.getMedia);
 router.get('/:id/sections', projectController.getSections);
+router.get('/:id/videos',   projectController.getVideos);
 router.get('/:id',          projectController.getOne);
 
 // ── Project create / update (admin + moderator) ────────────────────────────────
@@ -79,6 +81,41 @@ router.patch('/:id/sections/:sectionId',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateSection,
   projectController.updateSection);
 
+// ── Video section management (admin + moderator) ─────────────────────────────
+// Order-sensitive: /:id/videos/reorder and /:id/videos/position must come
+// BEFORE /:id/videos/:videoId so Express doesn't treat those literal strings
+// as numeric IDs.
+router.patch('/:id/videos/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateVideoReorder,
+  projectController.reorderVideos);
+
+router.patch('/:id/videos/position',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  projectController.setVideoSectionPosition);
+
+// File upload OR JSON body ({ url, title? }) for a YouTube embed.
+router.post('/:id/videos',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  (req, res, next) => {
+    const contentType = req.headers['content-type'] || '';
+    // JSON body (YouTube URL) — skip multer entirely
+    if (!contentType.startsWith('multipart/')) return next();
+    // Otherwise run multer on the single 'file' field
+    const upload = createProjectUpload(req.params.id);
+    upload.single('file')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: `Upload error: ${err.message}`, code: 400 });
+      }
+      if (err) return res.status(400).json({ error: err.message, code: 400 });
+      next();
+    });
+  },
+  projectController.addVideo);
+
+router.patch('/:id/videos/:videoId',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateVideoUpdate,
+  projectController.updateVideo);
+
 // ── Delete (admin only) ────────────────────────────────────────────────────────
 router.delete('/:id',
   requireAuth, requireRole('admin'), csrfProtect,
@@ -91,5 +128,14 @@ router.delete('/:id/media/:mediaId',
 router.delete('/:id/sections/:sectionId',
   requireAuth, requireRole('admin'), csrfProtect,
   projectController.deleteSection);
+
+// Clear-all must come BEFORE /:id/videos/:videoId so "videos" isn't treated as an id
+router.delete('/:id/videos',
+  requireAuth, requireRole('admin'), csrfProtect,
+  projectController.deleteVideoSection);
+
+router.delete('/:id/videos/:videoId',
+  requireAuth, requireRole('admin'), csrfProtect,
+  projectController.deleteVideo);
 
 module.exports = router;

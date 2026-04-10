@@ -3,7 +3,7 @@
 const db = require('../config/database');
 
 // Explicit column list — avoids SELECT * so schema changes are explicit
-const COLUMNS = 'id, title, description, category, year, tools_used, image_url, featured, created_at, updated_at';
+const COLUMNS = 'id, title, description, category, year, tools_used, image_url, featured, video_section_position, created_at, updated_at';
 
 class Project {
   // ── READ ──────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ class Project {
 
   static async update(id, data) {
     // Build SET clause dynamically — only update provided fields
-    const allowed = ['title', 'description', 'category', 'year', 'tools_used', 'image_url', 'featured'];
+    const allowed = ['title', 'description', 'category', 'year', 'tools_used', 'image_url', 'featured', 'video_section_position'];
     const sets   = [];
     const params = [];
 
@@ -199,5 +199,106 @@ class ProjectSection {
   }
 }
 
+// ── Project videos (files + YouTube embeds) ──────────────────────────────────
+
+const VIDEO_COLUMNS = 'id, project_id, kind, file_path, youtube_id, title, sort_order, created_at';
+
+class ProjectVideo {
+  static async list(projectId) {
+    const { rows } = await db.query(
+      `SELECT ${VIDEO_COLUMNS}
+         FROM project_videos
+        WHERE project_id = $1
+        ORDER BY sort_order ASC, id ASC`,
+      [Number(projectId)]
+    );
+    return rows;
+  }
+
+  static async create(projectId, { kind, file_path, youtube_id, title }) {
+    // Next sort_order
+    const { rows: maxRows } = await db.query(
+      `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+         FROM project_videos WHERE project_id = $1`,
+      [Number(projectId)]
+    );
+    const nextOrder = maxRows[0].next;
+
+    const { rows } = await db.query(
+      `INSERT INTO project_videos (project_id, kind, file_path, youtube_id, title, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING ${VIDEO_COLUMNS}`,
+      [Number(projectId), kind, file_path || null, youtube_id || null, title || null, nextOrder]
+    );
+    return rows[0];
+  }
+
+  static async update(projectId, videoId, { title }) {
+    const sets = [];
+    const params = [];
+    if (title !== undefined) {
+      params.push(title);
+      sets.push(`title = $${params.length}`);
+    }
+    if (sets.length === 0) {
+      const { rows } = await db.query(
+        `SELECT ${VIDEO_COLUMNS} FROM project_videos WHERE id = $1 AND project_id = $2`,
+        [Number(videoId), Number(projectId)]
+      );
+      return rows[0] || null;
+    }
+    params.push(Number(videoId));
+    params.push(Number(projectId));
+    const { rows } = await db.query(
+      `UPDATE project_videos SET ${sets.join(', ')}
+        WHERE id = $${params.length - 1} AND project_id = $${params.length}
+      RETURNING ${VIDEO_COLUMNS}`,
+      params
+    );
+    return rows[0] || null;
+  }
+
+  static async reorder(projectId, order) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const item of order) {
+        await client.query(
+          `UPDATE project_videos SET sort_order = $1
+            WHERE id = $2 AND project_id = $3`,
+          [Number(item.sort_order), Number(item.id), Number(projectId)]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    return ProjectVideo.list(projectId);
+  }
+
+  static async delete(projectId, videoId) {
+    const { rows } = await db.query(
+      `DELETE FROM project_videos WHERE id = $1 AND project_id = $2
+       RETURNING kind, file_path`,
+      [Number(videoId), Number(projectId)]
+    );
+    return rows[0] || null;
+  }
+
+  static async deleteAll(projectId) {
+    // Returns the deleted rows so callers can unlink any file_path from disk
+    const { rows } = await db.query(
+      `DELETE FROM project_videos WHERE project_id = $1
+       RETURNING kind, file_path`,
+      [Number(projectId)]
+    );
+    return rows;
+  }
+}
+
 module.exports = Project;
 module.exports.ProjectSection = ProjectSection;
+module.exports.ProjectVideo   = ProjectVideo;

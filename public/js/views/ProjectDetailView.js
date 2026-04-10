@@ -16,6 +16,7 @@ export class ProjectDetailView {
     this._lb              = null;
     this._media           = [];
     this._sections        = [];
+    this._videos          = [];
     this._uploadTargetSec = null; // currently-selected section for new uploads (null = Ungrouped)
     this._project         = null;
     this._editMode        = false;
@@ -36,16 +37,18 @@ export class ProjectDetailView {
     window.addEventListener('authchange', this._onAuthChange);
 
     try {
-      const [project, media, sections] = await Promise.all([
+      const [project, media, sections, videos] = await Promise.all([
         projectApi.getOne(this.id),
         projectApi.getMedia(this.id).catch(() => []),
         projectApi.getSections(this.id).catch(() => []),
+        projectApi.getVideos(this.id).catch(() => []),
       ]);
       if (!project) throw new Error('Not found');
 
       this._project  = project;
       this._media    = media    || [];
       this._sections = sections || [];
+      this._videos   = videos   || [];
       this._renderContent();
     } catch {
       this._view.innerHTML = `
@@ -122,6 +125,12 @@ export class ProjectDetailView {
     const legacyFlat = buckets.length === 1 && buckets[0].section === null && this._sections.length === 0;
     let globalIndex = 0;
 
+    // Video block — rendered on either side of the gallery, but only when
+    // there is at least one video (view mode hides empty blocks entirely).
+    const hasVideos     = this._videos.length > 0;
+    const videoPosition = p.video_section_position || 'above_gallery';
+    const videoBlock    = hasVideos ? this._buildVideoBlockView() : '';
+
     return `
       <div class="pd-hero">
         <div class="pd-hero__bg" style="background-image:url('${escHtml(heroImg)}')"></div>
@@ -168,6 +177,8 @@ export class ProjectDetailView {
             </div>
           </section>` : ''}
 
+          ${videoPosition === 'above_gallery' ? videoBlock : ''}
+
           ${hasMedia ? `
           <section class="pd-section pd-gallery-section" aria-label="Project gallery">
             <h2 class="pd-section__heading">Project Gallery</h2>
@@ -189,6 +200,8 @@ export class ProjectDetailView {
             }).join('')}
           </section>` : ''}
 
+          ${videoPosition === 'below_gallery' ? videoBlock : ''}
+
           <div class="pd-back-wrap">
             <a href="#/projects" class="pd-back-btn">&#x2190; Back to All Projects</a>
           </div>
@@ -205,6 +218,11 @@ export class ProjectDetailView {
     this._media = this._flatInGroupOrder();
     const buckets = this._groupBySection(); // includes empty Ungrouped bucket
     let globalIndex = 0;
+
+    // Video block is always rendered in edit mode so the admin can add to an
+    // empty section. Position is stored per-project on `video_section_position`.
+    const videoPosition = p.video_section_position || 'above_gallery';
+    const videoEditBlock = this._buildVideoBlockEdit(canDelete);
 
     // Target section dropdown for new uploads (default: Ungrouped)
     const uploadTargetOptions = `
@@ -266,6 +284,8 @@ export class ProjectDetailView {
               Separate tools with commas.
             </p>
           </section>
+
+          ${videoPosition === 'above_gallery' ? videoEditBlock : ''}
 
           <section class="pd-section pd-gallery-section" aria-label="Project gallery">
             <h2 class="pd-section__heading">Project Gallery</h2>
@@ -336,6 +356,8 @@ export class ProjectDetailView {
             <p class="pd-upload-status" id="pd-upload-status"></p>
           </section>
 
+          ${videoPosition === 'below_gallery' ? videoEditBlock : ''}
+
           <div class="pd-back-wrap">
             <a href="#/projects" class="pd-back-btn">&#x2190; Back to All Projects</a>
           </div>
@@ -343,6 +365,124 @@ export class ProjectDetailView {
         </div>
       </div>
     `;
+  }
+
+  // ── Video block rendering ────────────────────────────────────────────────
+
+  _buildVideoItemPlayer(v) {
+    if (v.kind === 'youtube') {
+      const src = `https://www.youtube-nocookie.com/embed/${escHtml(v.youtube_id)}`;
+      return `
+        <div class="pd-video-item__player">
+          <iframe
+            src="${src}"
+            title="${escHtml(v.title || 'YouTube video')}"
+            loading="lazy"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen></iframe>
+        </div>`;
+    }
+    // File
+    return `
+      <div class="pd-video-item__player">
+        <video
+          src="${escHtml(v.file_path)}"
+          controls
+          preload="metadata"
+          playsinline></video>
+      </div>`;
+  }
+
+  _buildVideoBlockView() {
+    // View mode: simple grid of players, optional titles
+    return `
+      <section class="pd-section pd-video-section" aria-label="Project videos">
+        <h2 class="pd-section__heading">Videos</h2>
+        <div class="pd-video-grid">
+          ${this._videos.map(v => `
+            <article class="pd-video-item" data-video-id="${v.id}">
+              ${this._buildVideoItemPlayer(v)}
+              ${v.title ? `<p class="pd-video-item__title">${escHtml(v.title)}</p>` : ''}
+            </article>
+          `).join('')}
+        </div>
+      </section>`;
+  }
+
+  _buildVideoBlockEdit(canDelete) {
+    const pos = this._project?.video_section_position || 'above_gallery';
+    const isAbove = pos === 'above_gallery';
+    const count   = this._videos.length;
+
+    return `
+      <section class="pd-section pd-video-section pd-video-section--edit" aria-label="Project videos">
+        <h2 class="pd-section__heading">Videos</h2>
+
+        <div class="pd-video-toolbar">
+          <div class="pd-video-toolbar__position">
+            <span class="pd-video-toolbar__label">Section position:</span>
+            <button class="gallery-btn gallery-btn--order" type="button"
+              data-action="video-section-up"
+              ${isAbove ? 'disabled' : ''} aria-label="Move section up (above gallery)">&#x25B2;</button>
+            <span class="pd-video-toolbar__value">${isAbove ? 'Above gallery' : 'Below gallery'}</span>
+            <button class="gallery-btn gallery-btn--order" type="button"
+              data-action="video-section-down"
+              ${!isAbove ? 'disabled' : ''} aria-label="Move section down (below gallery)">&#x25BC;</button>
+          </div>
+          ${canDelete && count > 0 ? `
+          <button class="gallery-btn gallery-btn--delete" type="button"
+            data-action="video-section-delete">
+            Delete Video Section
+          </button>` : ''}
+        </div>
+
+        <div class="pd-video-grid pd-video-grid--edit${count === 0 ? ' pd-video-grid--empty' : ''}">
+          ${count === 0 ? '<div class="pd-video-grid__empty-hint">No videos yet — add one below.</div>' : ''}
+          ${this._videos.map((v, i) => `
+            <article class="pd-video-item pd-video-item--edit" data-video-id="${v.id}">
+              ${this._buildVideoItemPlayer(v)}
+
+              <div class="pd-video-item__controls">
+                <div class="pd-video-item__reorder">
+                  <button class="gallery-btn gallery-btn--order" type="button"
+                    data-action="video-move-up" data-video-id="${v.id}"
+                    ${i === 0 ? 'disabled' : ''} aria-label="Move up">&#x25B2;</button>
+                  <button class="gallery-btn gallery-btn--order" type="button"
+                    data-action="video-move-down" data-video-id="${v.id}"
+                    ${i === count - 1 ? 'disabled' : ''} aria-label="Move down">&#x25BC;</button>
+                </div>
+                <button class="gallery-btn gallery-btn--delete" type="button"
+                  data-action="video-delete" data-video-id="${v.id}">
+                  Delete
+                </button>
+              </div>
+
+              <input
+                type="text"
+                class="pd-edit-field pd-video-item__title-edit"
+                data-video-title-id="${v.id}"
+                maxlength="200"
+                placeholder="Video title (optional)…"
+                value="${escHtml(v.title || '')}">
+            </article>
+          `).join('')}
+        </div>
+
+        <div class="pd-video-add-wrap">
+          <button class="pd-add-media-btn" type="button" id="pd-add-video-file-btn">
+            + Add Video File
+          </button>
+          <input type="file" id="pd-video-file-input"
+            accept="video/mp4,video/webm"
+            style="display:none">
+          <button class="pd-add-media-btn" type="button" id="pd-add-video-youtube-btn">
+            + Add YouTube URL
+          </button>
+        </div>
+        <p class="pd-upload-status" id="pd-video-upload-status"></p>
+      </section>`;
   }
 
   _buildGridItem(item, index) {
@@ -490,14 +630,21 @@ export class ProjectDetailView {
       const action    = btn.dataset.action;
       const mediaId   = btn.dataset.mediaId   ? Number(btn.dataset.mediaId)   : null;
       const sectionId = btn.dataset.sectionId ? Number(btn.dataset.sectionId) : null;
-      if (action === 'set-cover')      this._handleSetCover(mediaId);
-      if (action === 'delete-media')   this._handleDeleteMedia(mediaId, canDelete);
-      if (action === 'move-up')        this._handleReorder(mediaId, -1);
-      if (action === 'move-down')      this._handleReorder(mediaId, +1);
-      if (action === 'section-rename') this._handleRenameSection(sectionId);
-      if (action === 'section-delete') this._handleDeleteSection(sectionId, canDelete);
-      if (action === 'section-up')     this._handleReorderSection(sectionId, -1);
-      if (action === 'section-down')   this._handleReorderSection(sectionId, +1);
+      const videoId = btn.dataset.videoId ? Number(btn.dataset.videoId) : null;
+      if (action === 'set-cover')            this._handleSetCover(mediaId);
+      if (action === 'delete-media')         this._handleDeleteMedia(mediaId, canDelete);
+      if (action === 'move-up')              this._handleReorder(mediaId, -1);
+      if (action === 'move-down')            this._handleReorder(mediaId, +1);
+      if (action === 'section-rename')       this._handleRenameSection(sectionId);
+      if (action === 'section-delete')       this._handleDeleteSection(sectionId, canDelete);
+      if (action === 'section-up')           this._handleReorderSection(sectionId, -1);
+      if (action === 'section-down')         this._handleReorderSection(sectionId, +1);
+      if (action === 'video-move-up')        this._handleReorderVideo(videoId, -1);
+      if (action === 'video-move-down')      this._handleReorderVideo(videoId, +1);
+      if (action === 'video-delete')         this._handleDeleteVideo(videoId);
+      if (action === 'video-section-up')     this._handleSetVideoPosition('above_gallery');
+      if (action === 'video-section-down')   this._handleSetVideoPosition('below_gallery');
+      if (action === 'video-section-delete') this._handleDeleteVideoSection(canDelete);
     }, { signal });
 
     // Drag-and-drop reorder for gallery items
@@ -536,6 +683,34 @@ export class ProjectDetailView {
         const newDesc = ta.value;
         if ((current.description || '') === newDesc) return; // no change
         this._handleUpdateSectionDescription(id, newDesc);
+      });
+    });
+
+    // Video section: file upload button
+    const addVideoFileBtn = view.querySelector('#pd-add-video-file-btn');
+    const videoFileInput  = view.querySelector('#pd-video-file-input');
+    if (addVideoFileBtn && videoFileInput) {
+      addVideoFileBtn.addEventListener('click', () => videoFileInput.click());
+      videoFileInput.addEventListener('change', () => {
+        if (videoFileInput.files.length) this._handleVideoFileUpload(videoFileInput.files[0], view);
+      });
+    }
+
+    // Video section: YouTube URL button
+    const addYoutubeBtn = view.querySelector('#pd-add-video-youtube-btn');
+    if (addYoutubeBtn) {
+      addYoutubeBtn.addEventListener('click', () => this._handleAddYouTubeVideo(view));
+    }
+
+    // Per-video title inputs — persist on blur
+    view.querySelectorAll('[data-video-title-id]').forEach(input => {
+      input.addEventListener('blur', () => {
+        const id = Number(input.dataset.videoTitleId);
+        const current = this._videos.find(v => v.id === id);
+        if (!current) return;
+        const newTitle = input.value;
+        if ((current.title || '') === newTitle) return;
+        this._handleUpdateVideoTitle(id, newTitle);
       });
     });
   }
@@ -850,6 +1025,131 @@ export class ProjectDetailView {
     } catch (err) {
       alert('Could not reorder sections: ' + err.message);
     }
+  }
+
+  // ── Video section handlers ─────────────────────────────────────────────────
+
+  async _handleSetVideoPosition(position) {
+    // Binary toggle — no-op if already in the requested position
+    if ((this._project.video_section_position || 'above_gallery') === position) return;
+    try {
+      const updated = await projectApi.setVideoSectionPosition(this._project.id, position);
+      this._project = updated;
+      this._renderContent();
+    } catch (err) {
+      alert('Could not move video section: ' + err.message);
+    }
+  }
+
+  async _handleDeleteVideoSection(canDelete) {
+    if (!canDelete) return;
+    if (!this._videos.length) return;
+    if (!confirm(`Delete the entire Video section? ${this._videos.length} video(s) will be removed.`)) return;
+    try {
+      await projectApi.deleteVideoSection(this._project.id);
+      this._videos = [];
+      this._renderContent();
+    } catch (err) {
+      alert('Could not delete video section: ' + err.message);
+    }
+  }
+
+  _handleReorderVideo(videoId, direction) {
+    const idx = this._videos.findIndex(v => v.id === videoId);
+    if (idx === -1) return;
+    const target = idx + direction;
+    if (target < 0 || target >= this._videos.length) return;
+
+    const arr = [...this._videos];
+    [arr[idx], arr[target]] = [arr[target], arr[idx]];
+    this._videos = arr;
+    this._renderContent();
+    this._commitVideoReorder();
+  }
+
+  _commitVideoReorder() {
+    clearTimeout(this._videoReorderTimer);
+    this._videoReorderTimer = setTimeout(async () => {
+      const order = this._videos.map((v, i) => ({ id: v.id, sort_order: i }));
+      if (order.length === 0) return;
+      try {
+        const updated = await projectApi.reorderVideos(this._project.id, order);
+        this._videos = updated;
+      } catch (err) {
+        alert('Could not reorder videos: ' + err.message);
+      }
+    }, 400);
+  }
+
+  async _handleDeleteVideo(videoId) {
+    if (!confirm('Delete this video?')) return;
+    try {
+      await projectApi.deleteVideo(this._project.id, videoId);
+      this._videos = this._videos.filter(v => v.id !== videoId);
+      this._renderContent();
+    } catch (err) {
+      alert('Could not delete video: ' + err.message);
+    }
+  }
+
+  async _handleUpdateVideoTitle(videoId, title) {
+    try {
+      const updated = await projectApi.updateVideo(this._project.id, videoId, { title });
+      this._videos = this._videos.map(v => v.id === videoId ? updated : v);
+    } catch (err) {
+      alert('Could not save video title: ' + err.message);
+    }
+  }
+
+  async _handleVideoFileUpload(file, view) {
+    const ALLOWED = ['video/mp4', 'video/webm'];
+    if (!ALLOWED.includes(file.type)) {
+      this._setVideoStatus(view, 'Only mp4 / webm videos are allowed', 'error');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      this._setVideoStatus(view, 'File too large (max 50 MB)', 'error');
+      return;
+    }
+    const fileInput = view.querySelector('#pd-video-file-input');
+    const addBtn    = view.querySelector('#pd-add-video-file-btn');
+    if (addBtn) addBtn.disabled = true;
+    this._setVideoStatus(view, 'Uploading video…', '');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const row = await projectApi.addVideo(this._project.id, formData);
+      this._videos = [...this._videos, row];
+      this._setVideoStatus(view, 'Uploaded', 'ok');
+      this._renderContent();
+    } catch (err) {
+      this._setVideoStatus(view, err.message || 'Upload failed', 'error');
+    } finally {
+      if (addBtn)    addBtn.disabled = false;
+      if (fileInput) fileInput.value = '';
+    }
+  }
+
+  async _handleAddYouTubeVideo(view) {
+    const url = prompt('Paste a YouTube URL (watch, shorts, youtu.be, or embed):');
+    if (!url || !url.trim()) return;
+    this._setVideoStatus(view, 'Adding YouTube video…', '');
+    try {
+      const row = await projectApi.addVideo(this._project.id, { url: url.trim() });
+      this._videos = [...this._videos, row];
+      this._setVideoStatus(view, 'Added', 'ok');
+      this._renderContent();
+    } catch (err) {
+      this._setVideoStatus(view, err.message || 'Could not add YouTube video', 'error');
+    }
+  }
+
+  _setVideoStatus(view, message, type) {
+    const el = view.querySelector('#pd-video-upload-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className   = `pd-upload-status${type ? ` pd-upload-status--${type}` : ''}`;
   }
 
   // ── File upload ────────────────────────────────────────────────────────────

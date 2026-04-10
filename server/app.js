@@ -63,7 +63,8 @@ app.use(helmet({
       connectSrc: ["'self'", 'https://www.google-analytics.com', 'https://analytics.google.com'],
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
       objectSrc:  ["'none'"],
-      frameSrc:   ["'none'"],
+      // Allow YouTube iframes so project Video sections can embed videos.
+      frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com'],
       // Helmet 8 adds upgrade-insecure-requests by default; disable it so the
       // site works over plain HTTP on LAN IPs (e.g. phone testing on 192.168.x.x).
       // The directive upgrades sub-resource requests to HTTPS — fine in production

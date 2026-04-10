@@ -140,4 +140,56 @@ export const projectApi = {
       method: 'DELETE', headers: await csrfHeaders(),
     });
   },
+
+  // ── Videos ────────────────────────────────────────────────────────────────
+
+  getVideos: (projectId) => request(`${BASE}/${projectId}/videos`),
+
+  // payload is either a FormData (file upload) OR a plain object
+  // { url, title? } for a YouTube embed.
+  async addVideo(projectId, payload) {
+    const token = await getCSRFToken();
+    const csrf  = token ? { 'X-CSRF-Token': token } : {};
+    const isFormData = payload instanceof FormData;
+
+    const res = await fetch(`${BASE}/${projectId}/videos`, {
+      method:      'POST',
+      credentials: 'include',
+      headers:     isFormData ? csrf : { ...csrf, 'Content-Type': 'application/json' },
+      body:        isFormData ? payload : JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  async updateVideo(projectId, videoId, patch) {
+    return request(`${BASE}/${projectId}/videos/${videoId}`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify(patch),
+    });
+  },
+
+  async reorderVideos(projectId, order) {
+    return request(`${BASE}/${projectId}/videos/reorder`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ order }),
+    });
+  },
+
+  async deleteVideo(projectId, videoId) {
+    return request(`${BASE}/${projectId}/videos/${videoId}`, {
+      method: 'DELETE', headers: await csrfHeaders(),
+    });
+  },
+
+  async deleteVideoSection(projectId) {
+    return request(`${BASE}/${projectId}/videos`, {
+      method: 'DELETE', headers: await csrfHeaders(),
+    });
+  },
+
+  async setVideoSectionPosition(projectId, position) {
+    return request(`${BASE}/${projectId}/videos/position`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ position }),
+    });
+  },
 };

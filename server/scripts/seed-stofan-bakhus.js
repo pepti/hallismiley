@@ -82,34 +82,54 @@ async function seed() {
     console.log(`Inserted "${rows[0].title}" with id=${projectId}`);
   }
 
-  // ── 2. Seed media (idempotent — skip files already present) ───────────────
-  let inserted = 0;
-  let skipped  = 0;
+  // ── 2. Seed media (idempotent) ────────────────────────────────────────────
+  // Images → project_media. Videos → project_videos (since migration 015).
+  let insertedImages = 0;
+  let skippedImages  = 0;
+  let insertedVideos = 0;
+  let skippedVideos  = 0;
 
+  let videoOrder = 0;
   for (let i = 0; i < MEDIA.length; i++) {
     const { file, type } = MEDIA[i];
     const filePath   = `${BASE_PATH}${file}`;
     const sortOrder  = i + 1;
 
+    if (type === 'video') {
+      const { rows: existingVid } = await pool.query(
+        'SELECT id FROM project_videos WHERE project_id = $1 AND file_path = $2',
+        [projectId, filePath]
+      );
+      if (existingVid.length > 0) { skippedVideos++; videoOrder++; continue; }
+
+      await pool.query(
+        `INSERT INTO project_videos (project_id, kind, file_path, sort_order)
+         VALUES ($1, 'file', $2, $3)`,
+        [projectId, filePath, videoOrder]
+      );
+      insertedVideos++;
+      videoOrder++;
+      continue;
+    }
+
     const { rows: existingMedia } = await pool.query(
       'SELECT id FROM project_media WHERE project_id = $1 AND file_path = $2',
       [projectId, filePath]
     );
-
-    if (existingMedia.length > 0) {
-      skipped++;
-      continue;
-    }
+    if (existingMedia.length > 0) { skippedImages++; continue; }
 
     await pool.query(
       `INSERT INTO project_media (project_id, file_path, media_type, sort_order)
        VALUES ($1, $2, $3, $4)`,
       [projectId, filePath, type, sortOrder]
     );
-    inserted++;
+    insertedImages++;
   }
 
-  console.log(`Media: ${inserted} inserted, ${skipped} already existed.`);
+  console.log(
+    `Media: ${insertedImages} images inserted, ${skippedImages} skipped; ` +
+    `${insertedVideos} videos inserted, ${skippedVideos} skipped.`
+  );
 }
 
 module.exports = { seedStofanBakhus: seed };

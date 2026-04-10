@@ -1,9 +1,10 @@
 const fs      = require('fs');
 const path    = require('path');
 const Project = require('../models/Project');
-const { ProjectSection } = require('../models/Project');
+const { ProjectSection, ProjectVideo } = require('../models/Project');
 const db      = require('../config/database');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
+const { parseYouTubeId } = require('../utils/youtube');
 
 // Resolve path for a stored file_path like /assets/projects/5/img.jpg
 function _diskPath(filePath) {
@@ -406,6 +407,153 @@ const projectController = {
       const deleted = await ProjectSection.delete(req.params.id, req.params.sectionId);
       if (!deleted) return res.status(404).json({ error: 'Section not found', code: 404 });
       res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // ── Video section ──────────────────────────────────────────────────────────
+
+  async getVideos(req, res, next) {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      res.json(await ProjectVideo.list(req.params.id));
+    } catch (err) { next(err); }
+  },
+
+  async addVideo(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const project   = await Project.findById(projectId);
+      if (!project) {
+        if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
+        return res.status(404).json({ error: 'Project not found', code: 404 });
+      }
+
+      const title = typeof req.body.title === 'string' ? req.body.title : null;
+
+      // Two intake paths: multipart upload OR JSON body with a YouTube URL
+      if (req.file) {
+        // File upload — reuse multer storage path convention
+        const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : null;
+        if (!mediaType) {
+          _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
+          return res.status(400).json({ error: 'Only video files are accepted here', code: 400 });
+        }
+
+        const filePath = `/assets/projects/${projectId}/${req.file.filename}`;
+        const row = await ProjectVideo.create(projectId, {
+          kind:      'file',
+          file_path: filePath,
+          title,
+        });
+        return res.status(201).json(row);
+      }
+
+      // JSON body: { url } for a YouTube embed
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'Either a video file or a YouTube url is required', code: 400 });
+      }
+      const youtubeId = parseYouTubeId(url);
+      if (!youtubeId) {
+        return res.status(400).json({ error: 'Could not parse a YouTube video ID from url', code: 400 });
+      }
+
+      const row = await ProjectVideo.create(projectId, {
+        kind:       'youtube',
+        youtube_id: youtubeId,
+        title,
+      });
+      return res.status(201).json(row);
+    } catch (err) {
+      if (req.file) {
+        _tryUnlink(`/assets/projects/${req.params.id}/${req.file.filename}`);
+      }
+      next(err);
+    }
+  },
+
+  async updateVideo(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const project   = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const row = await ProjectVideo.update(projectId, req.params.videoId, {
+        title: req.body.title,
+      });
+      if (!row) return res.status(404).json({ error: 'Video not found', code: 404 });
+      res.json(row);
+    } catch (err) { next(err); }
+  },
+
+  async reorderVideos(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const project   = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const { order } = req.body;
+      const ids = order.map(i => Number(i.id));
+      const { rows: existing } = await db.query(
+        `SELECT id FROM project_videos WHERE project_id = $1 AND id = ANY($2::int[])`,
+        [projectId, ids]
+      );
+      if (existing.length !== ids.length) {
+        return res.status(400).json({
+          error: 'One or more video IDs do not belong to this project',
+          code: 400,
+        });
+      }
+
+      const rows = await ProjectVideo.reorder(projectId, order);
+      res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  async deleteVideo(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const project   = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const deleted = await ProjectVideo.delete(projectId, req.params.videoId);
+      if (!deleted) return res.status(404).json({ error: 'Video not found', code: 404 });
+
+      if (deleted.kind === 'file' && deleted.file_path) _tryUnlink(deleted.file_path);
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  async deleteVideoSection(req, res, next) {
+    // Clears every video from the project — used by the edit-mode
+    // "Delete Video Section" button.
+    try {
+      const projectId = Number(req.params.id);
+      const project   = await Project.findById(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const removed = await ProjectVideo.deleteAll(projectId);
+      for (const r of removed) {
+        if (r.kind === 'file' && r.file_path) _tryUnlink(r.file_path);
+      }
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  async setVideoSectionPosition(req, res, next) {
+    try {
+      const projectId = Number(req.params.id);
+      const { position } = req.body;
+      if (!['above_gallery', 'below_gallery'].includes(position)) {
+        return res.status(400).json({
+          error: 'position must be "above_gallery" or "below_gallery"',
+          code: 400,
+        });
+      }
+      const updated = await Project.update(projectId, { video_section_position: position });
+      if (!updated) return res.status(404).json({ error: 'Project not found', code: 404 });
+      res.json(updated);
     } catch (err) { next(err); }
   },
 

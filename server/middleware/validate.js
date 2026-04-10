@@ -339,6 +339,54 @@ function validateSection(req, res, next) {
   next();
 }
 
+// ── Video validation ─────────────────────────────────────────────────────────
+
+const MAX_VIDEO_TITLE_LEN = 200;
+
+// PATCH /api/v1/projects/:id/videos/:videoId — currently only title can change
+function validateVideoUpdate(req, res, next) {
+  const { title } = req.body;
+  const errors = [];
+
+  if (title !== undefined && title !== null) {
+    if (typeof title !== 'string')
+      errors.push('title must be a string');
+    else if (title.length > MAX_VIDEO_TITLE_LEN)
+      errors.push(`title must be at most ${MAX_VIDEO_TITLE_LEN} characters`);
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
+// PATCH /api/v1/projects/:id/videos/reorder
+function validateVideoReorder(req, res, next) {
+  const { order } = req.body;
+  const errors = [];
+
+  if (!Array.isArray(order) || order.length === 0) {
+    errors.push('order must be a non-empty array');
+  } else if (order.length > MAX_REORDER_LEN) {
+    errors.push(`order must contain at most ${MAX_REORDER_LEN} items`);
+  } else {
+    for (let i = 0; i < order.length; i++) {
+      const item = order[i];
+      if (typeof item !== 'object' || item === null) {
+        errors.push(`order[${i}] must be an object`); continue;
+      }
+      const id = Number(item.id);
+      const so = Number(item.sort_order);
+      if (!Number.isInteger(id) || id <= 0)
+        errors.push(`order[${i}].id must be a positive integer`);
+      if (!Number.isInteger(so) || so < 0)
+        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+    }
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
 // PATCH /api/v1/projects/:id/sections/reorder
 function validateSectionReorder(req, res, next) {
   const { order } = req.body;
@@ -445,6 +493,8 @@ module.exports = {
   validateReorder,
   validateSection,
   validateSectionReorder,
+  validateVideoUpdate,
+  validateVideoReorder,
   validateNews,
   ALLOWED_AVATARS,
 };

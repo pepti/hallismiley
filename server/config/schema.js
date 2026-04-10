@@ -239,6 +239,48 @@ const migrations = [
       `ALTER TABLE project_sections ADD COLUMN IF NOT EXISTS description TEXT`,
     ],
   },
+  {
+    // Dedicated Video section per project. Holds uploaded video files AND
+    // YouTube embeds. Position is per-project (above or below the photo
+    // gallery). Data-migrates any existing media_type='video' rows out of
+    // project_media into project_videos.
+    name: '015_project_videos',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS project_videos (
+        id          SERIAL      PRIMARY KEY,
+        project_id  INTEGER     NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind        TEXT        NOT NULL CHECK (kind IN ('file', 'youtube')),
+        file_path   TEXT,
+        youtube_id  TEXT,
+        title       TEXT,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT project_videos_payload_check CHECK (
+          (kind = 'file'    AND file_path  IS NOT NULL AND youtube_id IS NULL) OR
+          (kind = 'youtube' AND youtube_id IS NOT NULL AND file_path  IS NULL)
+        )
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_project_videos_project_id ON project_videos (project_id)`,
+      `ALTER TABLE projects ADD COLUMN IF NOT EXISTS video_section_position TEXT
+         NOT NULL DEFAULT 'above_gallery'`,
+      // CHECK constraint added separately so we can keep IF NOT EXISTS on the column
+      `DO $$ BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'projects_video_section_position_check'
+         ) THEN
+           ALTER TABLE projects ADD CONSTRAINT projects_video_section_position_check
+             CHECK (video_section_position IN ('above_gallery', 'below_gallery'));
+         END IF;
+       END $$`,
+      // Data migration — move existing video rows out of project_media.
+      // caption → title, keep the existing file path and sort_order.
+      `INSERT INTO project_videos (project_id, kind, file_path, title, sort_order, created_at)
+       SELECT project_id, 'file', file_path, caption, sort_order, created_at
+         FROM project_media
+        WHERE media_type = 'video'`,
+      `DELETE FROM project_media WHERE media_type = 'video'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
