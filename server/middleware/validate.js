@@ -236,7 +236,7 @@ const MAX_REORDER_LEN = 1000;
 
 // PATCH /api/v1/projects/:id/media/:mediaId
 function validateMediaUpdate(req, res, next) {
-  const { caption, sort_order } = req.body;
+  const { caption, sort_order, section_id } = req.body;
   const errors = [];
 
   if (caption !== undefined && caption !== null) {
@@ -250,6 +250,12 @@ function validateMediaUpdate(req, res, next) {
     const s = Number(sort_order);
     if (!Number.isInteger(s) || s < 0)
       errors.push('sort_order must be a non-negative integer');
+  }
+
+  if (section_id !== undefined && section_id !== null) {
+    const s = Number(section_id);
+    if (!Number.isInteger(s) || s <= 0)
+      errors.push('section_id must be a positive integer or null');
   }
 
   if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
@@ -274,6 +280,57 @@ function validateReorder(req, res, next) {
       }
       const id  = Number(item.id);
       const so  = Number(item.sort_order);
+      if (!Number.isInteger(id) || id <= 0)
+        errors.push(`order[${i}].id must be a positive integer`);
+      if (!Number.isInteger(so) || so < 0)
+        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+      if (item.section_id !== undefined && item.section_id !== null) {
+        const sid = Number(item.section_id);
+        if (!Number.isInteger(sid) || sid <= 0)
+          errors.push(`order[${i}].section_id must be a positive integer or null`);
+      }
+    }
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
+// ── Section validation ───────────────────────────────────────────────────────
+
+const MAX_SECTION_NAME_LEN = 80;
+
+// POST /api/v1/projects/:id/sections  and  PATCH /api/v1/projects/:id/sections/:sectionId
+function validateSection(req, res, next) {
+  const { name } = req.body;
+  const errors = [];
+
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    errors.push('name is required');
+  } else if (name.length > MAX_SECTION_NAME_LEN) {
+    errors.push(`name must be at most ${MAX_SECTION_NAME_LEN} characters`);
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
+// PATCH /api/v1/projects/:id/sections/reorder
+function validateSectionReorder(req, res, next) {
+  const { order } = req.body;
+  const errors = [];
+
+  if (!Array.isArray(order) || order.length === 0) {
+    errors.push('order must be a non-empty array');
+  } else {
+    for (let i = 0; i < order.length; i++) {
+      const item = order[i];
+      if (typeof item !== 'object' || item === null) {
+        errors.push(`order[${i}] must be an object`);
+        continue;
+      }
+      const id = Number(item.id);
+      const so = Number(item.sort_order);
       if (!Number.isInteger(id) || id <= 0)
         errors.push(`order[${i}].id must be a positive integer`);
       if (!Number.isInteger(so) || so < 0)
@@ -362,6 +419,8 @@ module.exports = {
   validatePasswordChange,
   validateMediaUpdate,
   validateReorder,
+  validateSection,
+  validateSectionReorder,
   validateNews,
   ALLOWED_AVATARS,
 };

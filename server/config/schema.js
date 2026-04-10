@@ -212,6 +212,25 @@ const migrations = [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ`,
     ],
   },
+  {
+    // Named sections within a project gallery (e.g. "Kitchen", "Living Room").
+    // section_id on project_media is nullable — legacy rows and freshly-uploaded
+    // unsorted media live in the "Ungrouped" bucket until an admin assigns them.
+    name: '013_project_sections',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS project_sections (
+        id          SERIAL      PRIMARY KEY,
+        project_id  INTEGER     NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name        TEXT        NOT NULL,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_project_sections_project_id ON project_sections (project_id)`,
+      `ALTER TABLE project_media ADD COLUMN IF NOT EXISTS section_id INTEGER
+         REFERENCES project_sections(id) ON DELETE SET NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_project_media_section_id ON project_media (section_id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

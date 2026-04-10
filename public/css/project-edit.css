@@ -364,3 +364,160 @@
 
 .pd-upload-status--error { color: #e06060; }
 .pd-upload-status--ok    { color: var(--gold); }
+
+/* ── Section toolbar (edit mode) ──────────────────────────────────────────── */
+
+.pd-section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(200, 170, 110, 0.18);
+}
+
+.pd-section-toolbar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.pd-section-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(200, 170, 110, 0.1);
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  color: var(--gold);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.pd-section-chip__name {
+  padding: 0 4px;
+}
+
+.pd-section-chip__move,
+.pd-section-chip__action {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--gold-light);
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition), background var(--transition);
+}
+
+.pd-section-chip__move:hover:not(:disabled),
+.pd-section-chip__action:hover {
+  background: rgba(200, 170, 110, 0.25);
+  color: var(--gold);
+}
+
+.pd-section-chip__move:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.pd-section-chip__action--danger {
+  color: #e06060;
+}
+
+.pd-section-chip__action--danger:hover {
+  background: rgba(200, 50, 50, 0.2);
+  color: #e06060;
+}
+
+.pd-section-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px dashed rgba(200, 170, 110, 0.4);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+
+.pd-section-add-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(200, 170, 110, 0.07);
+}
+
+/* ── Section group in edit mode — drop targets ───────────────────────────── */
+
+.pd-gallery-group--edit {
+  padding: var(--sp-2);
+  border: 2px dashed transparent;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.pd-gallery-group--edit .gallery-grid--edit.drop-active {
+  background: rgba(200, 170, 110, 0.06);
+}
+
+.pd-gallery-group--edit .gallery-grid--edit {
+  min-height: 60px;
+  padding: var(--sp-2);
+  border: 2px dashed rgba(200, 170, 110, 0.18);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.pd-gallery-group--edit .gallery-grid--edit.drop-active {
+  border-color: var(--gold);
+  background: rgba(200, 170, 110, 0.08);
+}
+
+.gallery-grid--empty {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 110px;
+}
+
+.gallery-grid__drop-hint {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* ── Upload target dropdown ──────────────────────────────────────────────── */
+
+.pd-add-media-wrap {
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.pd-upload-target-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}

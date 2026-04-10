@@ -4,17 +4,19 @@ const router  = express.Router();
 
 const projectController                          = require('../controllers/projectController');
 const { validateProject, validateQuery,
-        validateMediaUpdate, validateReorder }   = require('../middleware/validate');
+        validateMediaUpdate, validateReorder,
+        validateSection, validateSectionReorder } = require('../middleware/validate');
 const { requireAuth }                            = require('../auth/middleware');
 const { requireRole }                            = require('../auth/roles');
 const { csrfProtect }                            = require('../middleware/csrf');
 const { createProjectUpload }                    = require('../middleware/upload');
 
 // ── Public read endpoints (A03: query params validated) ───────────────────────
-router.get('/',          validateQuery, projectController.getAll);
-router.get('/featured',  projectController.getFeatured);
-router.get('/:id/media', projectController.getMedia);
-router.get('/:id',       projectController.getOne);
+router.get('/',             validateQuery, projectController.getAll);
+router.get('/featured',     projectController.getFeatured);
+router.get('/:id/media',    projectController.getMedia);
+router.get('/:id/sections', projectController.getSections);
+router.get('/:id',          projectController.getOne);
 
 // ── Project create / update (admin + moderator) ────────────────────────────────
 router.post('/',
@@ -62,6 +64,21 @@ router.patch('/:id/media/:mediaId',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateMediaUpdate,
   projectController.updateMedia);
 
+// ── Section management (admin + moderator) ────────────────────────────────────
+// /:id/sections/reorder must be declared BEFORE /:id/sections/:sectionId so
+// Express does not treat the literal string "reorder" as the sectionId param.
+router.patch('/:id/sections/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateSectionReorder,
+  projectController.reorderSections);
+
+router.post('/:id/sections',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateSection,
+  projectController.createSection);
+
+router.patch('/:id/sections/:sectionId',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateSection,
+  projectController.updateSection);
+
 // ── Delete (admin only) ────────────────────────────────────────────────────────
 router.delete('/:id',
   requireAuth, requireRole('admin'), csrfProtect,
@@ -70,5 +87,9 @@ router.delete('/:id',
 router.delete('/:id/media/:mediaId',
   requireAuth, requireRole('admin'), csrfProtect,
   projectController.deleteMedia);
+
+router.delete('/:id/sections/:sectionId',
+  requireAuth, requireRole('admin'), csrfProtect,
+  projectController.deleteSection);
 
 module.exports = router;

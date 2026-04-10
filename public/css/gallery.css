@@ -2,6 +2,33 @@
 
 .pd-gallery-section { margin-top: var(--sp-7); }
 
+/* ── Section groups (Kitchen / Living Room / …) ───────────────────────────── */
+
+.pd-gallery-group {
+  margin-block: var(--sp-6) var(--sp-7);
+}
+
+.pd-gallery-group:first-of-type { margin-top: var(--sp-4); }
+.pd-gallery-group:last-of-type  { margin-bottom: var(--sp-3); }
+
+.pd-gallery-group__heading {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: rgba(1, 10, 19, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.28);
+}
+
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

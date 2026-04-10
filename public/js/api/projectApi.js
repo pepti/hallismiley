@@ -105,4 +105,32 @@ export const projectApi = {
     if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
     return body;
   },
+
+  // ── Sections ──────────────────────────────────────────────────────────────
+
+  getSections: (projectId) => request(`${BASE}/${projectId}/sections`),
+
+  async createSection(projectId, name) {
+    return request(`${BASE}/${projectId}/sections`, {
+      method: 'POST', headers: await csrfHeaders(), body: JSON.stringify({ name }),
+    });
+  },
+
+  async renameSection(projectId, sectionId, name) {
+    return request(`${BASE}/${projectId}/sections/${sectionId}`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ name }),
+    });
+  },
+
+  async reorderSections(projectId, order) {
+    return request(`${BASE}/${projectId}/sections/reorder`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ order }),
+    });
+  },
+
+  async deleteSection(projectId, sectionId) {
+    return request(`${BASE}/${projectId}/sections/${sectionId}`, {
+      method: 'DELETE', headers: await csrfHeaders(),
+    });
+  },
 };

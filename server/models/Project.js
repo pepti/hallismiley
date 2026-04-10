@@ -96,4 +96,82 @@ class Project {
   }
 }
 
+// ── Project sections (named gallery groups) ──────────────────────────────────
+
+const SECTION_COLUMNS = 'id, project_id, name, sort_order, created_at';
+
+class ProjectSection {
+  static async list(projectId) {
+    const { rows } = await db.query(
+      `SELECT ${SECTION_COLUMNS}
+         FROM project_sections
+        WHERE project_id = $1
+        ORDER BY sort_order ASC, id ASC`,
+      [Number(projectId)]
+    );
+    return rows;
+  }
+
+  static async create(projectId, name) {
+    // New section goes to the end
+    const { rows: maxRows } = await db.query(
+      `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+         FROM project_sections WHERE project_id = $1`,
+      [Number(projectId)]
+    );
+    const nextOrder = maxRows[0].next;
+
+    const { rows } = await db.query(
+      `INSERT INTO project_sections (project_id, name, sort_order)
+       VALUES ($1, $2, $3)
+       RETURNING ${SECTION_COLUMNS}`,
+      [Number(projectId), name, nextOrder]
+    );
+    return rows[0];
+  }
+
+  static async rename(projectId, sectionId, name) {
+    const { rows } = await db.query(
+      `UPDATE project_sections
+          SET name = $1
+        WHERE id = $2 AND project_id = $3
+      RETURNING ${SECTION_COLUMNS}`,
+      [name, Number(sectionId), Number(projectId)]
+    );
+    return rows[0] || null;
+  }
+
+  static async reorder(projectId, order) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const item of order) {
+        await client.query(
+          `UPDATE project_sections
+              SET sort_order = $1
+            WHERE id = $2 AND project_id = $3`,
+          [Number(item.sort_order), Number(item.id), Number(projectId)]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    return ProjectSection.list(projectId);
+  }
+
+  static async delete(projectId, sectionId) {
+    // ON DELETE SET NULL on project_media.section_id preserves media
+    const { rowCount } = await db.query(
+      `DELETE FROM project_sections WHERE id = $1 AND project_id = $2`,
+      [Number(sectionId), Number(projectId)]
+    );
+    return rowCount > 0;
+  }
+}
+
 module.exports = Project;
+module.exports.ProjectSection = ProjectSection;

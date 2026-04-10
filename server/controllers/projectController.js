@@ -1,6 +1,7 @@
 const fs      = require('fs');
 const path    = require('path');
 const Project = require('../models/Project');
+const { ProjectSection } = require('../models/Project');
 const db      = require('../config/database');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 
@@ -15,7 +16,19 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
-const MEDIA_COLUMNS = 'id, project_id, file_path, media_type, sort_order, caption, created_at';
+const MEDIA_COLUMNS = 'id, project_id, file_path, media_type, sort_order, caption, section_id, created_at';
+
+// Parse an incoming section_id value (body/form) into a valid integer or null.
+// Returns { ok, value, error } — `ok: false` means the caller should 400.
+function _parseSectionId(raw) {
+  if (raw === undefined) return { ok: true, value: undefined }; // omit → don't touch
+  if (raw === null || raw === '' || raw === 'null') return { ok: true, value: null };
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    return { ok: false, error: 'section_id must be a positive integer or null' };
+  }
+  return { ok: true, value: n };
+}
 
 const projectController = {
   async getAll(req, res, next) {
@@ -67,11 +80,13 @@ const projectController = {
       const project = await Project.findById(req.params.id);
       if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
 
+      // NULLS FIRST so the "Ungrouped" bucket naturally precedes named sections
+      // in the flat array — frontend groups these client-side by section_id.
       const { rows } = await db.query(
         `SELECT ${MEDIA_COLUMNS}
          FROM project_media
          WHERE project_id = $1
-         ORDER BY sort_order ASC, id ASC`,
+         ORDER BY section_id ASC NULLS FIRST, sort_order ASC, id ASC`,
         [req.params.id]
       );
       res.json(rows);
@@ -121,11 +136,31 @@ const projectController = {
         sortOrder = sort_order !== undefined ? parseInt(sort_order, 10) : 0;
       }
 
+      // Optional section assignment (null = Ungrouped). Accept from both multipart body and JSON.
+      const parsedSection = _parseSectionId(req.body.section_id);
+      if (!parsedSection.ok) {
+        if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
+        return res.status(400).json({ error: parsedSection.error, code: 400 });
+      }
+      const sectionId = parsedSection.value ?? null;
+
+      // If a section was specified, verify it belongs to this project
+      if (sectionId !== null) {
+        const { rows: secRows } = await db.query(
+          `SELECT id FROM project_sections WHERE id = $1 AND project_id = $2`,
+          [sectionId, projectId]
+        );
+        if (!secRows[0]) {
+          if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
+          return res.status(400).json({ error: 'section_id does not belong to this project', code: 400 });
+        }
+      }
+
       const { rows } = await db.query(
-        `INSERT INTO project_media (project_id, file_path, media_type, sort_order, caption)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO project_media (project_id, file_path, media_type, sort_order, caption, section_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING ${MEDIA_COLUMNS}`,
-        [projectId, filePath, mediaType, sortOrder, caption]
+        [projectId, filePath, mediaType, sortOrder, caption, sectionId]
       );
       res.status(201).json(rows[0]);
     } catch (err) {
@@ -157,6 +192,23 @@ const projectController = {
       if (sort_order !== undefined) {
         params.push(parseInt(sort_order, 10));
         sets.push(`sort_order = $${params.length}`);
+      }
+
+      // Section assignment — null means "move back to Ungrouped"
+      if (req.body.section_id !== undefined) {
+        const parsed = _parseSectionId(req.body.section_id);
+        if (!parsed.ok) return res.status(400).json({ error: parsed.error, code: 400 });
+        if (parsed.value !== null) {
+          const { rows: secRows } = await db.query(
+            `SELECT id FROM project_sections WHERE id = $1 AND project_id = $2`,
+            [parsed.value, projectId]
+          );
+          if (!secRows[0]) {
+            return res.status(400).json({ error: 'section_id does not belong to this project', code: 400 });
+          }
+        }
+        params.push(parsed.value);
+        sets.push(`section_id = $${params.length}`);
       }
 
       if (sets.length === 0) {
@@ -213,7 +265,7 @@ const projectController = {
       const project = await Project.findById(projectId);
       if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
 
-      const { order } = req.body; // [{ id, sort_order }, ...]
+      const { order } = req.body; // [{ id, sort_order, section_id? }, ...]
 
       // Verify all supplied IDs belong to this project
       const ids = order.map(item => item.id);
@@ -228,15 +280,44 @@ const projectController = {
         });
       }
 
-      // Batch update inside a transaction
+      // Validate any supplied section_ids belong to this project. Collect the
+      // distinct non-null ones and check in a single query for efficiency.
+      const sectionIds = [...new Set(
+        order
+          .filter(item => item.section_id !== undefined && item.section_id !== null)
+          .map(item => Number(item.section_id))
+      )];
+      if (sectionIds.length) {
+        const { rows: secs } = await db.query(
+          `SELECT id FROM project_sections WHERE project_id = $1 AND id = ANY($2::int[])`,
+          [projectId, sectionIds]
+        );
+        if (secs.length !== sectionIds.length) {
+          return res.status(400).json({
+            error: 'One or more section IDs do not belong to this project',
+            code: 400,
+          });
+        }
+      }
+
+      // Batch update inside a transaction. If section_id is supplied on an
+      // item, update both columns; otherwise keep the existing section.
       const client = await db.pool.connect();
       try {
         await client.query('BEGIN');
         for (const item of order) {
-          await client.query(
-            'UPDATE project_media SET sort_order = $1 WHERE id = $2 AND project_id = $3',
-            [item.sort_order, item.id, projectId]
-          );
+          if (item.section_id !== undefined) {
+            const sid = item.section_id === null ? null : Number(item.section_id);
+            await client.query(
+              'UPDATE project_media SET sort_order = $1, section_id = $2 WHERE id = $3 AND project_id = $4',
+              [item.sort_order, sid, item.id, projectId]
+            );
+          } else {
+            await client.query(
+              'UPDATE project_media SET sort_order = $1 WHERE id = $2 AND project_id = $3',
+              [item.sort_order, item.id, projectId]
+            );
+          }
         }
         await client.query('COMMIT');
       } catch (err) {
@@ -250,10 +331,77 @@ const projectController = {
         `SELECT ${MEDIA_COLUMNS}
          FROM project_media
          WHERE project_id = $1
-         ORDER BY sort_order ASC, id ASC`,
+         ORDER BY section_id ASC NULLS FIRST, sort_order ASC, id ASC`,
         [projectId]
       );
       res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  // ── Section CRUD ───────────────────────────────────────────────────────────
+
+  async getSections(req, res, next) {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      res.json(await ProjectSection.list(req.params.id));
+    } catch (err) { next(err); }
+  },
+
+  async createSection(req, res, next) {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const section = await ProjectSection.create(req.params.id, req.body.name.trim());
+      res.status(201).json(section);
+    } catch (err) { next(err); }
+  },
+
+  async updateSection(req, res, next) {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const section = await ProjectSection.rename(
+        req.params.id, req.params.sectionId, req.body.name.trim()
+      );
+      if (!section) return res.status(404).json({ error: 'Section not found', code: 404 });
+      res.json(section);
+    } catch (err) { next(err); }
+  },
+
+  async reorderSections(req, res, next) {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const { order } = req.body;
+      const ids = order.map(i => Number(i.id));
+      const { rows: existing } = await db.query(
+        `SELECT id FROM project_sections WHERE project_id = $1 AND id = ANY($2::int[])`,
+        [req.params.id, ids]
+      );
+      if (existing.length !== ids.length) {
+        return res.status(400).json({
+          error: 'One or more section IDs do not belong to this project',
+          code: 400,
+        });
+      }
+
+      const sections = await ProjectSection.reorder(req.params.id, order);
+      res.json(sections);
+    } catch (err) { next(err); }
+  },
+
+  async deleteSection(req, res, next) {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+
+      const deleted = await ProjectSection.delete(req.params.id, req.params.sectionId);
+      if (!deleted) return res.status(404).json({ error: 'Section not found', code: 404 });
+      res.status(204).send();
     } catch (err) { next(err); }
   },
 

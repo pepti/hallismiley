@@ -12,14 +12,16 @@ const CATEGORY_HERO = {
 
 export class ProjectDetailView {
   constructor(id) {
-    this.id             = id;
-    this._lb            = null;
-    this._media         = [];
-    this._project       = null;
-    this._editMode      = false;
-    this._view          = null;
-    this._onAuthChange  = null;
-    this._actionsAbort  = null; // aborted on each re-render to avoid stacking listeners
+    this.id               = id;
+    this._lb              = null;
+    this._media           = [];
+    this._sections        = [];
+    this._uploadTargetSec = null; // currently-selected section for new uploads (null = Ungrouped)
+    this._project         = null;
+    this._editMode        = false;
+    this._view            = null;
+    this._onAuthChange    = null;
+    this._actionsAbort    = null; // aborted on each re-render to avoid stacking listeners
   }
 
   async render() {
@@ -34,14 +36,16 @@ export class ProjectDetailView {
     window.addEventListener('authchange', this._onAuthChange);
 
     try {
-      const [project, media] = await Promise.all([
+      const [project, media, sections] = await Promise.all([
         projectApi.getOne(this.id),
         projectApi.getMedia(this.id).catch(() => []),
+        projectApi.getSections(this.id).catch(() => []),
       ]);
       if (!project) throw new Error('Not found');
 
-      this._project = project;
-      this._media   = media || [];
+      this._project  = project;
+      this._media    = media    || [];
+      this._sections = sections || [];
       this._renderContent();
     } catch {
       this._view.innerHTML = `
@@ -77,9 +81,46 @@ export class ProjectDetailView {
     this._attachEventHandlers(this._view, canEdit, canDelete, this._actionsAbort.signal);
   }
 
+  // Group _media by section_id. Returns an array of buckets in render order:
+  // Ungrouped (null) first, then sections in their sort_order. Each bucket is
+  // { section, items }. Section === null is the Ungrouped bucket.
+  _groupBySection() {
+    const buckets = new Map(); // section_id|null → { section, items }
+    buckets.set(null, { section: null, items: [] });
+    for (const s of this._sections) {
+      buckets.set(s.id, { section: s, items: [] });
+    }
+    for (const m of this._media) {
+      const key = m.section_id ?? null;
+      const bucket = buckets.get(key) || buckets.get(null);
+      bucket.items.push(m);
+    }
+    return [...buckets.values()];
+  }
+
+  // Flatten buckets back into a single array in section-then-sort order so
+  // `data-gallery-index` lines up with Lightbox indices.
+  _flatInGroupOrder() {
+    const groups = this._groupBySection();
+    const flat = [];
+    for (const g of groups) flat.push(...g.items);
+    return flat;
+  }
+
   _buildPage(p, canEdit) {
     const heroImg  = p.image_url || CATEGORY_HERO[p.category] || CATEGORY_HERO.tech;
     const hasMedia = this._media.length > 0;
+
+    // Keep _media in the same order the Lightbox will walk through, so that
+    // data-gallery-index values match the array indices passed to the Lightbox.
+    this._media = this._flatInGroupOrder();
+
+    // Non-empty buckets only. If the only bucket is Ungrouped AND there are no
+    // named sections at all, skip the heading entirely so legacy projects look
+    // exactly like they did before sections existed.
+    const buckets = this._groupBySection().filter(g => g.items.length);
+    const legacyFlat = buckets.length === 1 && buckets[0].section === null && this._sections.length === 0;
+    let globalIndex = 0;
 
     return `
       <div class="pd-hero">
@@ -130,9 +171,18 @@ export class ProjectDetailView {
           ${hasMedia ? `
           <section class="pd-section pd-gallery-section" aria-label="Project gallery">
             <h2 class="pd-section__heading">Project Gallery</h2>
+            ${legacyFlat ? `
             <div class="gallery-grid" role="list">
-              ${this._media.map((item, i) => this._buildGridItem(item, i)).join('')}
+              ${buckets[0].items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
             </div>
+            ` : buckets.map(g => `
+            <section class="pd-gallery-group" data-section-id="${g.section ? g.section.id : ''}">
+              <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
+              <div class="gallery-grid" role="list">
+                ${g.items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
+              </div>
+            </section>
+            `).join('')}
           </section>` : ''}
 
           <div class="pd-back-wrap">
@@ -146,6 +196,18 @@ export class ProjectDetailView {
 
   _buildEditPage(p, canDelete) {
     const heroImg = p.image_url || CATEGORY_HERO[p.category] || CATEGORY_HERO.tech;
+
+    // Keep _media ordered the same way buckets iterate so index math is stable
+    this._media = this._flatInGroupOrder();
+    const buckets = this._groupBySection(); // includes empty Ungrouped bucket
+    let globalIndex = 0;
+
+    // Target section dropdown for new uploads (default: Ungrouped)
+    const uploadTargetOptions = `
+      <option value="">Ungrouped</option>
+      ${this._sections.map(s =>
+        `<option value="${s.id}" ${this._uploadTargetSec === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`
+      ).join('')}`;
 
     return `
       <div class="pd-edit-banner">
@@ -203,10 +265,54 @@ export class ProjectDetailView {
 
           <section class="pd-section pd-gallery-section" aria-label="Project gallery">
             <h2 class="pd-section__heading">Project Gallery</h2>
-            <div class="gallery-grid gallery-grid--edit" id="pd-edit-gallery" role="list">
-              ${this._media.map((item, i) => this._buildEditGridItem(item, i, canDelete)).join('')}
+
+            <div class="pd-section-toolbar">
+              <div class="pd-section-toolbar__chips">
+                ${this._sections.map((s, i) => `
+                  <div class="pd-section-chip" data-section-chip="${s.id}">
+                    <button class="pd-section-chip__move" type="button"
+                      data-action="section-up" data-section-id="${s.id}"
+                      ${i === 0 ? 'disabled' : ''} aria-label="Move section up">&#x25C0;</button>
+                    <span class="pd-section-chip__name">${escHtml(s.name)}</span>
+                    <button class="pd-section-chip__move" type="button"
+                      data-action="section-down" data-section-id="${s.id}"
+                      ${i === this._sections.length - 1 ? 'disabled' : ''} aria-label="Move section down">&#x25B6;</button>
+                    <button class="pd-section-chip__action" type="button"
+                      data-action="section-rename" data-section-id="${s.id}"
+                      aria-label="Rename section">&#x270E;</button>
+                    ${canDelete ? `
+                    <button class="pd-section-chip__action pd-section-chip__action--danger" type="button"
+                      data-action="section-delete" data-section-id="${s.id}"
+                      aria-label="Delete section">&times;</button>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+              <button class="pd-section-add-btn" type="button" id="pd-add-section-btn">
+                + Add Section
+              </button>
             </div>
+
+            ${buckets.map(g => {
+              const secId  = g.section ? g.section.id : '';
+              const isEmpty = g.items.length === 0;
+              return `
+              <section class="pd-gallery-group pd-gallery-group--edit" data-section-id="${secId}">
+                <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
+                <div class="gallery-grid gallery-grid--edit${isEmpty ? ' gallery-grid--empty' : ''}"
+                     data-section-id="${secId}" role="list">
+                  ${g.items.map(item => this._buildEditGridItem(item, globalIndex++, canDelete)).join('')}
+                  ${isEmpty ? '<div class="gallery-grid__drop-hint">Drag images here</div>' : ''}
+                </div>
+              </section>`;
+            }).join('')}
+
             <div class="pd-add-media-wrap">
+              <label class="pd-upload-target-label">
+                Upload into:
+                <select class="pd-edit-select" id="pd-upload-target">
+                  ${uploadTargetOptions}
+                </select>
+              </label>
               <button class="pd-add-media-btn" type="button" id="pd-add-media-btn">
                 + Add Image / Video
               </button>
@@ -266,7 +372,11 @@ export class ProjectDetailView {
 
   _buildEditGridItem(item, index, canDelete) {
     const isVideo = item.media_type === 'video';
-    const total   = this._media.length;
+
+    // Position within its section bucket (move-up/down is section-relative)
+    const sameSection = this._media.filter(m => (m.section_id ?? null) === (item.section_id ?? null));
+    const idxInSection  = sameSection.findIndex(m => m.id === item.id);
+    const lastInSection = sameSection.length - 1;
 
     const thumb = isVideo
       ? `<div class="gallery-grid__video-thumb" aria-hidden="true">
@@ -287,6 +397,7 @@ export class ProjectDetailView {
         role="listitem"
         data-media-id="${item.id}"
         data-media-index="${index}"
+        data-section-id="${item.section_id ?? ''}"
         draggable="true"
         tabindex="0"
       >
@@ -295,10 +406,10 @@ export class ProjectDetailView {
         <div class="gallery-grid__reorder">
           <button class="gallery-btn gallery-btn--order" type="button"
             data-action="move-up" data-media-id="${item.id}"
-            ${index === 0 ? 'disabled' : ''} aria-label="Move up">&#x25B2;</button>
+            ${idxInSection === 0 ? 'disabled' : ''} aria-label="Move up">&#x25B2;</button>
           <button class="gallery-btn gallery-btn--order" type="button"
             data-action="move-down" data-media-id="${item.id}"
-            ${index === total - 1 ? 'disabled' : ''} aria-label="Move down">&#x25BC;</button>
+            ${idxInSection === lastInSection ? 'disabled' : ''} aria-label="Move down">&#x25BC;</button>
         </div>
 
         <div class="gallery-grid__edit-controls">
@@ -363,12 +474,17 @@ export class ProjectDetailView {
     view.addEventListener('click', e => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
-      const action  = btn.dataset.action;
-      const mediaId = Number(btn.dataset.mediaId);
-      if (action === 'set-cover')    this._handleSetCover(mediaId);
-      if (action === 'delete-media') this._handleDeleteMedia(mediaId, canDelete);
-      if (action === 'move-up')      this._handleReorder(mediaId, -1);
-      if (action === 'move-down')    this._handleReorder(mediaId, +1);
+      const action    = btn.dataset.action;
+      const mediaId   = btn.dataset.mediaId   ? Number(btn.dataset.mediaId)   : null;
+      const sectionId = btn.dataset.sectionId ? Number(btn.dataset.sectionId) : null;
+      if (action === 'set-cover')      this._handleSetCover(mediaId);
+      if (action === 'delete-media')   this._handleDeleteMedia(mediaId, canDelete);
+      if (action === 'move-up')        this._handleReorder(mediaId, -1);
+      if (action === 'move-down')      this._handleReorder(mediaId, +1);
+      if (action === 'section-rename') this._handleRenameSection(sectionId);
+      if (action === 'section-delete') this._handleDeleteSection(sectionId, canDelete);
+      if (action === 'section-up')     this._handleReorderSection(sectionId, -1);
+      if (action === 'section-down')   this._handleReorderSection(sectionId, +1);
     }, { signal });
 
     // Drag-and-drop reorder for gallery items
@@ -382,6 +498,20 @@ export class ProjectDetailView {
       fileInput.addEventListener('change', () => {
         if (fileInput.files.length) this._handleFileUpload(fileInput.files[0], view);
       });
+    }
+
+    // Upload target selector — which section new uploads land in
+    const uploadTarget = view.querySelector('#pd-upload-target');
+    if (uploadTarget) {
+      uploadTarget.addEventListener('change', () => {
+        this._uploadTargetSec = uploadTarget.value ? Number(uploadTarget.value) : null;
+      });
+    }
+
+    // Add Section button
+    const addSectionBtn = view.querySelector('#pd-add-section-btn');
+    if (addSectionBtn) {
+      addSectionBtn.addEventListener('click', () => this._handleAddSection());
     }
   }
 
@@ -459,11 +589,26 @@ export class ProjectDetailView {
 
   // ── Reorder media ──────────────────────────────────────────────────────────
 
-  /** Debounced API persist — shared by arrow buttons and drag-and-drop */
+  /** Debounced API persist — shared by arrow buttons and drag-and-drop.
+   *  Writes both sort_order AND section_id for every item so a single commit
+   *  handles cross-section drops + intra-section reorders.  Sort-order values
+   *  are numbered per-section starting at 0 in the bucket iteration order. */
   _commitReorder() {
     clearTimeout(this._reorderTimer);
     this._reorderTimer = setTimeout(async () => {
-      const order = this._media.map((item, i) => ({ id: item.id, sort_order: i }));
+      // Re-number sort_order per section based on current bucket order
+      const buckets = this._groupBySection();
+      const order = [];
+      for (const g of buckets) {
+        g.items.forEach((item, i) => {
+          order.push({
+            id: item.id,
+            sort_order: i,
+            section_id: item.section_id ?? null,
+          });
+        });
+      }
+      if (order.length === 0) return;
       try {
         const reordered = await projectApi.reorderMedia(this._project.id, order);
         this._media = reordered;
@@ -474,14 +619,26 @@ export class ProjectDetailView {
   }
 
   _handleReorder(mediaId, direction) {
-    const idx = this._media.findIndex(m => m.id === mediaId);
-    if (idx === -1) return;
-    const targetIdx = idx + direction;
-    if (targetIdx < 0 || targetIdx >= this._media.length) return;
+    // Move within the item's own section bucket only
+    const item = this._media.find(m => m.id === mediaId);
+    if (!item) return;
+    const secId = item.section_id ?? null;
 
-    const arr = [...this._media];
-    [arr[idx], arr[targetIdx]] = [arr[targetIdx], arr[idx]];
-    this._media = arr.map((item, i) => ({ ...item, sort_order: i }));
+    // Split into sameSection items and "the rest"
+    const buckets = this._groupBySection();
+    const bucket = buckets.find(g => (g.section ? g.section.id : null) === secId);
+    if (!bucket) return;
+
+    const idxInSection = bucket.items.findIndex(m => m.id === mediaId);
+    const target = idxInSection + direction;
+    if (target < 0 || target >= bucket.items.length) return;
+
+    // Swap inside bucket
+    [bucket.items[idxInSection], bucket.items[target]] =
+      [bucket.items[target], bucket.items[idxInSection]];
+
+    // Rebuild _media from buckets so Lightbox order stays in sync
+    this._media = buckets.flatMap(g => g.items);
     this._renderContent();
     this._commitReorder();
   }
@@ -489,68 +646,175 @@ export class ProjectDetailView {
   // ── Drag-and-drop reorder ─────────────────────────────────────────────────
 
   _attachDragReorder(view) {
-    const grid = view.querySelector('.gallery-grid--edit');
-    if (!grid) return;
+    const grids = view.querySelectorAll('.gallery-grid--edit');
+    if (!grids.length) return;
 
     let dragMediaId = null;
 
-    grid.addEventListener('dragstart', e => {
-      const item = e.target.closest('.gallery-grid__item');
-      if (!item) return;
-      dragMediaId = Number(item.dataset.mediaId);
-      item.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      // Use a transparent 1x1 image so the browser's ghost doesn't obscure the grid
-      const ghost = document.createElement('canvas');
-      ghost.width = 1; ghost.height = 1;
-      e.dataTransfer.setDragImage(ghost, 0, 0);
+    // Helpers scoped to view
+    const clearIndicators = () => {
+      view.querySelectorAll('.drag-over, .dragging, .drop-active').forEach(el =>
+        el.classList.remove('drag-over', 'dragging', 'drop-active'));
+    };
+    const parseSecId = (raw) => {
+      if (raw === undefined || raw === null || raw === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    grids.forEach(grid => {
+      grid.addEventListener('dragstart', e => {
+        const item = e.target.closest('.gallery-grid__item');
+        if (!item) return;
+        dragMediaId = Number(item.dataset.mediaId);
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        // Use a transparent 1x1 image so the browser's ghost doesn't obscure the grid
+        const ghost = document.createElement('canvas');
+        ghost.width = 1; ghost.height = 1;
+        e.dataTransfer.setDragImage(ghost, 0, 0);
+      });
+
+      grid.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        // Clear stale indicators across all grids then highlight this grid
+        view.querySelectorAll('.drag-over, .drop-active').forEach(el =>
+          el.classList.remove('drag-over', 'drop-active'));
+        grid.classList.add('drop-active');
+
+        const overItem = e.target.closest('.gallery-grid__item');
+        if (overItem && Number(overItem.dataset.mediaId) !== dragMediaId) {
+          overItem.classList.add('drag-over');
+        }
+      });
+
+      grid.addEventListener('dragleave', e => {
+        // Only clear highlights if we've actually left the grid (not between children)
+        if (!grid.contains(e.relatedTarget)) {
+          grid.classList.remove('drop-active');
+          grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+      });
+
+      grid.addEventListener('drop', e => {
+        e.preventDefault();
+        if (dragMediaId === null) return;
+
+        const fromIdx = this._media.findIndex(m => m.id === dragMediaId);
+        if (fromIdx === -1) { clearIndicators(); dragMediaId = null; return; }
+
+        const targetSecId = parseSecId(grid.dataset.sectionId);
+        const overItem    = e.target.closest('.gallery-grid__item');
+
+        // Remove dragged item from its current position
+        const arr = [...this._media];
+        const [moved] = arr.splice(fromIdx, 1);
+        moved.section_id = targetSecId;
+
+        // Insertion index: before overItem if dropped on a thumbnail,
+        // else append at end of target section bucket.
+        let insertAt;
+        if (overItem && Number(overItem.dataset.mediaId) !== dragMediaId) {
+          insertAt = arr.findIndex(m => m.id === Number(overItem.dataset.mediaId));
+          if (insertAt === -1) insertAt = arr.length;
+        } else {
+          // Find last index of target section bucket; append after it.
+          let lastIdx = -1;
+          for (let i = 0; i < arr.length; i++) {
+            if ((arr[i].section_id ?? null) === targetSecId) lastIdx = i;
+          }
+          insertAt = lastIdx + 1;
+          // If target section has no items yet, splice at first position
+          // *after* all items of earlier sections. _flatInGroupOrder will fix
+          // ordering on the next render anyway.
+          if (lastIdx === -1) insertAt = arr.length;
+        }
+
+        arr.splice(insertAt, 0, moved);
+        this._media = arr;
+        clearIndicators();
+        dragMediaId = null;
+        this._renderContent();
+        this._commitReorder();
+      });
+
+      grid.addEventListener('dragend', () => {
+        clearIndicators();
+        dragMediaId = null;
+      });
     });
+  }
 
-    grid.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+  // ── Section CRUD ───────────────────────────────────────────────────────────
 
-      const target = e.target.closest('.gallery-grid__item');
-      // Clear previous drag-over indicators
-      grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-      if (target && Number(target.dataset.mediaId) !== dragMediaId) {
-        target.classList.add('drag-over');
-      }
-    });
-
-    grid.addEventListener('dragleave', e => {
-      const target = e.target.closest('.gallery-grid__item');
-      if (target) target.classList.remove('drag-over');
-    });
-
-    grid.addEventListener('drop', e => {
-      e.preventDefault();
-      grid.querySelectorAll('.drag-over, .dragging').forEach(el =>
-        el.classList.remove('drag-over', 'dragging'));
-
-      const target = e.target.closest('.gallery-grid__item');
-      if (!target) return;
-      const dropMediaId = Number(target.dataset.mediaId);
-      if (dropMediaId === dragMediaId) return;
-
-      const fromIdx = this._media.findIndex(m => m.id === dragMediaId);
-      const toIdx   = this._media.findIndex(m => m.id === dropMediaId);
-      if (fromIdx === -1 || toIdx === -1) return;
-
-      // Move the dragged item to the drop position
-      const arr = [...this._media];
-      const [moved] = arr.splice(fromIdx, 1);
-      arr.splice(toIdx, 0, moved);
-      this._media = arr.map((item, i) => ({ ...item, sort_order: i }));
+  async _handleAddSection() {
+    const name = prompt('Section name (e.g. Kitchen, Living Room):');
+    if (!name || !name.trim()) return;
+    try {
+      const created = await projectApi.createSection(this._project.id, name.trim());
+      this._sections = [...this._sections, created];
       this._renderContent();
-      this._commitReorder();
-    });
+    } catch (err) {
+      alert('Could not create section: ' + err.message);
+    }
+  }
 
-    grid.addEventListener('dragend', () => {
-      grid.querySelectorAll('.drag-over, .dragging').forEach(el =>
-        el.classList.remove('drag-over', 'dragging'));
-      dragMediaId = null;
-    });
+  async _handleRenameSection(sectionId) {
+    const current = this._sections.find(s => s.id === sectionId);
+    if (!current) return;
+    const name = prompt('Rename section:', current.name);
+    if (!name || !name.trim() || name.trim() === current.name) return;
+    try {
+      const updated = await projectApi.renameSection(this._project.id, sectionId, name.trim());
+      this._sections = this._sections.map(s => s.id === sectionId ? updated : s);
+      this._renderContent();
+    } catch (err) {
+      alert('Could not rename section: ' + err.message);
+    }
+  }
+
+  async _handleDeleteSection(sectionId, canDelete) {
+    if (!canDelete) return;
+    const current = this._sections.find(s => s.id === sectionId);
+    if (!current) return;
+    const affected = this._media.filter(m => m.section_id === sectionId).length;
+    const msg = affected === 0
+      ? `Delete section "${current.name}"?`
+      : `Delete section "${current.name}"? ${affected} photo(s) will move back to Ungrouped.`;
+    if (!confirm(msg)) return;
+    try {
+      await projectApi.deleteSection(this._project.id, sectionId);
+      this._sections = this._sections.filter(s => s.id !== sectionId);
+      // Reflect FK ON DELETE SET NULL locally so the UI updates immediately
+      this._media = this._media.map(m =>
+        m.section_id === sectionId ? { ...m, section_id: null } : m
+      );
+      this._renderContent();
+    } catch (err) {
+      alert('Could not delete section: ' + err.message);
+    }
+  }
+
+  async _handleReorderSection(sectionId, direction) {
+    const idx = this._sections.findIndex(s => s.id === sectionId);
+    if (idx === -1) return;
+    const target = idx + direction;
+    if (target < 0 || target >= this._sections.length) return;
+
+    const arr = [...this._sections];
+    [arr[idx], arr[target]] = [arr[target], arr[idx]];
+    this._sections = arr.map((s, i) => ({ ...s, sort_order: i }));
+    this._renderContent();
+
+    try {
+      const payload = this._sections.map((s, i) => ({ id: s.id, sort_order: i }));
+      const updated = await projectApi.reorderSections(this._project.id, payload);
+      this._sections = updated;
+    } catch (err) {
+      alert('Could not reorder sections: ' + err.message);
+    }
   }
 
   // ── File upload ────────────────────────────────────────────────────────────
@@ -577,6 +841,9 @@ export class ProjectDetailView {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('sort_order', String(this._media.length));
+    if (this._uploadTargetSec !== null && this._uploadTargetSec !== undefined) {
+      formData.append('section_id', String(this._uploadTargetSec));
+    }
 
     try {
       const newItem = await projectApi.addMedia(this._project.id, formData);
