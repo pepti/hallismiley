@@ -299,16 +299,40 @@ function validateReorder(req, res, next) {
 // ── Section validation ───────────────────────────────────────────────────────
 
 const MAX_SECTION_NAME_LEN = 80;
+const MAX_SECTION_DESC_LEN = 2000;
 
 // POST /api/v1/projects/:id/sections  and  PATCH /api/v1/projects/:id/sections/:sectionId
+// POST: name is required. PATCH: at least one of name/description must be supplied.
 function validateSection(req, res, next) {
-  const { name } = req.body;
+  const { name, description } = req.body;
   const errors = [];
+  const isPOST = req.method === 'POST';
 
-  if (typeof name !== 'string' || name.trim().length === 0) {
-    errors.push('name is required');
-  } else if (name.length > MAX_SECTION_NAME_LEN) {
-    errors.push(`name must be at most ${MAX_SECTION_NAME_LEN} characters`);
+  if (isPOST) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      errors.push('name is required');
+    }
+  } else {
+    // PATCH — must include at least one editable field
+    if (name === undefined && description === undefined) {
+      errors.push('at least one of name or description is required');
+    }
+  }
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      errors.push('name must be a non-empty string');
+    } else if (name.length > MAX_SECTION_NAME_LEN) {
+      errors.push(`name must be at most ${MAX_SECTION_NAME_LEN} characters`);
+    }
+  }
+
+  if (description !== undefined && description !== null) {
+    if (typeof description !== 'string') {
+      errors.push('description must be a string');
+    } else if (description.length > MAX_SECTION_DESC_LEN) {
+      errors.push(`description must be at most ${MAX_SECTION_DESC_LEN} characters`);
+    }
   }
 
   if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });

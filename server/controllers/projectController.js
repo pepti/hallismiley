@@ -353,7 +353,9 @@ const projectController = {
       const project = await Project.findById(req.params.id);
       if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
 
-      const section = await ProjectSection.create(req.params.id, req.body.name.trim());
+      const name        = req.body.name.trim();
+      const description = req.body.description != null ? String(req.body.description) : null;
+      const section = await ProjectSection.create(req.params.id, name, description);
       res.status(201).json(section);
     } catch (err) { next(err); }
   },
@@ -363,9 +365,11 @@ const projectController = {
       const project = await Project.findById(req.params.id);
       if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
 
-      const section = await ProjectSection.rename(
-        req.params.id, req.params.sectionId, req.body.name.trim()
-      );
+      const patch = {};
+      if (req.body.name !== undefined)        patch.name        = req.body.name.trim();
+      if (req.body.description !== undefined) patch.description = req.body.description;
+
+      const section = await ProjectSection.update(req.params.id, req.params.sectionId, patch);
       if (!section) return res.status(404).json({ error: 'Section not found', code: 404 });
       res.json(section);
     } catch (err) { next(err); }

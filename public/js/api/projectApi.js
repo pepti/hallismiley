@@ -110,16 +110,23 @@ export const projectApi = {
 
   getSections: (projectId) => request(`${BASE}/${projectId}/sections`),
 
-  async createSection(projectId, name) {
+  async createSection(projectId, name, description) {
+    const body = { name };
+    if (description !== undefined) body.description = description;
     return request(`${BASE}/${projectId}/sections`, {
-      method: 'POST', headers: await csrfHeaders(), body: JSON.stringify({ name }),
+      method: 'POST', headers: await csrfHeaders(), body: JSON.stringify(body),
     });
   },
 
-  async renameSection(projectId, sectionId, name) {
+  async updateSection(projectId, sectionId, patch) {
     return request(`${BASE}/${projectId}/sections/${sectionId}`, {
-      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ name }),
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify(patch),
     });
+  },
+
+  // Backwards-compat alias (older callers did renameSection)
+  async renameSection(projectId, sectionId, name) {
+    return this.updateSection(projectId, sectionId, { name });
   },
 
   async reorderSections(projectId, order) {

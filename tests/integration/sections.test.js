@@ -358,6 +358,92 @@ describe('PATCH /api/v1/projects/:id/media/:mediaId (section_id field)', () => {
   });
 });
 
+// ── Section description field ────────────────────────────────────────────────
+
+describe('section description field', () => {
+  test('GET /sections returns description (null by default)', async () => {
+    const sec = await seedSection('Kitchen');
+    const res = await request(app).get(`/api/v1/projects/${projectId}/sections`);
+    expect(res.status).toBe(200);
+    const found = res.body.find(s => s.id === sec.id);
+    expect(found).toHaveProperty('description');
+    expect(found.description).toBeNull();
+  });
+
+  test('POST /sections accepts description on creation', async () => {
+    const res = await request(app)
+      .post(`/api/v1/projects/${projectId}/sections`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Kitchen', description: 'The heart of the home.' });
+    expect(res.status).toBe(201);
+    expect(res.body.description).toBe('The heart of the home.');
+  });
+
+  test('PATCH /sections/:sectionId updates description', async () => {
+    const sec = await seedSection('Kitchen');
+    const res = await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', adminCookie)
+      .send({ description: 'Oak cabinets, black granite counters.' });
+    expect(res.status).toBe(200);
+    expect(res.body.description).toBe('Oak cabinets, black granite counters.');
+    // Name must still be present and unchanged
+    expect(res.body.name).toBe('Kitchen');
+  });
+
+  test('PATCH with null description clears it', async () => {
+    const sec = await seedSection('Kitchen');
+    await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', adminCookie)
+      .send({ description: 'some text' });
+    const res = await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', adminCookie)
+      .send({ description: null });
+    expect(res.status).toBe(200);
+    expect(res.body.description).toBeNull();
+  });
+
+  test('PATCH with description only (no name) works', async () => {
+    const sec = await seedSection('Kitchen');
+    const res = await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', adminCookie)
+      .send({ description: 'Description only.' });
+    expect(res.status).toBe(200);
+    expect(res.body.description).toBe('Description only.');
+  });
+
+  test('PATCH with no fields at all is rejected', async () => {
+    const sec = await seedSection('Kitchen');
+    const res = await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', adminCookie)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('description exceeding max length is rejected', async () => {
+    const sec = await seedSection('Kitchen');
+    const huge = 'x'.repeat(2001);
+    const res = await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', adminCookie)
+      .send({ description: huge });
+    expect(res.status).toBe(400);
+  });
+
+  test('regular user cannot update description', async () => {
+    const sec = await seedSection('Kitchen');
+    const res = await request(app)
+      .patch(`/api/v1/projects/${projectId}/sections/${sec.id}`)
+      .set('Cookie', userCookie)
+      .send({ description: 'nope' });
+    expect(res.status).toBe(403);
+  });
+});
+
 // ── GET /api/v1/projects/:id/media — includes section_id and orders by it ───
 
 describe('GET /api/v1/projects/:id/media (with sections)', () => {

@@ -29,6 +29,20 @@
   border-bottom: 1px solid rgba(200, 170, 110, 0.28);
 }
 
+/* Optional description paragraph shown below a section heading.
+   The JS only renders the element when description is non-empty, so
+   there is nothing to hide for empty sections — the element is absent. */
+.pd-gallery-group__description {
+  margin: 0 0 var(--sp-4);
+  padding: 0 var(--sp-3);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  max-width: 68ch;
+  white-space: pre-wrap;
+}
+
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

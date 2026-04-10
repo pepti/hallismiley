@@ -231,6 +231,14 @@ const migrations = [
       `CREATE INDEX IF NOT EXISTS idx_project_media_section_id ON project_media (section_id)`,
     ],
   },
+  {
+    // Optional free-text description shown under each section heading.
+    // Empty / NULL description means the paragraph is not rendered to visitors.
+    name: '014_project_section_description',
+    statements: [
+      `ALTER TABLE project_sections ADD COLUMN IF NOT EXISTS description TEXT`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

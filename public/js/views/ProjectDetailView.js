@@ -175,14 +175,18 @@ export class ProjectDetailView {
             <div class="gallery-grid" role="list">
               ${buckets[0].items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
             </div>
-            ` : buckets.map(g => `
-            <section class="pd-gallery-group" data-section-id="${g.section ? g.section.id : ''}">
-              <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
-              <div class="gallery-grid" role="list">
-                ${g.items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
-              </div>
-            </section>
-            `).join('')}
+            ` : buckets.map(g => {
+              const desc = g.section && g.section.description && g.section.description.trim();
+              return `
+              <section class="pd-gallery-group" data-section-id="${g.section ? g.section.id : ''}">
+                <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
+                ${desc ? `<p class="pd-gallery-group__description">${escHtml(desc)}</p>` : ''}
+                <div class="gallery-grid" role="list">
+                  ${g.items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
+                </div>
+              </section>
+              `;
+            }).join('')}
           </section>` : ''}
 
           <div class="pd-back-wrap">
@@ -293,11 +297,20 @@ export class ProjectDetailView {
             </div>
 
             ${buckets.map(g => {
-              const secId  = g.section ? g.section.id : '';
+              const secId   = g.section ? g.section.id : '';
               const isEmpty = g.items.length === 0;
+              const descVal = g.section && g.section.description ? g.section.description : '';
               return `
               <section class="pd-gallery-group pd-gallery-group--edit" data-section-id="${secId}">
                 <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
+                ${g.section ? `
+                <textarea
+                  class="pd-edit-field pd-gallery-group__description-edit"
+                  data-section-desc-id="${g.section.id}"
+                  rows="2"
+                  maxlength="2000"
+                  placeholder="Add a description for this section (optional)…"
+                >${escHtml(descVal)}</textarea>` : ''}
                 <div class="gallery-grid gallery-grid--edit${isEmpty ? ' gallery-grid--empty' : ''}"
                      data-section-id="${secId}" role="list">
                   ${g.items.map(item => this._buildEditGridItem(item, globalIndex++, canDelete)).join('')}
@@ -513,6 +526,18 @@ export class ProjectDetailView {
     if (addSectionBtn) {
       addSectionBtn.addEventListener('click', () => this._handleAddSection());
     }
+
+    // Section description textareas — persist on blur (and update in-memory state)
+    view.querySelectorAll('[data-section-desc-id]').forEach(ta => {
+      ta.addEventListener('blur', () => {
+        const id = Number(ta.dataset.sectionDescId);
+        const current = this._sections.find(s => s.id === id);
+        if (!current) return;
+        const newDesc = ta.value;
+        if ((current.description || '') === newDesc) return; // no change
+        this._handleUpdateSectionDescription(id, newDesc);
+      });
+    });
   }
 
   // ── Save text fields ───────────────────────────────────────────────────────
@@ -767,11 +792,21 @@ export class ProjectDetailView {
     const name = prompt('Rename section:', current.name);
     if (!name || !name.trim() || name.trim() === current.name) return;
     try {
-      const updated = await projectApi.renameSection(this._project.id, sectionId, name.trim());
+      const updated = await projectApi.updateSection(this._project.id, sectionId, { name: name.trim() });
       this._sections = this._sections.map(s => s.id === sectionId ? updated : s);
       this._renderContent();
     } catch (err) {
       alert('Could not rename section: ' + err.message);
+    }
+  }
+
+  async _handleUpdateSectionDescription(sectionId, description) {
+    try {
+      const updated = await projectApi.updateSection(this._project.id, sectionId, { description });
+      // Update state in place without a full re-render — the textarea is already in sync
+      this._sections = this._sections.map(s => s.id === sectionId ? updated : s);
+    } catch (err) {
+      alert('Could not save section description: ' + err.message);
     }
   }
 

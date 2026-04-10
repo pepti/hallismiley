@@ -98,7 +98,7 @@ class Project {
 
 // ── Project sections (named gallery groups) ──────────────────────────────────
 
-const SECTION_COLUMNS = 'id, project_id, name, sort_order, created_at';
+const SECTION_COLUMNS = 'id, project_id, name, description, sort_order, created_at';
 
 class ProjectSection {
   static async list(projectId) {
@@ -112,7 +112,7 @@ class ProjectSection {
     return rows;
   }
 
-  static async create(projectId, name) {
+  static async create(projectId, name, description = null) {
     // New section goes to the end
     const { rows: maxRows } = await db.query(
       `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
@@ -122,23 +122,49 @@ class ProjectSection {
     const nextOrder = maxRows[0].next;
 
     const { rows } = await db.query(
-      `INSERT INTO project_sections (project_id, name, sort_order)
-       VALUES ($1, $2, $3)
+      `INSERT INTO project_sections (project_id, name, description, sort_order)
+       VALUES ($1, $2, $3, $4)
        RETURNING ${SECTION_COLUMNS}`,
-      [Number(projectId), name, nextOrder]
+      [Number(projectId), name, description, nextOrder]
     );
     return rows[0];
   }
 
-  static async rename(projectId, sectionId, name) {
+  // Partial update — any of { name, description } may be provided
+  static async update(projectId, sectionId, { name, description }) {
+    const sets = [];
+    const params = [];
+    if (name !== undefined) {
+      params.push(name);
+      sets.push(`name = $${params.length}`);
+    }
+    if (description !== undefined) {
+      params.push(description);
+      sets.push(`description = $${params.length}`);
+    }
+    if (sets.length === 0) {
+      // Nothing to change — return current row
+      const { rows } = await db.query(
+        `SELECT ${SECTION_COLUMNS} FROM project_sections WHERE id = $1 AND project_id = $2`,
+        [Number(sectionId), Number(projectId)]
+      );
+      return rows[0] || null;
+    }
+    params.push(Number(sectionId));
+    params.push(Number(projectId));
     const { rows } = await db.query(
       `UPDATE project_sections
-          SET name = $1
-        WHERE id = $2 AND project_id = $3
+          SET ${sets.join(', ')}
+        WHERE id = $${params.length - 1} AND project_id = $${params.length}
       RETURNING ${SECTION_COLUMNS}`,
-      [name, Number(sectionId), Number(projectId)]
+      params
     );
     return rows[0] || null;
+  }
+
+  // Backwards-compat alias used by older controller references
+  static async rename(projectId, sectionId, name) {
+    return ProjectSection.update(projectId, sectionId, { name });
   }
 
   static async reorder(projectId, order) {

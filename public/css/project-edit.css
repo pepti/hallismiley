@@ -504,6 +504,46 @@
   pointer-events: none;
 }
 
+/* ── Section description textarea (edit mode) ───────────────────────────── */
+
+/* Inline-editable description that sits between the section heading and its
+   grid. In view mode the description is only rendered when non-empty, so there
+   is no matching .pd-gallery-group__description styling to override here. */
+.pd-gallery-group__description-edit {
+  display: block;
+  width: 100%;
+  max-width: 68ch;
+  margin: 0 0 var(--sp-3);
+  resize: vertical;
+  min-height: 44px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(200, 170, 110, 0.25);
+  padding: var(--sp-2) var(--sp-3);
+  box-sizing: border-box;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.pd-gallery-group__description-edit::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.pd-gallery-group__description-edit:hover {
+  border-color: rgba(200, 170, 110, 0.4);
+}
+
+.pd-gallery-group__description-edit:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.05);
+}
+
 /* ── Upload target dropdown ──────────────────────────────────────────────── */
 
 .pd-add-media-wrap {
