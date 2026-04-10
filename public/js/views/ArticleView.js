@@ -120,26 +120,48 @@ export class ArticleView {
       const user = getUser();
       const isEditor = user && ['admin', 'moderator'].includes(user.role);
 
-      // Admins/moderators can preview unpublished articles
-      const endpoint = isEditor
-        ? `/api/v1/news/${encodeURIComponent(this._slug)}/preview`
-        : `/api/v1/news/${encodeURIComponent(this._slug)}`;
+      const publicUrl  = `/api/v1/news/${encodeURIComponent(this._slug)}`;
+      const previewUrl = `${publicUrl}/preview`;
 
-      const res = await fetch(endpoint, { credentials: 'include' });
+      // Strategy: always try the PUBLIC endpoint first. Every published article
+      // lives there and it needs no auth, so the common case is one unconditional
+      // fetch that can't return 401/403. Only if the public endpoint returns 404
+      // AND the viewer is an editor do we fall back to /preview — that's the
+      // draft-preview path. This avoids the old failure mode where a stale
+      // client-side session (or an expired cookie) caused /preview to 401 and
+      // killed the page for signed-in editors looking at already-published posts.
+      let res = await fetch(publicUrl, { credentials: 'include' });
+
+      if (res.status === 404 && isEditor) {
+        // Maybe it's a draft — try the auth-gated preview endpoint.
+        const previewRes = await fetch(previewUrl, { credentials: 'include' });
+        if (previewRes.ok) {
+          res = previewRes;
+        } else if (previewRes.status === 404) {
+          this._view.innerHTML = this._notFound();
+          return this._view;
+        }
+        // If preview returned 401/403 the session is stale — fall through
+        // and show 404 (below) since the article isn't publicly visible.
+      }
 
       if (res.status === 404) {
         this._view.innerHTML = this._notFound();
         return this._view;
       }
-      if (!res.ok) throw new Error('Failed to load article');
+      if (!res.ok) throw new Error(`Failed to load article (HTTP ${res.status})`);
 
       this._article = await res.json();
       this._view.innerHTML = this._render(isEditor);
       this._bindActions();
-    } catch {
+    } catch (err) {
+      console.error('[ArticleView] Failed to load article:', err);
       this._view.innerHTML = `
         <div class="article-page__inner">
-          <p class="article-page__error">Could not load this article. <a href="#/news">Back to News</a></p>
+          <p class="article-page__error">
+            Could not load this article${err && err.message ? ` — ${_esc(err.message)}` : ''}.
+            <a href="#/news">Back to News</a>
+          </p>
         </div>`;
     }
 

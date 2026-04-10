@@ -142,7 +142,7 @@ const newsController = {
            (title, slug, summary, body, cover_image, category, author_id, published, published_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
-        [title, slug, summary, body, cover_image, category, req.user.userId, published, published_at]
+        [title, slug, summary, body, cover_image, category, req.user.id, published, published_at]
       );
 
       res.status(201).json(rows[0]);
