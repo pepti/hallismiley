@@ -116,26 +116,26 @@ router.patch('/:id/videos/:videoId',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect, validateVideoUpdate,
   projectController.updateVideo);
 
-// ── Delete (admin only) ────────────────────────────────────────────────────────
+// ── Delete (admin + moderator) ─────────────────────────────────────────────────
 router.delete('/:id',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   projectController.remove);
 
 router.delete('/:id/media/:mediaId',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   projectController.deleteMedia);
 
 router.delete('/:id/sections/:sectionId',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   projectController.deleteSection);
 
 // Clear-all must come BEFORE /:id/videos/:videoId so "videos" isn't treated as an id
 router.delete('/:id/videos',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   projectController.deleteVideoSection);
 
 router.delete('/:id/videos/:videoId',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   projectController.deleteVideo);
 
 module.exports = router;

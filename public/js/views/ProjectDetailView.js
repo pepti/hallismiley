@@ -72,7 +72,7 @@ export class ProjectDetailView {
 
     const user      = getUser();
     const canEdit   = !!(user && (user.role === 'admin' || user.role === 'moderator'));
-    const canDelete = !!(user && user.role === 'admin');
+    const canDelete = canEdit;
 
     this._view.innerHTML = this._editMode
       ? this._buildEditPage(this._project, canDelete)

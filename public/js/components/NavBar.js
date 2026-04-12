@@ -37,7 +37,7 @@ export class NavBar {
         <a href="#/projects" class="lol-nav__link" data-route="/projects">Projects</a>
         <a href="#/news" class="lol-nav__link" data-route="/news">News</a>
         <a href="#/halli" class="lol-nav__link" data-route="/halli">Halli</a>
-        <a href="#/" class="lol-nav__link" data-scroll="contact">Contact</a>
+        <a href="#/contact" class="lol-nav__link" data-route="/contact">Contact</a>
         <a href="#/party" class="lol-nav__link lol-nav__party-link" data-route="/party"
            id="nav-party-link" style="display:none" aria-label="Halli's 40th Birthday Party">🎂 Party</a>
       </div>

@@ -217,12 +217,12 @@ describe('DELETE /api/v1/projects/:id/sections/:sectionId', () => {
     expect(res.status).toBe(204);
   });
 
-  test('moderator gets 403 on delete (admin only)', async () => {
+  test('moderator can delete a section — 204', async () => {
     const sec = await seedSection('Kitchen');
     const res = await request(app)
       .delete(`/api/v1/projects/${projectId}/sections/${sec.id}`)
       .set('Cookie', modCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(204);
   });
 
   test('deleting a section detaches its media (section_id → null)', async () => {

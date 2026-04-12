@@ -1,4 +1,4 @@
-import { isAuthenticated, getUser, isAdmin } from '../services/auth.js';
+import { isAuthenticated, getUser, isAdmin, canEdit } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
@@ -45,8 +45,15 @@ export class PartyView {
       return el;
     }
 
-    if (!getUser()?.email_verified) {
+    if (!getUser()?.email_verified && !this._skipVerification) {
       el.innerHTML = this._renderUnverified();
+      el.querySelector('#party-skip-verify')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        this._skipVerification = true;
+        this.render().then(newEl => {
+          el.replaceWith(newEl);
+        });
+      });
       return el;
     }
 
@@ -141,6 +148,9 @@ export class PartyView {
         <p>You need to verify your email address before you can access the party page.</p>
         <p class="party-no-access__email">A verification link was sent to <strong>${escHtml(getUser()?.email || '')}</strong>.</p>
         <p>Check your inbox (and spam folder), then reload this page once verified.</p>
+        <p style="margin-top:1.2rem;font-size:0.9rem;opacity:0.8;">Note, if you haven't verified your email you might miss out on an update about the party.</p>
+        <a href="#" id="party-skip-verify" style="margin-top:0.5rem;display:inline-block;color:#c9a84c;text-decoration:underline;cursor:pointer;">Continue anyway →</a>
+        <br>
         <a href="#/signup" class="lol-btn lol-btn--primary" style="margin-top:1rem;">Back to Sign Up</a>
       </div>`;
   }
@@ -256,13 +266,13 @@ export class PartyView {
              loading="lazy" width="400" height="300">
       </button>`).join('');
 
-    const editBtn = isAdmin() ? `
+    const editBtn = canEdit() ? `
       <button class="party-edit-btn" data-edit-section="venue" aria-label="Edit venue section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit
       </button>` : '';
 
-    const editControls = isAdmin() ? `
+    const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="venue">
         <button class="party-edit-save" data-save-section="venue">Save</button>
         <button class="party-edit-cancel" data-cancel-section="venue">Cancel</button>
@@ -293,29 +303,29 @@ export class PartyView {
   }
 
   _renderSchedule(schedule) {
-    const admin = isAdmin();
+    const editor = canEdit();
     const items = schedule.map((item, i) => `
       <li class="party-timeline__item" data-schedule-index="${i}">
         <div class="party-timeline__time" data-sched="time">${escHtml(item.time)}</div>
         <div class="party-timeline__dot" aria-hidden="true"></div>
         <div class="party-timeline__event" data-sched="event">${escHtml(item.event)}</div>
-        ${admin ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-schedule="${i}" aria-label="Remove this event" title="Remove">✕</button>` : ''}
+        ${editor ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-schedule="${i}" aria-label="Remove this event" title="Remove">✕</button>` : ''}
       </li>`).join('');
 
-    const editBtn = isAdmin() ? `
+    const editBtn = canEdit() ? `
       <button class="party-edit-btn" data-edit-section="schedule" aria-label="Edit schedule section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit
       </button>` : '';
 
-    const editControls = isAdmin() ? `
+    const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="schedule">
         <button class="party-edit-save" data-save-section="schedule">Save</button>
         <button class="party-edit-cancel" data-cancel-section="schedule">Cancel</button>
         <span class="party-edit-status" data-status="schedule" aria-live="polite"></span>
       </div>` : '';
 
-    const addBtn = admin ? `<button class="party-edit-add party-edit-add--hidden" data-add-schedule aria-label="Add new event">+ Add Event</button>` : '';
+    const addBtn = editor ? `<button class="party-edit-add party-edit-add--hidden" data-add-schedule aria-label="Add new event">+ Add Event</button>` : '';
 
     return `
       <section class="party-section party-schedule" aria-labelledby="schedule-heading">
@@ -433,13 +443,13 @@ export class PartyView {
         <p class="party-game-card__rules" data-game="rules"><strong>Rules:</strong> <span data-game="rules-text">${escHtml(g.rules)}</span></p>
       </div>`).join('');
 
-    const editBtn = isAdmin() ? `
+    const editBtn = canEdit() ? `
       <button class="party-edit-btn" data-edit-section="games" aria-label="Edit games section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit
       </button>` : '';
 
-    const editControls = isAdmin() ? `
+    const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="games">
         <button class="party-edit-save" data-save-section="games">Save</button>
         <button class="party-edit-cancel" data-cancel-section="games">Cancel</button>
@@ -485,7 +495,7 @@ export class PartyView {
 
   _renderGuestbookEntry(entry) {
     const me = getUser();
-    const canDelete = me?.id === entry.user_id || isAdmin();
+    const canDelete = me?.id === entry.user_id || canEdit();
     return `
       <div class="party-guestbook__entry" data-id="${entry.id}">
         <img class="party-guestbook__avatar" src="${avatarPathByName(entry.avatar)}"
@@ -507,7 +517,7 @@ export class PartyView {
         <img src="${escHtml(p.file_path)}" alt="${escHtml(p.caption || 'Party photo')}"
              class="party-photo-item__img" loading="lazy" />
         ${p.caption ? `<p class="party-photo-item__caption">${escHtml(p.caption)}</p>` : ''}
-        ${(getUser()?.id === p.user_id || isAdmin()) ? `
+        ${(getUser()?.id === p.user_id || canEdit()) ? `
           <button class="party-photo-item__delete" data-id="${p.id}" aria-label="Delete photo">✕</button>` : ''}
       </div>`).join('') || '<p class="party-empty">No photos yet — be the first to upload one!</p>';
 
@@ -534,7 +544,7 @@ export class PartyView {
   _bindAll() {
     this._bindRsvp();
     this._bindVenueLightbox();
-    if (isAdmin()) this._bindEditing();
+    if (canEdit()) this._bindEditing();
 
     // Sign in button on landing (shouldn't be needed here but just in case)
     this._el.querySelector('#party-signin-btn')?.addEventListener('click', () => {

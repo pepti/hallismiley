@@ -4,9 +4,11 @@
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const ALLOWED_TOPICS = ['carpentry', 'software', 'collaboration', 'press', 'other'];
+
 async function submit(req, res, next) {
   try {
-    const { name, email, message, website } = req.body || {};
+    const { name, email, message, website, topic } = req.body || {};
 
     // Honeypot — bots fill in this hidden field, humans never see it
     if (website) {
@@ -22,6 +24,14 @@ async function submit(req, res, next) {
     if (email   && email.trim().length   > 200)  errors.push('Email must be 200 characters or fewer.');
     if (message && message.trim().length > 2000) errors.push('Message must be 2000 characters or fewer.');
 
+    // Topic is optional (Home form omits it). When present, restrict to known values.
+    const normalizedTopic = typeof topic === 'string' && topic.trim()
+      ? topic.trim().toLowerCase()
+      : null;
+    if (normalizedTopic && !ALLOWED_TOPICS.includes(normalizedTopic)) {
+      errors.push('Invalid topic.');
+    }
+
     if (errors.length) {
       return res.status(400).json({ errors });
     }
@@ -30,6 +40,7 @@ async function submit(req, res, next) {
     console.log('[Contact] New enquiry received:');
     console.log(`  Name:    ${name.trim()}`);
     console.log(`  Email:   ${email.trim()}`);
+    if (normalizedTopic) console.log(`  Topic:   ${normalizedTopic}`);
     console.log(`  Message: ${message.trim().slice(0, 120)}${message.length > 120 ? '…' : ''}`);
 
     res.status(200).json({ message: 'Message received. I\'ll be in touch soon.' });

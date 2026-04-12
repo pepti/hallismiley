@@ -2,6 +2,7 @@ import { HomeView }           from './views/HomeView.js';
 import { ProjectsView }       from './views/ProjectsView.js';
 import { ProjectDetailView }  from './views/ProjectDetailView.js';
 import { HalliView }          from './views/HalliView.js';
+import { ContactView }        from './views/ContactView.js';
 import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
@@ -27,6 +28,7 @@ const ROUTES = [
   { pattern: '/news',            factory: ()  => new NewsView() },
   { pattern: '/halli',           factory: ()  => new HalliView() },
   { pattern: '/about',           factory: ()  => new HalliView() },
+  { pattern: '/contact',         factory: ()  => new ContactView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },

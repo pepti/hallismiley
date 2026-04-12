@@ -346,12 +346,12 @@ describe('DELETE /api/v1/projects/:id/videos/:videoId', () => {
     expect(rows).toHaveLength(0);
   });
 
-  test('moderator gets 403 on single delete (admin only)', async () => {
+  test('moderator can delete a single video — 204', async () => {
     const v = await seedYoutube('aaaaaaaaaaa');
     const res = await request(app)
       .delete(`/api/v1/projects/${projectId}/videos/${v.id}`)
       .set('Cookie', modCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(204);
   });
 
   test('404 for non-existent video', async () => {
@@ -377,12 +377,12 @@ describe('DELETE /api/v1/projects/:id/videos', () => {
     expect(rows).toHaveLength(0);
   });
 
-  test('moderator gets 403 on clear-all (admin only)', async () => {
+  test('moderator can clear the whole video section — 204', async () => {
     await seedYoutube('aaaaaaaaaaa');
     const res = await request(app)
       .delete(`/api/v1/projects/${projectId}/videos`)
       .set('Cookie', modCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(204);
   });
 
   test('clearing a non-existent project 404s', async () => {

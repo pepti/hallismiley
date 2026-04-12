@@ -416,7 +416,7 @@ describe('DELETE /api/v1/projects/:id', () => {
     expect(get.status).toBe(404);
   });
 
-  test('moderator cannot delete — 403', async () => {
+  test('moderator can delete — 204', async () => {
     const create = await request(app)
       .post('/api/v1/projects')
       .set('Cookie', sessionCookie)
@@ -429,7 +429,7 @@ describe('DELETE /api/v1/projects/:id', () => {
       .delete(`/api/v1/projects/${create.body.id}`)
       .set('Cookie', modCookie);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(204);
   });
 
   test('regular user cannot delete — 403', async () => {

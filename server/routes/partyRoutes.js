@@ -79,7 +79,7 @@ router.get('/info',
   partyController.getInfo);
 
 router.patch('/info',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.updateInfo);
 
 // ── RSVP ─────────────────────────────────────────────────────────────────────

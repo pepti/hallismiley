@@ -395,12 +395,12 @@ describe('DELETE /api/v1/projects/:id/media/:mediaId', () => {
     expect(rows).toHaveLength(0);
   });
 
-  test('moderator gets 403 on delete', async () => {
+  test('moderator can delete media — 204', async () => {
     const res = await request(app)
       .delete(`/api/v1/projects/${projectId}/media/${mediaId}`)
       .set('Cookie', modCookie);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(204);
   });
 
   test('regular user gets 403', async () => {

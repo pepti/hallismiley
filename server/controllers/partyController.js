@@ -227,7 +227,8 @@ const partyController = {
       );
       if (!rows[0]) return res.status(404).json({ error: 'Entry not found', code: 404 });
 
-      if (rows[0].user_id !== req.user.id && req.user.role !== 'admin') {
+      const isEditor = req.user.role === 'admin' || req.user.role === 'moderator';
+      if (rows[0].user_id !== req.user.id && !isEditor) {
         return res.status(403).json({ error: 'Forbidden', code: 403 });
       }
 
@@ -286,7 +287,8 @@ const partyController = {
       );
       if (!rows[0]) return res.status(404).json({ error: 'Photo not found', code: 404 });
 
-      if (rows[0].user_id !== req.user.id && req.user.role !== 'admin') {
+      const isEditor = req.user.role === 'admin' || req.user.role === 'moderator';
+      if (rows[0].user_id !== req.user.id && !isEditor) {
         return res.status(403).json({ error: 'Forbidden', code: 403 });
       }
 

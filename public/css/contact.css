@@ -1,0 +1,416 @@
+/* ─────────────────────────────────────────────────────────────
+   Contact page (/contact) — dedicated view
+   Reuses .contact-form, .contact-form__* from home.css
+   ───────────────────────────────────────────────────────────── */
+
+.contact-view {
+  background: var(--bg-base);
+  min-height: 100vh;
+}
+
+/* ── Hero ──────────────────────────────────────────────────── */
+.contact-hero {
+  position: relative;
+  padding: 140px 24px 100px;
+  overflow: hidden;
+  background: var(--bg-nav);
+  text-align: center;
+}
+
+.contact-hero__bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(200,170,110,0.12), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(11,196,227,0.08), transparent 60%);
+  pointer-events: none;
+}
+
+.contact-hero__inner {
+  position: relative; z-index: 2;
+  max-width: 860px; margin: 0 auto;
+}
+
+.contact-hero__eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.85rem; font-weight: 700; font-style: italic;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 1.25rem;
+}
+
+.contact-hero__title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(2.25rem, 6vw, 5rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: var(--text-primary);
+  line-height: 0.95; margin: 0 0 1.5rem;
+}
+
+.contact-hero__title-accent {
+  color: var(--gold);
+}
+
+.contact-hero__subtitle {
+  font-family: 'Barlow', sans-serif;
+  font-size: 1.05rem; line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 620px; margin: 0 auto;
+}
+
+/* ── Contact card section ──────────────────────────────────── */
+.contact-card-section {
+  padding: 60px 24px;
+  background: var(--bg-base);
+}
+
+.contact-card-section__inner {
+  max-width: 1100px; margin: 0 auto;
+}
+
+.contact-card {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.contact-card__item {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 24px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color var(--transition),
+              background var(--transition),
+              transform var(--transition);
+}
+
+.contact-card__item:hover:not(.contact-card__item--static) {
+  border-color: var(--gold);
+  background: rgba(200,170,110,0.06);
+  transform: translateY(-2px);
+}
+
+.contact-card__item--static { cursor: default; }
+
+.contact-card__icon {
+  flex: 0 0 44px; width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(200,170,110,0.08);
+  border: 1px solid var(--border-light);
+  color: var(--gold);
+}
+
+.contact-card__body { flex: 1; min-width: 0; }
+
+.contact-card__label {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.contact-card__value {
+  font-family: 'Barlow', sans-serif;
+  font-size: 1rem; font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: break-word;
+}
+
+.contact-card__meta {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ── Form section ─────────────────────────────────────────── */
+.contact-form-section {
+  position: relative;
+  padding: 80px 24px 100px;
+  background: var(--bg-nav);
+}
+
+.contact-form-section__inner {
+  max-width: 720px; margin: 0 auto;
+  text-align: center;
+}
+
+.contact-form-section__eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.85rem; font-weight: 700; font-style: italic;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 0.75rem;
+}
+
+.contact-form-section__title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: var(--text-primary);
+  line-height: 1; margin-bottom: 2rem;
+}
+
+.contact-form--page {
+  margin-top: 1rem;
+  text-align: left;
+}
+
+/* Re-use .contact-form__* from home.css but add a select style */
+.contact-form__select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gold) 50%),
+    linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.contact-form__select option {
+  background: var(--bg-nav);
+  color: var(--text-primary);
+}
+
+.contact-form__fallback {
+  margin-top: 1rem;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.contact-form__fallback a {
+  color: var(--gold);
+  text-decoration: underline;
+}
+
+/* ── Availability section ─────────────────────────────────── */
+.availability {
+  position: relative;
+  padding: 100px 24px;
+  background: var(--bg-base);
+}
+
+.availability__inner {
+  max-width: 1100px; margin: 0 auto;
+  text-align: center;
+}
+
+.availability__eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.85rem; font-weight: 700; font-style: italic;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 0.75rem;
+}
+
+.availability__title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: var(--text-primary);
+  line-height: 1; margin: 0 0 3rem;
+}
+
+.availability__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  text-align: left;
+}
+
+.availability-card {
+  padding: 28px 24px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--gold);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.availability-card--limited { border-left-color: var(--teal); }
+.availability-card--closed  { border-left-color: var(--text-muted); opacity: 0.7; }
+
+.availability-card__status {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+
+.availability-card__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.availability-card--limited .availability-card__dot {
+  background: var(--teal);
+  box-shadow: 0 0 8px var(--teal);
+}
+
+.availability-card--closed .availability-card__dot {
+  background: var(--text-muted);
+  box-shadow: none;
+}
+
+.availability-card__status-text {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.availability-card__label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.3rem; font-weight: 700; font-style: italic;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+
+.availability-card__body {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.95rem; line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Edit bar for admins (mirrors skills edit styling) */
+.availability__edit-btn {
+  position: absolute; top: 24px; right: 24px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.availability__edit-btn:hover {
+  background: rgba(200,170,110,0.1);
+}
+.availability__edit-btn--hidden { display: none; }
+
+.availability__edit-controls {
+  position: absolute; top: 24px; right: 24px;
+  display: flex; align-items: center; gap: 10px;
+}
+.availability__edit-controls--hidden { display: none; }
+
+.availability__save-btn,
+.availability__cancel-btn {
+  padding: 8px 14px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  transition: all var(--transition);
+}
+.availability__save-btn {
+  background: var(--gold);
+  color: var(--bg-nav);
+}
+.availability__save-btn:hover  { background: var(--gold-light); }
+.availability__cancel-btn:hover { background: rgba(200,170,110,0.1); }
+
+.availability__edit-status {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.availability--editing [data-field] {
+  outline: 1px dashed var(--gold);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* ── Built-with section ──────────────────────────────────── */
+.built-with {
+  padding: 100px 24px;
+  background: var(--bg-nav);
+  border-top: 1px solid var(--border-light);
+}
+
+.built-with__inner {
+  max-width: 820px; margin: 0 auto;
+  text-align: center;
+}
+
+.built-with__eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.85rem; font-weight: 700; font-style: italic;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 0.75rem;
+}
+
+.built-with__title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  font-weight: 900; font-style: italic; text-transform: uppercase;
+  color: var(--text-primary);
+  line-height: 1; margin: 0 0 2rem;
+}
+
+.built-with__body {
+  font-family: 'Barlow', sans-serif;
+  font-size: 1rem; line-height: 1.75;
+  color: var(--text-secondary);
+  margin: 0 auto 1.25rem;
+  max-width: 680px;
+  text-align: left;
+}
+
+.built-with__stack {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 10px;
+  margin: 2rem 0 2.5rem;
+}
+
+.built-with__pill {
+  padding: 8px 14px;
+  background: rgba(200,170,110,0.08);
+  border: 1px solid var(--border-light);
+  color: var(--gold-light);
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.8rem; font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.built-with__actions {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 14px;
+}
+
+.built-with__btn {
+  padding: 16px 36px;
+  font-size: 0.78rem;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .contact-card {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .availability__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .contact-hero { padding: 100px 20px 70px; }
+  .contact-card { grid-template-columns: 1fr; }
+  .contact-card-section,
+  .contact-form-section,
+  .availability,
+  .built-with { padding-left: 20px; padding-right: 20px; }
+  .availability__edit-btn,
+  .availability__edit-controls { top: 12px; right: 12px; }
+}

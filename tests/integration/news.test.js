@@ -377,7 +377,7 @@ describe('DELETE /api/v1/news/:id', () => {
     expect(check.status).toBe(404);
   });
 
-  test('moderator cannot delete an article', async () => {
+  test('moderator can delete an article', async () => {
     const modId     = await createTestModeratorUser();
     const modCookie = await getTestSessionCookie(modId);
 
@@ -390,7 +390,7 @@ describe('DELETE /api/v1/news/:id', () => {
       .delete(`/api/v1/news/${created.body.id}`)
       .set('Cookie', modCookie);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(204);
   });
 
   test('regular user cannot delete an article', async () => {
