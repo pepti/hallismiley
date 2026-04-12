@@ -482,6 +482,53 @@ function validateNews(req, res, next) {
   next();
 }
 
+// ── News media validation ────────────────────────────────────────────────────
+
+// PATCH /api/v1/news/:id/media/:mediaId
+function validateNewsMediaUpdate(req, res, next) {
+  const { caption } = req.body;
+  const errors = [];
+
+  if (caption !== undefined && caption !== null) {
+    if (typeof caption !== 'string')
+      errors.push('caption must be a string');
+    else if (caption.length > MAX_CAPTION_LEN)
+      errors.push(`caption must be at most ${MAX_CAPTION_LEN} characters`);
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
+// PUT /api/v1/news/:id/media/reorder
+function validateNewsMediaReorder(req, res, next) {
+  const { order } = req.body;
+  const errors = [];
+
+  if (!Array.isArray(order) || order.length === 0) {
+    errors.push('order must be a non-empty array');
+  } else if (order.length > MAX_REORDER_LEN) {
+    errors.push(`order must contain at most ${MAX_REORDER_LEN} items`);
+  } else {
+    for (let i = 0; i < order.length; i++) {
+      const item = order[i];
+      if (typeof item !== 'object' || item === null) {
+        errors.push(`order[${i}] must be an object`);
+        continue;
+      }
+      const id = Number(item.id);
+      const so = Number(item.sort_order);
+      if (!Number.isInteger(id) || id <= 0)
+        errors.push(`order[${i}].id must be a positive integer`);
+      if (!Number.isInteger(so) || so < 0)
+        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+    }
+  }
+
+  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
@@ -496,5 +543,7 @@ module.exports = {
   validateVideoUpdate,
   validateVideoReorder,
   validateNews,
+  validateNewsMediaUpdate,
+  validateNewsMediaReorder,
   ALLOWED_AVATARS,
 };

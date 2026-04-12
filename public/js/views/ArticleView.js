@@ -1,10 +1,11 @@
 // ArticleView — Single news article page
 // Route: #/news/:slug
 // Renders full article with cover image, author byline, rich body HTML,
-// share button, and admin edit/delete controls.
+// share button, media gallery, and admin edit/delete controls.
 
 import { getUser } from '../services/auth.js';
 import { getCsrfHeaders }           from '../utils/api.js';
+import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
 
 // Tags allowed in article body (whitelist for DOMParser sanitisation)
@@ -106,6 +107,7 @@ export class ArticleView {
   constructor(slug) {
     this._slug    = slug;
     this._article = null;
+    this._media   = [];
     this._view    = null;
   }
 
@@ -152,6 +154,10 @@ export class ArticleView {
       if (!res.ok) throw new Error(`Failed to load article (HTTP ${res.status})`);
 
       this._article = await res.json();
+
+      // Load media
+      await this._loadMedia();
+
       this._view.innerHTML = this._render(isEditor);
       this._bindActions();
     } catch (err) {
@@ -168,6 +174,13 @@ export class ArticleView {
     return this._view;
   }
 
+  async _loadMedia() {
+    try {
+      const res = await fetch(`/api/v1/news/${this._article.id}/media`, { credentials: 'include' });
+      if (res.ok) this._media = await res.json();
+    } catch { /* ignore — media is optional */ }
+  }
+
   _notFound() {
     return `
       <div class="article-page__inner article-page__inner--narrow">
@@ -175,6 +188,47 @@ export class ArticleView {
         <h1 class="article-page__404-title">Article Not Found</h1>
         <p class="article-page__404-desc">This article doesn't exist or may have been removed.</p>
         <a href="#/news" class="article-back-link">← Back to News</a>
+      </div>`;
+  }
+
+  _renderMediaGallery() {
+    if (!this._media.length) return '';
+
+    const items = this._media.map(m => {
+      if (m.kind === 'youtube') {
+        return `
+          <div class="article-media__item article-media__item--video">
+            <div class="article-media__video-wrap">
+              <iframe src="https://www.youtube-nocookie.com/embed/${_esc(m.youtube_id)}"
+                      frameborder="0" allowfullscreen
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      loading="lazy"></iframe>
+            </div>
+            ${m.caption ? `<p class="article-media__caption">${_esc(m.caption)}</p>` : ''}
+          </div>`;
+      }
+      if (m.kind === 'video_file') {
+        return `
+          <div class="article-media__item article-media__item--video">
+            <div class="article-media__video-wrap article-media__video-wrap--file">
+              <video controls preload="metadata" src="${_esc(m.file_path)}"></video>
+            </div>
+            ${m.caption ? `<p class="article-media__caption">${_esc(m.caption)}</p>` : ''}
+          </div>`;
+      }
+      // image
+      return `
+        <div class="article-media__item">
+          <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
+          ${m.caption ? `<p class="article-media__caption">${_esc(m.caption)}</p>` : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="article-media-gallery">
+        <div class="article-media__grid">
+          ${items}
+        </div>
       </div>`;
   }
 
@@ -217,10 +271,9 @@ export class ArticleView {
            <button class="article-admin-btn article-admin-btn--edit" id="article-edit-btn">
              Edit Article
            </button>
-           ${(getUser()?.role === 'admin') ? `
            <button class="article-admin-btn article-admin-btn--delete" id="article-delete-btn">
              Delete
-           </button>` : ''}
+           </button>
          </div>`
       : '';
 
@@ -250,6 +303,8 @@ export class ArticleView {
           <div class="article-body" id="article-body">
             ${safeBody}
           </div>
+
+          ${this._renderMediaGallery()}
 
           <footer class="article-footer">
             <button class="article-share-btn" id="article-share-btn" aria-label="Copy link to clipboard">
@@ -349,6 +404,31 @@ export class ArticleView {
               Published
             </label>
           </div>
+
+          <!-- Media Section -->
+          <div class="news-editor__media-section">
+            <h3 class="news-editor__media-heading">Media</h3>
+            <div class="news-editor__media-actions">
+              <label class="news-editor__media-btn">
+                + Add Image
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden
+                       id="media-upload-image">
+              </label>
+              <label class="news-editor__media-btn">
+                + Add Video
+                <input type="file" accept="video/mp4,video/webm" hidden
+                       id="media-upload-video">
+              </label>
+              <button type="button" class="news-editor__media-btn" id="media-add-youtube">
+                + YouTube
+              </button>
+            </div>
+            <div class="news-editor__media-status" id="media-status" aria-live="polite"></div>
+            <div class="news-editor__media-grid" id="media-grid">
+              ${this._renderEditorMediaGrid()}
+            </div>
+          </div>
+
           <div class="news-editor__status" id="edit-status" aria-live="polite"></div>
           <div class="news-editor__actions">
             <button type="button" class="news-editor__btn news-editor__btn--cancel" id="edit-cancel-btn">Cancel</button>
@@ -369,6 +449,12 @@ export class ArticleView {
     overlay.querySelector('.news-editor__close').addEventListener('click', close);
     overlay.querySelector('#edit-cancel-btn').addEventListener('click', close);
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    // Media upload handlers
+    this._bindMediaUploads(overlay);
+
+    // Drag-and-drop reordering
+    this._attachMediaDragReorder(overlay);
 
     const form = overlay.querySelector('#article-edit-form');
     form.addEventListener('submit', async e => {
@@ -415,6 +501,277 @@ export class ArticleView {
     });
 
     overlay.querySelector('[name="title"]').focus();
+  }
+
+  // ── Media editor grid rendering ──────────────────────────────────────
+  _renderEditorMediaGrid() {
+    if (!this._media.length) {
+      return '<p class="news-editor__media-empty">No media added yet.</p>';
+    }
+
+    return this._media.map(m => {
+      let preview;
+      if (m.kind === 'youtube') {
+        preview = `<div class="news-editor__media-thumb news-editor__media-thumb--yt">
+          <img src="https://img.youtube.com/vi/${_esc(m.youtube_id)}/mqdefault.jpg"
+               alt="YouTube" loading="lazy">
+          <span class="news-editor__media-yt-badge">YT</span>
+        </div>`;
+      } else if (m.kind === 'video_file') {
+        preview = `<div class="news-editor__media-thumb news-editor__media-thumb--vid">
+          <video src="${_esc(m.file_path)}" preload="metadata" muted></video>
+          <span class="news-editor__media-vid-badge">VID</span>
+        </div>`;
+      } else {
+        preview = `<div class="news-editor__media-thumb">
+          <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
+        </div>`;
+      }
+
+      return `
+        <div class="news-editor__media-item" data-media-id="${m.id}" draggable="true">
+          ${preview}
+          <div class="news-editor__media-item-controls">
+            <input type="text" class="news-editor__media-caption" placeholder="Caption…"
+                   value="${_esc(m.caption || '')}" data-media-id="${m.id}">
+            <button type="button" class="news-editor__media-delete" data-media-id="${m.id}"
+                    aria-label="Delete media">✕</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  _refreshMediaGrid(overlay) {
+    const grid = overlay.querySelector('#media-grid');
+    if (grid) {
+      grid.innerHTML = this._renderEditorMediaGrid();
+      this._attachMediaDragReorder(overlay);
+      this._bindMediaItemActions(overlay);
+    }
+  }
+
+  _bindMediaItemActions(overlay) {
+    // Delete buttons
+    overlay.querySelectorAll('.news-editor__media-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mediaId = btn.dataset.mediaId;
+        if (!confirm('Delete this media item?')) return;
+        try {
+          const token = await getCSRFToken();
+          const res = await fetch(`/api/v1/news/${this._article.id}/media/${mediaId}`, {
+            method: 'DELETE', credentials: 'include',
+            headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+          });
+          if (!res.ok) throw new Error('Delete failed');
+          this._media = this._media.filter(m => m.id !== Number(mediaId));
+          this._refreshMediaGrid(overlay);
+        } catch (err) {
+          this._showMediaStatus(overlay, err.message, true);
+        }
+      });
+    });
+
+    // Caption blur-save
+    overlay.querySelectorAll('.news-editor__media-caption').forEach(input => {
+      input.addEventListener('change', async () => {
+        const mediaId = input.dataset.mediaId;
+        const caption = input.value.trim();
+        try {
+          const headers = await getCsrfHeaders();
+          await fetch(`/api/v1/news/${this._article.id}/media/${mediaId}`, {
+            method: 'PATCH', credentials: 'include', headers,
+            body: JSON.stringify({ caption }),
+          });
+          const m = this._media.find(m => m.id === Number(mediaId));
+          if (m) m.caption = caption;
+        } catch { /* silent */ }
+      });
+    });
+  }
+
+  _showMediaStatus(overlay, msg, isError = false) {
+    const el = overlay.querySelector('#media-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = `news-editor__media-status${isError ? ' news-editor__media-status--error' : ' news-editor__media-status--ok'}`;
+    setTimeout(() => { el.textContent = ''; el.className = 'news-editor__media-status'; }, 3000);
+  }
+
+  // ── Media upload bindings ────────────────────────────────────────────
+  _bindMediaUploads(overlay) {
+    // Image upload
+    const imageInput = overlay.querySelector('#media-upload-image');
+    if (imageInput) {
+      imageInput.addEventListener('change', () => {
+        if (imageInput.files[0]) this._uploadMediaFile(overlay, imageInput.files[0]);
+        imageInput.value = '';
+      });
+    }
+
+    // Video upload
+    const videoInput = overlay.querySelector('#media-upload-video');
+    if (videoInput) {
+      videoInput.addEventListener('change', () => {
+        if (videoInput.files[0]) this._uploadMediaFile(overlay, videoInput.files[0]);
+        videoInput.value = '';
+      });
+    }
+
+    // YouTube
+    const ytBtn = overlay.querySelector('#media-add-youtube');
+    if (ytBtn) {
+      ytBtn.addEventListener('click', () => this._addYouTube(overlay));
+    }
+
+    // Bind item actions for existing items
+    this._bindMediaItemActions(overlay);
+  }
+
+  async _uploadMediaFile(overlay, file) {
+    this._showMediaStatus(overlay, 'Uploading…');
+    try {
+      const token = await getCSRFToken();
+      const fd = new FormData();
+      fd.append('file', file);
+
+      const res = await fetch(`/api/v1/news/${this._article.id}/media`, {
+        method: 'POST', credentials: 'include',
+        headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+        body: fd,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      const item = await res.json();
+      this._media.push(item);
+      this._refreshMediaGrid(overlay);
+      this._showMediaStatus(overlay, 'Uploaded!');
+    } catch (err) {
+      this._showMediaStatus(overlay, err.message, true);
+    }
+  }
+
+  async _addYouTube(overlay) {
+    const url = prompt('YouTube URL:');
+    if (!url || !url.trim()) return;
+
+    this._showMediaStatus(overlay, 'Adding…');
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/news/${this._article.id}/media/youtube`, {
+        method: 'POST', credentials: 'include', headers,
+        body: JSON.stringify({ url: url.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to add YouTube video');
+      }
+
+      const item = await res.json();
+      this._media.push(item);
+      this._refreshMediaGrid(overlay);
+      this._showMediaStatus(overlay, 'Added!');
+    } catch (err) {
+      this._showMediaStatus(overlay, err.message, true);
+    }
+  }
+
+  // ── Drag-and-drop reorder ────────────────────────────────────────────
+  _attachMediaDragReorder(overlay) {
+    const grid = overlay.querySelector('#media-grid');
+    if (!grid) return;
+
+    let dragMediaId = null;
+
+    const clearIndicators = () => {
+      grid.querySelectorAll('.drag-over, .dragging').forEach(el =>
+        el.classList.remove('drag-over', 'dragging'));
+    };
+
+    grid.addEventListener('dragstart', e => {
+      const item = e.target.closest('.news-editor__media-item');
+      if (!item) return;
+      dragMediaId = Number(item.dataset.mediaId);
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      const ghost = document.createElement('canvas');
+      ghost.width = 1; ghost.height = 1;
+      e.dataTransfer.setDragImage(ghost, 0, 0);
+    });
+
+    grid.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      const overItem = e.target.closest('.news-editor__media-item');
+      if (overItem && Number(overItem.dataset.mediaId) !== dragMediaId) {
+        overItem.classList.add('drag-over');
+      }
+    });
+
+    grid.addEventListener('dragleave', e => {
+      if (!grid.contains(e.relatedTarget)) {
+        grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      }
+    });
+
+    grid.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragMediaId === null) return;
+
+      const fromIdx = this._media.findIndex(m => m.id === dragMediaId);
+      if (fromIdx === -1) { clearIndicators(); dragMediaId = null; return; }
+
+      const overItem = e.target.closest('.news-editor__media-item');
+      const arr = [...this._media];
+      const [moved] = arr.splice(fromIdx, 1);
+
+      let insertAt;
+      if (overItem && Number(overItem.dataset.mediaId) !== dragMediaId) {
+        insertAt = arr.findIndex(m => m.id === Number(overItem.dataset.mediaId));
+        if (insertAt === -1) insertAt = arr.length;
+      } else {
+        insertAt = arr.length;
+      }
+
+      arr.splice(insertAt, 0, moved);
+      this._media = arr;
+      clearIndicators();
+      dragMediaId = null;
+      this._refreshMediaGrid(overlay);
+      this._commitMediaReorder();
+    });
+
+    grid.addEventListener('dragend', () => {
+      clearIndicators();
+      dragMediaId = null;
+    });
+  }
+
+  _reorderTimer = null;
+  _commitMediaReorder() {
+    clearTimeout(this._reorderTimer);
+    this._reorderTimer = setTimeout(async () => {
+      const order = this._media.map((m, i) => ({ id: m.id, sort_order: i }));
+      try {
+        const token = await getCSRFToken();
+        const res = await fetch(`/api/v1/news/${this._article.id}/media/reorder`, {
+          method: 'PUT', credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'X-CSRF-Token': token } : {}),
+          },
+          body: JSON.stringify({ order }),
+        });
+        if (res.ok) {
+          this._media = await res.json();
+        }
+      } catch { /* silent */ }
+    }, 500);
   }
 
   _confirmDelete() {

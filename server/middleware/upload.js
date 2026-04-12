@@ -56,4 +56,45 @@ function createProjectUpload(projectId) {
   });
 }
 
-module.exports = { createProjectUpload, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };
+/**
+ * Returns a configured multer upload instance for news article media.
+ * Destination: `public/assets/news/<articleId>/`.
+ */
+function createNewsUpload(articleId) {
+  const destDir = path.join(
+    __dirname, '../../public/assets/news', String(articleId)
+  );
+
+  const storage = multer.diskStorage({
+    destination(req, file, cb) {
+      fs.mkdirSync(destDir, { recursive: true });
+      cb(null, destDir);
+    },
+    filename(req, file, cb) {
+      const ext  = path.extname(file.originalname).toLowerCase()
+                   || (file.mimetype.startsWith('image/') ? '.jpg' : '.mp4');
+      const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+      cb(null, name);
+    },
+  });
+
+  const fileFilter = (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      const err = new Error(
+        'Only images (jpg, png, webp) and videos (mp4, webm) are allowed'
+      );
+      err.code = 'INVALID_TYPE';
+      cb(err);
+    }
+  };
+
+  return multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: MAX_VIDEO_SIZE },
+  });
+}
+
+module.exports = { createProjectUpload, createNewsUpload, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };
