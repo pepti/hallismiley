@@ -76,7 +76,7 @@ async function seedMedia(overrides = {}) {
   return rows[0];
 }
 
-async function seedYouTube(overrides = {}) {
+async function _seedYouTube(overrides = {}) {
   const { rows } = await db.query(
     `INSERT INTO news_media (article_id, kind, youtube_id, caption, sort_order)
      VALUES ($1, 'youtube', $2, $3, $4)
