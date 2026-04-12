@@ -55,8 +55,8 @@ const DEFAULT_SKILLS_CONTENT = {
   image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
 };
 
-// ── Stats ─────────────────────────────────────────────────────────────────
-const STATS = [
+// ── Default stats content — used as fallback if API is unavailable ───────
+const DEFAULT_STATS_CONTENT = [
   { num: '22+', label: 'Years Carpentry Experience' },
   { num: '15+', label: 'Years Coding Experience' },
   { num: '6+',  label: 'Years Tech Management' },
@@ -66,12 +66,13 @@ const STATS = [
 // ─────────────────────────────────────────────────────────────────────────
 export class HomeView {
   constructor() {
-    this._content = null; // loaded from API in render()
+    this._content = null;      // skills — loaded from API in render()
+    this._statsContent = null;  // stats — loaded from API in render()
     this._newsArticles = [];
   }
 
   async render() {
-    await Promise.all([this._loadContent(), this._loadNews()]);
+    await Promise.all([this._loadContent(), this._loadStats(), this._loadNews()]);
 
     const view = document.createElement('div');
     view.className = 'view';
@@ -104,6 +105,18 @@ export class HomeView {
       }
     } catch { /* network error — fall through to default */ }
     this._content = { ...DEFAULT_SKILLS_CONTENT };
+  }
+
+  // ── Load stats content from API ────────────────────────────────────────
+  async _loadStats() {
+    try {
+      const res = await fetch('/api/v1/content/home_stats');
+      if (res.ok) {
+        this._statsContent = await res.json();
+        return;
+      }
+    } catch { /* network error — fall through to default */ }
+    this._statsContent = [...DEFAULT_STATS_CONTENT];
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
@@ -282,10 +295,10 @@ export class HomeView {
 
   // ── SECTION 6: Stats ──────────────────────────────────────────────────
   _stats() {
-    const items = STATS.map(s => `
-      <div class="lol-stats__item">
-        <div class="lol-stats__num" aria-label="${s.num} ${s.label}">${s.num}</div>
-        <div class="lol-stats__label" aria-hidden="true">${s.label}</div>
+    const items = this._statsContent.map((s, i) => `
+      <div class="lol-stats__item" data-stat-index="${i}">
+        <div class="lol-stats__num" data-stat="num" aria-label="${escHtml(s.num)} ${escHtml(s.label)}">${escHtml(s.num)}</div>
+        <div class="lol-stats__label" data-stat="label" aria-hidden="true">${escHtml(s.label)}</div>
       </div>
     `).join('');
 
@@ -452,11 +465,12 @@ export class HomeView {
     });
   }
 
-  // ── Skills section — inline edit for admin/moderator ──────────────────
+  // ── Skills + Stats section — inline edit for admin/moderator ───────────
   _initSkillsEdit(view) {
     if (!isAdmin() && !hasRole('moderator')) return;
 
-    const section = view.querySelector('.lol-skills');
+    const section     = view.querySelector('.lol-skills');
+    const statsSection = view.querySelector('.lol-stats');
     if (!section) return;
 
     // Edit button
@@ -464,7 +478,7 @@ export class HomeView {
     editBtn.className   = 'lol-skills__edit-btn';
     editBtn.id          = 'home-edit-btn';
     editBtn.type        = 'button';
-    editBtn.setAttribute('aria-label', 'Edit skills section');
+    editBtn.setAttribute('aria-label', 'Edit skills and stats sections');
     editBtn.setAttribute('data-testid', 'edit-page-btn');
     editBtn.innerHTML   = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -476,7 +490,9 @@ export class HomeView {
     section.style.position = 'relative';
     section.appendChild(editBtn);
 
-    // Save / cancel bar
+    // Save / cancel bar — attached to stats section (bottom of editable area)
+    const controlsParent = statsSection || section;
+    controlsParent.style.position = 'relative';
     const controls = document.createElement('div');
     controls.className  = 'lol-skills__edit-controls lol-skills__edit-controls--hidden';
     controls.id         = 'home-edit-bar';
@@ -485,35 +501,47 @@ export class HomeView {
       <button type="button" class="lol-skills__save-btn" id="home-edit-save" data-testid="edit-save-btn">Save Changes</button>
       <button type="button" class="lol-skills__cancel-btn" id="home-edit-cancel" data-testid="edit-cancel-btn">Cancel</button>
       <span   class="lol-skills__edit-status" aria-live="polite"></span>`;
-    section.appendChild(controls);
+    controlsParent.appendChild(controls);
 
-    let _snapshot = null; // saved copy for cancel
+    let _snapshot = null;      // skills snapshot for cancel
+    let _statsSnapshot = null; // stats snapshot for cancel
 
     editBtn.addEventListener('click', () => {
       _snapshot = JSON.parse(JSON.stringify(this._content));
-      this._enterEdit(section, editBtn, controls);
+      _statsSnapshot = JSON.parse(JSON.stringify(this._statsContent));
+      this._enterEdit(section, editBtn, controls, statsSection);
     });
 
     controls.querySelector('.lol-skills__save-btn').addEventListener('click', () =>
-      this._saveEdit(section, controls)
+      this._saveEdit(section, controls, statsSection)
     );
 
     controls.querySelector('.lol-skills__cancel-btn').addEventListener('click', () => {
-      this._exitEdit(section, editBtn, controls);
+      this._exitEdit(section, editBtn, controls, statsSection);
       if (_snapshot) this._restoreEdit(section, _snapshot);
+      if (_statsSnapshot) this._restoreStatsEdit(statsSection, _statsSnapshot);
     });
   }
 
-  _enterEdit(section, editBtn, controls) {
+  _enterEdit(section, editBtn, controls, statsSection) {
     section.classList.add('lol-skills--editing');
     editBtn.classList.add('lol-skills__edit-btn--hidden');
     controls.classList.remove('lol-skills__edit-controls--hidden');
 
-    // Make text fields editable
+    // Make skills text fields editable
     section.querySelectorAll('[data-field], [data-item]').forEach(el => {
       el.contentEditable = 'true';
       el.spellcheck      = true;
     });
+
+    // Make stats fields editable
+    if (statsSection) {
+      statsSection.classList.add('lol-stats--editing');
+      statsSection.querySelectorAll('[data-stat]').forEach(el => {
+        el.contentEditable = 'true';
+        el.spellcheck      = true;
+      });
+    }
 
     // Image overlay
     const imgWrap = section.querySelector('.lol-skills__img-wrap');
@@ -536,7 +564,7 @@ export class HomeView {
     });
   }
 
-  _exitEdit(section, editBtn, controls) {
+  _exitEdit(section, editBtn, controls, statsSection) {
     section.classList.remove('lol-skills--editing');
     editBtn.classList.remove('lol-skills__edit-btn--hidden');
     controls.classList.add('lol-skills__edit-controls--hidden');
@@ -548,6 +576,15 @@ export class HomeView {
     });
 
     section.querySelector('.lol-skills__img-overlay')?.remove();
+
+    // Exit stats edit
+    if (statsSection) {
+      statsSection.classList.remove('lol-stats--editing');
+      statsSection.querySelectorAll('[data-stat]').forEach(el => {
+        el.contentEditable = 'false';
+        el.removeAttribute('contenteditable');
+      });
+    }
   }
 
   _restoreEdit(section, snapshot) {
@@ -565,6 +602,17 @@ export class HomeView {
     });
 
     this._content = snapshot;
+  }
+
+  _restoreStatsEdit(statsSection, snapshot) {
+    if (!statsSection) return;
+    statsSection.querySelectorAll('[data-stat-index]').forEach(el => {
+      const i = parseInt(el.dataset.statIndex, 10);
+      if (!snapshot[i]) return;
+      el.querySelector('[data-stat="num"]').innerHTML   = escHtml(snapshot[i].num);
+      el.querySelector('[data-stat="label"]').innerHTML = escHtml(snapshot[i].label);
+    });
+    this._statsContent = snapshot;
   }
 
   async _uploadImage(file, section, controls) {
@@ -593,11 +641,11 @@ export class HomeView {
     }
   }
 
-  async _saveEdit(section, controls) {
+  async _saveEdit(section, controls, statsSection) {
     const status = controls.querySelector('.lol-skills__edit-status');
     status.textContent = 'Saving…';
 
-    // Collect text from DOM
+    // Collect skills text from DOM
     const eyebrow = section.querySelector('[data-field="eyebrow"]')?.innerText.trim() ?? this._content.eyebrow;
     const title   = section.querySelector('[data-field="title"]')?.innerText.trim()   ?? this._content.title;
     const desc    = section.querySelector('[data-field="desc"]')?.innerText.trim()    ?? this._content.description;
@@ -612,20 +660,44 @@ export class HomeView {
 
     const updated = { ...this._content, eyebrow, title, description: desc, items };
 
+    // Collect stats from DOM
+    const statsItems = [];
+    if (statsSection) {
+      statsSection.querySelectorAll('[data-stat-index]').forEach(el => {
+        statsItems.push({
+          num:   el.querySelector('[data-stat="num"]')?.innerText.trim() ?? '',
+          label: el.querySelector('[data-stat="label"]')?.innerText.trim() ?? '',
+        });
+      });
+    }
+
     try {
       const token = await getCSRFToken();
-      const res   = await fetch('/api/v1/content/home_skills', {
-        method:      'PUT',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'X-CSRF-Token': token } : {}),
-        },
-        body: JSON.stringify(updated),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
+      };
 
-      this._content  = await res.json();
+      // Save both in parallel
+      const [skillsRes, statsRes] = await Promise.all([
+        fetch('/api/v1/content/home_skills', {
+          method: 'PUT', credentials: 'include', headers,
+          body: JSON.stringify(updated),
+        }),
+        statsSection
+          ? fetch('/api/v1/content/home_stats', {
+              method: 'PUT', credentials: 'include', headers,
+              body: JSON.stringify(statsItems),
+            })
+          : Promise.resolve(null),
+      ]);
+
+      if (!skillsRes.ok) throw new Error((await skillsRes.json()).error || 'Skills save failed');
+      if (statsRes && !statsRes.ok) throw new Error((await statsRes.json()).error || 'Stats save failed');
+
+      this._content = await skillsRes.json();
+      if (statsRes) this._statsContent = await statsRes.json();
+
       status.textContent = 'Saved!';
       setTimeout(() => { status.textContent = ''; }, 2500);
     } catch (err) {
