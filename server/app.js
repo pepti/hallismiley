@@ -301,6 +301,12 @@ app.use(express.static(path.join(__dirname, '../public'), {
     if (filePath.endsWith('index.html')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
+    // In development, don't cache JS/CSS either — avoids stale ES modules
+    // when iterating on the frontend.
+    if (process.env.NODE_ENV !== 'production' &&
+        (filePath.endsWith('.js') || filePath.endsWith('.css'))) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
   },
 }));
 app.use('/auth',              authRoutes);

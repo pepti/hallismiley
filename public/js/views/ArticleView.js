@@ -410,18 +410,21 @@ export class ArticleView {
             <h3 class="news-editor__media-heading">Media</h3>
             <div class="news-editor__media-actions">
               <label class="news-editor__media-btn">
-                + Add Image
-                <input type="file" accept="image/jpeg,image/png,image/webp" hidden
+                + Add Images
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden multiple
                        id="media-upload-image">
               </label>
               <label class="news-editor__media-btn">
-                + Add Video
-                <input type="file" accept="video/mp4,video/webm" hidden
+                + Add Videos
+                <input type="file" accept="video/mp4,video/webm" hidden multiple
                        id="media-upload-video">
               </label>
               <button type="button" class="news-editor__media-btn" id="media-add-youtube">
                 + YouTube
               </button>
+            </div>
+            <div class="news-editor__media-dropzone" id="media-dropzone">
+              Drop images or videos here to upload
             </div>
             <div class="news-editor__media-status" id="media-status" aria-live="polite"></div>
             <div class="news-editor__media-grid" id="media-grid">
@@ -599,20 +602,20 @@ export class ArticleView {
 
   // ── Media upload bindings ────────────────────────────────────────────
   _bindMediaUploads(overlay) {
-    // Image upload
+    // Image upload (multi-select)
     const imageInput = overlay.querySelector('#media-upload-image');
     if (imageInput) {
       imageInput.addEventListener('change', () => {
-        if (imageInput.files[0]) this._uploadMediaFile(overlay, imageInput.files[0]);
+        if (imageInput.files.length) this._uploadMediaFiles(overlay, Array.from(imageInput.files));
         imageInput.value = '';
       });
     }
 
-    // Video upload
+    // Video upload (multi-select)
     const videoInput = overlay.querySelector('#media-upload-video');
     if (videoInput) {
       videoInput.addEventListener('change', () => {
-        if (videoInput.files[0]) this._uploadMediaFile(overlay, videoInput.files[0]);
+        if (videoInput.files.length) this._uploadMediaFiles(overlay, Array.from(videoInput.files));
         videoInput.value = '';
       });
     }
@@ -623,34 +626,76 @@ export class ArticleView {
       ytBtn.addEventListener('click', () => this._addYouTube(overlay));
     }
 
+    // Drag-and-drop file upload
+    this._bindDropzone(overlay);
+
     // Bind item actions for existing items
     this._bindMediaItemActions(overlay);
   }
 
-  async _uploadMediaFile(overlay, file) {
-    this._showMediaStatus(overlay, 'Uploading…');
-    try {
-      const token = await getCSRFToken();
-      const fd = new FormData();
-      fd.append('file', file);
+  _bindDropzone(overlay) {
+    const zone = overlay.querySelector('#media-dropzone');
+    if (!zone) return;
 
-      const res = await fetch(`/api/v1/news/${this._article.id}/media`, {
-        method: 'POST', credentials: 'include',
-        headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
-        body: fd,
+    const prevent = e => { e.preventDefault(); e.stopPropagation(); };
+
+    ['dragenter', 'dragover'].forEach(ev => {
+      zone.addEventListener(ev, e => {
+        prevent(e);
+        zone.classList.add('is-dragover');
       });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+      zone.addEventListener(ev, e => {
+        prevent(e);
+        zone.classList.remove('is-dragover');
+      });
+    });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Upload failed');
+    zone.addEventListener('drop', e => {
+      const files = Array.from(e.dataTransfer?.files || []).filter(f =>
+        /^image\/(jpeg|png|webp)$/.test(f.type) ||
+        /^video\/(mp4|webm)$/.test(f.type)
+      );
+      if (files.length) this._uploadMediaFiles(overlay, files);
+      else this._showMediaStatus(overlay, 'No supported images/videos found in drop', true);
+    });
+  }
+
+  async _uploadMediaFiles(overlay, files) {
+    const total = files.length;
+    let done = 0;
+    let failed = 0;
+    const token = await getCSRFToken();
+
+    for (const file of files) {
+      done++;
+      this._showMediaStatus(overlay, `Uploading ${done} of ${total}: ${file.name}…`);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch(`/api/v1/news/${this._article.id}/media`, {
+          method: 'POST', credentials: 'include',
+          headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+          body: fd,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Upload failed');
+        }
+        const item = await res.json();
+        this._media.push(item);
+        this._refreshMediaGrid(overlay);
+      } catch (err) {
+        failed++;
+        console.error(`Upload failed for ${file.name}:`, err);
       }
+    }
 
-      const item = await res.json();
-      this._media.push(item);
-      this._refreshMediaGrid(overlay);
-      this._showMediaStatus(overlay, 'Uploaded!');
-    } catch (err) {
-      this._showMediaStatus(overlay, err.message, true);
+    if (failed === 0) {
+      this._showMediaStatus(overlay, `Uploaded ${total} file${total === 1 ? '' : 's'}!`);
+    } else {
+      this._showMediaStatus(overlay, `Uploaded ${total - failed} of ${total}; ${failed} failed`, true);
     }
   }
 

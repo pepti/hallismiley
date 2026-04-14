@@ -237,7 +237,8 @@ export class NewsView {
     const existing = this._view.querySelector('#news-editor-overlay');
     if (existing) existing.remove();
 
-    this._editorMedia   = [];
+    this._editorMedia   = [];       // uploaded media (for existing articles)
+    this._pendingMedia  = [];       // files/youtube queued before article exists
     this._editorArticle = article || null;
 
     const isNew    = !article;
@@ -286,23 +287,26 @@ export class NewsView {
             </label>
           </div>
 
-          <!-- Media Section — shown after article is created -->
-          <div class="news-editor__media-section" id="editor-media-section" style="display:none">
+          <!-- Media Section — always visible; queues for new articles, uploads directly for existing -->
+          <div class="news-editor__media-section" id="editor-media-section">
             <h3 class="news-editor__media-heading">Media</h3>
             <div class="news-editor__media-actions">
               <label class="news-editor__media-btn">
-                + Add Image
-                <input type="file" accept="image/jpeg,image/png,image/webp" hidden
+                + Add Images
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden multiple
                        id="media-upload-image">
               </label>
               <label class="news-editor__media-btn">
-                + Add Video
-                <input type="file" accept="video/mp4,video/webm" hidden
+                + Add Videos
+                <input type="file" accept="video/mp4,video/webm" hidden multiple
                        id="media-upload-video">
               </label>
               <button type="button" class="news-editor__media-btn" id="media-add-youtube">
                 + YouTube
               </button>
+            </div>
+            <div class="news-editor__media-dropzone" id="media-dropzone">
+              Drop images or videos here to upload
             </div>
             <div class="news-editor__media-status" id="media-status" aria-live="polite"></div>
             <div class="news-editor__media-grid" id="media-grid">
@@ -325,6 +329,11 @@ export class NewsView {
     document.body.style.overflow = 'hidden';
 
     const close = () => {
+      // Revoke pending preview URLs to avoid memory leaks
+      (this._pendingMedia || []).forEach(p => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      });
+      this._pendingMedia = [];
       overlay.remove();
       document.body.style.overflow = '';
       this._offset = 0;
@@ -335,10 +344,14 @@ export class NewsView {
     overlay.querySelector('#editor-cancel-btn').addEventListener('click', close);
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
+    // Wire up media controls right away — queuing works even without article ID
+    this._bindMediaUploads(overlay);
+
     const form = overlay.querySelector('#news-editor-form');
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      await this._submitEditor(form, overlay, article?.id, isNew);
+      const current = this._editorArticle;
+      await this._submitEditor(form, overlay, current?.id, !current);
     });
 
     overlay.querySelector('[name="title"]').focus();
@@ -355,6 +368,13 @@ export class NewsView {
     const body        = form.querySelector('[name="body"]').value.trim();
     const cover_image = form.querySelector('[name="cover_image"]').value.trim() || null;
     const published   = form.querySelector('[name="published"]').checked;
+
+    // Basic client-side validation so the user gets feedback on required fields
+    if (!title || !summary || !body) {
+      status.className   = 'news-editor__status news-editor__status--error';
+      status.textContent = 'Title, summary, and body are required.';
+      return;
+    }
 
     status.textContent = '';
     status.className   = 'news-editor__status';
@@ -380,42 +400,61 @@ export class NewsView {
       }
 
       const saved = await res.json();
+      this._editorArticle = saved;
 
-      if (isNew) {
-        // Article created — reveal media section so user can upload images/videos
-        this._editorArticle = saved;
-        overlay.querySelector('.news-editor__title').textContent = 'Edit Article';
-        saveBtn.textContent = 'Save Changes';
-
-        // Show media section
-        const mediaSection = overlay.querySelector('#editor-media-section');
-        mediaSection.style.display = '';
-
-        // Bind media upload handlers
-        this._bindMediaUploads(overlay);
-
-        // Update status to confirm creation
-        status.className   = 'news-editor__status news-editor__status--ok';
-        status.textContent = 'Article created! You can now add images and videos below.';
-        setTimeout(() => {
-          if (status.classList.contains('news-editor__status--ok')) {
-            status.textContent = '';
-            status.className = 'news-editor__status';
-          }
-        }, 4000);
-      } else {
-        overlay.remove();
-        document.body.style.overflow = '';
-        this._offset = 0;
-        await this._loadArticles();
+      // If this was a new article and we have queued media, upload it now
+      if (isNew && this._pendingMedia.length) {
+        saveBtn.textContent = 'Uploading media…';
+        await this._flushPendingMedia(overlay);
       }
+
+      // Done — close overlay and refresh the news list
+      (this._pendingMedia || []).forEach(p => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      });
+      this._pendingMedia = [];
+      overlay.remove();
+      document.body.style.overflow = '';
+      this._offset = 0;
+      await this._loadArticles();
     } catch (err) {
       status.className   = 'news-editor__status news-editor__status--error';
       status.textContent = err.message;
     } finally {
       saveBtn.disabled    = false;
-      if (saveBtn.textContent === 'Saving…') {
+      if (saveBtn.textContent === 'Saving…' || saveBtn.textContent === 'Uploading media…') {
         saveBtn.textContent = isNew ? 'Create Article' : 'Save Changes';
+      }
+    }
+  }
+
+  // Upload all queued media items to the just-created article
+  async _flushPendingMedia(overlay) {
+    const token = await getCSRFToken();
+    const total = this._pendingMedia.length;
+    let done = 0;
+
+    for (const p of this._pendingMedia) {
+      done++;
+      this._showMediaStatus(overlay, `Uploading media ${done} of ${total}…`);
+      try {
+        if (p.type === 'file') {
+          const fd = new FormData();
+          fd.append('file', p.file);
+          await fetch(`/api/v1/news/${this._editorArticle.id}/media`, {
+            method: 'POST', credentials: 'include',
+            headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+            body: fd,
+          });
+        } else if (p.type === 'youtube') {
+          const headers = await getCsrfHeaders();
+          await fetch(`/api/v1/news/${this._editorArticle.id}/media/youtube`, {
+            method: 'POST', credentials: 'include', headers,
+            body: JSON.stringify({ url: p.url }),
+          });
+        }
+      } catch (err) {
+        console.error('Pending media upload failed:', err);
       }
     }
   }
@@ -425,7 +464,7 @@ export class NewsView {
     const imageInput = overlay.querySelector('#media-upload-image');
     if (imageInput) {
       imageInput.addEventListener('change', () => {
-        if (imageInput.files[0]) this._uploadMediaFile(overlay, imageInput.files[0]);
+        if (imageInput.files.length) this._handleFiles(overlay, Array.from(imageInput.files));
         imageInput.value = '';
       });
     }
@@ -433,7 +472,7 @@ export class NewsView {
     const videoInput = overlay.querySelector('#media-upload-video');
     if (videoInput) {
       videoInput.addEventListener('change', () => {
-        if (videoInput.files[0]) this._uploadMediaFile(overlay, videoInput.files[0]);
+        if (videoInput.files.length) this._handleFiles(overlay, Array.from(videoInput.files));
         videoInput.value = '';
       });
     }
@@ -443,46 +482,125 @@ export class NewsView {
       ytBtn.addEventListener('click', () => this._addYouTube(overlay));
     }
 
+    this._bindDropzone(overlay);
     this._bindMediaItemActions(overlay);
   }
 
-  async _uploadMediaFile(overlay, file) {
-    this._showMediaStatus(overlay, 'Uploading…');
-    try {
-      const token = await getCSRFToken();
-      const fd = new FormData();
-      fd.append('file', file);
-
-      const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media`, {
-        method: 'POST', credentials: 'include',
-        headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
-        body: fd,
+  // Route files either to immediate upload (existing article) or queue (new article)
+  _handleFiles(overlay, files) {
+    if (this._editorArticle?.id) {
+      this._uploadMediaFiles(overlay, files);
+    } else {
+      files.forEach(f => {
+        const previewUrl = URL.createObjectURL(f);
+        const isVideo = /^video\//.test(f.type);
+        this._pendingMedia.push({
+          type: 'file',
+          file: f,
+          isVideo,
+          previewUrl,
+          name: f.name,
+          _id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6),
+        });
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Upload failed');
-      }
-
-      const item = await res.json();
-      this._editorMedia.push(item);
       this._refreshMediaGrid(overlay);
-      this._showMediaStatus(overlay, 'Uploaded!');
-    } catch (err) {
-      this._showMediaStatus(overlay, err.message, true);
+      this._showMediaStatus(overlay, `${files.length} file${files.length === 1 ? '' : 's'} queued. Will upload after article is created.`);
+    }
+  }
+
+  _bindDropzone(overlay) {
+    const zone = overlay.querySelector('#media-dropzone');
+    if (!zone) return;
+
+    const prevent = e => { e.preventDefault(); e.stopPropagation(); };
+
+    ['dragenter', 'dragover'].forEach(ev => {
+      zone.addEventListener(ev, e => {
+        prevent(e);
+        zone.classList.add('is-dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+      zone.addEventListener(ev, e => {
+        prevent(e);
+        zone.classList.remove('is-dragover');
+      });
+    });
+
+    zone.addEventListener('drop', e => {
+      const files = Array.from(e.dataTransfer?.files || []).filter(f =>
+        /^image\/(jpeg|png|webp)$/.test(f.type) ||
+        /^video\/(mp4|webm)$/.test(f.type)
+      );
+      if (files.length) this._handleFiles(overlay, files);
+      else this._showMediaStatus(overlay, 'No supported images/videos found in drop', true);
+    });
+  }
+
+  async _uploadMediaFiles(overlay, files) {
+    const total = files.length;
+    let done = 0;
+    let failed = 0;
+    const token = await getCSRFToken();
+
+    for (const file of files) {
+      done++;
+      this._showMediaStatus(overlay, `Uploading ${done} of ${total}: ${file.name}…`);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media`, {
+          method: 'POST', credentials: 'include',
+          headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+          body: fd,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Upload failed');
+        }
+        const item = await res.json();
+        this._editorMedia.push(item);
+        this._refreshMediaGrid(overlay);
+      } catch (err) {
+        failed++;
+        console.error(`Upload failed for ${file.name}:`, err);
+      }
+    }
+
+    if (failed === 0) {
+      this._showMediaStatus(overlay, `Uploaded ${total} file${total === 1 ? '' : 's'}!`);
+    } else {
+      this._showMediaStatus(overlay, `Uploaded ${total - failed} of ${total}; ${failed} failed`, true);
     }
   }
 
   async _addYouTube(overlay) {
     const url = prompt('YouTube URL:');
     if (!url || !url.trim()) return;
+    const trimmed = url.trim();
+
+    // If no article yet, queue the URL; upload after article is created
+    if (!this._editorArticle?.id) {
+      // Extract video ID for thumbnail preview
+      const ytMatch = trimmed.match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+      const youtubeId = ytMatch ? ytMatch[1] : null;
+      this._pendingMedia.push({
+        type: 'youtube',
+        url: trimmed,
+        youtubeId,
+        _id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6),
+      });
+      this._refreshMediaGrid(overlay);
+      this._showMediaStatus(overlay, 'YouTube queued. Will be added after article is created.');
+      return;
+    }
 
     this._showMediaStatus(overlay, 'Adding…');
     try {
       const headers = await getCsrfHeaders();
       const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media/youtube`, {
         method: 'POST', credentials: 'include', headers,
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: trimmed }),
       });
 
       if (!res.ok) {
@@ -508,11 +626,14 @@ export class NewsView {
   }
 
   _renderEditorMediaGrid() {
-    if (!this._editorMedia.length) {
+    const uploaded = this._editorMedia || [];
+    const pending  = this._pendingMedia || [];
+
+    if (!uploaded.length && !pending.length) {
       return '<p class="news-editor__media-empty">No media added yet.</p>';
     }
 
-    return this._editorMedia.map(m => {
+    const uploadedHtml = uploaded.map(m => {
       let preview;
       if (m.kind === 'youtube') {
         preview = `<div class="news-editor__media-thumb news-editor__media-thumb--yt">
@@ -542,6 +663,41 @@ export class NewsView {
           </div>
         </div>`;
     }).join('');
+
+    const pendingHtml = pending.map(p => {
+      let preview;
+      if (p.type === 'youtube') {
+        const thumb = p.youtubeId
+          ? `<img src="https://img.youtube.com/vi/${_esc(p.youtubeId)}/mqdefault.jpg" alt="YouTube" loading="lazy">`
+          : '';
+        preview = `<div class="news-editor__media-thumb news-editor__media-thumb--yt">
+          ${thumb}
+          <span class="news-editor__media-yt-badge">YT</span>
+        </div>`;
+      } else if (p.isVideo) {
+        preview = `<div class="news-editor__media-thumb news-editor__media-thumb--vid">
+          <video src="${_esc(p.previewUrl)}" preload="metadata" muted></video>
+          <span class="news-editor__media-vid-badge">VID</span>
+        </div>`;
+      } else {
+        preview = `<div class="news-editor__media-thumb">
+          <img src="${_esc(p.previewUrl)}" alt="${_esc(p.name || '')}" loading="lazy">
+        </div>`;
+      }
+
+      return `
+        <div class="news-editor__media-item news-editor__media-item--pending" data-pending-id="${p._id}">
+          ${preview}
+          <span class="news-editor__media-pending-badge">PENDING</span>
+          <div class="news-editor__media-item-controls">
+            <span class="news-editor__media-pending-name" title="${_esc(p.name || p.url || '')}">${_esc(p.name || p.url || '')}</span>
+            <button type="button" class="news-editor__media-delete" data-pending-id="${p._id}"
+                    aria-label="Remove from queue">✕</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    return uploadedHtml + pendingHtml;
   }
 
   _refreshMediaGrid(overlay) {
@@ -555,6 +711,19 @@ export class NewsView {
   _bindMediaItemActions(overlay) {
     overlay.querySelectorAll('.news-editor__media-delete').forEach(btn => {
       btn.addEventListener('click', async () => {
+        // Pending (not yet uploaded) — just remove from queue, no confirm
+        const pendingId = btn.dataset.pendingId;
+        if (pendingId) {
+          const idx = this._pendingMedia.findIndex(p => p._id === pendingId);
+          if (idx !== -1) {
+            const removed = this._pendingMedia.splice(idx, 1)[0];
+            if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+          }
+          this._refreshMediaGrid(overlay);
+          return;
+        }
+
+        // Already-uploaded item — confirm and DELETE via API
         const mediaId = btn.dataset.mediaId;
         if (!confirm('Delete this media item?')) return;
         try {
