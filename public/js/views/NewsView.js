@@ -4,6 +4,7 @@
 
 import { getUser }        from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
+import { getCSRFToken }   from '../services/auth.js';
 
 const PAGE_SIZE = 9;
 
@@ -236,6 +237,9 @@ export class NewsView {
     const existing = this._view.querySelector('#news-editor-overlay');
     if (existing) existing.remove();
 
+    this._editorMedia   = [];
+    this._editorArticle = article || null;
+
     const isNew    = !article;
     const overlay  = document.createElement('div');
     overlay.id     = 'news-editor-overlay';
@@ -281,10 +285,35 @@ export class NewsView {
               Published
             </label>
           </div>
+
+          <!-- Media Section — shown after article is created -->
+          <div class="news-editor__media-section" id="editor-media-section" style="display:none">
+            <h3 class="news-editor__media-heading">Media</h3>
+            <div class="news-editor__media-actions">
+              <label class="news-editor__media-btn">
+                + Add Image
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden
+                       id="media-upload-image">
+              </label>
+              <label class="news-editor__media-btn">
+                + Add Video
+                <input type="file" accept="video/mp4,video/webm" hidden
+                       id="media-upload-video">
+              </label>
+              <button type="button" class="news-editor__media-btn" id="media-add-youtube">
+                + YouTube
+              </button>
+            </div>
+            <div class="news-editor__media-status" id="media-status" aria-live="polite"></div>
+            <div class="news-editor__media-grid" id="media-grid">
+              <p class="news-editor__media-empty">No media added yet.</p>
+            </div>
+          </div>
+
           <div class="news-editor__status" id="editor-status" aria-live="polite"></div>
           <div class="news-editor__actions">
             <button type="button" class="news-editor__btn news-editor__btn--cancel" id="editor-cancel-btn">Cancel</button>
-            <button type="submit" class="news-editor__btn news-editor__btn--save">
+            <button type="submit" class="news-editor__btn news-editor__btn--save" id="editor-save-btn">
               ${isNew ? 'Create Article' : 'Save Changes'}
             </button>
           </div>
@@ -298,6 +327,8 @@ export class NewsView {
     const close = () => {
       overlay.remove();
       document.body.style.overflow = '';
+      this._offset = 0;
+      this._loadArticles();
     };
 
     overlay.querySelector('.news-editor__close').addEventListener('click', close);
@@ -315,7 +346,7 @@ export class NewsView {
 
   async _submitEditor(form, overlay, articleId, isNew) {
     const status  = overlay.querySelector('#editor-status');
-    const saveBtn = form.querySelector('[type="submit"]');
+    const saveBtn = form.querySelector('#editor-save-btn');
 
     const title       = form.querySelector('[name="title"]').value.trim();
     const slug        = form.querySelector('[name="slug"]').value.trim();
@@ -348,16 +379,213 @@ export class NewsView {
         throw new Error(data.error || 'Save failed');
       }
 
-      overlay.remove();
-      document.body.style.overflow = '';
-      this._offset = 0;
-      await this._loadArticles();
+      const saved = await res.json();
+
+      if (isNew) {
+        // Article created — reveal media section so user can upload images/videos
+        this._editorArticle = saved;
+        overlay.querySelector('.news-editor__title').textContent = 'Edit Article';
+        saveBtn.textContent = 'Save Changes';
+
+        // Show media section
+        const mediaSection = overlay.querySelector('#editor-media-section');
+        mediaSection.style.display = '';
+
+        // Bind media upload handlers
+        this._bindMediaUploads(overlay);
+
+        // Update status to confirm creation
+        status.className   = 'news-editor__status news-editor__status--ok';
+        status.textContent = 'Article created! You can now add images and videos below.';
+        setTimeout(() => {
+          if (status.classList.contains('news-editor__status--ok')) {
+            status.textContent = '';
+            status.className = 'news-editor__status';
+          }
+        }, 4000);
+      } else {
+        overlay.remove();
+        document.body.style.overflow = '';
+        this._offset = 0;
+        await this._loadArticles();
+      }
     } catch (err) {
       status.className   = 'news-editor__status news-editor__status--error';
       status.textContent = err.message;
     } finally {
       saveBtn.disabled    = false;
-      saveBtn.textContent = isNew ? 'Create Article' : 'Save Changes';
+      if (saveBtn.textContent === 'Saving…') {
+        saveBtn.textContent = isNew ? 'Create Article' : 'Save Changes';
+      }
     }
+  }
+
+  // ── Media upload helpers (mirrors ArticleView pattern) ──────────────
+  _bindMediaUploads(overlay) {
+    const imageInput = overlay.querySelector('#media-upload-image');
+    if (imageInput) {
+      imageInput.addEventListener('change', () => {
+        if (imageInput.files[0]) this._uploadMediaFile(overlay, imageInput.files[0]);
+        imageInput.value = '';
+      });
+    }
+
+    const videoInput = overlay.querySelector('#media-upload-video');
+    if (videoInput) {
+      videoInput.addEventListener('change', () => {
+        if (videoInput.files[0]) this._uploadMediaFile(overlay, videoInput.files[0]);
+        videoInput.value = '';
+      });
+    }
+
+    const ytBtn = overlay.querySelector('#media-add-youtube');
+    if (ytBtn) {
+      ytBtn.addEventListener('click', () => this._addYouTube(overlay));
+    }
+
+    this._bindMediaItemActions(overlay);
+  }
+
+  async _uploadMediaFile(overlay, file) {
+    this._showMediaStatus(overlay, 'Uploading…');
+    try {
+      const token = await getCSRFToken();
+      const fd = new FormData();
+      fd.append('file', file);
+
+      const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media`, {
+        method: 'POST', credentials: 'include',
+        headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+        body: fd,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      const item = await res.json();
+      this._editorMedia.push(item);
+      this._refreshMediaGrid(overlay);
+      this._showMediaStatus(overlay, 'Uploaded!');
+    } catch (err) {
+      this._showMediaStatus(overlay, err.message, true);
+    }
+  }
+
+  async _addYouTube(overlay) {
+    const url = prompt('YouTube URL:');
+    if (!url || !url.trim()) return;
+
+    this._showMediaStatus(overlay, 'Adding…');
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media/youtube`, {
+        method: 'POST', credentials: 'include', headers,
+        body: JSON.stringify({ url: url.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to add YouTube video');
+      }
+
+      const item = await res.json();
+      this._editorMedia.push(item);
+      this._refreshMediaGrid(overlay);
+      this._showMediaStatus(overlay, 'Added!');
+    } catch (err) {
+      this._showMediaStatus(overlay, err.message, true);
+    }
+  }
+
+  _showMediaStatus(overlay, msg, isError = false) {
+    const el = overlay.querySelector('#media-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = `news-editor__media-status${isError ? ' news-editor__media-status--error' : ' news-editor__media-status--ok'}`;
+    setTimeout(() => { el.textContent = ''; el.className = 'news-editor__media-status'; }, 3000);
+  }
+
+  _renderEditorMediaGrid() {
+    if (!this._editorMedia.length) {
+      return '<p class="news-editor__media-empty">No media added yet.</p>';
+    }
+
+    return this._editorMedia.map(m => {
+      let preview;
+      if (m.kind === 'youtube') {
+        preview = `<div class="news-editor__media-thumb news-editor__media-thumb--yt">
+          <img src="https://img.youtube.com/vi/${_esc(m.youtube_id)}/mqdefault.jpg"
+               alt="YouTube" loading="lazy">
+          <span class="news-editor__media-yt-badge">YT</span>
+        </div>`;
+      } else if (m.kind === 'video_file') {
+        preview = `<div class="news-editor__media-thumb news-editor__media-thumb--vid">
+          <video src="${_esc(m.file_path)}" preload="metadata" muted></video>
+          <span class="news-editor__media-vid-badge">VID</span>
+        </div>`;
+      } else {
+        preview = `<div class="news-editor__media-thumb">
+          <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
+        </div>`;
+      }
+
+      return `
+        <div class="news-editor__media-item" data-media-id="${m.id}">
+          ${preview}
+          <div class="news-editor__media-item-controls">
+            <input type="text" class="news-editor__media-caption" placeholder="Caption…"
+                   value="${_esc(m.caption || '')}" data-media-id="${m.id}">
+            <button type="button" class="news-editor__media-delete" data-media-id="${m.id}"
+                    aria-label="Delete media">✕</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  _refreshMediaGrid(overlay) {
+    const grid = overlay.querySelector('#media-grid');
+    if (grid) {
+      grid.innerHTML = this._renderEditorMediaGrid();
+      this._bindMediaItemActions(overlay);
+    }
+  }
+
+  _bindMediaItemActions(overlay) {
+    overlay.querySelectorAll('.news-editor__media-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mediaId = btn.dataset.mediaId;
+        if (!confirm('Delete this media item?')) return;
+        try {
+          const token = await getCSRFToken();
+          const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media/${mediaId}`, {
+            method: 'DELETE', credentials: 'include',
+            headers: { ...(token ? { 'X-CSRF-Token': token } : {}) },
+          });
+          if (!res.ok) throw new Error('Delete failed');
+          this._editorMedia = this._editorMedia.filter(m => m.id !== Number(mediaId));
+          this._refreshMediaGrid(overlay);
+        } catch (err) {
+          this._showMediaStatus(overlay, err.message, true);
+        }
+      });
+    });
+
+    overlay.querySelectorAll('.news-editor__media-caption').forEach(input => {
+      input.addEventListener('change', async () => {
+        const mediaId = input.dataset.mediaId;
+        const caption = input.value.trim();
+        try {
+          const headers = await getCsrfHeaders();
+          await fetch(`/api/v1/news/${this._editorArticle.id}/media/${mediaId}`, {
+            method: 'PATCH', credentials: 'include', headers,
+            body: JSON.stringify({ caption }),
+          });
+          const m = this._editorMedia.find(m => m.id === Number(mediaId));
+          if (m) m.caption = caption;
+        } catch { /* silent */ }
+      });
+    });
   }
 }

@@ -867,3 +867,105 @@
 .party-edit-add--hidden { display: none; }
 
 .party-timeline__item { display: flex; align-items: center; }
+
+/* ── Checkbox groups (food options, custom questions) ───────────────── */
+
+.party-checkbox-group {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.party-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.party-checkbox input[type="checkbox"] {
+  accent-color: var(--gold);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* ── RSVP admin editor (food options / questions) ───────────────────── */
+
+.party-edit-btn--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--gold);
+  cursor: pointer;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  margin-left: var(--sp-2);
+  transition: background 200ms ease;
+}
+.party-edit-btn--inline:hover { background: rgba(200,155,60,.2); }
+
+.party-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.party-edit-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.party-edit-list-item input {
+  flex: 1;
+}
+
+.party-question-block {
+  padding: var(--sp-3);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  margin-bottom: var(--sp-3);
+}
+
+.party-question-block__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.party-question-block__header input {
+  flex: 1;
+  font-weight: 600;
+}
+
+.party-question-block__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-left: var(--sp-3);
+}
+
+.party-edit-add--sm {
+  font-size: .75rem;
+  padding: 4px 10px;
+}
+
+.party-rsvp-questions {
+  margin-top: var(--sp-3);
+  position: relative;
+}
+
+.party-custom-question {
+  margin-bottom: var(--sp-3);
+}
