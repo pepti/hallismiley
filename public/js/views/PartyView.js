@@ -170,15 +170,15 @@ export class PartyView {
 
   _renderHub() {
     const info    = this._partyInfo || {};
-    const schedule = this._parseJSON(info.schedule, []);
-    const games    = this._parseJSON(info.games,    []);
+    const schedule   = this._parseJSON(info.schedule,   []);
+    const activities = this._parseJSON(info.activities, { daytime: [], evening: [] });
 
     return `
       ${this._renderHero()}
       ${this._renderVenue(info)}
       ${this._renderSchedule(schedule)}
       ${this._renderRsvp()}
-      ${this._renderGames(games)}`;
+      ${this._renderActivities(activities)}`;
   }
 
   _renderHero() {
@@ -435,35 +435,54 @@ export class PartyView {
       </form>`;
   }
 
-  _renderGames(games) {
-    const cards = games.map((g, i) => `
-      <div class="party-game-card" data-game-index="${i}">
-        <h3 class="party-game-card__name" data-game="name">${escHtml(g.name)}</h3>
-        <p class="party-game-card__desc" data-game="desc">${escHtml(g.description)}</p>
-        <p class="party-game-card__rules" data-game="rules"><strong>Rules:</strong> <span data-game="rules-text">${escHtml(g.rules)}</span></p>
+  _renderActivities(activities) {
+    const editor = canEdit();
+
+    const renderCards = (list, group) => list.map((g, i) => `
+      <div class="party-activity-card" data-activity-index="${i}" data-activity-group="${group}">
+        ${editor ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-activity="${group}-${i}" aria-label="Remove this activity" title="Remove">✕</button>` : ''}
+        <h3 class="party-activity-card__name" data-activity="name">${escHtml(g.name)}</h3>
+        <p class="party-activity-card__desc" data-activity="desc">${escHtml(g.description)}</p>
+        <p class="party-activity-card__rules" data-activity="rules"><strong>Rules:</strong> <span data-activity="rules-text">${escHtml(g.rules)}</span></p>
       </div>`).join('');
 
-    const editBtn = canEdit() ? `
-      <button class="party-edit-btn" data-edit-section="games" aria-label="Edit games section">
+    const daytimeCards = renderCards(activities.daytime || [], 'daytime');
+    const eveningCards = renderCards(activities.evening || [], 'evening');
+
+    const addBtn = (group) => editor
+      ? `<button class="party-edit-add party-edit-add--hidden" data-add-activity="${group}" aria-label="Add ${group} activity">+ Add Activity</button>`
+      : '';
+
+    const editBtn = editor ? `
+      <button class="party-edit-btn" data-edit-section="activities" aria-label="Edit activities section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit
       </button>` : '';
 
-    const editControls = canEdit() ? `
-      <div class="party-edit-controls party-edit-controls--hidden" data-controls="games">
-        <button class="party-edit-save" data-save-section="games">Save</button>
-        <button class="party-edit-cancel" data-cancel-section="games">Cancel</button>
-        <span class="party-edit-status" data-status="games" aria-live="polite"></span>
+    const editControls = editor ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="activities">
+        <button class="party-edit-save" data-save-section="activities">Save</button>
+        <button class="party-edit-cancel" data-cancel-section="activities">Cancel</button>
+        <span class="party-edit-status" data-status="activities" aria-live="polite"></span>
       </div>` : '';
 
     return `
-      <section class="party-section party-games" aria-labelledby="games-heading">
+      <section class="party-section party-activities" aria-labelledby="activities-heading">
         ${editBtn}
         <div class="party-section__inner">
-          <h2 class="party-section__title" id="games-heading">🎮 Party Games</h2>
-          <div class="party-games__grid">
-            ${cards}
+          <h2 class="party-section__title" id="activities-heading">🎯 Activities</h2>
+
+          <h3 class="party-activities__sub-heading">☀️ Daytime Activities</h3>
+          <div class="party-activities__grid" data-activities-grid="daytime">
+            ${daytimeCards}
           </div>
+          ${addBtn('daytime')}
+
+          <h3 class="party-activities__sub-heading party-activities__sub-heading--evening">🌙 Evening Activities</h3>
+          <div class="party-activities__grid" data-activities-grid="evening">
+            ${eveningCards}
+          </div>
+          ${addBtn('evening')}
         </div>
         ${editControls}
       </section>`;
@@ -582,9 +601,9 @@ export class PartyView {
 
     // Enable contentEditable on data fields
     const editableSelectors = {
-      venue:    '[data-field], [data-detail]',
-      schedule: '[data-sched]',
-      games:    '[data-game="name"], [data-game="desc"], [data-game="rules-text"]',
+      venue:      '[data-field], [data-detail]',
+      schedule:   '[data-sched]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-text"]',
     };
     sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
       el.contentEditable = 'true';
@@ -597,6 +616,13 @@ export class PartyView {
       sectionEl.querySelector('[data-add-schedule]')?.classList.remove('party-edit-add--hidden');
       this._bindScheduleAddDelete(sectionEl);
     }
+
+    // Show add/delete buttons for activities
+    if (section === 'activities') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.remove('party-edit-row-delete--hidden'));
+      sectionEl.querySelectorAll('[data-add-activity]').forEach(b => b.classList.remove('party-edit-add--hidden'));
+      this._bindActivitiesAddDelete(sectionEl);
+    }
   }
 
   _exitEdit(section) {
@@ -608,9 +634,9 @@ export class PartyView {
     sectionEl.querySelector(`[data-controls="${section}"]`)?.classList.add('party-edit-controls--hidden');
 
     const editableSelectors = {
-      venue:    '[data-field], [data-detail]',
-      schedule: '[data-sched]',
-      games:    '[data-game="name"], [data-game="desc"], [data-game="rules-text"]',
+      venue:      '[data-field], [data-detail]',
+      schedule:   '[data-sched]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-text"]',
     };
     sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
       el.contentEditable = 'false';
@@ -620,6 +646,10 @@ export class PartyView {
     if (section === 'schedule') {
       sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.add('party-edit-row-delete--hidden'));
       sectionEl.querySelector('[data-add-schedule]')?.classList.add('party-edit-add--hidden');
+    }
+    if (section === 'activities') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.add('party-edit-row-delete--hidden'));
+      sectionEl.querySelectorAll('[data-add-activity]').forEach(b => b.classList.add('party-edit-add--hidden'));
     }
 
     // Clear status
@@ -680,16 +710,19 @@ export class PartyView {
       payload.schedule = JSON.stringify(items);
     }
 
-    if (section === 'games') {
-      const items = [];
-      sectionEl.querySelectorAll('[data-game-index]').forEach(card => {
-        items.push({
-          name:        card.querySelector('[data-game="name"]')?.innerText.trim()       || '',
-          description: card.querySelector('[data-game="desc"]')?.innerText.trim()       || '',
-          rules:       card.querySelector('[data-game="rules-text"]')?.innerText.trim() || '',
+    if (section === 'activities') {
+      const collect = (group) => {
+        const items = [];
+        sectionEl.querySelectorAll(`[data-activity-group="${group}"]`).forEach(card => {
+          items.push({
+            name:        card.querySelector('[data-activity="name"]')?.innerText.trim()       || '',
+            description: card.querySelector('[data-activity="desc"]')?.innerText.trim()       || '',
+            rules:       card.querySelector('[data-activity="rules-text"]')?.innerText.trim() || '',
+          });
         });
-      });
-      payload.games = JSON.stringify(items);
+        return items;
+      };
+      payload.activities = JSON.stringify({ daytime: collect('daytime'), evening: collect('evening') });
     }
 
     try {
@@ -757,8 +790,49 @@ export class PartyView {
     }
   }
 
+  _bindActivitiesAddDelete(sectionEl) {
+    // Delete buttons
+    sectionEl.querySelectorAll('[data-delete-activity]').forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        const card = newBtn.closest('[data-activity-group]');
+        const group = card?.dataset.activityGroup;
+        card?.remove();
+        // Re-index remaining cards in that group
+        sectionEl.querySelectorAll(`[data-activity-group="${group}"]`).forEach((c, i) => {
+          c.dataset.activityIndex = i;
+        });
+      });
+    });
+
+    // Add buttons (one per group)
+    sectionEl.querySelectorAll('[data-add-activity]').forEach(addBtn => {
+      const newAdd = addBtn.cloneNode(true);
+      addBtn.replaceWith(newAdd);
+      newAdd.addEventListener('click', () => {
+        const group = newAdd.dataset.addActivity;
+        const grid = sectionEl.querySelector(`[data-activities-grid="${group}"]`);
+        if (!grid) return;
+        const count = grid.querySelectorAll('[data-activity-group]').length;
+        const card = document.createElement('div');
+        card.className = 'party-activity-card';
+        card.dataset.activityIndex = count;
+        card.dataset.activityGroup = group;
+        card.innerHTML = `
+          <button class="party-edit-row-delete" data-delete-activity="${group}-${count}" aria-label="Remove this activity" title="Remove">✕</button>
+          <h3 class="party-activity-card__name" data-activity="name" contenteditable="true" spellcheck="true">New Activity</h3>
+          <p class="party-activity-card__desc" data-activity="desc" contenteditable="true" spellcheck="true">Description</p>
+          <p class="party-activity-card__rules" data-activity="rules"><strong>Rules:</strong> <span data-activity="rules-text" contenteditable="true" spellcheck="true">Rules here</span></p>`;
+        grid.appendChild(card);
+        this._bindActivitiesAddDelete(sectionEl);
+        card.querySelector('[data-activity="name"]')?.focus();
+      });
+    });
+  }
+
   _getSectionEl(section) {
-    const map = { venue: '.party-venue', schedule: '.party-schedule', games: '.party-games' };
+    const map = { venue: '.party-venue', schedule: '.party-schedule', activities: '.party-activities' };
     return this._el.querySelector(map[section]);
   }
 

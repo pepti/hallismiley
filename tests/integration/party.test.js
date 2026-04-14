@@ -62,7 +62,7 @@ describe('GET /api/v1/party/info', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('venue_name');
     expect(res.body).toHaveProperty('schedule');
-    expect(res.body).toHaveProperty('games');
+    expect(res.body).toHaveProperty('activities');
   });
 
   test('returns 403 for user without party access', async () => {

@@ -46,33 +46,52 @@ const DEFAULT_PARTY_INFO = {
     { time: '21:30', event: 'Last Round & Farewells' },
     { time: '22:00', event: 'Venue Closes' },
   ]),
-  games: JSON.stringify([
-    {
-      name: '40 Things About Halli',
-      description: 'Trivia quiz about the birthday person.',
-      rules: 'Answer questions about Halli — most correct answers wins!',
-    },
-    {
-      name: 'Decades Dance-Off',
-      description: "Dance to hits from each decade Halli has lived through.",
-      rules: "80s, 90s, 00s, 10s, 20s — best dancer in each round wins a point.",
-    },
-    {
-      name: 'Photo Scavenger Hunt',
-      description: 'Complete a list of fun photo challenges.',
-      rules: 'Most photos completed on the list by midnight wins.',
-    },
-    {
-      name: 'Musical Chairs: Adult Edition',
-      description: 'Classic musical chairs, but with a grown-up twist.',
-      rules: 'Last one standing takes the prize.',
-    },
-    {
-      name: 'Best Birthday Wish',
-      description: 'Most creative toast wins a prize.',
-      rules: 'Guests vote for their favourite toast — winner gets a special prize.',
-    },
-  ]),
+  activities: JSON.stringify({
+    daytime: [
+      {
+        name: 'Photo Scavenger Hunt',
+        description: 'Complete a list of fun photo challenges around the venue.',
+        rules: 'Most photos completed on the list wins.',
+      },
+      {
+        name: 'Lawn Games Tournament',
+        description: 'Outdoor games on the veranda — kubb, mölkky, and more.',
+        rules: 'Teams of 4, round-robin bracket. Winners get bragging rights.',
+      },
+      {
+        name: '40 Things About Halli',
+        description: 'Trivia quiz about the birthday person.',
+        rules: 'Answer questions about Halli — most correct answers wins!',
+      },
+      {
+        name: 'SPA Relay Race',
+        description: 'A silly relay between the hot tubs, sauna, and cold plunge.',
+        rules: 'Fastest team through all three stations wins.',
+      },
+    ],
+    evening: [
+      {
+        name: 'Decades Dance-Off',
+        description: "Dance to hits from each decade Halli has lived through.",
+        rules: "80s, 90s, 00s, 10s, 20s — best dancer in each round wins a point.",
+      },
+      {
+        name: 'Musical Chairs: Adult Edition',
+        description: 'Classic musical chairs, but with a grown-up twist.',
+        rules: 'Last one standing takes the prize.',
+      },
+      {
+        name: 'Best Birthday Wish',
+        description: 'Most creative toast wins a prize.',
+        rules: 'Guests vote for their favourite toast — winner gets a special prize.',
+      },
+      {
+        name: 'Karaoke Battle',
+        description: 'Grab the mic and belt out your best tune.',
+        rules: 'Crowd applause decides the winner. Bonus points for Icelandic songs.',
+      },
+    ],
+  }),
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -307,15 +326,25 @@ const partyController = {
       );
       const info = { ...DEFAULT_PARTY_INFO };
       for (const row of rows) {
-        info[row.key.replace(/^party_/, '')] = row.value;
+        const k = row.key.replace(/^party_/, '');
+        info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
       }
+      // Backward compat: migrate legacy flat games array → activities object
+      if (info.games && !info.activities) {
+        const games = typeof info.games === 'string' ? JSON.parse(info.games) : info.games;
+        if (Array.isArray(games)) {
+          const half = Math.ceil(games.length / 2);
+          info.activities = JSON.stringify({ daytime: games.slice(0, half), evening: games.slice(half) });
+        }
+      }
+      delete info.games;
       res.json(info);
     } catch (err) { next(err); }
   },
 
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'games'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {
@@ -350,7 +379,8 @@ const partyController = {
       );
       const info = { ...DEFAULT_PARTY_INFO };
       for (const row of rows) {
-        info[row.key.replace(/^party_/, '')] = row.value;
+        const k = row.key.replace(/^party_/, '');
+        info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
       }
       res.json(info);
     } catch (err) { next(err); }
