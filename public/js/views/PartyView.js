@@ -20,7 +20,10 @@ export class PartyView {
   }
 
   _isVerified() {
-    return isAuthenticated() && getUser()?.email_verified;
+    if (!isAuthenticated()) return false;
+    // Admins and moderators always have access, regardless of email verification
+    if (canEdit()) return true;
+    return !!getUser()?.email_verified;
   }
 
   async render() {
