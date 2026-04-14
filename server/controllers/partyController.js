@@ -329,11 +329,18 @@ const partyController = {
         if (typeof value !== 'string') {
           return res.status(400).json({ error: `${key} must be a string`, code: 400 });
         }
+        // value is always a string (validated above); structured fields arrive
+        // pre-JSON-stringified from the frontend.  Parse first so we store the
+        // real JSON type (object/array/string) rather than a double-encoded
+        // JSON string.  If parsing fails the value is a plain string, so wrap
+        // it as a JSON string.
+        let jsonb;
+        try { jsonb = JSON.parse(value); } catch { jsonb = value; }
         await db.query(
-          `INSERT INTO site_content (key, value, updated_by) VALUES ($1, $2, $3)
+          `INSERT INTO site_content (key, value, updated_by) VALUES ($1, $2::jsonb, $3)
            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,
              updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-          [`party_${key}`, value, req.user.id]
+          [`party_${key}`, JSON.stringify(jsonb), req.user.id]
         );
       }
 

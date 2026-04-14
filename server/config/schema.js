@@ -304,6 +304,15 @@ const migrations = [
       `CREATE INDEX IF NOT EXISTS idx_news_media_article ON news_media (article_id)`,
     ],
   },
+  {
+    name: '017_home_stats_content',
+    statements: [
+      `INSERT INTO site_content (key, value) VALUES (
+        'home_stats',
+        '[{"num":"22+","label":"Years Carpentry Experience"},{"num":"15+","label":"Years Coding Experience"},{"num":"6+","label":"Years Tech Management"},{"num":"40","label":"Years of creating all kinds of trouble"}]'::jsonb
+      ) ON CONFLICT (key) DO NOTHING`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
