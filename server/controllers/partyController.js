@@ -48,48 +48,10 @@ const DEFAULT_PARTY_INFO = {
   ]),
   activities: JSON.stringify({
     daytime: [
-      {
-        name: 'Photo Scavenger Hunt',
-        description: 'Complete a list of fun photo challenges around the venue.',
-        rules: 'Most photos completed on the list wins.',
-      },
-      {
-        name: 'Lawn Games Tournament',
-        description: 'Outdoor games on the veranda — kubb, mölkky, and more.',
-        rules: 'Teams of 4, round-robin bracket. Winners get bragging rights.',
-      },
-      {
-        name: '40 Things About Halli',
-        description: 'Trivia quiz about the birthday person.',
-        rules: 'Answer questions about Halli — most correct answers wins!',
-      },
-      {
-        name: 'SPA Relay Race',
-        description: 'A silly relay between the hot tubs, sauna, and cold plunge.',
-        rules: 'Fastest team through all three stations wins.',
-      },
+      { name: 'TBD', description: 'TBD', rules: 'TBD' },
     ],
     evening: [
-      {
-        name: 'Decades Dance-Off',
-        description: "Dance to hits from each decade Halli has lived through.",
-        rules: "80s, 90s, 00s, 10s, 20s — best dancer in each round wins a point.",
-      },
-      {
-        name: 'Musical Chairs: Adult Edition',
-        description: 'Classic musical chairs, but with a grown-up twist.',
-        rules: 'Last one standing takes the prize.',
-      },
-      {
-        name: 'Best Birthday Wish',
-        description: 'Most creative toast wins a prize.',
-        rules: 'Guests vote for their favourite toast — winner gets a special prize.',
-      },
-      {
-        name: 'Karaoke Battle',
-        description: 'Grab the mic and belt out your best tune.',
-        rules: 'Crowd applause decides the winner. Bonus points for Icelandic songs.',
-      },
+      { name: 'TBD', description: 'TBD', rules: 'TBD' },
     ],
   }),
 };

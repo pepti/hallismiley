@@ -178,7 +178,7 @@ export class PartyView {
       ${this._renderVenue(info)}
       ${this._renderSchedule(schedule)}
       ${this._renderRsvp()}
-      ${this._renderActivities(activities)}`;
+      ${getUser()?.email_verified ? this._renderActivities(activities) : ''}`;
   }
 
   _renderHero() {
