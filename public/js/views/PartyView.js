@@ -2,23 +2,10 @@ import { isAuthenticated, getUser, isAdmin, canEdit } from '../services/auth.js'
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
-import { avatarPathByName } from '../utils/avatar.js';
 import { Lightbox }     from '../components/Lightbox.js';
 
 const PARTY_DATE = new Date('2026-07-25T14:00:00');
 const TOTAL_GUESTS = 60;
-
-function timeAgo(str) {
-  const diff  = Date.now() - new Date(str).getTime();
-  const mins  = Math.floor(diff / 60000);
-  const hours = Math.floor(mins / 60);
-  const days  = Math.floor(hours / 24);
-  if (mins < 2)   return 'just now';
-  if (mins < 60)  return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return 'yesterday';
-  return `${days} days ago`;
-}
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -26,49 +13,20 @@ export class PartyView {
   constructor() {
     this._el            = null;
     this._timerLoop     = null;
-    this._lightbox      = null;
     this._venueLightbox = null;
     this._partyInfo     = null;
     this._rsvp          = null;
-    this._guestbook     = [];
-    this._photos        = [];
     this._rsvpCount     = 0;
+  }
+
+  _isVerified() {
+    return isAuthenticated() && getUser()?.email_verified;
   }
 
   async render() {
     const el = document.createElement('div');
     el.className = 'view party-view';
     this._el = el;
-
-    if (!isAuthenticated()) {
-      el.innerHTML = this._renderLanding();
-      return el;
-    }
-
-    if (!getUser()?.email_verified && !this._skipVerification) {
-      el.innerHTML = this._renderUnverified();
-      el.querySelector('#party-skip-verify')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        this._skipVerification = true;
-        this.render().then(newEl => {
-          el.replaceWith(newEl);
-        });
-      });
-      return el;
-    }
-
-    // Check access
-    let hasAccess = false;
-    try {
-      const res  = await fetch('/api/v1/party/access', { credentials: 'include' });
-      const data = await res.json();
-      hasAccess = data.hasAccess;
-    } catch { /* network error */ }
-
-    if (!hasAccess) {
-      el.innerHTML = this._renderNoAccess();
-      return el;
-    }
 
     // Render skeleton, then load all data
     el.innerHTML = this._renderSkeleton();
@@ -87,72 +45,54 @@ export class PartyView {
   }
 
   async _loadAll() {
-    const [infoRes, rsvpRes, gbRes, photoRes] = await Promise.all([
-      fetch('/api/v1/party/info',       { credentials: 'include' }),
-      fetch('/api/v1/party/rsvp',       { credentials: 'include' }),
-      fetch('/api/v1/party/guestbook',  { credentials: 'include' }),
-      fetch('/api/v1/party/photos',     { credentials: 'include' }),
-    ]);
-
+    // Party info is public — always fetch
+    const infoRes = await fetch('/api/v1/party/info');
     this._partyInfo = await infoRes.json();
-    this._rsvp      = await rsvpRes.json();
-    this._guestbook = await gbRes.json();
-    this._photos    = await photoRes.json();
 
-    // Count attending RSVPs for display
-    if (isAdmin()) {
-      const rsvpsRes = await fetch('/api/v1/party/rsvps', { credentials: 'include' });
-      const rsvps    = await rsvpsRes.json();
-      this._rsvpCount = rsvps.filter(r => r.attending).length;
+    // Parse admin-configurable RSVP options
+    this._foodOptions   = this._parseJSON(this._partyInfo.food_options,   []);
+    this._rsvpQuestions = this._parseJSON(this._partyInfo.rsvp_questions, []);
+
+    // RSVP data requires verified user
+    if (this._isVerified()) {
+      try {
+        const rsvpRes = await fetch('/api/v1/party/rsvp', { credentials: 'include' });
+        this._rsvp = await rsvpRes.json();
+      } catch { /* not accessible */ }
+
+      if (isAdmin()) {
+        const rsvpsRes = await fetch('/api/v1/party/rsvps', { credentials: 'include' });
+        const rsvps    = await rsvpsRes.json();
+        this._rsvpCount = rsvps.filter(r => r.attending).length;
+      }
     }
   }
 
-  // ── Locked states ─────────────────────────────────────────────────────────────
+  // ── Locked section overlay ─────────────────────────────────────────────────
 
-  _renderLanding() {
+  _renderLockedSection(title, emoji) {
+    const authed = isAuthenticated();
+    const ctaText = authed
+      ? 'Verify your email to unlock this section'
+      : 'Sign in & verify your email to unlock this section';
+    const ctaBtn = authed
+      ? ''
+      : `<div class="party-locked__actions">
+           <a href="#/signup" class="lol-btn lol-btn--primary party-locked__btn">Create Account</a>
+           <button class="lol-btn lol-btn--ghost party-locked__btn party-locked__signin">Sign In</button>
+         </div>`;
+
     return `
-      <div class="party-landing">
-        <div class="party-landing__confetti" aria-hidden="true">
-          ${Array.from({ length: 20 }, (_, i) =>
-            `<span class="confetti-piece confetti-piece--${i % 5}" aria-hidden="true"></span>`
-          ).join('')}
-        </div>
-        <div class="party-landing__content">
-          <div class="party-landing__cake" aria-hidden="true">🎂</div>
-          <h1 class="party-landing__title">You've been invited to<br><span class="party-gold">Halli's 40th!</span></h1>
-          <p class="party-landing__sub">July 25, 2026 &mdash; A celebration to remember</p>
-          <p class="party-landing__cta-text">Sign in or create an account to access the party hub.</p>
-          <div class="party-landing__actions">
-            <a href="#/signup" class="lol-btn lol-btn--primary party-landing__btn">Create Account</a>
-            <button class="lol-btn lol-btn--ghost party-landing__btn" id="party-signin-btn">Sign In</button>
+      <section class="party-section party-locked" aria-labelledby="locked-${title.toLowerCase().replace(/\s+/g, '-')}">
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="locked-${title.toLowerCase().replace(/\s+/g, '-')}">${emoji} ${escHtml(title)}</h2>
+          <div class="party-locked__overlay">
+            <div class="party-locked__icon" aria-hidden="true">🔒</div>
+            <p class="party-locked__text">${ctaText}</p>
+            ${ctaBtn}
           </div>
         </div>
-      </div>`;
-  }
-
-  _renderNoAccess() {
-    return `
-      <div class="party-no-access">
-        <div class="party-no-access__icon" aria-hidden="true">🔒</div>
-        <h2>Private Event</h2>
-        <p>This is a private event. If you received an invitation, make sure you're using the same email address you were invited with.</p>
-        <p class="party-no-access__email">Signed in as: <strong>${escHtml(getUser()?.email || '')}</strong></p>
-      </div>`;
-  }
-
-  _renderUnverified() {
-    return `
-      <div class="party-no-access">
-        <div class="party-no-access__icon" aria-hidden="true">✉️</div>
-        <h2>Verify Your Email First</h2>
-        <p>You need to verify your email address before you can access the party page.</p>
-        <p class="party-no-access__email">A verification link was sent to <strong>${escHtml(getUser()?.email || '')}</strong>.</p>
-        <p>Check your inbox (and spam folder), then reload this page once verified.</p>
-        <p style="margin-top:1.2rem;font-size:0.9rem;opacity:0.8;">Note, if you haven't verified your email you might miss out on an update about the party.</p>
-        <a href="#" id="party-skip-verify" style="margin-top:0.5rem;display:inline-block;color:#c9a84c;text-decoration:underline;cursor:pointer;">Continue anyway →</a>
-        <br>
-        <a href="#/signup" class="lol-btn lol-btn--primary" style="margin-top:1rem;">Back to Sign Up</a>
-      </div>`;
+      </section>`;
   }
 
   _renderSkeleton() {
@@ -169,16 +109,17 @@ export class PartyView {
   // ── Full hub ──────────────────────────────────────────────────────────────────
 
   _renderHub() {
-    const info    = this._partyInfo || {};
+    const info       = this._partyInfo || {};
     const schedule   = this._parseJSON(info.schedule,   []);
     const activities = this._parseJSON(info.activities, { daytime: [], evening: [] });
+    const verified   = this._isVerified();
 
     return `
       ${this._renderHero()}
       ${this._renderVenue(info)}
       ${this._renderSchedule(schedule)}
-      ${this._renderRsvp()}
-      ${getUser()?.email_verified ? this._renderActivities(activities) : ''}`;
+      ${verified ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟')}
+      ${verified ? this._renderActivities(activities) : this._renderLockedSection('Activities', '🎯')}`;
   }
 
   _renderHero() {
@@ -357,8 +298,16 @@ export class PartyView {
               <div class="party-rsvp__status party-rsvp__status--${rsvp.attending ? 'yes' : 'no'}">
                 ${rsvp.attending ? '✅ You are attending!' : '❌ You declined'}
               </div>
-              ${rsvp.dietary_needs ? `<p><strong>Dietary needs:</strong> ${escHtml(rsvp.dietary_needs)}</p>` : ''}
-              ${rsvp.plus_one ? `<p><strong>Plus one:</strong> ${escHtml(rsvp.plus_one_name || 'Guest')}${rsvp.plus_one_dietary ? ` (${escHtml(rsvp.plus_one_dietary)})` : ''}</p>` : ''}
+              ${rsvp.food_choices?.guest?.length
+                ? `<p><strong>Food:</strong> ${rsvp.food_choices.guest.map(f => escHtml(f)).join(', ')}</p>`
+                : (rsvp.dietary_needs ? `<p><strong>Dietary needs:</strong> ${escHtml(rsvp.dietary_needs)}</p>` : '')}
+              ${rsvp.plus_one ? `<p><strong>Plus one:</strong> ${escHtml(rsvp.plus_one_name || 'Guest')}${rsvp.food_choices?.plus_one?.length
+                ? ` (${rsvp.food_choices.plus_one.map(f => escHtml(f)).join(', ')})`
+                : (rsvp.plus_one_dietary ? ` (${escHtml(rsvp.plus_one_dietary)})` : '')}</p>` : ''}
+              ${(this._rsvpQuestions || []).map(q => {
+                const ans = rsvp.custom_answers?.[q.id];
+                return ans?.length ? `<p><strong>${escHtml(q.label)}:</strong> ${ans.map(a => escHtml(a)).join(', ')}</p>` : '';
+              }).join('')}
               ${rsvp.message ? `<p><strong>Message:</strong> ${escHtml(rsvp.message)}</p>` : ''}
               <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">Update RSVP</button>
             </div>
@@ -399,11 +348,39 @@ export class PartyView {
           </div>
         </div>
 
-        <div class="party-form-group" id="rsvp-extra" ${existing?.attending === false ? 'hidden' : ''}>
-          <label class="party-label" for="rsvp-dietary">Dietary needs</label>
-          <input id="rsvp-dietary" class="lol-input" type="text" name="dietary_needs"
-                 placeholder="e.g. vegetarian, gluten-free, nut allergy…"
-                 value="${escHtml(existing?.dietary_needs || '')}" maxlength="200" />
+        <div class="party-form-group" id="rsvp-food" ${existing?.attending === false ? 'hidden' : ''}>
+          ${this._foodOptions.length ? `
+            <label class="party-label">I'll be having</label>
+            ${canEdit() ? `<button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-food" aria-label="Edit food options">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>` : ''}
+            <div class="party-checkbox-group" id="food-guest-checkboxes">
+              ${this._foodOptions.map(opt => `
+                <label class="party-checkbox">
+                  <input type="checkbox" name="food_guest" value="${escHtml(opt)}"
+                         ${(existing?.food_choices?.guest || []).includes(opt) ? 'checked' : ''} />
+                  <span>${escHtml(opt)}</span>
+                </label>`).join('')}
+            </div>
+            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-food">
+              <button class="party-edit-save" data-save-section="rsvp-food">Save</button>
+              <button class="party-edit-cancel" data-cancel-section="rsvp-food">Cancel</button>
+              <span class="party-edit-status" data-status="rsvp-food"></span>
+            </div>
+          ` : `
+            <label class="party-label" for="rsvp-dietary">Dietary needs</label>
+            ${canEdit() ? `<button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-food" aria-label="Edit food options">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>` : ''}
+            <input id="rsvp-dietary" class="lol-input" type="text" name="dietary_needs"
+                   placeholder="e.g. vegetarian, gluten-free, nut allergy…"
+                   value="${escHtml(existing?.dietary_needs || '')}" maxlength="200" />
+            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-food">
+              <button class="party-edit-save" data-save-section="rsvp-food">Save</button>
+              <button class="party-edit-cancel" data-cancel-section="rsvp-food">Cancel</button>
+              <span class="party-edit-status" data-status="rsvp-food"></span>
+            </div>
+          `}
         </div>
 
         <div class="party-form-group" id="rsvp-extra2" ${existing?.attending === false ? 'hidden' : ''}>
@@ -417,10 +394,59 @@ export class PartyView {
           <label class="party-label" for="rsvp-plusone-name">Plus one's name</label>
           <input id="rsvp-plusone-name" class="lol-input" type="text" name="plus_one_name"
                  placeholder="Their name" value="${escHtml(existing?.plus_one_name || '')}" maxlength="100" />
-          <label class="party-label" for="rsvp-plusone-dietary">Their dietary needs</label>
-          <input id="rsvp-plusone-dietary" class="lol-input" type="text" name="plus_one_dietary"
-                 placeholder="Any dietary needs" value="${escHtml(existing?.plus_one_dietary || '')}" maxlength="200" />
+          ${this._foodOptions.length ? `
+            <label class="party-label">They'll be having</label>
+            <div class="party-checkbox-group">
+              ${this._foodOptions.map(opt => `
+                <label class="party-checkbox">
+                  <input type="checkbox" name="food_plusone" value="${escHtml(opt)}"
+                         ${(existing?.food_choices?.plus_one || []).includes(opt) ? 'checked' : ''} />
+                  <span>${escHtml(opt)}</span>
+                </label>`).join('')}
+            </div>
+          ` : `
+            <label class="party-label" for="rsvp-plusone-dietary">Their dietary needs</label>
+            <input id="rsvp-plusone-dietary" class="lol-input" type="text" name="plus_one_dietary"
+                   placeholder="Any dietary needs" value="${escHtml(existing?.plus_one_dietary || '')}" maxlength="200" />
+          `}
         </div>
+
+        ${this._rsvpQuestions.length ? `
+          <div class="party-rsvp-questions" id="rsvp-questions-area" ${existing?.attending === false ? 'hidden' : ''}>
+            ${canEdit() ? `<button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-questions" aria-label="Edit RSVP questions">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>` : ''}
+            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-questions">
+              <button class="party-edit-save" data-save-section="rsvp-questions">Save</button>
+              <button class="party-edit-cancel" data-cancel-section="rsvp-questions">Cancel</button>
+              <span class="party-edit-status" data-status="rsvp-questions"></span>
+            </div>
+            ${this._rsvpQuestions.map(q => `
+              <div class="party-form-group party-custom-question" data-question-id="${escHtml(q.id)}">
+                <label class="party-label">${escHtml(q.label)}</label>
+                <div class="party-checkbox-group">
+                  ${q.options.map(opt => `
+                    <label class="party-checkbox">
+                      <input type="checkbox" name="cq_${escHtml(q.id)}" value="${escHtml(opt)}"
+                             ${(existing?.custom_answers?.[q.id] || []).includes(opt) ? 'checked' : ''} />
+                      <span>${escHtml(opt)}</span>
+                    </label>`).join('')}
+                </div>
+              </div>`).join('')}
+          </div>
+        ` : `${canEdit() ? `
+          <div class="party-rsvp-questions" id="rsvp-questions-area" ${existing?.attending === false ? 'hidden' : ''}>
+            <button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-questions" aria-label="Add RSVP questions">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Add Questions
+            </button>
+            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-questions">
+              <button class="party-edit-save" data-save-section="rsvp-questions">Save</button>
+              <button class="party-edit-cancel" data-cancel-section="rsvp-questions">Cancel</button>
+              <span class="party-edit-status" data-status="rsvp-questions"></span>
+            </div>
+          </div>
+        ` : ''}`}
 
         <div class="party-form-group">
           <label class="party-label" for="rsvp-message">Message to host (optional)</label>
@@ -488,86 +514,19 @@ export class PartyView {
       </section>`;
   }
 
-  _renderGuestbook() {
-    const msgHtml = this._guestbook.map(entry => this._renderGuestbookEntry(entry)).join('') ||
-      '<p class="party-empty">No messages yet — be the first to wish Halli happy birthday!</p>';
-
-    return `
-      <section class="party-section party-guestbook" aria-labelledby="guestbook-heading">
-        <div class="party-section__inner">
-          <h2 class="party-section__title" id="guestbook-heading">💌 Guestbook</h2>
-          <form class="party-guestbook__form" id="guestbook-form" novalidate>
-            <textarea id="guestbook-msg" class="lol-input lol-textarea party-guestbook__textarea"
-                      placeholder="Write a birthday wish for Halli…" maxlength="1000"
-                      aria-label="Birthday message"></textarea>
-            <div class="party-guestbook__form-footer">
-              <span class="party-guestbook__char" id="gb-char">0 / 1000</span>
-              <button type="submit" class="lol-btn lol-btn--primary">Post Message</button>
-            </div>
-          </form>
-          <div class="party-guestbook__wall" id="guestbook-wall">
-            ${msgHtml}
-          </div>
-        </div>
-      </section>`;
-  }
-
-  _renderGuestbookEntry(entry) {
-    const me = getUser();
-    const canDelete = me?.id === entry.user_id || canEdit();
-    return `
-      <div class="party-guestbook__entry" data-id="${entry.id}">
-        <img class="party-guestbook__avatar" src="${avatarPathByName(entry.avatar)}"
-             alt="${escHtml(entry.display_name || entry.username)}" />
-        <div class="party-guestbook__body">
-          <div class="party-guestbook__meta">
-            <span class="party-guestbook__name">${escHtml(entry.display_name || entry.username)}</span>
-            <span class="party-guestbook__time">${timeAgo(entry.created_at)}</span>
-            ${canDelete ? `<button class="party-guestbook__delete" data-id="${entry.id}" aria-label="Delete message">✕</button>` : ''}
-          </div>
-          <p class="party-guestbook__msg">${escHtml(entry.message)}</p>
-        </div>
-      </div>`;
-  }
-
-  _renderPhotoWall() {
-    const photoHtml = this._photos.map((p, i) => `
-      <div class="party-photo-item" data-index="${i}">
-        <img src="${escHtml(p.file_path)}" alt="${escHtml(p.caption || 'Party photo')}"
-             class="party-photo-item__img" loading="lazy" />
-        ${p.caption ? `<p class="party-photo-item__caption">${escHtml(p.caption)}</p>` : ''}
-        ${(getUser()?.id === p.user_id || canEdit()) ? `
-          <button class="party-photo-item__delete" data-id="${p.id}" aria-label="Delete photo">✕</button>` : ''}
-      </div>`).join('') || '<p class="party-empty">No photos yet — be the first to upload one!</p>';
-
-    return `
-      <section class="party-section party-photos" aria-labelledby="photos-heading">
-        <div class="party-section__inner">
-          <h2 class="party-section__title" id="photos-heading">📸 Photo Wall</h2>
-          <div class="party-photos__toolbar">
-            <label class="lol-btn lol-btn--primary party-photos__upload-btn" for="party-photo-input">
-              Upload Photo
-              <input type="file" id="party-photo-input" accept="image/jpeg,image/png,image/webp"
-                     class="party-photos__file-input" aria-label="Upload photo" />
-            </label>
-          </div>
-          <div class="party-photos__grid" id="photo-grid">
-            ${photoHtml}
-          </div>
-        </div>
-      </section>`;
-  }
 
   // ── Binding ───────────────────────────────────────────────────────────────────
 
   _bindAll() {
-    this._bindRsvp();
+    if (this._isVerified()) this._bindRsvp();
     this._bindVenueLightbox();
     if (canEdit()) this._bindEditing();
 
-    // Sign in button on landing (shouldn't be needed here but just in case)
-    this._el.querySelector('#party-signin-btn')?.addEventListener('click', () => {
-      document.getElementById('nav-auth')?.querySelector('button')?.click();
+    // Sign-in buttons on locked sections
+    this._el.querySelectorAll('.party-locked__signin').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('nav-auth')?.querySelector('button')?.click();
+      });
     });
   }
 
@@ -832,7 +791,10 @@ export class PartyView {
   }
 
   _getSectionEl(section) {
-    const map = { venue: '.party-venue', schedule: '.party-schedule', activities: '.party-activities' };
+    const map = {
+      venue: '.party-venue', schedule: '.party-schedule', activities: '.party-activities',
+      'rsvp-food': '.party-rsvp', 'rsvp-questions': '.party-rsvp',
+    };
     return this._el.querySelector(map[section]);
   }
 
@@ -886,8 +848,9 @@ export class PartyView {
 
     // Toggle extra fields based on attending yes/no
     const toggleExtra = (show) => {
-      this._el.querySelector('#rsvp-extra')?.toggleAttribute('hidden', !show);
+      this._el.querySelector('#rsvp-food')?.toggleAttribute('hidden', !show);
       this._el.querySelector('#rsvp-extra2')?.toggleAttribute('hidden', !show);
+      this._el.querySelector('#rsvp-questions-area')?.toggleAttribute('hidden', !show);
       if (!show) this._el.querySelector('#plusone-fields')?.setAttribute('hidden', '');
     };
 
@@ -908,6 +871,17 @@ export class PartyView {
         return;
       }
 
+      // Gather food choices
+      const foodGuest   = [...form.querySelectorAll('[name="food_guest"]:checked')].map(cb => cb.value);
+      const foodPlusone = [...form.querySelectorAll('[name="food_plusone"]:checked')].map(cb => cb.value);
+
+      // Gather custom question answers
+      const custom_answers = {};
+      for (const q of (this._rsvpQuestions || [])) {
+        const checked = [...form.querySelectorAll(`[name="cq_${q.id}"]:checked`)].map(cb => cb.value);
+        if (checked.length) custom_answers[q.id] = checked;
+      }
+
       const payload = {
         attending:        attending === 'yes',
         dietary_needs:    data.get('dietary_needs')    || null,
@@ -915,6 +889,8 @@ export class PartyView {
         plus_one_name:    data.get('plus_one_name')    || null,
         plus_one_dietary: data.get('plus_one_dietary') || null,
         message:          data.get('message')          || null,
+        food_choices:     { guest: foodGuest, plus_one: foodPlusone },
+        custom_answers,
       };
 
       const btn = form.querySelector('[type="submit"]');
@@ -946,171 +922,6 @@ export class PartyView {
     });
   }
 
-  _bindGuestbook() {
-    const form    = this._el.querySelector('#guestbook-form');
-    const textarea = this._el.querySelector('#guestbook-msg');
-    const charEl  = this._el.querySelector('#gb-char');
-
-    textarea?.addEventListener('input', () => {
-      if (charEl) charEl.textContent = `${textarea.value.length} / 1000`;
-    });
-
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const msg = textarea?.value.trim();
-      if (!msg) return;
-
-      const btn = form.querySelector('[type="submit"]');
-      btn.disabled = true;
-      btn.textContent = 'Posting…';
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/guestbook', {
-          method:      'POST',
-          credentials: 'include',
-          headers,
-          body:        JSON.stringify({ message: msg }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Post failed');
-
-        // Get username/avatar from current user
-        const me = getUser();
-        const entry = {
-          ...data,
-          user_id:      me.id,
-          username:     me.username,
-          display_name: me.displayName || me.display_name,
-          avatar:       me.avatar,
-        };
-        this._guestbook.unshift(entry);
-
-        textarea.value = '';
-        if (charEl) charEl.textContent = '0 / 1000';
-
-        const wall = this._el.querySelector('#guestbook-wall');
-        if (wall) wall.insertAdjacentHTML('afterbegin', this._renderGuestbookEntry(entry));
-        this._bindGuestbookDeletes();
-        showToast('Message posted!', 'success');
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        btn.disabled    = false;
-        btn.textContent = 'Post Message';
-      }
-    });
-
-    this._bindGuestbookDeletes();
-  }
-
-  _bindGuestbookDeletes() {
-    this._el.querySelectorAll('.party-guestbook__delete').forEach(btn => {
-      // Remove old listener by cloning
-      const newBtn = btn.cloneNode(true);
-      btn.replaceWith(newBtn);
-      newBtn.addEventListener('click', async () => {
-        const id = newBtn.dataset.id;
-        try {
-          const headers = await getCsrfHeaders();
-          const res = await fetch(`/api/v1/party/guestbook/${id}`, {
-            method: 'DELETE', credentials: 'include', headers,
-          });
-          if (!res.ok) {
-            const d = await res.json();
-            throw new Error(d.error);
-          }
-          this._el.querySelector(`.party-guestbook__entry[data-id="${id}"]`)?.remove();
-          showToast('Message deleted', 'success');
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
-      });
-    });
-  }
-
-  _bindPhotos() {
-    const input = this._el.querySelector('#party-photo-input');
-    input?.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      await this._uploadPhoto(file);
-      input.value = '';
-    });
-
-    this._bindPhotoDeletes();
-  }
-
-  async _uploadPhoto(file) {
-    const csrfToken = await (await import('../utils/api.js')).getCSRFToken();
-    const formData  = new FormData();
-    formData.append('file', file);
-
-    try {
-      const res = await fetch('/api/v1/party/photos', {
-        method:      'POST',
-        credentials: 'include',
-        headers:     csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
-        body:        formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-
-      const me = getUser();
-      const photo = { ...data, user_id: me.id, username: me.username, avatar: me.avatar };
-      this._photos.unshift(photo);
-
-      const grid = this._el.querySelector('#photo-grid');
-      if (grid) {
-        // Remove "no photos" empty message if present
-        grid.querySelector('.party-empty')?.remove();
-        const div = document.createElement('div');
-        div.className  = 'party-photo-item';
-        div.dataset.index = 0;
-        div.innerHTML = `
-          <img src="${escHtml(photo.file_path)}" alt="Party photo" class="party-photo-item__img" />
-          ${photo.caption ? `<p class="party-photo-item__caption">${escHtml(photo.caption)}</p>` : ''}
-          <button class="party-photo-item__delete" data-id="${photo.id}" aria-label="Delete photo">✕</button>`;
-        grid.insertAdjacentElement('afterbegin', div);
-        this._bindPhotoDeletes();
-        this._rebuildLightbox();
-      }
-      showToast('Photo uploaded!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  _bindPhotoDeletes() {
-    this._el.querySelectorAll('.party-photo-item__delete').forEach(btn => {
-      const newBtn = btn.cloneNode(true);
-      btn.replaceWith(newBtn);
-      newBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = newBtn.dataset.id;
-        try {
-          const headers = await getCsrfHeaders();
-          const res = await fetch(`/api/v1/party/photos/${id}`, {
-            method: 'DELETE', credentials: 'include', headers,
-          });
-          if (!res.ok) {
-            const d = await res.json();
-            throw new Error(d.error);
-          }
-          newBtn.closest('.party-photo-item')?.remove();
-          this._photos = this._photos.filter(p => p.id !== Number(id));
-          this._rebuildLightbox();
-          showToast('Photo deleted', 'success');
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
-      });
-    });
-  }
-
-  _bindLightbox() {
-    this._rebuildLightbox();
-    this._bindVenueLightbox();
-  }
 
   _bindVenueLightbox() {
     if (this._venueLightbox) { this._venueLightbox.destroy(); this._venueLightbox = null; }
@@ -1132,29 +943,6 @@ export class PartyView {
     });
   }
 
-  _rebuildLightbox() {
-    if (this._lightbox) {
-      this._lightbox.destroy();
-      this._lightbox = null;
-    }
-
-    const items = this._photos.map(p => ({
-      file_path:  p.file_path,
-      media_type: 'image',
-      caption:    p.caption || '',
-    }));
-
-    if (items.length === 0) return;
-
-    this._lightbox = new Lightbox(items);
-    this._lightbox.mount();
-
-    this._el.querySelectorAll('.party-photo-item__img').forEach((img, i) => {
-      img.style.cursor = 'pointer';
-      img.addEventListener('click', () => this._lightbox.open(i));
-    });
-  }
-
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   _parseJSON(str, fallback) {
@@ -1163,10 +951,6 @@ export class PartyView {
 
   destroy() {
     clearInterval(this._timerLoop);
-    if (this._lightbox) {
-      this._lightbox.destroy();
-      this._lightbox = null;
-    }
     if (this._venueLightbox) {
       this._venueLightbox.destroy();
       this._venueLightbox = null;

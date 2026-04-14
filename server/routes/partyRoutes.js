@@ -68,9 +68,8 @@ router.get('/access',
   requireAuth,
   partyController.checkAccess);
 
-// ── Party info ────────────────────────────────────────────────────────────────
+// ── Party info (public — no auth required) ───────────────────────────────────
 router.get('/info',
-  requireAuth, requirePartyAccess,
   partyController.getInfo);
 
 router.patch('/info',

@@ -65,16 +65,18 @@ describe('GET /api/v1/party/info', () => {
     expect(res.body).toHaveProperty('activities');
   });
 
-  test('returns 403 for user without party access', async () => {
+  test('returns party info for user without party access (public)', async () => {
     const res = await request(app)
       .get('/api/v1/party/info')
       .set('Cookie', userCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('venue_name');
   });
 
-  test('unauthenticated returns 401', async () => {
+  test('unauthenticated returns party info (public)', async () => {
     const res = await request(app).get('/api/v1/party/info');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('venue_name');
   });
 });
 
@@ -442,7 +444,6 @@ describe('DELETE /api/v1/party/photos/:id', () => {
 
 describe('Non-invited user blocked on all party endpoints', () => {
   const protectedEndpoints = [
-    { method: 'get',    path: '/api/v1/party/info' },
     { method: 'post',   path: '/api/v1/party/rsvp',       body: { attending: true } },
     { method: 'get',    path: '/api/v1/party/rsvp' },
     { method: 'post',   path: '/api/v1/party/guestbook',  body: { message: 'hi' } },

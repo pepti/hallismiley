@@ -3,15 +3,6 @@ import { LoginModal } from './LoginModal.js';
 
 const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
 
-let _partyAccess = false;
-async function _checkPartyAccess() {
-  if (!isAuthenticated()) { _partyAccess = false; return; }
-  try {
-    const res  = await fetch('/api/v1/party/access', { credentials: 'include' });
-    const data = await res.json();
-    _partyAccess = !!data.hasAccess;
-  } catch { _partyAccess = false; }
-}
 
 export class NavBar {
   constructor() {
@@ -39,7 +30,7 @@ export class NavBar {
         <a href="#/halli" class="lol-nav__link" data-route="/halli">Halli</a>
         <a href="#/contact" class="lol-nav__link" data-route="/contact">Contact</a>
         <a href="#/party" class="lol-nav__link lol-nav__party-link" data-route="/party"
-           id="nav-party-link" style="display:none" aria-label="Halli's 40th Birthday Party">🎂 Party</a>
+           id="nav-party-link" aria-label="Halli's 40th Birthday Party">🎂 Party</a>
       </div>
 
       <!-- Right: Hamburger + Auth -->
@@ -60,19 +51,9 @@ export class NavBar {
 
     window.addEventListener('authchange', () => {
       this._renderAuth();
-      _checkPartyAccess().then(() => this._updatePartyLink());
     });
 
-    _checkPartyAccess().then(() => this._updatePartyLink());
-
     return nav;
-  }
-
-  _updatePartyLink() {
-    const link =
-      document.getElementById('nav-party-link') ||
-      this._nav?.querySelector('#nav-party-link');
-    if (link) link.style.display = _partyAccess ? '' : 'none';
   }
 
   _renderAuth() {

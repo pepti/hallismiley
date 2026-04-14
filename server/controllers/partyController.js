@@ -110,7 +110,7 @@ const partyController = {
 
   async upsertRsvp(req, res, next) {
     try {
-      const { attending, dietary_needs, plus_one, plus_one_name, plus_one_dietary, message } = req.body;
+      const { attending, dietary_needs, plus_one, plus_one_name, plus_one_dietary, message, food_choices, custom_answers } = req.body;
 
       if (typeof attending !== 'boolean') {
         return res.status(400).json({ error: 'attending must be a boolean', code: 400 });
@@ -118,8 +118,8 @@ const partyController = {
 
       const { rows } = await db.query(
         `INSERT INTO party_rsvps
-           (user_id, attending, dietary_needs, plus_one, plus_one_name, plus_one_dietary, message)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (user_id, attending, dietary_needs, plus_one, plus_one_name, plus_one_dietary, message, food_choices, custom_answers)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
          ON CONFLICT (user_id) DO UPDATE SET
            attending        = EXCLUDED.attending,
            dietary_needs    = EXCLUDED.dietary_needs,
@@ -127,6 +127,8 @@ const partyController = {
            plus_one_name    = EXCLUDED.plus_one_name,
            plus_one_dietary = EXCLUDED.plus_one_dietary,
            message          = EXCLUDED.message,
+           food_choices     = EXCLUDED.food_choices,
+           custom_answers   = EXCLUDED.custom_answers,
            updated_at       = NOW()
          RETURNING *`,
         [
@@ -137,6 +139,8 @@ const partyController = {
           plus_one_name   || null,
           plus_one_dietary || null,
           message         || null,
+          food_choices    ? JSON.stringify(food_choices) : null,
+          custom_answers  ? JSON.stringify(custom_answers) : null,
         ]
       );
 
@@ -306,7 +310,7 @@ const partyController = {
 
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {

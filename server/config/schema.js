@@ -313,6 +313,13 @@ const migrations = [
       ) ON CONFLICT (key) DO NOTHING`,
     ],
   },
+  {
+    name: '018_rsvp_custom_fields',
+    statements: [
+      `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS food_choices JSONB`,
+      `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS custom_answers JSONB`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

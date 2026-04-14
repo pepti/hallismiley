@@ -1,132 +1,5 @@
 /* ── Party Hub Styles ────────────────────────────────────────────────────────── */
 
-/* ── Landing page (not logged in) ─────────────────────────────────────────── */
-
-.party-landing {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  background: radial-gradient(ellipse at center top, #1a0a00 0%, var(--bg-base) 70%);
-  text-align: center;
-  padding: var(--sp-8) var(--sp-4);
-}
-
-.party-landing__content {
-  position: relative;
-  z-index: 2;
-  max-width: 560px;
-}
-
-.party-landing__cake {
-  font-size: 4rem;
-  margin-bottom: var(--sp-4);
-  animation: cakeBounce 2s ease-in-out infinite;
-}
-
-@keyframes cakeBounce {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-12px); }
-}
-
-.party-landing__title {
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 6vw, 3.5rem);
-  color: var(--text-primary);
-  line-height: 1.1;
-  margin-bottom: var(--sp-3);
-}
-
-.party-landing__sub {
-  font-size: 1.125rem;
-  color: var(--text-secondary);
-  margin-bottom: var(--sp-5);
-}
-
-.party-landing__cta-text {
-  color: var(--text-muted);
-  margin-bottom: var(--sp-5);
-}
-
-.party-landing__actions {
-  display: flex;
-  gap: var(--sp-3);
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.party-landing__btn {
-  min-width: 140px;
-}
-
-/* Confetti animation */
-.party-landing__confetti {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.confetti-piece {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  animation: confettiFall linear infinite;
-}
-
-.confetti-piece--0 { background: var(--gold);      left: 10%;  animation-duration: 3.2s; animation-delay: 0s;    top: -20px; }
-.confetti-piece--1 { background: #e05de0;           left: 25%;  animation-duration: 2.8s; animation-delay: 0.5s;  top: -20px; }
-.confetti-piece--2 { background: var(--teal);       left: 50%;  animation-duration: 3.5s; animation-delay: 1.1s;  top: -20px; }
-.confetti-piece--3 { background: #ff6b6b;           left: 70%;  animation-duration: 2.4s; animation-delay: 0.3s;  top: -20px; }
-.confetti-piece--4 { background: #a8e6cf;           left: 88%;  animation-duration: 3.0s; animation-delay: 0.8s;  top: -20px; }
-
-/* Additional confetti pieces via nth-child-based transforms */
-.confetti-piece:nth-child(5n+1)  { width: 8px;  height: 14px; left: 5%;  }
-.confetti-piece:nth-child(5n+2)  { width: 14px; height: 8px;  left: 20%; animation-delay: 1.5s; }
-.confetti-piece:nth-child(5n+3)  { width: 6px;  height: 16px; left: 40%; animation-delay: 0.7s; }
-.confetti-piece:nth-child(5n+4)  { width: 12px; height: 12px; left: 60%; animation-delay: 2.0s; }
-.confetti-piece:nth-child(5n+5)  { width: 8px;  height: 10px; left: 80%; animation-delay: 1.3s; }
-
-@keyframes confettiFall {
-  0%   { transform: translateY(-20px) rotate(0deg);   opacity: 1; }
-  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-}
-
-/* ── No Access ────────────────────────────────────────────────────────────── */
-
-.party-no-access {
-  max-width: 480px;
-  margin: var(--sp-8) auto;
-  text-align: center;
-  padding: var(--sp-6);
-  background: var(--bg-surface);
-  border: 1px solid #333;
-  border-radius: var(--radius-md);
-}
-
-.party-no-access__icon {
-  font-size: 3rem;
-  margin-bottom: var(--sp-4);
-}
-
-.party-no-access h2 {
-  font-family: var(--font-display);
-  color: var(--text-primary);
-  margin-bottom: var(--sp-3);
-}
-
-.party-no-access p {
-  color: var(--text-secondary);
-  margin-bottom: var(--sp-2);
-}
-
-.party-no-access__email {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
 
 /* ── Global party section ─────────────────────────────────────────────────── */
 
@@ -590,188 +463,37 @@
   margin-top: var(--sp-2);
 }
 
-/* ── Guestbook ─────────────────────────────────────────────────────────────── */
+/* ── Locked section overlay ────────────────────────────────────────────────── */
 
-.party-guestbook__form {
-  margin-bottom: var(--sp-6);
-}
-
-.party-guestbook__textarea {
-  width: 100%;
-  min-height: 100px;
-  resize: vertical;
-  margin-bottom: var(--sp-2);
-}
-
-.party-guestbook__form-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-
-.party-guestbook__char {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.party-guestbook__wall {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.party-guestbook__entry {
-  display: flex;
-  gap: var(--sp-3);
+.party-locked__overlay {
+  text-align: center;
+  padding: var(--sp-6) var(--sp-4);
   background: var(--bg-surface);
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid rgba(200, 170, 110, 0.15);
   border-radius: var(--radius-md);
-  padding: var(--sp-4);
-  animation: fadeIn 300ms ease forwards;
 }
 
-.party-guestbook__avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  border: 1px solid rgba(200,170,110,0.2);
+.party-locked__icon {
+  font-size: 2.5rem;
+  margin-bottom: var(--sp-3);
+  opacity: 0.6;
 }
 
-.party-guestbook__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.party-guestbook__meta {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-  flex-wrap: wrap;
-}
-
-.party-guestbook__name {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.9375rem;
-}
-
-.party-guestbook__time {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.party-guestbook__delete {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s, background 0.15s;
-}
-
-.party-guestbook__delete:hover {
-  color: #f44336;
-  background: rgba(244,67,54,0.1);
-}
-
-.party-guestbook__msg {
+.party-locked__text {
   color: var(--text-secondary);
   font-size: 0.9375rem;
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
-}
-
-/* ── Photo wall ────────────────────────────────────────────────────────────── */
-
-.party-photos__toolbar {
   margin-bottom: var(--sp-4);
 }
 
-.party-photos__file-input {
-  display: none;
-}
-
-.party-photos__upload-btn {
-  cursor: pointer;
-}
-
-.party-photos__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--sp-3);
-}
-
-.party-photo-item {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-surface);
-  border: 1px solid rgba(255,255,255,0.05);
-}
-
-.party-photo-item__img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.25s ease;
-}
-
-.party-photo-item:hover .party-photo-item__img {
-  transform: scale(1.05);
-}
-
-.party-photo-item__caption {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: var(--sp-2) var(--sp-2);
-  background: linear-gradient(transparent, rgba(0,0,0,0.8));
-  font-size: 0.75rem;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin: 0;
-}
-
-.party-photo-item__delete {
-  position: absolute;
-  top: var(--sp-2);
-  right: var(--sp-2);
-  background: rgba(0,0,0,0.7);
-  border: none;
-  color: #fff;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 0.6875rem;
+.party-locked__actions {
   display: flex;
-  align-items: center;
+  gap: var(--sp-3);
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
-  z-index: 2;
+  flex-wrap: wrap;
 }
 
-.party-photo-item:hover .party-photo-item__delete {
-  opacity: 1;
-}
-
-.party-photo-item__delete:hover {
-  background: #f44336;
+.party-locked__btn {
+  min-width: 130px;
 }
 
 /* ── Footer ────────────────────────────────────────────────────────────────── */
