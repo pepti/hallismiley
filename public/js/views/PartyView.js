@@ -73,23 +73,29 @@ export class PartyView {
   _renderLockedSection(title, emoji) {
     const authed = isAuthenticated();
     const ctaText = authed
-      ? 'Verify your email to unlock this section'
-      : 'Sign in & verify your email to unlock this section';
+      ? 'Verify your email to view this section'
+      : 'Log in or sign up to view this section';
     const ctaBtn = authed
       ? ''
-      : `<div class="party-locked__actions">
-           <a href="#/signup" class="lol-btn lol-btn--primary party-locked__btn">Create Account</a>
-           <button class="lol-btn lol-btn--ghost party-locked__btn party-locked__signin">Sign In</button>
-         </div>`;
+      : `<button class="party-locked__signin-link" type="button">Log in</button>`;
 
+    const slug = title.toLowerCase().replace(/\s+/g, '-');
     return `
-      <section class="party-section party-locked" aria-labelledby="locked-${title.toLowerCase().replace(/\s+/g, '-')}">
+      <section class="party-section party-locked" aria-labelledby="locked-${slug}">
         <div class="party-section__inner">
-          <h2 class="party-section__title" id="locked-${title.toLowerCase().replace(/\s+/g, '-')}">${emoji} ${escHtml(title)}</h2>
-          <div class="party-locked__overlay">
-            <div class="party-locked__icon" aria-hidden="true">🔒</div>
-            <p class="party-locked__text">${ctaText}</p>
-            ${ctaBtn}
+          <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
+          <div class="party-locked__ribbon" role="note">
+            <span class="party-locked__rule" aria-hidden="true"></span>
+            <span class="party-locked__ornament" aria-hidden="true">✦</span>
+            <span class="party-locked__rule" aria-hidden="true"></span>
+          </div>
+          <p class="party-locked__text">
+            ${ctaText}${ctaBtn ? ` — ${ctaBtn}` : ''}
+          </p>
+          <div class="party-locked__ribbon" aria-hidden="true">
+            <span class="party-locked__rule"></span>
+            <span class="party-locked__ornament">✦</span>
+            <span class="party-locked__rule"></span>
           </div>
         </div>
       </section>`;
@@ -522,8 +528,8 @@ export class PartyView {
     this._bindVenueLightbox();
     if (canEdit()) this._bindEditing();
 
-    // Sign-in buttons on locked sections
-    this._el.querySelectorAll('.party-locked__signin').forEach(btn => {
+    // Sign-in links on locked sections
+    this._el.querySelectorAll('.party-locked__signin-link').forEach(btn => {
       btn.addEventListener('click', () => {
         document.getElementById('nav-auth')?.querySelector('button')?.click();
       });
