@@ -52,9 +52,10 @@ export class PartyView {
     const infoRes = await fetch('/api/v1/party/info');
     this._partyInfo = await infoRes.json();
 
-    // Parse admin-configurable RSVP options
-    this._foodOptions   = this._parseJSON(this._partyInfo.food_options,   []);
-    this._rsvpQuestions = this._parseJSON(this._partyInfo.rsvp_questions, []);
+    // Admin-designed RSVP form (list of fields). Fall back to a seeded default
+    // so admins have something to edit on first use.
+    const parsed = this._parseJSON(this._partyInfo.rsvp_form, null);
+    this._rsvpForm = Array.isArray(parsed) && parsed.length ? parsed : this._defaultRsvpForm();
 
     // RSVP data requires verified user
     if (this._isVerified()) {
@@ -291,184 +292,118 @@ export class PartyView {
       </section>`;
   }
 
+  _defaultRsvpForm() {
+    return [
+      { id: 'heading',  type: 'heading',         label: '🎟  RSVP' },
+      { id: 'intro',    type: 'paragraph',       label: "Let us know if you'll be joining the party!" },
+      { id: 'attend',   type: 'checkbox-group',  label: 'Will you attend?',
+        options: ["Yes, I'll be there! 🎉", "Sorry, can't make it"] },
+      { id: 'message',  type: 'textarea',        label: 'Message to host (optional)',
+        placeholder: 'A note for Halli…' },
+    ];
+  }
+
   _renderRsvp() {
-    const rsvp = this._rsvp;
-    const countHtml = this._rsvpCount > 0
+    const rsvp         = this._rsvp;
+    const answers      = rsvp?.answers || {};
+    const editor       = canEdit();
+    const countHtml    = this._rsvpCount > 0
       ? `<p class="party-rsvp__count">${this._rsvpCount} of ${TOTAL_GUESTS} guests attending</p>`
       : '';
 
-    if (rsvp) {
-      return `
-        <section class="party-section party-rsvp" aria-labelledby="rsvp-heading" id="rsvp">
-          <div class="party-section__inner">
-            <h2 class="party-section__title" id="rsvp-heading">🎟 Your RSVP</h2>
-            ${countHtml}
-            <div class="party-rsvp__current">
-              <div class="party-rsvp__status party-rsvp__status--${rsvp.attending ? 'yes' : 'no'}">
-                ${rsvp.attending ? '✅ You are attending!' : '❌ You declined'}
-              </div>
-              ${rsvp.food_choices?.guest?.length
-                ? `<p><strong>Food:</strong> ${rsvp.food_choices.guest.map(f => escHtml(f)).join(', ')}</p>`
-                : (rsvp.dietary_needs ? `<p><strong>Dietary needs:</strong> ${escHtml(rsvp.dietary_needs)}</p>` : '')}
-              ${rsvp.plus_one ? `<p><strong>Plus one:</strong> ${escHtml(rsvp.plus_one_name || 'Guest')}${rsvp.food_choices?.plus_one?.length
-                ? ` (${rsvp.food_choices.plus_one.map(f => escHtml(f)).join(', ')})`
-                : (rsvp.plus_one_dietary ? ` (${escHtml(rsvp.plus_one_dietary)})` : '')}</p>` : ''}
-              ${(this._rsvpQuestions || []).map(q => {
-                const ans = rsvp.custom_answers?.[q.id];
-                return ans?.length ? `<p><strong>${escHtml(q.label)}:</strong> ${ans.map(a => escHtml(a)).join(', ')}</p>` : '';
-              }).join('')}
-              ${rsvp.message ? `<p><strong>Message:</strong> ${escHtml(rsvp.message)}</p>` : ''}
-              <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">Update RSVP</button>
-            </div>
-            <div class="party-rsvp__form-wrap" id="rsvp-form-wrap" hidden>
-              ${this._renderRsvpForm(rsvp)}
-            </div>
-          </div>
-        </section>`;
-    }
+    const editBtn = editor ? `
+      <button class="party-edit-btn" data-edit-section="rsvp" aria-label="Edit RSVP form">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </button>` : '';
+
+    const editControls = editor ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp">
+        <button class="party-edit-save" data-save-section="rsvp">Save</button>
+        <button class="party-edit-cancel" data-cancel-section="rsvp">Cancel</button>
+        <span class="party-edit-status" data-status="rsvp" aria-live="polite"></span>
+      </div>` : '';
+
+    // If user already RSVP'd, show summary + "Update RSVP" toggle
+    const summaryHtml = rsvp ? `
+      <div class="party-rsvp__current">
+        <div class="party-rsvp__status party-rsvp__status--yes">✅ You've RSVP'd</div>
+        ${this._rsvpForm.filter(f => !['heading','paragraph'].includes(f.type)).map(f => {
+          const a = answers[f.id];
+          if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
+          const val = Array.isArray(a) ? a.map(x => escHtml(x)).join(', ') : escHtml(a);
+          return `<p><strong>${escHtml(f.label)}:</strong> ${val}</p>`;
+        }).join('')}
+        <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">Update RSVP</button>
+      </div>` : '';
 
     return `
       <section class="party-section party-rsvp" aria-labelledby="rsvp-heading" id="rsvp">
-        <div class="party-section__inner">
-          <h2 class="party-section__title" id="rsvp-heading">🎟 RSVP</h2>
+        ${editBtn}
+        <div class="party-section__inner" id="rsvp-inner">
           ${countHtml}
-          <p class="party-rsvp__intro">Let us know if you'll be joining the party!</p>
-          <div class="party-rsvp__form-wrap" id="rsvp-form-wrap">
-            ${this._renderRsvpForm(null)}
+          ${summaryHtml}
+          <div class="party-rsvp__form-wrap" id="rsvp-form-wrap" ${rsvp ? 'hidden' : ''}>
+            ${this._renderRsvpForm(answers, !!rsvp)}
           </div>
         </div>
+        ${editControls}
       </section>`;
   }
 
-  _renderRsvpForm(existing) {
+  _renderField(field, answers) {
+    const id  = `rsvp-f-${field.id}`;
+    const ans = answers?.[field.id];
+    switch (field.type) {
+      case 'heading':
+        return `<h2 class="party-section__title" data-field-id="${escHtml(field.id)}">${escHtml(field.label)}</h2>`;
+      case 'paragraph':
+        return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}">${escHtml(field.label)}</p>`;
+      case 'checkbox-group': {
+        const opts = (field.options || []).map(opt => `
+          <label class="party-checkbox">
+            <input type="checkbox" name="f_${escHtml(field.id)}" value="${escHtml(opt)}"
+                   ${Array.isArray(ans) && ans.includes(opt) ? 'checked' : ''} />
+            <span>${escHtml(opt)}</span>
+          </label>`).join('');
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="checkbox-group">
+            <label class="party-label">${escHtml(field.label)}</label>
+            <div class="party-checkbox-group">${opts}</div>
+          </div>`;
+      }
+      case 'text':
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="text">
+            <label class="party-label" for="${id}">${escHtml(field.label)}</label>
+            <input id="${id}" class="lol-input" type="text" name="f_${escHtml(field.id)}"
+                   placeholder="${escHtml(field.placeholder || '')}"
+                   value="${escHtml(ans || '')}" maxlength="200" />
+          </div>`;
+      case 'textarea':
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="textarea">
+            <label class="party-label" for="${id}">${escHtml(field.label)}</label>
+            <textarea id="${id}" class="lol-input lol-textarea" name="f_${escHtml(field.id)}"
+                      placeholder="${escHtml(field.placeholder || '')}" maxlength="1000">${escHtml(ans || '')}</textarea>
+          </div>`;
+      default:
+        return '';
+    }
+  }
+
+  _renderRsvpForm(answers, isUpdate) {
+    const fields = this._rsvpForm.map(f => this._renderField(f, answers)).join('');
     return `
       <form class="party-rsvp__form" id="rsvp-form" novalidate>
-        <div class="party-form-group">
-          <label class="party-label">Will you attend?</label>
-          <div class="party-radio-group">
-            <label class="party-radio">
-              <input type="radio" name="attending" value="yes" ${existing?.attending === true  ? 'checked' : ''} required />
-              <span>Yes, I'll be there! 🎉</span>
-            </label>
-            <label class="party-radio">
-              <input type="radio" name="attending" value="no"  ${existing?.attending === false ? 'checked' : ''} required />
-              <span>Sorry, can't make it</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="party-form-group" id="rsvp-food" ${existing?.attending === false ? 'hidden' : ''}>
-          ${this._foodOptions.length ? `
-            <label class="party-label">I'll be having</label>
-            ${canEdit() ? `<button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-food" aria-label="Edit food options">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>` : ''}
-            <div class="party-checkbox-group" id="food-guest-checkboxes">
-              ${this._foodOptions.map(opt => `
-                <label class="party-checkbox">
-                  <input type="checkbox" name="food_guest" value="${escHtml(opt)}"
-                         ${(existing?.food_choices?.guest || []).includes(opt) ? 'checked' : ''} />
-                  <span>${escHtml(opt)}</span>
-                </label>`).join('')}
-            </div>
-            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-food">
-              <button class="party-edit-save" data-save-section="rsvp-food">Save</button>
-              <button class="party-edit-cancel" data-cancel-section="rsvp-food">Cancel</button>
-              <span class="party-edit-status" data-status="rsvp-food"></span>
-            </div>
-          ` : `
-            <label class="party-label" for="rsvp-dietary">Dietary needs</label>
-            ${canEdit() ? `<button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-food" aria-label="Edit food options">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>` : ''}
-            <input id="rsvp-dietary" class="lol-input" type="text" name="dietary_needs"
-                   placeholder="e.g. vegetarian, gluten-free, nut allergy…"
-                   value="${escHtml(existing?.dietary_needs || '')}" maxlength="200" />
-            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-food">
-              <button class="party-edit-save" data-save-section="rsvp-food">Save</button>
-              <button class="party-edit-cancel" data-cancel-section="rsvp-food">Cancel</button>
-              <span class="party-edit-status" data-status="rsvp-food"></span>
-            </div>
-          `}
-        </div>
-
-        <div class="party-form-group" id="rsvp-extra2" ${existing?.attending === false ? 'hidden' : ''}>
-          <label class="party-radio">
-            <input type="checkbox" name="plus_one" id="rsvp-plusone" ${existing?.plus_one ? 'checked' : ''} />
-            <span>Bringing a plus one?</span>
-          </label>
-        </div>
-
-        <div class="party-form-group party-rsvp__plusone-fields" id="plusone-fields" ${!existing?.plus_one ? 'hidden' : ''}>
-          <label class="party-label" for="rsvp-plusone-name">Plus one's name</label>
-          <input id="rsvp-plusone-name" class="lol-input" type="text" name="plus_one_name"
-                 placeholder="Their name" value="${escHtml(existing?.plus_one_name || '')}" maxlength="100" />
-          ${this._foodOptions.length ? `
-            <label class="party-label">They'll be having</label>
-            <div class="party-checkbox-group">
-              ${this._foodOptions.map(opt => `
-                <label class="party-checkbox">
-                  <input type="checkbox" name="food_plusone" value="${escHtml(opt)}"
-                         ${(existing?.food_choices?.plus_one || []).includes(opt) ? 'checked' : ''} />
-                  <span>${escHtml(opt)}</span>
-                </label>`).join('')}
-            </div>
-          ` : `
-            <label class="party-label" for="rsvp-plusone-dietary">Their dietary needs</label>
-            <input id="rsvp-plusone-dietary" class="lol-input" type="text" name="plus_one_dietary"
-                   placeholder="Any dietary needs" value="${escHtml(existing?.plus_one_dietary || '')}" maxlength="200" />
-          `}
-        </div>
-
-        ${this._rsvpQuestions.length ? `
-          <div class="party-rsvp-questions" id="rsvp-questions-area" ${existing?.attending === false ? 'hidden' : ''}>
-            ${canEdit() ? `<button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-questions" aria-label="Edit RSVP questions">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>` : ''}
-            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-questions">
-              <button class="party-edit-save" data-save-section="rsvp-questions">Save</button>
-              <button class="party-edit-cancel" data-cancel-section="rsvp-questions">Cancel</button>
-              <span class="party-edit-status" data-status="rsvp-questions"></span>
-            </div>
-            ${this._rsvpQuestions.map(q => `
-              <div class="party-form-group party-custom-question" data-question-id="${escHtml(q.id)}">
-                <label class="party-label">${escHtml(q.label)}</label>
-                <div class="party-checkbox-group">
-                  ${q.options.map(opt => `
-                    <label class="party-checkbox">
-                      <input type="checkbox" name="cq_${escHtml(q.id)}" value="${escHtml(opt)}"
-                             ${(existing?.custom_answers?.[q.id] || []).includes(opt) ? 'checked' : ''} />
-                      <span>${escHtml(opt)}</span>
-                    </label>`).join('')}
-                </div>
-              </div>`).join('')}
-          </div>
-        ` : `${canEdit() ? `
-          <div class="party-rsvp-questions" id="rsvp-questions-area" ${existing?.attending === false ? 'hidden' : ''}>
-            <button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvp-questions" aria-label="Add RSVP questions">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Add Questions
-            </button>
-            <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp-questions">
-              <button class="party-edit-save" data-save-section="rsvp-questions">Save</button>
-              <button class="party-edit-cancel" data-cancel-section="rsvp-questions">Cancel</button>
-              <span class="party-edit-status" data-status="rsvp-questions"></span>
-            </div>
-          </div>
-        ` : ''}`}
-
-        <div class="party-form-group">
-          <label class="party-label" for="rsvp-message">Message to host (optional)</label>
-          <textarea id="rsvp-message" class="lol-input lol-textarea" name="message"
-                    placeholder="A note for Halli…" maxlength="500">${escHtml(existing?.message || '')}</textarea>
-        </div>
-
+        ${fields}
         <div class="party-form-actions">
-          <button type="submit" class="lol-btn lol-btn--primary">Submit RSVP</button>
-          ${existing ? '<button type="button" class="lol-btn lol-btn--ghost" id="rsvp-cancel-btn">Cancel</button>' : ''}
+          <button type="submit" class="lol-btn lol-btn--primary party-rsvp__submit">Submit RSVP</button>
+          ${isUpdate ? '<button type="button" class="lol-btn lol-btn--ghost" id="rsvp-cancel-btn">Cancel</button>' : ''}
         </div>
       </form>`;
   }
+
 
   _renderActivities(activities) {
     const editor = canEdit();
@@ -556,9 +491,8 @@ export class PartyView {
   }
 
   _enterEdit(section) {
-    // RSVP sub-sections use a custom editing flow
-    if (section === 'rsvp-food') { this._enterEditFood(); return; }
-    if (section === 'rsvp-questions') { this._enterEditQuestions(); return; }
+    // RSVP uses a custom form-builder editing flow
+    if (section === 'rsvp') { this._enterEditRsvpForm(); return; }
 
     const sectionEl = this._getSectionEl(section);
     if (!sectionEl) return;
@@ -597,132 +531,144 @@ export class PartyView {
     }
   }
 
-  _enterEditFood() {
-    const container = this._el.querySelector('#rsvp-food');
-    if (!container) return;
+  _enterEditRsvpForm() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
 
-    // Snapshot
-    this._editSnapshots['rsvp-food'] = container.innerHTML;
+    const inner = sectionEl.querySelector('#rsvp-inner');
+    this._editSnapshots['rsvp'] = inner.innerHTML;
 
-    // Hide edit button, show controls
-    container.querySelector('[data-edit-section="rsvp-food"]')?.classList.add('party-edit-btn--hidden');
-    container.querySelector('[data-controls="rsvp-food"]')?.classList.remove('party-edit-controls--hidden');
+    sectionEl.classList.add('party-section--editing');
+    sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.add('party-edit-btn--hidden');
+    sectionEl.querySelector('[data-controls="rsvp"]')?.classList.remove('party-edit-controls--hidden');
 
-    // Replace checkbox group (or dietary input) with editable list
-    const target = container.querySelector('#food-guest-checkboxes') || container.querySelector('#rsvp-dietary');
-    if (!target) return;
+    // Replace inner content with the form-builder editor
+    inner.innerHTML = `
+      <div class="party-rsvp-builder" id="rsvp-builder">
+        ${this._rsvpForm.map(f => this._renderFieldEditor(f)).join('')}
+      </div>
+      <div class="party-rsvp-builder__add">
+        <label class="party-label" for="rsvp-add-type">Add field:</label>
+        <select id="rsvp-add-type" class="lol-input">
+          <option value="heading">Heading</option>
+          <option value="paragraph">Paragraph</option>
+          <option value="checkbox-group">Checkbox group</option>
+          <option value="text">Text input</option>
+          <option value="textarea">Text area</option>
+        </select>
+        <button type="button" class="party-edit-add" id="rsvp-add-field-btn">+ Add Field</button>
+      </div>`;
 
-    const items = [...this._foodOptions];
-    const editorEl = document.createElement('div');
-    editorEl.id = 'food-editor';
-    editorEl.className = 'party-edit-list';
-    editorEl.innerHTML = items.map((opt, i) => `
-      <div class="party-edit-list-item" data-food-index="${i}">
-        <input class="lol-input" type="text" data-food-input value="${escHtml(opt)}" />
-        <button class="party-edit-row-delete" type="button" data-delete-food="${i}" aria-label="Remove" title="Remove">✕</button>
-      </div>`).join('') + `
-      <button class="party-edit-add" type="button" id="add-food-option">+ Add Option</button>`;
-
-    target.replaceWith(editorEl);
-    this._bindFoodEditor(editorEl);
+    this._bindRsvpBuilder();
   }
 
-  _bindFoodEditor(editorEl) {
-    editorEl.querySelectorAll('[data-delete-food]').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('.party-edit-list-item')?.remove());
-    });
-    editorEl.querySelector('#add-food-option')?.addEventListener('click', () => {
-      const item = document.createElement('div');
-      item.className = 'party-edit-list-item';
-      const count = editorEl.querySelectorAll('.party-edit-list-item').length;
-      item.dataset.foodIndex = count;
-      item.innerHTML = `
-        <input class="lol-input" type="text" data-food-input value="" placeholder="New option…" />
-        <button class="party-edit-row-delete" type="button" aria-label="Remove" title="Remove">✕</button>`;
-      item.querySelector('button').addEventListener('click', () => item.remove());
-      editorEl.querySelector('#add-food-option').before(item);
-      item.querySelector('input')?.focus();
-    });
-  }
-
-  _enterEditQuestions() {
-    const container = this._el.querySelector('#rsvp-questions-area');
-    if (!container) return;
-
-    // Snapshot
-    this._editSnapshots['rsvp-questions'] = container.innerHTML;
-
-    // Hide edit button, show controls
-    container.querySelector('[data-edit-section="rsvp-questions"]')?.classList.add('party-edit-btn--hidden');
-    container.querySelector('[data-controls="rsvp-questions"]')?.classList.remove('party-edit-controls--hidden');
-
-    // Build editor with existing questions
-    const questions = [...(this._rsvpQuestions || [])];
-    const editorEl = document.createElement('div');
-    editorEl.id = 'questions-editor';
-    editorEl.innerHTML = questions.map(q => this._renderQuestionBlock(q)).join('') +
-      `<button class="party-edit-add" type="button" id="add-question-btn">+ Add Question</button>`;
-
-    // Remove existing question form-groups (or empty state)
-    container.querySelectorAll('.party-custom-question').forEach(el => el.remove());
-    const addQBtn = container.querySelector('#add-question-btn');
-    if (addQBtn) addQBtn.remove();
-    container.appendChild(editorEl);
-    this._bindQuestionsEditor(editorEl);
-  }
-
-  _renderQuestionBlock(q) {
-    const optionInputs = q.options.map((opt, i) => `
-      <div class="party-edit-list-item" data-option-index="${i}">
+  _renderFieldEditor(field) {
+    const id = field.id || ('f' + Date.now() + Math.random().toString(36).slice(2, 6));
+    const optionsHtml = (field.options || []).map(opt => `
+      <div class="party-edit-list-item" data-option-row>
         <input class="lol-input" type="text" data-option-input value="${escHtml(opt)}" />
         <button class="party-edit-row-delete" type="button" data-delete-option aria-label="Remove option" title="Remove">✕</button>
       </div>`).join('');
 
+    const typeLabels = {
+      'heading':        'Heading',
+      'paragraph':      'Paragraph',
+      'checkbox-group': 'Checkbox group',
+      'text':           'Text input',
+      'textarea':       'Text area',
+    };
+
+    const labelPlaceholder = field.type === 'paragraph'
+      ? 'Paragraph text…'
+      : (field.type === 'heading' ? 'Heading text…' : 'Question / field label');
+
     return `
-      <div class="party-question-block" data-question-block data-question-id="${escHtml(q.id)}">
-        <div class="party-question-block__header">
-          <input class="lol-input" type="text" data-question-label value="${escHtml(q.label)}" placeholder="Question text…" />
-          <button class="party-edit-row-delete" type="button" data-delete-question="${escHtml(q.id)}" aria-label="Delete question" title="Delete question">✕</button>
+      <div class="party-field-block" data-field-block data-field-id="${escHtml(id)}" data-field-type="${escHtml(field.type)}">
+        <div class="party-field-block__header">
+          <span class="party-field-block__type">${typeLabels[field.type] || field.type}</span>
+          <button class="party-edit-row-delete" type="button" data-delete-field aria-label="Delete field" title="Delete field">✕</button>
         </div>
-        <div class="party-question-block__options">
-          ${optionInputs}
-          <button class="party-edit-add party-edit-add--sm" type="button" data-add-option>+ Add Option</button>
-        </div>
+        <input class="lol-input" type="text" data-field-label value="${escHtml(field.label || '')}" placeholder="${labelPlaceholder}" />
+        ${['checkbox-group'].includes(field.type) ? `
+          <div class="party-field-block__options">
+            ${optionsHtml}
+            <button class="party-edit-add party-edit-add--sm" type="button" data-add-option>+ Add Option</button>
+          </div>` : ''}
+        ${['text','textarea'].includes(field.type) ? `
+          <input class="lol-input party-field-block__placeholder" type="text"
+                 data-field-placeholder value="${escHtml(field.placeholder || '')}" placeholder="Placeholder text (optional)" />` : ''}
       </div>`;
   }
 
-  _bindQuestionsEditor(editorEl) {
-    // Delete question buttons
-    editorEl.querySelectorAll('[data-delete-question]').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('.party-question-block')?.remove());
-    });
-    // Delete option buttons
-    editorEl.querySelectorAll('[data-delete-option]').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('.party-edit-list-item')?.remove());
-    });
-    // Add option buttons
-    editorEl.querySelectorAll('[data-add-option]').forEach(addBtn => {
-      addBtn.addEventListener('click', () => {
-        const item = document.createElement('div');
-        item.className = 'party-edit-list-item';
-        item.innerHTML = `
+  _bindRsvpBuilder() {
+    const builder = this._el.querySelector('#rsvp-builder');
+    if (!builder) return;
+
+    const bindBlock = (block) => {
+      block.querySelector('[data-delete-field]')?.addEventListener('click', () => block.remove());
+      block.querySelectorAll('[data-delete-option]').forEach(btn => {
+        btn.addEventListener('click', () => btn.closest('[data-option-row]')?.remove());
+      });
+      block.querySelector('[data-add-option]')?.addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'party-edit-list-item';
+        row.setAttribute('data-option-row', '');
+        row.innerHTML = `
           <input class="lol-input" type="text" data-option-input value="" placeholder="New option…" />
           <button class="party-edit-row-delete" type="button" data-delete-option aria-label="Remove option" title="Remove">✕</button>`;
-        item.querySelector('[data-delete-option]').addEventListener('click', () => item.remove());
-        addBtn.before(item);
-        item.querySelector('input')?.focus();
+        row.querySelector('[data-delete-option]').addEventListener('click', () => row.remove());
+        block.querySelector('[data-add-option]').before(row);
+        row.querySelector('input')?.focus();
       });
+    };
+
+    builder.querySelectorAll('[data-field-block]').forEach(bindBlock);
+
+    // Add field
+    this._el.querySelector('#rsvp-add-field-btn')?.addEventListener('click', () => {
+      const type = this._el.querySelector('#rsvp-add-type').value;
+      const defaults = {
+        'heading':        { label: 'New heading' },
+        'paragraph':      { label: 'New paragraph of text' },
+        'checkbox-group': { label: 'New question', options: ['Option 1'] },
+        'text':           { label: 'New text field' },
+        'textarea':       { label: 'New text area' },
+      };
+      const field = { id: 'f' + Date.now(), type, ...defaults[type] };
+      const wrap  = document.createElement('div');
+      wrap.innerHTML = this._renderFieldEditor(field);
+      const block = wrap.firstElementChild;
+      builder.appendChild(block);
+      bindBlock(block);
+      block.querySelector('[data-field-label]')?.focus();
     });
-    // Add question button
-    editorEl.querySelector('#add-question-btn')?.addEventListener('click', () => {
-      const newQ = { id: 'q' + Date.now(), label: '', options: [''] };
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = this._renderQuestionBlock(newQ);
-      const block = wrapper.firstElementChild;
-      editorEl.querySelector('#add-question-btn').before(block);
-      this._bindQuestionsEditor(editorEl); // rebind
-      block.querySelector('[data-question-label]')?.focus();
+  }
+
+  _collectRsvpForm() {
+    const fields = [];
+    this._el.querySelectorAll('[data-field-block]').forEach(block => {
+      const id    = block.dataset.fieldId;
+      const type  = block.dataset.fieldType;
+      const label = block.querySelector('[data-field-label]')?.value.trim() || '';
+      const field = { id, type, label };
+      if (type === 'checkbox-group') {
+        const opts = [];
+        block.querySelectorAll('[data-option-input]').forEach(inp => {
+          const v = inp.value.trim();
+          if (v) opts.push(v);
+        });
+        field.options = opts;
+      }
+      if (type === 'text' || type === 'textarea') {
+        const ph = block.querySelector('[data-field-placeholder]')?.value.trim();
+        if (ph) field.placeholder = ph;
+      }
+      // Keep headings/paragraphs even without label (empty still useful)
+      // Drop checkbox-groups with no options — they'd be useless
+      if (type === 'checkbox-group' && field.options.length === 0) return;
+      fields.push(field);
     });
+    return fields;
   }
 
   _exitEdit(section) {
@@ -758,21 +704,16 @@ export class PartyView {
   }
 
   _cancelEdit(section) {
-    // RSVP sub-sections: restore the sub-container from snapshot
-    if (section === 'rsvp-food') {
-      const container = this._el.querySelector('#rsvp-food');
-      if (container && this._editSnapshots[section]) {
-        container.innerHTML = this._editSnapshots[section];
-        if (canEdit()) this._bindEditing();
+    if (section === 'rsvp') {
+      const sectionEl = this._getSectionEl('rsvp');
+      const inner     = sectionEl?.querySelector('#rsvp-inner');
+      if (inner && this._editSnapshots[section]) {
+        inner.innerHTML = this._editSnapshots[section];
       }
-      return;
-    }
-    if (section === 'rsvp-questions') {
-      const container = this._el.querySelector('#rsvp-questions-area');
-      if (container && this._editSnapshots[section]) {
-        container.innerHTML = this._editSnapshots[section];
-        if (canEdit()) this._bindEditing();
-      }
+      sectionEl?.classList.remove('party-section--editing');
+      sectionEl?.querySelector('[data-edit-section="rsvp"]')?.classList.remove('party-edit-btn--hidden');
+      sectionEl?.querySelector('[data-controls="rsvp"]')?.classList.add('party-edit-controls--hidden');
+      this._bindRsvp();
       return;
     }
 
@@ -843,28 +784,9 @@ export class PartyView {
       payload.activities = JSON.stringify({ daytime: collect('daytime'), evening: collect('evening') });
     }
 
-    if (section === 'rsvp-food') {
-      const items = [];
-      this._el.querySelectorAll('[data-food-input]').forEach(input => {
-        const val = input.value.trim();
-        if (val) items.push(val);
-      });
-      payload.food_options = JSON.stringify(items);
-    }
-
-    if (section === 'rsvp-questions') {
-      const questions = [];
-      this._el.querySelectorAll('[data-question-block]').forEach(block => {
-        const id    = block.dataset.questionId;
-        const label = block.querySelector('[data-question-label]')?.value?.trim();
-        const opts  = [];
-        block.querySelectorAll('[data-option-input]').forEach(inp => {
-          const v = inp.value.trim();
-          if (v) opts.push(v);
-        });
-        if (label && opts.length) questions.push({ id, label, options: opts });
-      });
-      payload.rsvp_questions = JSON.stringify(questions);
+    if (section === 'rsvp') {
+      const fields = this._collectRsvpForm();
+      payload.rsvp_form = JSON.stringify(fields);
     }
 
     try {
@@ -884,12 +806,11 @@ export class PartyView {
       const updated = await res.json();
       this._partyInfo = updated;
 
-      // Re-parse food/questions if they changed
-      if (section === 'rsvp-food' || section === 'rsvp-questions') {
-        this._foodOptions   = this._parseJSON(updated.food_options,   []);
-        this._rsvpQuestions = this._parseJSON(updated.rsvp_questions, []);
+      // RSVP form changes: re-render the whole RSVP section
+      if (section === 'rsvp') {
+        const parsed = this._parseJSON(updated.rsvp_form, null);
+        this._rsvpForm = Array.isArray(parsed) && parsed.length ? parsed : this._defaultRsvpForm();
 
-        // Re-render the whole RSVP section to pick up the changes
         const rsvpSection = this._el.querySelector('.party-rsvp');
         if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
         this._bindRsvp();
@@ -990,7 +911,7 @@ export class PartyView {
   _getSectionEl(section) {
     const map = {
       venue: '.party-venue', schedule: '.party-schedule', activities: '.party-activities',
-      'rsvp-food': '.party-rsvp', 'rsvp-questions': '.party-rsvp',
+      rsvp: '.party-rsvp',
     };
     return this._el.querySelector(map[section]);
   }
@@ -1034,61 +955,33 @@ export class PartyView {
     const form      = this._el.querySelector('#rsvp-form');
 
     editBtn?.addEventListener('click', () => {
-      formWrap.hidden = false;
-      editBtn.closest('.party-rsvp__current').hidden = true;
+      if (formWrap) formWrap.hidden = false;
+      const current = editBtn.closest('.party-rsvp__current');
+      if (current) current.hidden = true;
     });
 
     cancelBtn?.addEventListener('click', () => {
-      formWrap.hidden = true;
-      this._el.querySelector('.party-rsvp__current').hidden = false;
-    });
-
-    // Toggle extra fields based on attending yes/no
-    const toggleExtra = (show) => {
-      this._el.querySelector('#rsvp-food')?.toggleAttribute('hidden', !show);
-      this._el.querySelector('#rsvp-extra2')?.toggleAttribute('hidden', !show);
-      this._el.querySelector('#rsvp-questions-area')?.toggleAttribute('hidden', !show);
-      if (!show) this._el.querySelector('#plusone-fields')?.setAttribute('hidden', '');
-    };
-
-    this._el.querySelectorAll('[name="attending"]').forEach(radio => {
-      radio.addEventListener('change', () => toggleExtra(radio.value === 'yes'));
-    });
-
-    this._el.querySelector('#rsvp-plusone')?.addEventListener('change', (e) => {
-      this._el.querySelector('#plusone-fields')?.toggleAttribute('hidden', !e.target.checked);
+      if (formWrap) formWrap.hidden = true;
+      const current = this._el.querySelector('.party-rsvp__current');
+      if (current) current.hidden = false;
     });
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const data     = new FormData(form);
-      const attending = data.get('attending');
-      if (!attending) {
-        showToast('Please select yes or no', 'error');
-        return;
+
+      // Collect answers keyed by field id
+      const answers = {};
+      for (const f of this._rsvpForm) {
+        if (f.type === 'heading' || f.type === 'paragraph') continue;
+        if (f.type === 'checkbox-group') {
+          const checked = [...form.querySelectorAll(`[name="f_${f.id}"]:checked`)].map(cb => cb.value);
+          if (checked.length) answers[f.id] = checked;
+        } else {
+          const el = form.querySelector(`[name="f_${f.id}"]`);
+          const v  = el?.value?.trim();
+          if (v) answers[f.id] = v;
+        }
       }
-
-      // Gather food choices
-      const foodGuest   = [...form.querySelectorAll('[name="food_guest"]:checked')].map(cb => cb.value);
-      const foodPlusone = [...form.querySelectorAll('[name="food_plusone"]:checked')].map(cb => cb.value);
-
-      // Gather custom question answers
-      const custom_answers = {};
-      for (const q of (this._rsvpQuestions || [])) {
-        const checked = [...form.querySelectorAll(`[name="cq_${q.id}"]:checked`)].map(cb => cb.value);
-        if (checked.length) custom_answers[q.id] = checked;
-      }
-
-      const payload = {
-        attending:        attending === 'yes',
-        dietary_needs:    data.get('dietary_needs')    || null,
-        plus_one:         !!form.querySelector('#rsvp-plusone')?.checked,
-        plus_one_name:    data.get('plus_one_name')    || null,
-        plus_one_dietary: data.get('plus_one_dietary') || null,
-        message:          data.get('message')          || null,
-        food_choices:     { guest: foodGuest, plus_one: foodPlusone },
-        custom_answers,
-      };
 
       const btn = form.querySelector('[type="submit"]');
       btn.disabled = true;
@@ -1099,7 +992,7 @@ export class PartyView {
           method:      'POST',
           credentials: 'include',
           headers,
-          body:        JSON.stringify(payload),
+          body:        JSON.stringify({ answers }),
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || 'RSVP failed');
@@ -1110,6 +1003,7 @@ export class PartyView {
         const rsvpSection = this._el.querySelector('.party-rsvp');
         if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
         this._bindRsvp();
+        if (canEdit()) this._bindEditing();
       } catch (err) {
         showToast(err.message, 'error');
       } finally {

@@ -997,3 +997,157 @@
 .party-custom-question {
   margin-bottom: var(--sp-3);
 }
+
+/* ── Button base styles (party page is self-contained for button variants) ───── */
+
+.party-rsvp__form .lol-btn,
+.party-rsvp__submit,
+.party-rsvp__update-btn,
+.party-locked__btn,
+.lol-btn--primary,
+.lol-btn--ghost,
+.lol-btn--danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: .7rem 1.4rem;
+  font-family: 'Barlow', sans-serif;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease, color 200ms ease;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.lol-btn--primary,
+.party-rsvp__submit {
+  background: var(--gold, #C89B3C);
+  color: #010A13;
+  border-color: var(--gold, #C89B3C);
+}
+
+.lol-btn--primary:hover,
+.party-rsvp__submit:hover {
+  background: #D4A843;
+  box-shadow: 0 4px 20px rgba(200, 155, 60, 0.35);
+}
+
+.lol-btn--primary[disabled],
+.party-rsvp__submit[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.lol-btn--ghost,
+.party-rsvp__update-btn {
+  background: transparent;
+  border-color: rgba(200, 170, 110, 0.5);
+  color: var(--gold, #C89B3C);
+}
+
+.lol-btn--ghost:hover,
+.party-rsvp__update-btn:hover {
+  background: rgba(200, 155, 60, 0.1);
+  border-color: var(--gold, #C89B3C);
+}
+
+.lol-btn--danger {
+  background: rgba(220, 50, 50, 0.15);
+  border-color: rgba(220, 50, 50, 0.5);
+  color: #e55;
+}
+
+.lol-btn--danger:hover {
+  background: rgba(220, 50, 50, 0.3);
+  border-color: #e55;
+}
+
+.lol-btn--sm {
+  padding: .35rem .8rem;
+  font-size: .7rem;
+}
+
+/* ── RSVP form builder (admin edit mode) ──────────────────────────────────── */
+
+.party-rsvp-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.party-rsvp-builder__add {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-top: var(--sp-4);
+  border-top: 1px dashed rgba(200, 170, 110, 0.25);
+}
+
+.party-rsvp-builder__add .lol-input {
+  max-width: 180px;
+}
+
+.party-field-block {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.party-field-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.party-field-block__type {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold, #C89B3C);
+  font-weight: 700;
+}
+
+.party-field-block__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 2px solid rgba(200, 170, 110, 0.15);
+}
+
+.party-field-block__placeholder {
+  margin-top: var(--sp-2);
+  font-style: italic;
+  opacity: 0.9;
+}
+
+.party-edit-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.party-edit-list-item .lol-input {
+  flex: 1;
+}
+
+.party-edit-add--sm {
+  padding: .25rem .6rem;
+  font-size: .7rem;
+  align-self: flex-start;
+}

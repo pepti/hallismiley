@@ -39,10 +39,10 @@ export class PartyAdminView {
     const rsvps   = await rsvpsRes.json();
     const info    = await infoRes.json();
 
-    this._invites = invites;
-    this._rsvps   = rsvps;
-    this._foodOptions   = (() => { try { return JSON.parse(info.food_options   || '[]'); } catch { return []; } })();
-    this._rsvpQuestions = (() => { try { return JSON.parse(info.rsvp_questions || '[]'); } catch { return []; } })();
+    this._invites  = invites;
+    this._rsvps    = rsvps;
+    const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
+    this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
     this._el.innerHTML = this._renderAll();
     this._bind();
@@ -73,10 +73,7 @@ export class PartyAdminView {
     const declined = invites.filter(i => i.status === 'declined').length;
     const total    = invites.length;
 
-    const headcount = rsvps.reduce((sum, r) => {
-      if (!r.attending) return sum;
-      return sum + 1 + (r.plus_one ? 1 : 0);
-    }, 0);
+    const headcount = rsvps.filter(r => r.attending).length;
 
     return `
       <section class="party-admin__section">
@@ -146,40 +143,33 @@ export class PartyAdminView {
       </section>`;
   }
 
+  _dataFields() {
+    // Fields that actually carry answer data (exclude pure layout)
+    return this._rsvpForm.filter(f => !['heading', 'paragraph'].includes(f.type));
+  }
+
+  _formatAnswer(val) {
+    if (val == null) return '—';
+    if (Array.isArray(val)) return val.length ? val.map(escHtml).join(', ') : '—';
+    return escHtml(String(val));
+  }
+
   _renderRsvpTable() {
-    const hasQuestions = this._rsvpQuestions.length > 0;
-    const colCount = 6 + (hasQuestions ? 1 : 0);
+    const fields = this._dataFields();
+    const colCount = 2 + fields.length; // Name + Email + one per field
 
     const rows = this._rsvps.map(r => {
-      const foodCell = r.food_choices?.guest?.length
-        ? escHtml(r.food_choices.guest.join(', '))
-        : escHtml(r.dietary_needs || '—');
-
-      const plusOneFood = r.food_choices?.plus_one?.length
-        ? ` (${escHtml(r.food_choices.plus_one.join(', '))})`
-        : (r.plus_one_dietary ? ` (${escHtml(r.plus_one_dietary)})` : '');
-      const plusOneCell = r.plus_one
-        ? `Yes — ${escHtml(r.plus_one_name || 'Guest')}${plusOneFood}`
-        : 'No';
-
-      const answersCell = hasQuestions
-        ? `<td>${this._rsvpQuestions.map(q => {
-            const ans = r.custom_answers?.[q.id];
-            return ans?.length ? `<strong>${escHtml(q.label)}:</strong> ${ans.map(a => escHtml(a)).join(', ')}` : '';
-          }).filter(Boolean).join('<br>') || '—'}</td>`
-        : '';
-
+      const answers = r.answers || {};
+      const fieldCells = fields.map(f => `<td>${this._formatAnswer(answers[f.id])}</td>`).join('');
       return `
         <tr>
           <td>${escHtml(r.display_name || r.username)}</td>
           <td>${escHtml(r.email)}</td>
-          <td><span class="party-status party-status--${r.attending ? 'accepted' : 'declined'}">${r.attending ? 'Yes ✅' : 'No ❌'}</span></td>
-          <td>${foodCell}</td>
-          <td>${plusOneCell}</td>
-          ${answersCell}
-          <td>${escHtml(r.message || '—')}</td>
+          ${fieldCells}
         </tr>`;
     }).join('') || `<tr><td colspan="${colCount}" class="party-empty">No RSVPs yet</td></tr>`;
+
+    const fieldHeaders = fields.map(f => `<th>${escHtml(f.label || f.id)}</th>`).join('');
 
     return `
       <section class="party-admin__section">
@@ -188,7 +178,7 @@ export class PartyAdminView {
           <table class="party-admin__table" aria-label="RSVP list">
             <thead>
               <tr>
-                <th>Name</th><th>Email</th><th>Attending</th><th>Food</th><th>Plus One</th>${hasQuestions ? '<th>Answers</th>' : ''}<th>Message</th>
+                <th>Name</th><th>Email</th>${fieldHeaders}
               </tr>
             </thead>
             <tbody>
@@ -200,58 +190,52 @@ export class PartyAdminView {
   }
 
   _renderFoodTally() {
-    if (!this._foodOptions.length) return '';
-    const attending = this._rsvps.filter(r => r.attending);
-    const tally = {};
-    this._foodOptions.forEach(opt => { tally[opt] = 0; });
-    attending.forEach(r => {
-      (r.food_choices?.guest || []).forEach(f => { tally[f] = (tally[f] || 0) + 1; });
-      if (r.plus_one) {
-        (r.food_choices?.plus_one || []).forEach(f => { tally[f] = (tally[f] || 0) + 1; });
-      }
-    });
+    // Tally all checkbox-group fields (one card grid per field)
+    const groups = this._rsvpForm.filter(f => f.type === 'checkbox-group' && (f.options || []).length);
+    if (!groups.length) return '';
 
-    const statItems = Object.entries(tally).map(([name, count]) => `
-      <div class="party-admin__stat">
-        <span class="party-admin__stat-num">${count}</span>
-        <span class="party-admin__stat-label">${escHtml(name)}</span>
-      </div>`).join('');
-
-    return `
-      <section class="party-admin__section">
-        <h2 class="party-admin__section-title">Food Tally</h2>
-        <div class="party-admin__stats">${statItems}</div>
-      </section>`;
+    return groups.map(g => {
+      const tally = {};
+      (g.options || []).forEach(opt => { tally[opt] = 0; });
+      this._rsvps.forEach(r => {
+        const answers = r.answers?.[g.id];
+        if (Array.isArray(answers)) {
+          answers.forEach(v => { if (v in tally) tally[v] += 1; else tally[v] = 1; });
+        }
+      });
+      const items = Object.entries(tally).map(([name, count]) => `
+        <div class="party-admin__stat">
+          <span class="party-admin__stat-num">${count}</span>
+          <span class="party-admin__stat-label">${escHtml(name)}</span>
+        </div>`).join('');
+      return `
+        <section class="party-admin__section">
+          <h2 class="party-admin__section-title">${escHtml(g.label || 'Tally')}</h2>
+          <div class="party-admin__stats">${items}</div>
+        </section>`;
+    }).join('');
   }
 
   _renderGuestListExport() {
-    const attending = this._rsvps.filter(r => r.attending);
-    const lines = attending.flatMap(r => {
+    const fields = this._dataFields();
+    const lines = this._rsvps.map(r => {
       const name = r.display_name || r.username;
-      const foodInfo = r.food_choices?.guest?.length
-        ? ` — Food: ${r.food_choices.guest.join(', ')}`
-        : (r.dietary_needs ? ` — ${r.dietary_needs}` : '');
-      const rows = [`${name} (${r.email})${foodInfo}`];
-      if (r.plus_one) {
-        const plusFood = r.food_choices?.plus_one?.length
-          ? ` — Food: ${r.food_choices.plus_one.join(', ')}`
-          : (r.plus_one_dietary ? ` — ${r.plus_one_dietary}` : '');
-        rows.push(`  + ${r.plus_one_name || 'Plus one'}${plusFood}`);
+      const parts = [`${name} (${r.email})`];
+      for (const f of fields) {
+        const a = r.answers?.[f.id];
+        if (a == null || (Array.isArray(a) && !a.length) || a === '') continue;
+        const val = Array.isArray(a) ? a.join(', ') : a;
+        parts.push(`  ${f.label || f.id}: ${val}`);
       }
-      // Custom answers
-      for (const q of this._rsvpQuestions) {
-        const ans = r.custom_answers?.[q.id];
-        if (ans?.length) rows.push(`  ${q.label}: ${ans.join(', ')}`);
-      }
-      return rows;
+      return parts.join('\n');
     });
 
     return `
       <section class="party-admin__section">
         <h2 class="party-admin__section-title">Guest List Export</h2>
-        <p class="party-admin__export-note">Copy and paste — ${attending.length} confirmed guests:</p>
+        <p class="party-admin__export-note">Copy and paste — ${this._rsvps.length} RSVPs:</p>
         <textarea class="lol-input lol-textarea party-admin__export-area" readonly
-                  aria-label="Guest list export">${lines.join('\n')}</textarea>
+                  aria-label="Guest list export">${lines.join('\n\n')}</textarea>
       </section>`;
   }
 

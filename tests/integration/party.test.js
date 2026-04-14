@@ -83,13 +83,13 @@ describe('GET /api/v1/party/info', () => {
 // ── POST /api/v1/party/rsvp ───────────────────────────────────────────────────
 
 describe('POST /api/v1/party/rsvp', () => {
-  test('invited user can submit RSVP', async () => {
+  test('invited user can submit RSVP with answers', async () => {
     const res = await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', adminCookie)
-      .send({ attending: true, dietary_needs: 'none', plus_one: false });
+      .send({ answers: { attend: ["Yes, I'll be there!"], message: 'See you there' } });
     expect(res.status).toBe(200);
-    expect(res.body.attending).toBe(true);
+    expect(res.body.answers).toMatchObject({ attend: ["Yes, I'll be there!"], message: 'See you there' });
     expect(res.body.user_id).toBe(adminId);
   });
 
@@ -97,37 +97,44 @@ describe('POST /api/v1/party/rsvp', () => {
     await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', adminCookie)
-      .send({ attending: true });
+      .send({ answers: { attend: ["Yes"] } });
     const res = await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', adminCookie)
-      .send({ attending: false, message: 'Sorry, cannot make it' });
+      .send({ answers: { attend: ["No"], message: 'Sorry' } });
     expect(res.status).toBe(200);
-    expect(res.body.attending).toBe(false);
-    expect(res.body.message).toBe('Sorry, cannot make it');
+    expect(res.body.answers).toMatchObject({ attend: ["No"], message: 'Sorry' });
   });
 
-  test('returns 400 when attending is not a boolean', async () => {
+  test('returns 400 when answers is missing', async () => {
     const res = await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', adminCookie)
-      .send({ attending: 'yes' });
+      .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/attending/i);
+    expect(res.body.error).toMatch(/answers/i);
+  });
+
+  test('returns 400 when answers is not an object', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/rsvp')
+      .set('Cookie', adminCookie)
+      .send({ answers: 'not-an-object' });
+    expect(res.status).toBe(400);
   });
 
   test('returns 403 for user without party access', async () => {
     const res = await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', userCookie)
-      .send({ attending: true });
+      .send({ answers: { attend: ["Yes"] } });
     expect(res.status).toBe(403);
   });
 
   test('unauthenticated returns 401', async () => {
     const res = await request(app)
       .post('/api/v1/party/rsvp')
-      .send({ attending: true });
+      .send({ answers: { attend: ["Yes"] } });
     expect(res.status).toBe(401);
   });
 });
@@ -147,14 +154,13 @@ describe('GET /api/v1/party/rsvp', () => {
     await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', adminCookie)
-      .send({ attending: true, plus_one: true, plus_one_name: 'Guest' });
+      .send({ answers: { attend: ["Yes"], food: ["Veg"] } });
 
     const res = await request(app)
       .get('/api/v1/party/rsvp')
       .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
-    expect(res.body.attending).toBe(true);
-    expect(res.body.plus_one_name).toBe('Guest');
+    expect(res.body.answers).toMatchObject({ attend: ["Yes"], food: ["Veg"] });
   });
 
   test('returns 403 for user without party access', async () => {
@@ -177,7 +183,7 @@ describe('GET /api/v1/party/rsvps', () => {
     await request(app)
       .post('/api/v1/party/rsvp')
       .set('Cookie', adminCookie)
-      .send({ attending: true });
+      .send({ answers: { attend: ["Yes"] } });
 
     const res = await request(app)
       .get('/api/v1/party/rsvps')
@@ -444,7 +450,7 @@ describe('DELETE /api/v1/party/photos/:id', () => {
 
 describe('Non-invited user blocked on all party endpoints', () => {
   const protectedEndpoints = [
-    { method: 'post',   path: '/api/v1/party/rsvp',       body: { attending: true } },
+    { method: 'post',   path: '/api/v1/party/rsvp',       body: { answers: { attend: ['Yes'] } } },
     { method: 'get',    path: '/api/v1/party/rsvp' },
     { method: 'post',   path: '/api/v1/party/guestbook',  body: { message: 'hi' } },
     { method: 'get',    path: '/api/v1/party/guestbook' },

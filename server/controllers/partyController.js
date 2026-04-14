@@ -110,38 +110,22 @@ const partyController = {
 
   async upsertRsvp(req, res, next) {
     try {
-      const { attending, dietary_needs, plus_one, plus_one_name, plus_one_dietary, message, food_choices, custom_answers } = req.body;
+      const { answers } = req.body;
 
-      if (typeof attending !== 'boolean') {
-        return res.status(400).json({ error: 'attending must be a boolean', code: 400 });
+      if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+        return res.status(400).json({ error: 'answers must be an object', code: 400 });
       }
 
+      // Store `attending=true` on the legacy column so headcount queries keep working.
+      // Real data lives in `answers` (keyed by field id chosen by the admin).
       const { rows } = await db.query(
-        `INSERT INTO party_rsvps
-           (user_id, attending, dietary_needs, plus_one, plus_one_name, plus_one_dietary, message, food_choices, custom_answers)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
+        `INSERT INTO party_rsvps (user_id, attending, answers)
+         VALUES ($1, TRUE, $2::jsonb)
          ON CONFLICT (user_id) DO UPDATE SET
-           attending        = EXCLUDED.attending,
-           dietary_needs    = EXCLUDED.dietary_needs,
-           plus_one         = EXCLUDED.plus_one,
-           plus_one_name    = EXCLUDED.plus_one_name,
-           plus_one_dietary = EXCLUDED.plus_one_dietary,
-           message          = EXCLUDED.message,
-           food_choices     = EXCLUDED.food_choices,
-           custom_answers   = EXCLUDED.custom_answers,
-           updated_at       = NOW()
+           answers    = EXCLUDED.answers,
+           updated_at = NOW()
          RETURNING *`,
-        [
-          req.user.id,
-          attending,
-          dietary_needs   || null,
-          plus_one        ?? false,
-          plus_one_name   || null,
-          plus_one_dietary || null,
-          message         || null,
-          food_choices    ? JSON.stringify(food_choices) : null,
-          custom_answers  ? JSON.stringify(custom_answers) : null,
-        ]
+        [req.user.id, JSON.stringify(answers)]
       );
 
       res.json(rows[0]);
@@ -310,7 +294,7 @@ const partyController = {
 
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {

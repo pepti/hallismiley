@@ -320,6 +320,16 @@ const migrations = [
       `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS custom_answers JSONB`,
     ],
   },
+  {
+    name: '019_rsvp_form_builder',
+    statements: [
+      // RSVP answers now live in a single JSONB column keyed by the admin-designed
+      // field ids. `rsvp_form` itself is stored as site_content.party_rsvp_form.
+      `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS answers JSONB`,
+      // Wipe existing RSVPs — form structure changed, previous answers no longer meaningful
+      `DELETE FROM party_rsvps`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
