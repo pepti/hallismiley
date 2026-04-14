@@ -703,7 +703,6 @@ export class PartyView {
     // Add option buttons
     editorEl.querySelectorAll('[data-add-option]').forEach(addBtn => {
       addBtn.addEventListener('click', () => {
-        const block = addBtn.closest('.party-question-block__options');
         const item = document.createElement('div');
         item.className = 'party-edit-list-item';
         item.innerHTML = `
