@@ -4,8 +4,8 @@ test.describe('Contact form', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    // Scroll contact section into view by clicking the nav link
-    await page.locator('[data-scroll="contact"]').click();
+    // Scroll the contact section into view
+    await page.locator('#contact').scrollIntoViewIfNeeded();
     await page.waitForSelector('#contact-form', { timeout: 8_000 });
   });
 

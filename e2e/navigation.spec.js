@@ -38,10 +38,10 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.halli-bio')).toBeVisible();
   });
 
-  test('Contact section is reachable from the navbar', async ({ page }) => {
+  test('Contact page is reachable from the navbar', async ({ page }) => {
     await page.goto('/');
-    await page.locator('[data-scroll="contact"]').click();
-    await expect(page.locator('#contact')).toBeAttached();
+    await page.locator('[data-route="/contact"]').click();
+    await expect(page.locator('#contact-page-form')).toBeAttached();
   });
 
   test('no JavaScript errors on homepage', async ({ page }) => {
