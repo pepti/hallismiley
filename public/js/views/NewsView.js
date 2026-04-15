@@ -276,16 +276,6 @@ export class NewsView {
                       required rows="16"
                       placeholder="<p>Full article content…</p>">${_esc(article?.body || '')}</textarea>
           </label>
-          <label class="news-editor__label">Cover Image URL
-            <div class="news-editor__cover-row">
-              <input class="news-editor__input news-editor__cover-input" name="cover_image" type="text"
-                     value="${_esc(article?.cover_image || '')}" placeholder="https:// or /assets/…">
-              <button type="button" class="news-editor__cover-pick-btn" id="cover-pick-btn">
-                Pick from uploaded
-              </button>
-            </div>
-            <div class="news-editor__cover-picker" id="cover-picker" hidden></div>
-          </label>
           <div class="news-editor__row news-editor__row--check">
             <label class="news-editor__check">
               <input type="checkbox" name="published" ${isNew || article?.published ? 'checked' : ''}>
@@ -352,7 +342,6 @@ export class NewsView {
 
     // Wire up media controls right away — queuing works even without article ID
     this._bindMediaUploads(overlay);
-    this._bindCoverPicker(overlay);
 
     const form = overlay.querySelector('#news-editor-form');
     form.addEventListener('submit', async e => {
@@ -377,42 +366,6 @@ export class NewsView {
     } catch { /* silent — picker just stays empty */ }
   }
 
-  _bindCoverPicker(overlay) {
-    const btn    = overlay.querySelector('#cover-pick-btn');
-    const picker = overlay.querySelector('#cover-picker');
-    const input  = overlay.querySelector('[name="cover_image"]');
-    if (!btn || !picker || !input) return;
-
-    const render = () => {
-      const images = (this._editorMedia || []).filter(m => m.kind === 'image');
-      if (!images.length) {
-        picker.innerHTML = `<p class="news-editor__cover-empty">
-          No uploaded images yet. Upload images in the Media section below, then pick one here.
-        </p>`;
-        return;
-      }
-      picker.innerHTML = images.map(m => `
-        <button type="button" class="news-editor__cover-thumb" data-path="${_esc(m.file_path)}"
-                title="${_esc(m.caption || '')}">
-          <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
-        </button>`).join('');
-      picker.querySelectorAll('.news-editor__cover-thumb').forEach(thumb => {
-        thumb.addEventListener('click', () => {
-          input.value = thumb.dataset.path;
-          picker.hidden = true;
-          btn.textContent = 'Pick from uploaded';
-        });
-      });
-    };
-
-    btn.addEventListener('click', () => {
-      const open = picker.hidden;
-      if (open) render();
-      picker.hidden = !open;
-      btn.textContent = open ? 'Close picker' : 'Pick from uploaded';
-    });
-  }
-
   async _submitEditor(form, overlay, articleId, isNew) {
     const status  = overlay.querySelector('#editor-status');
     const saveBtn = form.querySelector('#editor-save-btn');
@@ -422,7 +375,6 @@ export class NewsView {
     const category    = form.querySelector('[name="category"]').value.trim() || 'news';
     const summary     = form.querySelector('[name="summary"]').value.trim();
     const body        = form.querySelector('[name="body"]').value.trim();
-    const cover_image = form.querySelector('[name="cover_image"]').value.trim() || null;
     const published   = form.querySelector('[name="published"]').checked;
 
     // Basic client-side validation so the user gets feedback on required fields
@@ -439,7 +391,7 @@ export class NewsView {
 
     try {
       const headers = await getCsrfHeaders();
-      const payload = { title, summary, body, cover_image, category, published };
+      const payload = { title, summary, body, category, published };
       if (slug) payload.slug = slug;
 
       const url    = isNew ? '/api/v1/news' : `/api/v1/news/${articleId}`;
@@ -689,7 +641,10 @@ export class NewsView {
       return '<p class="news-editor__media-empty">No media added yet.</p>';
     }
 
+    const currentCover = this._editorArticle?.cover_image || '';
     const uploadedHtml = uploaded.map(m => {
+      const isImage = m.kind === 'image';
+      const isCover = isImage && m.file_path && m.file_path === currentCover;
       let preview;
       if (m.kind === 'youtube') {
         preview = `<div class="news-editor__media-thumb news-editor__media-thumb--yt">
@@ -705,15 +660,25 @@ export class NewsView {
       } else {
         preview = `<div class="news-editor__media-thumb">
           <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
+          ${isCover ? '<span class="news-editor__media-cover-badge">COVER</span>' : ''}
         </div>`;
       }
 
+      const setCoverBtn = isImage
+        ? `<button type="button" class="news-editor__media-set-cover${isCover ? ' is-current' : ''}"
+                   data-media-id="${m.id}"
+                   ${isCover ? 'disabled aria-label="Current cover image"' : 'aria-label="Set as cover image"'}>
+             ${isCover ? '✓ Cover' : 'Set Cover'}
+           </button>`
+        : '';
+
       return `
-        <div class="news-editor__media-item" data-media-id="${m.id}">
+        <div class="news-editor__media-item${isCover ? ' news-editor__media-item--is-cover' : ''}" data-media-id="${m.id}">
           ${preview}
           <div class="news-editor__media-item-controls">
             <input type="text" class="news-editor__media-caption" placeholder="Caption…"
                    value="${_esc(m.caption || '')}" data-media-id="${m.id}">
+            ${setCoverBtn}
             <button type="button" class="news-editor__media-delete" data-media-id="${m.id}"
                     aria-label="Delete media">✕</button>
           </div>
@@ -810,6 +775,35 @@ export class NewsView {
           const m = this._editorMedia.find(m => m.id === Number(mediaId));
           if (m) m.caption = caption;
         } catch { /* silent */ }
+      });
+    });
+
+    // Set Cover buttons — only appear on uploaded image items
+    overlay.querySelectorAll('.news-editor__media-set-cover').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mediaId = Number(btn.dataset.mediaId);
+        const m = this._editorMedia.find(x => x.id === mediaId);
+        if (!m || !m.file_path) return;
+        if (!this._editorArticle?.id) {
+          this._showMediaStatus(overlay, 'Save the article first, then set a cover.', true);
+          return;
+        }
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/news/${this._editorArticle.id}`, {
+            method: 'PATCH', credentials: 'include', headers,
+            body: JSON.stringify({ cover_image: m.file_path }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || 'Could not set cover');
+          }
+          this._editorArticle = await res.json();
+          this._refreshMediaGrid(overlay);
+          this._showMediaStatus(overlay, 'Cover image updated.');
+        } catch (err) {
+          this._showMediaStatus(overlay, err.message, true);
+        }
       });
     });
   }

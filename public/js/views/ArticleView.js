@@ -394,10 +394,6 @@ export class ArticleView {
             <textarea class="news-editor__textarea news-editor__textarea--lg" name="body"
                       required rows="16">${_esc(a.body)}</textarea>
           </label>
-          <label class="news-editor__label">Cover Image URL
-            <input class="news-editor__input" name="cover_image" type="text"
-                   value="${_esc(a.cover_image || '')}">
-          </label>
           <div class="news-editor__row news-editor__row--check">
             <label class="news-editor__check">
               <input type="checkbox" name="published" ${a.published ? 'checked' : ''}>
@@ -471,7 +467,6 @@ export class ArticleView {
         category:    form.querySelector('[name="category"]').value.trim() || 'news',
         summary:     form.querySelector('[name="summary"]').value.trim(),
         body:        form.querySelector('[name="body"]').value.trim(),
-        cover_image: form.querySelector('[name="cover_image"]').value.trim() || null,
         published:   form.querySelector('[name="published"]').checked,
       };
 
@@ -512,7 +507,10 @@ export class ArticleView {
       return '<p class="news-editor__media-empty">No media added yet.</p>';
     }
 
+    const currentCover = this._article?.cover_image || '';
     return this._media.map(m => {
+      const isImage  = m.kind === 'image';
+      const isCover  = isImage && m.file_path && m.file_path === currentCover;
       let preview;
       if (m.kind === 'youtube') {
         preview = `<div class="news-editor__media-thumb news-editor__media-thumb--yt">
@@ -528,15 +526,25 @@ export class ArticleView {
       } else {
         preview = `<div class="news-editor__media-thumb">
           <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
+          ${isCover ? '<span class="news-editor__media-cover-badge">COVER</span>' : ''}
         </div>`;
       }
 
+      const setCoverBtn = isImage
+        ? `<button type="button" class="news-editor__media-set-cover${isCover ? ' is-current' : ''}"
+                   data-media-id="${m.id}"
+                   ${isCover ? 'disabled aria-label="Current cover image"' : 'aria-label="Set as cover image"'}>
+             ${isCover ? '✓ Cover' : 'Set Cover'}
+           </button>`
+        : '';
+
       return `
-        <div class="news-editor__media-item" data-media-id="${m.id}" draggable="true">
+        <div class="news-editor__media-item${isCover ? ' news-editor__media-item--is-cover' : ''}" data-media-id="${m.id}" draggable="true">
           ${preview}
           <div class="news-editor__media-item-controls">
             <input type="text" class="news-editor__media-caption" placeholder="Caption…"
                    value="${_esc(m.caption || '')}" data-media-id="${m.id}">
+            ${setCoverBtn}
             <button type="button" class="news-editor__media-delete" data-media-id="${m.id}"
                     aria-label="Delete media">✕</button>
           </div>
@@ -568,6 +576,31 @@ export class ArticleView {
           if (!res.ok) throw new Error('Delete failed');
           this._media = this._media.filter(m => m.id !== Number(mediaId));
           this._refreshMediaGrid(overlay);
+        } catch (err) {
+          this._showMediaStatus(overlay, err.message, true);
+        }
+      });
+    });
+
+    // Set Cover buttons
+    overlay.querySelectorAll('.news-editor__media-set-cover').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mediaId = Number(btn.dataset.mediaId);
+        const m = this._media.find(x => x.id === mediaId);
+        if (!m || !m.file_path) return;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/news/${this._article.id}`, {
+            method: 'PATCH', credentials: 'include', headers,
+            body: JSON.stringify({ cover_image: m.file_path }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || 'Could not set cover');
+          }
+          this._article = await res.json();
+          this._refreshMediaGrid(overlay);
+          this._showMediaStatus(overlay, 'Cover image updated.');
         } catch (err) {
           this._showMediaStatus(overlay, err.message, true);
         }
