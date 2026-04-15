@@ -774,3 +774,119 @@
 .lol-stats--editing [contenteditable="true"]:focus {
   border-bottom-color: #C89B3C;
 }
+
+/* ─────────────────────────────────────────────
+   DISCIPLINE (PROJECTS) SECTION — Admin / Moderator edit mode
+   ───────────────────────────────────────────── */
+
+.lol-projects__edit-btn {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem .85rem;
+  background: rgba(200,155,60,.15);
+  border: 1px solid rgba(200,155,60,.5);
+  border-radius: 4px;
+  color: #C89B3C;
+  font-size: .75rem;
+  font-family: inherit;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+  z-index: 10;
+}
+.lol-projects__edit-btn:hover { background: rgba(200,155,60,.28); border-color: #C89B3C; }
+.lol-projects__edit-btn--hidden { display: none; }
+
+.lol-projects__edit-controls {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1.5rem;
+  background: rgba(10,12,18,.92);
+  border-top: 1px solid rgba(200,155,60,.3);
+  z-index: 10;
+}
+.lol-projects__edit-controls--hidden { display: none; }
+
+.lol-projects__save-btn,
+.lol-projects__cancel-btn {
+  padding: .4rem 1rem;
+  border-radius: 4px;
+  font-size: .8rem;
+  font-family: inherit;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s;
+}
+.lol-projects__save-btn {
+  background: #C89B3C;
+  border: 1px solid #C89B3C;
+  color: #010A13;
+  font-weight: 700;
+}
+.lol-projects__save-btn:hover { background: #dbb04a; }
+.lol-projects__cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(30,35,40,.3);
+  color: #1E2328;
+}
+.lol-projects__cancel-btn:hover { border-color: #1E2328; }
+
+.lol-projects__edit-status {
+  font-size: .8rem;
+  color: #C89B3C;
+}
+.lol-projects__edit-hint {
+  font-size: .75rem;
+  color: rgba(255,255,255,.6);
+  margin-left: auto;
+  font-style: italic;
+}
+
+/* Editable fields — subtle gold underline while in edit mode */
+.lol-projects--editing [contenteditable="true"] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-radius: 0;
+  cursor: text;
+  min-width: 2ch;
+  transition: border-color .2s;
+}
+.lol-projects--editing [contenteditable="true"]:focus {
+  border-bottom-color: #C89B3C;
+}
+
+/* Make room for save/cancel bar while editing */
+.lol-projects--editing { padding-bottom: 4.5rem; }
+
+/* Image change overlay on the preview circle */
+.lol-projects__circle { position: relative; }
+
+.lol-projects__img-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: .85rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background .2s;
+  z-index: 5;
+}
+.lol-projects__img-overlay:hover { background: rgba(0,0,0,.7); }
