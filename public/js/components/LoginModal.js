@@ -17,6 +17,14 @@ export class LoginModal {
         <button class="modal__close" aria-label="Close">&times;</button>
         <p class="login-modal__eyebrow">Welcome Back</p>
         <h2 class="modal__title" id="login-title">Sign in</h2>
+
+        <a class="btn btn--outline btn--full btn--google" href="/auth/google"
+           data-testid="login-google">
+          <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
+          <span>Continue with Google</span>
+        </a>
+        <div class="login-modal__divider"><span>or</span></div>
+
         <form class="login-form" novalidate data-testid="login-form">
           <div class="form-group">
             <label class="form-label" for="login-username">Username</label>

@@ -1,7 +1,8 @@
 const express        = require('express');
 const rateLimit      = require('express-rate-limit');
 const router         = express.Router();
-const authController = require('../controllers/authController');
+const authController       = require('../controllers/authController');
+const googleAuthController = require('../controllers/googleAuthController');
 const { validateSignup, validateResetPassword } = require('../middleware/validate');
 
 const isTest = () => process.env.NODE_ENV === 'test';
@@ -53,5 +54,11 @@ router.post('/reset-password',         validateResetPassword,  authController.re
 // ── Availability checks ───────────────────────────────────────────────────────
 router.get('/check-username/:username', checkLimiter, authController.checkUsername);
 router.get('/check-email/:email',       checkLimiter, authController.checkEmail);
+
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+// No CSRF (top-level redirects can't carry CSRF headers; state cookie covers it).
+// Reuse authLimiter — 10 requests per 15 min per IP — to deter abuse.
+router.get('/google',           authLimiter, googleAuthController.start);
+router.get('/google/callback',  authLimiter, googleAuthController.callback);
 
 module.exports = router;

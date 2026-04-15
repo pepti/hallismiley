@@ -36,6 +36,13 @@ export class SignupView {
             <p class="signup-subtitle">Already have an account? <a href="#/login" class="signup-link" data-route="/login">Sign in</a></p>
           </div>
 
+          <a class="btn btn--outline btn--full btn--google" href="/auth/google"
+             data-testid="signup-google">
+            <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
+            <span>Continue with Google</span>
+          </a>
+          <div class="login-modal__divider signup-divider"><span>or sign up with email</span></div>
+
           <form class="signup-form" id="signup-form" novalidate data-testid="signup-form">
 
             <!-- Avatar picker -->

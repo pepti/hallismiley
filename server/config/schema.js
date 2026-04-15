@@ -330,6 +330,19 @@ const migrations = [
       `DELETE FROM party_rsvps`,
     ],
   },
+  {
+    name: '020_oauth_google',
+    statements: [
+      // Stable Google subject (`sub` claim) — preferred over email as the OAuth key.
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT UNIQUE`,
+      // Forward-looking column so GitHub/Apple can be added later without another migration.
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT
+         CHECK (oauth_provider IS NULL OR oauth_provider IN ('google'))`,
+      // OAuth-only users have no password — relax NOT NULL on password_hash.
+      `ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_users_google_id ON users (google_id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -258,6 +258,36 @@
 .login-modal__link:hover { color: var(--gold-light); }
 .login-modal__sep { opacity: 0.4; }
 
+/* ── Google sign-in button + "or" divider ────────────────────────── */
+.btn--google {
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.btn--google .btn__icon {
+  width: 18px; height: 18px;
+  /* SVG is already multi-color; keep it as-is so Google brand colors stay intact */
+  filter: none;
+}
+.login-modal__divider {
+  display: flex; align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0 var(--sp-4);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.login-modal__divider::before,
+.login-modal__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-dim);
+}
+.signup-divider {
+  margin-bottom: var(--sp-5);
+}
+
 /* ── Profile page ────────────────────────────────────────────────── */
 .profile-container {
   max-width: 900px;
