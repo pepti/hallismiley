@@ -5,10 +5,12 @@ const { ProjectSection, ProjectVideo } = require('../models/Project');
 const db      = require('../config/database');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 const { parseYouTubeId } = require('../utils/youtube');
+const { UPLOAD_ROOT }    = require('../config/paths');
 
-// Resolve path for a stored file_path like /assets/projects/5/img.jpg
+// URLs look like `/assets/projects/5/img.jpg` but the bytes live at
+// `UPLOAD_ROOT/projects/5/img.jpg` — strip the `/assets` prefix when resolving.
 function _diskPath(filePath) {
-  return path.join(__dirname, '../../public', filePath);
+  return path.join(UPLOAD_ROOT, filePath.replace(/^\/assets\//, ''));
 }
 
 // Safely delete a file from disk (does not throw on missing file)

@@ -9,9 +9,10 @@ const { _checkInviteAccess }       = require('../controllers/partyController');
 const { requireAuth }              = require('../auth/middleware');
 const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
+const { partyUploadDir }           = require('../config/paths');
 
 // ── Party photo upload (images only, max 10 MB) ────────────────────────────────
-const PARTY_PHOTO_DIR = path.join(__dirname, '../../public/assets/party');
+const PARTY_PHOTO_DIR = partyUploadDir();
 
 const partyPhotoStorage = multer.diskStorage({
   destination(req, file, cb) {

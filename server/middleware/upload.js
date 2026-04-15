@@ -1,10 +1,12 @@
 // File upload middleware using multer (disk storage).
-// Creates a per-project upload directory under public/assets/projects/<projectId>/.
+// Destination directories live under UPLOAD_ROOT (see server/config/paths.js)
+// so production can redirect writes to the mounted Azure Files share.
 // Enforces MIME-type allowlist and per-type size limits.
 
 const multer = require('multer');
 const path   = require('path');
 const fs     = require('fs');
+const { newsUploadDir, projectUploadDir } = require('../config/paths');
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -20,9 +22,7 @@ const ALLOWED_MIME_TYPES  = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
  * Caller is responsible for calling `.single('file')` on the returned instance.
  */
 function createProjectUpload(projectId) {
-  const destDir = path.join(
-    __dirname, '../../public/assets/projects', String(projectId)
-  );
+  const destDir = projectUploadDir(projectId);
 
   const storage = multer.diskStorage({
     destination(req, file, cb) {
@@ -61,9 +61,7 @@ function createProjectUpload(projectId) {
  * Destination: `public/assets/news/<articleId>/`.
  */
 function createNewsUpload(articleId) {
-  const destDir = path.join(
-    __dirname, '../../public/assets/news', String(articleId)
-  );
+  const destDir = newsUploadDir(articleId);
 
   const storage = multer.diskStorage({
     destination(req, file, cb) {
