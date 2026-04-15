@@ -282,7 +282,7 @@ export class NewsView {
           </label>
           <div class="news-editor__row news-editor__row--check">
             <label class="news-editor__check">
-              <input type="checkbox" name="published" ${article?.published ? 'checked' : ''}>
+              <input type="checkbox" name="published" ${isNew || article?.published ? 'checked' : ''}>
               Published
             </label>
           </div>
