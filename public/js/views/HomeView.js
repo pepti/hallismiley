@@ -61,6 +61,18 @@ const DEFAULT_STATS_CONTENT = [
   { num: '40',  label: 'Years of creating all kinds of trouble' },
 ];
 
+// Historical rows in site_content were sometimes saved as an object with
+// numeric string keys (`{"0": {...}, "1": {...}}`) instead of a JSON array.
+// Both shapes carry the same data; normalise to an array so .map works.
+function _coerceStatsArray(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    const vals = Object.values(data).filter(v => v && typeof v === 'object' && 'num' in v && 'label' in v);
+    if (vals.length) return vals;
+  }
+  return [...DEFAULT_STATS_CONTENT];
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 export class HomeView {
   constructor() {
@@ -117,7 +129,8 @@ export class HomeView {
     try {
       const res = await fetch('/api/v1/content/home_stats');
       if (res.ok) {
-        this._statsContent = await res.json();
+        const data = await res.json();
+        this._statsContent = _coerceStatsArray(data);
         return;
       }
     } catch { /* network error — fall through to default */ }
