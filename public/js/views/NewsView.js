@@ -277,8 +277,14 @@ export class NewsView {
                       placeholder="<p>Full article content…</p>">${_esc(article?.body || '')}</textarea>
           </label>
           <label class="news-editor__label">Cover Image URL
-            <input class="news-editor__input" name="cover_image" type="text"
-                   value="${_esc(article?.cover_image || '')}" placeholder="https:// or /assets/…">
+            <div class="news-editor__cover-row">
+              <input class="news-editor__input news-editor__cover-input" name="cover_image" type="text"
+                     value="${_esc(article?.cover_image || '')}" placeholder="https:// or /assets/…">
+              <button type="button" class="news-editor__cover-pick-btn" id="cover-pick-btn">
+                Pick from uploaded
+              </button>
+            </div>
+            <div class="news-editor__cover-picker" id="cover-picker" hidden></div>
           </label>
           <div class="news-editor__row news-editor__row--check">
             <label class="news-editor__check">
@@ -346,6 +352,7 @@ export class NewsView {
 
     // Wire up media controls right away — queuing works even without article ID
     this._bindMediaUploads(overlay);
+    this._bindCoverPicker(overlay);
 
     const form = overlay.querySelector('#news-editor-form');
     form.addEventListener('submit', async e => {
@@ -355,6 +362,55 @@ export class NewsView {
     });
 
     overlay.querySelector('[name="title"]').focus();
+
+    // For existing articles, load already-uploaded media so it shows in the
+    // media grid and can be picked as the cover image.
+    if (article?.id) this._loadEditorMedia(overlay, article.id);
+  }
+
+  async _loadEditorMedia(overlay, articleId) {
+    try {
+      const res = await fetch(`/api/v1/news/${articleId}/media`, { credentials: 'include' });
+      if (!res.ok) return;
+      this._editorMedia = await res.json();
+      this._refreshMediaGrid(overlay);
+    } catch { /* silent — picker just stays empty */ }
+  }
+
+  _bindCoverPicker(overlay) {
+    const btn    = overlay.querySelector('#cover-pick-btn');
+    const picker = overlay.querySelector('#cover-picker');
+    const input  = overlay.querySelector('[name="cover_image"]');
+    if (!btn || !picker || !input) return;
+
+    const render = () => {
+      const images = (this._editorMedia || []).filter(m => m.kind === 'image');
+      if (!images.length) {
+        picker.innerHTML = `<p class="news-editor__cover-empty">
+          No uploaded images yet. Upload images in the Media section below, then pick one here.
+        </p>`;
+        return;
+      }
+      picker.innerHTML = images.map(m => `
+        <button type="button" class="news-editor__cover-thumb" data-path="${_esc(m.file_path)}"
+                title="${_esc(m.caption || '')}">
+          <img src="${_esc(m.file_path)}" alt="${_esc(m.caption || '')}" loading="lazy">
+        </button>`).join('');
+      picker.querySelectorAll('.news-editor__cover-thumb').forEach(thumb => {
+        thumb.addEventListener('click', () => {
+          input.value = thumb.dataset.path;
+          picker.hidden = true;
+          btn.textContent = 'Pick from uploaded';
+        });
+      });
+    };
+
+    btn.addEventListener('click', () => {
+      const open = picker.hidden;
+      if (open) render();
+      picker.hidden = !open;
+      btn.textContent = open ? 'Close picker' : 'Pick from uploaded';
+    });
   }
 
   async _submitEditor(form, overlay, articleId, isNew) {

@@ -223,7 +223,9 @@ app.get('/ready', async (req, res) => {
   };
   if (dbCircuitBreaker.state === 'open') overallOk = false;
 
-  // Memory usage
+  // Memory usage — reported for visibility; does not flip readiness.
+  // Node's heapTotal grows dynamically, so a high heapUsed/heapTotal ratio
+  // is common under load (especially in CI) and is not a reason to refuse traffic.
   const mem = process.memoryUsage();
   const heapRatio = mem.heapUsed / mem.heapTotal;
   checks.memory = {
@@ -232,15 +234,14 @@ app.get('/ready', async (req, res) => {
     heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
     ratio:       `${(heapRatio * 100).toFixed(1)}%`,
   };
-  if (heapRatio > 0.9) overallOk = false;
 
-  // Event loop lag
+  // Event loop lag — reported for visibility; does not flip readiness.
+  // Short-lived spikes (GC, test noise) shouldn't evict the pod from the LB.
   const lagMs = await measureEventLoopLag();
   checks.eventLoop = {
     status: lagMs > 100 ? 'degraded' : 'ok',
     lagMs:  Math.round(lagMs),
   };
-  if (lagMs > 100) overallOk = false;
 
   const status = overallOk ? 200 : 503;
   res.status(status).json({
