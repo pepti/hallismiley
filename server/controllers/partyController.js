@@ -1,6 +1,7 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
+const { UPLOAD_ROOT } = require('../config/paths');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -58,8 +59,10 @@ const DEFAULT_PARTY_INFO = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+// URLs look like `/assets/party/foo.jpg` but the bytes live at
+// `UPLOAD_ROOT/party/foo.jpg` — strip the `/assets` prefix when resolving.
 function _diskPath(filePath) {
-  return path.join(__dirname, '../../public', filePath);
+  return path.join(UPLOAD_ROOT, filePath.replace(/^\/assets\//, ''));
 }
 
 function _tryUnlink(filePath) {

@@ -23,8 +23,11 @@ COPY server/   ./server/
 COPY public/   ./public/
 COPY package.json ./
 
-# Ensure writable upload dir exists with correct ownership before dropping privileges
-RUN mkdir -p /app/public/assets/content && chown -R appuser:appgroup /app/public/assets
+# Ensure writable upload dirs exist with correct ownership before dropping privileges.
+# /app/uploads is the mount point for the Azure Files share in production
+# (see server/config/paths.js — UPLOAD_ROOT).
+RUN mkdir -p /app/public/assets/content /app/uploads/news /app/uploads/party /app/uploads/projects \
+ && chown -R appuser:appgroup /app/public/assets /app/uploads
 
 # Drop to non-root user
 USER appuser

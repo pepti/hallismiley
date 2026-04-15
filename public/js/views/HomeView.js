@@ -6,38 +6,36 @@ import { escHtml } from '../utils/escHtml.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
-const CATEGORIES = [
-  {
-    id: 'tech', label: 'Tech', type: 'Full-Stack Applications',
-    img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format',
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-             <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-           </svg>`,
-  },
-  {
-    id: 'carpentry', label: 'Carpentry', type: 'Joinery & Timber Work',
-    img: '/assets/projects/arnarhraun/img_1795.jpg',
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-             <polyline points="9 22 9 12 15 12 15 22"/>
-           </svg>`,
-  },
-  {
-    id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',
-    img: '/assets/projects/arnarhraun/img_1071.jpg',
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-           </svg>`,
-  },
-  {
-    id: 'tools', label: 'Tools', type: 'Workshop & Dev Tooling',
-    img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format',
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-             <circle cx="12" cy="12" r="3"/>
-             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
-           </svg>`,
-  },
-];
+// Icons are NOT editable — keyed by category id and merged at render time.
+const CATEGORY_ICONS = {
+  tech: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+           <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+         </svg>`,
+  carpentry: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>`,
+  remodelling: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>`,
+  tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+          </svg>`,
+};
+
+// Default discipline content — fallback if API row is unavailable.
+const DEFAULT_DISCIPLINE_CONTENT = {
+  eyebrow:     'Browse by',
+  heading:     'Discipline',
+  description: 'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
+  categories: [
+    { id: 'tech',        label: 'Tech',        type: 'Full-Stack Applications', img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
+    { id: 'carpentry',   label: 'Carpentry',   type: 'Joinery & Timber Work',   img: '/assets/projects/arnarhraun/img_1795.jpg' },
+    { id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',     img: '/assets/projects/arnarhraun/img_1071.jpg' },
+    { id: 'tools',       label: 'Tools',       type: 'Workshop & Dev Tooling',  img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+  ],
+};
 
 // ── Default skills content — used as fallback if API is unavailable ───────
 const DEFAULT_SKILLS_CONTENT = {
@@ -66,13 +64,19 @@ const DEFAULT_STATS_CONTENT = [
 // ─────────────────────────────────────────────────────────────────────────
 export class HomeView {
   constructor() {
-    this._content = null;      // skills — loaded from API in render()
+    this._content = null;       // skills — loaded from API in render()
     this._statsContent = null;  // stats — loaded from API in render()
+    this._discipline = null;    // discipline (projects categories) — loaded from API
     this._newsArticles = [];
   }
 
   async render() {
-    await Promise.all([this._loadContent(), this._loadStats(), this._loadNews()]);
+    await Promise.all([
+      this._loadContent(),
+      this._loadStats(),
+      this._loadDiscipline(),
+      this._loadNews(),
+    ]);
 
     const view = document.createElement('div');
     view.className = 'view';
@@ -91,6 +95,7 @@ export class HomeView {
     this._initContactForm(view);
     this._initHeroVideo(view);
     this._initSkillsEdit(view);
+    this._initDisciplineEdit(view);
     this._initFooterLinks(view);
     return view;
   }
@@ -117,6 +122,22 @@ export class HomeView {
       }
     } catch { /* network error — fall through to default */ }
     this._statsContent = [...DEFAULT_STATS_CONTENT];
+  }
+
+  // ── Load discipline (projects categories) content from API ─────────────
+  async _loadDiscipline() {
+    try {
+      const res = await fetch('/api/v1/content/home_discipline');
+      if (res.ok) {
+        const data = await res.json();
+        // Defensive: ensure required shape
+        if (data && Array.isArray(data.categories) && data.categories.length > 0) {
+          this._discipline = data;
+          return;
+        }
+      }
+    } catch { /* network error — fall through to default */ }
+    this._discipline = JSON.parse(JSON.stringify(DEFAULT_DISCIPLINE_CONTENT));
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
@@ -209,14 +230,16 @@ export class HomeView {
 
   // ── SECTION 4: Projects — champion-selector style ──────────────────────
   _projects() {
-    const first = CATEGORIES[0];
+    const d     = this._discipline;
+    const first = d.categories[0];
 
-    const catIcons = CATEGORIES.map((c, i) => `
+    const catIcons = d.categories.map((c, i) => `
       <div class="lol-projects__cat${i === 0 ? ' active' : ''}"
-           data-cat="${c.id}" role="tab" tabindex="${i === 0 ? '0' : '-1'}"
-           aria-selected="${i === 0 ? 'true' : 'false'}" aria-label="${c.label}">
-        <div class="lol-projects__cat-icon">${c.icon}</div>
-        <span class="lol-projects__cat-label">${c.label}</span>
+           data-cat="${escHtml(c.id)}" data-cat-index="${i}"
+           role="tab" tabindex="${i === 0 ? '0' : '-1'}"
+           aria-selected="${i === 0 ? 'true' : 'false'}" aria-label="${escHtml(c.label)}">
+        <div class="lol-projects__cat-icon">${CATEGORY_ICONS[c.id] || ''}</div>
+        <span class="lol-projects__cat-label" data-cat-field="label">${escHtml(c.label)}</span>
       </div>
     `).join('');
 
@@ -225,12 +248,9 @@ export class HomeView {
       <div class="lol-projects__inner">
 
         <div class="lol-projects__left">
-          <p class="lol-projects__eyebrow">Browse by</p>
-          <h2 class="lol-projects__heading">Discipline</h2>
-          <p class="lol-projects__desc">
-            From precision timber frames and hand-cut joinery to full-stack
-            web applications — every project is built to last.
-          </p>
+          <p class="lol-projects__eyebrow" data-disc-field="eyebrow">${escHtml(d.eyebrow)}</p>
+          <h2 class="lol-projects__heading" data-disc-field="heading">${escHtml(d.heading)}</h2>
+          <p class="lol-projects__desc" data-disc-field="description">${escHtml(d.description)}</p>
           <div class="lol-projects__btns">
             <a href="#/projects" class="lol-btn--gold">View All Projects</a>
             <a href="#/" class="lol-btn--teal" id="contact-btn">Get in Touch</a>
@@ -244,12 +264,12 @@ export class HomeView {
           <div class="lol-projects__circle">
             <img id="projects-preview-img"
                  class="lol-projects__preview-img"
-                 src="${first.img}" alt="${first.label} projects preview"
+                 src="${escHtml(first.img)}" alt="${escHtml(first.label)} projects preview"
                  width="800" height="800" loading="lazy">
           </div>
           <div class="lol-projects__preview-name">
-            <p id="projects-preview-title" class="lol-projects__preview-title">${first.label}</p>
-            <p id="projects-preview-type"  class="lol-projects__preview-type">${first.type}</p>
+            <p id="projects-preview-title" class="lol-projects__preview-title" data-cat-field="label">${escHtml(first.label)}</p>
+            <p id="projects-preview-type"  class="lol-projects__preview-type"  data-cat-field="type">${escHtml(first.type)}</p>
           </div>
         </div>
 
@@ -439,7 +459,7 @@ export class HomeView {
     cats.forEach(cat => {
       const activate = () => {
         const id   = cat.dataset.cat;
-        const data = CATEGORIES.find(c => c.id === id);
+        const data = this._discipline.categories.find(c => c.id === id);
         if (!data) return;
 
         cats.forEach(c => {
@@ -450,8 +470,8 @@ export class HomeView {
 
         img.style.opacity = '0';
         setTimeout(() => {
-          img.src          = data.img;
-          img.alt          = `${data.label} projects preview`;
+          img.src           = data.img;
+          img.alt           = `${data.label} projects preview`;
           title.textContent = data.label;
           type.textContent  = data.type;
           img.style.opacity = '1';
@@ -698,6 +718,262 @@ export class HomeView {
       this._content = await skillsRes.json();
       if (statsRes) this._statsContent = await statsRes.json();
 
+      status.textContent = 'Saved!';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    }
+  }
+
+  // ── Discipline (Projects categories) — inline edit for admin/moderator ──
+  _initDisciplineEdit(view) {
+    if (!isAdmin() && !hasRole('moderator')) return;
+
+    const section = view.querySelector('.lol-projects');
+    if (!section) return;
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'lol-projects__edit-btn';
+    editBtn.id        = 'discipline-edit-btn';
+    editBtn.type      = 'button';
+    editBtn.setAttribute('aria-label', 'Edit discipline section');
+    editBtn.setAttribute('data-testid', 'edit-discipline-btn');
+    editBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit Section`;
+    section.style.position = 'relative';
+    section.appendChild(editBtn);
+
+    const controls = document.createElement('div');
+    controls.className = 'lol-projects__edit-controls lol-projects__edit-controls--hidden';
+    controls.id        = 'discipline-edit-bar';
+    controls.setAttribute('data-testid', 'edit-discipline-controls');
+    controls.innerHTML = `
+      <button type="button" class="lol-projects__save-btn" data-testid="edit-discipline-save">Save Changes</button>
+      <button type="button" class="lol-projects__cancel-btn" data-testid="edit-discipline-cancel">Cancel</button>
+      <span class="lol-projects__edit-status" aria-live="polite"></span>
+      <span class="lol-projects__edit-hint">Tip: select a category to change its image.</span>`;
+    section.appendChild(controls);
+
+    let _snapshot = null;
+
+    editBtn.addEventListener('click', () => {
+      _snapshot = JSON.parse(JSON.stringify(this._discipline));
+      this._enterDisciplineEdit(section, editBtn, controls);
+    });
+
+    controls.querySelector('.lol-projects__save-btn').addEventListener('click', () =>
+      this._saveDisciplineEdit(section, controls)
+    );
+
+    controls.querySelector('.lol-projects__cancel-btn').addEventListener('click', () => {
+      this._exitDisciplineEdit(section, editBtn, controls);
+      if (_snapshot) this._restoreDisciplineEdit(section, _snapshot);
+    });
+  }
+
+  _enterDisciplineEdit(section, editBtn, controls) {
+    section.classList.add('lol-projects--editing');
+    editBtn.classList.add('lol-projects__edit-btn--hidden');
+    controls.classList.remove('lol-projects__edit-controls--hidden');
+
+    section.querySelectorAll('[data-disc-field]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck      = true;
+    });
+
+    // Each category tab: label is editable inline. Type is edited via the
+    // active-preview area (reflects whichever tab is selected).
+    section.querySelectorAll('.lol-projects__cat [data-cat-field="label"]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck      = true;
+    });
+    section.querySelectorAll('.lol-projects__preview-name [data-cat-field]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck      = true;
+    });
+
+    // Image overlay on the preview circle — uploads for whichever category
+    // is currently active. To change another category's image, admin selects
+    // that tab first.
+    const circle = section.querySelector('.lol-projects__circle');
+    if (circle && !circle.querySelector('.lol-projects__img-overlay')) {
+      const overlay = document.createElement('div');
+      overlay.className = 'lol-projects__img-overlay';
+      overlay.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <span>Change Image</span>
+        <input type="file" accept="image/jpeg,image/png,image/webp"
+               class="lol-img-file-input" aria-label="Upload replacement image for active category">`;
+      circle.appendChild(overlay);
+
+      overlay.querySelector('.lol-img-file-input').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) this._uploadDisciplineImage(file, section, controls);
+        e.target.value = ''; // allow re-upload of same filename
+      });
+    }
+
+    // Sync preview label/type back to the active category as user edits them
+    const previewTitle = section.querySelector('#projects-preview-title');
+    const previewType  = section.querySelector('#projects-preview-type');
+    const sync = () => {
+      const active = section.querySelector('.lol-projects__cat.active');
+      if (!active) return;
+      const idx = parseInt(active.dataset.catIndex, 10);
+      const cat = this._discipline.categories[idx];
+      if (!cat) return;
+      cat.label = previewTitle.innerText.trim();
+      cat.type  = previewType.innerText.trim();
+      // Mirror label change back into the tab itself
+      const tabLabel = active.querySelector('[data-cat-field="label"]');
+      if (tabLabel && tabLabel.innerText.trim() !== cat.label) {
+        tabLabel.innerText = cat.label;
+      }
+    };
+    previewTitle.addEventListener('input', sync);
+    previewType.addEventListener('input', sync);
+
+    // Sync tab label edits back into in-memory state too
+    section.querySelectorAll('.lol-projects__cat').forEach(tab => {
+      const labelEl = tab.querySelector('[data-cat-field="label"]');
+      if (!labelEl) return;
+      labelEl.addEventListener('input', () => {
+        const idx = parseInt(tab.dataset.catIndex, 10);
+        const cat = this._discipline.categories[idx];
+        if (!cat) return;
+        cat.label = labelEl.innerText.trim();
+        if (tab.classList.contains('active') && previewTitle) {
+          previewTitle.innerText = cat.label;
+        }
+      });
+    });
+  }
+
+  _exitDisciplineEdit(section, editBtn, controls) {
+    section.classList.remove('lol-projects--editing');
+    editBtn.classList.remove('lol-projects__edit-btn--hidden');
+    controls.classList.add('lol-projects__edit-controls--hidden');
+    controls.querySelector('.lol-projects__edit-status').textContent = '';
+
+    section.querySelectorAll('[data-disc-field], [data-cat-field]').forEach(el => {
+      el.contentEditable = 'false';
+      el.removeAttribute('contenteditable');
+    });
+
+    section.querySelector('.lol-projects__img-overlay')?.remove();
+  }
+
+  _restoreDisciplineEdit(section, snapshot) {
+    section.querySelector('[data-disc-field="eyebrow"]').innerText     = snapshot.eyebrow;
+    section.querySelector('[data-disc-field="heading"]').innerText     = snapshot.heading;
+    section.querySelector('[data-disc-field="description"]').innerText = snapshot.description;
+
+    section.querySelectorAll('.lol-projects__cat').forEach(tab => {
+      const idx = parseInt(tab.dataset.catIndex, 10);
+      const cat = snapshot.categories[idx];
+      if (!cat) return;
+      const labelEl = tab.querySelector('[data-cat-field="label"]');
+      if (labelEl) labelEl.innerText = cat.label;
+    });
+
+    // Restore preview to the currently-active tab
+    const active = section.querySelector('.lol-projects__cat.active');
+    const idx = active ? parseInt(active.dataset.catIndex, 10) : 0;
+    const cat = snapshot.categories[idx] || snapshot.categories[0];
+    const img   = section.querySelector('#projects-preview-img');
+    const title = section.querySelector('#projects-preview-title');
+    const type  = section.querySelector('#projects-preview-type');
+    if (img)   { img.src = cat.img; img.alt = `${cat.label} projects preview`; }
+    if (title) title.innerText = cat.label;
+    if (type)  type.innerText  = cat.type;
+
+    this._discipline = snapshot;
+  }
+
+  async _uploadDisciplineImage(file, section, controls) {
+    const status = controls.querySelector('.lol-projects__edit-status');
+    const active = section.querySelector('.lol-projects__cat.active');
+    if (!active) { status.textContent = 'Select a category first.'; return; }
+    const idx = parseInt(active.dataset.catIndex, 10);
+    const cat = this._discipline.categories[idx];
+    if (!cat) { status.textContent = 'Active category not found.'; return; }
+
+    status.textContent = `Uploading image for ${cat.label}…`;
+
+    try {
+      const token = await getCSRFToken();
+      const fd    = new FormData();
+      fd.append('file', file);
+
+      // Composite key for nice filenames; merge=false skips a useless DB row
+      // (the URL is persisted via the next PUT against home_discipline).
+      const key = `home_discipline_${cat.id}`;
+      const res = await fetch(`/api/v1/content/${encodeURIComponent(key)}/image?merge=false`, {
+        method:      'POST',
+        credentials: 'include',
+        headers:     token ? { 'X-CSRF-Token': token } : {},
+        body:        fd,
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Upload failed');
+
+      const { image_url } = await res.json();
+      cat.img = image_url;
+      const img = section.querySelector('#projects-preview-img');
+      if (img) img.src = image_url;
+      status.textContent = `Image updated for ${cat.label}. Click Save to persist.`;
+    } catch (err) {
+      status.textContent = `Upload error: ${err.message}`;
+    }
+  }
+
+  async _saveDisciplineEdit(section, controls) {
+    const status = controls.querySelector('.lol-projects__edit-status');
+    status.textContent = 'Saving…';
+
+    // Collect section text from DOM
+    const eyebrow     = section.querySelector('[data-disc-field="eyebrow"]')?.innerText.trim()     ?? this._discipline.eyebrow;
+    const heading     = section.querySelector('[data-disc-field="heading"]')?.innerText.trim()     ?? this._discipline.heading;
+    const description = section.querySelector('[data-disc-field="description"]')?.innerText.trim() ?? this._discipline.description;
+
+    // Collect per-category data — labels come from tab DOM, types come from
+    // the live `_discipline.categories[].type` (synced in _enterDisciplineEdit).
+    // For the active category, also capture the current preview title/type.
+    const categories = this._discipline.categories.map((cat, i) => {
+      const tab = section.querySelector(`.lol-projects__cat[data-cat-index="${i}"]`);
+      const labelEl = tab?.querySelector('[data-cat-field="label"]');
+      return {
+        id:    cat.id,
+        label: labelEl?.innerText.trim() || cat.label,
+        type:  cat.type,
+        img:   cat.img,
+      };
+    });
+
+    const updated = { eyebrow, heading, description, categories };
+
+    try {
+      const token = await getCSRFToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
+      };
+
+      const res = await fetch('/api/v1/content/home_discipline', {
+        method: 'PUT', credentials: 'include', headers,
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+
+      this._discipline = await res.json();
       status.textContent = 'Saved!';
       setTimeout(() => { status.textContent = ''; }, 2500);
     } catch (err) {

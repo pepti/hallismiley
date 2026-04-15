@@ -3,11 +3,14 @@ const path = require('path');
 const db   = require('../config/database');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 const { parseYouTubeId } = require('../utils/youtube');
+const { UPLOAD_ROOT } = require('../config/paths');
 
 const MEDIA_COLS = 'id, article_id, kind, file_path, youtube_id, caption, sort_order, created_at';
 
+// URLs look like `/assets/news/18/foo.mp4` but the bytes live at
+// `UPLOAD_ROOT/news/18/foo.mp4` — strip the `/assets` prefix when resolving.
 function _diskPath(filePath) {
-  return path.join(__dirname, '../../public', filePath);
+  return path.join(UPLOAD_ROOT, filePath.replace(/^\/assets\//, ''));
 }
 
 function _tryUnlink(filePath) {

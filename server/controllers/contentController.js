@@ -70,12 +70,18 @@ async function putContent(req, res, next) {
 }
 
 // ── POST /api/v1/content/:key/image ──────────────────────────────────────────
+// Query param ?merge=false — return the URL only, skip the DB merge. Used for
+// nested image fields (e.g. discipline categories) where the caller persists
+// the URL via a follow-up PUT against the parent key.
 function uploadImage(req, res, next) {
   upload(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const imageUrl = `/assets/content/${req.file.filename}`;
+    const merge    = req.query.merge !== 'false';
+
+    if (!merge) return res.json({ image_url: imageUrl });
 
     try {
       // Merge image_url into the existing JSONB value (or create a new row)

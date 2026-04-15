@@ -292,6 +292,26 @@ app.get('/api/v1/csrf-token', (req, res) => {
 // ── DB circuit breaker — applied to all routes that touch the database ─────────
 app.use(['/auth', '/api/v1'], dbCircuitBreakerMiddleware);
 
+// ── User-uploaded media — served from UPLOAD_ROOT ─────────────────────────────
+// These routes are registered BEFORE the baked `public/` static so uploads take
+// precedence. A request that doesn't exist under UPLOAD_ROOT falls through to
+// the static middleware below, which still serves committed baked content
+// (e.g. `/assets/waterfall-cover.jpg`, `/assets/party/venue/*.jpg`,
+// `/assets/projects/<slug>/*.jpg`, avatars, etc.).
+//
+// In production UPLOAD_ROOT is the Azure Files mount (/app/uploads) so
+// user uploads survive container redeploys.
+const { UPLOAD_ROOT } = require('./config/paths');
+const uploadStaticOpts = {
+  maxAge: '1h',
+  etag: true,
+  lastModified: true,
+  fallthrough: true,
+};
+app.use('/assets/news',     express.static(path.join(UPLOAD_ROOT, 'news'),     uploadStaticOpts));
+app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    uploadStaticOpts));
+app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
+
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
