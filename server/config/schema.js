@@ -343,6 +343,19 @@ const migrations = [
       `CREATE INDEX IF NOT EXISTS idx_users_google_id ON users (google_id)`,
     ],
   },
+  {
+    name: '021_oauth_facebook',
+    statements: [
+      // Stable Facebook user id (`id` from Graph API /me).
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_id TEXT UNIQUE`,
+      // Widen the CHECK constraint from migration 020 to allow 'facebook'.
+      // Postgres auto-names inline column constraints as <table>_<column>_check.
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_oauth_provider_check`,
+      `ALTER TABLE users ADD CONSTRAINT users_oauth_provider_check
+         CHECK (oauth_provider IS NULL OR oauth_provider IN ('google', 'facebook'))`,
+      `CREATE INDEX IF NOT EXISTS idx_users_facebook_id ON users (facebook_id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -41,6 +41,11 @@ export class SignupView {
             <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
             <span>Continue with Google</span>
           </a>
+          <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook"
+             data-testid="signup-facebook">
+            <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
+            <span>Continue with Facebook</span>
+          </a>
           <div class="login-modal__divider signup-divider"><span>or sign up with email</span></div>
 
           <form class="signup-form" id="signup-form" novalidate data-testid="signup-form">

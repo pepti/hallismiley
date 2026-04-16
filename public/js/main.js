@@ -24,18 +24,22 @@ document.body.insertBefore(navEl, document.getElementById('app'));
   const error   = params.get('error');
   if (!welcome && !error) return;
 
-  const GOOGLE_ERRORS = {
-    invalid_state:          'Google sign-in was interrupted. Please try again.',
-    oauth_failed:           'Google sign-in failed. Please try again.',
-    google_profile_invalid: 'Your Google account did not return a verified email.',
-    account_disabled:       'This account has been disabled.',
-    google_not_configured:  'Google sign-in is not configured on this site.',
+  const OAUTH_ERRORS = {
+    invalid_state:             'Sign-in was interrupted. Please try again.',
+    oauth_failed:              'Sign-in failed. Please try again.',
+    account_disabled:          'This account has been disabled.',
+    google_profile_invalid:    'Your Google account did not return a verified email.',
+    google_not_configured:     'Google sign-in is not configured on this site.',
+    facebook_profile_invalid:  'Your Facebook account did not return an email. Please use a different sign-in method.',
+    facebook_not_configured:   'Facebook sign-in is not configured on this site.',
   };
 
   if (welcome === 'google') {
     showToast('Signed in with Google', 'success');
-  } else if (error && GOOGLE_ERRORS[error]) {
-    showToast(GOOGLE_ERRORS[error], 'error', 5000);
+  } else if (welcome === 'facebook') {
+    showToast('Signed in with Facebook', 'success');
+  } else if (error && OAUTH_ERRORS[error]) {
+    showToast(OAUTH_ERRORS[error], 'error', 5000);
   }
 
   // Strip welcome/error from the hash without triggering a hashchange (which

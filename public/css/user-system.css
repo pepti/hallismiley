@@ -241,14 +241,16 @@
 .login-modal__link:hover { color: var(--gold-light); }
 .login-modal__sep { opacity: 0.4; }
 
-/* ── Google sign-in button + "or" divider ────────────────────────── */
-.btn--google {
+/* ── Social sign-in buttons + "or" divider ───────────────────────── */
+.btn--google,
+.btn--facebook {
   gap: var(--sp-2);
   margin-bottom: var(--sp-3);
 }
-.btn--google .btn__icon {
+.btn--google .btn__icon,
+.btn--facebook .btn__icon {
   width: 18px; height: 18px;
-  /* SVG is already multi-color; keep it as-is so Google brand colors stay intact */
+  /* SVGs ship with brand colors baked in; keep them so no tint applies */
   filter: none;
 }
 .login-modal__divider {
