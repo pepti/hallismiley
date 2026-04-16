@@ -121,6 +121,14 @@ const ALLOWED_AVATARS = Array.from({ length: 40 }, (_, i) =>
   `avatar-${String(i + 1).padStart(2, '0')}.svg`
 );
 
+// User-uploaded avatars are written by the upload endpoint with a controlled
+// filename pattern: user-<userId>-<timestamp>-<rand>.<ext>. This regex is the
+// allowlist for uploaded avatars referenced from the avatar field.
+const UPLOADED_AVATAR_RE = /^user-\d+-\d+-[a-z0-9]+\.(jpg|jpeg|png|webp)$/i;
+function isAllowedAvatar(name) {
+  return ALLOWED_AVATARS.includes(name) || UPLOADED_AVATAR_RE.test(name);
+}
+
 function validatePassword(password, errors) {
   if (!password || typeof password !== 'string') {
     errors.push('password is required');
@@ -185,8 +193,8 @@ function validateProfileUpdate(req, res, next) {
   }
 
   if (avatar !== undefined) {
-    if (!ALLOWED_AVATARS.includes(avatar))
-      errors.push(`avatar must be one of the allowed avatars (avatar-01.svg to avatar-40.svg)`);
+    if (!isAllowedAvatar(avatar))
+      errors.push(`avatar must be one of the allowed avatars or an uploaded avatar`);
   }
 
   if (errors.length) {

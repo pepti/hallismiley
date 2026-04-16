@@ -174,6 +174,24 @@ export async function updateProfile(updates) {
   return data;
 }
 
+export async function uploadAvatar(file) {
+  const token = await getCSRFToken();
+  const fd    = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/v1/users/me/avatar', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     token ? { 'X-CSRF-Token': token } : {},
+    body:        fd,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Avatar upload failed');
+  // Refresh cached user so NavBar picks up the new avatar
+  _user = { ..._user, avatar: data.avatar };
+  _dispatch();
+  return data;
+}
+
 export async function changePassword(currentPassword, newPassword) {
   const headers = await _csrfHeaders();
   const res = await fetch('/api/v1/users/me/password', {
