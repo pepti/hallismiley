@@ -23,6 +23,11 @@ export class LoginModal {
           <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
           <span>Continue with Google</span>
         </a>
+        <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook"
+           data-testid="login-facebook">
+          <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
+          <span>Continue with Facebook</span>
+        </a>
         <div class="login-modal__divider"><span>or</span></div>
 
         <form class="login-form" novalidate data-testid="login-form">

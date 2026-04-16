@@ -1,8 +1,9 @@
 const express        = require('express');
 const rateLimit      = require('express-rate-limit');
 const router         = express.Router();
-const authController       = require('../controllers/authController');
-const googleAuthController = require('../controllers/googleAuthController');
+const authController         = require('../controllers/authController');
+const googleAuthController   = require('../controllers/googleAuthController');
+const facebookAuthController = require('../controllers/facebookAuthController');
 const { validateSignup, validateResetPassword } = require('../middleware/validate');
 
 const isTest = () => process.env.NODE_ENV === 'test';
@@ -60,5 +61,9 @@ router.get('/check-email/:email',       checkLimiter, authController.checkEmail)
 // Reuse authLimiter — 10 requests per 15 min per IP — to deter abuse.
 router.get('/google',           authLimiter, googleAuthController.start);
 router.get('/google/callback',  authLimiter, googleAuthController.callback);
+
+// ── Facebook OAuth ────────────────────────────────────────────────────────────
+router.get('/facebook',          authLimiter, facebookAuthController.start);
+router.get('/facebook/callback', authLimiter, facebookAuthController.callback);
 
 module.exports = router;

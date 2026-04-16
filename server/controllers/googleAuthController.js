@@ -11,10 +11,10 @@
 //
 // Errors bubble back to /#/login?error=<code> so the SPA can render them.
 
-const crypto                      = require('crypto');
 const { query: dbQuery }          = require('../config/database');
 const { lucia }                   = require('../auth/lucia');
 const { loadArctic, isConfigured } = require('../auth/google');
+const { generateUniqueUsername }  = require('../auth/oauthHelpers');
 
 const COOKIE_TTL_MS = 10 * 60 * 1000;
 const USERINFO_URL  = 'https://openidconnect.googleapis.com/v1/userinfo';
@@ -169,24 +169,4 @@ async function callback(req, res, next) {
   }
 }
 
-// Derive a unique username from display name or email local-part.
-async function generateUniqueUsername(email, name) {
-  const raw  = name || email.split('@')[0] || 'user';
-  const base = raw.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'user';
-  // Signup validator requires ≥ 3 chars — pad if too short.
-  const padded = base.length < 3 ? (base + '123').slice(0, 20) : base;
-
-  for (let i = 0; i < 5; i++) {
-    const suffix    = i === 0 ? '' : crypto.randomBytes(2).toString('hex');
-    const candidate = (padded + suffix).slice(0, 32);
-    const { rows } = await dbQuery(
-      `SELECT 1 FROM users WHERE username = $1`,
-      [candidate],
-    );
-    if (rows.length === 0) return candidate;
-  }
-  // Fallback — effectively guaranteed unique.
-  return `user_${crypto.randomBytes(6).toString('hex')}`;
-}
-
-module.exports = { start, callback, generateUniqueUsername };
+module.exports = { start, callback };
