@@ -14,6 +14,7 @@
   --gold-light:   #F0E6D3;
   --gold-dark:    #785A28;
   --gold-glow:    rgba(200, 170, 110, 0.12);
+  --glow-around:  0 0 60px rgba(200, 170, 110, 0.196), 0 0 20px rgba(200, 170, 110, 0.126);
   --teal:         #0BC4E3;
   --teal-dim:     rgba(11, 196, 227, 0.12);
 

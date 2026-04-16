@@ -23,17 +23,8 @@
   padding: var(--sp-7) var(--sp-6);
   position: relative;
   text-align: center;
+  box-shadow: var(--glow-around);
 }
-
-/* Gold corner brackets on auth card */
-.auth-card::before,
-.auth-card::after {
-  content: ''; position: absolute;
-  width: 18px; height: 18px;
-  border-color: var(--gold); border-style: solid;
-}
-.auth-card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
-.auth-card::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 
 .auth-card__eyebrow {
   font-size: 0.68rem; font-weight: 700;
@@ -91,16 +82,8 @@
   border: 1px solid var(--border-dim);
   padding: var(--sp-7) var(--sp-6);
   position: relative;
+  box-shadow: var(--glow-around);
 }
-
-.signup-card::before,
-.signup-card::after {
-  content: ''; position: absolute;
-  width: 20px; height: 20px;
-  border-color: var(--gold); border-style: solid;
-}
-.signup-card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
-.signup-card::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 
 .signup-card__header { margin-bottom: var(--sp-6); }
 
