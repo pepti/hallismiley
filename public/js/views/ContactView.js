@@ -46,6 +46,11 @@ const TOPICS = [
 const GITHUB_URL   = 'https://github.com/pepti/hallismiley';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/halliv/';
 
+// Email is kept as parts so the full address never appears as a literal string
+// in the HTML source or JS bundle — see `_initEmailLinks` for runtime assembly.
+const EMAIL_PARTS = ['halli', 'hallismiley', 'is'];
+const buildEmail = () => `${EMAIL_PARTS[0]}@${EMAIL_PARTS[1]}.${EMAIL_PARTS[2]}`;
+
 export class ContactView {
   constructor() {
     this._availability = null;
@@ -120,7 +125,8 @@ export class ContactView {
       <div class="contact-card-section__inner">
         <div class="contact-card">
 
-          <a class="contact-card__item" id="contact-email-link" href="#">
+          <a class="contact-card__item" id="contact-email-link" href="#"
+             aria-label="Send me an email">
             <div class="contact-card__icon" aria-hidden="true">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -130,7 +136,7 @@ export class ContactView {
             </div>
             <div class="contact-card__body">
               <div class="contact-card__label">Email</div>
-              <div class="contact-card__value" id="contact-email-text">halli&#8203;@&#8203;hallismiley.is</div>
+              <div class="contact-card__value" id="contact-email-text">halli [at] hallismiley [dot] is</div>
             </div>
           </a>
 
@@ -168,7 +174,7 @@ export class ContactView {
             </div>
             <div class="contact-card__body">
               <div class="contact-card__label">Based in</div>
-              <div class="contact-card__value">Reykjavík · GMT</div>
+              <div class="contact-card__value">Hafnarfjörður · GMT</div>
               <div class="contact-card__meta">Typical reply within 2–3 days</div>
             </div>
           </div>
@@ -336,18 +342,32 @@ export class ContactView {
     </footer>`;
   }
 
-  // ── Init: email obfuscation (build mailto from parts) ─────────────────
+  // ── Init: email obfuscation — assemble mailto only on user interaction ─
+  // The displayed text stays as "halli [at] hallismiley [dot] is" so the raw
+  // address never lives in the DOM; the mailto is built lazily on click/focus.
   _initEmailLinks(view) {
-    const parts = ['halli', 'hallismiley', 'is'];
-    const address = `${parts[0]}@${parts[1]}.${parts[2]}`;
+    const reveal = (el) => {
+      if (!el || el.dataset.revealed === '1') return;
+      el.href = `mailto:${buildEmail()}`;
+      el.dataset.revealed = '1';
+    };
 
-    const link = view.querySelector('#contact-email-link');
-    const text = view.querySelector('#contact-email-text');
-    if (link) link.href = `mailto:${address}`;
-    if (text) text.textContent = address;
-
-    const mailto = view.querySelector('#contact-mailto-link');
-    if (mailto) mailto.href = `mailto:${address}`;
+    ['#contact-email-link', '#contact-mailto-link'].forEach(sel => {
+      const el = view.querySelector(sel);
+      if (!el) return;
+      // Reveal on first hover/focus/touch so the mailto fires on the actual click.
+      el.addEventListener('mouseenter', () => reveal(el), { once: true });
+      el.addEventListener('focus',      () => reveal(el), { once: true });
+      el.addEventListener('touchstart', () => reveal(el), { once: true, passive: true });
+      // Fallback: if a click lands before any of the above (keyboard Enter on a
+      // non-focused element, synthetic clicks), still open the mail client.
+      el.addEventListener('click', (e) => {
+        if (el.dataset.revealed !== '1') {
+          e.preventDefault();
+          window.location.href = `mailto:${buildEmail()}`;
+        }
+      });
+    });
   }
 
   // ── Init: "Email me for setup help" pre-fills topic + scrolls to form ──
@@ -401,7 +421,7 @@ export class ContactView {
 
         if (res.ok) {
           status.className = 'contact-form__status contact-form__status--success';
-          status.textContent = "Got it — I'll reply from halli@hallismiley.is within a few days.";
+          status.textContent = `Got it — I'll reply from ${buildEmail()} within a few days.`;
           form.reset();
         } else {
           const data = await res.json().catch(() => ({}));
