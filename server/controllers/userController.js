@@ -1,10 +1,20 @@
 // User profile management — self-service endpoints for authenticated users.
+const fs   = require('fs');
+const path = require('path');
 const { query: dbQuery } = require('../config/database');
 const { Scrypt }         = require('oslo/password');
+const { userAvatarDir }  = require('../config/paths');
 
 const scrypt = new Scrypt();
 
 const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, created_at';
+
+// Only delete files that match the user-upload pattern (never the baked SVGs).
+const UPLOADED_AVATAR_RE = /^user-\d+-\d+-[a-z0-9]+\.(jpg|jpeg|png|webp)$/i;
+function _tryUnlinkAvatar(filename) {
+  if (!filename || !UPLOADED_AVATAR_RE.test(filename)) return;
+  try { fs.unlinkSync(path.join(userAvatarDir(), filename)); } catch { /* ignore */ }
+}
 
 const userController = {
   // GET /api/v1/users/me
@@ -46,6 +56,38 @@ const userController = {
 
       return res.json(rows[0]);
     } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/users/me/avatar  (multipart, field: file)
+  // Stores the uploaded image under UPLOAD_ROOT/avatars and sets users.avatar
+  // to the new filename. Deletes the prior uploaded avatar (if any) on success.
+  async uploadAvatar(req, res, next) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded', code: 400 });
+      }
+
+      // Look up previous avatar so we can clean up if it was a user upload.
+      const { rows: prevRows } = await dbQuery(
+        'SELECT avatar FROM users WHERE id = $1',
+        [req.user.id]
+      );
+      const previous = prevRows[0]?.avatar;
+
+      const newName = req.file.filename;
+      const { rows } = await dbQuery(
+        `UPDATE users SET avatar = $1 WHERE id = $2
+         RETURNING ${PROFILE_FIELDS}`,
+        [newName, req.user.id]
+      );
+
+      if (previous && previous !== newName) _tryUnlinkAvatar(previous);
+
+      return res.json(rows[0]);
+    } catch (err) {
+      if (req.file) _tryUnlinkAvatar(req.file.filename);
+      next(err);
+    }
   },
 
   // PATCH /api/v1/users/me/password  { current_password, new_password }

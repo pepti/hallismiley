@@ -311,6 +311,7 @@ const uploadStaticOpts = {
 app.use('/assets/news',     express.static(path.join(UPLOAD_ROOT, 'news'),     uploadStaticOpts));
 app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    uploadStaticOpts));
 app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
+app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {

@@ -358,7 +358,7 @@ export class PartyView {
       case 'heading':
         return `<h2 class="party-section__title" data-field-id="${escHtml(field.id)}">${escHtml(field.label)}</h2>`;
       case 'paragraph':
-        return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}">${escHtml(field.label)}</p>`;
+        return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}">${escHtml(field.label).replace(/\n/g, '<br>')}</p>`;
       case 'checkbox-group': {
         const opts = (field.options || []).map(opt => `
           <label class="party-checkbox">
@@ -588,7 +588,9 @@ export class PartyView {
           <span class="party-field-block__type">${typeLabels[field.type] || field.type}</span>
           <button class="party-edit-row-delete" type="button" data-delete-field aria-label="Delete field" title="Delete field">✕</button>
         </div>
-        <input class="lol-input" type="text" data-field-label value="${escHtml(field.label || '')}" placeholder="${labelPlaceholder}" />
+        ${field.type === 'paragraph'
+          ? `<textarea class="lol-input" data-field-label rows="3" placeholder="${labelPlaceholder}">${escHtml(field.label || '')}</textarea>`
+          : `<input class="lol-input" type="text" data-field-label value="${escHtml(field.label || '')}" placeholder="${labelPlaceholder}" />`}
         ${['checkbox-group'].includes(field.type) ? `
           <div class="party-field-block__options">
             ${optionsHtml}

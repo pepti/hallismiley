@@ -170,6 +170,34 @@
   object-fit: cover; display: block;
 }
 
+/* ── Avatar upload ──────────────────────────────────────────────── */
+.avatar-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+}
+.avatar-upload__preview {
+  width: 72px; height: 72px;
+  object-fit: cover;
+  border: 1px solid var(--border-dim);
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+.avatar-upload__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.avatar-upload__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 /* ── Password strength ───────────────────────────────────────────── */
 .password-strength {
   margin-top: var(--sp-2);

@@ -1,4 +1,4 @@
-import { isAuthenticated, getProfile, updateProfile, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
+import { isAuthenticated, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 
@@ -107,6 +107,21 @@ export class ProfileView {
             </div>
           </div>
 
+          <!-- Custom avatar upload -->
+          <div class="form-group">
+            <span class="form-label">Upload Avatar</span>
+            <div class="avatar-upload">
+              <img class="avatar-upload__preview" id="avatar-upload-preview"
+                   src="${avatarPathByName(avatarName)}" alt="Avatar preview"/>
+              <div class="avatar-upload__controls">
+                <input type="file" id="avatar-upload-input" accept="image/jpeg,image/png,image/webp" hidden/>
+                <button type="button" class="btn btn--outline" id="avatar-upload-btn">Choose Image…</button>
+                <p class="avatar-upload__hint">JPG, PNG, or WebP. Max 5 MB.</p>
+                <p class="form-error" id="avatar-upload-error" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+
           <!-- Avatar picker in edit mode -->
           <div class="form-group">
             <span class="form-label">Avatar</span>
@@ -202,6 +217,60 @@ export class ProfileView {
     }
   }
 
+  _bindAvatarUpload(el, profile) {
+    const btn     = el.querySelector('#avatar-upload-btn');
+    const input   = el.querySelector('#avatar-upload-input');
+    const preview = el.querySelector('#avatar-upload-preview');
+    const errEl   = el.querySelector('#avatar-upload-error');
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+
+    btn.addEventListener('click', () => input.click());
+
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      errEl.textContent = '';
+
+      // Client-side guard — server enforces the same limits authoritatively.
+      const MAX = 5 * 1024 * 1024;
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.type)) {
+        errEl.textContent = 'Please choose a JPG, PNG, or WebP image.';
+        input.value = ''; return;
+      }
+      if (file.size > MAX) {
+        errEl.textContent = 'Image must not exceed 5 MB.';
+        input.value = ''; return;
+      }
+
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = 'Uploading…';
+      try {
+        const updated = await uploadAvatar(file);
+        const newName = updated.avatar;
+        // Update preview, hidden field, header avatar, and the in-memory profile
+        // so a later Save Changes uses the uploaded avatar.
+        const url = avatarPathByName(newName);
+        preview.src = url;
+        el.querySelector('#edit-avatar').value = newName;
+        el.querySelector('#profile-avatar-img').src = url;
+        profile.avatar = newName;
+        // Deselect any picker swatch since the avatar is now custom.
+        el.querySelectorAll('.avatar-picker__item--selected')
+          .forEach(b => b.classList.remove('avatar-picker__item--selected'));
+        showToast('Avatar updated', 'success');
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        input.value = '';
+      }
+    });
+  }
+
   _bindEdit(el, profile) {
     const editBtn    = el.querySelector('#profile-edit-btn');
     const section    = el.querySelector('#edit-section');
@@ -211,6 +280,7 @@ export class ProfileView {
       section.hidden = false;
       editBtn.hidden = true;
       this._buildAvatarPicker(el, profile.avatar || 'avatar-01.svg');
+      this._bindAvatarUpload(el, profile);
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
