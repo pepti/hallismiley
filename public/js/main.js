@@ -36,6 +36,7 @@ document.body.insertBefore(navEl, document.getElementById('app'));
     google_not_configured:     'Google sign-in is not configured on this site.',
     facebook_profile_invalid:  'Your Facebook account did not return an email. Please use a different sign-in method.',
     facebook_not_configured:   'Facebook sign-in is not configured on this site.',
+    email_unverified_conflict: 'An unverified account with that email already exists. Please verify it via the email we sent before signing in with Facebook.',
   };
 
   if (welcome === 'google') {
