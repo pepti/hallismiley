@@ -413,4 +413,128 @@
   .built-with { padding-left: 20px; padding-right: 20px; }
   .availability__edit-btn,
   .availability__edit-controls { top: 12px; right: 12px; }
+  .contact-view__edit-btn { top: 12px; right: 12px; }
+  .contact-view__edit-controls {
+    left: 12px; right: 12px; bottom: 12px;
+    justify-content: center;
+  }
+}
+
+/* ── Page-level inline edit (admin/moderator) ─────────────────── */
+.contact-view {
+  position: relative;
+}
+
+.contact-view__edit-btn {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 90;
+  padding: 10px 16px;
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  color: var(--bg-nav);
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: background var(--transition), transform var(--transition);
+}
+.contact-view__edit-btn:hover {
+  background: var(--gold-light);
+  transform: translateY(-1px);
+}
+.contact-view__edit-btn--hidden { display: none; }
+
+.contact-view__edit-controls {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(10, 14, 20, 0.95);
+  border: 1px solid var(--gold);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.contact-view__edit-controls--hidden { display: none; }
+
+.contact-view__save-btn,
+.contact-view__cancel-btn {
+  padding: 8px 14px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  transition: background var(--transition), color var(--transition);
+}
+.contact-view__save-btn {
+  background: var(--gold);
+  color: var(--bg-nav);
+}
+.contact-view__save-btn:hover  { background: var(--gold-light); }
+.contact-view__cancel-btn:hover { background: rgba(200, 170, 110, 0.1); }
+
+.contact-view__edit-status {
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 320px;
+}
+
+/* Dashed outline on every editable text field while in edit mode */
+.contact-view--editing [data-field] {
+  outline: 1px dashed var(--gold);
+  outline-offset: 3px;
+  border-radius: 2px;
+  min-width: 2ch;
+}
+.contact-view--editing [data-field]:focus {
+  outline-style: solid;
+  outline-color: var(--gold-light);
+  background: rgba(200, 170, 110, 0.06);
+}
+
+/* Helper rows (href editors) — hidden unless we're in edit mode */
+.contact-view__edit-only { display: none; }
+.contact-view--editing .contact-view__edit-only {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+  font-family: 'Barlow', monospace;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+.contact-card__href-label {
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.contact-card__href-value {
+  word-break: break-all;
+}
+
+/* Prevent the footer href editors from disrupting the inline nav layout */
+.lol-footer__href {
+  flex-basis: 100%;
+}
+.contact-view--editing .lol-footer__nav-link,
+.contact-view--editing .lol-footer__legal-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
