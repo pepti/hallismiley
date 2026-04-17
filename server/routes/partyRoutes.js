@@ -1,6 +1,5 @@
 const express = require('express');
 const multer  = require('multer');
-const path    = require('path');
 const fs      = require('fs');
 const router  = express.Router();
 
@@ -10,6 +9,7 @@ const { requireAuth }              = require('../auth/middleware');
 const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
 const { partyUploadDir }           = require('../config/paths');
+const { MIME_TO_EXT }              = require('../middleware/upload');
 
 // ── Party photo upload (images only, max 10 MB) ────────────────────────────────
 const PARTY_PHOTO_DIR = partyUploadDir();
@@ -20,7 +20,9 @@ const partyPhotoStorage = multer.diskStorage({
     cb(null, PARTY_PHOTO_DIR);
   },
   filename(req, file, cb) {
-    const ext  = path.extname(file.originalname).toLowerCase() || '.jpg';
+    // Derive extension from the accepted MIME type (not originalname) to
+    // prevent attackers from storing files with attacker-chosen extensions.
+    const ext  = MIME_TO_EXT[file.mimetype] || '.jpg';
     const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
     cb(null, name);
   },

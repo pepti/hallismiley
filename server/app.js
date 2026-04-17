@@ -119,7 +119,7 @@ const globalLimiter = rateLimit({
   max: 400,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV,
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
   message: { error: 'Too many requests, please try again later.', code: 429 },
 });
 app.use(globalLimiter);
@@ -130,7 +130,7 @@ const writeLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV,
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
   message: { error: 'Too many write requests, please try again later.', code: 429 },
 });
 app.use('/api/v1/projects', (req, res, next) => {

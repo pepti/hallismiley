@@ -6,6 +6,8 @@ const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
+const securityLogger      = require('../observability/securityLogger');
+const { trackFailedLogin } = require('../observability/alerts');
 
 const scrypt = new Scrypt();
 
@@ -65,12 +67,17 @@ const authController = {
               'UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
               [attempts, lockedUntil, user.id]
             );
+            securityLogger.accountLocked(req.ip, username, user.id);
           } else {
             await dbQuery(
               'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
               [attempts, user.id]
             );
           }
+          securityLogger.loginFailed(req.ip, username);
+          trackFailedLogin(req.ip);
+        } else {
+          securityLogger.loginFailed(req.ip, username);
         }
         return res.status(401).json({ error: 'Invalid credentials', code: 401 });
       }
@@ -91,6 +98,8 @@ const authController = {
         user_agent: req.headers['user-agent'] ?? null,
       });
       res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
+
+      securityLogger.loginSuccess(req.ip, user.username, user.id);
 
       return res.json({
         user: {
@@ -115,6 +124,8 @@ const authController = {
       const { username, email, password, phone, display_name, avatar } = req.body;
 
       // Uniqueness checks
+      securityLogger.signupAttempt(req.ip, username, 'started');
+
       const { rows: uRows } = await dbQuery(
         'SELECT id FROM users WHERE username = $1',
         [username]

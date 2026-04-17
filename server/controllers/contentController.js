@@ -6,6 +6,7 @@ const path   = require('path');
 const fs     = require('fs');
 const multer = require('multer');
 const db     = require('../config/database');
+const { MIME_TO_EXT } = require('../middleware/upload');
 
 // ── Image upload: store under public/assets/content/ ─────────────────────────
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'content');
@@ -22,7 +23,8 @@ const storage = multer.diskStorage({
     }
   },
   filename:    (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    // Extension from MIME type (not originalname) to prevent extension spoofing
+    const ext = MIME_TO_EXT[file.mimetype] || '.jpg';
     const key = String(req.params.key || 'content').replace(/[^\w-]/g, '');
     cb(null, `${key}-${Date.now()}${ext}`);
   },

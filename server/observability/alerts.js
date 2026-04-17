@@ -55,8 +55,11 @@ async function alert(severity, title, details = {}) {
       signal: AbortSignal.timeout(5000),
     });
   } catch {
-    // Never let a webhook failure crash the app
-    securityLogger.alert('warning', 'Alert webhook delivery failed', { webhookUrl });
+    // Never let a webhook failure crash the app.
+    // Mask the URL before logging — Slack/Discord webhook URLs contain embedded
+    // secret tokens and must not appear in log aggregators.
+    const maskedUrl = webhookUrl.replace(/\/[A-Za-z0-9_-]{10,}(\/[A-Za-z0-9_-]{10,})*$/, '/***');
+    securityLogger.alert('warning', 'Alert webhook delivery failed', { webhookUrl: maskedUrl });
   }
 }
 
