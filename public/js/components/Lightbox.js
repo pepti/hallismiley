@@ -77,6 +77,9 @@ export class Lightbox {
 
   open(index) {
     if (!this._el) this.mount();
+    // Remember the element that had focus so we can restore it on close — a11y
+    // best practice for modal dialogs.
+    this._prevFocus = document.activeElement;
     this._index = Math.max(0, Math.min(index, this._items.length - 1));
     this._render();
     this._el.hidden = false;
@@ -93,6 +96,12 @@ export class Lightbox {
     document.removeEventListener('keydown', this._onKey);
     // Pause any playing video
     if (this._video) this._video.pause();
+    // Restore focus to the trigger element so keyboard users don't land at the
+    // top of <body>.
+    if (this._prevFocus && typeof this._prevFocus.focus === 'function') {
+      try { this._prevFocus.focus(); } catch { /* element may be detached */ }
+    }
+    this._prevFocus = null;
   }
 
   destroy() {

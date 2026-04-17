@@ -174,11 +174,11 @@ describe('GET /auth/facebook/callback', () => {
     expect(countAfter).toBe(countBefore);
   });
 
-  test('auto-link: existing password user with same email gets facebook_id attached', async () => {
-    // Insert a password-only user with email matching what Facebook will return.
+  test('auto-link: existing VERIFIED password user with same email gets facebook_id attached', async () => {
+    // Verified password account — safe to attach Facebook to.
     await db.query(
       `INSERT INTO users (email, username, password_hash, role, email_verified, avatar)
-       VALUES ('linkme@example.com', 'linkfbuser', 'fakehash', 'user', FALSE, 'avatar-01.svg')`,
+       VALUES ('linkme@example.com', 'linkfbuser', 'fakehash', 'user', TRUE, 'avatar-01.svg')`,
     );
 
     mockUserinfo.response.email = 'linkme@example.com';
@@ -199,6 +199,34 @@ describe('GET /auth/facebook/callback', () => {
     expect(rows[0].facebook_id).toBe('fb-id-link');
     expect(rows[0].oauth_provider).toBe('facebook');
     expect(rows[0].email_verified).toBe(true);
+  });
+
+  test('auto-link rejected when existing password account is UNVERIFIED', async () => {
+    // Pre-registration attack: unverified account with the same email must
+    // NOT be silently linked when the Facebook user arrives.
+    await db.query(
+      `INSERT INTO users (email, username, password_hash, role, email_verified, avatar)
+       VALUES ('unverifiedfb@example.com', 'unverifiedfb', 'attackerhash', 'user', FALSE, 'avatar-01.svg')`,
+    );
+
+    mockUserinfo.response.email = 'unverifiedfb@example.com';
+    mockUserinfo.response.id    = 'fb-id-attack';
+
+    const res = await request(app)
+      .get('/auth/facebook/callback?code=abc&state=test-state-xyz')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/#/login?error=email_unverified_conflict');
+
+    const { rows } = await db.query(
+      `SELECT facebook_id, oauth_provider, email_verified
+         FROM users WHERE email = 'unverifiedfb@example.com'`,
+    );
+    expect(rows[0].facebook_id).toBeNull();
+    expect(rows[0].oauth_provider).toBeNull();
+    expect(rows[0].email_verified).toBe(false);
+    expect(res.headers['set-cookie']?.some((c) => c.startsWith('auth_session='))).not.toBe(true);
   });
 
   test('disabled account redirects with account_disabled', async () => {

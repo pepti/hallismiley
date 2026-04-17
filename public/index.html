@@ -4,12 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+  <!-- Fallback CSP mirroring the server-side Helmet policy. The server header
+       is the authoritative source; this meta tag guards against mis-caching or
+       CDN header stripping. Browsers combine the two and use the most
+       restrictive value. Keep in sync with server/app.js. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; connect-src 'self' https://www.google-analytics.com https://analytics.google.com; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self'; form-action 'self'" />
+
   <!-- Primary Meta -->
   <title>Halli Smiley — Icelandic Carpenter &amp; Computer Scientist</title>
   <meta name="description" content="Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing, combined with full-stack web development. Based in Iceland." />
   <meta name="robots" content="index, follow" />
   <meta name="author" content="Halli" />
-  <link rel="canonical" href="https://halliprojects.is/" />
+  <link rel="canonical" href="https://hallismiley.is/" />
 
   <!-- Geo targeting -->
   <meta name="geo.region" content="IS" />
@@ -18,11 +24,12 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="en_IS" />
-  <meta property="og:url" content="https://halliprojects.is/" />
+  <meta property="og:url" content="https://hallismiley.is/" />
   <meta property="og:title" content="Halli Smiley — Icelandic Carpenter &amp; Computer Scientist" />
   <meta property="og:description" content="Twenty years of carpentry precision — timber frames, hand-cut joinery, bespoke cabinetry — married to modern full-stack software engineering. Based in Iceland." />
-  <!-- TODO before launch: create og-image.jpg (1200×630 px) and place it in public/ -->
-  <meta property="og:image" content="https://halliprojects.is/og-image.jpg" />
+  <!-- Social-preview image. 1200×630 PNG/JPG lives in public/og-image.jpg.
+       If the file does not exist, social sharing will fall back to plain text. -->
+  <meta property="og:image" content="https://hallismiley.is/og-image.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:site_name" content="Halli Smiley" />
@@ -51,7 +58,7 @@
     "@context": "https://schema.org",
     "@type": "Person",
     "name": "Halli",
-    "url": "https://halliprojects.is",
+    "url": "https://hallismiley.is",
     "description": "Icelandic carpenter and computer scientist with twenty years of precision joinery and timber framing, combined with full-stack web development in Node.js and PostgreSQL.",
     "address": {
       "@type": "PostalAddress",
@@ -61,7 +68,7 @@
     "knowsAbout": [
       "Carpentry", "Timber Framing", "Hand-Cut Joinery", "Cabinetry",
       "JavaScript", "Node.js", "PostgreSQL", "Full-Stack Development",
-      "REST APIs", "JWT Authentication"
+      "REST APIs", "OAuth 2.0"
     ],
     "sameAs": [
       "https://github.com/pepti",
@@ -72,7 +79,7 @@
 
   <!-- Analytics: loaded only after cookie consent (see /js/consent.js).
        When you have a real GA4 Measurement ID, set window.GA_MEASUREMENT_ID
-       before this script, or pass it to loadAnalytics() inside consent.js. -->
+       BEFORE consent.js runs so loadAnalytics() can pick it up. -->
   <script src="/js/consent.js" defer></script>
 </head>
 <body>

@@ -7,6 +7,7 @@ import { getUser } from '../services/auth.js';
 import { getCsrfHeaders }           from '../utils/api.js';
 import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
+import { escHtml }                  from '../utils/escHtml.js';
 
 // Tags allowed in article body (whitelist for DOMParser sanitisation)
 const ALLOWED_TAGS = new Set([
@@ -83,14 +84,9 @@ function sanitizeBody(rawHtml) {
   return wrapper.innerHTML;
 }
 
-function _esc(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+// Use the shared escHtml (also escapes single quotes). Kept as _esc so the
+// many call sites below stay intact.
+const _esc = escHtml;
 
 function _formatDate(iso) {
   if (!iso) return '';
@@ -871,5 +867,12 @@ export class ArticleView {
     } catch (err) {
       alert(`Could not delete article: ${err.message}`);
     }
+  }
+
+  // Called by the router when navigating away.
+  destroy() {
+    // Prevent a pending debounced reorder from firing after the DOM is gone.
+    clearTimeout(this._reorderTimer);
+    this._reorderTimer = null;
   }
 }

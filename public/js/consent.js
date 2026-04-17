@@ -13,7 +13,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'cookie_consent';
+  const STORAGE_KEY = 'cookie_consent';
 
   function getConsent() {
     try {
@@ -30,7 +30,7 @@
   }
 
   function loadAnalytics() {
-    var id = window.GA_MEASUREMENT_ID;
+    const id = window.GA_MEASUREMENT_ID;
     if (!id || id === 'G-XXXXXXXXXX') {
       // No real Measurement ID configured — skip loading.
       return;
@@ -38,7 +38,7 @@
 
     if (document.getElementById('ga4-script')) return; // already loaded
 
-    var s = document.createElement('script');
+    const s = document.createElement('script');
     s.id = 'ga4-script';
     s.async = true;
     s.src = 'https://www.googletagmanager.com/gtag/js?id=' + id;
@@ -58,7 +58,7 @@
   }
 
   function createBanner() {
-    var banner = document.createElement('div');
+    const banner = document.createElement('div');
     banner.id = 'cookie-consent-banner';
     banner.setAttribute('role', 'dialog');
     banner.setAttribute('aria-modal', 'false');
@@ -83,17 +83,17 @@
       'line-height:1.5'
     ].join(';');
 
-    var text = document.createElement('p');
+    const text = document.createElement('p');
     text.style.cssText = 'margin:0;flex:1 1 300px';
     text.innerHTML =
       'This site uses cookies for analytics. See our ' +
       '<a href="#/privacy" style="color:#a0a090;text-decoration:underline">Privacy Policy</a>. ' +
       'Do you consent to analytics cookies?';
 
-    var actions = document.createElement('div');
+    const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:0.5rem;flex-shrink:0';
 
-    var acceptBtn = document.createElement('button');
+    const acceptBtn = document.createElement('button');
     acceptBtn.textContent = 'Accept';
     acceptBtn.style.cssText = [
       'padding:0.4rem 1rem',
@@ -106,7 +106,7 @@
       'font-weight:600'
     ].join(';');
 
-    var declineBtn = document.createElement('button');
+    const declineBtn = document.createElement('button');
     declineBtn.textContent = 'Decline';
     declineBtn.style.cssText = [
       'padding:0.4rem 1rem',
@@ -137,7 +137,7 @@
   }
 
   function init() {
-    var consent = getConsent();
+    const consent = getConsent();
 
     if (consent === 'accepted') {
       loadAnalytics();

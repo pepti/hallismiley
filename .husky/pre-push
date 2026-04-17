@@ -1,2 +1,25 @@
-npm run lint
-npm test
+# Pre-push hook: run lint and tests in parallel so fast failures land quickly.
+# `wait -n` exits as soon as either child fails, and we then kill the other so
+# we don't wait for a slow test run when lint is already broken (or vice versa).
+#
+# If you need to push without the hook for an emergency, use:
+#   git push --no-verify
+# Never make --no-verify a habit.
+
+set -o pipefail
+
+npm run lint & lint_pid=$!
+npm test    & test_pid=$!
+
+wait -n "$lint_pid" "$test_pid"
+first_status=$?
+
+if [ "$first_status" -ne 0 ]; then
+  kill "$lint_pid" "$test_pid" 2>/dev/null || true
+  wait 2>/dev/null || true
+  exit "$first_status"
+fi
+
+# First job succeeded; wait for the remaining one
+wait "$lint_pid" "$test_pid"
+exit $?

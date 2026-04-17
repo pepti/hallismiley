@@ -107,6 +107,32 @@ const mediaUploadsTotal = new client.Counter({
   registers: [register],
 });
 
+// ── DB pool sampler ─────────────────────────────────────────────────────────
+// pg exposes totalCount / idleCount / waitingCount as live properties on the
+// Pool. Sample them every 5 s so the gauges reflect reality instead of reading
+// zero forever.
+let _poolSamplerInterval = null;
+function startDbPoolSampler(pool) {
+  if (_poolSamplerInterval) return; // idempotent — safe to call in tests
+  const sample = () => {
+    try {
+      dbPoolTotal.set(pool.totalCount ?? 0);
+      dbPoolIdle.set(pool.idleCount ?? 0);
+      dbPoolWaiting.set(pool.waitingCount ?? 0);
+    } catch { /* never let telemetry crash the app */ }
+  };
+  sample(); // initial read so /metrics isn't zero-ish on first scrape
+  _poolSamplerInterval = setInterval(sample, 5000);
+  _poolSamplerInterval.unref();
+}
+
+function stopDbPoolSampler() {
+  if (_poolSamplerInterval) {
+    clearInterval(_poolSamplerInterval);
+    _poolSamplerInterval = null;
+  }
+}
+
 module.exports = {
   register,
   httpRequestsTotal,
@@ -123,4 +149,6 @@ module.exports = {
   projectsTotal,
   usersTotal,
   mediaUploadsTotal,
+  startDbPoolSampler,
+  stopDbPoolSampler,
 };

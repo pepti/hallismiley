@@ -2,6 +2,33 @@
 
 const securityLogger = require('./securityLogger');
 
+// Optional Sentry capture — load lazily so tests / no-DSN runs don't break if
+// the module isn't initialised. Anything with severity 'warning' or 'critical'
+// is forwarded to Sentry so on-call sees it even when ALERT_WEBHOOK_URL isn't
+// configured.
+let sentryModule = null;
+try {
+  sentryModule = require('@sentry/node');
+} catch { /* Sentry not installed — fine */ }
+
+function captureAlertInSentry(severity, title, details) {
+  if (!sentryModule || !process.env.SENTRY_DSN) return;
+  if (severity === 'info') return;
+  try {
+    const level = severity === 'critical' ? 'fatal' : 'warning';
+    sentryModule.withScope((scope) => {
+      scope.setLevel(level);
+      scope.setTag('alert', 'true');
+      for (const [k, v] of Object.entries(details || {})) {
+        scope.setContext('alert_details', { [k]: String(v) });
+      }
+      sentryModule.captureMessage(title, level);
+    });
+  } catch {
+    // Never let Sentry errors propagate back into the alert path.
+  }
+}
+
 // ── In-memory tracking for rate-based alerts ───────────────────────────────────
 
 // Track failed logins per IP: ip → [timestamp, ...]
@@ -28,6 +55,11 @@ const MEMORY_ALERT_THRESHOLD = 0.90; // 90 %
 async function alert(severity, title, details = {}) {
   // Always log
   securityLogger.alert(severity, title, details);
+
+  // Forward to Sentry (no-op if DSN unset) so non-webhook deploys still have
+  // visibility. Done before the webhook so a webhook failure doesn't drop the
+  // Sentry signal.
+  captureAlertInSentry(severity, title, details);
 
   // Webhook (Slack / Discord / PagerDuty) if configured
   const webhookUrl = process.env.ALERT_WEBHOOK_URL;

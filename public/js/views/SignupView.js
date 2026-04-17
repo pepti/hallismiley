@@ -292,17 +292,18 @@ export class SignupView {
     const btn         = el.querySelector('#signup-resend-btn');
     const countdown   = el.querySelector('#signup-resend-countdown');
     const msgEl       = el.querySelector('#signup-resend-msg');
-    let   _timer      = null;
 
     const startCountdown = () => {
       let secs = 60;
       btn.disabled = true;
       countdown.hidden = false;
       countdown.textContent = `(${secs}s)`;
-      _timer = setInterval(() => {
+      // Store on `this` so destroy() can clear if the user navigates away mid-countdown.
+      this._resendTimer = setInterval(() => {
         secs--;
         if (secs <= 0) {
-          clearInterval(_timer);
+          clearInterval(this._resendTimer);
+          this._resendTimer = null;
           btn.disabled = false;
           countdown.hidden = true;
           countdown.textContent = '';
@@ -322,5 +323,22 @@ export class SignupView {
         msgEl.textContent = err.message || 'Could not resend. Please try again shortly.';
       }
     });
+  }
+
+  /**
+   * Clear all pending timers when the router tears this view down. Leaving
+   * setInterval / setTimeout behind keeps DOM refs alive after mountEl has been
+   * cleared and produces console errors on every tick. Timers are module-scope
+   * (for debouncers) or method-scope (for the countdown) so we reach them via
+   * their closures — clearTimeout/clearInterval are idempotent so it's safe to
+   * call with stale IDs.
+   */
+  destroy() {
+    clearTimeout(_usernameTimer);
+    clearTimeout(_emailTimer);
+    clearInterval(this._resendTimer);
+    _usernameTimer = null;
+    _emailTimer    = null;
+    this._resendTimer = null;
   }
 }

@@ -9,6 +9,7 @@ const { _checkInviteAccess }       = require('../controllers/partyController');
 const { requireAuth }              = require('../auth/middleware');
 const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
+const { verifyFileBytes }          = require('../middleware/upload');
 const { partyUploadDir }           = require('../config/paths');
 
 // ── Party photo upload (images only, max 10 MB) ────────────────────────────────
@@ -117,6 +118,7 @@ router.post('/photos',
       next();
     });
   },
+  verifyFileBytes,
   partyController.uploadPhoto);
 
 router.get('/photos',

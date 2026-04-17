@@ -1,8 +1,12 @@
 name: Deploy to Azure
 
+# Deploy only after CI has passed on main. workflow_run lets us gate on a separate
+# workflow's success; manual workflow_dispatch is still available for rollback/hotfix.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -13,10 +17,17 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    # Only proceed when CI succeeded (automatic) or when manually dispatched
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # For workflow_run, check out the exact SHA that CI validated
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -35,10 +46,10 @@ jobs:
           push: true
           tags: |
             hallismileyacr.azurecr.io/hallismiley:latest
-            hallismileyacr.azurecr.io/hallismiley:${{ github.sha }}
+            hallismileyacr.azurecr.io/hallismiley:${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: hallismiley-app
-          images: hallismileyacr.azurecr.io/hallismiley:${{ github.sha }}
+          images: hallismileyacr.azurecr.io/hallismiley:${{ github.event.workflow_run.head_sha || github.sha }}

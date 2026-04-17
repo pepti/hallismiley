@@ -5,6 +5,7 @@
 import { getUser }        from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { getCSRFToken }   from '../services/auth.js';
+import { escHtml }        from '../utils/escHtml.js';
 
 const PAGE_SIZE = 9;
 
@@ -16,14 +17,9 @@ const CATEGORY_LABELS = {
   tech:         'Tech',
 };
 
-function _esc(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+// Use the shared escHtml (covers single quotes too). Kept as _esc so existing
+// call sites in this file don't need to be rewritten.
+const _esc = escHtml;
 
 function _formatDate(iso) {
   if (!iso) return '';

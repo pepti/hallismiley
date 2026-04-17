@@ -1,11 +1,11 @@
 const express        = require('express');
 const multer         = require('multer');
-const path           = require('path');
 const fs             = require('fs');
 const router         = express.Router();
 const userController = require('../controllers/userController');
 const { requireAuth } = require('../auth/middleware');
 const { csrfProtect } = require('../middleware/csrf');
+const { verifyFileBytes } = require('../middleware/upload');
 const { validateProfileUpdate, validatePasswordChange } = require('../middleware/validate');
 const { userAvatarDir } = require('../config/paths');
 
@@ -59,7 +59,7 @@ router.use(requireAuth);
 
 router.get('/me',                         userController.getMe);
 router.patch('/me',          csrfProtect, validateProfileUpdate, userController.updateMe);
-router.post('/me/avatar',    csrfProtect, avatarUploadMw, userController.uploadAvatar);
+router.post('/me/avatar',    csrfProtect, avatarUploadMw, verifyFileBytes, userController.uploadAvatar);
 router.patch('/me/password', csrfProtect, validatePasswordChange, userController.changePassword);
 router.get('/me/sessions',                userController.getSessions);
 router.delete('/me/sessions',             csrfProtect, userController.revokeAllSessions);

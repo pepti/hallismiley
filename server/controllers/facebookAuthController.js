@@ -115,20 +115,26 @@ async function callback(req, res, next) {
     if (byFacebook[0]?.disabled) return redirectWithError(res, 'account_disabled');
     let userId = byFacebook[0]?.id ?? null;
 
-    // 2. Else existing by email → auto-link. Note: unlike Google, Facebook
-    //    does NOT verify email ownership; we trust it per product decision.
+    // 2. Else existing by email → auto-link ONLY if that account is already
+    //    email-verified. Facebook does not verify email ownership itself, so
+    //    this guard is doubly important: without it, anyone with a Facebook
+    //    account claiming `victim@example.com` could ride an existing
+    //    unverified signup. Require the existing account to have proven
+    //    ownership (via verification or password reset) before linking.
     if (!userId) {
       const { rows: byEmail } = await dbQuery(
-        `SELECT id, disabled FROM users WHERE email = $1`,
+        `SELECT id, disabled, email_verified FROM users WHERE email = $1`,
         [email],
       );
       if (byEmail[0]) {
         if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled');
+        if (!byEmail[0].email_verified) {
+          return redirectWithError(res, 'email_unverified_conflict');
+        }
         await dbQuery(
           `UPDATE users
              SET facebook_id = $1,
-                 oauth_provider = COALESCE(oauth_provider, 'facebook'),
-                 email_verified = TRUE
+                 oauth_provider = COALESCE(oauth_provider, 'facebook')
            WHERE id = $2`,
           [facebookId, byEmail[0].id],
         );

@@ -114,19 +114,26 @@ async function callback(req, res, next) {
     if (byGoogle[0]?.disabled) return redirectWithError(res, 'account_disabled');
     let userId = byGoogle[0]?.id ?? null;
 
-    // 2. Else existing by email → auto-link (Google has verified the email).
+    // 2. Else existing by email → auto-link ONLY if that account is already
+    //    email-verified. Linking an unverified account would let an attacker
+    //    pre-register the victim's email (which they don't own), wait for the
+    //    victim to sign in with Google, then silently ride the session. The
+    //    rightful victim can still recover via password reset, which also
+    //    proves email ownership.
     if (!userId) {
       const { rows: byEmail } = await dbQuery(
-        `SELECT id, disabled FROM users WHERE email = $1`,
+        `SELECT id, disabled, email_verified FROM users WHERE email = $1`,
         [email],
       );
       if (byEmail[0]) {
         if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled');
+        if (!byEmail[0].email_verified) {
+          return redirectWithError(res, 'email_unverified_conflict');
+        }
         await dbQuery(
           `UPDATE users
              SET google_id = $1,
-                 oauth_provider = COALESCE(oauth_provider, 'google'),
-                 email_verified = TRUE
+                 oauth_provider = COALESCE(oauth_provider, 'google')
            WHERE id = $2`,
           [profile.sub, byEmail[0].id],
         );

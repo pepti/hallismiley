@@ -33,7 +33,7 @@ Engineered for production from day one — the codebase includes structured logg
 
 async function update() {
   // Try to find by old title first, then by new title (idempotent)
-  let { rows } = await pool.query(
+  const { rows } = await pool.query(
     'SELECT id, title FROM projects WHERE title = $1 OR title = $2',
     [OLD_TITLE, PROJECT.title]
   );

@@ -1,3 +1,4 @@
+/* eslint-env node */
 // One-off: generate a 1024×1024 PNG Facebook app icon from the site brand.
 // Run: `node scripts/gen-fb-icon.js` — writes public/assets/icons/fb-app-icon.png.
 const { chromium } = require('playwright');

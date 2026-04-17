@@ -2,7 +2,16 @@
   "root": true,
   "extends": ["eslint:recommended"],
   "rules": {
-    "no-unused-vars": ["error", { "varsIgnorePattern": "^_", "argsIgnorePattern": "^_" }]
+    "no-unused-vars":      ["error", { "varsIgnorePattern": "^_", "argsIgnorePattern": "^_" }],
+    "no-console":          "off",
+    "no-var":              "error",
+    "prefer-const":        ["error", { "destructuring": "all" }],
+    "no-implicit-globals": "error",
+    "no-throw-literal":    "error",
+    "no-return-await":     "error",
+    "eqeqeq":              ["error", "smart"],
+    "no-promise-executor-return": "error",
+    "require-atomic-updates":     "off"
   },
   "parserOptions": {
     "ecmaVersion": 2022

@@ -1,5 +1,14 @@
 # Pre-Launch Audit Report — HalliSmiley
 
+> **⚠ ARCHIVED — 2026-04-16.** This document captures the state of the project
+> on 2026-03-30, immediately before its public launch. It is preserved for
+> historical reference only. The three CRITICAL issues (RSA keys committed,
+> keys baked into Docker image, `keys/` not gitignored) have since been
+> resolved, and the stack has evolved substantially (Lucia + Arctic OAuth has
+> replaced RS256 JWTs, Resend has replaced SMTP, deployment has moved from
+> Railway to Azure). For the current audit, see
+> `C:\Users\Notandi\.claude\plans\crystalline-zooming-cake.md`.
+
 **Date:** 2026-03-30
 **Stack:** Node.js 20 · Express 4.18 · PostgreSQL · Vanilla JS SPA
 **Auditor:** Manual review of all 65+ source files

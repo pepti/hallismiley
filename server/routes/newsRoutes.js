@@ -4,17 +4,17 @@ const router  = express.Router();
 
 const newsController                               = require('../controllers/newsController');
 const { validateNews, validateNewsMediaUpdate,
-        validateNewsMediaReorder }                  = require('../middleware/validate');
+        validateNewsMediaReorder, validateQuery }   = require('../middleware/validate');
 const { requireAuth }                              = require('../auth/middleware');
 const { requireRole }                              = require('../auth/roles');
 const { csrfProtect }                              = require('../middleware/csrf');
-const { createNewsUpload }                         = require('../middleware/upload');
+const { createNewsUpload, verifyFileBytes }        = require('../middleware/upload');
 
 // ── Public read endpoints ─────────────────────────────────────────────────────
 // NOTE: /admin/list must be registered before /:slug so Express does not treat
 // the literal string "admin" as a slug parameter.
 router.get('/admin/list',
-  requireAuth, requireRole('admin', 'moderator'),
+  requireAuth, requireRole('admin', 'moderator'), validateQuery,
   newsController.adminList);
 
 router.get('/:slug/preview',
@@ -67,6 +67,7 @@ router.post('/:id/media',
       next();
     });
   },
+  verifyFileBytes,
   newsController.addMedia);
 
 router.patch('/:id/media/:mediaId',

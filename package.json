@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@lucia-auth/adapter-postgresql": "^3.1.2",
-    "@sentry/node": "^10.46.0",
+    "@sentry/node": "^10.49.0",
     "arctic": "^3.7.0",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
@@ -32,7 +32,6 @@
     "hpp": "^0.2.3",
     "lucia": "^3.2.2",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.5",
     "oslo": "^1.2.1",
     "pg": "^8.20.0",
     "pino": "^10.3.1",

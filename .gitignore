@@ -36,3 +36,22 @@ build/
 
 # Test coverage reports (generated, not committed)
 coverage/
+
+# Playwright / Jest artefacts
+test-results/
+playwright-report/
+
+# Runtime-uploaded media (multer writes files as `<ts>-<rand>.<ext>`)
+# Stock assets (avatar-01..20.svg, party/venue/*, icons/*) stay tracked.
+public/assets/avatars/user-*
+public/assets/party/[0-9]*-*.png
+public/assets/party/[0-9]*-*.jpg
+public/assets/party/[0-9]*-*.jpeg
+public/assets/party/[0-9]*-*.webp
+public/assets/news/[0-9]*-*
+public/assets/projects/[0-9]*-*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp

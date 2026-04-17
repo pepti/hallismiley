@@ -8,8 +8,24 @@
 
 const { doubleCsrf } = require('csrf-csrf');
 
+// Fail-loud if CSRF_SECRET is unset in production. A hard-coded fallback would
+// defeat the double-submit protection entirely for anyone with access to this
+// repo, so production boot must abort rather than silently degrade.
+const CSRF_SECRET = (() => {
+  const fromEnv = process.env.CSRF_SECRET;
+  if (fromEnv && fromEnv.length >= 32) return fromEnv;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'CSRF_SECRET environment variable is required in production and must be at least 32 characters. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64\'))"'
+    );
+  }
+  // Dev / test fallback — still a fixed string, but clearly labelled and only used outside production.
+  return fromEnv || 'dev-csrf-secret-not-for-production-use-only';
+})();
+
 const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
-  getSecret: () => process.env.CSRF_SECRET ?? 'dev-csrf-secret-change-in-production',
+  getSecret: () => CSRF_SECRET,
   // Tie CSRF token to the current auth session so tokens can't be reused across sessions.
   getSessionIdentifier: (req) => {
     const cookie = req.headers.cookie ?? '';

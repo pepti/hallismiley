@@ -148,7 +148,7 @@ const newsController = {
       } = req.body;
 
       // Slug: use provided or auto-generate from title
-      let rawSlug = req.body.slug
+      const rawSlug = req.body.slug
         ? String(req.body.slug).toLowerCase().replace(/[^\w-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 100)
         : _slugify(title);
       const slug = await _uniqueSlug(rawSlug);

@@ -198,7 +198,9 @@ app.get('/ready', async (req, res) => {
   try {
     await Promise.race([
       dbQuery('SELECT 1'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('timeout')), 3000);
+      }),
     ]);
     checks.database = { status: 'ok' };
   } catch (err) {

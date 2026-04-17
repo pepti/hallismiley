@@ -1,5 +1,5 @@
 // Contact form handler
-// Validates and logs enquiries. Wire up nodemailer or a mail API (e.g. Resend)
+// Validates and logs enquiries. Wire up Resend (see server/services/emailService.js)
 // to forward submissions to your inbox.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -36,7 +36,7 @@ async function submit(req, res, next) {
       return res.status(400).json({ errors });
     }
 
-    // Log the enquiry — replace this block with nodemailer / Resend / etc.
+    // Log the enquiry — replace this block with a Resend call (see emailService.js).
     console.log('[Contact] New enquiry received:');
     console.log(`  Name:    ${name.trim()}`);
     console.log(`  Email:   ${email.trim()}`);

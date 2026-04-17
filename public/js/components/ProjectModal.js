@@ -18,6 +18,8 @@ export class ProjectModal {
 
   open(project) {
     if (!this.overlay) this.mount();
+    // Remember the trigger so close() can restore focus for keyboard users.
+    this._prevFocus = document.activeElement;
     const { title, description, category, year, tools_used, featured } = project;
     const modal = this.overlay.querySelector('.modal');
 
@@ -54,6 +56,10 @@ export class ProjectModal {
       this.overlay.classList.remove('open');
       document.removeEventListener('keydown', this._onKeyDown);
     }
+    if (this._prevFocus && typeof this._prevFocus.focus === 'function') {
+      try { this._prevFocus.focus(); } catch { /* element may be detached */ }
+    }
+    this._prevFocus = null;
   }
 
   _onKeyDown(e) {

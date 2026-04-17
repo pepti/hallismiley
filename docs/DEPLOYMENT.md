@@ -1,77 +1,86 @@
 # Deployment Guide — HalliProjects
 
-This guide covers deploying HalliProjects to Railway from a GitHub repository.
+Production runs on **Azure Web App for Containers**. Images are built and pushed by GitHub Actions using OIDC (federated credentials — no long-lived secrets stored in the repo). The authoritative workflow is `.github/workflows/deploy.yml`; it triggers only after the `CI` workflow has succeeded on `main`.
 
 ---
 
-## Railway Deployment
+## Prerequisites (one-time setup)
 
-### 1. Create the Railway project
+1. **Azure resources**
+   - Azure Container Registry — this guide assumes the name `hallismileyacr`.
+   - Azure Web App for Containers — this guide assumes the name `hallismiley-app`.
+   - Azure Database for PostgreSQL — Flexible Server (with firewall rules allowing the Web App outbound address).
+   - Azure Files share mounted on the Web App for persistent uploads (mount path becomes `UPLOAD_ROOT`).
+2. **Azure AD app registration with federated credentials**
+   - Create an App Registration in Azure AD.
+   - Add a **federated credential** trusting this GitHub repo, branch `main`.
+   - Grant the app `AcrPush` on the registry and `Contributor` on the Web App's resource group.
+3. **Repo secrets** (GitHub → Settings → Secrets → Actions)
+   - `AZURE_CLIENT_ID`
+   - `AZURE_TENANT_ID`
+   - `AZURE_SUBSCRIPTION_ID`
+4. **App Service configuration** (App Service → Configuration → Application settings) — at minimum:
 
-1. Go to [railway.app](https://railway.app) and sign in.
-2. Click **New Project → Deploy from GitHub repo**.
-3. Authorise Railway and select the `HalliProjects` repository.
-4. Railway will detect the `Dockerfile` and queue the first build automatically.
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | your Azure PG connection string |
+   | `ALLOWED_ORIGINS` | `https://hallismiley.is,https://www.hallismiley.is` |
+   | `NODE_ENV` | `production` |
+   | `CSRF_SECRET` | 32+ char random, e.g. `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` |
+   | `DB_SSL` | `true` |
+   | `UPLOAD_ROOT` | mount path of the Azure Files share (e.g. `/mnt/uploads`) |
+   | `APP_URL` | `https://www.hallismiley.is` |
+   | `RESEND_API_KEY` | from Resend dashboard |
+   | `EMAIL_FROM` | a verified Resend sender |
 
-### 2. Add a PostgreSQL database
+   Optional: `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE`, `METRICS_TOKEN`, `ALERT_WEBHOOK_URL`, `GOOGLE_*`, `FACEBOOK_*`, `ADMIN_*`.
 
-1. Inside the project, click **New → Database → Add PostgreSQL**.
-2. Once provisioned, open the Postgres service and copy the **DATABASE_URL** from the **Connect** tab.
-   Railway also exposes it as `${{Postgres.DATABASE_URL}}` so you can reference it directly in environment variables.
+5. **Path mapping** (App Service → Configuration → Path mappings)
+   - Mount the Azure Files share at the same path you set for `UPLOAD_ROOT`.
 
-### 3. Set environment variables
+---
 
-Open the web service → **Variables** tab and add the following (see `.env.example` for descriptions):
+## Standard Deployment Flow
 
-| Variable | Value |
-|---|---|
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-| `ALLOWED_ORIGINS` | `https://halliprojects.is,https://www.halliprojects.is` |
-| `NODE_ENV` | `production` |
-| `CSRF_SECRET` | *(32+ char random hex — see below)* |
-| `DB_SSL` | `true` |
-| `LOG_LEVEL` | `info` |
-| `SENTRY_DSN` | *(optional — your Sentry project DSN)* |
-| `METRICS_TOKEN` | *(optional — random hex to protect /metrics)* |
-| `ALERT_WEBHOOK_URL` | *(optional — Slack/Discord/PagerDuty webhook)* |
+1. Merge to `main`.
+2. `CI` workflow runs: npm audit (moderate), ESLint, Jest with coverage, Playwright E2E, Docker build.
+3. On CI success, `Deploy to Azure` triggers automatically:
+   - Azure login via OIDC.
+   - `az acr login --name hallismileyacr`.
+   - Build and push image tags `:latest` and `:<commit-sha>` to `hallismileyacr.azurecr.io/hallismiley`.
+   - Deploy the `:<sha>` tag to `hallismiley-app`.
+4. The server runs pending migrations on startup (`server/scripts/migrate.js`) before accepting traffic.
 
-Generate secrets locally:
+---
+
+## Manual deploy / redeploy a specific SHA
+
+Use **Actions → Deploy to Azure → Run workflow** from the GitHub UI and pick the ref to deploy. Or from Azure CLI:
+
 ```bash
-# CSRF_SECRET
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# METRICS_TOKEN
-node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+az webapp config container set \
+  --name hallismiley-app \
+  --resource-group <your-rg> \
+  --docker-custom-image-name hallismileyacr.azurecr.io/hallismiley:<sha>
 ```
-
-### 4. Deploy
-
-Railway redeploys automatically on every push to the configured branch (default: `main`/`master`).
-
-To trigger a manual deploy: **Deployments → Trigger Deploy**.
-
-The server runs database migrations automatically at startup (`server/scripts/migrate.js`), so no manual migration step is needed.
 
 ---
 
 ## Initial Admin Setup
 
-After the first successful deploy, create the first admin user by running a one-off command via the Railway CLI:
+First boot will bootstrap an admin if `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` are set in App Service configuration and no admin exists yet. **Remove the password from the environment after the account is created.**
+
+If you need to reset or create an admin on an existing deployment:
 
 ```bash
-# Install Railway CLI if you haven't already
-npm install -g @railway/cli
-railway login
-
-# Run the setup script in your production service
-railway run node server/scripts/setup-admin.js <username> <email> <password>
+az webapp ssh --name hallismiley-app --resource-group <your-rg>
+# inside the container:
+node server/scripts/setup-admin.js
 ```
-
-This creates the user and grants the `admin` role. Keep the credentials in a password manager — there is no recovery flow without database access.
 
 ---
 
-## Verifying the Deployment
+## Verifying a Deployment
 
 | Check | URL | Expected response |
 |---|---|---|
@@ -79,50 +88,33 @@ This creates the user and grants the `admin` role. Keep the credentials in a pas
 | Readiness (DB + system) | `GET /ready` | `200 {"status":"ok", ...}` |
 | Prometheus metrics | `GET /metrics` | `200` text/plain (requires `Authorization: Bearer <METRICS_TOKEN>` if token is set) |
 
-A healthy deploy returns `200` on `/ready` before Railway marks it live (`healthcheckPath = "/ready"` in `railway.toml`).
+Azure Web App's built-in health check should be pointed at `/ready`.
 
 ---
 
 ## SSL / Custom Domain
 
-1. In Railway: **Settings → Domains → Add Custom Domain**.
-2. Enter `halliprojects.is` (and `www.halliprojects.is` if needed).
-3. Railway displays CNAME or A records — add them in your DNS provider.
-4. Railway provisions a Let's Encrypt certificate automatically once DNS propagates (usually < 5 minutes).
-5. Ensure `ALLOWED_ORIGINS` includes the `https://` URL of your domain or CORS requests will be blocked.
+1. In the Azure portal: Web App → **Custom domains** → **Add custom domain**.
+2. Follow Azure's DNS validation prompts (TXT + CNAME records).
+3. Once validated, **Add binding** and choose **App Service Managed Certificate** (free).
+4. Ensure `ALLOWED_ORIGINS` includes the `https://` URL of every public hostname, or CORS requests will be blocked.
 
 ---
 
 ## Rollback Procedure
 
-### Instant rollback via Railway dashboard
+See `RUNBOOK.md` — Rollback Procedures. Two supported paths:
+1. Redeploy a prior image tag via `az webapp config container set`.
+2. Slot swap (if a staging slot is provisioned).
 
-1. Open **Deployments** in the Railway project.
-2. Find the last known-good deployment.
-3. Click **Redeploy** — Railway rolls back to that exact image within seconds.
+---
 
-### Git-based rollback
+## Database
 
-```bash
-# Identify the commit to roll back to
-git log --oneline -10
-
-# Create a revert commit (keeps history clean)
-git revert <bad-commit-sha>
-git push origin main
-```
-
-Railway picks up the push and deploys the reverted code automatically.
-
-### Database rollback
-
-Migrations run forward-only. If a migration caused data issues:
-
-1. Connect to the Railway Postgres instance via the **Connect** tab.
-2. Manually reverse the schema change with a SQL statement.
-3. Remove or rename the migration file and redeploy, or write a new corrective migration.
-
-Always back up the database before deploying schema-changing migrations:
-```bash
-railway run pg_dump $DATABASE_URL > backup-$(date +%Y%m%d).sql
-```
+- Automated backups are managed by Azure Database for PostgreSQL Flexible Server — configure retention in the portal under **Backup and restore**.
+- **Point-in-time restore** is the preferred recovery path; it restores to a new server, which you can then swap in by updating `DATABASE_URL`.
+- Manual backup on-demand:
+  ```bash
+  pg_dump "$DATABASE_URL" --no-acl --no-owner -F c -f backup_$(date +%Y%m%d).dump
+  ```
+- Always capture a manual backup before deploying a schema-changing migration.

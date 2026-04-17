@@ -2,6 +2,10 @@ import { tryRestoreSession } from './services/auth.js';
 import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
+import { installDirtyGuard } from './utils/dirtyGuard.js';
+
+// Warn before navigating away if any contentEditable edit is in flight.
+installDirtyGuard();
 
 // Silently try to restore session from refresh token cookie before first render
 await tryRestoreSession();

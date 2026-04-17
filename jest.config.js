@@ -27,9 +27,17 @@ module.exports = {
     '!server/scripts/**',
     '!server/migrations/**',
   ],
+  // Coverage thresholds are a floor, not a target. Current full-suite coverage
+  // sits at ~75% lines / 74% statements — the gap is mostly in email/token/
+  // securityLogger/circuit-breaker plumbing that needs its own focused tests.
+  // Thresholds are set just under today's numbers so the CI guard catches
+  // real regressions; bump these incrementally as new tests land.
   coverageThreshold: {
     global: {
-      lines: 70,
+      lines:      72,
+      statements: 72,
+      branches:   60,
+      functions:  68,
     },
   },
 };

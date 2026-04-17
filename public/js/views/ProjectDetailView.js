@@ -1214,5 +1214,11 @@ export class ProjectDetailView {
       this._lb.destroy();
       this._lb = null;
     }
+    // Any in-flight reorder debounces targeting DOM that no longer exists
+    // would fire on a detached tree; clear them here.
+    clearTimeout(this._reorderTimer);
+    clearTimeout(this._videoReorderTimer);
+    this._reorderTimer = null;
+    this._videoReorderTimer = null;
   }
 }

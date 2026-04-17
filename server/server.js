@@ -1,9 +1,19 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 // ── Sentry error tracking — init before anything else if DSN is configured ────
+// Sampling rates are read from env so staging/prod can tune independently.
+// Defaults: 10% tracing, profiling off (matches Sentry defaults but stays
+// explicit — override with SENTRY_TRACES_SAMPLE_RATE / SENTRY_PROFILES_SAMPLE_RATE).
 if (process.env.SENTRY_DSN) {
   const Sentry = require('@sentry/node');
-  Sentry.init({ dsn: process.env.SENTRY_DSN });
+  const tracesSampleRate   = Number(process.env.SENTRY_TRACES_SAMPLE_RATE   ?? 0.1);
+  const profilesSampleRate = Number(process.env.SENTRY_PROFILES_SAMPLE_RATE ?? 0);
+  Sentry.init({
+    dsn:                 process.env.SENTRY_DSN,
+    environment:         process.env.NODE_ENV || 'development',
+    tracesSampleRate:    Number.isFinite(tracesSampleRate)   ? tracesSampleRate   : 0.1,
+    profilesSampleRate:  Number.isFinite(profilesSampleRate) ? profilesSampleRate : 0,
+  });
 }
 
 // ── Required env var validation — fail fast on misconfiguration ────────────────
@@ -19,6 +29,7 @@ const app    = require('./app');
 const { pool } = require('./config/database');
 const { migrate } = require('./scripts/migrate');
 const { startTokenCleanup } = require('./services/tokenCleanup');
+const { startDbPoolSampler } = require('./observability/metrics');
 
 const PORT = process.env.PORT || 3000;
 
@@ -95,6 +106,9 @@ async function start() {
 
   // Start periodic cleanup of expired sessions (runs every 24h)
   const cleanupTimer = startTokenCleanup();
+
+  // Start sampling the DB pool into prom-client gauges (every 5s).
+  startDbPoolSampler(pool);
 
   // Graceful shutdown — finish in-flight requests before exiting
   function shutdown(signal) {

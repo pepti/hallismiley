@@ -173,11 +173,12 @@ describe('GET /auth/google/callback', () => {
     expect(countAfter).toBe(countBefore);
   });
 
-  test('auto-link: existing password user with same email gets google_id attached', async () => {
-    // Insert a password-only user with email matching what Google will return.
+  test('auto-link: existing VERIFIED password user with same email gets google_id attached', async () => {
+    // Insert a verified password user — legitimate owner of the email, so
+    // Google sign-in can safely attach to the same account.
     await db.query(
       `INSERT INTO users (email, username, password_hash, role, email_verified, avatar)
-       VALUES ('linkme@example.com', 'linkuser', 'fakehash', 'user', FALSE, 'avatar-01.svg')`,
+       VALUES ('linkme@example.com', 'linkuser', 'fakehash', 'user', TRUE, 'avatar-01.svg')`,
     );
 
     mockUserinfo.response.email = 'linkme@example.com';
@@ -198,6 +199,36 @@ describe('GET /auth/google/callback', () => {
     expect(rows[0].google_id).toBe('google-sub-link');
     expect(rows[0].oauth_provider).toBe('google');
     expect(rows[0].email_verified).toBe(true);
+  });
+
+  test('auto-link rejected when existing password account is UNVERIFIED', async () => {
+    // Simulates the pre-registration attack: attacker signs up with victim's
+    // email but never verifies. The victim then signs in via Google — we must
+    // NOT silently attach google_id to the unverified account.
+    await db.query(
+      `INSERT INTO users (email, username, password_hash, role, email_verified, avatar)
+       VALUES ('unverified@example.com', 'unverifieduser', 'attackerhash', 'user', FALSE, 'avatar-01.svg')`,
+    );
+
+    mockUserinfo.response.email = 'unverified@example.com';
+    mockUserinfo.response.sub   = 'google-sub-attack';
+
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/#/login?error=email_unverified_conflict');
+
+    // Ensure google_id was NOT written and no session was issued.
+    const { rows } = await db.query(
+      `SELECT google_id, oauth_provider, email_verified
+         FROM users WHERE email = 'unverified@example.com'`,
+    );
+    expect(rows[0].google_id).toBeNull();
+    expect(rows[0].oauth_provider).toBeNull();
+    expect(rows[0].email_verified).toBe(false);
+    expect(res.headers['set-cookie']?.some((c) => c.startsWith('auth_session='))).not.toBe(true);
   });
 
   test('disabled account redirects with account_disabled', async () => {
@@ -222,6 +253,20 @@ describe('GET /auth/google/callback', () => {
 
   test('token-exchange failure redirects with oauth_failed', async () => {
     mockState.validateAuthorizationCode = async () => { throw new Error('bad code'); };
+
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/#/login?error=oauth_failed');
+  });
+
+  test('userinfo 5xx redirects with oauth_failed', async () => {
+    // Token exchange succeeds but the userinfo fetch returns 500. Should
+    // bail cleanly instead of 500-ing the whole request.
+    mockUserinfo.ok = false;
+    mockUserinfo.response = { error: 'internal' };
 
     const res = await request(app)
       .get('/auth/google/callback?code=abc&state=test-state-123')
