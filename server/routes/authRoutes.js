@@ -4,6 +4,7 @@ const router         = express.Router();
 const authController       = require('../controllers/authController');
 const googleAuthController = require('../controllers/googleAuthController');
 const { validateSignup, validateResetPassword } = require('../middleware/validate');
+const { csrfProtect } = require('../middleware/csrf');
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
@@ -39,17 +40,27 @@ const resendLimiter = rateLimit({
   message: { error: 'Please wait 1 minute before requesting another verification email.', code: 429 },
 });
 
+// Password-reset flow: 5 requests per hour per IP to limit flooding / token guessing
+const resetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  skip: isTest,
+  message: { error: 'Too many password reset requests, please try again in an hour.', code: 429 },
+});
+
 // ── Existing auth ─────────────────────────────────────────────────────────────
-router.post('/login',  authLimiter,   authController.login);
-router.post('/logout',               authController.logout);
-router.get('/session',               authController.session);
+router.post('/login',  authLimiter,              authController.login);
+// csrfProtect on logout: the client already fetches a fresh CSRF token before
+// calling this endpoint (see public/js/services/auth.js → logout()).
+router.post('/logout', csrfProtect,              authController.logout);
+router.get('/session',                           authController.session);
 
 // ── New auth endpoints ────────────────────────────────────────────────────────
 router.post('/signup',           signupLimiter, validateSignup, authController.signup);
 router.post('/verify-email',                                    authController.verifyEmail);
 router.post('/resend-verification', resendLimiter,              authController.resendVerification);
-router.post('/forgot-password',                                 authController.forgotPassword);
-router.post('/reset-password',         validateResetPassword,  authController.resetPassword);
+router.post('/forgot-password', resetLimiter,                  authController.forgotPassword);
+router.post('/reset-password',  resetLimiter, validateResetPassword, authController.resetPassword);
 
 // ── Availability checks ───────────────────────────────────────────────────────
 router.get('/check-username/:username', checkLimiter, authController.checkUsername);

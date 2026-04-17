@@ -1,5 +1,5 @@
 // Email service using Resend API.
-// Falls back to console logging when RESEND_API_KEY is not set (dev/test mode).
+// Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
 
 const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
@@ -65,8 +65,10 @@ async function sendVerificationEmail(to, token) {
   const link = `${APP_URL}/#/verify-email?token=${token}`;
 
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — verification link for ${to}:`);
-    console.log(`  ${link}`);
+    // Do NOT log the token or the full link — they are credential-equivalent.
+    // In development, retrieve the token directly from the database:
+    //   SELECT email_verify_token FROM users WHERE email = '...';
+    console.log('[EmailService] Resend not configured — verification email skipped (retrieve token from DB)');
     return;
   }
 
@@ -94,7 +96,7 @@ async function sendVerificationEmail(to, token) {
     </p>
   `);
 
-  console.log(`[EmailService] Sending verification email to ${to}`);
+  // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Verification email sent: id=${data.id}`);
@@ -106,8 +108,10 @@ async function sendPasswordResetEmail(to, token) {
   const link = `${APP_URL}/#/reset-password?token=${token}`;
 
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — password reset link for ${to}:`);
-    console.log(`  ${link}`);
+    // Do NOT log the token or the full link — they are credential-equivalent.
+    // In development, retrieve the token directly from the database:
+    //   SELECT password_reset_token FROM users WHERE email = '...';
+    console.log('[EmailService] Resend not configured — password reset email skipped (retrieve token from DB)');
     return;
   }
 
@@ -138,7 +142,7 @@ async function sendPasswordResetEmail(to, token) {
     </p>
   `);
 
-  console.log(`[EmailService] Sending password reset email to ${to}`);
+  // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Password reset email sent: id=${data.id}`);

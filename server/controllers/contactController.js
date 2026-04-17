@@ -1,6 +1,7 @@
 // Contact form handler
-// Validates and logs enquiries. Wire up nodemailer or a mail API (e.g. Resend)
+// Validates and forwards enquiries. Wire up nodemailer or a mail API (e.g. Resend)
 // to forward submissions to your inbox.
+const { randomUUID } = require('crypto');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -36,12 +37,11 @@ async function submit(req, res, next) {
       return res.status(400).json({ errors });
     }
 
-    // Log the enquiry — replace this block with nodemailer / Resend / etc.
-    console.log('[Contact] New enquiry received:');
-    console.log(`  Name:    ${name.trim()}`);
-    console.log(`  Email:   ${email.trim()}`);
-    if (normalizedTopic) console.log(`  Topic:   ${normalizedTopic}`);
-    console.log(`  Message: ${message.trim().slice(0, 120)}${message.length > 120 ? '…' : ''}`);
+    // Log a correlation ID only — name, email, and message body are PII and
+    // must not be written to aggregated log stores.  Wire in Resend/nodemailer
+    // here to actually deliver the submission to your inbox.
+    const submissionId = randomUUID();
+    console.log(`[Contact] Submission received: id=${submissionId} topic=${normalizedTopic || 'none'}`);
 
     res.status(200).json({ message: 'Message received. I\'ll be in touch soon.' });
   } catch (err) {
