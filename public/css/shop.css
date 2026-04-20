@@ -996,6 +996,34 @@
 }
 .shop-view__edit-btn--hidden { display: none; }
 
+/* Admin-only "Add Product" button, pinned just below Edit Page. */
+.shop-view__add-btn {
+  position: fixed;
+  top: 128px;
+  right: 24px;
+  z-index: 89;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.shop-view__add-btn:hover {
+  background: var(--gold);
+  color: var(--bg-nav);
+  transform: translateY(-1px);
+}
+/* Hide Add Product while in copy-edit mode so it doesn't compete with the
+   edit save/cancel bar. */
+.shop-view--editing .shop-view__add-btn { display: none; }
+
 .shop-view__edit-controls {
   position: fixed;
   bottom: 24px;

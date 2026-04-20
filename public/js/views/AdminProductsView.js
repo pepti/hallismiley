@@ -87,164 +87,14 @@ export class AdminProductsView {
   }
 
   _showForm(existing = null) {
-    const isEdit = !!existing;
-    const modal = document.createElement('div');
-    modal.className = 'admin-shop__modal';
-    modal.innerHTML = `
-      <div class="admin-shop__modal-card">
-        <header>
-          <h2>${isEdit ? 'Edit product' : 'New product'}</h2>
-          <button type="button" class="admin-shop__modal-close" aria-label="Close">✕</button>
-        </header>
-        <form class="admin-shop__form" id="admin-product-form">
-          <label>Name
-            <input type="text" name="name" required maxlength="200" value="${_esc(existing?.name || '')}"/>
-          </label>
-          <label>Slug (URL-friendly)
-            <input type="text" name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?"
-                   value="${_esc(existing?.slug || '')}"/>
-          </label>
-          <label>Description
-            <textarea name="description" rows="4">${_esc(existing?.description || '')}</textarea>
-          </label>
-          <div class="admin-shop__form-row">
-            <label>Price ISK (whole kr.)
-              <input type="number" name="price_isk" required min="1" step="1" value="${existing?.price_isk ?? ''}"/>
-            </label>
-            <label>Price EUR (cents)
-              <input type="number" name="price_eur" required min="1" step="1" value="${existing?.price_eur ?? ''}"/>
-            </label>
-          </div>
-          <div class="admin-shop__form-row">
-            <label>Stock
-              <input type="number" name="stock" min="0" step="1" value="${existing?.stock ?? 0}"/>
-            </label>
-            <label>Weight (grams, optional)
-              <input type="number" name="weight_grams" min="0" step="1" value="${existing?.weight_grams ?? ''}"/>
-            </label>
-            <label class="admin-shop__checkbox">
-              <input type="checkbox" name="active" ${existing?.active === false ? '' : 'checked'}/>
-              Active
-            </label>
-          </div>
-          <p class="admin-shop__error" id="admin-product-error" role="alert"></p>
-          <div class="admin-shop__form-actions">
-            ${isEdit ? '<button type="button" class="admin-shop__delete" id="admin-product-deactivate">Deactivate</button>' : ''}
-            <button type="submit" class="admin-shop__primary-btn">${isEdit ? 'Save' : 'Create'}</button>
-          </div>
-        </form>
-
-        ${isEdit ? `
-          <section class="admin-shop__images">
-            <h3>Images</h3>
-            <div class="admin-shop__image-list" id="admin-product-images"></div>
-            <label class="admin-shop__upload-btn">
-              <input type="file" accept="image/jpeg,image/png,image/webp" id="admin-product-image-input"/>
-              Upload image
-            </label>
-          </section>
-
-          <section class="admin-shop__variants">
-            <h3>Variants <span class="admin-shop__hint" style="margin:0 8px;font-size:12px">
-              ${(existing.variants || []).length} SKUs</span></h3>
-            <p class="admin-shop__hint">
-              Override prices and stock per SKU. Leave price fields blank to inherit the base price.
-            </p>
-            <div id="admin-variant-table-wrap"></div>
-          </section>` : ''}
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    const close = () => modal.remove();
-    modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
-    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-
-    const form = modal.querySelector('#admin-product-form');
-    const errorEl = modal.querySelector('#admin-product-error');
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      errorEl.textContent = '';
-      const fd = new FormData(form);
-      const body = {
-        name:         String(fd.get('name') || '').trim(),
-        slug:         String(fd.get('slug') || '').trim(),
-        description:  String(fd.get('description') || ''),
-        price_isk:    Number(fd.get('price_isk')),
-        price_eur:    Number(fd.get('price_eur')),
-        stock:        Number(fd.get('stock') || 0),
-        active:       fd.get('active') === 'on',
-      };
-      const wg = fd.get('weight_grams');
-      if (wg !== null && wg !== '') body.weight_grams = Number(wg);
-
-      try {
-        const headers = await getCsrfHeaders();
-        const url = isEdit ? `/api/v1/admin/shop/products/${existing.id}` : '/api/v1/admin/shop/products';
-        const method = isEdit ? 'PATCH' : 'POST';
-        const res = await fetch(url, { method, credentials: 'include', headers, body: JSON.stringify(body) });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Save failed');
-        close();
-        await this._load();
-      } catch (err) {
-        errorEl.textContent = err.message;
-      }
+    openProductFormModal({
+      existing,
+      onSaved: () => this._load(),
+      paintImages:   (modal, product) => this._paintImages(modal, product),
+      paintVariants: (modal, product) => this._paintVariants(modal, product),
     });
-
-    if (isEdit) {
-      const deactivateBtn = modal.querySelector('#admin-product-deactivate');
-      deactivateBtn.addEventListener('click', async () => {
-        if (!confirm('Deactivate this product? It will stop showing in the shop.')) return;
-        try {
-          const token = await getCSRFToken();
-          const res = await fetch(`/api/v1/admin/shop/products/${existing.id}`, {
-            method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-Token': token || '' },
-          });
-          if (!res.ok && res.status !== 204) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || 'Deactivation failed');
-          }
-          close();
-          await this._load();
-        } catch (err) {
-          errorEl.textContent = err.message;
-        }
-      });
-
-      // Variant management
-      this._paintVariants(modal, existing);
-
-      // Image management
-      this._paintImages(modal, existing);
-      modal.querySelector('#admin-product-image-input').addEventListener('change', async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-          const token = await getCSRFToken();
-          const fdata = new FormData();
-          fdata.append('file', file);
-          const res = await fetch(`/api/v1/admin/shop/products/${existing.id}/images`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'X-CSRF-Token': token || '' },
-            body: fdata,
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Upload failed');
-          // Refresh images
-          const refreshed = await (await fetch(`/api/v1/admin/shop/products/${existing.id}`, { credentials: 'include' })).json();
-          existing.images = refreshed.product.images;
-          this._paintImages(modal, existing);
-          e.target.value = '';
-          await this._load();
-        } catch (err) {
-          errorEl.textContent = err.message;
-        }
-      });
-    }
   }
+
 
   _paintImages(modal, product) {
     const list = modal.querySelector('#admin-product-images');
@@ -370,4 +220,173 @@ export class AdminProductsView {
   }
 
   destroy() {}
+}
+
+// ── Standalone modal (reused by ShopView "Add Product" button) ──────────────
+//
+// openProductFormModal({ existing, onSaved, paintImages, paintVariants })
+//   existing       — product row for edit mode, null for new-product mode
+//   onSaved        — called after a successful create/update/deactivate
+//   paintImages    — optional renderer for the images section (admin edit only)
+//   paintVariants  — optional renderer for the variants section (admin edit only)
+//
+// The images/variants sub-sections are only rendered when `existing` is set
+// (a product must be saved first to have an id for image/variant FKs), so a
+// fresh-create flow (new product) doesn't need the paint callbacks.
+export function openProductFormModal({ existing = null, onSaved = () => {}, paintImages, paintVariants } = {}) {
+  const isEdit = !!existing;
+  const modal = document.createElement('div');
+  modal.className = 'admin-shop__modal';
+  modal.innerHTML = `
+    <div class="admin-shop__modal-card">
+      <header>
+        <h2>${isEdit ? 'Edit product' : 'New product'}</h2>
+        <button type="button" class="admin-shop__modal-close" aria-label="Close">✕</button>
+      </header>
+      <form class="admin-shop__form" id="admin-product-form">
+        <label>Name
+          <input type="text" name="name" required maxlength="200" value="${_esc(existing?.name || '')}"/>
+        </label>
+        <label>Slug (URL-friendly)
+          <input type="text" name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?"
+                 value="${_esc(existing?.slug || '')}"/>
+        </label>
+        <label>Description
+          <textarea name="description" rows="4">${_esc(existing?.description || '')}</textarea>
+        </label>
+        <div class="admin-shop__form-row">
+          <label>Price ISK (whole kr.)
+            <input type="number" name="price_isk" required min="1" step="1" value="${existing?.price_isk ?? ''}"/>
+          </label>
+          <label>Price EUR (cents)
+            <input type="number" name="price_eur" required min="1" step="1" value="${existing?.price_eur ?? ''}"/>
+          </label>
+        </div>
+        <div class="admin-shop__form-row">
+          <label>Stock
+            <input type="number" name="stock" min="0" step="1" value="${existing?.stock ?? 0}"/>
+          </label>
+          <label>Weight (grams, optional)
+            <input type="number" name="weight_grams" min="0" step="1" value="${existing?.weight_grams ?? ''}"/>
+          </label>
+          <label class="admin-shop__checkbox">
+            <input type="checkbox" name="active" ${existing?.active === false ? '' : 'checked'}/>
+            Active
+          </label>
+        </div>
+        <p class="admin-shop__hint">
+          ISK prices are whole krónur (e.g. <code>5900</code>). EUR prices are in <em>cents</em>
+          (e.g. <code>4000</code> for €40.00). Prices are VAT-inclusive (24% VSK).
+        </p>
+        <p class="admin-shop__error" id="admin-product-error" role="alert"></p>
+        <div class="admin-shop__form-actions">
+          ${isEdit ? '<button type="button" class="admin-shop__delete" id="admin-product-deactivate">Deactivate</button>' : ''}
+          <button type="submit" class="admin-shop__primary-btn">${isEdit ? 'Save' : 'Create'}</button>
+        </div>
+      </form>
+
+      ${isEdit ? `
+        <section class="admin-shop__images">
+          <h3>Images</h3>
+          <div class="admin-shop__image-list" id="admin-product-images"></div>
+          <label class="admin-shop__upload-btn">
+            <input type="file" accept="image/jpeg,image/png,image/webp" id="admin-product-image-input"/>
+            Upload image
+          </label>
+        </section>
+
+        <section class="admin-shop__variants">
+          <h3>Variants <span class="admin-shop__hint" style="margin:0 8px;font-size:12px">
+            ${(existing.variants || []).length} SKUs</span></h3>
+          <p class="admin-shop__hint">
+            Override prices and stock per SKU. Leave price fields blank to inherit the base price.
+          </p>
+          <div id="admin-variant-table-wrap"></div>
+        </section>` : ''}
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  const form    = modal.querySelector('#admin-product-form');
+  const errorEl = modal.querySelector('#admin-product-error');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.textContent = '';
+    const fd = new FormData(form);
+    const body = {
+      name:         String(fd.get('name') || '').trim(),
+      slug:         String(fd.get('slug') || '').trim(),
+      description:  String(fd.get('description') || ''),
+      price_isk:    Number(fd.get('price_isk')),
+      price_eur:    Number(fd.get('price_eur')),
+      stock:        Number(fd.get('stock') || 0),
+      active:       fd.get('active') === 'on',
+    };
+    const wg = fd.get('weight_grams');
+    if (wg !== null && wg !== '') body.weight_grams = Number(wg);
+
+    try {
+      const headers = await getCsrfHeaders();
+      const url    = isEdit ? `/api/v1/admin/shop/products/${existing.id}` : '/api/v1/admin/shop/products';
+      const method = isEdit ? 'PATCH' : 'POST';
+      const res    = await fetch(url, { method, credentials: 'include', headers, body: JSON.stringify(body) });
+      const data   = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      close();
+      await onSaved(data.product || null);
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+
+  if (isEdit) {
+    modal.querySelector('#admin-product-deactivate')?.addEventListener('click', async () => {
+      if (!confirm('Deactivate this product? It will stop showing in the shop.')) return;
+      try {
+        const token = await getCSRFToken();
+        const res = await fetch(`/api/v1/admin/shop/products/${existing.id}`, {
+          method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-Token': token || '' },
+        });
+        if (!res.ok && res.status !== 204) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Deactivation failed');
+        }
+        close();
+        await onSaved(null);
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+
+    if (paintVariants) paintVariants(modal, existing);
+    if (paintImages)   paintImages(modal, existing);
+
+    modal.querySelector('#admin-product-image-input')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const token = await getCSRFToken();
+        const fdata = new FormData();
+        fdata.append('file', file);
+        const res = await fetch(`/api/v1/admin/shop/products/${existing.id}/images`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'X-CSRF-Token': token || '' }, body: fdata,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        const refreshed = await (await fetch(`/api/v1/admin/shop/products/${existing.id}`, { credentials: 'include' })).json();
+        existing.images = refreshed.product.images;
+        if (paintImages) paintImages(modal, existing);
+        e.target.value = '';
+        await onSaved(refreshed.product);
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+  }
 }

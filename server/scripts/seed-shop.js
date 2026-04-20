@@ -296,13 +296,27 @@ async function writeImages(productId, p) {
   const dir = productUploadDir(productId);
   fs.mkdirSync(dir, { recursive: true });
 
+  // Precedence per colour: an existing real photo (png/jpg/jpeg/webp) wins
+  // over the generated SVG placeholder. Admins who upload real imagery via
+  // the admin UI (or drop files into the upload dir) won't have their work
+  // clobbered on the next seed run.
+  const PHOTO_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
   const files = [];
   for (const color of COLORS) {
-    const name = `${color}.svg`;
-    fs.writeFileSync(path.join(dir, name), renderSvgFor(p.kind, color), 'utf8');
+    let name = null;
+    for (const ext of PHOTO_EXTS) {
+      if (fs.existsSync(path.join(dir, `${color}.${ext}`))) {
+        name = `${color}.${ext}`;
+        break;
+      }
+    }
+    if (!name) {
+      name = `${color}.svg`;
+      fs.writeFileSync(path.join(dir, name), renderSvgFor(p.kind, color), 'utf8');
+    }
     files.push({
       url: `/assets/products/${productId}/${name}`,
-      alt_text: `${p.name} — ${color}`,
+      alt_text: `${p.name} (${color})`,
       position: color === 'black' ? 0 : 1,
     });
   }

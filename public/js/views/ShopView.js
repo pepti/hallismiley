@@ -9,6 +9,7 @@ import { CurrencySelector } from '../components/CurrencySelector.js';
 import { ShopFilters, applyFilters, parseStateFromQs, stateToQs } from '../components/ShopFilters.js';
 import * as cart from '../services/cart.js';
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
+import { openProductFormModal } from './AdminProductsView.js';
 
 // Default copy — rendered when the DB row is missing or the network fails.
 const DEFAULT_HERO = {
@@ -186,6 +187,26 @@ export class ShopView {
     editBtn.setAttribute('data-testid', 'edit-shop-page-btn');
     editBtn.textContent = 'Edit Page';
     view.appendChild(editBtn);
+
+    // "Add Product" floating button — admin only (creation uses the
+    // admin-only POST /api/v1/admin/shop/products endpoint). Sits just
+    // below the Edit Page button. Reuses the same modal as the
+    // AdminProductsView so the form stays a single source of truth.
+    if (isAdmin()) {
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'shop-view__add-btn';
+      addBtn.setAttribute('data-testid', 'add-product-btn');
+      addBtn.textContent = '+ Add Product';
+      view.appendChild(addBtn);
+
+      addBtn.addEventListener('click', () => {
+        openProductFormModal({
+          existing: null,
+          onSaved: async () => { await this._loadProducts(); },
+        });
+      });
+    }
 
     const controls = document.createElement('div');
     controls.className = 'shop-view__edit-controls shop-view__edit-controls--hidden';
