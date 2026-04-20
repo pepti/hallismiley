@@ -292,15 +292,31 @@ async function upsertProduct(client, p) {
   return rows[0].id;
 }
 
+const SEED_ASSETS_DIR = path.join(__dirname, 'seed-assets');
+const PHOTO_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
+
 async function writeImages(productId, p) {
   const dir = productUploadDir(productId);
   fs.mkdirSync(dir, { recursive: true });
 
-  // Precedence per colour: an existing real photo (png/jpg/jpeg/webp) wins
-  // over the generated SVG placeholder. Admins who upload real imagery via
-  // the admin UI (or drop files into the upload dir) won't have their work
-  // clobbered on the next seed run.
-  const PHOTO_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
+  // Step 1: populate the upload dir from the repo's seed-assets/ if the
+  // target file doesn't already exist. Source naming convention:
+  //   server/scripts/seed-assets/<product-slug>-<color>.<ext>
+  // We NEVER overwrite an existing file — admin uploads / prior seeds win.
+  for (const color of COLORS) {
+    for (const ext of PHOTO_EXTS) {
+      const src = path.join(SEED_ASSETS_DIR, `${p.slug}-${color}.${ext}`);
+      const dst = path.join(dir, `${color}.${ext}`);
+      if (fs.existsSync(src) && !fs.existsSync(dst)) {
+        fs.copyFileSync(src, dst);
+      }
+    }
+  }
+
+  // Step 2: precedence per colour:
+  //   existing real photo (png/jpg/jpeg/webp) > generated SVG placeholder.
+  // Admins who upload real imagery via the admin UI (or drop files into the
+  // upload dir) aren't clobbered on the next seed run.
   const files = [];
   for (const color of COLORS) {
     let name = null;
