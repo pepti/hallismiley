@@ -1,6 +1,7 @@
 import { isAuthenticated, isAdmin, getUser, logout } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { LoginModal } from './LoginModal.js';
+import { CartIcon } from './CartIcon.js';
 
 const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
 
@@ -8,6 +9,7 @@ const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
 export class NavBar {
   constructor() {
     this._loginModal = new LoginModal();
+    this._cartIcon   = new CartIcon();
   }
 
   render() {
@@ -27,6 +29,7 @@ export class NavBar {
       <div class="lol-nav__center" id="nav-menu">
         <a href="#/" class="lol-nav__link" data-route="/">Home</a>
         <a href="#/projects" class="lol-nav__link" data-route="/projects">Projects</a>
+        <a href="#/shop" class="lol-nav__link" data-route="/shop">Shop</a>
         <a href="#/news" class="lol-nav__link" data-route="/news">News</a>
         <a href="#/halli" class="lol-nav__link" data-route="/halli">Halli</a>
         <a href="#/contact" class="lol-nav__link" data-route="/contact">Contact</a>
@@ -34,8 +37,9 @@ export class NavBar {
            id="nav-party-link" aria-label="Halli's 40th Birthday Party">🎂 Party</a>
       </div>
 
-      <!-- Right: Hamburger + Auth -->
+      <!-- Right: Cart + Hamburger + Auth -->
       <div class="lol-nav__right">
+        <div class="lol-nav__cart-slot" id="nav-cart-slot"></div>
         <button class="lol-nav__hamburger" id="nav-hamburger"
                 aria-label="Open navigation menu" aria-expanded="false" aria-controls="nav-menu">
           <span></span><span></span><span></span>
@@ -45,6 +49,9 @@ export class NavBar {
     `;
 
     this._nav = nav;
+    // Mount cart icon
+    const cartSlot = nav.querySelector('#nav-cart-slot');
+    if (cartSlot) cartSlot.appendChild(this._cartIcon.render());
     this._renderAuth();
     this._bindScrollLinks(nav);
     this._bindHomeLinks(nav);
@@ -95,7 +102,16 @@ export class NavBar {
         </a>
         <a href="#/admin/users" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/users">
           Manage Users
+        </a>
+        <a href="#/admin/shop/products" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/shop/products">
+          Manage Products
+        </a>
+        <a href="#/admin/shop/orders" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/shop/orders">
+          Manage Orders
         </a>` : ''}
+        <a href="#/orders" class="lol-nav__dropdown-item" role="menuitem" data-route="/orders">
+          My Orders
+        </a>
         <hr class="lol-nav__dropdown-divider"/>
         <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" id="nav-signout-btn" data-testid="nav-signout">
           Sign Out

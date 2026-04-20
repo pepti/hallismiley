@@ -16,6 +16,9 @@ const adminRoutes    = require('./routes/adminRoutes');
 const contentRoutes  = require('./routes/contentRoutes');
 const newsRoutes     = require('./routes/newsRoutes');
 const partyRoutes    = require('./routes/partyRoutes');
+const shopRoutes     = require('./routes/shopRoutes');
+const adminShopRoutes = require('./routes/adminShopRoutes');
+const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { generateCsrfToken } = require('./middleware/csrf');
@@ -64,7 +67,10 @@ app.use(helmet({
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
       objectSrc:  ["'none'"],
       // Allow YouTube iframes so project Video sections can embed videos.
-      frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com'],
+      // Stripe Checkout is allowed so the hosted-checkout redirect works.
+      frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://checkout.stripe.com'],
+      // Allow shop checkout redirect to POST to Stripe
+      formAction: ["'self'", 'https://checkout.stripe.com'],
       // Helmet 8 adds upgrade-insecure-requests by default; disable it so the
       // site works over plain HTTP on LAN IPs (e.g. phone testing on 192.168.x.x).
       // The directive upgrades sub-resource requests to HTTPS — fine in production
@@ -75,9 +81,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// Restrict access to browser features not used by this app
+// Restrict access to browser features not used by this app.
+// payment=* allowed so Stripe Checkout can use the Payment Request API.
 app.use((req, res, next) => {
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
 
@@ -105,6 +112,15 @@ app.use(cors({
 
 // ── A03 Injection: HTTP Parameter Pollution protection ────────────────────────
 app.use(hpp());
+
+// ── Stripe webhook — MUST be registered BEFORE express.json() so the raw
+// body bytes are available for HMAC signature verification. Stripe's
+// constructEvent is byte-exact; a JSON re-serialisation would break it.
+// This route is deliberately NOT protected by CSRF (Stripe can't produce a
+// CSRF token) nor by sanitizeBody (must not mutate the Buffer).
+app.post('/api/v1/shop/webhook',
+  express.raw({ type: 'application/json', limit: '1mb' }),
+  shopController.handleStripeWebhook);
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
 app.use(express.json({ limit: '100kb' }));
@@ -140,6 +156,12 @@ app.use('/api/v1/projects', (req, res, next) => {
   next();
 });
 app.use('/api/v1/party', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
+app.use('/api/v1/admin/shop', (req, res, next) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }
@@ -312,6 +334,7 @@ app.use('/assets/news',     express.static(path.join(UPLOAD_ROOT, 'news'),     u
 app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    uploadStaticOpts));
 app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
+app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
 
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
@@ -335,10 +358,12 @@ app.use('/auth',              authRoutes);
 app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
+app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
-app.use('/api/v1/content',   contentRoutes);
-app.use('/api/v1/news',      newsRoutes);
-app.use('/api/v1/party',     partyRoutes);
+app.use('/api/v1/content',    contentRoutes);
+app.use('/api/v1/news',       newsRoutes);
+app.use('/api/v1/party',      partyRoutes);
+app.use('/api/v1/shop',       shopRoutes);
 
 // Fallback SPA route — never cache, browser must revalidate on every navigation
 app.get('*', (req, res) => {

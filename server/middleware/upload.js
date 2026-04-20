@@ -5,7 +5,7 @@
 
 const multer = require('multer');
 const fs     = require('fs');
-const { newsUploadDir, projectUploadDir } = require('../config/paths');
+const { newsUploadDir, projectUploadDir, productUploadDir } = require('../config/paths');
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -110,4 +110,40 @@ function createNewsUpload(articleId) {
   });
 }
 
-module.exports = { createProjectUpload, createNewsUpload, MIME_TO_EXT, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };
+/**
+ * Returns a configured multer upload instance for product images.
+ * Images only (no videos). Destination: `UPLOAD_ROOT/products/<productId>/`.
+ */
+function createProductUpload(productId) {
+  const destDir = productUploadDir(productId);
+
+  const storage = multer.diskStorage({
+    destination(req, file, cb) {
+      fs.mkdirSync(destDir, { recursive: true });
+      cb(null, destDir);
+    },
+    filename(req, file, cb) {
+      const ext  = MIME_TO_EXT[file.mimetype] || '.bin';
+      const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+      cb(null, name);
+    },
+  });
+
+  const fileFilter = (req, file, cb) => {
+    if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      const err = new Error('Only images (jpg, png, webp) are allowed for products');
+      err.code = 'INVALID_TYPE';
+      cb(err);
+    }
+  };
+
+  return multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: MAX_IMAGE_SIZE },
+  });
+}
+
+module.exports = { createProjectUpload, createNewsUpload, createProductUpload, MIME_TO_EXT, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };

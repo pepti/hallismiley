@@ -148,4 +148,169 @@ async function sendPasswordResetEmail(to, token) {
   console.log(`[EmailService] Password reset email sent: id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail };
+// ── Order receipt email ───────────────────────────────────────────────────────
+
+function formatMoney(amount, currency) {
+  if (currency === 'ISK') {
+    return `${Number(amount).toLocaleString('is-IS')} kr.`;
+  }
+  if (currency === 'EUR') {
+    return `€${(Number(amount) / 100).toFixed(2)}`;
+  }
+  return `${amount} ${currency}`;
+}
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function sendOrderReceipt(order, items) {
+  const to = order.guest_email || order.user_email;
+  if (!to) {
+    console.warn(`[EmailService] No recipient for order ${order.order_number} receipt`);
+    return;
+  }
+
+  const orderUrl = `${APP_URL}/#/checkout/success?session_id=${encodeURIComponent(order.stripe_session_id || '')}`;
+
+  const itemsHtml = items.map(it => `
+    <tr>
+      <td style="padding:8px 0;color:#aaa;font-size:14px;">
+        ${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}
+      </td>
+      <td style="padding:8px 0;color:#e0e0e0;font-size:14px;text-align:right;">
+        ${formatMoney(it.product_price_snapshot * it.quantity, order.currency)}
+      </td>
+    </tr>
+  `).join('');
+
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — order receipt for ${order.order_number} skipped`);
+    return;
+  }
+
+  const subject = `Your Halli Smiley order ${order.order_number}`;
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">Thank you for your order</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      Your order <strong style="color:#c9a84c;">${escapeHtml(order.order_number)}</strong>
+      has been received. A confirmation of the full details is below.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;">
+      ${itemsHtml}
+      <tr>
+        <td style="padding:12px 0 8px;color:#666;font-size:13px;border-top:1px solid #222;">Subtotal</td>
+        <td style="padding:12px 0 8px;color:#aaa;font-size:13px;text-align:right;border-top:1px solid #222;">
+          ${formatMoney(order.subtotal, order.currency)}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;color:#666;font-size:13px;">Shipping (${escapeHtml(order.shipping_method === 'local_pickup' ? 'Local pickup' : 'Shipping')})</td>
+        <td style="padding:4px 0;color:#aaa;font-size:13px;text-align:right;">
+          ${formatMoney(order.shipping, order.currency)}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:12px 0 0;color:#e0e0e0;font-size:16px;font-weight:600;border-top:1px solid #222;">Total</td>
+        <td style="padding:12px 0 0;color:#c9a84c;font-size:16px;font-weight:600;text-align:right;border-top:1px solid #222;">
+          ${formatMoney(order.total, order.currency)}
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 16px;font-size:12px;color:#555;">
+      Price includes 24% VAT (VSK).
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${orderUrl}"
+             style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            View Order
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+      Questions? Reply to this email and we'll get back to you.
+    </p>
+  `);
+
+  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Order receipt sent: order=${order.order_number} id=${data.id}`);
+}
+
+// ── RSVP notification to admins ───────────────────────────────────────────────
+
+async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEmails }) {
+  if (!adminEmails || adminEmails.length === 0) return;
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — RSVP notification skipped (user=${user.id}, isUpdate=${isUpdate})`);
+    return;
+  }
+
+  const name = user.display_name || user.username || user.email;
+  const subject = isUpdate
+    ? `RSVP updated: ${name}`
+    : `New RSVP from ${name}`;
+
+  const fields = Array.isArray(rsvpForm) ? rsvpForm : [];
+  const dataFields = fields.filter(f => !['heading', 'paragraph'].includes(f.type));
+
+  const answerRows = dataFields.map(f => {
+    const a = answers?.[f.id];
+    if (a == null || (Array.isArray(a) && a.length === 0) || a === '') return null;
+    const val = Array.isArray(a) ? a.map(escapeHtml).join(', ') : escapeHtml(String(a));
+    return `
+      <tr>
+        <td style="padding:8px 0;color:#666;font-size:13px;vertical-align:top;width:180px;">${escapeHtml(f.label || f.id)}</td>
+        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">${val}</td>
+      </tr>`;
+  }).filter(Boolean).join('');
+
+  // Fall back to dumping raw keys if the form schema is missing
+  const rawRows = answerRows ? '' : Object.entries(answers || {}).map(([k, v]) => {
+    const val = Array.isArray(v) ? v.map(escapeHtml).join(', ') : escapeHtml(String(v));
+    return `
+      <tr>
+        <td style="padding:8px 0;color:#666;font-size:13px;vertical-align:top;width:180px;">${escapeHtml(k)}</td>
+        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">${val}</td>
+      </tr>`;
+  }).join('');
+
+  const partyUrl = `${APP_URL}/#/party/admin`;
+  const heading  = isUpdate ? 'An RSVP was updated' : 'A new RSVP came in';
+
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      <strong style="color:#c9a84c;">${escapeHtml(name)}</strong>
+      (${escapeHtml(user.email || '')}) ${isUpdate ? 'updated their RSVP' : 'sent an RSVP'}.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;">
+      ${answerRows || rawRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">(no answers)</td></tr>`}
+    </table>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${partyUrl}"
+             style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            Open Party Admin
+          </a>
+        </td>
+      </tr>
+    </table>
+  `);
+
+  const { data, error } = await getClient().emails.send({
+    from: FROM, to: adminEmails, subject, html,
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] RSVP notification sent: user=${user.id} isUpdate=${isUpdate} recipients=${adminEmails.length} id=${data.id}`);
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification };

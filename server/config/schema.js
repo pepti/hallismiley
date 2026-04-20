@@ -356,6 +356,180 @@ const migrations = [
       `CREATE INDEX IF NOT EXISTS idx_users_facebook_id ON users (facebook_id)`,
     ],
   },
+  {
+    // eCommerce (Shop) MVP — products, orders, order_items, product_images,
+    // plus a processed_webhook_events table for Stripe idempotency.
+    // Money stored in smallest currency unit integers: ISK has no subunit
+    // (1 ISK = 1 unit), EUR stored in cents. Prices are VAT-inclusive.
+    name: '022_ecommerce',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS products (
+        id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        slug          TEXT        NOT NULL UNIQUE,
+        name          TEXT        NOT NULL,
+        description   TEXT        NOT NULL DEFAULT '',
+        price_isk     INTEGER     NOT NULL CHECK (price_isk > 0),
+        price_eur     INTEGER     NOT NULL CHECK (price_eur > 0),
+        stock         INTEGER     NOT NULL DEFAULT 0 CHECK (stock >= 0),
+        weight_grams  INTEGER,
+        active        BOOLEAN     NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_products_slug   ON products (slug)`,
+      `CREATE INDEX IF NOT EXISTS idx_products_active ON products (active) WHERE active = TRUE`,
+      `DROP TRIGGER IF EXISTS trg_products_updated_at ON products`,
+      `CREATE TRIGGER trg_products_updated_at
+         BEFORE UPDATE ON products
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+
+      `CREATE TABLE IF NOT EXISTS product_images (
+        id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        product_id  TEXT        NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        url         TEXT        NOT NULL,
+        position    INTEGER     NOT NULL DEFAULT 0,
+        alt_text    TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images (product_id)`,
+
+      `CREATE TABLE IF NOT EXISTS orders (
+        id                        TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        order_number              TEXT        NOT NULL UNIQUE,
+        user_id                   TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        guest_email               TEXT,
+        guest_name                TEXT,
+        currency                  TEXT        NOT NULL CHECK (currency IN ('ISK', 'EUR')),
+        subtotal                  INTEGER     NOT NULL CHECK (subtotal >= 0),
+        shipping                  INTEGER     NOT NULL DEFAULT 0 CHECK (shipping >= 0),
+        total                     INTEGER     NOT NULL CHECK (total >= 0),
+        status                    TEXT        NOT NULL DEFAULT 'pending'
+                                              CHECK (status IN ('pending','paid','failed','shipped','cancelled','refunded')),
+        shipping_method           TEXT        NOT NULL CHECK (shipping_method IN ('flat_rate','local_pickup')),
+        shipping_address          JSONB,
+        stripe_session_id         TEXT        UNIQUE,
+        stripe_payment_intent_id  TEXT        UNIQUE,
+        paid_at                   TIMESTAMPTZ,
+        created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_user_id          ON orders (user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_stripe_session_id ON orders (stripe_session_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_status           ON orders (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_created_at_desc  ON orders (created_at DESC)`,
+      `DROP TRIGGER IF EXISTS trg_orders_updated_at ON orders`,
+      `CREATE TRIGGER trg_orders_updated_at
+         BEFORE UPDATE ON orders
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+
+      `CREATE TABLE IF NOT EXISTS order_items (
+        id                      TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        order_id                TEXT        NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        product_id              TEXT        NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        product_name_snapshot   TEXT        NOT NULL,
+        product_price_snapshot  INTEGER     NOT NULL CHECK (product_price_snapshot >= 0),
+        quantity                INTEGER     NOT NULL CHECK (quantity > 0),
+        currency                TEXT        NOT NULL CHECK (currency IN ('ISK', 'EUR')),
+        created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id)`,
+
+      `CREATE TABLE IF NOT EXISTS processed_webhook_events (
+        id          TEXT        PRIMARY KEY,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+    ],
+  },
+  {
+    // Shop product taxonomy — shape (aero/tall/classic/etc.) and capacity_litres
+    // feed the shop filter UI. Both nullable: existing products pre-seed
+    // without values will just not match shape/capacity filter chips.
+    name: '023_product_taxonomy',
+    statements: [
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS shape TEXT`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'products_shape_check'
+         ) THEN
+           ALTER TABLE products ADD CONSTRAINT products_shape_check
+             CHECK (shape IS NULL OR shape IN ('aero','tall','long','low','cube','classic'));
+         END IF;
+       END $$`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS capacity_litres INTEGER
+         CHECK (capacity_litres IS NULL OR capacity_litres > 0)`,
+      `CREATE INDEX IF NOT EXISTS idx_products_shape    ON products (shape)`,
+      `CREATE INDEX IF NOT EXISTS idx_products_capacity ON products (capacity_litres)`,
+    ],
+  },
+  {
+    // Product variants — generic size/colour/etc. axes so the shop can sell
+    // apparel (t-shirt × size × colour), accessories (cap × colour), or
+    // future single-SKU items (gift card) with the same code path.
+    //
+    // products.category          — taxonomy: 'apparel', 'accessories', 'roof_box', …
+    // products.variant_axes      — JSONB array, e.g. ["size","color"] or []
+    // product_variants           — per-SKU stock + optional price override
+    // order_items.product_variant_id  — which exact SKU was purchased (snapshot)
+    // order_items.variant_attributes  — JSONB snapshot of the variant at order time
+    name: '024_product_variants',
+    statements: [
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS variant_axes JSONB NOT NULL DEFAULT '[]'::jsonb`,
+      `CREATE INDEX IF NOT EXISTS idx_products_category ON products (category)`,
+
+      `CREATE TABLE IF NOT EXISTS product_variants (
+        id           TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        product_id   TEXT        NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        sku          TEXT        NOT NULL UNIQUE,
+        attributes   JSONB       NOT NULL,
+        price_isk    INTEGER     CHECK (price_isk IS NULL OR price_isk > 0),
+        price_eur    INTEGER     CHECK (price_eur IS NULL OR price_eur > 0),
+        stock        INTEGER     NOT NULL DEFAULT 0 CHECK (stock >= 0),
+        active       BOOLEAN     NOT NULL DEFAULT TRUE,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants (product_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_active    ON product_variants (active) WHERE active = TRUE`,
+      // Prevent two variants of the same product sharing the same attribute combination.
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_attrs
+         ON product_variants (product_id, attributes)`,
+      `DROP TRIGGER IF EXISTS trg_product_variants_updated_at ON product_variants`,
+      `CREATE TRIGGER trg_product_variants_updated_at
+         BEFORE UPDATE ON product_variants
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+
+      // Link order items to a specific variant (nullable for legacy orders).
+      // RESTRICT so we can't accidentally remove a variant that has history.
+      `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_variant_id TEXT
+         REFERENCES product_variants(id) ON DELETE RESTRICT`,
+      `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS variant_attributes JSONB`,
+      `CREATE INDEX IF NOT EXISTS idx_order_items_variant_id ON order_items (product_variant_id)`,
+    ],
+  },
+  {
+    // Editable shop copy — hero block on /#/shop and shared chrome labels
+    // across all product detail pages. Follows the existing site_content
+    // pattern (see migrations 005, 011 for more examples).
+    //
+    // shop_hero           — eyebrow/title/subtitle/empty_state on /#/shop
+    // shop_product_chrome — labels that appear on every product page
+    //                       (back link, VAT note, qty label, button text,
+    //                       stock copy templates). Edits affect ALL products.
+    //
+    // Templates use {n} / {qty} / {name} placeholders replaced client-side.
+    name: '025_shop_content',
+    statements: [
+      `INSERT INTO site_content (key, value) VALUES (
+         'shop_hero',
+         '{"eyebrow":"From the workshop","title":"Shop","subtitle":"Smiley apparel and goods \u2014 prices include 24% VAT.","empty_state":"No products match your filters."}'::jsonb
+       ) ON CONFLICT (key) DO NOTHING`,
+      `INSERT INTO site_content (key, value) VALUES (
+         'shop_product_chrome',
+         '{"back_label":"\u2190 Back to shop","vat_note":"Price includes 24% VAT","qty_label":"Quantity","add_to_cart_label":"Add to cart","out_of_stock_label":"Out of stock","low_stock_template":"Only {n} left \u2014 ships within 24 h","in_stock_template":"{n} in stock","select_options_hint":"Select options to see availability"}'::jsonb
+       ) ON CONFLICT (key) DO NOTHING`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

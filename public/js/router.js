@@ -18,6 +18,15 @@ import { ResetPasswordView }  from './views/ResetPasswordView.js';
 import { isAuthenticated, isAdmin } from './services/auth.js';
 import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
+import { ShopView }              from './views/ShopView.js';
+import { ProductView }           from './views/ProductView.js';
+import { CartView }              from './views/CartView.js';
+import { CheckoutView }          from './views/CheckoutView.js';
+import { CheckoutSuccessView }   from './views/CheckoutSuccessView.js';
+import { CheckoutCancelView }    from './views/CheckoutCancelView.js';
+import { OrderHistoryView }      from './views/OrderHistoryView.js';
+import { AdminProductsView }     from './views/AdminProductsView.js';
+import { AdminOrdersView }       from './views/AdminOrdersView.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -41,6 +50,16 @@ const ROUTES = [
   { pattern: '/terms',           factory: ()  => new TermsView() },
   { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && isAdmin()) ? new PartyAdminView() : new PartyView() },
   { pattern: '/party',           factory: ()  => new PartyView() },
+  // Shop + checkout
+  { pattern: '/shop/:slug',      factory: (p) => new ProductView(p.slug) },
+  { pattern: '/shop',            factory: (_, qs) => new ShopView(null, qs) },
+  { pattern: '/cart',            factory: ()  => new CartView() },
+  { pattern: '/checkout/success', factory: (_, qs) => new CheckoutSuccessView(qs) },
+  { pattern: '/checkout/cancel',  factory: ()  => new CheckoutCancelView() },
+  { pattern: '/checkout',        factory: ()  => new CheckoutView() },
+  { pattern: '/orders',          factory: ()  => isAuthenticated() ? new OrderHistoryView() : new HomeView() },
+  { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && isAdmin()) ? new AdminProductsView() : new HomeView() },
+  { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && isAdmin()) ? new AdminOrdersView() : new HomeView() },
 ];
 
 function parseHash(rawHash) {
@@ -102,6 +121,16 @@ export class Router {
     // Guard profile
     if (path === '/profile' && !isAuthenticated()) {
       window.location.hash = '#/login';
+      return;
+    }
+    // Guard order history
+    if (path === '/orders' && !isAuthenticated()) {
+      window.location.hash = '#/login';
+      return;
+    }
+    // Guard admin shop routes
+    if (path.startsWith('/admin/shop') && (!isAuthenticated() || !isAdmin())) {
+      window.location.hash = '#/';
       return;
     }
 
