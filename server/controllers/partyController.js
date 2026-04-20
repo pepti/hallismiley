@@ -2,6 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
 const { UPLOAD_ROOT } = require('../config/paths');
+const emailService = require('../services/emailService');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -70,6 +71,38 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
+async function _notifyAdminsOfRsvp({ userId, answers, isUpdate }) {
+  const [userRes, adminsRes, formRes] = await Promise.all([
+    db.query(
+      'SELECT id, username, display_name, email FROM users WHERE id = $1',
+      [userId]
+    ),
+    db.query(
+      `SELECT email FROM users
+        WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE`
+    ),
+    db.query(
+      `SELECT value FROM site_content WHERE key = 'party_rsvp_form' LIMIT 1`
+    ),
+  ]);
+
+  const user = userRes.rows[0];
+  if (!user) return;
+  const adminEmails = adminsRes.rows.map(r => r.email).filter(Boolean);
+  if (!adminEmails.length) return;
+
+  let rsvpForm = [];
+  const rawForm = formRes.rows[0]?.value;
+  if (Array.isArray(rawForm)) rsvpForm = rawForm;
+  else if (typeof rawForm === 'string') {
+    try { rsvpForm = JSON.parse(rawForm); } catch { /* ignore */ }
+  }
+
+  await emailService.sendRsvpNotification({
+    user, answers, rsvpForm, isUpdate, adminEmails,
+  });
+}
+
 /** Check party access via the users.party_access flag.
  *  The email-invite pathway (party_invites table) was removed with the old
  *  party scope; access is now granted purely by the admin-toggleable flag. */
@@ -119,6 +152,12 @@ const partyController = {
         return res.status(400).json({ error: 'answers must be an object', code: 400 });
       }
 
+      const existing = await db.query(
+        'SELECT 1 FROM party_rsvps WHERE user_id = $1',
+        [req.user.id]
+      );
+      const isUpdate = existing.rows.length > 0;
+
       // Store `attending=true` on the legacy column so headcount queries keep working.
       // Real data lives in `answers` (keyed by field id chosen by the admin).
       const { rows } = await db.query(
@@ -132,6 +171,10 @@ const partyController = {
       );
 
       res.json(rows[0]);
+
+      // Fire-and-forget admin notification. Never fail the request on email failure.
+      _notifyAdminsOfRsvp({ userId: req.user.id, answers, isUpdate })
+        .catch(err => console.error(`[partyController] RSVP notification failed: ${err.message}`));
     } catch (err) { next(err); }
   },
 

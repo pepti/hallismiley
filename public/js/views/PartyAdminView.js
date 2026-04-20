@@ -1,6 +1,4 @@
 import { isAuthenticated, isAdmin } from '../services/auth.js';
-import { getCsrfHeaders } from '../utils/api.js';
-import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 
 export class PartyAdminView {
@@ -30,16 +28,13 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [invitesRes, rsvpsRes, infoRes] = await Promise.all([
-      fetch('/api/v1/party/invites', { credentials: 'include' }),
+    const [rsvpsRes, infoRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',   { credentials: 'include' }),
       fetch('/api/v1/party/info',    { credentials: 'include' }),
     ]);
-    const invites = await invitesRes.json();
     const rsvps   = await rsvpsRes.json();
     const info    = await infoRes.json();
 
-    this._invites  = invites;
     this._rsvps    = rsvps;
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
@@ -57,88 +52,73 @@ export class PartyAdminView {
         </div>
 
         ${this._renderStats()}
-        ${this._renderFoodTally()}
-        ${this._renderInviteManager()}
+        ${this._renderAnswerTallies()}
+        ${this._renderHelpersList()}
         ${this._renderRsvpTable()}
         ${this._renderGuestListExport()}
       </div>`;
   }
 
   _renderStats() {
-    const invites  = this._invites;
-    const rsvps    = this._rsvps;
-
-    const pending  = invites.filter(i => i.status === 'pending').length;
-    const accepted = invites.filter(i => i.status === 'accepted').length;
-    const declined = invites.filter(i => i.status === 'declined').length;
-    const total    = invites.length;
-
+    const rsvps = this._rsvps;
     const headcount = rsvps.filter(r => r.attending).length;
+
+    // Try to derive day/evening/both from a radio-group field that looks like attendance timing
+    const attendField = this._rsvpForm.find(f =>
+      f.type === 'radio-group' &&
+      (f.id === 'attend_when' || /attend|when|day|evening/i.test(f.label || ''))
+    );
+
+    let breakdownCards = '';
+    if (attendField) {
+      const tally = {};
+      (attendField.options || []).forEach(opt => { tally[opt] = 0; });
+      rsvps.forEach(r => {
+        const a = r.answers?.[attendField.id];
+        if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
+      });
+      const pickCount = (regex) => {
+        for (const [opt, count] of Object.entries(tally)) {
+          if (regex.test(opt)) return count;
+        }
+        return 0;
+      };
+      const day      = pickCount(/day/i);
+      const evening  = pickCount(/evening/i);
+      const both     = pickCount(/both|all day/i);
+      const declined = pickCount(/can'?t|sorry|no/i);
+      breakdownCards = `
+        <div class="party-admin__stat">
+          <span class="party-admin__stat-num">${day}</span>
+          <span class="party-admin__stat-label">☀️ Day only</span>
+        </div>
+        <div class="party-admin__stat">
+          <span class="party-admin__stat-num">${evening}</span>
+          <span class="party-admin__stat-label">🌙 Evening only</span>
+        </div>
+        <div class="party-admin__stat">
+          <span class="party-admin__stat-num">${both}</span>
+          <span class="party-admin__stat-label">🎉 Both</span>
+        </div>
+        <div class="party-admin__stat party-admin__stat--muted">
+          <span class="party-admin__stat-num">${declined}</span>
+          <span class="party-admin__stat-label">Can't make it</span>
+        </div>`;
+    }
 
     return `
       <section class="party-admin__section">
         <h2 class="party-admin__section-title">Stats</h2>
         <div class="party-admin__stats">
           <div class="party-admin__stat">
-            <span class="party-admin__stat-num">${total}</span>
-            <span class="party-admin__stat-label">Invited</span>
+            <span class="party-admin__stat-num">${rsvps.length}</span>
+            <span class="party-admin__stat-label">RSVPs submitted</span>
           </div>
-          <div class="party-admin__stat party-admin__stat--green">
-            <span class="party-admin__stat-num">${accepted}</span>
-            <span class="party-admin__stat-label">Accepted</span>
-          </div>
-          <div class="party-admin__stat party-admin__stat--red">
-            <span class="party-admin__stat-num">${declined}</span>
-            <span class="party-admin__stat-label">Declined</span>
-          </div>
-          <div class="party-admin__stat party-admin__stat--muted">
-            <span class="party-admin__stat-num">${pending}</span>
-            <span class="party-admin__stat-label">Pending</span>
-          </div>
+          ${breakdownCards}
           <div class="party-admin__stat party-admin__stat--gold">
             <span class="party-admin__stat-num">${headcount}</span>
             <span class="party-admin__stat-label">Total Headcount</span>
           </div>
-        </div>
-      </section>`;
-  }
-
-  _renderInviteManager() {
-    const rows = this._invites.map(inv => `
-      <tr>
-        <td>${escHtml(inv.email)}</td>
-        <td><span class="party-status party-status--${inv.status}">${escHtml(inv.status)}</span></td>
-        <td class="party-admin__token-cell">
-          <code class="party-admin__token" title="Invite link token">${escHtml(inv.invite_token || '')}</code>
-        </td>
-        <td>${escHtml(inv.invited_by_username || '—')}</td>
-        <td>
-          <button class="lol-btn lol-btn--danger lol-btn--sm party-admin__remove-invite"
-                  data-id="${inv.id}" aria-label="Remove invite for ${escHtml(inv.email)}">Remove</button>
-        </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="party-empty">No invites yet</td></tr>';
-
-    return `
-      <section class="party-admin__section">
-        <h2 class="party-admin__section-title">Invite Management</h2>
-        <form class="party-admin__invite-form" id="add-invites-form" novalidate>
-          <label class="party-label" for="invite-emails">Add emails (one per line)</label>
-          <textarea id="invite-emails" class="lol-input lol-textarea party-admin__invite-textarea"
-                    placeholder="alice@example.com&#10;bob@example.com"
-                    aria-label="Email addresses to invite"></textarea>
-          <button type="submit" class="lol-btn lol-btn--primary">Send Invites</button>
-        </form>
-        <div class="party-admin__table-wrap">
-          <table class="party-admin__table" aria-label="Invite list">
-            <thead>
-              <tr>
-                <th>Email</th><th>Status</th><th>Token</th><th>Invited by</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="invite-table-body">
-              ${rows}
-            </tbody>
-          </table>
         </div>
       </section>`;
   }
@@ -189,18 +169,22 @@ export class PartyAdminView {
       </section>`;
   }
 
-  _renderFoodTally() {
-    // Tally all checkbox-group fields (one card grid per field)
-    const groups = this._rsvpForm.filter(f => f.type === 'checkbox-group' && (f.options || []).length);
+  _renderAnswerTallies() {
+    // Tally all option-based fields (checkbox-group + radio-group)
+    const groups = this._rsvpForm.filter(f =>
+      (f.type === 'checkbox-group' || f.type === 'radio-group') && (f.options || []).length
+    );
     if (!groups.length) return '';
 
     return groups.map(g => {
       const tally = {};
       (g.options || []).forEach(opt => { tally[opt] = 0; });
       this._rsvps.forEach(r => {
-        const answers = r.answers?.[g.id];
-        if (Array.isArray(answers)) {
-          answers.forEach(v => { if (v in tally) tally[v] += 1; else tally[v] = 1; });
+        const ans = r.answers?.[g.id];
+        if (Array.isArray(ans)) {
+          ans.forEach(v => { tally[v] = (tally[v] || 0) + 1; });
+        } else if (typeof ans === 'string') {
+          tally[ans] = (tally[ans] || 0) + 1;
         }
       });
       const items = Object.entries(tally).map(([name, count]) => `
@@ -214,6 +198,50 @@ export class PartyAdminView {
           <div class="party-admin__stats">${items}</div>
         </section>`;
     }).join('');
+  }
+
+  _renderHelpersList() {
+    // Find the "helping" field and the conditional activity-details companion
+    const helpField = this._rsvpForm.find(f =>
+      f.type === 'checkbox-group' &&
+      (f.id === 'helping' || /help/i.test(f.label || ''))
+    );
+    if (!helpField) return '';
+
+    const activityField = this._rsvpForm.find(f =>
+      f.type === 'textarea' &&
+      (f.id === 'activity_details' || f.showIf?.fieldId === helpField.id)
+    );
+
+    const helpers = this._rsvps
+      .map(r => ({
+        rsvp:   r,
+        offers: r.answers?.[helpField.id],
+        detail: activityField ? r.answers?.[activityField.id] : null,
+      }))
+      .filter(h => Array.isArray(h.offers) && h.offers.length > 0);
+
+    if (!helpers.length) return '';
+
+    const cards = helpers.map(({ rsvp, offers, detail }) => {
+      const chips = offers.map(o => `<span class="party-admin__chip">${escHtml(o)}</span>`).join('');
+      const detailHtml = detail
+        ? `<p class="party-admin__helper-detail"><strong>Activity:</strong> ${escHtml(detail)}</p>`
+        : '';
+      return `
+        <div class="party-admin__helper-card">
+          <div class="party-admin__helper-name">${escHtml(rsvp.display_name || rsvp.username)}</div>
+          <div class="party-admin__helper-email">${escHtml(rsvp.email)}</div>
+          <div class="party-admin__helper-chips">${chips}</div>
+          ${detailHtml}
+        </div>`;
+    }).join('');
+
+    return `
+      <section class="party-admin__section">
+        <h2 class="party-admin__section-title">🙋 Helpers (${helpers.length})</h2>
+        <div class="party-admin__helpers">${cards}</div>
+      </section>`;
   }
 
   _renderGuestListExport() {
@@ -240,63 +268,6 @@ export class PartyAdminView {
   }
 
   _bind() {
-    // Add invites form
-    this._el.querySelector('#add-invites-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const raw    = this._el.querySelector('#invite-emails')?.value || '';
-      const emails = raw.split('\n').map(s => s.trim()).filter(Boolean);
-      if (emails.length === 0) {
-        showToast('Enter at least one email', 'error');
-        return;
-      }
-
-      const btn = e.target.querySelector('[type="submit"]');
-      btn.disabled = true;
-      btn.textContent = 'Sending…';
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/invites', {
-          method:      'POST',
-          credentials: 'include',
-          headers,
-          body:        JSON.stringify({ emails }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed');
-
-        showToast(`${data.length} invite(s) added`, 'success');
-        this._el.querySelector('#invite-emails').value = '';
-        // Reload
-        await this._loadAndRender();
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        btn.disabled    = false;
-        btn.textContent = 'Send Invites';
-      }
-    });
-
-    // Remove invite buttons
-    this._el.querySelectorAll('.party-admin__remove-invite').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.id;
-        if (!confirm('Remove this invite?')) return;
-
-        try {
-          const headers = await getCsrfHeaders();
-          const res = await fetch(`/api/v1/party/invites/${id}`, {
-            method: 'DELETE', credentials: 'include', headers,
-          });
-          if (!res.ok) {
-            const d = await res.json();
-            throw new Error(d.error);
-          }
-          showToast('Invite removed', 'success');
-          await this._loadAndRender();
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
-      });
-    });
+    // No-op placeholder — all current sections are read-only.
   }
 }

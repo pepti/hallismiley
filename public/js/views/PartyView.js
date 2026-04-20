@@ -294,11 +294,18 @@ export class PartyView {
 
   _defaultRsvpForm() {
     return [
-      { id: 'heading',  type: 'heading',         label: '🎟  RSVP' },
-      { id: 'intro',    type: 'paragraph',       label: "Let us know if you'll be joining the party!" },
-      { id: 'attend',   type: 'checkbox-group',  label: 'Will you attend?',
-        options: ["Yes, I'll be there! 🎉", "Sorry, can't make it"] },
-      { id: 'message',  type: 'textarea',        label: 'Message to host (optional)',
+      { id: 'heading',     type: 'heading',        label: '🎟  RSVP' },
+      { id: 'intro',       type: 'paragraph',      label: "Let me know if you'll make it and how you'd like to join!" },
+      { id: 'attend_when', type: 'radio-group',    label: 'When will you join?',
+        options: ['☀️ Daytime only (14:00–18:00)', '🌙 Evening only (18:00–22:00)', '🎉 Both — all day!', "Sorry, can't make it"] },
+      { id: 'bringing',    type: 'checkbox-group', label: 'Bringing anyone with you?',
+        options: ['Spouse / partner', 'Kids'] },
+      { id: 'helping',     type: 'checkbox-group', label: 'Want to help out? (totally optional)',
+        options: ['Help with planning', 'Host an activity', 'General help on the day'] },
+      { id: 'activity_details', type: 'textarea',  label: 'What activity would you host?',
+        placeholder: 'A short description — games, music, a talk, anything…',
+        showIf: { fieldId: 'helping', value: 'Host an activity' } },
+      { id: 'message',     type: 'textarea',       label: 'Message to host (optional)',
         placeholder: 'A note for Halli…' },
     ];
   }
@@ -367,14 +374,27 @@ export class PartyView {
             <span>${escHtml(opt)}</span>
           </label>`).join('');
         return `
-          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="checkbox-group">
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="checkbox-group"${this._showIfAttrs(field)}>
             <label class="party-label">${escHtml(field.label)}</label>
             <div class="party-checkbox-group">${opts}</div>
           </div>`;
       }
+      case 'radio-group': {
+        const opts = (field.options || []).map(opt => `
+          <label class="party-checkbox">
+            <input type="radio" name="f_${escHtml(field.id)}" value="${escHtml(opt)}"
+                   ${typeof ans === 'string' && ans === opt ? 'checked' : ''} />
+            <span>${escHtml(opt)}</span>
+          </label>`).join('');
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="radio-group"${this._showIfAttrs(field)}>
+            <label class="party-label">${escHtml(field.label)}</label>
+            <div class="party-checkbox-group party-radio-group">${opts}</div>
+          </div>`;
+      }
       case 'text':
         return `
-          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="text">
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="text"${this._showIfAttrs(field)}>
             <label class="party-label" for="${id}">${escHtml(field.label)}</label>
             <input id="${id}" class="lol-input" type="text" name="f_${escHtml(field.id)}"
                    placeholder="${escHtml(field.placeholder || '')}"
@@ -382,7 +402,7 @@ export class PartyView {
           </div>`;
       case 'textarea':
         return `
-          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="textarea">
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="textarea"${this._showIfAttrs(field)}>
             <label class="party-label" for="${id}">${escHtml(field.label)}</label>
             <textarea id="${id}" class="lol-input lol-textarea" name="f_${escHtml(field.id)}"
                       placeholder="${escHtml(field.placeholder || '')}" maxlength="1000">${escHtml(ans || '')}</textarea>
@@ -390,6 +410,11 @@ export class PartyView {
       default:
         return '';
     }
+  }
+
+  _showIfAttrs(field) {
+    if (!field.showIf || !field.showIf.fieldId || field.showIf.value == null) return '';
+    return ` data-show-if-field="${escHtml(field.showIf.fieldId)}" data-show-if-value="${escHtml(field.showIf.value)}" style="display:none"`;
   }
 
   _renderRsvpForm(answers, isUpdate) {
@@ -553,6 +578,7 @@ export class PartyView {
           <option value="heading">Heading</option>
           <option value="paragraph">Paragraph</option>
           <option value="checkbox-group">Checkbox group</option>
+          <option value="radio-group">Radio buttons (single choice)</option>
           <option value="text">Text input</option>
           <option value="textarea">Text area</option>
         </select>
@@ -574,6 +600,7 @@ export class PartyView {
       'heading':        'Heading',
       'paragraph':      'Paragraph',
       'checkbox-group': 'Checkbox group',
+      'radio-group':    'Radio buttons (single choice)',
       'text':           'Text input',
       'textarea':       'Text area',
     };
@@ -581,6 +608,10 @@ export class PartyView {
     const labelPlaceholder = field.type === 'paragraph'
       ? 'Paragraph text…'
       : (field.type === 'heading' ? 'Heading text…' : 'Question / field label');
+
+    const showIfFieldId = field.showIf?.fieldId || '';
+    const showIfValue   = field.showIf?.value || '';
+    const supportsShowIf = ['text', 'textarea', 'checkbox-group', 'radio-group'].includes(field.type);
 
     return `
       <div class="party-field-block" data-field-block data-field-id="${escHtml(id)}" data-field-type="${escHtml(field.type)}">
@@ -591,7 +622,7 @@ export class PartyView {
         ${field.type === 'paragraph'
           ? `<textarea class="lol-input" data-field-label rows="3" placeholder="${labelPlaceholder}">${escHtml(field.label || '')}</textarea>`
           : `<input class="lol-input" type="text" data-field-label value="${escHtml(field.label || '')}" placeholder="${labelPlaceholder}" />`}
-        ${['checkbox-group'].includes(field.type) ? `
+        ${['checkbox-group', 'radio-group'].includes(field.type) ? `
           <div class="party-field-block__options">
             ${optionsHtml}
             <button class="party-edit-add party-edit-add--sm" type="button" data-add-option>+ Add Option</button>
@@ -599,6 +630,16 @@ export class PartyView {
         ${['text','textarea'].includes(field.type) ? `
           <input class="lol-input party-field-block__placeholder" type="text"
                  data-field-placeholder value="${escHtml(field.placeholder || '')}" placeholder="Placeholder text (optional)" />` : ''}
+        ${supportsShowIf ? `
+          <details class="party-field-block__showif"${showIfFieldId ? ' open' : ''}>
+            <summary>Show only if…</summary>
+            <div class="party-field-block__showif-row">
+              <input class="lol-input" type="text" data-show-if-field
+                     value="${escHtml(showIfFieldId)}" placeholder="Other field id (e.g. helping)" />
+              <input class="lol-input" type="text" data-show-if-value
+                     value="${escHtml(showIfValue)}" placeholder="Value that must match" />
+            </div>
+          </details>` : ''}
       </div>`;
   }
 
@@ -633,6 +674,7 @@ export class PartyView {
         'heading':        { label: 'New heading' },
         'paragraph':      { label: 'New paragraph of text' },
         'checkbox-group': { label: 'New question', options: ['Option 1'] },
+        'radio-group':    { label: 'New question', options: ['Option 1'] },
         'text':           { label: 'New text field' },
         'textarea':       { label: 'New text area' },
       };
@@ -653,7 +695,7 @@ export class PartyView {
       const type  = block.dataset.fieldType;
       const label = block.querySelector('[data-field-label]')?.value.trim() || '';
       const field = { id, type, label };
-      if (type === 'checkbox-group') {
+      if (type === 'checkbox-group' || type === 'radio-group') {
         const opts = [];
         block.querySelectorAll('[data-option-input]').forEach(inp => {
           const v = inp.value.trim();
@@ -665,9 +707,14 @@ export class PartyView {
         const ph = block.querySelector('[data-field-placeholder]')?.value.trim();
         if (ph) field.placeholder = ph;
       }
+      const showIfFieldId = block.querySelector('[data-show-if-field]')?.value.trim() || '';
+      const showIfValue   = block.querySelector('[data-show-if-value]')?.value.trim() || '';
+      if (showIfFieldId && showIfValue) {
+        field.showIf = { fieldId: showIfFieldId, value: showIfValue };
+      }
       // Keep headings/paragraphs even without label (empty still useful)
-      // Drop checkbox-groups with no options — they'd be useless
-      if (type === 'checkbox-group' && field.options.length === 0) return;
+      // Drop option-based fields with no options — they'd be useless
+      if ((type === 'checkbox-group' || type === 'radio-group') && field.options.length === 0) return;
       fields.push(field);
     });
     return fields;
@@ -968,6 +1015,8 @@ export class PartyView {
       if (current) current.hidden = false;
     });
 
+    this._bindConditionalFields(form);
+
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -975,9 +1024,15 @@ export class PartyView {
       const answers = {};
       for (const f of this._rsvpForm) {
         if (f.type === 'heading' || f.type === 'paragraph') continue;
+        // Skip fields hidden by showIf — don't persist stale answers
+        const group = form.querySelector(`.party-form-group[data-field-id="${f.id}"]`);
+        if (group && group.style.display === 'none') continue;
         if (f.type === 'checkbox-group') {
           const checked = [...form.querySelectorAll(`[name="f_${f.id}"]:checked`)].map(cb => cb.value);
           if (checked.length) answers[f.id] = checked;
+        } else if (f.type === 'radio-group') {
+          const sel = form.querySelector(`[name="f_${f.id}"]:checked`);
+          if (sel) answers[f.id] = sel.value;
         } else {
           const el = form.querySelector(`[name="f_${f.id}"]`);
           const v  = el?.value?.trim();
@@ -1015,6 +1070,34 @@ export class PartyView {
     });
   }
 
+
+  _bindConditionalFields(form) {
+    if (!form) return;
+    const conditionals = form.querySelectorAll('[data-show-if-field]');
+    if (!conditionals.length) return;
+
+    const apply = () => {
+      conditionals.forEach(group => {
+        const targetId = group.dataset.showIfField;
+        const wanted   = group.dataset.showIfValue;
+        const inputs = form.querySelectorAll(`[name="f_${targetId}"]`);
+        let match = false;
+        inputs.forEach(inp => {
+          if ((inp.type === 'checkbox' || inp.type === 'radio')) {
+            if (inp.checked && inp.value === wanted) match = true;
+          } else if (inp.value === wanted) {
+            match = true;
+          }
+        });
+        group.style.display = match ? '' : 'none';
+      });
+    };
+
+    // Listen to changes on any input within the form — cheap enough and robust.
+    form.addEventListener('change', apply);
+    form.addEventListener('input',  apply);
+    apply();
+  }
 
   _bindVenueLightbox() {
     if (this._venueLightbox) { this._venueLightbox.destroy(); this._venueLightbox = null; }
