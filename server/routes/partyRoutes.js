@@ -1,7 +1,8 @@
-const express = require('express');
-const multer  = require('multer');
-const fs      = require('fs');
-const router  = express.Router();
+const express   = require('express');
+const multer    = require('multer');
+const rateLimit = require('express-rate-limit');
+const fs        = require('fs');
+const router    = express.Router();
 
 const partyController              = require('../controllers/partyController');
 const { _checkInviteAccess }       = require('../controllers/partyController');
@@ -10,6 +11,16 @@ const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
 const { partyUploadDir }           = require('../config/paths');
 const { MIME_TO_EXT }              = require('../middleware/upload');
+
+const isTest = () => process.env.NODE_ENV === 'test';
+
+// Redeem invite code: 5 attempts/hr/IP — deters brute-force code guessing.
+const inviteRedeemLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  skip: isTest,
+  message: { error: 'Too many attempts. Try again in an hour.', code: 429 },
+});
 
 // ── Party photo upload (images only, max 10 MB) ────────────────────────────────
 const PARTY_PHOTO_DIR = partyUploadDir();
@@ -71,6 +82,15 @@ router.get('/access',
   requireAuth,
   partyController.checkAccess);
 
+// ── Invite code — redeem (any authed user) / read (admin/moderator only) ─────
+router.post('/redeem-invite-code',
+  requireAuth, inviteRedeemLimiter, csrfProtect,
+  partyController.redeemInviteCode);
+
+router.get('/invite-code',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.getInviteCode);
+
 // ── Party info (public — no auth required) ───────────────────────────────────
 router.get('/info',
   partyController.getInfo);
@@ -89,8 +109,12 @@ router.get('/rsvp',
   partyController.getMyRsvp);
 
 router.get('/rsvps',
-  requireAuth, requireRole('admin'),
+  requireAuth, requireRole('admin', 'moderator'),
   partyController.getAllRsvps);
+
+router.get('/invited-guests',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listInvitedGuests);
 
 // ── Guestbook ─────────────────────────────────────────────────────────────────
 router.post('/guestbook',

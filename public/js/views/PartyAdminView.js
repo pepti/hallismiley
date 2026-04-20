@@ -1,4 +1,6 @@
-import { isAuthenticated, isAdmin } from '../services/auth.js';
+import { isAuthenticated, isAdmin, canEdit, adminUpdateUser } from '../services/auth.js';
+import { getCsrfHeaders } from '../utils/api.js';
+import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 
 export class PartyAdminView {
@@ -11,8 +13,8 @@ export class PartyAdminView {
     el.className = 'view party-admin-view';
     this._el = el;
 
-    if (!isAuthenticated() || !isAdmin()) {
-      el.innerHTML = '<div class="party-error"><p>Admin access required.</p></div>';
+    if (!isAuthenticated() || !canEdit()) {
+      el.innerHTML = '<div class="party-error"><p>Admin or moderator access required.</p></div>';
       return el;
     }
 
@@ -28,14 +30,23 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes] = await Promise.all([
-      fetch('/api/v1/party/rsvps',   { credentials: 'include' }),
-      fetch('/api/v1/party/info',    { credentials: 'include' }),
+    const [rsvpsRes, infoRes, inviteRes, healthRes, guestsRes] = await Promise.all([
+      fetch('/api/v1/party/rsvps',          { credentials: 'include' }),
+      fetch('/api/v1/party/info',           { credentials: 'include' }),
+      fetch('/api/v1/party/invite-code',    { credentials: 'include' }),
+      fetch('/api/v1/admin/email-health',   { credentials: 'include' }),
+      fetch('/api/v1/party/invited-guests', { credentials: 'include' }),
     ]);
     const rsvps   = await rsvpsRes.json();
     const info    = await infoRes.json();
+    const invite  = inviteRes.ok ? await inviteRes.json() : { code: '' };
+    const health  = healthRes.ok ? await healthRes.json() : null;
+    const guests  = guestsRes.ok ? await guestsRes.json() : [];
 
-    this._rsvps    = rsvps;
+    this._rsvps         = Array.isArray(rsvps) ? rsvps : [];
+    this._inviteCode    = invite.code || '';
+    this._emailHealth   = health;
+    this._invitedGuests = Array.isArray(guests) ? guests : [];
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
@@ -48,15 +59,152 @@ export class PartyAdminView {
       <div class="party-admin">
         <div class="party-admin__header">
           <h1 class="party-admin__title">🎂 Party Admin</h1>
+          ${this._renderHealthPill()}
           <a href="#/party" class="lol-btn lol-btn--ghost">← Back to Party</a>
         </div>
 
+        ${this._renderInvitedGuests()}
+        ${this._renderInviteCodeSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
         ${this._renderHelpersList()}
         ${this._renderRsvpTable()}
         ${this._renderGuestListExport()}
       </div>`;
+  }
+
+  _renderInvitedGuests() {
+    const guests = this._invitedGuests || [];
+    const showRevoke = isAdmin();
+
+    // Sort: waiting first (need attention), then going, then declined. Alpha within.
+    const order = { waiting: 0, rsvpd: 1, declined: 2 };
+    const byName = (a, b) =>
+      (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
+    const sorted = [...guests].sort((a, b) => {
+      const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
+      return d !== 0 ? d : byName(a, b);
+    });
+
+    const counts = guests.reduce((acc, g) => {
+      acc[g.rsvp_status] = (acc[g.rsvp_status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const rows = sorted.length
+      ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
+      : `<tr><td colspan="${showRevoke ? 5 : 4}" class="party-empty">No invited guests yet. Share the invite code to get started.</td></tr>`;
+
+    return `
+      <section class="party-admin__section">
+        <h2 class="party-admin__section-title">Invited Guests (${guests.length})</h2>
+        <p class="party-admin__invited-summary">
+          <span class="party-admin__pill party-admin__pill--waiting">⏳ Waiting: ${counts.waiting || 0}</span>
+          <span class="party-admin__pill party-admin__pill--going">✅ Going: ${counts.rsvpd || 0}</span>
+          <span class="party-admin__pill party-admin__pill--declined">❌ Can't make it: ${counts.declined || 0}</span>
+        </p>
+        <div class="party-admin__table-wrap">
+          <table class="party-admin__table party-admin__table--invited" aria-label="Invited guests">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>RSVP'd at</th>
+                ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </section>`;
+  }
+
+  _renderInvitedGuestRow(g, showRevoke) {
+    const name     = escHtml(g.display_name || g.username || '—');
+    const email    = escHtml(g.email || '');
+    const rsvpedAt = g.rsvp_updated_at
+      ? new Date(g.rsvp_updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      : '—';
+
+    const statusHtml = {
+      rsvpd:    '<span class="party-admin__status party-admin__status--going">✅ Going</span>',
+      declined: '<span class="party-admin__status party-admin__status--declined">❌ Can\'t make it</span>',
+      waiting:  '<span class="party-admin__status party-admin__status--waiting">⏳ Waiting</span>',
+    }[g.rsvp_status] || '—';
+
+    // Detail row — full answer dump, hidden until row is clicked
+    const detailFields = (this._rsvpForm || []).filter(f => !['heading','paragraph'].includes(f.type));
+    const detailsHtml = g.rsvp_answers
+      ? detailFields.map(f => {
+          const a = g.rsvp_answers[f.id];
+          if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
+          const val = Array.isArray(a) ? a.map(escHtml).join(', ') : escHtml(String(a));
+          return `<div><strong>${escHtml(f.label || f.id)}:</strong> ${val}</div>`;
+        }).filter(Boolean).join('')
+      : '<em class="party-admin__no-answers">Hasn\'t RSVP\'d yet.</em>';
+
+    const colSpan = showRevoke ? 5 : 4;
+    const revokeCell = showRevoke
+      ? `<td><button class="lol-btn lol-btn--ghost lol-btn--sm" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}">Revoke</button></td>`
+      : '';
+
+    return `
+      <tr class="party-admin__invited-row" data-expand-guest="${escHtml(g.id)}">
+        <td>${name}</td>
+        <td>${email}</td>
+        <td>${statusHtml}</td>
+        <td>${rsvpedAt}</td>
+        ${revokeCell}
+      </tr>
+      <tr class="party-admin__invited-details" data-guest-details="${escHtml(g.id)}" hidden>
+        <td colspan="${colSpan}">
+          <div class="party-admin__invited-detail-box">${detailsHtml}</div>
+        </td>
+      </tr>`;
+  }
+
+  _renderHealthPill() {
+    const h = this._emailHealth;
+    if (!h) return '';
+
+    const issues = [];
+    if (!h.resendConfigured) issues.push('RESEND_API_KEY is not set');
+    if (!h.anyAdminVerified) issues.push('No admin email is verified — notifications would silently drop');
+    if (!h.fromAddressSet)   issues.push(`EMAIL_FROM is not set (using default "${h.fromAddress}")`);
+
+    const healthy = h.healthy;
+    const label   = healthy ? '📧 Notifications: ON' : '⚠️ Notifications OFF';
+    const tooltip = healthy
+      ? `Resend configured. Verified admin inboxes: ${h.adminEmails.filter(a => a.verified).length}`
+      : issues.join('; ');
+
+    return `
+      <span class="party-admin__health-pill party-admin__health-pill--${healthy ? 'ok' : 'bad'}"
+            title="${escHtml(tooltip)}" role="status" tabindex="0">
+        ${escHtml(label)}
+      </span>`;
+  }
+
+  _renderInviteCodeSection() {
+    return `
+      <section class="party-admin__section party-admin__invite">
+        <h2 class="party-admin__section-title">Invite Code</h2>
+        <p class="party-admin__invite-help">
+          Share this code with invited guests. They redeem it on the party page to unlock RSVP and Activities.
+          Change it any time to rotate access; already-redeemed guests keep their access.
+        </p>
+        <form class="party-admin__invite-form" id="party-admin-invite-form">
+          <input type="text" id="party-admin-invite-input" class="lol-input"
+                 value="${escHtml(this._inviteCode)}" maxlength="100" autocomplete="off"
+                 aria-label="Invite code" />
+          <button type="submit" class="lol-btn lol-btn--primary">Save</button>
+          <button type="button" class="lol-btn lol-btn--ghost" id="party-admin-invite-copy">Copy</button>
+          <span class="party-admin__invite-status" id="party-admin-invite-status" aria-live="polite"></span>
+        </form>
+      </section>`;
   }
 
   _renderStats() {
@@ -268,6 +416,95 @@ export class PartyAdminView {
   }
 
   _bind() {
-    // No-op placeholder — all current sections are read-only.
+    this._bindInviteCodeForm();
+    this._bindInvitedGuests();
+  }
+
+  _bindInvitedGuests() {
+    // Row click → toggle detail expansion. Ignores clicks on buttons within
+    // the row so Revoke doesn't also open the details.
+    this._el.querySelectorAll('[data-expand-guest]').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const id = row.dataset.expandGuest;
+        const details = this._el.querySelector(`[data-guest-details="${CSS.escape(id)}"]`);
+        if (!details) return;
+        details.hidden = !details.hidden;
+      });
+    });
+
+    // Revoke → flip party_access to false, remove the two rows for this guest.
+    this._el.querySelectorAll('[data-revoke-user-id]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.revokeUserId;
+        const name   = btn.dataset.revokeUserName || 'this guest';
+        if (!confirm(`Revoke party access for ${name}? They will no longer see RSVP or Activities.`)) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Revoking…';
+        try {
+          await adminUpdateUser(userId, { party_access: false });
+          // Remove the two related rows and any cached entry
+          const row     = btn.closest('tr');
+          const details = this._el.querySelector(`[data-guest-details="${CSS.escape(userId)}"]`);
+          row?.remove();
+          details?.remove();
+          this._invitedGuests = (this._invitedGuests || []).filter(g => g.id !== userId);
+          showToast(`Revoked access for ${name}`, 'success');
+        } catch (err) {
+          showToast(err.message || 'Failed to revoke', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Revoke';
+        }
+      });
+    });
+  }
+
+  _bindInviteCodeForm() {
+    const form   = this._el.querySelector('#party-admin-invite-form');
+    if (!form) return;
+    const input  = form.querySelector('#party-admin-invite-input');
+    const status = form.querySelector('#party-admin-invite-status');
+    const copyBtn = form.querySelector('#party-admin-invite-copy');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = (input?.value || '').trim();
+      if (!code) {
+        status.textContent = 'Enter a code';
+        return;
+      }
+      status.textContent = 'Saving…';
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/info', {
+          method:      'PATCH',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify({ invite_code: code }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Save failed');
+        }
+        this._inviteCode = code;
+        status.textContent = 'Saved!';
+        setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`;
+      }
+    });
+
+    copyBtn?.addEventListener('click', async () => {
+      const code = (input?.value || '').trim();
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        showToast('Code copied', 'success');
+      } catch {
+        showToast('Copy failed — select and copy manually', 'error');
+      }
+    });
   }
 }

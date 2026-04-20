@@ -530,6 +530,20 @@ const migrations = [
        ) ON CONFLICT (key) DO NOTHING`,
     ],
   },
+  {
+    // Shared invite code that unlocks the party RSVP + Activities sections.
+    // Admins share it out-of-band (Facebook group, DM, etc); guests redeem it
+    // on /#/party which flips users.party_access. Stored in site_content so
+    // admins can rotate it in-place; never returned from the public GET
+    // /api/v1/party/info endpoint.
+    name: '026_party_invite_code',
+    statements: [
+      `INSERT INTO site_content (key, value) VALUES (
+         'party_invite_code',
+         '"HALLI40"'::jsonb
+       ) ON CONFLICT (key) DO NOTHING`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -71,8 +71,8 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
-async function _notifyAdminsOfRsvp({ userId, answers, isUpdate }) {
-  const [userRes, adminsRes, formRes] = await Promise.all([
+async function _sendRsvpEmails({ userId, answers, isUpdate }) {
+  const [userRes, adminsRes, formRes, infoRes] = await Promise.all([
     db.query(
       'SELECT id, username, display_name, email FROM users WHERE id = $1',
       [userId]
@@ -84,12 +84,14 @@ async function _notifyAdminsOfRsvp({ userId, answers, isUpdate }) {
     db.query(
       `SELECT value FROM site_content WHERE key = 'party_rsvp_form' LIMIT 1`
     ),
+    db.query(
+      `SELECT key, value FROM site_content
+        WHERE key LIKE 'party_%' AND key <> 'party_invite_code'`
+    ),
   ]);
 
   const user = userRes.rows[0];
   if (!user) return;
-  const adminEmails = adminsRes.rows.map(r => r.email).filter(Boolean);
-  if (!adminEmails.length) return;
 
   let rsvpForm = [];
   const rawForm = formRes.rows[0]?.value;
@@ -98,9 +100,24 @@ async function _notifyAdminsOfRsvp({ userId, answers, isUpdate }) {
     try { rsvpForm = JSON.parse(rawForm); } catch { /* ignore */ }
   }
 
-  await emailService.sendRsvpNotification({
-    user, answers, rsvpForm, isUpdate, adminEmails,
-  });
+  const partyInfo = { ...DEFAULT_PARTY_INFO };
+  for (const row of infoRes.rows) {
+    const k = row.key.replace(/^party_/, '');
+    partyInfo[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
+  }
+
+  const adminEmails = adminsRes.rows.map(r => r.email).filter(Boolean);
+
+  // Fire admin notification + guest confirmation in parallel. Failures are
+  // isolated: one failing email never blocks the other from sending.
+  await Promise.allSettled([
+    adminEmails.length
+      ? emailService.sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEmails })
+      : Promise.resolve(),
+    user.email
+      ? emailService.sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyInfo })
+      : Promise.resolve(),
+  ]);
 }
 
 /** Check party access via the users.party_access flag.
@@ -172,9 +189,10 @@ const partyController = {
 
       res.json(rows[0]);
 
-      // Fire-and-forget admin notification. Never fail the request on email failure.
-      _notifyAdminsOfRsvp({ userId: req.user.id, answers, isUpdate })
-        .catch(err => console.error(`[partyController] RSVP notification failed: ${err.message}`));
+      // Fire-and-forget: admin notification + guest confirmation. Never fail
+      // the request on email failure.
+      _sendRsvpEmails({ userId: req.user.id, answers, isUpdate })
+        .catch(err => console.error(`[partyController] RSVP emails failed: ${err.message}`));
     } catch (err) { next(err); }
   },
 
@@ -197,6 +215,51 @@ const partyController = {
          ORDER BY r.created_at ASC`
       );
       res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/party/invited-guests — admin/moderator only.
+  // Returns every user with party_access=true, LEFT JOINed with their RSVP
+  // row so the UI can show "✅ Going / ⏳ Waiting / ❌ Can't make it" at a
+  // glance. The `attend_when` sentinel that marks a decline is derived from
+  // the site's default RSVP form; callers should match against it loosely.
+  async listInvitedGuests(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT
+           u.id, u.username, u.display_name, u.email, u.avatar, u.role,
+           r.answers    AS rsvp_answers,
+           r.created_at AS rsvp_created_at,
+           r.updated_at AS rsvp_updated_at
+         FROM users u
+         LEFT JOIN party_rsvps r ON r.user_id = u.id
+         WHERE u.party_access = TRUE AND u.disabled = FALSE
+         ORDER BY COALESCE(u.display_name, u.username) ASC`
+      );
+
+      const shaped = rows.map(r => {
+        const answers   = r.rsvp_answers || null;
+        const attendAns = answers?.attend_when;
+        let status = 'waiting';
+        if (answers) {
+          status = (typeof attendAns === 'string' && /can'?t|sorry|no/i.test(attendAns))
+            ? 'declined'
+            : 'rsvpd';
+        }
+        return {
+          id:              r.id,
+          username:        r.username,
+          display_name:    r.display_name,
+          email:           r.email,
+          avatar:          r.avatar,
+          role:            r.role,
+          rsvp_status:     status,
+          rsvp_answers:    answers,
+          rsvp_created_at: r.rsvp_created_at,
+          rsvp_updated_at: r.rsvp_updated_at,
+        };
+      });
+      res.json(shaped);
     } catch (err) { next(err); }
   },
 
@@ -318,7 +381,7 @@ const partyController = {
   async getInfo(req, res, next) {
     try {
       const { rows } = await db.query(
-        `SELECT key, value FROM site_content WHERE key LIKE 'party_%'`
+        `SELECT key, value FROM site_content WHERE key LIKE 'party_%' AND key <> 'party_invite_code'`
       );
       const info = { ...DEFAULT_PARTY_INFO };
       for (const row of rows) {
@@ -338,9 +401,55 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // GET /api/v1/party/invite-code — admin/moderator only. Returns the current
+  // shared invite code so it can be displayed + rotated from Party Admin UI.
+  async getInviteCode(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT value FROM site_content WHERE key = 'party_invite_code' LIMIT 1`
+      );
+      const raw = rows[0]?.value;
+      const code = typeof raw === 'string' ? raw : (raw == null ? '' : String(raw));
+      res.json({ code });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/party/redeem-invite-code  { code }
+  // Any authenticated user. If the code matches site_content.party_invite_code
+  // (case-insensitive, trimmed), flip the user's party_access flag and return
+  // the updated user shape. Rate-limited upstream to deter brute force.
+  async redeemInviteCode(req, res, next) {
+    try {
+      const { code } = req.body || {};
+      if (typeof code !== 'string' || !code.trim()) {
+        return res.status(400).json({ error: 'Code is required', code: 400 });
+      }
+
+      const { rows } = await db.query(
+        `SELECT value FROM site_content WHERE key = 'party_invite_code' LIMIT 1`
+      );
+      const raw = rows[0]?.value;
+      const expected = typeof raw === 'string' ? raw : '';
+      if (!expected) {
+        return res.status(503).json({ error: 'Invite code not configured', code: 503 });
+      }
+
+      if (code.trim().toLowerCase() !== expected.trim().toLowerCase()) {
+        return res.status(403).json({ error: "That code doesn't match — double-check with Halli.", code: 403 });
+      }
+
+      const { rows: uRows } = await db.query(
+        `UPDATE users SET party_access = TRUE WHERE id = $1
+         RETURNING id, username, email, role, avatar, display_name, phone, email_verified, party_access`,
+        [req.user.id]
+      );
+      res.json({ user: uRows[0] });
+    } catch (err) { next(err); }
+  },
+
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'invite_code'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {

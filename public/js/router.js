@@ -15,7 +15,7 @@ import { ProfileView }        from './views/ProfileView.js';
 import { VerifyEmailView }    from './views/VerifyEmailView.js';
 import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
-import { isAuthenticated, isAdmin } from './services/auth.js';
+import { isAuthenticated, isAdmin, canEdit } from './services/auth.js';
 import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
 import { ShopView }              from './views/ShopView.js';
@@ -48,7 +48,7 @@ const ROUTES = [
   { pattern: '/reset-password',  factory: (_, qs) => new ResetPasswordView(qs) },
   { pattern: '/privacy',         factory: ()  => new PrivacyView() },
   { pattern: '/terms',           factory: ()  => new TermsView() },
-  { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && isAdmin()) ? new PartyAdminView() : new PartyView() },
+  { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && canEdit()) ? new PartyAdminView() : new PartyView() },
   { pattern: '/party',           factory: ()  => new PartyView() },
   // Shop + checkout
   { pattern: '/shop/:slug',      factory: (p) => new ProductView(p.slug) },

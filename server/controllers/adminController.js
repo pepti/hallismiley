@@ -1,6 +1,7 @@
 // Admin user-management endpoints.  All routes require role='admin'.
 const { query: dbQuery } = require('../config/database');
 const { lucia }          = require('../auth/lucia');
+const emailService       = require('../services/emailService');
 
 const VALID_ROLES = ['admin', 'moderator', 'user'];
 
@@ -120,6 +121,35 @@ const adminController = {
       }
 
       return res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/email-health
+  // Reports whether outbound email notifications can be delivered. Fire-and-
+  // forget RSVP emails fail silently; this endpoint surfaces the underlying
+  // config so admins can spot "notifications are broken" before missing RSVPs.
+  async getEmailHealth(req, res, next) {
+    try {
+      const envHealth = emailService.emailHealthCheck();
+
+      const { rows: adminRows } = await dbQuery(
+        `SELECT email, email_verified FROM users
+          WHERE role = 'admin' AND disabled = FALSE
+          ORDER BY email`
+      );
+
+      const adminEmails = adminRows.map(r => ({
+        email:    r.email,
+        verified: r.email_verified,
+      }));
+      const anyVerified = adminEmails.some(a => a.verified);
+
+      return res.json({
+        ...envHealth,
+        adminEmails,
+        anyAdminVerified: anyVerified,
+        healthy: envHealth.resendConfigured && anyVerified,
+      });
     } catch (err) { next(err); }
   },
 

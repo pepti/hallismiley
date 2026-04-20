@@ -1,4 +1,4 @@
-import { isAuthenticated, getUser, isAdmin, canEdit } from '../services/auth.js';
+import { isAuthenticated, getUser, isAdmin, canEdit, updateCachedUser } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
@@ -24,6 +24,16 @@ export class PartyView {
     // Admins and moderators always have access, regardless of email verification
     if (canEdit()) return true;
     return !!getUser()?.email_verified;
+  }
+
+  // Gates RSVP + Activities. Admins/moderators bypass; everyone else needs a
+  // verified email AND the party_access flag (granted by redeeming an invite
+  // code or by an admin toggle in Manage Users).
+  _hasPartyAccess() {
+    if (!isAuthenticated()) return false;
+    if (canEdit()) return true;
+    const u = getUser();
+    return !!(u?.email_verified && u?.party_access);
   }
 
   async render() {
@@ -57,25 +67,37 @@ export class PartyView {
     const parsed = this._parseJSON(this._partyInfo.rsvp_form, null);
     this._rsvpForm = Array.isArray(parsed) && parsed.length ? parsed : this._defaultRsvpForm();
 
-    // RSVP data requires verified user
-    if (this._isVerified()) {
+    // RSVP data requires party access (verified email + invite code redeemed, or admin)
+    if (this._hasPartyAccess()) {
       try {
         const rsvpRes = await fetch('/api/v1/party/rsvp', { credentials: 'include' });
-        this._rsvp = await rsvpRes.json();
+        if (rsvpRes.ok) this._rsvp = await rsvpRes.json();
       } catch { /* not accessible */ }
 
       if (isAdmin()) {
         const rsvpsRes = await fetch('/api/v1/party/rsvps', { credentials: 'include' });
-        const rsvps    = await rsvpsRes.json();
-        this._rsvpCount = rsvps.filter(r => r.attending).length;
+        if (rsvpsRes.ok) {
+          const rsvps = await rsvpsRes.json();
+          if (Array.isArray(rsvps)) this._rsvpCount = rsvps.filter(r => r.attending).length;
+        }
       }
     }
   }
 
   // ── Locked section overlay ─────────────────────────────────────────────────
 
-  _renderLockedSection(title, emoji) {
+  _renderLockedSection(title, emoji, opts = {}) {
     const authed = isAuthenticated();
+    const user   = getUser();
+    const emailOk = authed && (canEdit() || !!user?.email_verified);
+    const needsInviteCode = emailOk && !canEdit() && !user?.party_access;
+
+    // Invited-code state: show the redemption form on the first locked section
+    // (opts.primary !== false) and a "unlock above" hint on the second.
+    if (needsInviteCode) {
+      return this._renderInviteCodeLocked(title, emoji, opts.primary !== false);
+    }
+
     const ctaText = authed
       ? 'Verify your email to view this section'
       : 'Log in or sign up to view this section';
@@ -105,6 +127,44 @@ export class PartyView {
       </section>`;
   }
 
+  _renderInviteCodeLocked(title, emoji, primary) {
+    const slug = title.toLowerCase().replace(/\s+/g, '-');
+    if (!primary) {
+      return `
+        <section class="party-section party-locked" aria-labelledby="locked-${slug}">
+          <div class="party-section__inner">
+            <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
+            <p class="party-locked__text">Enter the invite code above to unlock.</p>
+          </div>
+        </section>`;
+    }
+    return `
+      <section class="party-section party-locked party-locked--invite" aria-labelledby="locked-${slug}">
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
+          <div class="party-locked__ribbon" role="note">
+            <span class="party-locked__rule" aria-hidden="true"></span>
+            <span class="party-locked__ornament" aria-hidden="true">✦</span>
+            <span class="party-locked__rule" aria-hidden="true"></span>
+          </div>
+          <p class="party-locked__text">Got an invite code? Enter it to unlock RSVP and Activities.</p>
+          <form class="party-invite-form" id="party-invite-form" novalidate>
+            <input type="text" name="code" id="party-invite-code-input"
+                   class="lol-input party-invite-form__input"
+                   placeholder="Invite code"
+                   maxlength="100" autocomplete="off" required
+                   aria-label="Invite code" />
+            <button type="submit" class="lol-btn lol-btn--primary party-invite-form__submit">Unlock</button>
+          </form>
+          <div class="party-locked__ribbon" aria-hidden="true">
+            <span class="party-locked__rule"></span>
+            <span class="party-locked__ornament">✦</span>
+            <span class="party-locked__rule"></span>
+          </div>
+        </div>
+      </section>`;
+  }
+
   _renderSkeleton() {
     return `<div class="party-skeleton">
       <div class="skeleton-hero"></div>
@@ -122,14 +182,14 @@ export class PartyView {
     const info       = this._partyInfo || {};
     const schedule   = this._parseJSON(info.schedule,   []);
     const activities = this._parseJSON(info.activities, { daytime: [], evening: [] });
-    const verified   = this._isVerified();
+    const unlocked   = this._hasPartyAccess();
 
     return `
       ${this._renderHero()}
       ${this._renderVenue(info)}
       ${this._renderSchedule(schedule)}
-      ${verified ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟')}
-      ${verified ? this._renderActivities(activities) : this._renderLockedSection('Activities', '🎯')}`;
+      ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟', { primary: true })}
+      ${unlocked ? this._renderActivities(activities) : this._renderLockedSection('Activities', '🎯', { primary: false })}`;
   }
 
   _renderHero() {
@@ -487,8 +547,9 @@ export class PartyView {
   // ── Binding ───────────────────────────────────────────────────────────────────
 
   _bindAll() {
-    if (this._isVerified()) this._bindRsvp();
+    if (this._hasPartyAccess()) this._bindRsvp();
     this._bindVenueLightbox();
+    this._bindInviteCodeForm();
     if (canEdit()) this._bindEditing();
 
     // Sign-in links on locked sections
@@ -496,6 +557,50 @@ export class PartyView {
       btn.addEventListener('click', () => {
         document.getElementById('nav-auth')?.querySelector('button')?.click();
       });
+    });
+  }
+
+  _bindInviteCodeForm() {
+    const form  = this._el.querySelector('#party-invite-form');
+    if (!form) return;
+    const input = form.querySelector('#party-invite-code-input');
+    const btn   = form.querySelector('.party-invite-form__submit');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = (input?.value || '').trim();
+      if (!code) {
+        showToast('Enter a code first', 'error');
+        input?.focus();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Unlocking…';
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/redeem-invite-code', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify({ code }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Unable to redeem code');
+
+        if (data.user) updateCachedUser(data.user);
+        showToast("You're in! 🎉", 'success');
+
+        // Re-fetch RSVP data now that we have access, then re-render the hub.
+        await this._loadAll();
+        this._el.innerHTML = this._renderHub();
+        this._bindAll();
+        this._startCountdown();
+      } catch (err) {
+        showToast(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Unlock';
+      }
     });
   }
 
@@ -966,6 +1071,7 @@ export class PartyView {
   }
 
   _startCountdown() {
+    if (this._timerLoop) clearInterval(this._timerLoop);
     this._updateCountdown();
     this._timerLoop = setInterval(() => this._updateCountdown(), 1000);
   }

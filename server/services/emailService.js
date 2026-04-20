@@ -10,6 +10,17 @@ function isConfigured() {
   return !!process.env.RESEND_API_KEY;
 }
 
+// Basic transport-layer health check. DB-dependent checks (e.g. which admin
+// emails are verified) belong in the caller — this stays DB-free so the
+// emailService module stays reusable outside request context.
+function emailHealthCheck() {
+  return {
+    resendConfigured: !!process.env.RESEND_API_KEY,
+    fromAddressSet:   !!process.env.EMAIL_FROM,
+    fromAddress:      FROM_ADDR,
+  };
+}
+
 function getClient() {
   return new Resend(process.env.RESEND_API_KEY);
 }
@@ -313,4 +324,91 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
   console.log(`[EmailService] RSVP notification sent: user=${user.id} isUpdate=${isUpdate} recipients=${adminEmails.length} id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification };
+// ── RSVP confirmation to the guest ────────────────────────────────────────────
+
+async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyInfo }) {
+  if (!user?.email) return;
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — RSVP confirmation skipped (user=${user.id}, isUpdate=${isUpdate})`);
+    return;
+  }
+
+  const name = user.display_name || user.username || 'there';
+  const subject = isUpdate
+    ? "Your RSVP to Halli's 40th — updated"
+    : "Your RSVP to Halli's 40th — we've got it!";
+
+  const fields = Array.isArray(rsvpForm) ? rsvpForm : [];
+  const dataFields = fields.filter(f => !['heading', 'paragraph'].includes(f.type));
+
+  const answerRows = dataFields.map(f => {
+    const a = answers?.[f.id];
+    if (a == null || (Array.isArray(a) && a.length === 0) || a === '') return null;
+    const val = Array.isArray(a) ? a.map(escapeHtml).join(', ') : escapeHtml(String(a));
+    return `
+      <tr>
+        <td style="padding:8px 0;color:#666;font-size:13px;vertical-align:top;width:180px;">${escapeHtml(f.label || f.id)}</td>
+        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">${val}</td>
+      </tr>`;
+  }).filter(Boolean).join('');
+
+  const info = partyInfo || {};
+  const venueName    = escapeHtml(info.venue_name    || '');
+  const venueAddress = escapeHtml(info.venue_address || '');
+  const partyDate    = escapeHtml(info.date          || 'July 25, 2026');
+  const mapsLink     = info.venue_maps_link
+    || (info.venue_address
+          ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address)}`
+          : '');
+
+  const partyUrl = `${APP_URL}/#/party`;
+  const headline = isUpdate
+    ? 'Your RSVP has been updated'
+    : "You're on the list! 🎉";
+
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(headline)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      Hi ${escapeHtml(name)} — ${isUpdate
+        ? "your updated answers are saved. Here's what we have:"
+        : "thanks for letting Halli know you'll be there. Here's a copy of your answers:"}
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;">
+      ${answerRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">(no answers on file)</td></tr>`}
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">When &amp; where</p>
+          <p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>
+          ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
+          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">📍 Open in Google Maps</a></p>` : ''}
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">
+      Need to change anything? You can update your RSVP any time:
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${partyUrl}"
+             style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            Update RSVP
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+      Can't wait to celebrate with you!
+    </p>
+  `);
+
+  const { data, error } = await getClient().emails.send({ from: FROM, to: user.email, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] RSVP confirmation sent: user=${user.id} isUpdate=${isUpdate} id=${data.id}`);
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification, sendRsvpConfirmation, emailHealthCheck, isConfigured };

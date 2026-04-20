@@ -17,6 +17,14 @@ export function isAdmin()         { return _user?.role === 'admin'; }
 // (party page, news, projects) where moderators have full edit/delete rights.
 export function canEdit()         { return _user?.role === 'admin' || _user?.role === 'moderator'; }
 
+// Merge a partial update into the cached user (e.g. after flipping party_access
+// via invite-code redemption). Dispatches authchange so listeners re-render.
+export function updateCachedUser(partial) {
+  if (!_user) return;
+  _user = { ..._user, ...partial };
+  _dispatch();
+}
+
 // ── CSRF ──────────────────────────────────────────────────────────────────────
 
 export async function getCSRFToken() {

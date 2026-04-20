@@ -89,6 +89,12 @@ async function start() {
     logger.warn({ err: err.message }, '[server] Admin bootstrap skipped');
   }
 
+  // One-shot boot-time notice if outbound email isn't configured. RSVP
+  // confirmations + admin notifications silently no-op when this is missing.
+  if (!process.env.RESEND_API_KEY) {
+    logger.warn('[server] RESEND_API_KEY not set — outbound email (RSVP notifications, verification, order receipts) will not send');
+  }
+
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
   });
