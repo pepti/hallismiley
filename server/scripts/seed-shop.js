@@ -1,8 +1,21 @@
 // Seed script: Smiley apparel line (t-shirts, sweatpants) with variants + SVG imagery.
-// Re-runnable (idempotent by slug / (product, attributes)). Deactivates any
-// non-apparel products so the shop shows a clean lineup.
 //
-// Usage: node server/scripts/seed-shop.js
+// Default mode (SAFE — use this against production):
+//   Upserts the defined products + variants by slug. Does NOT touch any
+//   other product rows. Safe to run alongside admin-managed SKUs.
+//
+//   node server/scripts/seed-shop.js
+//
+// --reset mode (DESTRUCTIVE — local/dev only):
+//   Additionally deactivates every product NOT in the defined lineup (and
+//   their variants). Use this when you're pivoting product categories on
+//   dev (e.g. roof boxes → apparel) and want a clean slate. NEVER run this
+//   against a production DB with admin-added products.
+//
+//   node server/scripts/seed-shop.js --reset
+//
+// Re-runnable. Idempotent per (slug, attributes) via ON CONFLICT upserts.
+// See RUNBOOK.md for the prod-seeding workflow.
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 
 const fs   = require('fs');
@@ -371,25 +384,41 @@ async function seedVariants(productId, p) {
 }
 
 async function main() {
+  // Parse flags. Default = idempotent-safe (prod-safe). --reset opts into
+  // the destructive deactivate-everything-else behavior used on local dev.
+  const args = process.argv.slice(2);
+  const resetMode = args.includes('--reset');
+
   console.log(`[seed-shop] UPLOAD_ROOT = ${UPLOAD_ROOT}`);
+  if (resetMode) {
+    console.log('[seed-shop] ⚠️  --reset mode: will DEACTIVATE every product NOT in the defined lineup.');
+    console.log('[seed-shop]               If this is prod, abort now (Ctrl+C).');
+  } else {
+    console.log('[seed-shop] safe mode: upserting defined products/variants only; other rows untouched.');
+    console.log('[seed-shop]            (use --reset on dev to also deactivate products outside the lineup)');
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Deactivate everything that is NOT in the apparel lineup so previous
-    // seeds (e.g. roof boxes) vanish from the shop.
-    const keepSlugs = PRODUCTS.map(p => p.slug);
-    const placeholders = keepSlugs.map((_, i) => `$${i + 1}`).join(',');
-    await client.query(
-      `UPDATE products SET active = FALSE WHERE slug NOT IN (${placeholders})`,
-      keepSlugs
-    );
-    // Also deactivate all variants that belong to now-inactive products
-    // (variants of apparel products get re-upserted with active=true below).
-    await client.query(
-      `UPDATE product_variants SET active = FALSE
-        WHERE product_id IN (SELECT id FROM products WHERE active = FALSE)`
-    );
+    if (resetMode) {
+      // Deactivate everything that is NOT in the defined lineup so previous
+      // seeds (e.g. roof boxes) vanish from the shop. Destructive — only ever
+      // run this on a dev DB or during an authorised product-line pivot.
+      const keepSlugs = PRODUCTS.map(p => p.slug);
+      const placeholders = keepSlugs.map((_, i) => `$${i + 1}`).join(',');
+      await client.query(
+        `UPDATE products SET active = FALSE WHERE slug NOT IN (${placeholders})`,
+        keepSlugs
+      );
+      // Also deactivate all variants that belong to now-inactive products
+      // (variants of apparel products get re-upserted with active=true below).
+      await client.query(
+        `UPDATE product_variants SET active = FALSE
+          WHERE product_id IN (SELECT id FROM products WHERE active = FALSE)`
+      );
+    }
 
     for (const p of PRODUCTS) {
       const id = await upsertProduct(client, p);

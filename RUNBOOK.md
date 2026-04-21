@@ -44,6 +44,48 @@ ALTER TABLE projects DROP COLUMN IF EXISTS some_column;
 
 ---
 
+## Seeding the Shop (`server/scripts/seed-shop.js`)
+
+The seeder's **default mode is prod-safe**: it upserts the defined clothing
+line (2 products, 20 variants) by slug and touches nothing else. Admin-added
+products are untouched. The optional `--reset` flag opts into the
+destructive "deactivate every product not in the lineup" behavior — only
+ever use that on a local dev DB or during an authorised product-line pivot.
+
+```bash
+# Dev (local Postgres, wipes-and-reloads the shop):
+node server/scripts/seed-shop.js --reset
+
+# Dev (local Postgres, preserves any admin-added rows):
+node server/scripts/seed-shop.js
+
+# Prod (Azure Postgres — NEVER pass --reset here):
+DATABASE_URL='postgresql://halliadmin:<url-encoded-pass>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require' \
+DB_SSL=true \
+UPLOAD_ROOT=/tmp/seed-out \
+node server/scripts/seed-shop.js
+# Then upload the generated image files to the Azure Files share:
+az storage file upload-batch \
+  --account-name hallismileyfs --destination uploads --destination-path products \
+  --source /tmp/seed-out/products --auth-mode key
+```
+
+Rationale: the App Service container has no SSH-able wwwroot (Kudu can't
+reach the app container filesystem on a Docker-based App Service), so the
+canonical prod-seeding workflow is: run the seeder from a dev machine
+pointed at the prod DB, dump the image files to a temp `UPLOAD_ROOT`,
+then batch-upload the image subtree to the Azure Files share that the
+container mounts at `/app/uploads`.
+
+**General rule for anything that mutates prod data:**
+
+- Default behavior MUST be idempotent and non-destructive.
+- Destructive / reset behavior MUST be opt-in via an explicit flag.
+- The tool MUST print which mode it's in at startup so you see it before
+  it does any work.
+
+---
+
 ## Common Incidents
 
 ### Server returns 503 on /health
