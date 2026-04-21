@@ -544,6 +544,81 @@ const migrations = [
        ) ON CONFLICT (key) DO NOTHING`,
     ],
   },
+  {
+    // One-shot patch for existing deployments whose stored party_rsvp_form
+    // pre-dates the "expand RSVP form" change (commit 34c6247) — their form
+    // only has attendance + message fields, missing the helper signup and
+    // the plus-ones question. Idempotent: skipped if no form is stored, or
+    // if the fields are already present. The message field is always moved
+    // to the end so ordering stays sensible.
+    name: '027_party_rsvp_form_patch_helper_fields',
+    statements: [
+      `DO $$
+       DECLARE
+         existing    JSONB;
+         msg_element JSONB;
+         new_fields  JSONB := '[]'::jsonb;
+         rebuilt     JSONB;
+       BEGIN
+         SELECT value INTO existing FROM site_content WHERE key = 'party_rsvp_form';
+         IF existing IS NULL OR jsonb_typeof(existing) <> 'array' THEN
+           RETURN;
+         END IF;
+
+         IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(existing) e WHERE e->>'id' = 'bringing') THEN
+           new_fields := new_fields || jsonb_build_object(
+             'id',      'bringing',
+             'type',    'checkbox-group',
+             'label',   'Bringing anyone with you?',
+             'options', jsonb_build_array('Spouse / partner', 'Kids')
+           );
+         END IF;
+
+         IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(existing) e WHERE e->>'id' = 'helping') THEN
+           new_fields := new_fields || jsonb_build_object(
+             'id',      'helping',
+             'type',    'checkbox-group',
+             'label',   'Want to help out? (totally optional)',
+             'options', jsonb_build_array('Help with planning', 'Host an activity', 'General help on the day')
+           );
+         END IF;
+
+         IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(existing) e WHERE e->>'id' = 'activity_details') THEN
+           new_fields := new_fields || jsonb_build_object(
+             'id',          'activity_details',
+             'type',        'textarea',
+             'label',       'What activity would you host?',
+             'placeholder', 'A short description — games, music, a talk, anything…',
+             'showIf',      jsonb_build_object('fieldId', 'helping', 'value', 'Host an activity')
+           );
+         END IF;
+
+         IF jsonb_array_length(new_fields) = 0 THEN
+           RETURN;
+         END IF;
+
+         SELECT e.value INTO msg_element
+         FROM jsonb_array_elements(existing) WITH ORDINALITY AS e(value, idx)
+         WHERE e.value->>'id' = 'message'
+         ORDER BY idx
+         LIMIT 1;
+
+         IF msg_element IS NULL THEN
+           rebuilt := existing || new_fields;
+         ELSE
+           SELECT COALESCE(jsonb_agg(e.value ORDER BY e.idx), '[]'::jsonb)
+             INTO rebuilt
+             FROM jsonb_array_elements(existing) WITH ORDINALITY AS e(value, idx)
+             WHERE e.value->>'id' <> 'message';
+           rebuilt := rebuilt || new_fields || jsonb_build_array(msg_element);
+         END IF;
+
+         UPDATE site_content
+            SET value = rebuilt, updated_at = NOW()
+          WHERE key = 'party_rsvp_form';
+       END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
