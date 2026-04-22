@@ -632,7 +632,7 @@
   "lightbox.previous": "Previous image",
   "lightbox.next": "Next image",
   "lightbox.close": "Close",
-  "lightbox.imageCount": "{current} of {total}",
+  "lightbox.imageCount": "{current} / {total}",
 
   "toast.close": "Dismiss notification",
 

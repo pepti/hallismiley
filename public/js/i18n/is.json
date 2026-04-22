@@ -632,7 +632,7 @@
   "lightbox.previous": "Fyrri mynd",
   "lightbox.next": "Næsta mynd",
   "lightbox.close": "Loka",
-  "lightbox.imageCount": "{current} af {total}",
+  "lightbox.imageCount": "{current} / {total}",
 
   "toast.close": "Loka tilkynningu",
 
