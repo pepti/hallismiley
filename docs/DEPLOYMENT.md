@@ -26,7 +26,7 @@ Open the web service → **Variables** tab and add the following (see `.env.exam
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-| `ALLOWED_ORIGINS` | `https://halliprojects.is,https://www.halliprojects.is` |
+| `ALLOWED_ORIGINS` | `https://hallismiley.is,https://www.hallismiley.is` |
 | `NODE_ENV` | `production` |
 | `CSRF_SECRET` | *(32+ char random hex — see below)* |
 | `DB_SSL` | `true` |
@@ -86,7 +86,7 @@ A healthy deploy returns `200` on `/ready` before Railway marks it live (`health
 ## SSL / Custom Domain
 
 1. In Railway: **Settings → Domains → Add Custom Domain**.
-2. Enter `halliprojects.is` (and `www.halliprojects.is` if needed).
+2. Enter `hallismiley.is` (and `www.hallismiley.is` if needed).
 3. Railway displays CNAME or A records — add them in your DNS provider.
 4. Railway provisions a Let's Encrypt certificate automatically once DNS propagates (usually < 5 minutes).
 5. Ensure `ALLOWED_ORIGINS` includes the `https://` URL of your domain or CORS requests will be blocked.

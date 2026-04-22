@@ -17,7 +17,7 @@ jobs:
         env:
           POSTGRES_USER:     postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB:       halliprojects_test
+          POSTGRES_DB:       hallismiley_test
         ports:
           - 5432:5432
         options: >-
@@ -48,7 +48,7 @@ jobs:
       - name: Run tests with coverage
         env:
           NODE_ENV:            test
-          TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/halliprojects_test
+          TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/hallismiley_test
           # ADMIN_USERNAME / ADMIN_PASSWORD_HASH are set by tests/env.js
         run: npm run test:ci
 
@@ -63,7 +63,7 @@ jobs:
         env:
           POSTGRES_USER:     postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB:       halliprojects_e2e
+          POSTGRES_DB:       hallismiley_e2e
         ports:
           - 5432:5432
         options: >-
@@ -92,7 +92,7 @@ jobs:
         env:
           CI:              "true"
           NODE_ENV:        test
-          DATABASE_URL:    postgresql://postgres:postgres@localhost:5432/halliprojects_e2e
+          DATABASE_URL:    postgresql://postgres:postgres@localhost:5432/hallismiley_e2e
           ALLOWED_ORIGINS: http://localhost:3000
         run: npm run test:e2e
 

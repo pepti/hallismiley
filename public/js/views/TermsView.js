@@ -15,7 +15,7 @@ export class TermsView {
 
           <section class="legal-section">
             <h2>1. Acceptance of Terms</h2>
-            <p>By accessing <strong>halliprojects.com</strong>, you agree to these Terms of Service. If you do not agree, please do not use this site.</p>
+            <p>By accessing <strong>hallismiley.is</strong>, you agree to these Terms of Service. If you do not agree, please do not use this site.</p>
           </section>
 
           <section class="legal-section">

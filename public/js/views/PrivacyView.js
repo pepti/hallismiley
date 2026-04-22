@@ -15,7 +15,7 @@ export class PrivacyView {
 
           <section class="legal-section">
             <h2>1. Who We Are</h2>
-            <p>This website (<strong>halliprojects.is</strong>) is the personal portfolio of Halli, a carpenter and computer scientist. For privacy enquiries, contact: <span id="privacy-email-1"></span></p>
+            <p>This website (<strong>hallismiley.is</strong>) is the personal portfolio of Halli, a carpenter and computer scientist. For privacy enquiries, contact: <span id="privacy-email-1"></span></p>
           </section>
 
           <section class="legal-section">
@@ -67,8 +67,8 @@ export class PrivacyView {
     [view.querySelector('#privacy-email-1'), view.querySelector('#privacy-email-2')].forEach(el => {
       if (!el) return;
       const a = document.createElement('a');
-      a.href = `mailto:${['halli', 'halliprojects.is'].join('@')}`;
-      a.textContent = ['halli', 'halliprojects.is'].join('@');
+      a.href = `mailto:${['halli', 'hallismiley.is'].join('@')}`;
+      a.textContent = ['halli', 'hallismiley.is'].join('@');
       el.appendChild(a);
     });
 

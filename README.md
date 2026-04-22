@@ -2,7 +2,7 @@
 
 Personal portfolio of Halli — an Icelandic carpenter and computer scientist. Showcases twenty years of precision joinery and timber framing alongside full-stack software engineering work.
 
-Live site: **https://halliprojects.is**
+Live site: **https://www.hallismiley.is**
 
 ---
 
@@ -32,8 +32,8 @@ Live site: **https://halliprojects.is**
 **1. Clone and install dependencies**
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/halliprojects.git
-cd halliprojects
+git clone https://github.com/YOUR_GITHUB_USERNAME/hallismiley.git
+cd hallismiley
 npm install
 ```
 
@@ -56,7 +56,7 @@ openssl rsa -in keys/private.pem -pubout -out keys/public.pem
 **4. Create the database and run migrations**
 
 ```bash
-createdb halliprojects        # or create via psql
+createdb hallismiley        # or create via psql
 npm run migrate
 ```
 
@@ -163,7 +163,7 @@ pg_restore --clean --no-acl --no-owner -d "$DATABASE_URL" backup_YYYYMMDD.dump
 |----------|-------------|---------|------------|
 | `NODE_ENV` | `development` | `staging` | `production` |
 | `DB_SSL` | `false` (local PG) | `true` (hosted) | `true` (hosted) |
-| `ALLOWED_ORIGINS` | `http://localhost:3000` | staging URL | `https://halliprojects.is` |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | staging URL | `https://www.hallismiley.is` |
 | `SENTRY_DSN` | leave blank | optional | set for error tracking |
 | Cookie `secure` flag | off (http ok) | on | on |
 | HTTPS redirect | disabled | enabled | enabled |

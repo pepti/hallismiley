@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL: `https://halliprojects.is`
+Base URL: `https://www.hallismiley.is`
 
 All API endpoints are under `/api/v1/`. Authenticated endpoints require a valid session cookie (`auth_session`) obtained via `POST /auth/login`.
 

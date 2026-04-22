@@ -18,6 +18,7 @@ const newsRoutes     = require('./routes/newsRoutes');
 const partyRoutes    = require('./routes/partyRoutes');
 const shopRoutes     = require('./routes/shopRoutes');
 const adminShopRoutes = require('./routes/adminShopRoutes');
+const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
@@ -196,6 +197,21 @@ if (process.env.NODE_ENV === 'production') {
     }
     next();
   });
+
+  // Canonicalize host → www.hallismiley.is. Prevents duplicate-content
+  // indexing across apex (hallismiley.is), the Azure default hostname
+  // (hallismiley-app.azurewebsites.net), and any legacy aliases.
+  // Skip probes so Azure load-balancer health checks still reach /health
+  // and /ready regardless of which hostname they use.
+  const CANONICAL_HOST = 'www.hallismiley.is';
+  app.use((req, res, next) => {
+    if (req.path === '/health' || req.path === '/ready') return next();
+    const host = (req.headers.host || '').toLowerCase();
+    if (host && host !== CANONICAL_HOST) {
+      return res.redirect(301, `https://${CANONICAL_HOST}${req.url}`);
+    }
+    next();
+  });
 }
 
 // ── Liveness probe — returns 200 if the process is alive ──────────────────────
@@ -340,6 +356,10 @@ app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    u
 app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
+
+// Dynamic /sitemap.xml — must come BEFORE express.static so it shadows
+// any stale public/sitemap.xml file and reflects live DB state.
+app.use('/', sitemapRoutes);
 
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {

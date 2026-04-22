@@ -6,7 +6,7 @@ const { migrations } = require('../server/config/schema');
 
 module.exports = async function globalSetup() {
   const dbUrl = process.env.TEST_DATABASE_URL
-    || 'postgresql://postgres:postgres@localhost:5432/halliprojects_test';
+    || 'postgresql://postgres:postgres@localhost:5432/hallismiley_test';
 
   const pool   = new Pool({ connectionString: dbUrl });
   const client = await pool.connect();

@@ -120,7 +120,7 @@ Likely cause: `PRIVATE_KEY` or `PUBLIC_KEY` env vars were changed or not set.
 ## Health Check
 
 ```bash
-curl https://halliprojects.is/health
+curl https://www.hallismiley.is/health
 ```
 
 Expected response:

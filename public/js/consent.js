@@ -1,5 +1,5 @@
 /**
- * Cookie Consent — halliprojects.is
+ * Cookie Consent — hallismiley.is
  *
  * Shows a consent banner on first visit.
  * Analytics are only loaded after the user explicitly accepts.

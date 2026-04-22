@@ -3,7 +3,7 @@
 
 process.env.NODE_ENV        = 'test';
 process.env.DATABASE_URL    = process.env.TEST_DATABASE_URL
-  || 'postgresql://postgres:postgres@localhost:5432/halliprojects_test';
+  || 'postgresql://postgres:postgres@localhost:5432/hallismiley_test';
 process.env.DB_SSL          = 'false';
 process.env.ADMIN_USERNAME  = 'testadmin';
 process.env.ADMIN_PASSWORD  = 'testpassword123';

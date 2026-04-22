@@ -1,27 +1,29 @@
 'use strict';
 /*
- * SSR meta-tag injection for the SPA catch-all route.
+ * SSR meta-tag injection + crawler-content pre-rendering for the SPA
+ * catch-all route.
  *
- * We don't server-render the <body> (it's a vanilla JS SPA that hydrates
- * client-side). What we DO render is the <head>: <title>, <meta name=
- * "description">, <link rel="canonical">, <link rel="alternate" hreflang>,
- * and the og:* set — all filled in per-route and per-locale from the
- * ROUTE_META table below and live site_content rows for content-driven pages.
+ * The SPA hydrates client-side into <div id="app">. But search-engine
+ * crawlers and social preview bots vary wildly in JS support — Bing,
+ * LinkedIn, Facebook, X, and Google's fast-track indexer often see only
+ * the initial HTML. So for *every* request that reaches this middleware
+ * we:
+ *
+ *   1. Rewrite the <head>: title, meta description, canonical, hreflang,
+ *      og:* tags — all filled in per-route and per-locale.
+ *   2. Inject JSON-LD structured data (Person on home; Article on news;
+ *      Product on shop items; CreativeWork on projects; BreadcrumbList
+ *      on all non-home pages).
+ *   3. Inject a hidden <div id="crawler-content"> sibling to #app that
+ *      contains real HTML headings, excerpts, and links for list and
+ *      detail pages. The SPA ignores it; crawlers read it.
  *
  * Scale design:
- *   • Template is read once from disk at boot (cached) — no fs.readFile per
- *     request.
- *   • Per-route metadata is static; only the 3 content-driven pages (home,
- *     halli, contact) hit the DB, and only for a 1-column projection.
- *   • Responses are tagged with  Cache-Control: public, max-age=300,
- *     stale-while-revalidate=60  so a CDN sitting in front can coalesce
- *     bot traffic without touching Node.
- *   • Unknown routes fall through to the generic meta — no 404 in the HTML
- *     (the SPA still handles the actual 404 render).
- *
- * Google indexes JS-rendered content, but Bing / Facebook / LinkedIn / X
- * crawlers don't always execute JS reliably — the head must carry the
- * truth so preview cards and search snippets render regardless.
+ *   • Template is read once from disk at boot (cached) + a dev watcher.
+ *   • Static routes hit DB only for admin-editable site_content meta
+ *     overrides; detail routes hit DB once for the relevant row.
+ *   • Responses tagged  Cache-Control: public, max-age=300,
+ *     stale-while-revalidate=60  so a CDN can coalesce bot traffic.
  */
 
 const fs   = require('fs');
@@ -40,7 +42,6 @@ function loadTemplate() {
   _template = fs.readFileSync(INDEX_PATH, 'utf8');
   return _template;
 }
-// In dev, invalidate on file change so edits to index.html don't require restart.
 if (process.env.NODE_ENV !== 'production') {
   try {
     fs.watchFile(INDEX_PATH, { interval: 1000 }, () => { _template = null; });
@@ -63,8 +64,6 @@ const ROUTE_META = {
   '/party':    { key: 'party' },
 };
 
-// Fallback strings per (route key, locale). Kept small on purpose: real
-// content lives in site_content / product / article rows.
 const DEFAULT_META = {
   en: {
     home:     { title: 'Halli Smiley — Icelandic Carpenter & Computer Scientist', description: 'Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing combined with full-stack web development.' },
@@ -90,7 +89,27 @@ const DEFAULT_META = {
   },
 };
 
-// Parse the first path segment as a locale, or return DEFAULT_LOCALE.
+// Section labels for breadcrumbs (per locale).
+const SECTION_LABELS = {
+  en: { projects: 'Projects', news: 'News', shop: 'Shop' },
+  is: { projects: 'Verkefni', news: 'Fréttir', shop: 'Verslun' },
+};
+
+// Detail-route patterns. Order matters only because each returns on first match.
+const DETAIL_PATTERNS = [
+  { re: /^\/news\/([^/]+)$/,    type: 'news'    },
+  { re: /^\/shop\/([^/]+)$/,    type: 'product' },
+  { re: /^\/projects\/(\d+)$/,  type: 'project' },
+];
+
+function extractDetail(route) {
+  for (const p of DETAIL_PATTERNS) {
+    const m = route.match(p.re);
+    if (m) return { type: p.type, param: m[1], section: p.type === 'product' ? 'shop' : p.type + 's' };
+  }
+  return null;
+}
+
 function extractLocale(pathname) {
   const parts = (pathname || '/').split('/').filter(Boolean);
   if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) {
@@ -107,10 +126,18 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
-// Look up admin-editable meta overrides on a site_content row. Admins add
-// `meta_title` / `meta_description` keys to the JSONB blob — we surface them
-// if present, fall back to DEFAULT_META otherwise. Single-row lookup with a
-// locale filter; safe for the catch-all's request path.
+function stripHtml(s) {
+  return String(s ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function absUrl(u) {
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  return `${APP_URL}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+// ── DB lookups ───────────────────────────────────────────────────────────────
+
 async function fetchContentMeta(contentKey, locale) {
   if (!contentKey) return null;
   try {
@@ -125,21 +152,267 @@ async function fetchContentMeta(contentKey, locale) {
     );
     const v = rows[0]?.value;
     if (!v || typeof v !== 'object') return null;
-    return {
-      title:       v.meta_title,
-      description: v.meta_description,
-    };
+    return { title: v.meta_title, description: v.meta_description };
   } catch {
     return null;
   }
 }
 
-// Replace the tag with matching id, preserving all attributes not in patch.
+async function fetchDetailRow(detail) {
+  try {
+    if (detail.type === 'news') {
+      const { rows } = await db.query(
+        `SELECT id, slug, title, title_is, summary, summary_is,
+                body, body_is, cover_image, cover_image_is,
+                published_at, updated_at
+           FROM news_articles
+          WHERE slug = $1 AND published = TRUE
+          LIMIT 1`,
+        [detail.param]
+      );
+      return rows[0] || null;
+    }
+    if (detail.type === 'product') {
+      const { rows } = await db.query(
+        `SELECT p.id, p.slug, p.name, p.name_is, p.description, p.description_is,
+                p.price_isk, p.price_eur, p.stock, p.active, p.updated_at,
+                (SELECT url FROM product_images
+                  WHERE product_id = p.id
+               ORDER BY position ASC, created_at ASC
+                  LIMIT 1) AS image_url
+           FROM products p
+          WHERE p.slug = $1 AND p.active = TRUE
+          LIMIT 1`,
+        [detail.param]
+      );
+      return rows[0] || null;
+    }
+    if (detail.type === 'project') {
+      const id = Number(detail.param);
+      if (!Number.isFinite(id)) return null;
+      const { rows } = await db.query(
+        `SELECT id, title, description, category, year, image_url, featured,
+                created_at, updated_at
+           FROM projects WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      return rows[0] || null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function fetchListRows(section, limit = 10) {
+  try {
+    if (section === 'news') {
+      const { rows } = await db.query(
+        `SELECT slug, title, title_is, summary, summary_is, cover_image, published_at
+           FROM news_articles
+          WHERE published = TRUE
+          ORDER BY published_at DESC NULLS LAST
+          LIMIT $1`,
+        [limit]
+      );
+      return rows;
+    }
+    if (section === 'shop') {
+      const { rows } = await db.query(
+        `SELECT p.slug, p.name, p.name_is, p.description, p.description_is,
+                p.price_isk, p.updated_at,
+                (SELECT url FROM product_images
+                  WHERE product_id = p.id
+               ORDER BY position ASC, created_at ASC
+                  LIMIT 1) AS image_url
+           FROM products p
+          WHERE p.active = TRUE
+          ORDER BY p.updated_at DESC
+          LIMIT $1`,
+        [limit]
+      );
+      return rows;
+    }
+    if (section === 'projects') {
+      const { rows } = await db.query(
+        `SELECT id, title, description, category, year, image_url
+           FROM projects
+          ORDER BY featured DESC, year DESC, updated_at DESC
+          LIMIT $1`,
+        [limit]
+      );
+      return rows;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+// Pick locale-matched text with English fallback.
+function pickLocale(row, enCol, isCol, locale) {
+  if (!row) return '';
+  if (locale === 'is' && row[isCol]) return row[isCol];
+  return row[enCol] || '';
+}
+
+// ── JSON-LD builders ─────────────────────────────────────────────────────────
+
+function breadcrumbSchema({ section, detailName, localePath, locale }) {
+  const home = { '@type': 'ListItem', position: 1, name: locale === 'is' ? 'Heim' : 'Home', item: `${APP_URL}/${locale}/` };
+  const items = [home];
+  if (section) {
+    items.push({
+      '@type': 'ListItem', position: 2,
+      name: SECTION_LABELS[locale]?.[section] || SECTION_LABELS.en[section] || section,
+      item: `${APP_URL}/${locale}/${section}`,
+    });
+  }
+  if (detailName) {
+    items.push({
+      '@type': 'ListItem', position: 3,
+      name: detailName,
+      item: `${APP_URL}/${locale}${localePath}`,
+    });
+  }
+  if (items.length < 2) return null;
+  return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: items };
+}
+
+function articleSchema(row, locale, canonical) {
+  const headline = pickLocale(row, 'title', 'title_is', locale);
+  const desc     = pickLocale(row, 'summary', 'summary_is', locale);
+  const image    = locale === 'is' && row.cover_image_is ? row.cover_image_is : row.cover_image;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline,
+    description: desc,
+    inLanguage: locale === 'is' ? 'is-IS' : 'en-US',
+    datePublished: row.published_at ? new Date(row.published_at).toISOString() : undefined,
+    dateModified:  row.updated_at   ? new Date(row.updated_at).toISOString()   : undefined,
+    image: image ? absUrl(image) : undefined,
+    author:    { '@type': 'Person', name: 'Halli' },
+    publisher: { '@type': 'Person', name: 'Halli' },
+    mainEntityOfPage: canonical,
+  };
+}
+
+function productSchema(row, locale, canonical) {
+  const name = pickLocale(row, 'name', 'name_is', locale);
+  const desc = pickLocale(row, 'description', 'description_is', locale);
+  const availability = (row.stock > 0)
+    ? 'https://schema.org/InStock'
+    : 'https://schema.org/OutOfStock';
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name,
+    description: desc,
+    image: row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`,
+    sku: row.slug,
+    brand: { '@type': 'Brand', name: 'Halli Smiley' },
+    offers: {
+      '@type': 'Offer',
+      url: canonical,
+      price: row.price_isk,
+      priceCurrency: 'ISK',
+      availability,
+    },
+  };
+}
+
+function creativeWorkSchema(row, locale, canonical) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CreativeWork',
+    name: row.title,
+    description: row.description,
+    dateCreated: row.year ? String(row.year) : undefined,
+    dateModified: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+    image: row.image_url ? absUrl(row.image_url) : undefined,
+    creator: { '@type': 'Person', name: 'Halli' },
+    inLanguage: locale === 'is' ? 'is-IS' : 'en-US',
+    url: canonical,
+    genre: row.category,
+  };
+}
+
+// Strip undefined fields so the rendered JSON is clean.
+function clean(obj) {
+  if (Array.isArray(obj)) return obj.map(clean);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const cv = clean(v);
+      if (cv !== undefined && cv !== null && cv !== '') out[k] = cv;
+    }
+    return out;
+  }
+  return obj;
+}
+
+function jsonLdScript(schemas) {
+  const blocks = schemas.filter(Boolean).map(s => JSON.stringify(clean(s)));
+  if (!blocks.length) return '';
+  return blocks
+    .map(json => `<script type="application/ld+json">${json.replace(/</g, '\\u003c')}</script>`)
+    .join('\n  ');
+}
+
+// ── Crawler-content HTML builders ────────────────────────────────────────────
+// Hidden sibling to <div id="app">; not user-visible but present in DOM for
+// non-JS crawlers. Contains an <h1>, excerpts, and real anchor links.
+
+function crawlerListHtml(section, rows, locale) {
+  const heading = DEFAULT_META[locale]?.[section]?.title || DEFAULT_META.en[section].title;
+  const items = rows.map(row => {
+    if (section === 'news') {
+      const title   = pickLocale(row, 'title', 'title_is', locale);
+      const summary = pickLocale(row, 'summary', 'summary_is', locale);
+      const href    = `/${locale}/news/${row.slug}`;
+      return `<li><a href="${esc(href)}"><h2>${esc(title)}</h2></a><p>${esc(summary)}</p></li>`;
+    }
+    if (section === 'shop') {
+      const name = pickLocale(row, 'name', 'name_is', locale);
+      const desc = pickLocale(row, 'description', 'description_is', locale);
+      const href = `/${locale}/shop/${row.slug}`;
+      return `<li><a href="${esc(href)}"><h2>${esc(name)}</h2></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
+    }
+    if (section === 'projects') {
+      const href = `/${locale}/projects/${row.id}`;
+      return `<li><a href="${esc(href)}"><h2>${esc(row.title)}</h2></a><p>${esc(stripHtml(row.description).slice(0, 200))}</p></li>`;
+    }
+    return '';
+  }).filter(Boolean).join('');
+  return `<h1>${esc(heading)}</h1><ul>${items}</ul>`;
+}
+
+function crawlerDetailHtml(type, row, locale) {
+  if (type === 'news') {
+    const title   = pickLocale(row, 'title', 'title_is', locale);
+    const summary = pickLocale(row, 'summary', 'summary_is', locale);
+    const body    = pickLocale(row, 'body', 'body_is', locale);
+    return `<article><h1>${esc(title)}</h1><p><em>${esc(summary)}</em></p>${body}</article>`;
+  }
+  if (type === 'product') {
+    const name = pickLocale(row, 'name', 'name_is', locale);
+    const desc = pickLocale(row, 'description', 'description_is', locale);
+    const priceLabel = locale === 'is' ? 'Verð' : 'Price';
+    return `<article><h1>${esc(name)}</h1><p>${esc(desc)}</p><p>${esc(priceLabel)}: ${Number(row.price_isk).toLocaleString('is-IS')} ISK</p></article>`;
+  }
+  if (type === 'project') {
+    return `<article><h1>${esc(row.title)}</h1><p><strong>${esc(row.category)} · ${esc(String(row.year))}</strong></p>${row.description}</article>`;
+  }
+  return '';
+}
+
+// ── HTML rewriting ───────────────────────────────────────────────────────────
+
 function replaceById(html, id, attrs, innerText) {
   const attrStr = Object.entries(attrs)
     .map(([k, v]) => `${k}="${esc(v)}"`)
     .join(' ');
-  // Match the full self-closing or paired element with this id.
   const selfRe = new RegExp(`<(?:link|meta)\\b[^>]*\\bid="${id}"[^>]*\\/?\\s*>`, 'i');
   const pairedRe = new RegExp(`<(title|meta|link)\\b[^>]*\\bid="${id}"[^>]*>[\\s\\S]*?</\\1>`, 'i');
   if (selfRe.test(html)) {
@@ -154,22 +427,14 @@ function replaceById(html, id, attrs, innerText) {
   return html;
 }
 
-// Single-use tag replacers — less brittle than regex-hunting for each
-// attribute combination. The index.html baseline uses id= attributes on the
-// tags we need to control.
-function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage }) {
-  // <title id="ssr-title"> — add if absent, replace if present.
+function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd }) {
   if (/<title\b/i.test(html)) {
     html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
   }
-
-  // <meta name="description" …>
   html = html.replace(
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${esc(description)}" id="ssr-description" />`
   );
-
-  // og:title / og:description / og:url / og:locale / og:image
   html = html.replace(
     /<meta\s+property="og:title"[^>]*>/i,
     `<meta property="og:title" content="${esc(title)}" />`
@@ -190,48 +455,110 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+property="og:image"[^>]*>/i,
     `<meta property="og:image" content="${esc(ogImage)}" data-base-href="${OG_IMAGE_PATH}" />`
   );
-
-  // Canonical + hreflang triple (replace-by-id).
   html = replaceById(html, 'ssr-canonical',        { rel: 'canonical', href: canonical });
   html = replaceById(html, 'ssr-hreflang-en',      { rel: 'alternate', hreflang: 'en',        href: hreflang.en });
   html = replaceById(html, 'ssr-hreflang-is',      { rel: 'alternate', hreflang: 'is',        href: hreflang.is });
   html = replaceById(html, 'ssr-hreflang-default', { rel: 'alternate', hreflang: 'x-default', href: hreflang['x-default'] });
-
-  // <html lang="...">
   html = html.replace(/<html\b[^>]*\blang="[^"]*"/i, `<html lang="${esc(ogLocale.split('_')[0])}"`);
 
+  // Inject per-route JSON-LD just before </head>. The baked Person schema
+  // on home stays in place (inside <head> before this insertion point).
+  if (jsonLd) {
+    html = html.replace(/<\/head>/i, `  ${jsonLd}\n</head>`);
+  }
   return html;
 }
 
-/**
- * Express middleware — serves index.html with filled-in <head> for any
- * SPA route that reaches it. Mount AFTER static assets + API routes so we
- * only handle URLs that aren't files or data endpoints.
- */
+// Insert a hidden crawler-content sibling right after <div id="app">.
+// Kept in DOM but hidden from users via the `hidden` attribute; crawlers
+// treat it as regular content.
+function injectCrawlerContent(html, innerHtml) {
+  if (!innerHtml) return html;
+  const block = `<div id="crawler-content" hidden aria-hidden="true">${innerHtml}</div>`;
+  return html.replace(
+    /<div id="app"><\/div>/,
+    `<div id="app"></div>\n  ${block}`
+  );
+}
+
+// ── Middleware ───────────────────────────────────────────────────────────────
+
 module.exports = async function ssrMetaMiddleware(req, res, next) {
-  // Only GET requests for HTML (bots + humans). Skip data endpoints.
   if (req.method !== 'GET') return next();
   const accept = req.headers['accept'] || '';
   if (!accept.includes('text/html') && accept !== '*/*' && accept !== '') return next();
-
-  // Skip anything that looks like a file (has an extension) — those should
-  // have been caught by the static middleware upstream; a miss = 404.
   if (/\.[a-z0-9]{2,5}$/i.test(req.path)) return next();
 
   const { locale, rest } = extractLocale(req.path);
-  // Normalise the rest so '/', '/en', '/en/' all land on '/'.
   const route = (rest === '' ? '/' : rest).replace(/\/+$/, '') || '/';
 
-  // Find the route meta entry (exact match or fall back to generic).
-  const meta = ROUTE_META[route] || null;
-  const key  = meta?.key;
-  const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[key] || {};
+  const detail = extractDetail(route);
 
-  // Admin-editable overrides for content-driven pages.
-  const override = meta?.contentKey ? await fetchContentMeta(meta.contentKey, locale) : null;
+  let title, description, ogImage;
+  let schemas = [];
 
-  const title       = override?.title       || defaults.title       || DEFAULT_META[DEFAULT_LOCALE].home.title;
-  const description = override?.description || defaults.description || DEFAULT_META[DEFAULT_LOCALE].home.description;
+  if (detail) {
+    // ── Detail page (news article / product / project) ─────────────────
+    const row = await fetchDetailRow(detail);
+    if (!row) {
+      // Not found — fall back to section defaults so the SPA can render
+      // its own 404 and we still serve *something* sensible to crawlers.
+      const sectionKey = detail.section === 'shop' ? 'shop'
+                       : detail.section === 'news' ? 'news'
+                       : 'projects';
+      const d = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[sectionKey];
+      title       = d.title;
+      description = d.description;
+      ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
+    } else {
+      const canonical = `${APP_URL}${req.path}`;
+      if (detail.type === 'news') {
+        title       = pickLocale(row, 'title', 'title_is', locale);
+        description = pickLocale(row, 'summary', 'summary_is', locale);
+        const img   = locale === 'is' && row.cover_image_is ? row.cover_image_is : row.cover_image;
+        ogImage     = img ? absUrl(img) : `${APP_URL}${OG_IMAGE_PATH}`;
+        schemas.push(articleSchema(row, locale, canonical));
+        schemas.push(breadcrumbSchema({ section: 'news', detailName: title, localePath: `/news/${row.slug}`, locale }));
+      } else if (detail.type === 'product') {
+        title       = pickLocale(row, 'name', 'name_is', locale);
+        description = stripHtml(pickLocale(row, 'description', 'description_is', locale)).slice(0, 200);
+        ogImage     = row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
+        schemas.push(productSchema(row, locale, canonical));
+        schemas.push(breadcrumbSchema({ section: 'shop', detailName: title, localePath: `/shop/${row.slug}`, locale }));
+      } else if (detail.type === 'project') {
+        title       = row.title;
+        description = stripHtml(row.description).slice(0, 200);
+        ogImage     = row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
+        schemas.push(creativeWorkSchema(row, locale, canonical));
+        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/projects/${row.id}`, locale }));
+      }
+    }
+  } else {
+    // ── List / static page ──────────────────────────────────────────────
+    const meta = ROUTE_META[route] || null;
+    const key  = meta?.key;
+    const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[key] || {};
+    const override = meta?.contentKey ? await fetchContentMeta(meta.contentKey, locale) : null;
+
+    title       = override?.title       || defaults.title       || DEFAULT_META[DEFAULT_LOCALE].home.title;
+    description = override?.description || defaults.description || DEFAULT_META[DEFAULT_LOCALE].home.description;
+    ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
+
+    // Breadcrumbs on any non-home page.
+    if (route !== '/') {
+      let section = null;
+      if (route === '/projects' || route === '/news' || route === '/shop') {
+        section = route.slice(1);
+      }
+      const bc = breadcrumbSchema({
+        section,
+        detailName: section ? null : title,
+        localePath: route,
+        locale,
+      });
+      if (bc) schemas.push(bc);
+    }
+  }
 
   const canonical = `${APP_URL}${req.path}`;
   const hreflang  = {
@@ -240,14 +567,29 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     'x-default':  `${APP_URL}${route === '/' ? '/' : route}`,
   };
   const ogLocale = locale === 'is' ? 'is_IS' : 'en_IS';
-  const ogImage  = `${APP_URL}${OG_IMAGE_PATH}`;
 
-  const html = rewriteHead(loadTemplate(), {
+  const jsonLdHtml = jsonLdScript(schemas);
+
+  // Crawler body content — lists (/news, /shop, /projects) and all
+  // detail pages. Static pages (home, halli, contact, privacy, terms)
+  // rely on the SPA; their content is small enough that Google's JS
+  // renderer handles it and social scrapers can read the <head> alone.
+  let crawlerHtml = '';
+  if (detail) {
+    const row = await fetchDetailRow(detail);
+    if (row) crawlerHtml = crawlerDetailHtml(detail.type, row, locale);
+  } else if (route === '/news' || route === '/shop' || route === '/projects') {
+    const section = route.slice(1);
+    const rows    = await fetchListRows(section, 10);
+    if (rows.length) crawlerHtml = crawlerListHtml(section, rows, locale);
+  }
+
+  let html = rewriteHead(loadTemplate(), {
     title, description, canonical, hreflang, ogLocale, ogImage,
+    jsonLd: jsonLdHtml,
   });
+  html = injectCrawlerContent(html, crawlerHtml);
 
-  // CDN-friendly: same path + locale = same HTML (until admin edits meta or
-  // code redeploys). 5 min fresh + 1 min SWR is plenty for meta copy.
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
   res.setHeader('Vary', 'Accept-Language, Cookie');
