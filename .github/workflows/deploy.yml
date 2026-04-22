@@ -10,26 +10,30 @@ jobs:
     name: Build & Deploy
     runs-on: ubuntu-latest
 
+    # Required for OIDC federated login against Azure AD — the job gets a
+    # short-lived token from GitHub that Azure exchanges for a service-
+    # principal session, no long-lived secrets in the repo.
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Service-principal auth via the legacy creds JSON in AZURE_CREDENTIALS.
-      # The repo also has AZURE_CLIENT_ID/TENANT_ID/SUBSCRIPTION_ID slots left
-      # over from a half-wired OIDC attempt; when those get populated we can
-      # switch back to OIDC (permissions: id-token: write + the 3 with:
-      # inputs) and retire this single-secret approach.
-      - name: Azure Login
+      - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # `az acr login` uses the Azure session above — no ACR_USERNAME /
+      # ACR_PASSWORD needed. It populates Docker's credential store so
+      # the subsequent build-push step can push images without a second
+      # auth round-trip.
       - name: Log in to ACR
-        uses: docker/login-action@v3
-        with:
-          registry: hallismileyacr.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+        run: az acr login --name hallismileyacr
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
