@@ -190,9 +190,12 @@ async function fetchDetailRow(detail) {
     if (detail.type === 'project') {
       const id = Number(detail.param);
       if (!Number.isFinite(id)) return null;
+      // Select title_is / description_is alongside the primary columns so
+      // the caller can pick the locale-appropriate value when rendering
+      // <title> + og:description for Icelandic crawlers.
       const { rows } = await db.query(
-        `SELECT id, title, description, category, year, image_url, featured,
-                created_at, updated_at
+        `SELECT id, title, title_is, description, description_is,
+                category, year, image_url, featured, created_at, updated_at
            FROM projects WHERE id = $1 LIMIT 1`,
         [id]
       );
@@ -235,7 +238,8 @@ async function fetchListRows(section, limit = 10) {
     }
     if (section === 'projects') {
       const { rows } = await db.query(
-        `SELECT id, title, description, category, year, image_url
+        `SELECT id, title, title_is, description, description_is,
+                category, year, image_url
            FROM projects
           ORDER BY featured DESC, year DESC, updated_at DESC
           LIMIT $1`,
@@ -380,8 +384,10 @@ function crawlerListHtml(section, rows, locale) {
       return `<li><a href="${esc(href)}"><h2>${esc(name)}</h2></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
     }
     if (section === 'projects') {
-      const href = `/${locale}/projects/${row.id}`;
-      return `<li><a href="${esc(href)}"><h2>${esc(row.title)}</h2></a><p>${esc(stripHtml(row.description).slice(0, 200))}</p></li>`;
+      const title = pickLocale(row, 'title', 'title_is', locale);
+      const desc  = pickLocale(row, 'description', 'description_is', locale);
+      const href  = `/${locale}/projects/${row.id}`;
+      return `<li><a href="${esc(href)}"><h2>${esc(title)}</h2></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
     }
     return '';
   }).filter(Boolean).join('');
@@ -402,7 +408,9 @@ function crawlerDetailHtml(type, row, locale) {
     return `<article><h1>${esc(name)}</h1><p>${esc(desc)}</p><p>${esc(priceLabel)}: ${Number(row.price_isk).toLocaleString('is-IS')} ISK</p></article>`;
   }
   if (type === 'project') {
-    return `<article><h1>${esc(row.title)}</h1><p><strong>${esc(row.category)} · ${esc(String(row.year))}</strong></p>${row.description}</article>`;
+    const title = pickLocale(row, 'title', 'title_is', locale);
+    const desc  = pickLocale(row, 'description', 'description_is', locale);
+    return `<article><h1>${esc(title)}</h1><p><strong>${esc(row.category)} · ${esc(String(row.year))}</strong></p>${desc}</article>`;
   }
   return '';
 }
@@ -526,8 +534,8 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
         schemas.push(productSchema(row, locale, canonical));
         schemas.push(breadcrumbSchema({ section: 'shop', detailName: title, localePath: `/shop/${row.slug}`, locale }));
       } else if (detail.type === 'project') {
-        title       = row.title;
-        description = stripHtml(row.description).slice(0, 200);
+        title       = pickLocale(row, 'title', 'title_is', locale);
+        description = stripHtml(pickLocale(row, 'description', 'description_is', locale)).slice(0, 200);
         ogImage     = row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
         schemas.push(creativeWorkSchema(row, locale, canonical));
         schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/projects/${row.id}`, locale }));

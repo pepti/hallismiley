@@ -9,17 +9,36 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { t, getLocale, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+
+// Pick the locale-resolved slice of a `{ en, is }` default blob. Falls back
+// to English if an unknown locale is active or the .is key is missing.
+function pick(defaultsBlob) {
+  return (defaultsBlob && (defaultsBlob[getLocale()] || defaultsBlob.en)) || {};
+}
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
+// Each DEFAULT_* is shaped as { en, is } so the view falls back to
+// locale-appropriate copy when no admin-edited site_content row exists.
+// Resolve at _loadAllContent() time via s.defaults[getLocale()] || s.defaults.en.
 const DEFAULT_HERO = {
-  eyebrow:     'Get in touch',
-  title_line1: "Let's build something",
-  title_accent: 'in wood or in code.',
-  subtitle:
-    'Commissions, collaborations, hiring, or just saying hi — ' +
-    'I read every message and reply from my own inbox.',
+  en: {
+    eyebrow:     'Get in touch',
+    title_line1: "Let's build something",
+    title_accent: 'in wood or in code.',
+    subtitle:
+      'Commissions, collaborations, hiring, or just saying hi — ' +
+      'I read every message and reply from my own inbox.',
+  },
+  is: {
+    eyebrow:     'Hafa samband',
+    title_line1: 'Smíðum eitthvað saman',
+    title_accent: 'í viði eða í kóða.',
+    subtitle:
+      'Verkefni, samstarf, ráðningar eða bara til að heilsa — ' +
+      'ég les öll skilaboð og svara úr minni eigin inbox.',
+  },
 };
 
 // Icons for card items are keyed by `type` and merged at render time — not editable.
@@ -43,89 +62,160 @@ const CARD_ICONS = {
 };
 
 const DEFAULT_CARD = {
-  items: [
-    { type: 'email',    label: 'Email',    value: 'halli [at] hallismiley [dot] is', href: 'halli@hallismiley.is' },
-    { type: 'github',   label: 'GitHub',   value: 'pepti/hallismiley',               href: 'https://github.com/pepti/hallismiley' },
-    { type: 'linkedin', label: 'LinkedIn', value: 'halliv',                          href: 'https://www.linkedin.com/in/halliv/' },
-    { type: 'location', label: 'Based in', value: 'Hafnarfjörður · GMT',             meta:  'Typical reply within 2–3 days' },
-  ],
+  en: {
+    items: [
+      { type: 'email',    label: 'Email',    value: 'halli [at] hallismiley [dot] is', href: 'halli@hallismiley.is' },
+      { type: 'github',   label: 'GitHub',   value: 'pepti/hallismiley',               href: 'https://github.com/pepti/hallismiley' },
+      { type: 'linkedin', label: 'LinkedIn', value: 'halliv',                          href: 'https://www.linkedin.com/in/halliv/' },
+      { type: 'location', label: 'Based in', value: 'Hafnarfjörður · GMT',             meta:  'Typical reply within 2–3 days' },
+    ],
+  },
+  is: {
+    items: [
+      { type: 'email',    label: 'Netfang',     value: 'halli [at] hallismiley [dot] is', href: 'halli@hallismiley.is' },
+      { type: 'github',   label: 'GitHub',      value: 'pepti/hallismiley',               href: 'https://github.com/pepti/hallismiley' },
+      { type: 'linkedin', label: 'LinkedIn',    value: 'halliv',                          href: 'https://www.linkedin.com/in/halliv/' },
+      { type: 'location', label: 'Staðsetning', value: 'Hafnarfjörður · GMT',             meta:  'Yfirleitt svar innan 2–3 daga' },
+    ],
+  },
 };
 
 const DEFAULT_FORM = {
-  eyebrow:         'Send a message',
-  title:           'Tell me what you are thinking about',
-  submit_label:    'Send Message',
-  fallback_prefix: 'Prefer email?',
-  fallback_link:   'Write to me directly.',
+  en: {
+    eyebrow:         'Send a message',
+    title:           'Tell me what you are thinking about',
+    submit_label:    'Send Message',
+    fallback_prefix: 'Prefer email?',
+    fallback_link:   'Write to me directly.',
+  },
+  is: {
+    eyebrow:         'Sendu skilaboð',
+    title:           'Segðu mér hvað þú ert að hugsa um',
+    submit_label:    'Senda skilaboð',
+    fallback_prefix: 'Frekar netfang?',
+    fallback_link:   'Sendu mér tölvupóst beint.',
+  },
 };
 
 const DEFAULT_AVAILABILITY = {
-  eyebrow: 'Right now',
-  title: 'What I am open to',
-  cards: [
-    {
-      status: 'open',
-      label: 'Freelance software',
-      body: 'Taking on small to mid-size web projects — backend, full-stack, automation, tooling.',
-    },
-    {
-      status: 'open',
-      label: 'Carpentry commissions',
-      body: 'Taking carpentry work in Iceland — joinery, furniture, interior fit-out.',
-    },
-    {
-      status: 'limited',
-      label: 'Collaborations & speaking',
-      body: 'Happy to talk about interesting ideas at the intersection of craft and code.',
-    },
-  ],
+  en: {
+    eyebrow: 'Right now',
+    title: 'What I am open to',
+    cards: [
+      { status: 'open',    label: 'Freelance software',         body: 'Taking on small to mid-size web projects — backend, full-stack, automation, tooling.' },
+      { status: 'open',    label: 'Carpentry commissions',      body: 'Taking carpentry work in Iceland — joinery, furniture, interior fit-out.' },
+      { status: 'limited', label: 'Collaborations & speaking',  body: 'Happy to talk about interesting ideas at the intersection of craft and code.' },
+    ],
+  },
+  is: {
+    eyebrow: 'Núna',
+    title: 'Hvað ég er tilbúinn í',
+    cards: [
+      { status: 'open',    label: 'Hugbúnaður í lausavinnu',     body: 'Tek að mér lítil og meðalstór vefverkefni — bakendi, fullur stafli, sjálfvirkni, verkfæri.' },
+      { status: 'open',    label: 'Smíðaverkefni',               body: 'Tek að mér smíðaverkefni á Íslandi — fellingar, húsgögn, innanhússfrágang.' },
+      { status: 'limited', label: 'Samstarf & erindi',           body: 'Fús til að ræða áhugaverðar hugmyndir á mörkum handverks og kóða.' },
+    ],
+  },
 };
 
 const DEFAULT_BUILT_WITH = {
-  eyebrow: 'Under the hood',
-  title:   'Built with — and yours to clone',
-  body1:
-    'This site is a hand-built portfolio running on Node.js and Express with a PostgreSQL ' +
-    'database and a vanilla-JS single-page frontend — no framework, no build step. Auth uses ' +
-    'Lucia with CSRF and Helmet hardening, email goes through Resend, uploads through Multer, ' +
-    'observability through Pino and Sentry, and the whole thing deploys to Azure or Railway.',
-  body2:
-    'The full source is on GitHub — feel free to fork or clone it. If you would like a hand ' +
-    'getting it running or keeping it maintained, drop me a line and I am happy to help ' +
-    'with setup, hosting, or ongoing maintenance.',
-  pills: [
-    'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
-    'Helmet', 'CSRF', 'Resend', 'Multer',
-    'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure', 'Railway',
-  ],
-  github_btn_label: 'View on GitHub',
-  email_btn_label:  'Email me for setup help',
-  github_url:       'https://github.com/pepti/hallismiley',
+  en: {
+    eyebrow: 'Under the hood',
+    title:   'Built with — and yours to clone',
+    body1:
+      'This site is a hand-built portfolio running on Node.js and Express with a PostgreSQL ' +
+      'database and a vanilla-JS single-page frontend — no framework, no build step. Auth uses ' +
+      'Lucia with CSRF and Helmet hardening, email goes through Resend, uploads through Multer, ' +
+      'observability through Pino and Sentry, and the whole thing deploys to Azure or Railway.',
+    body2:
+      'The full source is on GitHub — feel free to fork or clone it. If you would like a hand ' +
+      'getting it running or keeping it maintained, drop me a line and I am happy to help ' +
+      'with setup, hosting, or ongoing maintenance.',
+    pills: [
+      'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
+      'Helmet', 'CSRF', 'Resend', 'Multer',
+      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure', 'Railway',
+    ],
+    github_btn_label: 'View on GitHub',
+    email_btn_label:  'Email me for setup help',
+    github_url:       'https://github.com/pepti/hallismiley',
+  },
+  is: {
+    eyebrow: 'Undir húddinu',
+    title:   'Byggt með — og þitt að afrita',
+    body1:
+      'Þessi síða er handsmíðað verkefnasafn sem keyrir á Node.js og Express með PostgreSQL ' +
+      'gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn rammi, ' +
+      'ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, tölvupóstur ' +
+      'fer í gegnum Resend, skráarupphleðsla í gegnum Multer, vöktun gegnum Pino og Sentry, ' +
+      'og allt saman er dreift á Azure eða Railway.',
+    body2:
+      'Öll frumskrár eru á GitHub — þér er velkomið að klóna eða fork-a. Ef þig vantar aðstoð ' +
+      'við að koma þessu í loftið eða halda því við, hafðu samband og ég aðstoða með ánægju ' +
+      'við uppsetningu, hýsingu eða áframhaldandi umsjón.',
+    pills: [
+      'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
+      'Helmet', 'CSRF', 'Resend', 'Multer',
+      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure', 'Railway',
+    ],
+    github_btn_label: 'Skoða á GitHub',
+    email_btn_label:  'Sendu mér póst um uppsetningu',
+    github_url:       'https://github.com/pepti/hallismiley',
+  },
 };
 
 const DEFAULT_FOOTER = {
-  brand_name:  'Halli Smiley',
-  copy_suffix: 'A portfolio of nothing and everything.',
-  nav_links: [
-    { label: 'Halli',    href: '#/halli' },
-    { label: 'Projects', href: '#/projects' },
-    { label: 'GitHub',   href: 'https://github.com/pepti/hallismiley' },
-    { label: 'LinkedIn', href: 'https://www.linkedin.com/in/halliv/' },
-  ],
-  legal_links: [
-    { label: 'Privacy Policy',   href: '#/privacy' },
-    { label: 'Terms of Service', href: '#/terms' },
-  ],
+  en: {
+    brand_name:  'Halli Smiley',
+    copy_suffix: 'A portfolio of nothing and everything.',
+    nav_links: [
+      { label: 'Halli',    href: '/halli' },
+      { label: 'Projects', href: '/projects' },
+      { label: 'GitHub',   href: 'https://github.com/pepti/hallismiley' },
+      { label: 'LinkedIn', href: 'https://www.linkedin.com/in/halliv/' },
+    ],
+    legal_links: [
+      { label: 'Privacy Policy',   href: '/privacy' },
+      { label: 'Terms of Service', href: '/terms' },
+    ],
+  },
+  is: {
+    brand_name:  'Halli Smiley',
+    copy_suffix: 'Verkefnasafn um allt og ekkert.',
+    nav_links: [
+      { label: 'Halli',     href: '/halli' },
+      { label: 'Verkefni',  href: '/projects' },
+      { label: 'GitHub',    href: 'https://github.com/pepti/hallismiley' },
+      { label: 'LinkedIn',  href: 'https://www.linkedin.com/in/halliv/' },
+    ],
+    legal_links: [
+      { label: 'Persónuverndarstefna', href: '/privacy' },
+      { label: 'Notkunarskilmálar',    href: '/terms' },
+    ],
+  },
 };
 
-const TOPICS = [
-  { value: '',              label: 'What is this about?' },
-  { value: 'carpentry',     label: 'Carpentry commission' },
-  { value: 'software',      label: 'Software work' },
-  { value: 'collaboration', label: 'Collaboration' },
-  { value: 'press',         label: 'Press & speaking' },
-  { value: 'other',         label: 'Other' },
-];
+// Topic dropdown options for the contact form. Values stay the same in both
+// locales (they're server-side enum keys) — only the human-readable labels
+// switch. Resolved at render time via TOPICS[getLocale()] || TOPICS.en.
+const TOPICS = {
+  en: [
+    { value: '',              label: 'What is this about?' },
+    { value: 'carpentry',     label: 'Carpentry commission' },
+    { value: 'software',      label: 'Software work' },
+    { value: 'collaboration', label: 'Collaboration' },
+    { value: 'press',         label: 'Press & speaking' },
+    { value: 'other',         label: 'Other' },
+  ],
+  is: [
+    { value: '',              label: 'Hvað er þetta um?' },
+    { value: 'carpentry',     label: 'Smíðaverkefni' },
+    { value: 'software',      label: 'Hugbúnaðarvinna' },
+    { value: 'collaboration', label: 'Samstarf' },
+    { value: 'press',         label: 'Fjölmiðlar & erindi' },
+    { value: 'other',         label: 'Annað' },
+  ],
+};
 
 // Each editable section's config: state field on `this`, default, and DB key.
 const SECTIONS = [
@@ -177,15 +267,18 @@ export class ContactView {
   // ── Load all site_content rows in parallel; fall back to defaults on 404 ──
   async _loadAllContent() {
     await Promise.all(SECTIONS.map(async s => {
+      // Resolve the locale-appropriate slice of the {en, is} defaults blob
+      // once per section load. Any DB row then merges on top.
+      const defaults = pick(s.defaults);
       try {
         const res = await fetch(`/api/v1/content/${s.key}?locale=${encodeURIComponent(window.__locale || 'en')}`);
         if (res.ok) {
           const data = await res.json();
-          this[s.field] = this._mergeWithDefaults(s.defaults, data);
+          this[s.field] = this._mergeWithDefaults(defaults, data);
           return;
         }
       } catch { /* fall through */ }
-      this[s.field] = JSON.parse(JSON.stringify(s.defaults));
+      this[s.field] = JSON.parse(JSON.stringify(defaults));
     }));
   }
 
@@ -275,7 +368,7 @@ export class ContactView {
   // ── SECTION 3: Inquiry form ────────────────────────────────────────────
   _formHtml() {
     const f = this._form;
-    const topicOptions = TOPICS.map(t =>
+    const topicOptions = (TOPICS[getLocale()] || TOPICS.en).map(t =>
       `<option value="${escHtml(t.value)}">${escHtml(t.label)}</option>`
     ).join('');
 
@@ -389,7 +482,7 @@ export class ContactView {
         </div>
 
         <div class="built-with__actions">
-          <a href="${escHtml(b.github_url || DEFAULT_BUILT_WITH.github_url)}"
+          <a href="${escHtml(b.github_url || DEFAULT_BUILT_WITH.en.github_url)}"
              target="_blank" rel="noopener noreferrer"
              class="lol-btn--gold built-with__btn">
             <span data-field="github_btn_label">${escHtml(b.github_btn_label)}</span>
@@ -455,7 +548,7 @@ export class ContactView {
   _initEmailLinks(view) {
     const emailHref = () => {
       const it = this._card.items.find(x => x.type === 'email');
-      return (it && it.href) || DEFAULT_CARD.items[0].href;
+      return (it && it.href) || DEFAULT_CARD.en.items[0].href;
     };
     const reveal = (el) => {
       if (!el || el.dataset.revealed === '1') return;
@@ -501,7 +594,7 @@ export class ContactView {
     const submit = view.querySelector('#contact-page-submit');
     if (!form) return;
 
-    const submitLabel = () => this._form.submit_label || DEFAULT_FORM.submit_label;
+    const submitLabel = () => this._form.submit_label || pick(DEFAULT_FORM).submit_label;
 
     form.addEventListener('submit', async e => {
       e.preventDefault();
@@ -751,7 +844,7 @@ export class ContactView {
       pills,
       github_btn_label: this._readField(section, 'github_btn_label', this._builtWith.github_btn_label),
       email_btn_label:  this._readField(section, 'email_btn_label',  this._builtWith.email_btn_label),
-      github_url:       this._builtWith.github_url || DEFAULT_BUILT_WITH.github_url,
+      github_url:       this._builtWith.github_url || DEFAULT_BUILT_WITH.en.github_url,
     };
   }
 

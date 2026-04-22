@@ -3,7 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -25,17 +25,31 @@ const CATEGORY_ICONS = {
           </svg>`,
 };
 
-// Default discipline content — fallback if API row is unavailable.
+// Default discipline content — fallback if API row is unavailable. Shaped
+// as { en, is } for locale-aware fallback (picked via pick() at load time).
 const DEFAULT_DISCIPLINE_CONTENT = {
-  eyebrow:     'Browse by',
-  heading:     'Discipline',
-  description: 'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
-  categories: [
-    { id: 'tech',        label: 'Tech',        type: 'Full-Stack Applications', img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
-    { id: 'carpentry',   label: 'Carpentry',   type: 'Joinery & Timber Work',   img: '/assets/projects/arnarhraun/img_1795.jpg' },
-    { id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',     img: '/assets/projects/arnarhraun/img_1071.jpg' },
-    { id: 'tools',       label: 'Tools',       type: 'Workshop & Dev Tooling',  img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
-  ],
+  en: {
+    eyebrow:     'Browse by',
+    heading:     'Discipline',
+    description: 'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
+    categories: [
+      { id: 'tech',        label: 'Tech',        type: 'Full-Stack Applications', img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
+      { id: 'carpentry',   label: 'Carpentry',   type: 'Joinery & Timber Work',   img: '/assets/projects/arnarhraun/img_1795.jpg' },
+      { id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',     img: '/assets/projects/arnarhraun/img_1071.jpg' },
+      { id: 'tools',       label: 'Tools',       type: 'Workshop & Dev Tooling',  img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+    ],
+  },
+  is: {
+    eyebrow:     'Skoða eftir',
+    heading:     'Sviði',
+    description: 'Allt frá nákvæmum timburgrindum og handskornum fellingum til fullra vefforrita — hvert verkefni byggt til að endast.',
+    categories: [
+      { id: 'tech',        label: 'Tækni',       type: 'Fullur tæknistafli',       img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
+      { id: 'carpentry',   label: 'Smíði',       type: 'Fellingar & timburvinna',  img: '/assets/projects/arnarhraun/img_1795.jpg' },
+      { id: 'remodelling', label: 'Endurnýjun',  type: 'Innanhússfrágangur',       img: '/assets/projects/arnarhraun/img_1071.jpg' },
+      { id: 'tools',       label: 'Verkfæri',    type: 'Verkstæði & þróunarverkfæri', img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+    ],
+  },
 };
 
 // ── Default skills content — used as fallback if API is unavailable ───────
@@ -151,7 +165,8 @@ export class HomeView {
         }
       }
     } catch { /* network error — fall through to default */ }
-    this._discipline = JSON.parse(JSON.stringify(DEFAULT_DISCIPLINE_CONTENT));
+    const defaults = DEFAULT_DISCIPLINE_CONTENT[getLocale()] || DEFAULT_DISCIPLINE_CONTENT.en;
+    this._discipline = JSON.parse(JSON.stringify(defaults));
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────

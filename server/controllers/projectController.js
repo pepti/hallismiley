@@ -20,7 +20,21 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
-const MEDIA_COLUMNS = 'id, project_id, file_path, media_type, sort_order, caption, section_id, created_at';
+// Admin-facing column list — surfaces caption + caption_is so the CMS can
+// render both languages side-by-side.
+const MEDIA_COLUMNS = 'id, project_id, file_path, media_type, sort_order, caption, caption_is, section_id, created_at';
+
+// Public-facing: COALESCE the IS caption when req.locale === 'is' so gallery
+// thumbnails read in the viewer's language without the frontend needing to
+// know about the _is column.
+function mediaPublicCols(locale) {
+  if (locale === 'is') {
+    return `id, project_id, file_path, media_type, sort_order,
+            COALESCE(caption_is, caption) AS caption,
+            section_id, created_at`;
+  }
+  return 'id, project_id, file_path, media_type, sort_order, caption, section_id, created_at';
+}
 
 // Parse an incoming section_id value (body/form) into a valid integer or null.
 // Returns { ok, value, errorKey } — `ok: false` means the caller should 400
@@ -39,20 +53,20 @@ const projectController = {
   async getAll(req, res, next) {
     try {
       const { category, featured, year, limit, offset } = req.query;
-      res.json(await Project.findAll({ category, featured, year, limit, offset }));
+      res.json(await Project.findAll({ category, featured, year, limit, offset, locale: req.locale }));
     } catch (err) { next(err); }
   },
 
   async getFeatured(req, res, next) {
     try {
       res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
-      res.json(await Project.findFeatured());
+      res.json(await Project.findFeatured(req.locale));
     } catch (err) { next(err); }
   },
 
   async getOne(req, res, next) {
     try {
-      const project = await Project.findById(req.params.id);
+      const project = await Project.findById(req.params.id, { locale: req.locale });
       if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.json(project);
     } catch (err) { next(err); }
@@ -87,8 +101,9 @@ const projectController = {
 
       // NULLS FIRST so the "Ungrouped" bucket naturally precedes named sections
       // in the flat array — frontend groups these client-side by section_id.
+      const cols = mediaPublicCols(req.locale);
       const { rows } = await db.query(
-        `SELECT ${MEDIA_COLUMNS}
+        `SELECT ${cols}
          FROM project_media
          WHERE project_id = $1
          ORDER BY section_id ASC NULLS FIRST, sort_order ASC, id ASC`,
@@ -349,7 +364,7 @@ const projectController = {
     try {
       const project = await Project.findById(req.params.id);
       if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
-      res.json(await ProjectSection.list(req.params.id));
+      res.json(await ProjectSection.list(req.params.id, { locale: req.locale }));
     } catch (err) { next(err); }
   },
 
@@ -420,7 +435,7 @@ const projectController = {
     try {
       const project = await Project.findById(req.params.id);
       if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
-      res.json(await ProjectVideo.list(req.params.id));
+      res.json(await ProjectVideo.list(req.params.id, { locale: req.locale }));
     } catch (err) { next(err); }
   },
 

@@ -2,6 +2,15 @@ import { getCSRFToken } from '../services/auth.js';
 
 const BASE = '/api/v1/projects';
 
+// Append ?locale= to a URL so the server's locale middleware pins the fetch
+// to the SPA's active locale instead of falling back to the preferred_locale
+// cookie (which lags URL-driven switches by one navigation).
+function withLocale(url) {
+  const locale = encodeURIComponent(window.__locale || 'en');
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}locale=${locale}`;
+}
+
 async function request(url, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
 
@@ -26,11 +35,11 @@ export const projectApi = {
     const qs = new URLSearchParams(
       Object.fromEntries(Object.entries(params).filter(([,v]) => v !== undefined))
     ).toString();
-    return request(`${BASE}${qs ? '?' + qs : ''}`);
+    return request(withLocale(`${BASE}${qs ? '?' + qs : ''}`));
   },
-  getFeatured: ()         => request(`${BASE}/featured`),
-  getOne:      (id)       => request(`${BASE}/${id}`),
-  getMedia:    (id)       => request(`${BASE}/${id}/media`),
+  getFeatured: ()         => request(withLocale(`${BASE}/featured`)),
+  getOne:      (id)       => request(withLocale(`${BASE}/${id}`)),
+  getMedia:    (id)       => request(withLocale(`${BASE}/${id}/media`)),
   async create(data) {
     return request(BASE, { method: 'POST', headers: await csrfHeaders(), body: JSON.stringify(data) });
   },
@@ -108,7 +117,7 @@ export const projectApi = {
 
   // ── Sections ──────────────────────────────────────────────────────────────
 
-  getSections: (projectId) => request(`${BASE}/${projectId}/sections`),
+  getSections: (projectId) => request(withLocale(`${BASE}/${projectId}/sections`)),
 
   async createSection(projectId, name, description) {
     const body = { name };
@@ -143,7 +152,7 @@ export const projectApi = {
 
   // ── Videos ────────────────────────────────────────────────────────────────
 
-  getVideos: (projectId) => request(`${BASE}/${projectId}/videos`),
+  getVideos: (projectId) => request(withLocale(`${BASE}/${projectId}/videos`)),
 
   // payload is either a FormData (file upload) OR a plain object
   // { url, title? } for a YouTube embed.

@@ -784,6 +784,85 @@ const migrations = [
         WHERE slug = 'were-live-welcome'`,
     ],
   },
+  {
+    // i18n — per-locale text on projects, project_sections, project_media,
+    // project_videos. Same Option B approach as migration 031 for news/
+    // products: nullable "_is" sibling columns so existing foreign keys
+    // (project_media.project_id, project_sections.project_id, etc.) stay
+    // intact.
+    //
+    // Controllers surface the IS column via COALESCE when req.locale === 'is'
+    // and the _is column is non-null; admin editors receive both raw fields
+    // so the CMS can show EN + IS side-by-side.
+    name: '033_i18n_projects_locale',
+    statements: [
+      // Projects — title + description each get an IS sibling.
+      `ALTER TABLE projects           ADD COLUMN IF NOT EXISTS title_is       TEXT`,
+      `ALTER TABLE projects           ADD COLUMN IF NOT EXISTS description_is TEXT`,
+
+      // Project sections — name (section heading) + description (body under it).
+      `ALTER TABLE project_sections   ADD COLUMN IF NOT EXISTS name_is        TEXT`,
+      `ALTER TABLE project_sections   ADD COLUMN IF NOT EXISTS description_is TEXT`,
+
+      // Project media — caption (appears under each image/video in the gallery).
+      `ALTER TABLE project_media      ADD COLUMN IF NOT EXISTS caption_is     TEXT`,
+
+      // Project videos — title (shown above the video embed).
+      `ALTER TABLE project_videos     ADD COLUMN IF NOT EXISTS title_is       TEXT`,
+    ],
+  },
+  {
+    // i18n — backfill Icelandic translations for the 4 live projects. Only
+    // writes when _is is NULL so later admin edits via the CMS are never
+    // overwritten. Idempotent on re-run. Keyed by title (slug column
+    // doesn't exist on projects); project IDs aren't stable across
+    // environments.
+    name: '034_i18n_projects_icelandic_backfill',
+    statements: [
+      // 1) Halli Smiley Portfolio Platform — match both em-dash and plain
+      //    hyphen variants in case the admin title has drifted between
+      //    environments or was edited after the screenshot was taken.
+      `UPDATE projects
+          SET title_is       = COALESCE(title_is,       'Halli Smiley — Verkefnavefur'),
+              description_is = COALESCE(description_is,
+                'Fullt vefforrit byggt frá grunni til að sýna smíðavinnu og hugbúnaðargerð. Með sérsmíðuðu CMS og innbyggðum stjórnborðs-ritli, margþrepa notendakerfi með setustýrðri auðkenningu, viðburðasíðu með rauntíma niðurtalningu fyrir boðsgesti og fullu myndasafni með lightbox. Hönnuð með áberandi dökku þema innblásnu af úrvalsviðmótum tölvuleikja, afhendir vettvangurinn óaðfinnanlega eitt-síðu upplifun án þess að reiða sig á nokkurn framenda-ramma.
+
+Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfasta loggun með Pino, Prometheus-mælingar, straumrof, CI/CD með yfir 398 sjálfvirkum prófunum í eininga-, samþættingar- og enda-til-enda svítum, og yfirgripsmikinn vöktunarstafla. Hver einasti hluti, frá Lucia-keyrðu auðkenningarkerfi til stjórnenda-ritaðs vefefnis, var handsmíðaður til að sýna fullt vefþróunar-handverk á hverju lagi tæknistaflans.')
+        WHERE title ILIKE 'Halli Smiley%Portfolio Platform'`,
+
+      // 2) Arnarhraun Renovations
+      `UPDATE projects
+          SET title_is       = COALESCE(title_is,       'Endurnýjun á Arnarhrauni'),
+              description_is = COALESCE(description_is, 'Nýtt eldhús, nýtt gólfefni, málning, veggir fjarlægðir.')
+        WHERE title = 'Arnarhraun Renovations'`,
+
+      // 3) Seljaland Kitchen
+      `UPDATE projects
+          SET title_is       = COALESCE(title_is,       'Seljaland eldhús'),
+              description_is = COALESCE(description_is, 'Nýtt eldhús fyrir systur mína.')
+        WHERE title = 'Seljaland Kitchen'`,
+
+      // 4) Stofan Bakhús
+      `UPDATE projects
+          SET title_is       = COALESCE(title_is,       'Stofan Bakhús'),
+              description_is = COALESCE(description_is,
+                'Byggingarverkefni. Það sem gerði verkefnið sérstaklega áhugavert var að enginn annar verktaki kom að því og allar ákvarðanir um innanhússhönnun og framkvæmdir voru teknar af mér í samstarfi við eigendur. Ábyrgð fyrir innanhússhönnun, framkvæmdum, byggingarreglugerðarstöðlum þ.m.t. vikmörkum, heilbrigðis- og öryggiskröfum.')
+        WHERE title = 'Stofan Bakhús'`,
+    ],
+  },
+  {
+    // i18n — backfill Icelandic for the second seeded news article
+    // ('AI Generated videos', slug 'x-11'). Three short strings, same
+    // COALESCE-guarded pattern as migration 032.
+    name: '035_i18n_ai_news_icelandic_backfill',
+    statements: [
+      `UPDATE news_articles
+          SET title_is   = COALESCE(title_is,   'Myndbönd búin til með gervigreind'),
+              summary_is = COALESCE(summary_is, 'Super Grok gervigreindar-myndgerð'),
+              body_is    = COALESCE(body_is,    'Dágóð vitleysa')
+        WHERE slug = 'x-11'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

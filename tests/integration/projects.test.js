@@ -461,3 +461,112 @@ describe('DELETE /api/v1/projects/:id', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ── Per-project Icelandic translations (migration 033) ────────────────────────
+//
+// Projects gained nullable title_is / description_is columns. The public API
+// routes should surface the IS column when req.locale === 'is' AND the column
+// is non-null, otherwise fall back to the primary English column.
+
+describe('Project locale-aware SELECTs', () => {
+  test('POST accepts title_is + description_is and stores both', async () => {
+    const res = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject({
+        title:          'Stofan Bakhús',
+        description:    'Construction project.',
+        title_is:       'Stofan Bakhús',
+        description_is: 'Byggingarverkefni.',
+      }));
+    expect(res.status).toBe(201);
+    expect(res.body.title_is).toBe('Stofan Bakhús');
+    expect(res.body.description_is).toBe('Byggingarverkefni.');
+  });
+
+  test('GET /api/v1/projects?locale=is returns IS fields under title/description when present', async () => {
+    await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject({
+        title:          'Portfolio Platform',
+        description:    'Full-stack platform.',
+        title_is:       'Verkefnavefur',
+        description_is: 'Fullt vefforrit.',
+      }));
+
+    const is = await request(app).get('/api/v1/projects?locale=is');
+    expect(is.status).toBe(200);
+    expect(is.body[0].title).toBe('Verkefnavefur');
+    expect(is.body[0].description).toBe('Fullt vefforrit.');
+  });
+
+  test('GET /api/v1/projects?locale=is falls back to EN when IS column is null', async () => {
+    await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject({
+        title:       'Untranslated',
+        description: 'English only.',
+        // title_is / description_is intentionally omitted
+      }));
+
+    const is = await request(app).get('/api/v1/projects?locale=is');
+    expect(is.status).toBe(200);
+    expect(is.body[0].title).toBe('Untranslated');
+    expect(is.body[0].description).toBe('English only.');
+  });
+
+  test('GET /api/v1/projects (no locale) returns English title/description verbatim', async () => {
+    await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject({
+        title:    'English Title',
+        title_is: 'Íslenskur titill',
+      }));
+
+    const en = await request(app).get('/api/v1/projects');
+    expect(en.status).toBe(200);
+    expect(en.body[0].title).toBe('English Title');
+  });
+
+  test('PATCH accepts title_is + description_is and they round-trip', async () => {
+    const created = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject({ title: 'EN only' }));
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    const patched = await request(app)
+      .put(`/api/v1/projects/${id}`)
+      .set('Cookie', sessionCookie)
+      .send({ title_is: 'Aðeins íslenskt', description_is: 'Bara lýsing.' });
+    expect(patched.status).toBe(200);
+
+    const is = await request(app).get(`/api/v1/projects/${id}?locale=is`);
+    expect(is.body.title).toBe('Aðeins íslenskt');
+    expect(is.body.description).toBe('Bara lýsing.');
+  });
+
+  test('PATCH with empty-string title_is clears it back to null (EN fallback)', async () => {
+    const created = await request(app)
+      .post('/api/v1/projects')
+      .set('Cookie', sessionCookie)
+      .send(validProject({
+        title:    'EN',
+        title_is: 'Íslenska',
+      }));
+    const id = created.body.id;
+
+    await request(app)
+      .put(`/api/v1/projects/${id}`)
+      .set('Cookie', sessionCookie)
+      .send({ title_is: '' });
+
+    const is = await request(app).get(`/api/v1/projects/${id}?locale=is`);
+    expect(is.body.title).toBe('EN'); // fallback now that IS is null
+  });
+});
+

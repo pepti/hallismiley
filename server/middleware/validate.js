@@ -22,7 +22,10 @@ const MAX_TOOLS     = 50;
 
 // Validates body fields on POST / PUT / PATCH
 function validateProject(req, res, next) {
-  const { title, description, category, year, tools_used, image_url, featured } = req.body;
+  const {
+    title, description, category, year, tools_used, image_url, featured,
+    title_is, description_is,
+  } = req.body;
   const errors = [];
   const isPOST = req.method === 'POST';
 
@@ -75,6 +78,20 @@ function validateProject(req, res, next) {
     } else if (!/^https:\/\/.+/i.test(image_url) && !/^\/assets\//i.test(image_url)) {
       errors.push({ key: 'validation.imageUrl.invalid' });
     }
+  }
+
+  // Icelandic siblings — nullable but length-capped when supplied.
+  if (title_is !== undefined && title_is !== null && title_is !== '') {
+    if (typeof title_is !== 'string')
+      errors.push({ key: 'validation.title.nonEmptyString' });
+    else if (title_is.length > MAX_TITLE_LEN)
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_TITLE_LEN } });
+  }
+  if (description_is !== undefined && description_is !== null && description_is !== '') {
+    if (typeof description_is !== 'string')
+      errors.push({ key: 'validation.description.string' });
+    else if (description_is.length > MAX_DESC_LEN)
+      errors.push({ key: 'validation.description.maxLength', params: { n: MAX_DESC_LEN } });
   }
 
   if (errors.length) return _fail(req, res, errors);

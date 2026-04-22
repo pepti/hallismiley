@@ -61,6 +61,23 @@ export class ProjectForm {
             <label class="form-label" for="pf-image">${t('admin.imageUrl')}</label>
             <input class="form-input" id="pf-image" name="image_url" type="url" />
           </div>
+
+          <!-- Icelandic translations — nullable sibling columns (migration 033).
+               Leave blank to fall back to the English copy for Icelandic visitors. -->
+          <fieldset class="news-editor__translations">
+            <legend class="news-editor__translations-legend">${t('admin.translations')} — ${t('admin.icelandicField')}</legend>
+            <p class="news-editor__translations-hint">${t('admin.translationsHint')}</p>
+            <div class="form-group">
+              <label class="form-label" for="pf-title-is">Titill</label>
+              <input class="form-input" id="pf-title-is" name="title_is" type="text" maxlength="200" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pf-desc-is">Lýsing</label>
+              <textarea class="form-input form-textarea" id="pf-desc-is" name="description_is"
+                maxlength="2000" rows="4"></textarea>
+            </div>
+          </fieldset>
+
           <p class="form-error" aria-live="polite"></p>
           <div class="form-actions">
             <button class="btn btn--ghost" type="button" data-action="cancel">${t('admin.cancel')}</button>
@@ -93,13 +110,15 @@ export class ProjectForm {
     this._overlay.querySelector('.form-error').textContent = '';
 
     if (isEdit) {
-      form.title.value       = project.title;
-      form.description.value = project.description;
-      form.category.value    = project.category;
-      form.year.value        = project.year;
-      form.featured.checked  = project.featured;
-      form.tools_used.value  = (project.tools_used || []).join(', ');
-      form.image_url.value   = project.image_url || '';
+      form.title.value          = project.title;
+      form.description.value    = project.description;
+      form.category.value       = project.category;
+      form.year.value           = project.year;
+      form.featured.checked     = project.featured;
+      form.tools_used.value     = (project.tools_used || []).join(', ');
+      form.image_url.value      = project.image_url || '';
+      form.title_is.value       = project.title_is       || '';
+      form.description_is.value = project.description_is || '';
     }
 
     requestAnimationFrame(() => this._overlay.classList.add('open'));
@@ -120,13 +139,16 @@ export class ProjectForm {
     btn.disabled = true;
 
     const data = {
-      title:       form.title.value.trim(),
-      description: form.description.value.trim(),
-      category:    form.category.value,
-      year:        Number(form.year.value),
-      featured:    form.featured.checked,
-      tools_used:  form.tools_used.value.split(',').map(s => s.trim()).filter(Boolean),
-      image_url:   form.image_url.value.trim() || null,
+      title:          form.title.value.trim(),
+      description:    form.description.value.trim(),
+      category:       form.category.value,
+      year:           Number(form.year.value),
+      featured:       form.featured.checked,
+      tools_used:     form.tools_used.value.split(',').map(s => s.trim()).filter(Boolean),
+      image_url:      form.image_url.value.trim() || null,
+      // Icelandic siblings — empty → null → IS visitors see the EN fallback.
+      title_is:       form.title_is.value.trim()       || null,
+      description_is: form.description_is.value.trim() || null,
     };
 
     try {
