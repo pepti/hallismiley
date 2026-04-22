@@ -3,7 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -562,6 +562,7 @@ export class HomeView {
     section.classList.add('lol-skills--editing');
     editBtn.classList.add('lol-skills__edit-btn--hidden');
     controls.classList.remove('lol-skills__edit-controls--hidden');
+    checkUntranslated('home_skills', controls);
 
     // Make skills text fields editable
     section.querySelectorAll('[data-field], [data-item]').forEach(el => {
@@ -796,6 +797,7 @@ export class HomeView {
     section.classList.add('lol-projects--editing');
     editBtn.classList.add('lol-projects__edit-btn--hidden');
     controls.classList.remove('lol-projects__edit-controls--hidden');
+    checkUntranslated('home_discipline', controls);
 
     section.querySelectorAll('[data-disc-field]').forEach(el => {
       el.contentEditable = 'true';

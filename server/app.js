@@ -346,6 +346,10 @@ app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
   etag: true,
   lastModified: true,
+  // index: false so '/' falls through to our SSR meta catch-all and can
+  // get locale-redirected / meta-injected rather than silently serving
+  // raw index.html with placeholder tags.
+  index: false,
   setHeaders(res, filePath) {
     // Never cache the HTML entry point — the SPA must always get a fresh shell
     if (filePath.endsWith('index.html')) {
@@ -370,10 +374,47 @@ app.use('/api/v1/news',       newsRoutes);
 app.use('/api/v1/party',      partyRoutes);
 app.use('/api/v1/shop',       shopRoutes);
 
-// Fallback SPA route — never cache, browser must revalidate on every navigation
-app.get('*', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+// ── SPA catch-all with server-side meta tag injection ─────────────────────
+// Unmatched paths land here. We do three things in order:
+//   1. Refuse anything under /api/ or /auth/ — those are data endpoints,
+//      and a miss is a real 404.
+//   2. Redirect root-level paths ('/', '/en', '/is' with no trailing segment)
+//      to a locale prefix chosen from the preferred_locale cookie →
+//      Accept-Language → DEFAULT_LOCALE. This gives crawlers + humans a
+//      clean 302 to the right language instead of ambiguous content.
+//   3. Serve index.html with <title>, <meta description>, og:*, canonical,
+//      and hreflang tags filled in per-route. JS-free crawlers (Bing,
+//      Facebook, LinkedIn, X) get the right preview cards; humans get the
+//      SPA shell and client-side hydration kicks in.
+const ssrMetaMiddleware = require('./middleware/ssrMeta');
+
+function pickLocaleForRedirect(req) {
+  const cookie = req.cookies?.preferred_locale;
+  if (cookie && ['en', 'is'].includes(cookie)) return cookie;
+  const accept = (req.headers['accept-language'] || '').toLowerCase();
+  for (const part of accept.split(',')) {
+    const code = part.split(';')[0].trim().split('-')[0];
+    if (code === 'is') return 'is';
+    if (code === 'en') return 'en';
+  }
+  return 'en';
+}
+
+app.get('*', (req, res, next) => {
+  // Real 404s for data paths — don't serve HTML for missed API calls.
+  if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
+    return res.status(404).json({ error: 'Not found', code: 404 });
+  }
+  // '/', '/en', '/en/', '/is', '/is/' → redirect to `/<locale>/`
+  const parts = req.path.split('/').filter(Boolean);
+  if (parts.length === 0) {
+    const locale = pickLocaleForRedirect(req);
+    return res.redirect(302, `/${locale}/${req.url.slice(1)}`);
+  }
+  if (parts.length === 1 && ['en', 'is'].includes(parts[0]) && !req.path.endsWith('/')) {
+    return res.redirect(301, `/${parts[0]}/${req.url.slice(parts[0].length + 1)}`);
+  }
+  return ssrMetaMiddleware(req, res, next);
 });
 
 app.use(errorHandler);

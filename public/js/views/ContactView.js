@@ -9,7 +9,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
@@ -600,6 +600,9 @@ export class ContactView {
     view.classList.add('contact-view--editing');
     editBtn.classList.add('contact-view__edit-btn--hidden');
     controls.classList.remove('contact-view__edit-controls--hidden');
+    // contact_hero is the canonical anchor block — if it's untranslated the
+    // rest of the page almost certainly is too.
+    checkUntranslated('contact_hero', controls);
     view.querySelectorAll('[data-field]').forEach(el => {
       el.contentEditable = 'true';
       el.spellcheck = true;

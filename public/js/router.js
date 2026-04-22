@@ -31,6 +31,7 @@ import {
   SUPPORTED_LOCALES, DEFAULT_LOCALE,
   loadLocale, getLocale, getPreferredLocale,
 } from './i18n/i18n.js';
+import { navigate, navigateReplace } from './navigate.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -45,7 +46,7 @@ const ROUTES = [
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
-  { pattern: '/login',           factory: ()  => { window.location.hash = '#/' + getLocale() + '/'; return new HomeView(); } },
+  { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
   { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },
   { pattern: '/verify-email',    factory: (_, qs) => new VerifyEmailView(qs) },
   { pattern: '/forgot-password', factory: ()  => new ForgotPasswordView() },
@@ -66,10 +67,11 @@ const ROUTES = [
   { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && isAdmin()) ? new AdminOrdersView() : new HomeView() },
 ];
 
-// ── Hash parsing (locale-aware) ───────────────────────────────────────────────
+// ── Path parsing (locale-aware) ───────────────────────────────────────────────
 
-function parseHash(rawHash) {
-  const [pathAndLocale, qs = ''] = rawHash.split('?');
+function parsePath(rawPath, rawSearch) {
+  // rawPath: '/en/projects' | '/'  —  rawSearch: '?foo=bar' | ''
+  const pathAndLocale = rawPath || '/';
   const parts = pathAndLocale.split('/').filter(Boolean);
 
   let locale = null;
@@ -82,7 +84,19 @@ function parseHash(rawHash) {
     path = pathAndLocale || '/';
   }
 
+  // Strip leading '?' from search so downstream consumers can split on '&'.
+  const qs = (rawSearch || '').replace(/^\?/, '');
   return { path, qs, locale };
+}
+
+// Hash routes are legacy. Migrate any '#/...' on first load to a clean URL
+// so existing bookmarks + shared links keep working. Runs exactly once per
+// pageview (the replaceState doesn't trigger popstate).
+function migrateLegacyHash() {
+  if (!window.location.hash.startsWith('#/')) return;
+  const legacy = window.location.hash.slice(1); // drop leading '#'
+  // Preserve any existing ?query on the hash (e.g. #/en/verify-email?token=X)
+  history.replaceState(null, '', legacy);
 }
 
 function matchRoute(path) {
@@ -118,51 +132,70 @@ export class Router {
   }
 
   init() {
-    window.addEventListener('hashchange', this._navigate);
+    migrateLegacyHash();
+    window.addEventListener('popstate',      this._navigate);
+    window.addEventListener('spa:navigate',  this._navigate);
     window.addEventListener('authchange', () => this._navigate());
+    // Global click interceptor — rewrite same-origin <a> clicks into
+    // pushState navigations so clean URLs behave like a SPA while still
+    // letting middle-click / ⌘-click / target="_blank" open new tabs.
+    document.addEventListener('click', this._onDocumentClick.bind(this));
     this._navigate();
+  }
+
+  _onDocumentClick(e) {
+    // Respect modifier keys / non-primary button / default-prevented.
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('#') || a.target === '_blank' || a.hasAttribute('download')) return;
+    // Only intercept same-origin absolute paths — leave http(s)://, mailto:, tel: to the browser.
+    if (!href.startsWith('/')) return;
+    e.preventDefault();
+    navigate(href);
   }
 
   async _navigate() {
     const seq = ++this._navSeq;
-    const raw = window.location.hash.replace('#', '') || '/';
+    const raw = window.location.pathname || '/';
 
-    // If the hash has no locale prefix, redirect to the preferred locale root.
-    const { locale: hashLocale } = parseHash(raw);
-    if (!hashLocale) {
+    // If the path has no locale prefix, redirect to the preferred locale root.
+    const { locale: pathLocale } = parsePath(raw, window.location.search);
+    if (!pathLocale) {
       const preferred = getPreferredLocale();
-      const target = '/' + preferred + (raw === '/' ? '/' : (raw.startsWith('/') ? raw : '/' + raw));
-      window.location.hash = '#' + target;
+      const target = '/' + preferred + (raw === '/' ? '/' : raw);
+      navigateReplace(target + window.location.search);
       return;
     }
 
     // Load locale if it changed (triggers re-render with new strings).
-    if (hashLocale !== getLocale()) {
-      await loadLocale(hashLocale);
+    if (pathLocale !== getLocale()) {
+      await loadLocale(pathLocale);
       this.navBar.updateLocale();
     }
 
-    const { path, qs } = parseHash(raw);
+    const { path, qs } = parsePath(raw, window.location.search);
 
     // Guard admin routes
     if (path === '/admin' && !isAuthenticated()) {
-      window.location.hash = '#/' + getLocale() + '/';
+      navigateReplace('/' + getLocale() + '/');
       return;
     }
     if (path === '/admin/users' && (!isAuthenticated() || !isAdmin())) {
-      window.location.hash = '#/' + getLocale() + '/';
+      navigateReplace('/' + getLocale() + '/');
       return;
     }
     if (path === '/profile' && !isAuthenticated()) {
-      window.location.hash = '#/' + getLocale() + '/login';
+      navigateReplace('/' + getLocale() + '/login');
       return;
     }
     if (path === '/orders' && !isAuthenticated()) {
-      window.location.hash = '#/' + getLocale() + '/login';
+      navigateReplace('/' + getLocale() + '/login');
       return;
     }
     if (path.startsWith('/admin/shop') && (!isAuthenticated() || !isAdmin())) {
-      window.location.hash = '#/' + getLocale() + '/';
+      navigateReplace('/' + getLocale() + '/');
       return;
     }
 

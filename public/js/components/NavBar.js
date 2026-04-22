@@ -3,10 +3,11 @@ import { escHtml } from '../utils/escHtml.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
 import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
+import { navigate } from '../navigate.js';
 
 const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
 
-// Build a locale-prefixed href for a route (e.g. '#/en/projects').
+// Build a locale-prefixed clean URL for a route (e.g. '/en/projects').
 function navHref(route) {
   return href(route);
 }
@@ -160,7 +161,7 @@ export class NavBar {
         e.preventDefault();
         this._closeMenu();
         const route = link.dataset.route;
-        window.location.hash = navHref(route);
+        navigate(navHref(route));
       });
     });
   }
@@ -240,7 +241,7 @@ export class NavBar {
 
       dropdown.querySelector('#nav-signout-btn').addEventListener('click', async () => {
         await logout();
-        window.location.hash = navHref('/');
+        navigate(navHref('/'));
       });
 
       // Intercept dropdown anchor clicks to add locale prefix
@@ -248,7 +249,7 @@ export class NavBar {
         link.addEventListener('click', e => {
           e.preventDefault();
           dropdown.classList.remove('open');
-          window.location.hash = navHref(link.dataset.route);
+          navigate(navHref(link.dataset.route));
         });
       });
 
@@ -269,7 +270,7 @@ export class NavBar {
       signUp.textContent = t('nav.signUp');
       signUp.addEventListener('click', e => {
         e.preventDefault();
-        window.location.hash = navHref('/signup');
+        navigate(navHref('/signup'));
       });
 
       container.appendChild(signIn);
@@ -287,11 +288,11 @@ export class NavBar {
         e.preventDefault();
         this._closeMenu();
         const target = navHref('/');
-        const onHome = window.location.hash === target || window.location.hash === '#/';
+        const onHome = window.location.pathname === target || window.location.pathname === '/';
         if (onHome) {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
-          window.location.hash = target;
+          navigate(target);
           setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
         }
       });
@@ -305,8 +306,8 @@ export class NavBar {
         this._closeMenu();
         const id     = link.dataset.scroll;
         const home   = navHref('/');
-        if (!window.location.hash.startsWith(home)) {
-          window.location.hash = home;
+        if (!window.location.pathname.startsWith(home)) {
+          navigate(home);
           setTimeout(() => {
             document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
           }, 300);

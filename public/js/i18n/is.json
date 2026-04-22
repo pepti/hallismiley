@@ -816,5 +816,11 @@
   "admin.editingInEn": "Þú ert að breyta ensku — skiptu um tungumál efst til að breyta íslensku",
   "admin.editingInIs": "Þú ert að breyta íslensku — skiptu um tungumál efst til að breyta ensku",
   "admin.editingLocaleBadgeEn": "BREYTI: ENGLISH",
-  "admin.editingLocaleBadgeIs": "BREYTI: ÍSLENSKA"
+  "admin.editingLocaleBadgeIs": "BREYTI: ÍSLENSKA",
+  "admin.untranslated": "⚠️ Óþýtt",
+  "admin.untranslatedTip": "Þessi reitur er samhljóða ensku útgáfunni — enn óþýtt á íslensku.",
+  "admin.translations": "Þýðingar",
+  "admin.englishField": "Enska",
+  "admin.icelandicField": "Íslenska",
+  "admin.translationsHint": "Fylltu út íslensku reitina til að sýna þýddan texta fyrir íslenska gesti. Skildu þá eftir auða til að sýna enska útgáfu."
 }

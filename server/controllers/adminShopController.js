@@ -44,7 +44,11 @@ const adminShopController = {
 
   async createProduct(req, res, next) {
     try {
-      const { slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active } = req.body;
+      const {
+        slug, name, description,
+        name_is, description_is,
+        price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active,
+      } = req.body;
       if (!validateSlug(slug)) {
         return res.status(400).json({ error: 'slug must be lowercase alphanumeric with hyphens (1-80 chars)', code: 400 });
       }
@@ -65,7 +69,9 @@ const adminShopController = {
       }
       const product = await Product.create({
         slug, name,
-        description: description || '',
+        description:    description || '',
+        name_is:        name_is        || null,
+        description_is: description_is || null,
         price_isk: priceIsk,
         price_eur: priceEur,
         stock: Number(stock) || 0,

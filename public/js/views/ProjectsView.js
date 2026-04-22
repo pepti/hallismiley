@@ -2,6 +2,7 @@ import { projectApi } from '../api/projectApi.js';
 import { ProjectCard } from '../components/ProjectCard.js';
 import { FilterBar }   from '../components/FilterBar.js';
 import { t, href }     from '../i18n/i18n.js';
+import { navigate }    from '../navigate.js';
 
 export class ProjectsView {
   constructor() {
@@ -68,7 +69,7 @@ export class ProjectsView {
     projects.forEach(p => {
       this.grid.appendChild(
         new ProjectCard(p, (proj) => {
-          window.location.hash = href(`/projects/${proj.id}`);
+          navigate(href(`/projects/${proj.id}`));
         }).render()
       );
     });

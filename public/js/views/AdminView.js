@@ -4,11 +4,12 @@ import { showToast }       from '../components/Toast.js';
 import { isAuthenticated } from '../services/auth.js';
 import { escHtml }         from '../utils/escHtml.js';
 import { t, href }         from '../i18n/i18n.js';
+import { navigateReplace } from '../navigate.js';
 
 export class AdminView {
   async render() {
     if (!isAuthenticated()) {
-      window.location.hash = href('/');
+      navigateReplace(href('/'));
       return document.createTextNode('');
     }
 

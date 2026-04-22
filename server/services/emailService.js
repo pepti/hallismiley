@@ -74,7 +74,10 @@ function emailShell(title, bodyHtml, locale = 'en') {
 // ── Verification email ────────────────────────────────────────────────────────
 
 async function sendVerificationEmail(to, token, locale = 'en') {
-  const link = `${APP_URL}/#/verify-email?token=${token}`;
+  // Include the locale in the link so the verify page renders in the same
+  // language as the email — recipients often aren't logged in yet, so no
+  // session preference exists for the locale middleware to fall back to.
+  const link = `${APP_URL}/#/verify-email?token=${token}&locale=${encodeURIComponent(locale)}`;
 
   if (!isConfigured()) {
     // Do NOT log the token or the full link — they are credential-equivalent.
@@ -116,7 +119,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
 // ── Password reset email ──────────────────────────────────────────────────────
 
 async function sendPasswordResetEmail(to, token, locale = 'en') {
-  const link = `${APP_URL}/#/reset-password?token=${token}`;
+  const link = `${APP_URL}/#/reset-password?token=${token}&locale=${encodeURIComponent(locale)}`;
 
   if (!isConfigured()) {
     // Do NOT log the token or the full link — they are credential-equivalent.

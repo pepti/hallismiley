@@ -273,6 +273,20 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
           </label>
         </div>
         <p class="admin-shop__hint">${t('adminProducts.priceHintShort')}</p>
+
+        <!-- Icelandic translations — nullable siblings. Left blank ⇒ IS
+             visitors see the English fallback. See migration 031. -->
+        <fieldset class="admin-product-form__translations">
+          <legend class="admin-product-form__translations-legend">${t('admin.translations')} — ${t('admin.icelandicField')}</legend>
+          <p class="admin-product-form__translations-hint">${t('admin.translationsHint')}</p>
+          <label>Heiti (íslenska)
+            <input type="text" name="name_is" maxlength="200" value="${_esc(existing?.name_is || '')}"/>
+          </label>
+          <label>Lýsing (íslenska)
+            <textarea name="description_is" rows="4">${_esc(existing?.description_is || '')}</textarea>
+          </label>
+        </fieldset>
+
         <p class="admin-shop__error" id="admin-product-error" role="alert"></p>
         <div class="admin-shop__form-actions">
           ${isEdit ? `<button type="button" class="admin-shop__delete" id="admin-product-deactivate">${t('adminProducts.deactivate')}</button>` : ''}
@@ -311,14 +325,19 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     e.preventDefault();
     errorEl.textContent = '';
     const fd = new FormData(form);
+    // Icelandic siblings: empty ⇒ null ⇒ fall back to English (see Product model).
+    const nameIs = String(fd.get('name_is')        || '').trim();
+    const descIs = String(fd.get('description_is') || '').trim();
     const body = {
-      name:         String(fd.get('name') || '').trim(),
-      slug:         String(fd.get('slug') || '').trim(),
-      description:  String(fd.get('description') || ''),
-      price_isk:    Number(fd.get('price_isk')),
-      price_eur:    Number(fd.get('price_eur')),
-      stock:        Number(fd.get('stock') || 0),
-      active:       fd.get('active') === 'on',
+      name:           String(fd.get('name') || '').trim(),
+      slug:           String(fd.get('slug') || '').trim(),
+      description:    String(fd.get('description') || ''),
+      name_is:        nameIs || null,
+      description_is: descIs || null,
+      price_isk:      Number(fd.get('price_isk')),
+      price_eur:      Number(fd.get('price_eur')),
+      stock:          Number(fd.get('stock') || 0),
+      active:         fd.get('active') === 'on',
     };
     const wg = fd.get('weight_grams');
     if (wg !== null && wg !== '') body.weight_grams = Number(wg);

@@ -3,6 +3,7 @@ import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
+import { navigateReplace } from '../navigate.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -12,7 +13,7 @@ const avatarPathByName = name => `/assets/avatars/${name}`;
 export class ProfileView {
   async render() {
     if (!isAuthenticated()) {
-      window.location.hash = href('/login');
+      navigateReplace(href('/login'));
       return document.createTextNode('');
     }
 
@@ -130,20 +131,20 @@ export class ProfileView {
         </form>
       </section>
 
-      <!-- Language preference -->
+<!-- Language preference -->
       <section class="profile-section" id="lang-section">
         <h2 class="profile-section__title">${t('profile.languagePreference')}</h2>
-        <p style="font-size:14px;color:#888;margin:0 0 16px;">${t('profile.languageDescription')}</p>
-        <div class="form-group" style="max-width:260px;">
+        <p class="profile-lang-description">${t('profile.languageDescription')}</p>
+        <div class="form-group profile-lang-section">
           <select class="form-input" id="lang-select">
             ${SUPPORTED_LOCALES.map(lc => `
               <option value="${lc}" ${lc === (profile.preferredLocale || profile.preferred_locale || 'en') ? 'selected' : ''}>
                 ${lc === 'en' ? t('nav.switchToEn') : t('nav.switchToIs')}
               </option>`).join('')}
           </select>
-          <p class="form-error" id="lang-error" aria-live="polite" style="margin-top:8px;"></p>
+          <p class="form-error profile-lang-error" id="lang-error" aria-live="polite"></p>
         </div>
-        <div class="form-actions" style="margin-top:12px;">
+        <div class="form-actions profile-lang-actions">
           <button class="btn btn--primary" id="lang-save-btn">${t('profile.saveChanges')}</button>
         </div>
       </section>

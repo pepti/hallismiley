@@ -269,6 +269,26 @@ export class NewsView {
                       required rows="16"
                       placeholder="${t('news.bodyPlaceholder')}">${_esc(article?.body || '')}</textarea>
           </label>
+
+          <!-- Icelandic translations — nullable siblings. Left blank ⇒ IS readers
+               see the English fallback. See migration 031 and newsController. -->
+          <fieldset class="news-editor__translations">
+            <legend class="news-editor__translations-legend">${t('admin.translations')} — ${t('admin.icelandicField')}</legend>
+            <p class="news-editor__translations-hint">${t('admin.translationsHint')}</p>
+            <label class="news-editor__label">Titill
+              <input class="news-editor__input" name="title_is" type="text" maxlength="200"
+                     value="${_esc(article?.title_is || '')}">
+            </label>
+            <label class="news-editor__label">Ágrip <small>(max 300 chars)</small>
+              <textarea class="news-editor__textarea news-editor__textarea--sm" name="summary_is"
+                        maxlength="300" rows="3">${_esc(article?.summary_is || '')}</textarea>
+            </label>
+            <label class="news-editor__label">Meginmál
+              <textarea class="news-editor__textarea news-editor__textarea--lg" name="body_is"
+                        rows="12">${_esc(article?.body_is || '')}</textarea>
+            </label>
+          </fieldset>
+
           <div class="news-editor__row news-editor__row--check">
             <label class="news-editor__check">
               <input type="checkbox" name="published" ${isNew || article?.published ? 'checked' : ''}>
@@ -369,6 +389,10 @@ export class NewsView {
     const summary     = form.querySelector('[name="summary"]').value.trim();
     const body        = form.querySelector('[name="body"]').value.trim();
     const published   = form.querySelector('[name="published"]').checked;
+    // Icelandic siblings — empty string ⇒ null ⇒ fall back to English.
+    const titleIs     = form.querySelector('[name="title_is"]')?.value.trim()   || null;
+    const summaryIs   = form.querySelector('[name="summary_is"]')?.value.trim() || null;
+    const bodyIs      = form.querySelector('[name="body_is"]')?.value.trim()    || null;
 
     // Basic client-side validation so the user gets feedback on required fields
     if (!title || !summary || !body) {
@@ -384,7 +408,12 @@ export class NewsView {
 
     try {
       const headers = await getCsrfHeaders();
-      const payload = { title, summary, body, category, published };
+      const payload = {
+        title, summary, body, category, published,
+        title_is:   titleIs,
+        summary_is: summaryIs,
+        body_is:    bodyIs,
+      };
       if (slug) payload.slug = slug;
 
       const url    = isNew ? '/api/v1/news' : `/api/v1/news/${articleId}`;

@@ -9,12 +9,14 @@
   <meta name="description" content="Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing, combined with full-stack web development. Based in Iceland." />
   <meta name="robots" content="index, follow" />
   <meta name="author" content="Halli" />
-  <link rel="canonical" href="https://halliprojects.is/" />
-
-  <!-- Hreflang alternates for bilingual (en/is) support -->
-  <link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/" />
-  <link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/" />
-  <link rel="alternate" hreflang="x-default" href="https://halliprojects.is/" />
+  <!-- Canonical + hreflang are filled in per-request by the server SSR
+       middleware (server/middleware/ssrMeta.js) — these elements exist as
+       default fallbacks when a route is rendered directly from a browser
+       cache before SSR catches up. -->
+  <link rel="canonical" href="https://halliprojects.is/" id="ssr-canonical" />
+  <link rel="alternate" hreflang="en"        href="https://halliprojects.is/en/"        id="ssr-hreflang-en" />
+  <link rel="alternate" hreflang="is"        href="https://halliprojects.is/is/"        id="ssr-hreflang-is" />
+  <link rel="alternate" hreflang="x-default" href="https://halliprojects.is/"           id="ssr-hreflang-default" />
 
   <!-- Geo targeting -->
   <meta name="geo.region" content="IS" />

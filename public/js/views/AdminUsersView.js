@@ -3,6 +3,7 @@ import { showToast }     from '../components/Toast.js';
 import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
 import { t, href }       from '../i18n/i18n.js';
+import { navigateReplace } from '../navigate.js';
 
 const PAGE_SIZE = 20;
 
@@ -19,7 +20,7 @@ export class AdminUsersView {
 
   async render() {
     if (!isAuthenticated() || !isAdmin()) {
-      window.location.hash = href('/');
+      navigateReplace(href('/'));
       return document.createTextNode('');
     }
 

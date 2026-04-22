@@ -8,6 +8,7 @@ import { getCsrfHeaders }           from '../utils/api.js';
 import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
 import { t, href }                  from '../i18n/i18n.js';
+import { navigate }                 from '../navigate.js';
 
 // Tags allowed in article body (whitelist for DOMParser sanitisation)
 const ALLOWED_TAGS = new Set([
@@ -868,7 +869,7 @@ export class ArticleView {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Delete failed');
       }
-      window.location.hash = href('/news');
+      navigate(href('/news'));
     } catch (err) {
       alert(t('article.alertDeleteFailed', { message: err.message }));
     }

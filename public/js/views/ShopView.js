@@ -10,7 +10,7 @@ import { ShopFilters, applyFilters, parseStateFromQs, stateToQs } from '../compo
 import * as cart from '../services/cart.js';
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { openProductFormModal } from './AdminProductsView.js';
-import { t, adminLocaleBadgeHtml } from '../i18n/i18n.js';
+import { t, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // Default copy — rendered when the DB row is missing or the network fails.
 const DEFAULT_HERO = {
@@ -258,6 +258,7 @@ export class ShopView {
     view.classList.add('shop-view--editing');
     editBtn.classList.add('shop-view__edit-btn--hidden');
     controls.classList.remove('shop-view__edit-controls--hidden');
+    checkUntranslated('shop_hero', controls);
     view.querySelectorAll('[data-field]').forEach(el => {
       el.contentEditable = 'true';
       el.spellcheck = true;

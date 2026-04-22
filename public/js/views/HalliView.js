@@ -3,7 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // ── Default content — compelling placeholder biography ────────────────────
 const DEFAULT_CONTENT = {
@@ -534,6 +534,7 @@ export class HalliView {
     view.classList.add('halli-bio--editing');
     editBtn.classList.add('hb-edit-btn--hidden');
     controls.classList.add('is-visible');
+    checkUntranslated('halli_bio', controls);
 
     view.querySelectorAll('[data-field]').forEach(el => {
       el.contentEditable = 'true';

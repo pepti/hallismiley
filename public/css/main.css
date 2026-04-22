@@ -45,6 +45,47 @@ body {
 }
 .admin-locale-badge--is { background: #5cb5e0; }
 
+/* Translations fieldset inside news/product admin editors — groups the
+   _is sibling inputs under a header so the EN + IS split is obvious. */
+.news-editor__translations,
+.admin-product-form__translations {
+  margin: 24px 0 0;
+  padding: 16px 20px;
+  border: 1px solid #2a2a2a;
+  border-left: 3px solid #5cb5e0;
+  border-radius: 6px;
+  background: #0d0d0d;
+}
+.news-editor__translations-legend,
+.admin-product-form__translations-legend {
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #5cb5e0;
+}
+.news-editor__translations-hint,
+.admin-product-form__translations-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.5;
+}
+
+.admin-untranslated-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: #7a2e2e;
+  color: #ffd7d7;
+  vertical-align: middle;
+  user-select: none;
+}
+
 /* Profile page — language preference section */
 .profile-lang-section { max-width: 260px; }
 .profile-lang-description { font-size: 14px; color: #888; margin: 0 0 16px; }
