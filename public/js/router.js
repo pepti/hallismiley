@@ -28,7 +28,7 @@ import { OrderHistoryView }      from './views/OrderHistoryView.js';
 import { AdminProductsView }     from './views/AdminProductsView.js';
 import { AdminOrdersView }       from './views/AdminOrdersView.js';
 import {
-  SUPPORTED_LOCALES, DEFAULT_LOCALE,
+  SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale,
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';

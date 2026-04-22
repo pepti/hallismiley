@@ -9,7 +9,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { t, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
