@@ -60,9 +60,18 @@ export class NavBar {
     });
     // Re-render auth section (user name / sign-in buttons)
     this._renderAuth();
-    // Re-render language switcher label
-    const switcher = this._nav.querySelector('#nav-lang-btn');
-    if (switcher) switcher.setAttribute('aria-label', t('nav.languageSwitcher'));
+    // Sync the segmented language toggle — mark the active locale, update
+    // aria-pressed, refresh the group aria-label to the active language.
+    const group = this._nav.querySelector('.lol-nav__lang');
+    if (group) group.setAttribute('aria-label', t('nav.languageSwitcher'));
+    const active = getLocale();
+    this._nav.querySelectorAll('.lol-nav__lang-opt').forEach(btn => {
+      const isActive = btn.dataset.locale === active;
+      btn.classList.toggle('lol-nav__lang-opt--active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+      const lc = btn.dataset.locale;
+      btn.setAttribute('aria-label', t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1)));
+    });
   }
 
   _navHtml() {
@@ -102,47 +111,30 @@ export class NavBar {
   }
 
   _langSwitcherHtml() {
+    // Segmented toggle — both languages always visible, one-click switch.
+    // More discoverable + faster than a dropdown when there are only two
+    // options, and scales fine to a third (just wider pill).
     const current = getLocale();
-    const options = SUPPORTED_LOCALES
-      .map(lc => `<button class="lol-nav__lang-option${lc === current ? ' active' : ''}"
+    const buttons = SUPPORTED_LOCALES
+      .map(lc => `<button type="button"
+                          class="lol-nav__lang-opt${lc === current ? ' lol-nav__lang-opt--active' : ''}"
                           data-locale="${lc}"
-                          aria-pressed="${lc === current}">${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}</button>`)
+                          aria-pressed="${lc === current}"
+                          aria-label="${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}">${lc.toUpperCase()}</button>`)
       .join('');
     return `
-      <div class="lol-nav__lang" id="nav-lang">
-        <button class="lol-nav__lang-btn" id="nav-lang-btn"
-                aria-label="${t('nav.languageSwitcher')}" aria-haspopup="true" aria-expanded="false">
-          <span class="lol-nav__lang-current">${current.toUpperCase()}</span>
-          <span class="lol-nav__lang-caret" aria-hidden="true">▾</span>
-        </button>
-        <div class="lol-nav__lang-dropdown" id="nav-lang-dropdown" role="menu">
-          ${options}
-        </div>
+      <div class="lol-nav__lang" role="group"
+           aria-label="${t('nav.languageSwitcher')}">
+        ${buttons}
       </div>`;
   }
 
   _bindLangSwitcher(nav) {
-    const btn      = nav.querySelector('#nav-lang-btn');
-    const dropdown = nav.querySelector('#nav-lang-dropdown');
-    if (!btn || !dropdown) return;
-
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const open = dropdown.classList.toggle('open');
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-
-    document.addEventListener('click', () => {
-      dropdown.classList.remove('open');
-      btn.setAttribute('aria-expanded', 'false');
-    });
-
-    dropdown.querySelectorAll('[data-locale]').forEach(optBtn => {
+    nav.querySelectorAll('.lol-nav__lang-opt').forEach(optBtn => {
       optBtn.addEventListener('click', e => {
         e.stopPropagation();
-        dropdown.classList.remove('open');
-        btn.setAttribute('aria-expanded', 'false');
         const newLocale = optBtn.dataset.locale;
+        if (newLocale === getLocale()) return;   // already active, no-op
         // Persist to DB first so the session has the new locale when content re-fetches.
         if (isAuthenticated()) {
           updateProfile({ preferred_locale: newLocale })

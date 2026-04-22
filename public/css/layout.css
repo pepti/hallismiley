@@ -76,6 +76,42 @@
   width: 200px; justify-content: flex-end;
 }
 
+/* ── Segmented language toggle — both locales always visible, click
+      the inactive one to switch. Binary choice so no dropdown needed. ── */
+.lol-nav__lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid #2a2a2a;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.lol-nav__lang-opt {
+  min-width: 32px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #888;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+.lol-nav__lang-opt:hover { color: #F0E6D3; }
+.lol-nav__lang-opt:focus-visible {
+  outline: 2px solid #C8AA6E;
+  outline-offset: 2px;
+}
+.lol-nav__lang-opt--active {
+  color: #0a0a0a;
+  background: #C8AA6E;
+}
+.lol-nav__lang-opt--active:hover { color: #0a0a0a; }
+
 /* ── Hamburger (mobile only) ── */
 .lol-nav__hamburger {
   display: none;
