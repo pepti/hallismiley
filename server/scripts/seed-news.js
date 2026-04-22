@@ -53,6 +53,52 @@ const LAUNCH_ARTICLE = {
 <p>If you made it this far: thanks for reading. Create an account if you want to follow along, or just poke around the projects. Either way, I'm glad you're here.</p>
 
 <p>— Halli</p>`,
+
+  // Icelandic sibling fields (migration 031). Same conversational voice as the
+  // English original — Halli's first-person tone translated faithfully rather
+  // than corporate-polished.
+  title_is:   "Við erum í loftinu! Velkomin á Halli Smiley",
+  summary_is: "Eftir margra mánaða vinnu er síðan loks í loftinu. Hér er sagan á bak við hana — hvað þetta er, hvernig hún er byggð og hvað kemur næst.",
+  body_is: `<p>Jæja. Þetta er sem sagt komið í loftið. Ég held áfram að ýta á refresh í þeirri von að sjá hana springa, en einhvern veginn... virkar þetta bara. Velkomin á <strong>Halli Smiley</strong> — minn litla kima á netinu þar sem smíði mætir kóða og hvort tveggja er tekið jafn alvarlega.</p>
+
+<h2>Af hverju vefsíða með verkefnasafni?</h2>
+
+<p>Í hreinskilni sagt? Ég var orðinn þreyttur á því að útskýra hvað ég geri í matarboðum. „Þú ert sem sagt smiður?" Já. „En þú skrifar líka hugbúnað?" Já líka. „Samtímis?" Svona hálfpartinn. Ruglingurinn var raunverulegur. Svo ég bjó til þetta apparat bæði til að sýna vinnuna og til að geta rétt fólki slóð og labbað í burtu.</p>
+
+<p>Ég hef verið í smíðum í yfir tuttugu ár — handverkfæri, rafmagnsverkfæri, fellingar, grindarsmíði, allt það. Og einhvern tímann á leiðinni datt ég af alvöru í forritun. Ekki af því að ég þyrfti þess, heldur af því að kitlið við að leysa vandamál er það sama. Að fella sinklagið svo skápurinn lokist án átaks, eða að finna villu í setustjórnun sem kemur aðeins fram undir tilteknum keppnisskilyrðum — sami heilinn, önnur efni.</p>
+
+<h2>Hvernig hún er byggð</h2>
+
+<p>Þessi síða er <strong>Node.js á bakendanum og hrein JavaScript á framendanum</strong>. Enginn React. Ekkert Next.js. Enginn rammi að taka ákvarðanir fyrir mig. Bara leiðarvísir sem ég skrifaði sjálfur, viðmót sem teiknar sig upp á gamla mátann, og PostgreSQL-gagnagrunnur sem gerir nákvæmlega það sem gagnagrunnar eiga að gera.</p>
+
+<p>Auðkenningin er Lucia v3 með setu-kökum — rétta leiðin með httpOnly, SameSite, allt það. Svo er full CSRF-vörn, hraðatakmörkun, hreinsun á innsendum gögnum, Prometheus-mælingar, formfastir loggar með Pino, og straumrof á gagnagrunnstengingunni. Ég viðurkenni að ég gæti hafa farið örlítið yfir strikið með vöktuninni á vefsíðu fyrir verkefnasafn. Ég sé ekkert eftir því.</p>
+
+<p>Framendinn er eitt-síðu vefforrit með slóðasjá á viðskiptavinahlið. Hann hleðst hratt, virkar án JavaScript fyrir kyrrstæða hlutann, og CSS-ið er handskrifað með CSS-breytum fyrir hönnunarkerfi sem þvælist ekki fyrir mér. Dökka þemað er meðvituð ákvörðun — ég eyði flestum deginum annaðhvort í tréspæni eða skipanalínugluggum, og hvort tveggja kemur betur út í myrkri.</p>
+
+<h2>Hvað er hér að finna</h2>
+
+<p>Nokkrir punktar sem vert er að nefna:</p>
+
+<ul>
+  <li><strong>Verkefnasafn</strong> — Bæði smíða- og tækniverkefni á einum stað. Síað eftir grein. Hvert verkefni á sína eigin síðu með myndum, notuðum verkfærum og sögunni á bak við.</li>
+  <li><strong>Notendaaðgangar</strong> — Þú getur búið til aðgang, valið mynd og vistað uppáhaldsverkefni. Aðgangarnir eru alvöru — netfangsstaðfesting, lykilorðsendurstilling, heili pakkinn.</li>
+  <li><strong>Veislusíðan</strong> — Ég verð 40 ára í ár. Það verður afmælisveisla, og ég smíðaði heilt boðskorta- og skráningarkerfi fyrir hana. Auðvitað gerði ég það.</li>
+  <li><strong>Þessi fréttaveita</strong> — Hér mun ég birta greinar um verkefni á meðan þau eru í vinnslu, skrif um tækni, og endrum og eins tuða yfir hreyfingum í viði eða sérkennum JavaScript.</li>
+</ul>
+
+<h2>Fyrsta alvöru verkefnið: Stofan Bakhús</h2>
+
+<p>Fyrsta smíðaverkefnið á síðunni er <strong>Stofan Bakhús</strong> — umbreyting á útihúsi í stofu með útsýn í garðinn, sem ég vann fyrir nokkrum árum. Þetta er verkefnið sem ég er hvað stoltastur af frá þeim tíma: almennileg timburgrind, handsmíðaðar fellingar, byggt til að endast áratugum saman. Myndirnar skila þessu ekki nógu vel en þær eru það besta sem ég á.</p>
+
+<p>Fleiri verkefni eru á leiðinni. Ég á nóg af verkum í bakka sem ég þarf að skjalfesta — bæði smíðaverkefni og hugbúnaðarverkefni — og ég bæti þeim við þegar ég finn tíma á milli raunverulegu vinnunnar.</p>
+
+<h2>Hvað kemur næst</h2>
+
+<p>Til skamms tíma: fleiri verkefni, fleiri skrif, almennileg Um mig-síða. Til miðlungs langs tíma: mig langar að bæta við athugasemdakerfi og kannski einhvers konar verkstæðisdagbók þar sem ég fylgist með virkum verkefnum í rauntíma. Til langs tíma: hver veit. Síðan er lifandi fyrirbæri og ég bý hana til eins og ég smíða húsgögn — einn hlut í einu, rétt felldan áður en haldið er áfram.</p>
+
+<p>Ef þú komst alla leið hingað: takk fyrir lesturinn. Búðu þér til aðgang ef þú vilt fylgjast með, eða flettu bara í verkefnunum. Annaðhvort er, þá er ég glaður að þú sért hér.</p>
+
+<p>— Halli</p>`,
 };
 
 async function seedNews() {
@@ -65,15 +111,22 @@ async function seedNews() {
 
     const { rows } = await db.query(
       `INSERT INTO news_articles
-         (title, slug, summary, body, category, author_id, published, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW())
-       ON CONFLICT (slug) DO NOTHING
+         (title, slug, summary, body, title_is, summary_is, body_is,
+          category, author_id, published, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, NOW())
+       ON CONFLICT (slug) DO UPDATE
+         SET title_is   = COALESCE(news_articles.title_is,   EXCLUDED.title_is),
+             summary_is = COALESCE(news_articles.summary_is, EXCLUDED.summary_is),
+             body_is    = COALESCE(news_articles.body_is,    EXCLUDED.body_is)
        RETURNING id, title, slug`,
       [
         LAUNCH_ARTICLE.title,
         LAUNCH_ARTICLE.slug,
         LAUNCH_ARTICLE.summary,
         LAUNCH_ARTICLE.body,
+        LAUNCH_ARTICLE.title_is,
+        LAUNCH_ARTICLE.summary_is,
+        LAUNCH_ARTICLE.body_is,
         LAUNCH_ARTICLE.category,
         authorId,
       ]

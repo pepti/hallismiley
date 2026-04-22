@@ -91,6 +91,9 @@ export class NewsView {
         offset: this._offset,
       });
       if (this._category) params.set('category', this._category);
+      // Pin the request locale — otherwise the server falls back to the
+      // preferred_locale cookie which lags the URL by one navigation.
+      params.set('locale', window.__locale || 'en');
 
       const res = await fetch(`/api/v1/news?${params}`);
       if (!res.ok) throw new Error('Failed to load articles');

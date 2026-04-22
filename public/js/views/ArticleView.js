@@ -124,8 +124,12 @@ export class ArticleView {
       const user = getUser();
       const isEditor = user && ['admin', 'moderator'].includes(user.role);
 
-      const publicUrl  = `/api/v1/news/${encodeURIComponent(this._slug)}`;
-      const previewUrl = `${publicUrl}/preview`;
+      // Pin the request locale to the URL path's locale via ?locale=. Without
+      // it the server falls back to the preferred_locale cookie, which lags
+      // the URL by one navigation when someone switches languages mid-flow.
+      const localeParam = `?locale=${encodeURIComponent(window.__locale || 'en')}`;
+      const publicUrl  = `/api/v1/news/${encodeURIComponent(this._slug)}${localeParam}`;
+      const previewUrl = `/api/v1/news/${encodeURIComponent(this._slug)}/preview${localeParam}`;
 
       // Strategy: always try the PUBLIC endpoint first. Every published article
       // lives there and it needs no auth, so the common case is one unconditional
