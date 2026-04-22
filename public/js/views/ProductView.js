@@ -10,7 +10,7 @@
 import * as cart from '../services/cart.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { LOW_STOCK_THRESHOLD } from '../components/ProductCard.js';
-import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
+import { isAdmin, getCSRFToken } from '../services/auth.js';
 import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // Default chrome — rendered when shop_product_chrome is missing or network fails.
@@ -112,11 +112,14 @@ export class ProductView {
     this._view.innerHTML = `<div id="shop-product-body"><div class="shop-product__loading">${t('form.loading')}</div></div>`;
 
     try {
-      // Product detail + shared chrome load in parallel.
-      const [productRes, chromeLoaded] = await Promise.all([
+      // Product detail + shared chrome load in parallel. The chrome loader
+      // has the side effect of setting this._chrome — we await it here but
+      // don't need its return value, hence the underscore-prefixed name.
+      const [productRes, _chromeLoaded] = await Promise.all([
         fetch(`/api/v1/shop/products/${encodeURIComponent(this._slug)}`, { credentials: 'include' }),
         this._loadChrome(),
       ]);
+      void _chromeLoaded;
       const data = await productRes.json();
       if (!productRes.ok) throw new Error(data.error || 'Product not found');
       this._product = data.product;
@@ -373,7 +376,6 @@ export class ProductView {
     if (priceEl) priceEl.textContent = cart.formatMoney(price, cur);
 
     const stock = this._effectiveStock();
-    const variant = this._selectedVariant();
     const axes = this._product.variant_axes || [];
     const fullySelected = axes.every(a => this._selection[a] != null);
 

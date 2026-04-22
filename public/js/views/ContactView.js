@@ -530,8 +530,6 @@ export class ContactView {
         });
 
         if (res.ok) {
-          const emailAddr = this._card.items.find(x => x.type === 'email')?.href
-            || DEFAULT_CARD.items[0].href;
           status.className = 'contact-form__status contact-form__status--success';
           status.textContent = t('contact.sent');
           form.reset();
