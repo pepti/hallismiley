@@ -8,6 +8,7 @@ const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
+const { t }               = require('../i18n');
 
 const scrypt = new Scrypt();
 
@@ -28,7 +29,7 @@ const authController = {
       const { username, password } = req.body;
 
       if (!username || !password) {
-        return res.status(400).json({ error: 'username and password are required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.usernamePasswordRequired'), code: 400 });
       }
 
       const { rows } = await dbQuery(
@@ -45,7 +46,7 @@ const authController = {
       // Check lockout before password work — a locked account already reveals
       // the username exists, so an early return is acceptable here.
       if (user && user.locked_until && new Date(user.locked_until) > new Date()) {
-        return res.status(401).json({ error: 'Account temporarily locked', code: 401 });
+        return res.status(401).json({ error: t(req.locale, 'errors.auth.accountLocked'), code: 401 });
       }
 
       // Always perform hash work to prevent timing-based username enumeration.
@@ -79,12 +80,12 @@ const authController = {
         } else {
           securityLogger.loginFailed(req.ip, username);
         }
-        return res.status(401).json({ error: 'Invalid credentials', code: 401 });
+        return res.status(401).json({ error: t(req.locale, 'errors.auth.invalidCredentials'), code: 401 });
       }
 
       // Block disabled accounts after credentials are confirmed valid
       if (user.disabled) {
-        return res.status(403).json({ error: 'Account has been disabled', code: 403 });
+        return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
 
       // Successful login — reset counters, create session
@@ -131,7 +132,7 @@ const authController = {
         [username]
       );
       if (uRows.length > 0) {
-        return res.status(409).json({ error: 'Username already taken', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.auth.usernameTaken'), code: 409 });
       }
 
       const { rows: eRows } = await dbQuery(
@@ -139,7 +140,7 @@ const authController = {
         [email.toLowerCase()]
       );
       if (eRows.length > 0) {
-        return res.status(409).json({ error: 'Email already registered', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
       }
 
       const passwordHash    = await scrypt.hash(password);
@@ -188,13 +189,13 @@ const authController = {
 
       if (requireVerify) {
         return res.status(201).json({
-          message: 'Account created. Please check your email to verify your account.',
+          message: t(req.locale, 'errors.auth.accountCreatedVerify'),
           user: newUser,
         });
       }
 
       return res.status(201).json({
-        message: 'Account created successfully.',
+        message: t(req.locale, 'errors.auth.accountCreated'),
         user: newUser,
       });
     } catch (err) { next(err); }
@@ -205,7 +206,7 @@ const authController = {
     try {
       const { token } = req.body;
       if (!token) {
-        return res.status(400).json({ error: 'token is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.tokenRequired'), code: 400 });
       }
 
       const { rows } = await dbQuery(
@@ -215,12 +216,12 @@ const authController = {
       );
 
       if (rows.length === 0) {
-        return res.status(400).json({ error: 'Invalid or already-used verification token', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.invalidVerifyToken'), code: 400 });
       }
 
       const user = rows[0];
       if (new Date(user.email_verify_expires) < new Date()) {
-        return res.status(400).json({ error: 'Verification token has expired', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.verifyTokenExpired'), code: 400 });
       }
 
       await dbQuery(
@@ -232,7 +233,7 @@ const authController = {
         [user.id]
       );
 
-      return res.json({ message: 'Email verified successfully.' });
+      return res.json({ message: t(req.locale, 'errors.auth.emailVerified') });
     } catch (err) { next(err); }
   },
 
@@ -241,7 +242,7 @@ const authController = {
     try {
       const { email } = req.body;
       if (!email) {
-        return res.status(400).json({ error: 'email is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.emailRequired'), code: 400 });
       }
 
       const { rows } = await dbQuery(
@@ -266,7 +267,7 @@ const authController = {
         }
       }
 
-      return res.json({ message: 'If that email is registered you will receive a reset link.' });
+      return res.json({ message: t(req.locale, 'errors.auth.forgotPasswordSent') });
     } catch (err) { next(err); }
   },
 
@@ -275,7 +276,7 @@ const authController = {
     try {
       const { token, password } = req.body;
       if (!token || !password) {
-        return res.status(400).json({ error: 'token and password are required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.tokenPasswordRequired'), code: 400 });
       }
 
       const { rows } = await dbQuery(
@@ -285,12 +286,12 @@ const authController = {
       );
 
       if (rows.length === 0) {
-        return res.status(400).json({ error: 'Invalid or already-used reset token', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.invalidResetToken'), code: 400 });
       }
 
       const user = rows[0];
       if (new Date(user.password_reset_expires) < new Date()) {
-        return res.status(400).json({ error: 'Reset token has expired', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.resetTokenExpired'), code: 400 });
       }
 
       const newHash = await scrypt.hash(password);
@@ -309,7 +310,7 @@ const authController = {
       // Invalidate all existing sessions for security
       await lucia.invalidateUserSessions(user.id);
 
-      return res.json({ message: 'Password updated. Please log in with your new password.' });
+      return res.json({ message: t(req.locale, 'errors.auth.passwordUpdatedReLogin') });
     } catch (err) { next(err); }
   },
 
@@ -378,7 +379,7 @@ const authController = {
     try {
       const { email } = req.body;
       if (!email) {
-        return res.status(400).json({ error: 'email is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.emailRequired'), code: 400 });
       }
 
       const { rows } = await dbQuery(
@@ -389,7 +390,7 @@ const authController = {
 
       // Always return 200 to prevent email enumeration
       if (rows.length === 0 || rows[0].email_verified) {
-        return res.json({ message: 'If that email is pending verification you will receive a new link.' });
+        return res.json({ message: t(req.locale, 'errors.auth.resendVerificationSent') });
       }
 
       const newToken  = makeToken();
@@ -406,7 +407,7 @@ const authController = {
         console.error('[resend-verification] Email failed:', emailErr.message);
       }
 
-      return res.json({ message: 'If that email is pending verification you will receive a new link.' });
+      return res.json({ message: t(req.locale, 'errors.auth.resendVerificationSent') });
     } catch (err) { next(err); }
   },
 

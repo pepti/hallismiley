@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
 const { UPLOAD_ROOT } = require('../config/paths');
+const { t }           = require('../i18n');
 
 function validateSlug(slug) {
   return typeof slug === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
@@ -32,7 +33,7 @@ const adminShopController = {
   async getProduct(req, res, next) {
     try {
       const product = await Product.findById(req.params.id);
-      if (!product) return res.status(404).json({ error: 'Product not found', code: 404 });
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       const [images, variants] = await Promise.all([
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: false }),
@@ -60,7 +61,7 @@ const adminShopController = {
       }
       const VALID_SHAPES = ['aero', 'tall', 'long', 'low', 'cube', 'classic'];
       if (shape != null && !VALID_SHAPES.includes(shape)) {
-        return res.status(400).json({ error: `shape must be one of: ${VALID_SHAPES.join(', ')}`, code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.shapeEnum', { values: VALID_SHAPES.join(', ') }), code: 400 });
       }
       const product = await Product.create({
         slug, name,
@@ -76,7 +77,7 @@ const adminShopController = {
       return res.status(201).json({ product });
     } catch (err) {
       if (err.code === '23505') { // unique_violation on slug
-        return res.status(409).json({ error: 'A product with that slug already exists', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.slugTaken'), code: 409 });
       }
       next(err);
     }
@@ -88,11 +89,11 @@ const adminShopController = {
         return res.status(400).json({ error: 'invalid slug', code: 400 });
       }
       const product = await Product.update(req.params.id, req.body);
-      if (!product) return res.status(404).json({ error: 'Product not found', code: 404 });
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       return res.json({ product });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({ error: 'Slug already taken', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.slugAlreadyTaken'), code: 409 });
       }
       next(err);
     }
@@ -101,7 +102,7 @@ const adminShopController = {
   async deactivateProduct(req, res, next) {
     try {
       const product = await Product.deactivate(req.params.id);
-      if (!product) return res.status(404).json({ error: 'Product not found', code: 404 });
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       return res.json({ product });
     } catch (err) { next(err); }
   },
@@ -111,8 +112,8 @@ const adminShopController = {
   async uploadImage(req, res, next) {
     try {
       const product = await Product.findById(req.params.id);
-      if (!product) return res.status(404).json({ error: 'Product not found', code: 404 });
-      if (!req.file) return res.status(400).json({ error: 'No file uploaded', code: 400 });
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.admin.noFileUploaded'), code: 400 });
 
       const url = `/assets/products/${product.id}/${req.file.filename}`;
       const image = await Product.addImage(product.id, {
@@ -126,7 +127,7 @@ const adminShopController = {
   async deleteImage(req, res, next) {
     try {
       const deleted = await Product.deleteImage(req.params.id, req.params.imageId);
-      if (!deleted) return res.status(404).json({ error: 'Image not found', code: 404 });
+      if (!deleted) return res.status(404).json({ error: t(req.locale, 'errors.admin.imageNotFound'), code: 404 });
 
       // Best-effort unlink the file on disk
       try {
@@ -165,7 +166,7 @@ const adminShopController = {
   async getOrder(req, res, next) {
     try {
       const order = await Order.findById(req.params.id);
-      if (!order) return res.status(404).json({ error: 'Order not found', code: 404 });
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       const items = await Order.listItems(order.id);
       return res.json({ order, items });
     } catch (err) { next(err); }
@@ -183,7 +184,7 @@ const adminShopController = {
   async createVariant(req, res, next) {
     try {
       const product = await Product.findById(req.params.id);
-      if (!product) return res.status(404).json({ error: 'Product not found', code: 404 });
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
 
       const { sku, attributes, price_isk, price_eur, stock, active } = req.body || {};
       if (!sku || typeof sku !== 'string' || sku.length > 100) {
@@ -205,7 +206,7 @@ const adminShopController = {
     } catch (err) {
       if (err.code === '23505') {
         return res.status(409).json({
-          error: 'A variant with those attributes (or that SKU) already exists',
+          error: t(req.locale, 'errors.admin.variantAttrsTaken'),
           code: 409,
         });
       }
@@ -216,11 +217,11 @@ const adminShopController = {
   async updateVariant(req, res, next) {
     try {
       const variant = await ProductVariant.update(req.params.variantId, req.body || {});
-      if (!variant) return res.status(404).json({ error: 'Variant not found', code: 404 });
+      if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       return res.json({ variant });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({ error: 'SKU already in use', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.skuTaken'), code: 409 });
       }
       next(err);
     }
@@ -229,7 +230,7 @@ const adminShopController = {
   async deactivateVariant(req, res, next) {
     try {
       const variant = await ProductVariant.update(req.params.variantId, { active: false });
-      if (!variant) return res.status(404).json({ error: 'Variant not found', code: 404 });
+      if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       return res.json({ variant });
     } catch (err) { next(err); }
   },
@@ -240,12 +241,12 @@ const adminShopController = {
       const allowed = ['shipped', 'cancelled'];
       if (!allowed.includes(status)) {
         return res.status(400).json({
-          error: `Admins may set status to one of: ${allowed.join(', ')}`,
+          error: t(req.locale, 'errors.admin.statusEnum', { values: allowed.join(', ') }),
           code: 400,
         });
       }
       const order = await Order.updateStatus(req.params.id, status);
-      if (!order) return res.status(404).json({ error: 'Order not found', code: 404 });
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       return res.json({ order });
     } catch (err) { next(err); }
   },

@@ -6,6 +6,7 @@ const db      = require('../config/database');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 const { parseYouTubeId } = require('../utils/youtube');
 const { UPLOAD_ROOT }    = require('../config/paths');
+const { t }              = require('../i18n');
 
 // URLs look like `/assets/projects/5/img.jpg` but the bytes live at
 // `UPLOAD_ROOT/projects/5/img.jpg` — strip the `/assets` prefix when resolving.
@@ -22,13 +23,14 @@ function _tryUnlink(filePath) {
 const MEDIA_COLUMNS = 'id, project_id, file_path, media_type, sort_order, caption, section_id, created_at';
 
 // Parse an incoming section_id value (body/form) into a valid integer or null.
-// Returns { ok, value, error } — `ok: false` means the caller should 400.
+// Returns { ok, value, errorKey } — `ok: false` means the caller should 400
+// and pass `errorKey` through t(req.locale, ...).
 function _parseSectionId(raw) {
   if (raw === undefined) return { ok: true, value: undefined }; // omit → don't touch
   if (raw === null || raw === '' || raw === 'null') return { ok: true, value: null };
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    return { ok: false, error: 'section_id must be a positive integer or null' };
+    return { ok: false, errorKey: 'errors.project.sectionIdPositiveOrNull' };
   }
   return { ok: true, value: n };
 }
@@ -51,7 +53,7 @@ const projectController = {
   async getOne(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.json(project);
     } catch (err) { next(err); }
   },
@@ -65,7 +67,7 @@ const projectController = {
   async update(req, res, next) {
     try {
       const project = await Project.update(req.params.id, req.body);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.json(project);
     } catch (err) { next(err); }
   },
@@ -73,7 +75,7 @@ const projectController = {
   async remove(req, res, next) {
     try {
       const deleted = await Project.delete(req.params.id);
-      if (!deleted) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!deleted) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.status(204).send();
     } catch (err) { next(err); }
   },
@@ -81,7 +83,7 @@ const projectController = {
   async getMedia(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       // NULLS FIRST so the "Ungrouped" bucket naturally precedes named sections
       // in the flat array — frontend groups these client-side by section_id.
@@ -104,7 +106,7 @@ const projectController = {
       const project   = await Project.findById(projectId);
       if (!project) {
         if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
-        return res.status(404).json({ error: 'Project not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       }
 
       let filePath, mediaType, caption, sortOrder;
@@ -116,7 +118,7 @@ const projectController = {
         // Enforce per-type size limit (multer allows up to MAX_VIDEO_SIZE globally)
         if (mediaType === 'image' && req.file.size > MAX_IMAGE_SIZE) {
           _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
-          return res.status(400).json({ error: 'Image file size must not exceed 10 MB', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.project.imageTooLarge'), code: 400 });
         }
 
         filePath  = `/assets/projects/${projectId}/${req.file.filename}`;
@@ -127,10 +129,10 @@ const projectController = {
         const { file_path, media_type, caption: cap, sort_order } = req.body;
 
         if (!file_path || typeof file_path !== 'string') {
-          return res.status(400).json({ error: 'file_path is required', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.project.filePathRequired'), code: 400 });
         }
         if (!['image', 'video'].includes(media_type)) {
-          return res.status(400).json({ error: 'media_type must be image or video', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.project.mediaType'), code: 400 });
         }
 
         filePath  = file_path;
@@ -143,7 +145,7 @@ const projectController = {
       const parsedSection = _parseSectionId(req.body.section_id);
       if (!parsedSection.ok) {
         if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
-        return res.status(400).json({ error: parsedSection.error, code: 400 });
+        return res.status(400).json({ error: t(req.locale, parsedSection.errorKey), code: 400 });
       }
       const sectionId = parsedSection.value ?? null;
 
@@ -155,7 +157,7 @@ const projectController = {
         );
         if (!secRows[0]) {
           if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
-          return res.status(400).json({ error: 'section_id does not belong to this project', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.project.sectionNotInProject'), code: 400 });
         }
       }
 
@@ -181,7 +183,7 @@ const projectController = {
 
       // Verify project exists
       const project = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       // Only update fields that are allowed
       const { caption, sort_order } = req.body;
@@ -200,14 +202,14 @@ const projectController = {
       // Section assignment — null means "move back to Ungrouped"
       if (req.body.section_id !== undefined) {
         const parsed = _parseSectionId(req.body.section_id);
-        if (!parsed.ok) return res.status(400).json({ error: parsed.error, code: 400 });
+        if (!parsed.ok) return res.status(400).json({ error: t(req.locale, parsed.errorKey), code: 400 });
         if (parsed.value !== null) {
           const { rows: secRows } = await db.query(
             `SELECT id FROM project_sections WHERE id = $1 AND project_id = $2`,
             [parsed.value, projectId]
           );
           if (!secRows[0]) {
-            return res.status(400).json({ error: 'section_id does not belong to this project', code: 400 });
+            return res.status(400).json({ error: t(req.locale, 'errors.project.sectionNotInProject'), code: 400 });
           }
         }
         params.push(parsed.value);
@@ -220,7 +222,7 @@ const projectController = {
           `SELECT ${MEDIA_COLUMNS} FROM project_media WHERE id = $1 AND project_id = $2`,
           [mediaId, projectId]
         );
-        if (!rows[0]) return res.status(404).json({ error: 'Media item not found', code: 404 });
+        if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.project.mediaNotFound'), code: 404 });
         return res.json(rows[0]);
       }
 
@@ -233,7 +235,7 @@ const projectController = {
          RETURNING ${MEDIA_COLUMNS}`,
         params
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Media item not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.project.mediaNotFound'), code: 404 });
       res.json(rows[0]);
     } catch (err) { next(err); }
   },
@@ -244,7 +246,7 @@ const projectController = {
       const mediaId   = Number(req.params.mediaId);
 
       const project = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const { rows } = await db.query(
         `DELETE FROM project_media
@@ -252,7 +254,7 @@ const projectController = {
          RETURNING file_path`,
         [mediaId, projectId]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Media item not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.project.mediaNotFound'), code: 404 });
 
       // Remove file from disk if it is a locally-stored asset
       _tryUnlink(rows[0].file_path);
@@ -266,7 +268,7 @@ const projectController = {
       const projectId = Number(req.params.id);
 
       const project = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const { order } = req.body; // [{ id, sort_order, section_id? }, ...]
 
@@ -278,7 +280,7 @@ const projectController = {
       );
       if (existing.length !== ids.length) {
         return res.status(400).json({
-          error: 'One or more media IDs do not belong to this project',
+          error: t(req.locale, 'errors.project.mediaBelongsToProject'),
           code: 400,
         });
       }
@@ -297,7 +299,7 @@ const projectController = {
         );
         if (secs.length !== sectionIds.length) {
           return res.status(400).json({
-            error: 'One or more section IDs do not belong to this project',
+            error: t(req.locale, 'errors.project.sectionBelongsToProject'),
             code: 400,
           });
         }
@@ -346,7 +348,7 @@ const projectController = {
   async getSections(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.json(await ProjectSection.list(req.params.id));
     } catch (err) { next(err); }
   },
@@ -354,7 +356,7 @@ const projectController = {
   async createSection(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const name        = req.body.name.trim();
       const description = req.body.description != null ? String(req.body.description) : null;
@@ -366,14 +368,14 @@ const projectController = {
   async updateSection(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const patch = {};
       if (req.body.name !== undefined)        patch.name        = req.body.name.trim();
       if (req.body.description !== undefined) patch.description = req.body.description;
 
       const section = await ProjectSection.update(req.params.id, req.params.sectionId, patch);
-      if (!section) return res.status(404).json({ error: 'Section not found', code: 404 });
+      if (!section) return res.status(404).json({ error: t(req.locale, 'errors.project.sectionNotFound'), code: 404 });
       res.json(section);
     } catch (err) { next(err); }
   },
@@ -381,7 +383,7 @@ const projectController = {
   async reorderSections(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const { order } = req.body;
       const ids = order.map(i => Number(i.id));
@@ -391,7 +393,7 @@ const projectController = {
       );
       if (existing.length !== ids.length) {
         return res.status(400).json({
-          error: 'One or more section IDs do not belong to this project',
+          error: t(req.locale, 'errors.project.sectionBelongsToProject'),
           code: 400,
         });
       }
@@ -404,10 +406,10 @@ const projectController = {
   async deleteSection(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const deleted = await ProjectSection.delete(req.params.id, req.params.sectionId);
-      if (!deleted) return res.status(404).json({ error: 'Section not found', code: 404 });
+      if (!deleted) return res.status(404).json({ error: t(req.locale, 'errors.project.sectionNotFound'), code: 404 });
       res.status(204).send();
     } catch (err) { next(err); }
   },
@@ -417,7 +419,7 @@ const projectController = {
   async getVideos(req, res, next) {
     try {
       const project = await Project.findById(req.params.id);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.json(await ProjectVideo.list(req.params.id));
     } catch (err) { next(err); }
   },
@@ -428,7 +430,7 @@ const projectController = {
       const project   = await Project.findById(projectId);
       if (!project) {
         if (req.file) _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
-        return res.status(404).json({ error: 'Project not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       }
 
       const title = typeof req.body.title === 'string' ? req.body.title : null;
@@ -439,7 +441,7 @@ const projectController = {
         const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : null;
         if (!mediaType) {
           _tryUnlink(`/assets/projects/${projectId}/${req.file.filename}`);
-          return res.status(400).json({ error: 'Only video files are accepted here', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.project.onlyVideoFiles'), code: 400 });
         }
 
         const filePath = `/assets/projects/${projectId}/${req.file.filename}`;
@@ -454,11 +456,11 @@ const projectController = {
       // JSON body: { url } for a YouTube embed
       const { url } = req.body;
       if (!url || typeof url !== 'string') {
-        return res.status(400).json({ error: 'Either a video file or a YouTube url is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.project.videoOrYoutubeRequired'), code: 400 });
       }
       const youtubeId = parseYouTubeId(url);
       if (!youtubeId) {
-        return res.status(400).json({ error: 'Could not parse a YouTube video ID from url', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.invalidYoutubeUrl'), code: 400 });
       }
 
       const row = await ProjectVideo.create(projectId, {
@@ -479,12 +481,12 @@ const projectController = {
     try {
       const projectId = Number(req.params.id);
       const project   = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const row = await ProjectVideo.update(projectId, req.params.videoId, {
         title: req.body.title,
       });
-      if (!row) return res.status(404).json({ error: 'Video not found', code: 404 });
+      if (!row) return res.status(404).json({ error: t(req.locale, 'errors.project.videoNotFound'), code: 404 });
       res.json(row);
     } catch (err) { next(err); }
   },
@@ -493,7 +495,7 @@ const projectController = {
     try {
       const projectId = Number(req.params.id);
       const project   = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const { order } = req.body;
       const ids = order.map(i => Number(i.id));
@@ -503,7 +505,7 @@ const projectController = {
       );
       if (existing.length !== ids.length) {
         return res.status(400).json({
-          error: 'One or more video IDs do not belong to this project',
+          error: t(req.locale, 'errors.project.videoBelongsToProject'),
           code: 400,
         });
       }
@@ -517,10 +519,10 @@ const projectController = {
     try {
       const projectId = Number(req.params.id);
       const project   = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const deleted = await ProjectVideo.delete(projectId, req.params.videoId);
-      if (!deleted) return res.status(404).json({ error: 'Video not found', code: 404 });
+      if (!deleted) return res.status(404).json({ error: t(req.locale, 'errors.project.videoNotFound'), code: 404 });
 
       if (deleted.kind === 'file' && deleted.file_path) _tryUnlink(deleted.file_path);
       res.status(204).send();
@@ -533,7 +535,7 @@ const projectController = {
     try {
       const projectId = Number(req.params.id);
       const project   = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const removed = await ProjectVideo.deleteAll(projectId);
       for (const r of removed) {
@@ -549,12 +551,12 @@ const projectController = {
       const { position } = req.body;
       if (!['above_gallery', 'below_gallery'].includes(position)) {
         return res.status(400).json({
-          error: 'position must be "above_gallery" or "below_gallery"',
+          error: t(req.locale, 'errors.project.invalidPosition'),
           code: 400,
         });
       }
       const updated = await Project.update(projectId, { video_section_position: position });
-      if (!updated) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!updated) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
       res.json(updated);
     } catch (err) { next(err); }
   },
@@ -564,11 +566,11 @@ const projectController = {
       const projectId = Number(req.params.id);
 
       const project = await Project.findById(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found', code: 404 });
+      if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
 
       const { media_id } = req.body;
       if (!media_id || !Number.isInteger(Number(media_id))) {
-        return res.status(400).json({ error: 'media_id is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.project.mediaIdRequired'), code: 400 });
       }
 
       const { rows: mediaRows } = await db.query(
@@ -576,7 +578,7 @@ const projectController = {
         [Number(media_id), projectId]
       );
       if (!mediaRows[0]) {
-        return res.status(404).json({ error: 'Media item not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.project.mediaNotFound'), code: 404 });
       }
 
       const updated = await Project.update(projectId, { image_url: mediaRows[0].file_path });

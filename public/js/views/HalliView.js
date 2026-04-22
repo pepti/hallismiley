@@ -3,7 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 // ── Default content — compelling placeholder biography ────────────────────
 const DEFAULT_CONTENT = {
@@ -505,6 +505,7 @@ export class HalliView {
     controls.className = 'hb-edit-controls';
     controls.setAttribute('data-testid', 'edit-controls');
     controls.innerHTML = `
+      ${adminLocaleBadgeHtml()}
       <button type="button" class="hb-edit-save"   data-testid="edit-save-btn">${t('form.save')}</button>
       <button type="button" class="hb-edit-cancel" data-testid="edit-cancel-btn">${t('admin.cancel')}</button>
       <span class="hb-edit-status" aria-live="polite"></span>`;

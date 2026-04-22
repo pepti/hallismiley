@@ -1,4 +1,14 @@
-// A03 Injection + A04 Insecure Design: strict input validation for all routes
+// A03 Injection + A04 Insecure Design: strict input validation for all routes.
+// Error messages are i18n keys — translated to req.locale just before the
+// response goes out via the `_fail()` helper at the bottom of each validator.
+
+const { t } = require('../i18n');
+
+/** Translate an array of {key, params} entries using req.locale and return a 400. */
+function _fail(req, res, errors) {
+  const messages = errors.map(e => t(req.locale, e.key, e.params));
+  return res.status(400).json({ error: messages.join('; '), code: 400 });
+}
 
 // ── Project validation ────────────────────────────────────────────────────────
 
@@ -18,58 +28,56 @@ function validateProject(req, res, next) {
 
   // Required fields only on creation
   if (isPOST) {
-    if (!title?.trim())       errors.push('title is required');
-    if (!description?.trim()) errors.push('description is required');
-    if (!category)            errors.push('category is required');
-    if (year === undefined)   errors.push('year is required');
+    if (!title?.trim())       errors.push({ key: 'validation.title.required' });
+    if (!description?.trim()) errors.push({ key: 'validation.description.required' });
+    if (!category)            errors.push({ key: 'validation.category.required' });
+    if (year === undefined)   errors.push({ key: 'validation.year.required' });
   }
 
   // Field-level checks (apply when field is present)
   if (title !== undefined) {
     if (typeof title !== 'string' || title.trim().length === 0)
-      errors.push('title must be a non-empty string');
+      errors.push({ key: 'validation.title.nonEmptyString' });
     else if (title.length > MAX_TITLE_LEN)
-      errors.push(`title must be at most ${MAX_TITLE_LEN} characters`);
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_TITLE_LEN } });
   }
   if (description !== undefined) {
     if (typeof description !== 'string' || description.trim().length === 0)
-      errors.push('description must be a non-empty string');
+      errors.push({ key: 'validation.description.nonEmptyString' });
     else if (description.length > MAX_DESC_LEN)
-      errors.push(`description must be at most ${MAX_DESC_LEN} characters`);
+      errors.push({ key: 'validation.description.maxLength', params: { n: MAX_DESC_LEN } });
   }
   if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
-    errors.push(`category must be one of: ${VALID_CATEGORIES.join(', ')}`);
+    errors.push({ key: 'validation.category.enum', params: { values: VALID_CATEGORIES.join(', ') } });
   }
   if (year !== undefined) {
     const y = Number(year);
     if (!Number.isInteger(y) || y < MIN_YEAR || y > MAX_YEAR)
-      errors.push(`year must be an integer between ${MIN_YEAR} and ${MAX_YEAR}`);
+      errors.push({ key: 'validation.year.intRange', params: { min: MIN_YEAR, max: MAX_YEAR } });
   }
   if (tools_used !== undefined) {
     if (!Array.isArray(tools_used))
-      errors.push('tools_used must be an array');
+      errors.push({ key: 'validation.toolsUsed.array' });
     else if (tools_used.length > MAX_TOOLS)
-      errors.push(`tools_used must contain at most ${MAX_TOOLS} items`);
+      errors.push({ key: 'validation.toolsUsed.maxItems', params: { n: MAX_TOOLS } });
     else if (tools_used.some(t => typeof t !== 'string' || t.length > MAX_TOOL_LEN))
-      errors.push(`each tool must be a string of at most ${MAX_TOOL_LEN} characters`);
+      errors.push({ key: 'validation.toolsUsed.itemString', params: { n: MAX_TOOL_LEN } });
   }
   // A03: reject unexpected boolean coercions for featured
   if (featured !== undefined && typeof featured !== 'boolean') {
-    errors.push('featured must be a boolean');
+    errors.push({ key: 'validation.featured.boolean' });
   }
   // A03: allow https:// external URLs and /assets/ relative paths (for cover images
   // set via the media management API).  Blocks javascript:, data:, and plain http:.
   if (image_url !== undefined && image_url !== null && image_url !== '') {
     if (typeof image_url !== 'string') {
-      errors.push('image_url must be a string');
+      errors.push({ key: 'validation.imageUrl.string' });
     } else if (!/^https:\/\/.+/i.test(image_url) && !/^\/assets\//i.test(image_url)) {
-      errors.push('image_url must be a valid https:// URL or a relative /assets/ path');
+      errors.push({ key: 'validation.imageUrl.invalid' });
     }
   }
 
-  if (errors.length) {
-    return res.status(400).json({ error: errors.join('; '), code: 400 });
-  }
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -82,30 +90,28 @@ function validateQuery(req, res, next) {
   const errors = [];
 
   if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
-    errors.push(`category must be one of: ${VALID_CATEGORIES.join(', ')}`);
+    errors.push({ key: 'validation.category.enum', params: { values: VALID_CATEGORIES.join(', ') } });
   }
   if (featured !== undefined && !['true', 'false'].includes(featured)) {
-    errors.push('featured must be true or false');
+    errors.push({ key: 'validation.featured.bool' });
   }
   if (year !== undefined) {
     const y = Number(year);
     if (isNaN(y) || y < MIN_YEAR || y > MAX_YEAR)
-      errors.push(`year must be between ${MIN_YEAR} and ${MAX_YEAR}`);
+      errors.push({ key: 'validation.year.range', params: { min: MIN_YEAR, max: MAX_YEAR } });
   }
   if (limit !== undefined) {
     const l = Number(limit);
     if (!Number.isInteger(l) || l < 1 || l > MAX_LIMIT)
-      errors.push(`limit must be an integer between 1 and ${MAX_LIMIT}`);
+      errors.push({ key: 'validation.limit.intRange', params: { max: MAX_LIMIT } });
   }
   if (offset !== undefined) {
     const o = Number(offset);
     if (!Number.isInteger(o) || o < 0 || o > MAX_OFFSET)
-      errors.push(`offset must be a non-negative integer`);
+      errors.push({ key: 'validation.offset.nonNegative' });
   }
 
-  if (errors.length) {
-    return res.status(400).json({ error: errors.join('; '), code: 400 });
-  }
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -131,12 +137,12 @@ function isAllowedAvatar(name) {
 
 function validatePassword(password, errors) {
   if (!password || typeof password !== 'string') {
-    errors.push('password is required');
+    errors.push({ key: 'validation.password.required' });
     return;
   }
-  if (password.length < 8)         errors.push('password must be at least 8 characters');
-  if (!/[a-zA-Z]/.test(password))  errors.push('password must contain at least one letter');
-  if (!/[0-9]/.test(password))     errors.push('password must contain at least one number');
+  if (password.length < 8)         errors.push({ key: 'validation.password.minLength' });
+  if (!/[a-zA-Z]/.test(password))  errors.push({ key: 'validation.password.letter' });
+  if (!/[0-9]/.test(password))     errors.push({ key: 'validation.password.number' });
 }
 
 // POST /auth/signup
@@ -145,36 +151,34 @@ function validateSignup(req, res, next) {
   const errors = [];
 
   if (!username || typeof username !== 'string') {
-    errors.push('username is required');
+    errors.push({ key: 'validation.username.required' });
   } else if (!USERNAME_RE.test(username)) {
-    errors.push('username must be 3-30 characters, letters/numbers/underscore only');
+    errors.push({ key: 'validation.username.invalid' });
   }
 
   if (!email || typeof email !== 'string') {
-    errors.push('email is required');
+    errors.push({ key: 'validation.email.required' });
   } else if (!EMAIL_RE.test(email.trim())) {
-    errors.push('email must be a valid email address');
+    errors.push({ key: 'validation.email.invalid' });
   }
 
   validatePassword(password, errors);
 
   if (phone !== undefined && phone !== null && phone !== '') {
-    if (!PHONE_RE.test(phone)) errors.push('phone must be a valid phone number');
+    if (!PHONE_RE.test(phone)) errors.push({ key: 'validation.phone.invalid' });
   }
 
   if (display_name !== undefined && display_name !== null) {
     if (typeof display_name !== 'string' || display_name.trim().length > 100)
-      errors.push('display_name must be a string of at most 100 characters');
+      errors.push({ key: 'validation.displayName.maxLength', params: { n: 100 } });
   }
 
   if (avatar !== undefined) {
     if (!ALLOWED_AVATARS.includes(avatar))
-      errors.push(`avatar must be one of the allowed avatars (avatar-01.svg to avatar-40.svg)`);
+      errors.push({ key: 'validation.avatar.invalid' });
   }
 
-  if (errors.length) {
-    return res.status(400).json({ error: errors.join('; '), code: 400 });
-  }
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -185,21 +189,19 @@ function validateProfileUpdate(req, res, next) {
 
   if (display_name !== undefined && display_name !== null) {
     if (typeof display_name !== 'string' || display_name.trim().length > 100)
-      errors.push('display_name must be a string of at most 100 characters');
+      errors.push({ key: 'validation.displayName.maxLength', params: { n: 100 } });
   }
 
   if (phone !== undefined && phone !== null && phone !== '') {
-    if (!PHONE_RE.test(phone)) errors.push('phone must be a valid phone number');
+    if (!PHONE_RE.test(phone)) errors.push({ key: 'validation.phone.invalid' });
   }
 
   if (avatar !== undefined) {
     if (!isAllowedAvatar(avatar))
-      errors.push(`avatar must be one of the allowed avatars or an uploaded avatar`);
+      errors.push({ key: 'validation.avatar.invalidOrUploaded' });
   }
 
-  if (errors.length) {
-    return res.status(400).json({ error: errors.join('; '), code: 400 });
-  }
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -209,14 +211,12 @@ function validateResetPassword(req, res, next) {
   const errors = [];
 
   if (!token || typeof token !== 'string') {
-    errors.push('token is required');
+    errors.push({ key: 'validation.token.required' });
   }
 
   validatePassword(password, errors);
 
-  if (errors.length) {
-    return res.status(400).json({ error: errors.join('; '), code: 400 });
-  }
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -226,14 +226,12 @@ function validatePasswordChange(req, res, next) {
   const errors = [];
 
   if (!current_password || typeof current_password !== 'string') {
-    errors.push('current_password is required');
+    errors.push({ key: 'validation.currentPassword.required' });
   }
 
   validatePassword(new_password, errors);
 
-  if (errors.length) {
-    return res.status(400).json({ error: errors.join('; '), code: 400 });
-  }
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -249,24 +247,24 @@ function validateMediaUpdate(req, res, next) {
 
   if (caption !== undefined && caption !== null) {
     if (typeof caption !== 'string')
-      errors.push('caption must be a string');
+      errors.push({ key: 'validation.caption.string' });
     else if (caption.length > MAX_CAPTION_LEN)
-      errors.push(`caption must be at most ${MAX_CAPTION_LEN} characters`);
+      errors.push({ key: 'validation.caption.maxLength', params: { n: MAX_CAPTION_LEN } });
   }
 
   if (sort_order !== undefined) {
     const s = Number(sort_order);
     if (!Number.isInteger(s) || s < 0)
-      errors.push('sort_order must be a non-negative integer');
+      errors.push({ key: 'validation.sortOrder.nonNegative' });
   }
 
   if (section_id !== undefined && section_id !== null) {
     const s = Number(section_id);
     if (!Number.isInteger(s) || s <= 0)
-      errors.push('section_id must be a positive integer or null');
+      errors.push({ key: 'validation.sectionId.positiveOrNull' });
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -276,31 +274,31 @@ function validateReorder(req, res, next) {
   const errors = [];
 
   if (!Array.isArray(order) || order.length === 0) {
-    errors.push('order must be a non-empty array');
+    errors.push({ key: 'validation.order.nonEmptyArray' });
   } else if (order.length > MAX_REORDER_LEN) {
-    errors.push(`order must contain at most ${MAX_REORDER_LEN} items`);
+    errors.push({ key: 'validation.order.maxItems', params: { n: MAX_REORDER_LEN } });
   } else {
     for (let i = 0; i < order.length; i++) {
       const item = order[i];
       if (typeof item !== 'object' || item === null) {
-        errors.push(`order[${i}] must be an object`);
+        errors.push({ key: 'validation.order.itemObject', params: { i } });
         continue;
       }
       const id  = Number(item.id);
       const so  = Number(item.sort_order);
       if (!Number.isInteger(id) || id <= 0)
-        errors.push(`order[${i}].id must be a positive integer`);
+        errors.push({ key: 'validation.order.itemIdPositive', params: { i } });
       if (!Number.isInteger(so) || so < 0)
-        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+        errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i } });
       if (item.section_id !== undefined && item.section_id !== null) {
         const sid = Number(item.section_id);
         if (!Number.isInteger(sid) || sid <= 0)
-          errors.push(`order[${i}].section_id must be a positive integer or null`);
+          errors.push({ key: 'validation.order.itemSectionIdPositiveOrNull', params: { i } });
       }
     }
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -318,32 +316,32 @@ function validateSection(req, res, next) {
 
   if (isPOST) {
     if (typeof name !== 'string' || name.trim().length === 0) {
-      errors.push('name is required');
+      errors.push({ key: 'validation.name.required' });
     }
   } else {
     // PATCH — must include at least one editable field
     if (name === undefined && description === undefined) {
-      errors.push('at least one of name or description is required');
+      errors.push({ key: 'validation.nameOrDescription.required' });
     }
   }
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0) {
-      errors.push('name must be a non-empty string');
+      errors.push({ key: 'validation.name.nonEmptyString' });
     } else if (name.length > MAX_SECTION_NAME_LEN) {
-      errors.push(`name must be at most ${MAX_SECTION_NAME_LEN} characters`);
+      errors.push({ key: 'validation.name.maxLength', params: { n: MAX_SECTION_NAME_LEN } });
     }
   }
 
   if (description !== undefined && description !== null) {
     if (typeof description !== 'string') {
-      errors.push('description must be a string');
+      errors.push({ key: 'validation.description.string' });
     } else if (description.length > MAX_SECTION_DESC_LEN) {
-      errors.push(`description must be at most ${MAX_SECTION_DESC_LEN} characters`);
+      errors.push({ key: 'validation.description.maxLength', params: { n: MAX_SECTION_DESC_LEN } });
     }
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -358,12 +356,12 @@ function validateVideoUpdate(req, res, next) {
 
   if (title !== undefined && title !== null) {
     if (typeof title !== 'string')
-      errors.push('title must be a string');
+      errors.push({ key: 'validation.videoTitle.string' });
     else if (title.length > MAX_VIDEO_TITLE_LEN)
-      errors.push(`title must be at most ${MAX_VIDEO_TITLE_LEN} characters`);
+      errors.push({ key: 'validation.videoTitle.maxLength', params: { n: MAX_VIDEO_TITLE_LEN } });
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -373,25 +371,25 @@ function validateVideoReorder(req, res, next) {
   const errors = [];
 
   if (!Array.isArray(order) || order.length === 0) {
-    errors.push('order must be a non-empty array');
+    errors.push({ key: 'validation.order.nonEmptyArray' });
   } else if (order.length > MAX_REORDER_LEN) {
-    errors.push(`order must contain at most ${MAX_REORDER_LEN} items`);
+    errors.push({ key: 'validation.order.maxItems', params: { n: MAX_REORDER_LEN } });
   } else {
     for (let i = 0; i < order.length; i++) {
       const item = order[i];
       if (typeof item !== 'object' || item === null) {
-        errors.push(`order[${i}] must be an object`); continue;
+        errors.push({ key: 'validation.order.itemObject', params: { i } }); continue;
       }
       const id = Number(item.id);
       const so = Number(item.sort_order);
       if (!Number.isInteger(id) || id <= 0)
-        errors.push(`order[${i}].id must be a positive integer`);
+        errors.push({ key: 'validation.order.itemIdPositive', params: { i } });
       if (!Number.isInteger(so) || so < 0)
-        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+        errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i } });
     }
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -401,24 +399,24 @@ function validateSectionReorder(req, res, next) {
   const errors = [];
 
   if (!Array.isArray(order) || order.length === 0) {
-    errors.push('order must be a non-empty array');
+    errors.push({ key: 'validation.order.nonEmptyArray' });
   } else {
     for (let i = 0; i < order.length; i++) {
       const item = order[i];
       if (typeof item !== 'object' || item === null) {
-        errors.push(`order[${i}] must be an object`);
+        errors.push({ key: 'validation.order.itemObject', params: { i } });
         continue;
       }
       const id = Number(item.id);
       const so = Number(item.sort_order);
       if (!Number.isInteger(id) || id <= 0)
-        errors.push(`order[${i}].id must be a positive integer`);
+        errors.push({ key: 'validation.order.itemIdPositive', params: { i } });
       if (!Number.isInteger(so) || so < 0)
-        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+        errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i } });
     }
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -430,63 +428,90 @@ const SLUG_RE              = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // POST /api/v1/news  and  PATCH /api/v1/news/:id
 function validateNews(req, res, next) {
-  const { title, slug, summary, body, cover_image, category, published } = req.body;
+  const {
+    title, slug, summary, body, cover_image,
+    title_is, summary_is, body_is, cover_image_is,
+    category, published,
+  } = req.body;
   const errors  = [];
   const isPOST  = req.method === 'POST';
 
   // Required on creation
   if (isPOST) {
-    if (!title?.trim())   errors.push('title is required');
-    if (!summary?.trim()) errors.push('summary is required');
-    if (!body?.trim())    errors.push('body is required');
+    if (!title?.trim())   errors.push({ key: 'validation.title.required' });
+    if (!summary?.trim()) errors.push({ key: 'validation.summary.required' });
+    if (!body?.trim())    errors.push({ key: 'validation.body.required' });
   }
 
   if (title !== undefined) {
     if (typeof title !== 'string' || title.trim().length === 0)
-      errors.push('title must be a non-empty string');
+      errors.push({ key: 'validation.title.nonEmptyString' });
     else if (title.length > MAX_NEWS_TITLE_LEN)
-      errors.push(`title must be at most ${MAX_NEWS_TITLE_LEN} characters`);
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_NEWS_TITLE_LEN } });
   }
 
   if (slug !== undefined && slug !== null && slug !== '') {
     if (typeof slug !== 'string' || !SLUG_RE.test(slug))
-      errors.push('slug must contain only lowercase letters, numbers and hyphens');
+      errors.push({ key: 'validation.slug.invalid' });
     else if (slug.length > 100)
-      errors.push('slug must be at most 100 characters');
+      errors.push({ key: 'validation.slug.maxLength', params: { n: 100 } });
   }
 
   if (summary !== undefined) {
     if (typeof summary !== 'string' || summary.trim().length === 0)
-      errors.push('summary must be a non-empty string');
+      errors.push({ key: 'validation.summary.nonEmptyString' });
     else if (summary.length > MAX_NEWS_SUMMARY_LEN)
-      errors.push(`summary must be at most ${MAX_NEWS_SUMMARY_LEN} characters`);
+      errors.push({ key: 'validation.summary.maxLength', params: { n: MAX_NEWS_SUMMARY_LEN } });
   }
 
   if (body !== undefined) {
     if (typeof body !== 'string' || body.trim().length === 0)
-      errors.push('body must be a non-empty string');
+      errors.push({ key: 'validation.body.nonEmptyString' });
   }
 
   if (cover_image !== undefined && cover_image !== null && cover_image !== '') {
     if (typeof cover_image !== 'string') {
-      errors.push('cover_image must be a string');
+      errors.push({ key: 'validation.coverImage.string' });
     } else if (!/^https:\/\/.+/i.test(cover_image) && !/^\/assets\//i.test(cover_image)) {
-      errors.push('cover_image must be a valid https:// URL or a relative /assets/ path');
+      errors.push({ key: 'validation.coverImage.invalid' });
     }
   }
 
   if (category !== undefined) {
     if (typeof category !== 'string' || category.trim().length === 0)
-      errors.push('category must be a non-empty string');
+      errors.push({ key: 'validation.category.nonEmptyString' });
     else if (category.length > 50)
-      errors.push('category must be at most 50 characters');
+      errors.push({ key: 'validation.category.maxLength', params: { n: 50 } });
   }
 
   if (published !== undefined && typeof published !== 'boolean') {
-    errors.push('published must be a boolean');
+    errors.push({ key: 'validation.published.boolean' });
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  // Icelandic siblings — nullable but when supplied must match the same
+  // format/length constraints as their English counterparts.
+  if (title_is !== undefined && title_is !== null) {
+    if (typeof title_is !== 'string') errors.push({ key: 'validation.title.nonEmptyString' });
+    else if (title_is.length > MAX_NEWS_TITLE_LEN)
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_NEWS_TITLE_LEN } });
+  }
+  if (summary_is !== undefined && summary_is !== null) {
+    if (typeof summary_is !== 'string') errors.push({ key: 'validation.summary.nonEmptyString' });
+    else if (summary_is.length > MAX_NEWS_SUMMARY_LEN)
+      errors.push({ key: 'validation.summary.maxLength', params: { n: MAX_NEWS_SUMMARY_LEN } });
+  }
+  if (body_is !== undefined && body_is !== null) {
+    if (typeof body_is !== 'string') errors.push({ key: 'validation.body.nonEmptyString' });
+  }
+  if (cover_image_is !== undefined && cover_image_is !== null && cover_image_is !== '') {
+    if (typeof cover_image_is !== 'string') {
+      errors.push({ key: 'validation.coverImage.string' });
+    } else if (!/^https:\/\/.+/i.test(cover_image_is) && !/^\/assets\//i.test(cover_image_is)) {
+      errors.push({ key: 'validation.coverImage.invalid' });
+    }
+  }
+
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -499,12 +524,12 @@ function validateNewsMediaUpdate(req, res, next) {
 
   if (caption !== undefined && caption !== null) {
     if (typeof caption !== 'string')
-      errors.push('caption must be a string');
+      errors.push({ key: 'validation.caption.string' });
     else if (caption.length > MAX_CAPTION_LEN)
-      errors.push(`caption must be at most ${MAX_CAPTION_LEN} characters`);
+      errors.push({ key: 'validation.caption.maxLength', params: { n: MAX_CAPTION_LEN } });
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 
@@ -514,26 +539,26 @@ function validateNewsMediaReorder(req, res, next) {
   const errors = [];
 
   if (!Array.isArray(order) || order.length === 0) {
-    errors.push('order must be a non-empty array');
+    errors.push({ key: 'validation.order.nonEmptyArray' });
   } else if (order.length > MAX_REORDER_LEN) {
-    errors.push(`order must contain at most ${MAX_REORDER_LEN} items`);
+    errors.push({ key: 'validation.order.maxItems', params: { n: MAX_REORDER_LEN } });
   } else {
     for (let i = 0; i < order.length; i++) {
       const item = order[i];
       if (typeof item !== 'object' || item === null) {
-        errors.push(`order[${i}] must be an object`);
+        errors.push({ key: 'validation.order.itemObject', params: { i } });
         continue;
       }
       const id = Number(item.id);
       const so = Number(item.sort_order);
       if (!Number.isInteger(id) || id <= 0)
-        errors.push(`order[${i}].id must be a positive integer`);
+        errors.push({ key: 'validation.order.itemIdPositive', params: { i } });
       if (!Number.isInteger(so) || so < 0)
-        errors.push(`order[${i}].sort_order must be a non-negative integer`);
+        errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i } });
     }
   }
 
-  if (errors.length) return res.status(400).json({ error: errors.join('; '), code: 400 });
+  if (errors.length) return _fail(req, res, errors);
   next();
 }
 

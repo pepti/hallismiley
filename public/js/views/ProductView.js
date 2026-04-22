@@ -11,7 +11,7 @@ import * as cart from '../services/cart.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { LOW_STOCK_THRESHOLD } from '../components/ProductCard.js';
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 // Default chrome — rendered when shop_product_chrome is missing or network fails.
 // Templates use {n} (stock count) — substituted client-side.
@@ -420,6 +420,7 @@ export class ProductView {
     const controls = document.createElement('div');
     controls.className = 'shop-view__edit-controls shop-view__edit-controls--hidden';
     controls.innerHTML = `
+      ${adminLocaleBadgeHtml()}
       <button type="button" class="shop-view__save-btn"
               data-testid="edit-product-page-save">${t('form.saveChanges')}</button>
       <button type="button" class="shop-view__cancel-btn"

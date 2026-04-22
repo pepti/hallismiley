@@ -9,6 +9,7 @@ const { SHIPPING_METHODS, getShippingPrice } = require('../config/shipping');
 const { isConfigured: stripeIsConfigured } = require('../config/stripe');
 const stripeService = require('../services/stripeService');
 const { sendOrderReceipt } = require('../services/emailService');
+const { t }                = require('../i18n');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -79,7 +80,7 @@ const shopController = {
   // GET /api/v1/shop/products — public list of active products (+ variants)
   async listProducts(req, res, next) {
     try {
-      const products = await Product.findAll({ activeOnly: true, limit: 100 });
+      const products = await Product.findAll({ activeOnly: true, limit: 100, locale: req.locale });
       const withAll = await Promise.all(products.map(async (p) => {
         const [images, variants] = await Promise.all([
           Product.listImages(p.id),
@@ -94,8 +95,8 @@ const shopController = {
   // GET /api/v1/shop/products/:slug — public product detail (active only)
   async getProduct(req, res, next) {
     try {
-      const product = await Product.findBySlug(req.params.slug, { activeOnly: true });
-      if (!product) return res.status(404).json({ error: 'Product not found', code: 404 });
+      const product = await Product.findBySlug(req.params.slug, { activeOnly: true, locale: req.locale });
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
       const [images, variants] = await Promise.all([
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
@@ -108,7 +109,7 @@ const shopController = {
   async createCheckoutSession(req, res, next) {
     try {
       if (!stripeIsConfigured()) {
-        return res.status(503).json({ error: 'Checkout is not available yet', code: 503 });
+        return res.status(503).json({ error: t(req.locale, 'errors.shop.checkoutUnavailable'), code: 503 });
       }
 
       const {
@@ -122,13 +123,13 @@ const shopController = {
 
       // ── Validation ──────────────────────────────────────────────────────
       if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ITEMS_PER_ORDER) {
-        return res.status(400).json({ error: `items must be a non-empty array (max ${MAX_ITEMS_PER_ORDER})`, code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.shop.itemsNonEmpty', { n: MAX_ITEMS_PER_ORDER }), code: 400 });
       }
       if (!['ISK', 'EUR'].includes(currency)) {
-        return res.status(400).json({ error: 'currency must be ISK or EUR', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.shop.invalidCurrency'), code: 400 });
       }
       if (!['flat_rate', 'local_pickup'].includes(shippingMethod)) {
-        return res.status(400).json({ error: 'shipping_method must be flat_rate or local_pickup', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.shop.invalidShippingMethod'), code: 400 });
       }
 
       // Auth: either a logged-in user OR guest email must be provided
@@ -140,10 +141,10 @@ const shopController = {
         customerEmail = user.email || null;
       } else {
         if (!validateEmail(guestEmailRaw)) {
-          return res.status(400).json({ error: 'A valid guest_email is required for guest checkout', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.shop.guestEmailRequired'), code: 400 });
         }
         if (!validateName(guestNameRaw, { max: 100 })) {
-          return res.status(400).json({ error: 'guest_name is required', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.shop.guestNameRequired'), code: 400 });
         }
         guestEmail = guestEmailRaw.trim().toLowerCase();
         guestName  = guestNameRaw.trim();
@@ -154,7 +155,7 @@ const shopController = {
       const method = SHIPPING_METHODS[shippingMethod];
       if (method.requiresAddress) {
         if (!validateAddress(shippingAddress)) {
-          return res.status(400).json({ error: 'A valid shipping_address is required for flat_rate shipping', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.shop.shippingAddressRequired'), code: 400 });
         }
       }
 
@@ -165,21 +166,21 @@ const shopController = {
       for (const it of items) {
         const qty = Math.floor(Number(it.quantity));
         if (!Number.isFinite(qty) || qty < 1 || qty > MAX_QTY_PER_ITEM) {
-          return res.status(400).json({ error: `invalid quantity (1..${MAX_QTY_PER_ITEM})`, code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.shop.invalidQuantity', { max: MAX_QTY_PER_ITEM }), code: 400 });
         }
 
         if (it.variantId) {
           const variant = await ProductVariant.findById(String(it.variantId));
           if (!variant || !variant.active) {
-            return res.status(404).json({ error: `Variant not found: ${it.variantId}`, code: 404 });
+            return res.status(404).json({ error: t(req.locale, 'errors.shop.variantNotFound', { id: it.variantId }), code: 404 });
           }
-          const product = await Product.findById(variant.product_id, { activeOnly: true });
+          const product = await Product.findById(variant.product_id, { activeOnly: true, locale: req.locale });
           if (!product) {
-            return res.status(404).json({ error: 'Product not found', code: 404 });
+            return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
           }
           if (variant.stock < qty) {
             return res.status(409).json({
-              error: `Not enough stock for ${buildLineName(product, variant)}`,
+              error: t(req.locale, 'errors.shop.notEnoughStock', { name: buildLineName(product, variant) }),
               code: 409,
             });
           }
@@ -194,20 +195,20 @@ const shopController = {
         } else if (it.productId) {
           // Single-SKU product (no variants). Kept for forward compatibility
           // with future non-apparel products like gift cards.
-          const product = await Product.findBySlug(it.productId, { activeOnly: true })
-                        || await Product.findById(it.productId, { activeOnly: true });
+          const product = await Product.findBySlug(it.productId, { activeOnly: true, locale: req.locale })
+                        || await Product.findById(it.productId, { activeOnly: true, locale: req.locale });
           if (!product) {
-            return res.status(404).json({ error: `Product not found: ${it.productId}`, code: 404 });
+            return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
           }
           // Reject products that use variants — caller must pick a variant first.
           if (Array.isArray(product.variant_axes) && product.variant_axes.length > 0) {
             return res.status(400).json({
-              error: `Product ${product.name} requires a variant selection`,
+              error: t(req.locale, 'errors.shop.variantRequired', { name: product.name }),
               code: 400,
             });
           }
           if (product.stock < qty) {
-            return res.status(409).json({ error: `Not enough stock for ${product.name}`, code: 409 });
+            return res.status(409).json({ error: t(req.locale, 'errors.shop.notEnoughStock', { name: product.name }), code: 409 });
           }
           resolvedItems.push({
             productId: product.id,
@@ -218,7 +219,7 @@ const shopController = {
             quantity: qty,
           });
         } else {
-          return res.status(400).json({ error: 'each item needs variantId or productId', code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.shop.itemNeedsId'), code: 400 });
         }
       }
 
@@ -264,7 +265,7 @@ const shopController = {
       });
     } catch (err) {
       if (err.code === 'STRIPE_NOT_CONFIGURED') {
-        return res.status(503).json({ error: 'Checkout is not available yet', code: 503 });
+        return res.status(503).json({ error: t(req.locale, 'errors.shop.checkoutUnavailable'), code: 503 });
       }
       next(err);
     }
@@ -274,7 +275,7 @@ const shopController = {
   async getOrderBySession(req, res, next) {
     try {
       const order = await Order.findByStripeSessionId(req.params.sessionId);
-      if (!order) return res.status(404).json({ error: 'Order not found', code: 404 });
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.shop.orderNotFound'), code: 404 });
       const items = await Order.listItems(order.id);
       // Return a minimal public view — strip payment intent ids
       const publicOrder = {

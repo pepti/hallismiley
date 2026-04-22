@@ -190,7 +190,7 @@ export class ShopFilters {
                  placeholder="${t('filters.searchPlaceholder')}" value="${_esc(s.q)}"
                  autocomplete="off" data-testid="shop-search"/>
           ${s.q ? `<button type="button" class="shop-filters__clear-search" id="shop-filters-clear-q"
-                    aria-label="Clear search">✕</button>` : ''}
+                    aria-label="${t('shop.filtersClearSearchAria')}">✕</button>` : ''}
         </div>
         <label class="shop-filters__sort">
           <span class="shop-filters__sort-label">${t('filters.sort')}</span>
@@ -228,12 +228,12 @@ export class ShopFilters {
           <input type="number" inputmode="numeric" min="0" step="any"
                  class="shop-filters__price-input" id="shop-filters-min"
                  placeholder="${t('filters.minPrice')} ${pricePlaceholder}" value="${_esc(s.priceMin)}"
-                 aria-label="Minimum price"/>
+                 aria-label="${t('shop.filtersMinPriceAria')}"/>
           <span class="shop-filters__price-sep">—</span>
           <input type="number" inputmode="numeric" min="0" step="any"
                  class="shop-filters__price-input" id="shop-filters-max"
                  placeholder="${t('filters.maxPrice')} ${pricePlaceholder}" value="${_esc(s.priceMax)}"
-                 aria-label="Maximum price"/>
+                 aria-label="${t('shop.filtersMaxPriceAria')}"/>
         </div>
 
         <label class="shop-filters__toggle">

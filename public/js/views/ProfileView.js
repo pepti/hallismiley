@@ -1,22 +1,13 @@
 import { isAuthenticated, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
+import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
 const avatarPath = n => `/assets/avatars/avatar-${pad(n)}.svg`;
 const avatarPathByName = name => `/assets/avatars/${name}`;
-
-function formatDate(str) {
-  if (!str) return '—';
-  return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function formatDateTime(str) {
-  if (!str) return '—';
-  return new Date(str).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
 
 export class ProfileView {
   async render() {
@@ -100,12 +91,12 @@ export class ProfileView {
             <div class="form-group">
               <label class="form-label" for="edit-displayname">${t('signup.displayName')}</label>
               <input class="form-input" id="edit-displayname" name="displayName" type="text"
-                     value="${escHtml(profile.displayName || '')}" placeholder="Your display name"/>
+                     value="${escHtml(profile.displayName || '')}" placeholder="${t('profile.displayNamePlaceholder')}"/>
             </div>
             <div class="form-group">
               <label class="form-label" for="edit-phone">${t('checkout.phone')}</label>
               <input class="form-input" id="edit-phone" name="phone" type="tel"
-                     value="${escHtml(profile.phone || '')}" placeholder="+1 555 000 0000"/>
+                     value="${escHtml(profile.phone || '')}" placeholder="${t('profile.phonePlaceholder')}"/>
             </div>
           </div>
 

@@ -2,6 +2,7 @@
 const { query: dbQuery } = require('../config/database');
 const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
+const { t }              = require('../i18n');
 
 const VALID_ROLES = ['admin', 'moderator', 'user'];
 
@@ -41,14 +42,14 @@ const adminController = {
 
       if (!VALID_ROLES.includes(role)) {
         return res.status(400).json({
-          error: `role must be one of: ${VALID_ROLES.join(', ')}`,
+          error: t(req.locale, 'errors.admin.roleEnum', { values: VALID_ROLES.join(', ') }),
           code: 400,
         });
       }
 
       // Prevent admin from demoting themselves
       if (id === req.user.id) {
-        return res.status(400).json({ error: 'Cannot change your own role', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
       }
 
       const { rows } = await dbQuery(
@@ -58,7 +59,7 @@ const adminController = {
       );
 
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'User not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
 
       return res.json(rows[0]);
@@ -79,7 +80,7 @@ const adminController = {
         [party_access, id]
       );
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'User not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
       return res.json(rows[0]);
     } catch (err) { next(err); }
@@ -97,7 +98,7 @@ const adminController = {
 
       // Prevent admin from disabling themselves
       if (id === req.user.id) {
-        return res.status(400).json({ error: 'Cannot disable your own account', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotDisableSelf'), code: 400 });
       }
 
       const disabledAt     = disabled ? new Date() : null;
@@ -112,7 +113,7 @@ const adminController = {
       );
 
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'User not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
 
       // If disabling, invalidate all their active sessions immediately
@@ -159,7 +160,7 @@ const adminController = {
       const { id } = req.params;
 
       if (id === req.user.id) {
-        return res.status(400).json({ error: 'Cannot delete your own account', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotDeleteSelf'), code: 400 });
       }
 
       // Invalidate sessions before deleting so Lucia doesn't error on missing user
@@ -171,7 +172,7 @@ const adminController = {
       );
 
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'User not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
 
       return res.status(204).send();

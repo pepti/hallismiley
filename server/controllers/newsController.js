@@ -4,6 +4,7 @@ const db   = require('../config/database');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 const { parseYouTubeId } = require('../utils/youtube');
 const { UPLOAD_ROOT } = require('../config/paths');
+const { t }           = require('../i18n');
 
 const MEDIA_COLS = 'id, article_id, kind, file_path, youtube_id, caption, sort_order, created_at';
 
@@ -18,9 +19,41 @@ function _tryUnlink(filePath) {
   try { fs.unlinkSync(_diskPath(filePath)); } catch { /* ignore */ }
 }
 
-// Column list shared between queries — keeps SELECT consistent
-const ARTICLE_COLS = `
+// Column list shared between queries — keeps SELECT consistent.
+// When the reader's locale is 'is' and the *_is sibling column is non-null,
+// we surface the Icelandic copy under the canonical field names so callers
+// and the client don't have to know about the _is columns.
+function articleCols(locale) {
+  if (locale === 'is') {
+    return `
+      a.id,
+      COALESCE(a.title_is,       a.title)       AS title,
+      a.slug,
+      COALESCE(a.summary_is,     a.summary)     AS summary,
+      COALESCE(a.body_is,        a.body)        AS body,
+      COALESCE(a.cover_image_is, a.cover_image) AS cover_image,
+      a.category, a.author_id, a.published, a.published_at,
+      a.created_at, a.updated_at,
+      u.username AS author_username,
+      u.display_name AS author_display_name,
+      u.avatar AS author_avatar
+    `;
+  }
+  return `
+    a.id, a.title, a.slug, a.summary, a.body, a.cover_image,
+    a.category, a.author_id, a.published, a.published_at,
+    a.created_at, a.updated_at,
+    u.username AS author_username,
+    u.display_name AS author_display_name,
+    u.avatar AS author_avatar
+  `;
+}
+// Admin/preview surface returns BOTH locales' raw columns so the CMS editor
+// can show EN + IS fields side-by-side. Used only by preview(), update(),
+// and create() callers where an admin is editing.
+const ARTICLE_COLS_BOTH = `
   a.id, a.title, a.slug, a.summary, a.body, a.cover_image,
+  a.title_is, a.summary_is, a.body_is, a.cover_image_is,
   a.category, a.author_id, a.published, a.published_at,
   a.created_at, a.updated_at,
   u.username AS author_username,
@@ -68,8 +101,8 @@ const newsController = {
       const offset = Math.min(parseInt(req.query.offset ?? '0',  10), 1_000_000);
       const category = req.query.category;
 
-      if (!Number.isFinite(limit)  || limit  < 1) return res.status(400).json({ error: 'invalid limit',  code: 400 });
-      if (!Number.isFinite(offset) || offset < 0) return res.status(400).json({ error: 'invalid offset', code: 400 });
+      if (!Number.isFinite(limit)  || limit  < 1) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidLimit'),  code: 400 });
+      if (!Number.isFinite(offset) || offset < 0) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidOffset'), code: 400 });
 
       const params = [];
       let where = 'WHERE a.published = TRUE';
@@ -82,7 +115,7 @@ const newsController = {
       params.push(limit, offset);
 
       const { rows } = await db.query(
-        `SELECT ${ARTICLE_COLS}
+        `SELECT ${articleCols(req.locale)}
          FROM   news_articles a
          LEFT JOIN users u ON u.id = a.author_id
          ${where}
@@ -110,13 +143,13 @@ const newsController = {
   async getOne(req, res, next) {
     try {
       const { rows } = await db.query(
-        `SELECT ${ARTICLE_COLS}
+        `SELECT ${articleCols(req.locale)}
          FROM   news_articles a
          LEFT JOIN users u ON u.id = a.author_id
          WHERE  a.slug = $1 AND a.published = TRUE`,
         [req.params.slug]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Article not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
       res.json(rows[0]);
     } catch (err) { next(err); }
@@ -126,14 +159,16 @@ const newsController = {
   // Admin/moderator — fetch any article (published or draft) by slug.
   async preview(req, res, next) {
     try {
+      // Admin preview returns both locales' fields so the CMS editor can
+      // render EN + IS inputs side-by-side.
       const { rows } = await db.query(
-        `SELECT ${ARTICLE_COLS}
+        `SELECT ${ARTICLE_COLS_BOTH}
          FROM   news_articles a
          LEFT JOIN users u ON u.id = a.author_id
          WHERE  a.slug = $1`,
         [req.params.slug]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Article not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
       res.json(rows[0]);
     } catch (err) { next(err); }
   },
@@ -144,6 +179,7 @@ const newsController = {
     try {
       const {
         title, summary, body, cover_image = null,
+        title_is = null, summary_is = null, body_is = null, cover_image_is = null,
         category = 'news', published = false,
       } = req.body;
 
@@ -157,16 +193,20 @@ const newsController = {
 
       const { rows } = await db.query(
         `INSERT INTO news_articles
-           (title, slug, summary, body, cover_image, category, author_id, published, published_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (title, slug, summary, body, cover_image,
+            title_is, summary_is, body_is, cover_image_is,
+            category, author_id, published, published_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
-        [title, slug, summary, body, cover_image, category, req.user.id, published, published_at]
+        [title, slug, summary, body, cover_image,
+         title_is, summary_is, body_is, cover_image_is,
+         category, req.user.id, published, published_at]
       );
 
       res.status(201).json(rows[0]);
     } catch (err) {
       if (err.code === '23505' && err.constraint === 'news_articles_slug_key') {
-        return res.status(409).json({ error: 'An article with this slug already exists', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.news.slugTaken'), code: 409 });
       }
       next(err);
     }
@@ -177,21 +217,25 @@ const newsController = {
   async update(req, res, next) {
     try {
       const id = parseInt(req.params.id, 10);
-      if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id', code: 400 });
+      if (!Number.isInteger(id)) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
 
       const { rows: existing } = await db.query(
         'SELECT * FROM news_articles WHERE id = $1', [id]
       );
-      if (!existing[0]) return res.status(404).json({ error: 'Article not found', code: 404 });
+      if (!existing[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
 
       const current = existing[0];
 
-      const title       = req.body.title       !== undefined ? req.body.title       : current.title;
-      const summary     = req.body.summary     !== undefined ? req.body.summary     : current.summary;
-      const body        = req.body.body        !== undefined ? req.body.body        : current.body;
-      const cover_image = req.body.cover_image !== undefined ? req.body.cover_image : current.cover_image;
-      const category    = req.body.category    !== undefined ? req.body.category    : current.category;
-      const published   = req.body.published   !== undefined ? req.body.published   : current.published;
+      const title          = req.body.title          !== undefined ? req.body.title          : current.title;
+      const summary        = req.body.summary        !== undefined ? req.body.summary        : current.summary;
+      const body           = req.body.body           !== undefined ? req.body.body           : current.body;
+      const cover_image    = req.body.cover_image    !== undefined ? req.body.cover_image    : current.cover_image;
+      const title_is       = req.body.title_is       !== undefined ? req.body.title_is       : current.title_is;
+      const summary_is     = req.body.summary_is     !== undefined ? req.body.summary_is     : current.summary_is;
+      const body_is        = req.body.body_is        !== undefined ? req.body.body_is        : current.body_is;
+      const cover_image_is = req.body.cover_image_is !== undefined ? req.body.cover_image_is : current.cover_image_is;
+      const category       = req.body.category       !== undefined ? req.body.category       : current.category;
+      const published      = req.body.published      !== undefined ? req.body.published      : current.published;
 
       // Slug handling: if provided update it (with uniqueness check), else keep existing
       let slug = current.slug;
@@ -212,16 +256,20 @@ const newsController = {
       const { rows } = await db.query(
         `UPDATE news_articles
          SET title = $1, slug = $2, summary = $3, body = $4,
-             cover_image = $5, category = $6, published = $7, published_at = $8
-         WHERE id = $9
+             cover_image = $5,
+             title_is = $6, summary_is = $7, body_is = $8, cover_image_is = $9,
+             category = $10, published = $11, published_at = $12
+         WHERE id = $13
          RETURNING *`,
-        [title, slug, summary, body, cover_image, category, published, published_at, id]
+        [title, slug, summary, body, cover_image,
+         title_is, summary_is, body_is, cover_image_is,
+         category, published, published_at, id]
       );
 
       res.json(rows[0]);
     } catch (err) {
       if (err.code === '23505' && err.constraint === 'news_articles_slug_key') {
-        return res.status(409).json({ error: 'An article with this slug already exists', code: 409 });
+        return res.status(409).json({ error: t(req.locale, 'errors.news.slugTaken'), code: 409 });
       }
       next(err);
     }
@@ -232,12 +280,12 @@ const newsController = {
   async remove(req, res, next) {
     try {
       const id = parseInt(req.params.id, 10);
-      if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id', code: 400 });
+      if (!Number.isInteger(id)) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
 
       const { rows } = await db.query(
         'DELETE FROM news_articles WHERE id = $1 RETURNING id', [id]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Article not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
       res.status(204).send();
     } catch (err) { next(err); }
   },
@@ -247,7 +295,7 @@ const newsController = {
   async getMedia(req, res, next) {
     try {
       const id = parseInt(req.params.id, 10);
-      if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id', code: 400 });
+      if (!Number.isInteger(id)) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
       const { rows } = await db.query(
         `SELECT ${MEDIA_COLS} FROM news_media WHERE article_id = $1 ORDER BY sort_order, id`,
         [id]
@@ -263,7 +311,7 @@ const newsController = {
       const articleId = parseInt(req.params.id, 10);
       if (!Number.isInteger(articleId)) {
         if (req.file) _tryUnlink(`/assets/news/${req.params.id}/${req.file.filename}`);
-        return res.status(400).json({ error: 'invalid id', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
       }
 
       const { rows: article } = await db.query(
@@ -271,18 +319,18 @@ const newsController = {
       );
       if (!article[0]) {
         if (req.file) _tryUnlink(`/assets/news/${articleId}/${req.file.filename}`);
-        return res.status(404).json({ error: 'Article not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
       }
 
       if (!req.file) {
-        return res.status(400).json({ error: 'A file is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.fileRequired'), code: 400 });
       }
 
       const kind = req.file.mimetype.startsWith('image/') ? 'image' : 'video_file';
 
       if (kind === 'image' && req.file.size > MAX_IMAGE_SIZE) {
         _tryUnlink(`/assets/news/${articleId}/${req.file.filename}`);
-        return res.status(400).json({ error: 'Image file size must not exceed 10 MB', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.imageTooLarge'), code: 400 });
       }
 
       const filePath  = `/assets/news/${articleId}/${req.file.filename}`;
@@ -307,20 +355,20 @@ const newsController = {
   async addYouTube(req, res, next) {
     try {
       const articleId = parseInt(req.params.id, 10);
-      if (!Number.isInteger(articleId)) return res.status(400).json({ error: 'invalid id', code: 400 });
+      if (!Number.isInteger(articleId)) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
 
       const { rows: article } = await db.query(
         'SELECT id FROM news_articles WHERE id = $1', [articleId]
       );
-      if (!article[0]) return res.status(404).json({ error: 'Article not found', code: 404 });
+      if (!article[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
 
       const { url } = req.body;
       if (!url || typeof url !== 'string') {
-        return res.status(400).json({ error: 'url is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.urlRequired'), code: 400 });
       }
       const youtubeId = parseYouTubeId(url);
       if (!youtubeId) {
-        return res.status(400).json({ error: 'Could not parse a YouTube video ID from url', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.invalidYoutubeUrl'), code: 400 });
       }
 
       const caption   = typeof req.body.caption === 'string' ? req.body.caption : null;
@@ -343,19 +391,19 @@ const newsController = {
       const articleId = parseInt(req.params.id, 10);
       const mediaId   = parseInt(req.params.mediaId, 10);
       if (!Number.isInteger(articleId) || !Number.isInteger(mediaId)) {
-        return res.status(400).json({ error: 'invalid id', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
       }
 
       const caption = req.body.caption !== undefined ? req.body.caption : undefined;
       if (caption === undefined) {
-        return res.status(400).json({ error: 'No fields to update', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.noFieldsToUpdate'), code: 400 });
       }
 
       const { rows } = await db.query(
         `UPDATE news_media SET caption = $1 WHERE id = $2 AND article_id = $3 RETURNING ${MEDIA_COLS}`,
         [caption, mediaId, articleId]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Media not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.mediaNotFound'), code: 404 });
       res.json(rows[0]);
     } catch (err) { next(err); }
   },
@@ -367,14 +415,14 @@ const newsController = {
       const articleId = parseInt(req.params.id, 10);
       const mediaId   = parseInt(req.params.mediaId, 10);
       if (!Number.isInteger(articleId) || !Number.isInteger(mediaId)) {
-        return res.status(400).json({ error: 'invalid id', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
       }
 
       const { rows } = await db.query(
         'DELETE FROM news_media WHERE id = $1 AND article_id = $2 RETURNING file_path',
         [mediaId, articleId]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Media not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.mediaNotFound'), code: 404 });
 
       _tryUnlink(rows[0].file_path);
       res.status(204).send();
@@ -386,7 +434,7 @@ const newsController = {
   async reorderMedia(req, res, next) {
     try {
       const articleId = parseInt(req.params.id, 10);
-      if (!Number.isInteger(articleId)) return res.status(400).json({ error: 'invalid id', code: 400 });
+      if (!Number.isInteger(articleId)) return res.status(400).json({ error: t(req.locale, 'errors.news.invalidId'), code: 400 });
 
       const { order } = req.body; // [{ id, sort_order }, ...]
 
@@ -397,7 +445,7 @@ const newsController = {
       );
       if (existing.length !== ids.length) {
         return res.status(400).json({
-          error: 'One or more media IDs do not belong to this article',
+          error: t(req.locale, 'errors.news.mediaBelongsToArticle'),
           code: 400,
         });
       }
@@ -434,8 +482,9 @@ const newsController = {
       const limit  = Math.min(parseInt(req.query.limit  ?? '50', 10), 100);
       const offset = Math.min(parseInt(req.query.offset ?? '0',  10), 1_000_000);
 
+      // Admin list surfaces BOTH locales so translators can scan at a glance.
       const { rows } = await db.query(
-        `SELECT ${ARTICLE_COLS}
+        `SELECT ${ARTICLE_COLS_BOTH}
          FROM   news_articles a
          LEFT JOIN users u ON u.id = a.author_id
          ORDER  BY a.created_at DESC

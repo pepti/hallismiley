@@ -3,7 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -532,6 +532,7 @@ export class HomeView {
     controls.id         = 'home-edit-bar';
     controls.setAttribute('data-testid', 'edit-controls');
     controls.innerHTML  = `
+      ${adminLocaleBadgeHtml()}
       <button type="button" class="lol-skills__save-btn" id="home-edit-save" data-testid="edit-save-btn">Save Changes</button>
       <button type="button" class="lol-skills__cancel-btn" id="home-edit-cancel" data-testid="edit-cancel-btn">Cancel</button>
       <span   class="lol-skills__edit-status" aria-live="polite"></span>`;
@@ -767,6 +768,7 @@ export class HomeView {
     controls.id        = 'discipline-edit-bar';
     controls.setAttribute('data-testid', 'edit-discipline-controls');
     controls.innerHTML = `
+      ${adminLocaleBadgeHtml()}
       <button type="button" class="lol-projects__save-btn" data-testid="edit-discipline-save">Save Changes</button>
       <button type="button" class="lol-projects__cancel-btn" data-testid="edit-discipline-cancel">Cancel</button>
       <span class="lol-projects__edit-status" aria-live="polite"></span>

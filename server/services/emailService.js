@@ -160,12 +160,17 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
 
 // ── Order receipt email ───────────────────────────────────────────────────────
 
-function formatMoney(amount, currency) {
+function formatMoney(amount, currency, locale = 'en') {
+  const tag = locale === 'is' ? 'is-IS' : 'en-GB';
   if (currency === 'ISK') {
-    return `${Number(amount).toLocaleString('is-IS')} kr.`;
+    return new Intl.NumberFormat(tag, {
+      style: 'currency', currency: 'ISK', maximumFractionDigits: 0,
+    }).format(Number(amount));
   }
   if (currency === 'EUR') {
-    return `€${(Number(amount) / 100).toFixed(2)}`;
+    return new Intl.NumberFormat(tag, {
+      style: 'currency', currency: 'EUR',
+    }).format(Number(amount) / 100);
   }
   return `${amount} ${currency}`;
 }
@@ -191,7 +196,7 @@ async function sendOrderReceipt(order, items, locale = 'en') {
         ${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}
       </td>
       <td style="padding:8px 0;color:#e0e0e0;font-size:14px;text-align:right;">
-        ${formatMoney(it.product_price_snapshot * it.quantity, order.currency)}
+        ${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}
       </td>
     </tr>
   `).join('');
@@ -216,19 +221,19 @@ async function sendOrderReceipt(order, items, locale = 'en') {
       <tr>
         <td style="padding:12px 0 8px;color:#666;font-size:13px;border-top:1px solid #222;">${t(locale, 'email.order.subtotal')}</td>
         <td style="padding:12px 0 8px;color:#aaa;font-size:13px;text-align:right;border-top:1px solid #222;">
-          ${formatMoney(order.subtotal, order.currency)}
+          ${formatMoney(order.subtotal, order.currency, locale)}
         </td>
       </tr>
       <tr>
         <td style="padding:4px 0;color:#666;font-size:13px;">${t(locale, 'email.order.shipping', { method: methodLabel })}</td>
         <td style="padding:4px 0;color:#aaa;font-size:13px;text-align:right;">
-          ${formatMoney(order.shipping, order.currency)}
+          ${formatMoney(order.shipping, order.currency, locale)}
         </td>
       </tr>
       <tr>
         <td style="padding:12px 0 0;color:#e0e0e0;font-size:16px;font-weight:600;border-top:1px solid #222;">${t(locale, 'email.order.total')}</td>
         <td style="padding:12px 0 0;color:#c9a84c;font-size:16px;font-weight:600;text-align:right;border-top:1px solid #222;">
-          ${formatMoney(order.total, order.currency)}
+          ${formatMoney(order.total, order.currency, locale)}
         </td>
       </tr>
     </table>

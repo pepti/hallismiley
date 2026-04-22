@@ -9,6 +9,7 @@ const multer = require('multer');
 const db     = require('../config/database');
 const { MIME_TO_EXT } = require('../middleware/upload');
 const { DEFAULT_LOCALE } = require('../config/i18n');
+const { t }   = require('../i18n');
 
 // ── Image upload: store under public/assets/content/ ─────────────────────────
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'content');
@@ -56,7 +57,7 @@ async function getContent(req, res, next) {
         LIMIT 1`,
       [req.params.key, locale, DEFAULT_LOCALE]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (rows.length === 0) return res.status(404).json({ error: t(req.locale, 'errors.content.notFound') });
     return res.json(rows[0].value);
   } catch (err) { return next(err); }
 }
@@ -85,7 +86,7 @@ async function putContent(req, res, next) {
 function uploadImage(req, res, next) {
   upload(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.content.noFileUploaded') });
 
     const imageUrl = `/assets/content/${req.file.filename}`;
     const merge    = req.query.merge !== 'false';

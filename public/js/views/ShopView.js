@@ -10,7 +10,7 @@ import { ShopFilters, applyFilters, parseStateFromQs, stateToQs } from '../compo
 import * as cart from '../services/cart.js';
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { openProductFormModal } from './AdminProductsView.js';
-import { t } from '../i18n/i18n.js';
+import { t, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 // Default copy — rendered when the DB row is missing or the network fails.
 const DEFAULT_HERO = {
@@ -212,6 +212,7 @@ export class ShopView {
     const controls = document.createElement('div');
     controls.className = 'shop-view__edit-controls shop-view__edit-controls--hidden';
     controls.innerHTML = `
+      ${adminLocaleBadgeHtml()}
       <button type="button" class="shop-view__save-btn"
               data-testid="edit-shop-page-save">${t('form.saveChanges')}</button>
       <button type="button" class="shop-view__cancel-btn"

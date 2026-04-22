@@ -68,7 +68,7 @@ export class NavBar {
     return `
       <!-- Left: Brand -->
       <div class="lol-nav__brand">
-        <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="Halli Smiley home">
+        <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="${t('nav.brandAriaLabel')}">
           <div class="lol-nav__logo-icon" aria-hidden="true">H</div>
           <div class="lol-nav__logo-text">Halli<br>Smiley</div>
         </a>

@@ -660,6 +660,75 @@ const migrations = [
        ON CONFLICT (key, locale) DO NOTHING`,
     ],
   },
+  {
+    // i18n — real Icelandic content for every site_content row seeded in
+    // English by earlier migrations. Migration 029 copied English verbatim
+    // into the locale='is' rows so the locale switcher worked on day one;
+    // this migration replaces those placeholders with fluent Icelandic copy
+    // written by a native speaker. Admins can re-edit either locale via the
+    // CMS afterwards.
+    name: '030_i18n_site_content_icelandic',
+    statements: [
+      // home_skills — hero/skills block on the landing page.
+      `UPDATE site_content SET value = '{"eyebrow":"Í tvo áratugi","title":"Smíði\\n& Kóði","description":"Tuttugu ára nákvæmni í trésmíði — að lesa æðar viðarins, saga eftir línunni, fella saman án glufa — yfirfærð á hverja einustu línu af kóða. Sömu reglur og gera sinklag-fellingu endingargóða í heila öld gera hugbúnað auðveldan að viðhalda.","items":[{"label":"Forritunarmál","value":"JS · Python · SQL"},{"label":"Bakendi","value":"Node · Express · REST"},{"label":"Gagnagrunnur","value":"PostgreSQL · Redis"},{"label":"Smíði","value":"20+ ár með hand- og rafmagnsverkfæri"},{"label":"Ský","value":"Azure · Railway"},{"label":"Öryggi","value":"OWASP · OAuth 2.0 · RS256"}],"image_url":"https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format"}'::jsonb,
+           updated_at = NOW()
+        WHERE key = 'home_skills' AND locale = 'is'`,
+
+      // home_stats — the counter strip.
+      `UPDATE site_content SET value = '[{"num":"22+","label":"ára reynsla í smíði"},{"num":"15+","label":"ára reynsla í forritun"},{"num":"6+","label":"ára reynsla í tæknistjórnun"},{"num":"40","label":"ára af alls kyns uppátækjum"}]'::jsonb,
+           updated_at = NOW()
+        WHERE key = 'home_stats' AND locale = 'is'`,
+
+      // halli_bio — the long-form biography page.
+      `UPDATE site_content SET value = '{"hero_tagline":"Þar sem viður mætir kóða","beginning_eyebrow":"Fyrsti kafli","beginning_title":"Upphafið","beginning_text":"Fæddur og uppalinn á jaðri Norður-Atlantshafsins, ólst Halli upp á Íslandi — landi sem er mótað af eldi, ís og þrjóskri hugkvæmni fólks sem átti ekki annarra kosta völ en að búa hlutina til sjálft. Afi hans byggði sitt eigið hús með berum höndum. Faðir hans hélt þeirri hefð á lífi í bílskúrnum um helgar, staðnum sem lyktaði af furuspæni og hörfræolíu, þar sem hvert vandamál átti sér lausn ef maður var nógu þolinmóður til að finna hana.","beginning_text2":"Fjórtán ára gamall smíðaði hann sitt fyrsta húsgagn. Lítinn bókaskáp, grófan í samsetningum, stoltan í herberginu. Hann var aldrei alveg réttur í hornin. En hann stóð. Þessi ófullkomni skápur kenndi honum meira um auðmýkt, nákvæmni og þrautseigju en nokkur kennslustofa hefði nokkurn tímann getað.","craft_eyebrow":"Annar kafli","craft_title":"Handverkið","craft_text":"Smíðin valdi Halla jafn mikið og hann valdi hana. Það býr í því heimspeki að vinna með við sem ekkert annað efni jafnast á við. Viðurinn hefur æðar, sögu og persónuleika. Hver planki ber minningu um tréið sem hann kom úr: árin í þurrki og velgjöf, stefnu ríkjandi vinda. Að vinna með við er að vinna með einhverju sem er eldra en maður sjálfur.","craft_text2":"Í gegnum tvo áratugi hefur hann smíðað matarborð sem endast lengur en hann sjálfur, smíðað eldhús inn í gömul og hallandi hús og tengt saman timburgrindur fyrir byggingar sem eiga að standa í heila öld. Heimspeki hans hefur ekki breyst síðan þessar fyrstu, klaufalegu tilraunir: skildu efnið þitt, virtu verkfærin og mældu tvisvar.","craft_highlight1":"Húsgögn sem endast lengur en smiðurinn","craft_highlight2":"Fellingar skornar með höndunum, tengdar saman án fyllingar","craft_highlight3":"Hvert verk smíðað fyrir nákvæmlega sinn stað og tilgang","code_eyebrow":"Þriðji kafli","code_title":"Kóðinn","code_text":"Leiðin frá viði til hugbúnaðar var ekki bein. Seint á kvöldin í hálfkláruðum vinnuskúr byrjaði Halli að kenna sjálfum sér að forrita. Ekki vegna þess að hann vildi leggja smíðina á hilluna, heldur vegna þess að hann þurfti verkfæri sem voru ekki til. Birgðakerfi, verkefnaeftirlit, viðskiptavinagáttir. Ef hann gat smíðað skáp, gat hann smíðað vefforrit.","code_text2":"Það sem kom honum á óvart var hversu kunnuglegt þetta allt var. Sami agi sem heldur vinnubekk hreinum heldur kóðagrunni viðráðanlegum. Sama þolinmæðin sem gerir manni kleift að skera sinklag í höndunum gerir manni kleift að leita að göllum í flóknu kerfi. Orðabókin var önnur. Hugarfarið var eins.","blend_eyebrow":"Fjórði kafli","blend_title":"Samþættingin","blend_quote":"Handverksmaður velur ekki verkfæri sín af handahófi. Hann velur þau beittustu, þau heiðarlegustu — og lærir að nota þau þar til verkfærið verður framlenging af hugsun hans.","blend_text":"Hugsunarháttur handverksmannsins á sér nafn í hugbúnaði: verkfræði. Ekki nafnorðið, heldur sögnin — að stöðugt gera hluti nákvæmari, endingargóðari og heiðarlegri. Halli beitir sama auga við línu af kóða og við geirnagla: Er þetta rétt? Er þetta heiðarlegt? Mun þetta halda?","blend_text2":"Viðskiptavinir hans í báðum heimum hafa tekið eftir þessu. Það er kyrrð yfir verki sem er vel unnið, hvaða miðill sem er. Vel felld hurð lokast með mjúkum smelli. Vel hannað API gerir nákvæmlega það sem það segist gera, hvorki meira né minna.","life_eyebrow":"Fimmti kafli","life_title":"Lífið utan vinnu","life_text":"Á milli vinnuskúrsins og tölvunnar er Halli eiginmaður og faðir sem reynir að skilja bæði störfin eftir við dyrnar þegar kvöldið kallar. Hann gengur um hálendi Íslands — há- sléttur þar sem eina hljóðið er vindurinn og eigin andardráttur — og kemur heim með þeirri sérstöku tærleika sem aðeins fjarlægðin veitir.","life_text2":"Ísland er ekki bara heimili hans; það er efniviður hans. Langir eldfjallavetur, þögnin, undarleg birta sumarsins — allt þetta síast inn í vinnubrögð hans, það sem hann skapar og það sem hann metur.","life_tile1":"Ísland","life_tile2":"Göngur","life_tile3":"Matreiðsla","life_tile4":"Lestur","life_tile5":"Kaffi","future_eyebrow":"Sjötti kafli","future_title":"Hvað er næst","future_text":"Það eru fleiri borð sem bíða eftir að vera smíðuð. Fleiri kerfi sem bíða eftir hönnun. Fleiri vandamál sem sitja á mótum hins áþreifanlega og stafræna og bíða eftir einhverjum sem talar bæði tungumálin. Vinnustofan er að taka á sig mynd — hálft vinnuskúr, hálf skrifstofa — þar sem greinarnar tvær deila veggjum, verkfærum og hugmyndum.","future_text2":"Ef þú ert að vinna að einhverju áhugaverðu — vöru, byggingu eða verkfæri sem er ekki til — þá skaltu hafa samband. Besta verkið byrjar alltaf á samtali.","counter1_num":"20+","counter1_label":"ár í viðarsmíði","counter2_num":"10K+","counter2_label":"línur af kóða skrifaðar","counter3_num":"80+","counter3_label":"verkefni kláruð","counter4_num":"1","counter4_label":"eyþjóð sem er heimili"}'::jsonb,
+           updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'is'`,
+
+      // shop_hero — /shop hero.
+      `UPDATE site_content SET value = '{"eyebrow":"Úr verkstæðinu","title":"Verslun","subtitle":"Smiley-fatnaður og varningur — verð með 24% VSK.","empty_state":"Engar vörur passa við síurnar þínar."}'::jsonb,
+           updated_at = NOW()
+        WHERE key = 'shop_hero' AND locale = 'is'`,
+
+      // shop_product_chrome — labels shared by every product page.
+      `UPDATE site_content SET value = '{"back_label":"\\u2190 Til baka í verslun","vat_note":"Verð er með 24% VSK","qty_label":"Fjöldi","add_to_cart_label":"Setja í körfu","out_of_stock_label":"Uppselt","low_stock_template":"Aðeins {n} eftir — sent innan 24 klst.","in_stock_template":"{n} til á lager","select_options_hint":"Veldu valkosti til að sjá framboð"}'::jsonb,
+           updated_at = NOW()
+        WHERE key = 'shop_product_chrome' AND locale = 'is'`,
+    ],
+  },
+  {
+    // i18n — per-locale content on news_articles and products.
+    //
+    // Approach: nullable "_is" sibling columns rather than a composite
+    // (id, locale) primary key. This keeps existing foreign keys in
+    // news_media.article_id, order_items.product_id, etc. intact.
+    //
+    // Controllers read the locale-matched column when req.locale === 'is'
+    // AND the _is column is non-null, otherwise they fall back to the
+    // primary (English) column. Admins editing an article/product edit
+    // the primary row + both locales' text fields at once.
+    name: '031_i18n_news_products_locale',
+    statements: [
+      // News articles — four user-visible text fields gain an IS sibling.
+      // cover_image_is is optional because most images are language-neutral.
+      `ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS title_is       TEXT`,
+      `ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS summary_is     TEXT`,
+      `ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS body_is        TEXT`,
+      `ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS cover_image_is TEXT`,
+      // Length constraint matching the summary check on the primary column.
+      `DO $$ BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'news_articles_summary_is_length'
+         ) THEN
+           ALTER TABLE news_articles ADD CONSTRAINT news_articles_summary_is_length
+             CHECK (summary_is IS NULL OR LENGTH(summary_is) <= 300);
+         END IF;
+       END $$`,
+
+      // Products — name + description gain IS siblings.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS name_is        TEXT`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS description_is TEXT`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

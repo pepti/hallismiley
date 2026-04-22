@@ -3,6 +3,8 @@ const path = require('path');
 const db   = require('../config/database');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
+const { t }        = require('../i18n');
+const { DEFAULT_LOCALE } = require('../config/i18n');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -82,11 +84,15 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
         WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE`
     ),
     db.query(
-      `SELECT value FROM site_content WHERE key = 'party_rsvp_form' LIMIT 1`
+      `SELECT value FROM site_content WHERE key = 'party_rsvp_form'
+        ORDER BY (locale = $1) DESC LIMIT 1`,
+      [DEFAULT_LOCALE]
     ),
     db.query(
-      `SELECT key, value FROM site_content
-        WHERE key LIKE 'party_%' AND key <> 'party_invite_code'`
+      `SELECT DISTINCT ON (key) key, value FROM site_content
+        WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
+        ORDER BY key, (locale = $1) DESC`,
+      [DEFAULT_LOCALE]
     ),
   ]);
 
@@ -137,7 +143,7 @@ const partyController = {
 
   async addInvites(req, res, _next) {
     // party_invites table removed — access is managed via users.party_access flag in Manage Users
-    return res.status(410).json({ error: 'Invite management via this endpoint has been removed. Grant access through Manage Users → party_access toggle.', code: 410 });
+    return res.status(410).json({ error: t(req.locale, 'errors.party.inviteEndpointRemoved'), code: 410 });
   },
 
   async listInvites(req, res, _next) {
@@ -147,7 +153,7 @@ const partyController = {
 
   async deleteInvite(req, res, _next) {
     // party_invites table removed
-    return res.status(410).json({ error: 'Invite management via this endpoint has been removed.', code: 410 });
+    return res.status(410).json({ error: t(req.locale, 'errors.party.inviteEndpointRemovedShort'), code: 410 });
   },
 
   // ── Access check ─────────────────────────────────────────────────────────────
@@ -166,7 +172,7 @@ const partyController = {
       const { answers } = req.body;
 
       if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
-        return res.status(400).json({ error: 'answers must be an object', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.party.answersObject'), code: 400 });
       }
 
       const existing = await db.query(
@@ -269,10 +275,10 @@ const partyController = {
     try {
       const { message } = req.body;
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
-        return res.status(400).json({ error: 'message is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.party.messageRequired'), code: 400 });
       }
       if (message.length > 1000) {
-        return res.status(400).json({ error: 'message must not exceed 1000 characters', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.party.messageTooLong', { n: 1000 }), code: 400 });
       }
 
       const { rows } = await db.query(
@@ -303,11 +309,11 @@ const partyController = {
         'SELECT user_id FROM party_guestbook WHERE id = $1',
         [req.params.id]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Entry not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.entryNotFound'), code: 404 });
 
       const isEditor = req.user.role === 'admin' || req.user.role === 'moderator';
       if (rows[0].user_id !== req.user.id && !isEditor) {
-        return res.status(403).json({ error: 'Forbidden', code: 403 });
+        return res.status(403).json({ error: t(req.locale, 'errors.party.forbidden'), code: 403 });
       }
 
       await db.query('DELETE FROM party_guestbook WHERE id = $1', [req.params.id]);
@@ -320,12 +326,12 @@ const partyController = {
   async uploadPhoto(req, res, next) {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.user.noFileUploaded'), code: 400 });
       }
 
       if (req.file.size > MAX_PHOTO_SIZE) {
         _tryUnlink(`/assets/party/${req.file.filename}`);
-        return res.status(400).json({ error: 'Photo must not exceed 10 MB', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.party.photoTooLarge'), code: 400 });
       }
 
       const caption  = req.body.caption || null;
@@ -363,11 +369,11 @@ const partyController = {
         'SELECT user_id, file_path FROM party_photos WHERE id = $1',
         [req.params.id]
       );
-      if (!rows[0]) return res.status(404).json({ error: 'Photo not found', code: 404 });
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.photoNotFound'), code: 404 });
 
       const isEditor = req.user.role === 'admin' || req.user.role === 'moderator';
       if (rows[0].user_id !== req.user.id && !isEditor) {
-        return res.status(403).json({ error: 'Forbidden', code: 403 });
+        return res.status(403).json({ error: t(req.locale, 'errors.party.forbidden'), code: 403 });
       }
 
       await db.query('DELETE FROM party_photos WHERE id = $1', [req.params.id]);
@@ -380,8 +386,14 @@ const partyController = {
 
   async getInfo(req, res, next) {
     try {
+      // Prefer the request's locale; fall back to DEFAULT_LOCALE per key if missing.
+      const locale = req.locale || DEFAULT_LOCALE;
       const { rows } = await db.query(
-        `SELECT key, value FROM site_content WHERE key LIKE 'party_%' AND key <> 'party_invite_code'`
+        `SELECT DISTINCT ON (key) key, value FROM site_content
+          WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
+            AND (locale = $1 OR locale = $2)
+          ORDER BY key, (locale = $1) DESC`,
+        [locale, DEFAULT_LOCALE]
       );
       const info = { ...DEFAULT_PARTY_INFO };
       for (const row of rows) {
@@ -422,7 +434,7 @@ const partyController = {
     try {
       const { code } = req.body || {};
       if (typeof code !== 'string' || !code.trim()) {
-        return res.status(400).json({ error: 'Code is required', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.party.codeRequired'), code: 400 });
       }
 
       const { rows } = await db.query(
@@ -431,11 +443,11 @@ const partyController = {
       const raw = rows[0]?.value;
       const expected = typeof raw === 'string' ? raw : '';
       if (!expected) {
-        return res.status(503).json({ error: 'Invite code not configured', code: 503 });
+        return res.status(503).json({ error: t(req.locale, 'errors.party.inviteCodeNotConfigured'), code: 503 });
       }
 
       if (code.trim().toLowerCase() !== expected.trim().toLowerCase()) {
-        return res.status(403).json({ error: "That code doesn't match — double-check with Halli.", code: 403 });
+        return res.status(403).json({ error: t(req.locale, 'errors.party.codeMismatch'), code: 403 });
       }
 
       const { rows: uRows } = await db.query(
@@ -453,15 +465,18 @@ const partyController = {
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {
-        return res.status(400).json({ error: 'Body must be a plain object', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.party.bodyPlainObject'), code: 400 });
       }
+
+      // Write to the request's locale — admins switching languages edit per-locale content.
+      const locale = req.locale || DEFAULT_LOCALE;
 
       for (const [key, value] of Object.entries(updates)) {
         if (!allowed.includes(key)) {
-          return res.status(400).json({ error: `Invalid field: ${key}`, code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.party.invalidField', { name: key }), code: 400 });
         }
         if (typeof value !== 'string') {
-          return res.status(400).json({ error: `${key} must be a string`, code: 400 });
+          return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeString', { name: key }), code: 400 });
         }
         // value is always a string (validated above); structured fields arrive
         // pre-JSON-stringified from the frontend.  Parse first so we store the
@@ -471,16 +486,19 @@ const partyController = {
         let jsonb;
         try { jsonb = JSON.parse(value); } catch { jsonb = value; }
         await db.query(
-          `INSERT INTO site_content (key, value, updated_by) VALUES ($1, $2::jsonb, $3)
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,
+          `INSERT INTO site_content (key, locale, value, updated_by) VALUES ($1, $2, $3::jsonb, $4)
+           ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value,
              updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-          [`party_${key}`, JSON.stringify(jsonb), req.user.id]
+          [`party_${key}`, locale, JSON.stringify(jsonb), req.user.id]
         );
       }
 
-      // Return the merged result
+      // Return the merged result (for the request's locale, falling back to default)
       const { rows } = await db.query(
-        `SELECT key, value FROM site_content WHERE key LIKE 'party_%'`
+        `SELECT DISTINCT ON (key) key, value FROM site_content
+          WHERE key LIKE 'party_%' AND (locale = $1 OR locale = $2)
+          ORDER BY key, (locale = $1) DESC`,
+        [locale, DEFAULT_LOCALE]
       );
       const info = { ...DEFAULT_PARTY_INFO };
       for (const row of rows) {

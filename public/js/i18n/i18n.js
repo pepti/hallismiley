@@ -101,3 +101,18 @@ export function switchLocale(newLocale) {
 export function href(route) {
   return '#/' + (_locale || DEFAULT_LOCALE) + (route.startsWith('/') ? route : '/' + route);
 }
+
+/**
+ * HTML snippet for a small "EDITING: {locale}" pill shown next to admin inline
+ * edit controls. Reminds admins which locale they're editing so they don't
+ * accidentally overwrite the other language's copy. Caller inserts the string
+ * directly into innerHTML — the span has `data-testid="admin-locale-badge"`
+ * and its own BEM class.
+ */
+export function adminLocaleBadgeHtml() {
+  const key = _locale === 'is' ? 'admin.editingLocaleBadgeIs' : 'admin.editingLocaleBadgeEn';
+  const tip = _locale === 'is' ? 'admin.editingInIs' : 'admin.editingInEn';
+  return `<span class="admin-locale-badge admin-locale-badge--${_locale}"
+                data-testid="admin-locale-badge"
+                title="${t(tip)}">${t(key)}</span>`;
+}

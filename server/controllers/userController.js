@@ -4,6 +4,7 @@ const path = require('path');
 const { query: dbQuery } = require('../config/database');
 const { Scrypt }         = require('oslo/password');
 const { userAvatarDir }  = require('../config/paths');
+const { t }              = require('../i18n');
 
 const scrypt = new Scrypt();
 
@@ -26,7 +27,7 @@ const userController = {
         [req.user.id]
       );
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'User not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.user.userNotFound'), code: 404 });
       }
       return res.json(rows[0]);
     } catch (err) { next(err); }
@@ -43,11 +44,11 @@ const userController = {
       }
 
       if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: 'No updatable fields provided', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.user.noUpdatableFields'), code: 400 });
       }
 
       if ('preferred_locale' in updates && !SUPPORTED_LOCALES.includes(updates.preferred_locale)) {
-        return res.status(400).json({ error: 'Unsupported locale', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.user.unsupportedLocale'), code: 400 });
       }
 
       const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);
@@ -69,7 +70,7 @@ const userController = {
   async uploadAvatar(req, res, next) {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded', code: 400 });
+        return res.status(400).json({ error: t(req.locale, 'errors.user.noFileUploaded'), code: 400 });
       }
 
       // Look up previous avatar so we can clean up if it was a user upload.
@@ -106,12 +107,12 @@ const userController = {
         [req.user.id]
       );
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'User not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.user.userNotFound'), code: 404 });
       }
 
       const valid = await scrypt.verify(rows[0].password_hash, current_password);
       if (!valid) {
-        return res.status(401).json({ error: 'Current password is incorrect', code: 401 });
+        return res.status(401).json({ error: t(req.locale, 'errors.user.wrongCurrentPassword'), code: 401 });
       }
 
       const newHash = await scrypt.hash(new_password);
@@ -120,7 +121,7 @@ const userController = {
         [newHash, req.user.id]
       );
 
-      return res.json({ message: 'Password updated successfully.' });
+      return res.json({ message: t(req.locale, 'errors.user.passwordUpdated') });
     } catch (err) { next(err); }
   },
 
@@ -151,7 +152,7 @@ const userController = {
         [sessionId, req.user.id]
       );
       if (rowCount === 0) {
-        return res.status(404).json({ error: 'Session not found', code: 404 });
+        return res.status(404).json({ error: t(req.locale, 'errors.user.sessionNotFound'), code: 404 });
       }
       return res.status(204).send();
     } catch (err) { next(err); }

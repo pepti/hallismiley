@@ -55,7 +55,7 @@ export class ProjectForm {
           <div class="form-group">
             <label class="form-label" for="pf-tools">${t('admin.tools')} <span class="form-hint">(${t('projects.commaSeparated')})</span></label>
             <input class="form-input" id="pf-tools" name="tools_used" type="text"
-              placeholder="e.g. Node.js, Express, PostgreSQL" />
+              placeholder="${t('project.toolsUsedPlaceholder')}" />
           </div>
           <div class="form-group">
             <label class="form-label" for="pf-image">${t('admin.imageUrl')}</label>

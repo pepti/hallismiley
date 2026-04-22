@@ -115,7 +115,7 @@ export class AdminUsersView {
                 </label>
               </td>
               <td>
-                <label class="toggle-label" title="${u.party_access ? 'Revoke party access' : 'Grant party access'}">
+                <label class="toggle-label" title="${u.party_access ? t('adminUsers.revokePartyAccess') : t('adminUsers.grantPartyAccess')}">
                   <input type="checkbox" class="toggle-input" data-action="toggle-party"
                          data-user-id="${escHtml(String(u.id))}" ${u.party_access ? 'checked' : ''}/>
                   <span class="toggle-track"></span>

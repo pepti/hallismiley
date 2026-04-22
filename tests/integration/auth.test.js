@@ -534,7 +534,8 @@ describe('POST /auth/signup — email verification flow', () => {
     expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
     expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
       'unverif@example.com',
-      expect.any(String)
+      expect.any(String),
+      expect.any(String)  // locale — added by the i18n refactor
     );
   });
 });
@@ -591,7 +592,8 @@ describe('POST /auth/resend-verification', () => {
     expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
     expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
       'pending@example.com',
-      expect.any(String)
+      expect.any(String),
+      expect.any(String)  // locale — added by the i18n refactor
     );
 
     // Token in DB should be rotated

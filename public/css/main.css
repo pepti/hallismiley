@@ -26,3 +26,27 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* Admin inline-edit locale badge — shown in edit control bars so admins
+   know which locale they're about to overwrite. Switch locales via the
+   nav-bar switcher to edit the other language's copy. */
+.admin-locale-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: 4px;
+  background: #c9a84c;
+  color: #0a0a0a;
+  vertical-align: middle;
+  user-select: none;
+}
+.admin-locale-badge--is { background: #5cb5e0; }
+
+/* Profile page — language preference section */
+.profile-lang-section { max-width: 260px; }
+.profile-lang-description { font-size: 14px; color: #888; margin: 0 0 16px; }
+.profile-lang-error { margin-top: 8px; }
+.profile-lang-actions { margin-top: 12px; }

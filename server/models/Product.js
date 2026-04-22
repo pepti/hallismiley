@@ -2,16 +2,32 @@
 // Parameterised queries throughout (A03: prevents SQL injection).
 const db = require('../config/database');
 
-const COLUMNS = 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, active, created_at, updated_at';
+// Admin-facing column list: surfaces both locales' raw fields so the CMS
+// editor can render EN + IS inputs side-by-side.
+const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, active, created_at, updated_at';
 const IMG_COLUMNS = 'id, product_id, url, position, alt_text, created_at';
+
+// Public-facing column list: COALESCE the IS sibling columns into the primary
+// field names so callers see `name` / `description` in the reader's language.
+function publicCols(locale) {
+  if (locale === 'is') {
+    return `id, slug,
+            COALESCE(name_is,        name)        AS name,
+            COALESCE(description_is, description) AS description,
+            price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
+            category, variant_axes, active, created_at, updated_at`;
+  }
+  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, active, created_at, updated_at';
+}
 
 class Product {
   // ── READ ──────────────────────────────────────────────────────────────────
 
-  static async findAll({ activeOnly = true, limit = 100, offset = 0 } = {}) {
+  static async findAll({ activeOnly = true, limit = 100, offset = 0, locale = null } = {}) {
     const where = activeOnly ? 'WHERE active = TRUE' : '';
+    const cols  = locale ? publicCols(locale) : COLUMNS;
     const { rows } = await db.query(
-      `SELECT ${COLUMNS} FROM products ${where}
+      `SELECT ${cols} FROM products ${where}
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [Number(limit), Number(offset)]
@@ -19,19 +35,21 @@ class Product {
     return rows;
   }
 
-  static async findBySlug(slug, { activeOnly = true } = {}) {
+  static async findBySlug(slug, { activeOnly = true, locale = null } = {}) {
     const where = activeOnly ? 'AND active = TRUE' : '';
+    const cols  = locale ? publicCols(locale) : COLUMNS;
     const { rows } = await db.query(
-      `SELECT ${COLUMNS} FROM products WHERE slug = $1 ${where}`,
+      `SELECT ${cols} FROM products WHERE slug = $1 ${where}`,
       [String(slug)]
     );
     return rows[0] || null;
   }
 
-  static async findById(id, { activeOnly = false } = {}) {
+  static async findById(id, { activeOnly = false, locale = null } = {}) {
     const where = activeOnly ? 'AND active = TRUE' : '';
+    const cols  = locale ? publicCols(locale) : COLUMNS;
     const { rows } = await db.query(
-      `SELECT ${COLUMNS} FROM products WHERE id = $1 ${where}`,
+      `SELECT ${cols} FROM products WHERE id = $1 ${where}`,
       [String(id)]
     );
     return rows[0] || null;
@@ -42,6 +60,7 @@ class Product {
   static async create(data) {
     const {
       slug, name, description = '',
+      name_is = null, description_is = null,
       price_isk, price_eur,
       stock = 0, weight_grams = null,
       shape = null, capacity_litres = null,
@@ -49,11 +68,14 @@ class Product {
       active = true,
     } = data;
     const { rows } = await db.query(
-      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+      `INSERT INTO products (slug, name, description, name_is, description_is,
+                             price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14)
        RETURNING ${COLUMNS}`,
       [
         String(slug), String(name), String(description),
+        name_is || null,
+        description_is || null,
         Number(price_isk), Number(price_eur),
         Number(stock),
         weight_grams === null || weight_grams === undefined ? null : Number(weight_grams),
@@ -68,7 +90,7 @@ class Product {
   }
 
   static async update(id, data) {
-    const allowed = ['slug', 'name', 'description', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'variant_axes', 'active'];
+    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'variant_axes', 'active'];
     const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres']);
     const bool    = new Set(['active']);
     const jsonField = new Set(['variant_axes']);

@@ -16,7 +16,7 @@ export class ForgotPasswordView {
             <div class="form-group">
               <label class="form-label" for="forgot-email">${t('forgotPassword.emailLabel')}</label>
               <input class="form-input" id="forgot-email" name="email" type="email"
-                     autocomplete="email" required placeholder="you@example.com"/>
+                     autocomplete="email" required placeholder="${t('auth.emailPlaceholder')}"/>
             </div>
             <p class="form-error" id="forgot-error" aria-live="polite"></p>
             <button class="btn btn--primary btn--full" type="submit" id="forgot-btn">${t('forgotPassword.submit')}</button>

@@ -63,13 +63,13 @@ export class SignupView {
               <div class="form-group">
                 <label class="form-label" for="signup-email">${t('checkout.email')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-email" name="email" type="email"
-                       autocomplete="email" required placeholder="you@example.com"/>
+                       autocomplete="email" required placeholder="${t('auth.emailPlaceholder')}"/>
                 <p class="form-field-status" id="email-status"></p>
               </div>
               <div class="form-group">
                 <label class="form-label" for="signup-username">${t('adminUsers.username')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-username" name="username" type="text"
-                       autocomplete="username" required placeholder="cooluser42"
+                       autocomplete="username" required placeholder="${t('auth.usernamePlaceholder')}"
                        minlength="3" maxlength="32"/>
                 <p class="form-field-status" id="username-status"></p>
               </div>
@@ -82,14 +82,14 @@ export class SignupView {
                   ${t('signup.displayName')} <span class="form-hint">(${t('form.optional')})</span>
                 </label>
                 <input class="form-input" id="signup-displayname" name="displayName" type="text"
-                       autocomplete="name" placeholder="Cool User"/>
+                       autocomplete="name" placeholder="${t('auth.displayNamePlaceholder')}"/>
               </div>
               <div class="form-group">
                 <label class="form-label" for="signup-phone">
                   ${t('checkout.phone')} <span class="form-hint">(${t('form.optional')})</span>
                 </label>
                 <input class="form-input" id="signup-phone" name="phone" type="tel"
-                       autocomplete="tel" placeholder="+1 555 000 0000"/>
+                       autocomplete="tel" placeholder="${t('auth.phonePlaceholder')}"/>
               </div>
             </div>
 

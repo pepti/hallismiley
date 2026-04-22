@@ -9,7 +9,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
@@ -306,14 +306,14 @@ export class ContactView {
                 ${t('contact.name')} <span aria-hidden="true" class="required-mark">*</span>
               </label>
               <input type="text" id="contact-page-name" name="name" class="contact-form__input"
-                     required autocomplete="name" placeholder="Your name" maxlength="100" />
+                     required autocomplete="name" placeholder="${t('contact.namePlaceholder')}" maxlength="100" />
             </div>
             <div class="contact-form__field">
               <label for="contact-page-email" class="contact-form__label">
                 ${t('contact.email')} <span aria-hidden="true" class="required-mark">*</span>
               </label>
               <input type="email" id="contact-page-email" name="email" class="contact-form__input"
-                     required autocomplete="email" placeholder="your@email.com" maxlength="200" />
+                     required autocomplete="email" placeholder="${t('contact.emailPlaceholder')}" maxlength="200" />
             </div>
           </div>
 
@@ -322,7 +322,7 @@ export class ContactView {
               ${t('contact.message')} <span aria-hidden="true" class="required-mark">*</span>
             </label>
             <textarea id="contact-page-message" name="message" class="contact-form__textarea"
-                      required rows="6" placeholder="What is on your mind?" maxlength="2000"></textarea>
+                      required rows="6" placeholder="${t('contact.messagePlaceholder')}" maxlength="2000"></textarea>
           </div>
 
           <div aria-live="polite" id="contact-page-status" class="contact-form__status"></div>
@@ -565,6 +565,7 @@ export class ContactView {
     const controls = document.createElement('div');
     controls.className = 'contact-view__edit-controls contact-view__edit-controls--hidden';
     controls.innerHTML = `
+      ${adminLocaleBadgeHtml()}
       <button type="button" class="contact-view__save-btn"
               data-testid="edit-contact-page-save">${t('form.saveChanges')}</button>
       <button type="button" class="contact-view__cancel-btn"

@@ -263,7 +263,7 @@ export class ArticleView {
          </div>`;
 
     const draftBadge = !a.published
-      ? `<span class="article-draft-badge" aria-label="Draft — not publicly visible">DRAFT</span>`
+      ? `<span class="article-draft-badge" aria-label="${t('article.draftAria')}">DRAFT</span>`
       : '';
 
     const adminBtns = isEditor
@@ -308,7 +308,7 @@ export class ArticleView {
           ${this._renderMediaGallery()}
 
           <footer class="article-footer">
-            <button class="article-share-btn" id="article-share-btn" aria-label="Copy link to clipboard">
+            <button class="article-share-btn" id="article-share-btn" aria-label="${t('article.copyLinkAria')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
@@ -370,7 +370,7 @@ export class ArticleView {
       <div class="news-editor" role="dialog" aria-modal="true" aria-label="${t('news.editArticle')}">
         <div class="news-editor__header">
           <h2 class="news-editor__title">${t('news.editArticle')}</h2>
-          <button class="news-editor__close" aria-label="Close editor">✕</button>
+          <button class="news-editor__close" aria-label="${t('article.closeEditorAria')}">✕</button>
         </div>
         <form class="news-editor__form" id="article-edit-form" novalidate>
           <label class="news-editor__label">Title *
@@ -534,7 +534,7 @@ export class ArticleView {
       const setCoverBtn = isImage
         ? `<button type="button" class="news-editor__media-set-cover${isCover ? ' is-current' : ''}"
                    data-media-id="${m.id}"
-                   ${isCover ? 'disabled aria-label="Current cover image"' : 'aria-label="Set as cover image"'}>
+                   ${isCover ? `disabled aria-label="${t('article.currentCoverAria')}"` : `aria-label="${t('article.setCoverAria')}"`}>
              ${isCover ? '✓ Cover' : 'Set Cover'}
            </button>`
         : '';
@@ -543,11 +543,11 @@ export class ArticleView {
         <div class="news-editor__media-item${isCover ? ' news-editor__media-item--is-cover' : ''}" data-media-id="${m.id}" draggable="true">
           ${preview}
           <div class="news-editor__media-item-controls">
-            <input type="text" class="news-editor__media-caption" placeholder="Caption…"
+            <input type="text" class="news-editor__media-caption" placeholder="${t('article.captionPlaceholder')}"
                    value="${_esc(m.caption || '')}" data-media-id="${m.id}">
             ${setCoverBtn}
             <button type="button" class="news-editor__media-delete" data-media-id="${m.id}"
-                    aria-label="Delete media">✕</button>
+                    aria-label="${t('article.deleteMediaAria')}">✕</button>
           </div>
         </div>`;
     }).join('');
@@ -567,7 +567,7 @@ export class ArticleView {
     overlay.querySelectorAll('.news-editor__media-delete').forEach(btn => {
       btn.addEventListener('click', async () => {
         const mediaId = btn.dataset.mediaId;
-        if (!confirm('Delete this media item?')) return;
+        if (!confirm(t('article.confirmDeleteMedia'))) return;
         try {
           const token = await getCSRFToken();
           const res = await fetch(`/api/v1/news/${this._article.id}/media/${mediaId}`, {
@@ -870,7 +870,7 @@ export class ArticleView {
       }
       window.location.hash = href('/news');
     } catch (err) {
-      alert(`Could not delete article: ${err.message}`);
+      alert(t('article.alertDeleteFailed', { message: err.message }));
     }
   }
 }

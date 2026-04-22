@@ -242,32 +242,32 @@ export class NewsView {
       <div class="news-editor" role="dialog" aria-modal="true" aria-label="${isNew ? t('news.newArticle') : t('news.editArticle')}">
         <div class="news-editor__header">
           <h2 class="news-editor__title">${isNew ? t('news.newArticle') : t('news.editArticle')}</h2>
-          <button class="news-editor__close" aria-label="Close editor">✕</button>
+          <button class="news-editor__close" aria-label="${t('article.closeEditorAria')}">✕</button>
         </div>
         <form class="news-editor__form" id="news-editor-form" novalidate>
           <label class="news-editor__label">Title *
             <input class="news-editor__input" name="title" type="text" required maxlength="200"
-                   value="${_esc(article?.title || '')}" placeholder="Article title">
+                   value="${_esc(article?.title || '')}" placeholder="${t('news.titlePlaceholder')}">
           </label>
           <div class="news-editor__row">
             <label class="news-editor__label">Slug
               <input class="news-editor__input" name="slug" type="text" maxlength="100"
-                     value="${_esc(article?.slug || '')}" placeholder="auto-generated-from-title">
+                     value="${_esc(article?.slug || '')}" placeholder="${t('news.slugPlaceholder')}">
             </label>
             <label class="news-editor__label">Category
               <input class="news-editor__input" name="category" type="text" maxlength="50"
-                     value="${_esc(article?.category || 'news')}" placeholder="news">
+                     value="${_esc(article?.category || 'news')}" placeholder="${t('news.categoryPlaceholder')}">
             </label>
           </div>
           <label class="news-editor__label">Summary * <small>(max 300 chars)</small>
             <textarea class="news-editor__textarea news-editor__textarea--sm" name="summary"
                       required maxlength="300" rows="3"
-                      placeholder="Short summary shown in cards…">${_esc(article?.summary || '')}</textarea>
+                      placeholder="${t('news.summaryPlaceholder')}">${_esc(article?.summary || '')}</textarea>
           </label>
           <label class="news-editor__label">Body * <small>(HTML supported: p, h2, h3, strong, em, a, ul, ol, li, blockquote)</small>
             <textarea class="news-editor__textarea news-editor__textarea--lg" name="body"
                       required rows="16"
-                      placeholder="<p>Full article content…</p>">${_esc(article?.body || '')}</textarea>
+                      placeholder="${t('news.bodyPlaceholder')}">${_esc(article?.body || '')}</textarea>
           </label>
           <div class="news-editor__row news-editor__row--check">
             <label class="news-editor__check">
@@ -658,7 +658,7 @@ export class NewsView {
       const setCoverBtn = isImage
         ? `<button type="button" class="news-editor__media-set-cover${isCover ? ' is-current' : ''}"
                    data-media-id="${m.id}"
-                   ${isCover ? 'disabled aria-label="Current cover image"' : 'aria-label="Set as cover image"'}>
+                   ${isCover ? `disabled aria-label="${t('article.currentCoverAria')}"` : `aria-label="${t('article.setCoverAria')}"`}>
              ${isCover ? '✓ Cover' : 'Set Cover'}
            </button>`
         : '';
@@ -667,7 +667,7 @@ export class NewsView {
         <div class="news-editor__media-item${isCover ? ' news-editor__media-item--is-cover' : ''}" data-media-id="${m.id}">
           ${preview}
           <div class="news-editor__media-item-controls">
-            <input type="text" class="news-editor__media-caption" placeholder="Caption…"
+            <input type="text" class="news-editor__media-caption" placeholder="${t('article.captionPlaceholder')}"
                    value="${_esc(m.caption || '')}" data-media-id="${m.id}">
             ${setCoverBtn}
             <button type="button" class="news-editor__media-delete" data-media-id="${m.id}"
@@ -737,7 +737,7 @@ export class NewsView {
 
         // Already-uploaded item — confirm and DELETE via API
         const mediaId = btn.dataset.mediaId;
-        if (!confirm('Delete this media item?')) return;
+        if (!confirm(t('article.confirmDeleteMedia'))) return;
         try {
           const token = await getCSRFToken();
           const res = await fetch(`/api/v1/news/${this._editorArticle.id}/media/${mediaId}`, {
