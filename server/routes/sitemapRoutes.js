@@ -50,8 +50,12 @@ function isoDate(d) {
 // `localePath` is the per-locale suffix applied after /en or /is
 // (e.g. '/news/my-slug' — does NOT include the locale prefix).
 function urlEntry({ localePath, lastmod, priority = '0.5', changefreq = 'monthly', includeXDefault = false }) {
-  const en = `${APP_URL}/en${localePath}`;
-  const is = `${APP_URL}/is${localePath}`;
+  // Home (empty path) renders as /en/ with trailing slash to match the
+  // locale-prefix convention used everywhere else in the app; deep paths
+  // (/projects, /news/slug, …) concatenate directly.
+  const suffix = localePath === '' ? '/' : localePath;
+  const en = localePath === '' ? `${APP_URL}/en/` : `${APP_URL}/en${suffix}`;
+  const is = localePath === '' ? `${APP_URL}/is/` : `${APP_URL}/is${suffix}`;
   const lines = [
     '  <url>',
     `    <loc>${xmlEscape(en)}</loc>`,
