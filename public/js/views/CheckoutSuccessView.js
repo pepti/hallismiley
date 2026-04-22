@@ -2,6 +2,7 @@
 // Route: #/checkout/success?session_id=...
 // Polls /api/v1/shop/orders/by-session/:sid until paid (webhook may race).
 import * as cart from '../services/cart.js';
+import { t, href } from '../i18n/i18n.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -26,9 +27,9 @@ export class CheckoutSuccessView {
     this._view.className = 'view shop-success';
     this._view.innerHTML = `
       <div class="shop-success__inner">
-        <h1 class="shop-success__title">Thank you</h1>
+        <h1 class="shop-success__title">${t('checkout.thankYou')}</h1>
         <p class="shop-success__sub" id="shop-success-status">
-          Processing your payment…
+          ${t('checkout.processing')}
         </p>
         <div id="shop-success-body"></div>
       </div>
@@ -36,7 +37,7 @@ export class CheckoutSuccessView {
 
     const sessionId = this._qs.session_id;
     if (!sessionId) {
-      this._view.querySelector('#shop-success-status').textContent = 'Missing session id.';
+      this._view.querySelector('#shop-success-status').textContent = t('checkout.missingSession');
       return this._view;
     }
 
@@ -75,7 +76,7 @@ export class CheckoutSuccessView {
     }
     // Timed out waiting — still ok, webhook will catch up later.
     const status = this._view.querySelector('#shop-success-status');
-    status.textContent = 'Payment is being confirmed. You will receive an email shortly.';
+    status.textContent = t('checkout.confirmingPayment');
   }
 
   _renderPaid(order, items) {
@@ -90,32 +91,31 @@ export class CheckoutSuccessView {
     // product_name_snapshot is already "Smiley T-shirt — Black / M" (shopController
     // calls buildLineName() when writing order_items), so no extra formatting.
 
-    this._view.querySelector('#shop-success-status').textContent =
-      'Payment confirmed — a receipt is on its way to your email.';
+    this._view.querySelector('#shop-success-status').textContent = t('checkout.paymentConfirmed');
     this._view.querySelector('#shop-success-body').innerHTML = `
       <div class="shop-success__card">
         <p class="shop-success__order-number">
-          Order <strong>${_esc(order.order_number)}</strong>
+          ${t('orders.order')} <strong>${_esc(order.order_number)}</strong>
         </p>
         <ul class="shop-success__items">${itemsHtml}</ul>
         <div class="shop-success__total-row">
-          <span>Subtotal</span><span>${fmt(order.subtotal)}</span>
+          <span>${t('cart.subtotal')}</span><span>${fmt(order.subtotal)}</span>
         </div>
         <div class="shop-success__total-row">
-          <span>Shipping</span><span>${fmt(order.shipping)}</span>
+          <span>${t('checkout.shipping')}</span><span>${fmt(order.shipping)}</span>
         </div>
         <div class="shop-success__grand">
-          <span>Total</span><span>${fmt(order.total)}</span>
+          <span>${t('orders.total')}</span><span>${fmt(order.total)}</span>
         </div>
-        <p class="shop-success__vat-note">Price includes 24% VAT.</p>
-        <a href="#/shop" class="shop-success__back">Keep shopping</a>
+        <p class="shop-success__vat-note">${t('orders.vatNote')}</p>
+        <a href="${href('/shop')}" class="shop-success__back">${t('checkout.keepShopping')}</a>
       </div>
     `;
   }
 
   _renderFailed(order) {
     this._view.querySelector('#shop-success-status').textContent =
-      `Something went wrong with order ${order?.order_number || ''} — please contact us.`;
+      t('checkout.failed', { orderNumber: order?.order_number || '' });
   }
 
   destroy() {

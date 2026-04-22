@@ -1,12 +1,5 @@
-/**
- * Lightbox — reusable media viewer component.
- *
- * Usage:
- *   const lb = new Lightbox(mediaItems);  // [{ file_path, media_type, caption }]
- *   lb.mount();
- *   lb.open(index);
- *   lb.destroy();  // when the containing view is torn down
- */
+import { t } from '../i18n/i18n.js';
+
 export class Lightbox {
   constructor(items = []) {
     this._items   = items;
@@ -25,20 +18,20 @@ export class Lightbox {
     this._el.className      = 'lb-overlay';
     this._el.setAttribute('role', 'dialog');
     this._el.setAttribute('aria-modal', 'true');
-    this._el.setAttribute('aria-label', 'Media lightbox');
+    this._el.setAttribute('aria-label', t('common.open'));
     this._el.hidden = true;
 
     this._el.innerHTML = `
       <div class="lb-backdrop"></div>
       <div class="lb-container">
-        <button class="lb-close" aria-label="Close lightbox">&#x2715;</button>
-        <button class="lb-arrow lb-arrow--prev" aria-label="Previous image">&#x2039;</button>
+        <button class="lb-close" aria-label="${t('lightbox.close')}">&#x2715;</button>
+        <button class="lb-arrow lb-arrow--prev" aria-label="${t('lightbox.previous')}">&#x2039;</button>
         <div class="lb-media-wrap">
           <img class="lb-img" src="" alt="" draggable="false">
           <video class="lb-video" controls playsinline></video>
           <p class="lb-caption"></p>
         </div>
-        <button class="lb-arrow lb-arrow--next" aria-label="Next image">&#x203A;</button>
+        <button class="lb-arrow lb-arrow--next" aria-label="${t('lightbox.next')}">&#x203A;</button>
         <div class="lb-counter" aria-live="polite"></div>
       </div>
     `;
@@ -117,7 +110,7 @@ export class Lightbox {
     const item  = this._items[this._index];
     const total = this._items.length;
 
-    this._counter.textContent = `${this._index + 1} / ${total}`;
+    this._counter.textContent = t('lightbox.imageCount', { current: this._index + 1, total });
     this._prevBtn.disabled    = this._index === 0;
     this._nextBtn.disabled    = this._index === total - 1;
     this._caption.textContent = item.caption || '';

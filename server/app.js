@@ -21,6 +21,7 @@ const adminShopRoutes = require('./routes/adminShopRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
+const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register }   = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
@@ -106,7 +107,7 @@ app.use(cors({
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Trace-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Trace-ID', 'X-Locale'],
   credentials: true, // required for httpOnly session cookie
 }));
 
@@ -128,6 +129,10 @@ app.use(cookieParser());
 
 // ── A03 Injection: sanitize all incoming body strings ────────────────────────
 app.use(sanitizeBody);
+
+// ── Locale detection — sets req.locale for every API request ──────────────
+// Must run after cookieParser() so req.cookies is available.
+app.use(localeMiddleware);
 
 // ── A01 Broken Access Control: global rate limiter ───────────────────────────
 const globalLimiter = rateLimit({

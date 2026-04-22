@@ -1,6 +1,7 @@
 import { projectApi } from '../api/projectApi.js';
 import { ProjectCard } from '../components/ProjectCard.js';
 import { FilterBar }   from '../components/FilterBar.js';
+import { t, href }     from '../i18n/i18n.js';
 
 export class ProjectsView {
   constructor() {
@@ -21,7 +22,7 @@ export class ProjectsView {
     section.className = 'section';
     section.innerHTML = `
       <div class="section__header">
-        <h2 class="section__title">All Projects</h2>
+        <h2 class="section__title">${t('projects.title')}</h2>
         <span class="section__count" id="projects-count"></span>
       </div>
     `;
@@ -43,8 +44,8 @@ export class ProjectsView {
     try {
       this.allProjects = await projectApi.getAll({ limit: 100 });
       this._renderGrid(this.allProjects, view);
-    } catch (err) {
-      this.grid.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div>Failed to load projects.</div>`;
+    } catch {
+      this.grid.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div>${t('form.error')}</div>`;
     }
   }
 
@@ -57,17 +58,17 @@ export class ProjectsView {
 
   _renderGrid(projects, view) {
     const countEl = (view || document).querySelector('#projects-count');
-    if (countEl) countEl.textContent = `${projects.length} projects`;
+    if (countEl) countEl.textContent = `${projects.length}`;
 
     this.grid.innerHTML = '';
     if (!projects.length) {
-      this.grid.innerHTML = '<div class="empty-state"><div class="empty-state__icon">📂</div>No projects in this category.</div>';
+      this.grid.innerHTML = `<div class="empty-state"><div class="empty-state__icon">📂</div>${t('projects.noProjects')}</div>`;
       return;
     }
     projects.forEach(p => {
       this.grid.appendChild(
         new ProjectCard(p, (proj) => {
-          window.location.hash = `#/projects/${proj.id}`;
+          window.location.hash = href(`/projects/${proj.id}`);
         }).render()
       );
     });

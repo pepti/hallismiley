@@ -1,7 +1,8 @@
 import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser, adminDeleteUser } from '../services/auth.js';
-import { showToast } from '../components/Toast.js';
-import { escHtml } from '../utils/escHtml.js';
+import { showToast }     from '../components/Toast.js';
+import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
+import { t, href }       from '../i18n/i18n.js';
 
 const PAGE_SIZE = 20;
 
@@ -12,13 +13,13 @@ function formatDate(str) {
 
 export class AdminUsersView {
   constructor() {
-    this._page = 1;
+    this._page  = 1;
     this._total = 0;
   }
 
   async render() {
     if (!isAuthenticated() || !isAdmin()) {
-      window.location.hash = '#/';
+      window.location.hash = href('/');
       return document.createTextNode('');
     }
 
@@ -27,13 +28,13 @@ export class AdminUsersView {
     el.innerHTML = `
       <div class="admin-header">
         <div>
-          <p class="admin-eyebrow">Admin</p>
-          <h1 class="admin-title">User Management</h1>
+          <p class="admin-eyebrow">${t('admin.dashboard')}</p>
+          <h1 class="admin-title">${t('adminUsers.title')}</h1>
         </div>
-        <a href="#/admin" class="btn btn--outline" data-route="/admin">← Projects</a>
+        <a href="${href('/admin')}" class="btn btn--outline" data-route="/admin">← ${t('admin.projects')}</a>
       </div>
       <div class="admin-table-wrap" id="users-table-wrap">
-        <div class="admin-loading">Loading users…</div>
+        <div class="admin-loading">${t('form.loading')}</div>
       </div>
       <div class="pagination" id="pagination"></div>
     `;
@@ -45,15 +46,15 @@ export class AdminUsersView {
 
   async _load() {
     const wrap = this._el.querySelector('#users-table-wrap');
-    wrap.innerHTML = '<div class="admin-loading">Loading users…</div>';
+    wrap.innerHTML = `<div class="admin-loading">${t('form.loading')}</div>`;
     try {
-      const data = await adminGetUsers({ page: this._page, limit: PAGE_SIZE });
+      const data  = await adminGetUsers({ page: this._page, limit: PAGE_SIZE });
       const users = Array.isArray(data) ? data : (data.users || []);
       this._total = data.total || users.length;
       this._renderTable(users);
       this._renderPagination();
     } catch (err) {
-      wrap.innerHTML = `<p class="admin-error">Failed to load users: ${escHtml(err.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-error">${t('form.error')}: ${escHtml(err.message)}</p>`;
     }
   }
 
@@ -64,7 +65,7 @@ export class AdminUsersView {
       wrap.innerHTML = `
         <div class="empty-state">
           <div class="empty-state__icon">👤</div>
-          <p>No users found.</p>
+          <p>${t('adminUsers.title')}: ${t('admin.noUsers')}</p>
         </div>`;
       return;
     }
@@ -73,14 +74,14 @@ export class AdminUsersView {
       <table class="admin-table admin-users-table">
         <thead>
           <tr>
-            <th>User</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Verified</th>
-            <th>Status</th>
+            <th>${t('adminUsers.username')}</th>
+            <th>${t('adminUsers.email')}</th>
+            <th>${t('adminUsers.role')}</th>
+            <th>${t('adminUsers.verified')}</th>
+            <th>${t('adminUsers.status')}</th>
             <th>Party</th>
-            <th>Joined</th>
-            <th class="admin-table__actions-col">Actions</th>
+            <th>${t('orders.date')}</th>
+            <th class="admin-table__actions-col">${t('adminUsers.actions')}</th>
           </tr>
         </thead>
         <tbody>
@@ -95,22 +96,22 @@ export class AdminUsersView {
               <td class="user-email">${escHtml(u.email)}</td>
               <td>
                 <select class="form-input form-input--sm role-select" data-user-id="${escHtml(String(u.id))}" data-action="role">
-                  <option value="user"      ${u.role === 'user'      ? 'selected' : ''}>User</option>
-                  <option value="moderator" ${u.role === 'moderator' ? 'selected' : ''}>Moderator</option>
-                  <option value="admin"     ${u.role === 'admin'     ? 'selected' : ''}>Admin</option>
+                  <option value="user"      ${u.role === 'user'      ? 'selected' : ''}>${t('adminUsers.setRole')} — user</option>
+                  <option value="moderator" ${u.role === 'moderator' ? 'selected' : ''}>moderator</option>
+                  <option value="admin"     ${u.role === 'admin'     ? 'selected' : ''}>admin</option>
                 </select>
               </td>
               <td>
                 ${u.email_verified
-                  ? '<span class="verified-badge">✓ Verified</span>'
-                  : '<span class="unverified-badge">✗ Unverified</span>'}
+                  ? `<span class="verified-badge">✓ ${t('adminUsers.verified')}</span>`
+                  : `<span class="unverified-badge">✗ ${t('adminUsers.unverified')}</span>`}
               </td>
               <td>
-                <label class="toggle-label" title="${u.disabled ? 'Enable user' : 'Disable user'}">
+                <label class="toggle-label" title="${u.disabled ? t('adminUsers.enable') : t('adminUsers.disable')}">
                   <input type="checkbox" class="toggle-input" data-action="toggle-disabled"
                          data-user-id="${escHtml(String(u.id))}" ${u.disabled ? '' : 'checked'}/>
                   <span class="toggle-track"></span>
-                  <span class="toggle-text">${u.disabled ? 'Disabled' : 'Active'}</span>
+                  <span class="toggle-text">${u.disabled ? t('adminUsers.disabled') : t('adminUsers.active')}</span>
                 </label>
               </td>
               <td>
@@ -128,30 +129,26 @@ export class AdminUsersView {
                 <button class="btn btn--sm btn--danger delete-user-btn"
                         data-user-id="${escHtml(String(u.id))}"
                         data-username="${escHtml(u.username)}"
-                        title="Delete user">Delete</button>` : ''}
+                        title="${t('admin.delete')}">${t('admin.delete')}</button>` : ''}
               </td>
             </tr>`).join('')}
         </tbody>
       </table>
     `;
 
-    // Wire role changes
     wrap.querySelectorAll('[data-action=role]').forEach(sel => {
       sel.dataset.prevRole = sel.value;
       sel.addEventListener('change', () => this._onRoleChange(sel));
     });
 
-    // Wire enable/disable toggles
     wrap.querySelectorAll('[data-action=toggle-disabled]').forEach(chk => {
       chk.addEventListener('change', () => this._onToggleDisabled(chk));
     });
 
-    // Wire party-access toggles
     wrap.querySelectorAll('[data-action=toggle-party]').forEach(chk => {
       chk.addEventListener('change', () => this._onTogglePartyAccess(chk));
     });
 
-    // Wire delete buttons
     wrap.querySelectorAll('.delete-user-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onDeleteUser(btn));
     });
@@ -164,10 +161,10 @@ export class AdminUsersView {
     try {
       await adminUpdateUser(userId, { party_access: enabled });
       if (textEl) textEl.textContent = enabled ? '🎂 On' : 'Off';
-      showToast(enabled ? 'Party access granted' : 'Party access revoked', 'success');
+      showToast(t('form.success'), 'success');
     } catch (err) {
       showToast(err.message, 'error');
-      checkbox.checked = !checkbox.checked; // revert
+      checkbox.checked = !checkbox.checked;
     }
   }
 
@@ -178,7 +175,7 @@ export class AdminUsersView {
     try {
       await adminUpdateUser(userId, { role: newRole });
       select.dataset.prevRole = newRole;
-      showToast(`Role updated to ${newRole}`, 'success');
+      showToast(t('form.success'), 'success');
     } catch (err) {
       showToast(err.message, 'error');
       select.value = prevRole;
@@ -188,10 +185,10 @@ export class AdminUsersView {
   async _onDeleteUser(btn) {
     const userId   = btn.dataset.userId;
     const username = btn.dataset.username;
-    if (!confirm(`Permanently delete user "${username}"? This cannot be undone.`)) return;
+    if (!confirm(`${t('admin.confirmDelete')} "${escHtml(username)}"?`)) return;
     try {
       await adminDeleteUser(userId);
-      showToast(`User "${username}" deleted`, 'success');
+      showToast(t('form.success'), 'success');
       await this._load();
     } catch (err) {
       showToast(err.message, 'error');
@@ -204,11 +201,11 @@ export class AdminUsersView {
     const textEl   = checkbox.closest('label').querySelector('.toggle-text');
     try {
       await adminUpdateUser(userId, { disabled });
-      if (textEl) textEl.textContent = disabled ? 'Disabled' : 'Active';
-      showToast(disabled ? 'User disabled' : 'User enabled', 'success');
+      if (textEl) textEl.textContent = disabled ? t('adminUsers.disabled') : t('adminUsers.active');
+      showToast(t('form.success'), 'success');
     } catch (err) {
       showToast(err.message, 'error');
-      checkbox.checked = !checkbox.checked; // revert
+      checkbox.checked = !checkbox.checked;
     }
   }
 
@@ -219,19 +216,19 @@ export class AdminUsersView {
 
     pag.innerHTML = '';
     const prev = document.createElement('button');
-    prev.className = 'btn btn--sm btn--ghost';
-    prev.textContent = '← Prev';
-    prev.disabled = this._page <= 1;
+    prev.className   = 'btn btn--sm btn--ghost';
+    prev.textContent = `← ${t('form.previous')}`;
+    prev.disabled    = this._page <= 1;
     prev.addEventListener('click', () => { this._page--; this._load(); });
 
     const info = document.createElement('span');
-    info.className = 'pagination__info';
-    info.textContent = `Page ${this._page} of ${pages}`;
+    info.className   = 'pagination__info';
+    info.textContent = `${this._page} / ${pages}`;
 
     const next = document.createElement('button');
-    next.className = 'btn btn--sm btn--ghost';
-    next.textContent = 'Next →';
-    next.disabled = this._page >= pages;
+    next.className   = 'btn btn--sm btn--ghost';
+    next.textContent = `${t('form.next')} →`;
+    next.disabled    = this._page >= pages;
     next.addEventListener('click', () => { this._page++; this._load(); });
 
     pag.appendChild(prev);

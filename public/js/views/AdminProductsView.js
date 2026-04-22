@@ -1,6 +1,7 @@
 // AdminProductsView — admin CRUD for products. Route: #/admin/shop/products
 import { getCSRFToken, getCsrfHeaders } from '../utils/api.js';
 import * as cart from '../services/cart.js';
+import { t } from '../i18n/i18n.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -17,14 +18,11 @@ export class AdminProductsView {
     this._view.innerHTML = `
       <div class="admin-shop__inner">
         <header class="admin-shop__header">
-          <h1>Manage products</h1>
-          <button type="button" id="admin-new-product" class="admin-shop__primary-btn">+ New product</button>
+          <h1>${t('adminProducts.title')}</h1>
+          <button type="button" id="admin-new-product" class="admin-shop__primary-btn">${t('adminProducts.newProduct')}</button>
         </header>
-        <p class="admin-shop__hint">
-          ISK prices are whole krónur (e.g. <code>89000</code>). EUR prices are in <em>cents</em>
-          (e.g. <code>60000</code> for €600.00). Prices are VAT-inclusive (24% VSK).
-        </p>
-        <div id="admin-shop-body"><p>Loading…</p></div>
+        <p class="admin-shop__hint">${t('adminProducts.priceHint')}</p>
+        <div id="admin-shop-body"><p>${t('form.loading')}</p></div>
       </div>
     `;
     this._view.querySelector('#admin-new-product').addEventListener('click', () => this._showForm());
@@ -49,15 +47,15 @@ export class AdminProductsView {
   _paint() {
     const body = this._view.querySelector('#admin-shop-body');
     if (this._products.length === 0) {
-      body.innerHTML = `<p>No products yet. Click "+ New product" to add one.</p>`;
+      body.innerHTML = `<p>${t('adminProducts.empty')}</p>`;
       return;
     }
     body.innerHTML = `
       <table class="admin-shop__table">
         <thead><tr>
-          <th>Image</th><th>Name</th><th>Slug</th>
-          <th>Price ISK</th><th>Price EUR</th>
-          <th>Stock</th><th>Active</th><th></th>
+          <th>${t('adminProducts.image')}</th><th>${t('adminProducts.name')}</th><th>${t('adminProducts.slug')}</th>
+          <th>${t('adminProducts.priceISK')}</th><th>${t('adminProducts.priceEUR')}</th>
+          <th>${t('adminProducts.stock')}</th><th>${t('adminProducts.active')}</th><th></th>
         </tr></thead>
         <tbody>
           ${this._products.map(p => `
@@ -72,7 +70,7 @@ export class AdminProductsView {
               <td>${p.stock}</td>
               <td>${p.active ? '✓' : '—'}</td>
               <td>
-                <button type="button" class="admin-shop__link" data-action="edit" data-id="${_esc(p.id)}">Edit</button>
+                <button type="button" class="admin-shop__link" data-action="edit" data-id="${_esc(p.id)}">${t('admin.edit')}</button>
               </td>
             </tr>`).join('')}
         </tbody>
@@ -100,18 +98,18 @@ export class AdminProductsView {
     const list = modal.querySelector('#admin-product-images');
     if (!list) return;
     if (!product.images || product.images.length === 0) {
-      list.innerHTML = `<p class="admin-shop__hint">No images yet.</p>`;
+      list.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.noImages')}</p>`;
       return;
     }
     list.innerHTML = product.images.map(img => `
       <div class="admin-shop__image-item" data-img-id="${_esc(img.id)}">
         <img src="${_esc(img.url)}" alt=""/>
-        <button type="button" class="admin-shop__image-del" data-img-id="${_esc(img.id)}">Delete</button>
+        <button type="button" class="admin-shop__image-del" data-img-id="${_esc(img.id)}">${t('admin.delete')}</button>
       </div>
     `).join('');
     list.querySelectorAll('.admin-shop__image-del').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Delete this image?')) return;
+        if (!confirm(t('adminProducts.confirmDeleteImage'))) return;
         try {
           const token = await getCSRFToken();
           const res = await fetch(
@@ -139,7 +137,7 @@ export class AdminProductsView {
     const variants = product.variants || [];
     if (variants.length === 0) {
       wrap.innerHTML = `<p class="admin-shop__hint">
-        No variants yet. Variants are created via the seed script or the API
+        ${t('adminProducts.noVariants')}
         (<code>POST /api/v1/admin/shop/products/${product.id}/variants</code>).
       </p>`;
       return;
@@ -189,7 +187,7 @@ export class AdminProductsView {
       } else if (field === 'active') {
         value = Boolean(rawValue);
       }
-      status.textContent = `Saving ${field}…`;
+      status.textContent = t('form.saving');
       status.style.color = 'var(--text-muted)';
       try {
         const headers = await getCsrfHeaders();
@@ -202,7 +200,7 @@ export class AdminProductsView {
         // Update local cache so a subsequent paint doesn't revert.
         const idx = product.variants.findIndex(x => x.id === variantId);
         if (idx >= 0) product.variants[idx] = data.variant;
-        status.textContent = `Saved ${field}.`;
+        status.textContent = t('form.saved');
         status.style.color = 'var(--success)';
       } catch (err) {
         status.textContent = err.message;
@@ -240,67 +238,62 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
   modal.innerHTML = `
     <div class="admin-shop__modal-card">
       <header>
-        <h2>${isEdit ? 'Edit product' : 'New product'}</h2>
-        <button type="button" class="admin-shop__modal-close" aria-label="Close">✕</button>
+        <h2>${isEdit ? t('adminProducts.editProduct') : t('adminProducts.createProduct')}</h2>
+        <button type="button" class="admin-shop__modal-close" aria-label="${t('common.close')}">✕</button>
       </header>
       <form class="admin-shop__form" id="admin-product-form">
-        <label>Name
+        <label>${t('adminProducts.name')}
           <input type="text" name="name" required maxlength="200" value="${_esc(existing?.name || '')}"/>
         </label>
-        <label>Slug (URL-friendly)
+        <label>${t('adminProducts.slugLabel')}
           <input type="text" name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?"
                  value="${_esc(existing?.slug || '')}"/>
         </label>
-        <label>Description
+        <label>${t('adminProducts.description')}
           <textarea name="description" rows="4">${_esc(existing?.description || '')}</textarea>
         </label>
         <div class="admin-shop__form-row">
-          <label>Price ISK (whole kr.)
+          <label>${t('adminProducts.priceISKLabel')}
             <input type="number" name="price_isk" required min="1" step="1" value="${existing?.price_isk ?? ''}"/>
           </label>
-          <label>Price EUR (cents)
+          <label>${t('adminProducts.priceEURLabel')}
             <input type="number" name="price_eur" required min="1" step="1" value="${existing?.price_eur ?? ''}"/>
           </label>
         </div>
         <div class="admin-shop__form-row">
-          <label>Stock
+          <label>${t('adminProducts.stock')}
             <input type="number" name="stock" min="0" step="1" value="${existing?.stock ?? 0}"/>
           </label>
-          <label>Weight (grams, optional)
+          <label>${t('adminProducts.weight')}
             <input type="number" name="weight_grams" min="0" step="1" value="${existing?.weight_grams ?? ''}"/>
           </label>
           <label class="admin-shop__checkbox">
             <input type="checkbox" name="active" ${existing?.active === false ? '' : 'checked'}/>
-            Active
+            ${t('adminProducts.active')}
           </label>
         </div>
-        <p class="admin-shop__hint">
-          ISK prices are whole krónur (e.g. <code>5900</code>). EUR prices are in <em>cents</em>
-          (e.g. <code>4000</code> for €40.00). Prices are VAT-inclusive (24% VSK).
-        </p>
+        <p class="admin-shop__hint">${t('adminProducts.priceHintShort')}</p>
         <p class="admin-shop__error" id="admin-product-error" role="alert"></p>
         <div class="admin-shop__form-actions">
-          ${isEdit ? '<button type="button" class="admin-shop__delete" id="admin-product-deactivate">Deactivate</button>' : ''}
-          <button type="submit" class="admin-shop__primary-btn">${isEdit ? 'Save' : 'Create'}</button>
+          ${isEdit ? `<button type="button" class="admin-shop__delete" id="admin-product-deactivate">${t('adminProducts.deactivate')}</button>` : ''}
+          <button type="submit" class="admin-shop__primary-btn">${isEdit ? t('form.save') : t('form.create')}</button>
         </div>
       </form>
 
       ${isEdit ? `
         <section class="admin-shop__images">
-          <h3>Images</h3>
+          <h3>${t('adminProducts.images')}</h3>
           <div class="admin-shop__image-list" id="admin-product-images"></div>
           <label class="admin-shop__upload-btn">
             <input type="file" accept="image/jpeg,image/png,image/webp" id="admin-product-image-input"/>
-            Upload image
+            ${t('adminProducts.uploadImage')}
           </label>
         </section>
 
         <section class="admin-shop__variants">
-          <h3>Variants <span class="admin-shop__hint" style="margin:0 8px;font-size:12px">
+          <h3>${t('adminProducts.variants')} <span class="admin-shop__hint" style="margin:0 8px;font-size:12px">
             ${(existing.variants || []).length} SKUs</span></h3>
-          <p class="admin-shop__hint">
-            Override prices and stock per SKU. Leave price fields blank to inherit the base price.
-          </p>
+          <p class="admin-shop__hint">${t('adminProducts.variantHint')}</p>
           <div id="admin-variant-table-wrap"></div>
         </section>` : ''}
     </div>
@@ -346,7 +339,7 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
 
   if (isEdit) {
     modal.querySelector('#admin-product-deactivate')?.addEventListener('click', async () => {
-      if (!confirm('Deactivate this product? It will stop showing in the shop.')) return;
+      if (!confirm(t('adminProducts.confirmDeactivate'))) return;
       try {
         const token = await getCSRFToken();
         const res = await fetch(`/api/v1/admin/shop/products/${existing.id}`, {

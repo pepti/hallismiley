@@ -1,3 +1,5 @@
+import { t, href } from '../i18n/i18n.js';
+
 export class TermsView {
   async render() {
     const view = document.createElement('div');
@@ -6,8 +8,8 @@ export class TermsView {
       <main class="main legal-page" id="main-content">
         <article class="legal-article">
           <header class="legal-header">
-            <p class="admin-eyebrow">Legal</p>
-            <h1 class="legal-title">Terms of Service</h1>
+            <p class="admin-eyebrow">${t('legal.eyebrow')}</p>
+            <h1 class="legal-title">${t('terms.title')}</h1>
             <p class="legal-meta">Last updated: 28 March 2026</p>
           </header>
 
@@ -53,7 +55,7 @@ export class TermsView {
           </section>
 
           <footer class="legal-footer-nav">
-            <a href="#/" class="btn btn--outline">Back to Home</a>
+            <a href="${href('/')}" class="btn btn--outline">${t('common.backToHome')}</a>
           </footer>
         </article>
       </main>

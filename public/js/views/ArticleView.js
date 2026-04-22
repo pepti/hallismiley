@@ -7,6 +7,7 @@ import { getUser } from '../services/auth.js';
 import { getCsrfHeaders }           from '../utils/api.js';
 import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
+import { t, href }                  from '../i18n/i18n.js';
 
 // Tags allowed in article body (whitelist for DOMParser sanitisation)
 const ALLOWED_TAGS = new Set([
@@ -116,7 +117,7 @@ export class ArticleView {
     this._view.className = 'view article-page';
 
     // Show skeleton while loading
-    this._view.innerHTML = `<div class="article-page__loading">Loading article…</div>`;
+    this._view.innerHTML = `<div class="article-page__loading">${t('form.loading')}</div>`;
 
     try {
       const user = getUser();
@@ -166,7 +167,7 @@ export class ArticleView {
         <div class="article-page__inner">
           <p class="article-page__error">
             Could not load this article${err && err.message ? ` — ${_esc(err.message)}` : ''}.
-            <a href="#/news">Back to News</a>
+            <a href="${href('/news')}">${t('news.backToNews')}</a>
           </p>
         </div>`;
     }
@@ -185,9 +186,9 @@ export class ArticleView {
     return `
       <div class="article-page__inner article-page__inner--narrow">
         <p class="article-page__eyebrow">404</p>
-        <h1 class="article-page__404-title">Article Not Found</h1>
-        <p class="article-page__404-desc">This article doesn't exist or may have been removed.</p>
-        <a href="#/news" class="article-back-link">← Back to News</a>
+        <h1 class="article-page__404-title">${t('article.notFound')}</h1>
+        <p class="article-page__404-desc">${t('article.notFoundDesc')}</p>
+        <a href="${href('/news')}" class="article-back-link">← ${t('news.backToNews')}</a>
       </div>`;
   }
 
@@ -269,10 +270,10 @@ export class ArticleView {
       ? `<div class="article-admin-bar">
            ${draftBadge}
            <button class="article-admin-btn article-admin-btn--edit" id="article-edit-btn">
-             Edit Article
+             ${t('news.editArticle')}
            </button>
            <button class="article-admin-btn article-admin-btn--delete" id="article-delete-btn">
-             Delete
+             ${t('admin.delete')}
            </button>
          </div>`
       : '';
@@ -283,12 +284,12 @@ export class ArticleView {
       ${coverHtml}
       <div class="article-page__inner">
         <nav class="article-nav">
-          <a href="#/news" class="article-back-link">
+          <a href="${href('/news')}" class="article-back-link">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
-            Back to News
+            ${t('news.backToNews')}
           </a>
           ${adminBtns}
         </nav>
@@ -314,14 +315,14 @@ export class ArticleView {
                 <polyline points="16 6 12 2 8 6"/>
                 <line x1="12" y1="2" x2="12" y2="15"/>
               </svg>
-              Share
+              ${t('article.share')}
             </button>
             <span class="article-share-confirm" id="share-confirm" aria-live="polite"></span>
           </footer>
         </article>
 
         <div class="article-page__back">
-          <a href="#/news" class="article-back-link">← All Articles</a>
+          <a href="${href('/news')}" class="article-back-link">← ${t('article.allArticles')}</a>
         </div>
       </div>
     `;
@@ -337,7 +338,7 @@ export class ArticleView {
         try {
           await navigator.clipboard.writeText(url);
           if (confirm) {
-            confirm.textContent = 'Link copied!';
+            confirm.textContent = t('article.linkCopied');
             setTimeout(() => { confirm.textContent = ''; }, 2500);
           }
         } catch {
@@ -366,9 +367,9 @@ export class ArticleView {
     overlay.id    = 'article-editor-overlay';
     overlay.className = 'news-editor-overlay';
     overlay.innerHTML = `
-      <div class="news-editor" role="dialog" aria-modal="true" aria-label="Edit Article">
+      <div class="news-editor" role="dialog" aria-modal="true" aria-label="${t('news.editArticle')}">
         <div class="news-editor__header">
-          <h2 class="news-editor__title">Edit Article</h2>
+          <h2 class="news-editor__title">${t('news.editArticle')}</h2>
           <button class="news-editor__close" aria-label="Close editor">✕</button>
         </div>
         <form class="news-editor__form" id="article-edit-form" novalidate>
@@ -430,8 +431,8 @@ export class ArticleView {
 
           <div class="news-editor__status" id="edit-status" aria-live="polite"></div>
           <div class="news-editor__actions">
-            <button type="button" class="news-editor__btn news-editor__btn--cancel" id="edit-cancel-btn">Cancel</button>
-            <button type="submit" class="news-editor__btn news-editor__btn--save">Save Changes</button>
+            <button type="button" class="news-editor__btn news-editor__btn--cancel" id="edit-cancel-btn">${t('admin.cancel')}</button>
+            <button type="submit" class="news-editor__btn news-editor__btn--save">${t('form.saveChanges')}</button>
           </div>
         </form>
       </div>
@@ -472,7 +473,7 @@ export class ArticleView {
 
       status.textContent  = '';
       saveBtn.disabled    = true;
-      saveBtn.textContent = 'Saving…';
+      saveBtn.textContent = t('form.saving');
 
       try {
         const headers = await getCsrfHeaders();
@@ -494,7 +495,7 @@ export class ArticleView {
         status.textContent = err.message;
       } finally {
         saveBtn.disabled    = false;
-        saveBtn.textContent = 'Save Changes';
+        saveBtn.textContent = t('form.saveChanges');
       }
     });
 
@@ -853,7 +854,7 @@ export class ArticleView {
   }
 
   _confirmDelete() {
-    if (!confirm('Delete this article? This cannot be undone.')) return;
+    if (!confirm(t('article.confirmDelete'))) return;
     this._deleteArticle();
   }
 
@@ -867,7 +868,7 @@ export class ArticleView {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Delete failed');
       }
-      window.location.hash = '#/news';
+      window.location.hash = href('/news');
     } catch (err) {
       alert(`Could not delete article: ${err.message}`);
     }

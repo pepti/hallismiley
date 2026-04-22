@@ -9,6 +9,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { t, href } from '../i18n/i18n.js';
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ export class ContactView {
   async _loadAllContent() {
     await Promise.all(SECTIONS.map(async s => {
       try {
-        const res = await fetch(`/api/v1/content/${s.key}`);
+        const res = await fetch(`/api/v1/content/${s.key}?locale=${encodeURIComponent(window.__locale || 'en')}`);
         if (res.ok) {
           const data = await res.json();
           this[s.field] = this._mergeWithDefaults(s.defaults, data);
@@ -293,7 +294,7 @@ export class ContactView {
                  style="position:absolute;left:-9999px;opacity:0;height:0;width:0;pointer-events:none;" />
 
           <div class="contact-form__field">
-            <label for="contact-page-topic" class="contact-form__label">Topic</label>
+            <label for="contact-page-topic" class="contact-form__label">${t('contact.topic')}</label>
             <select id="contact-page-topic" name="topic" class="contact-form__input contact-form__select">
               ${topicOptions}
             </select>
@@ -302,14 +303,14 @@ export class ContactView {
           <div class="contact-form__row">
             <div class="contact-form__field">
               <label for="contact-page-name" class="contact-form__label">
-                Name <span aria-hidden="true" class="required-mark">*</span>
+                ${t('contact.name')} <span aria-hidden="true" class="required-mark">*</span>
               </label>
               <input type="text" id="contact-page-name" name="name" class="contact-form__input"
                      required autocomplete="name" placeholder="Your name" maxlength="100" />
             </div>
             <div class="contact-form__field">
               <label for="contact-page-email" class="contact-form__label">
-                Email <span aria-hidden="true" class="required-mark">*</span>
+                ${t('contact.email')} <span aria-hidden="true" class="required-mark">*</span>
               </label>
               <input type="email" id="contact-page-email" name="email" class="contact-form__input"
                      required autocomplete="email" placeholder="your@email.com" maxlength="200" />
@@ -318,7 +319,7 @@ export class ContactView {
 
           <div class="contact-form__field">
             <label for="contact-page-message" class="contact-form__label">
-              Message <span aria-hidden="true" class="required-mark">*</span>
+              ${t('contact.message')} <span aria-hidden="true" class="required-mark">*</span>
             </label>
             <textarea id="contact-page-message" name="message" class="contact-form__textarea"
                       required rows="6" placeholder="What is on your mind?" maxlength="2000"></textarea>
@@ -512,12 +513,12 @@ export class ContactView {
 
       if (!name || !email || !message) {
         status.className = 'contact-form__status contact-form__status--error';
-        status.textContent = 'Please fill in all required fields.';
+        status.textContent = t('form.requiredFields');
         return;
       }
 
       submit.disabled = true;
-      submit.textContent = 'Sending…';
+      submit.textContent = t('form.sending');
       status.className = 'contact-form__status';
       status.textContent = '';
 
@@ -532,7 +533,7 @@ export class ContactView {
           const emailAddr = this._card.items.find(x => x.type === 'email')?.href
             || DEFAULT_CARD.items[0].href;
           status.className = 'contact-form__status contact-form__status--success';
-          status.textContent = `Got it — I'll reply from ${emailAddr} within a few days.`;
+          status.textContent = t('contact.sent');
           form.reset();
         } else {
           const data = await res.json().catch(() => ({}));
@@ -558,16 +559,16 @@ export class ContactView {
     editBtn.className = 'contact-view__edit-btn';
     editBtn.setAttribute('aria-label', 'Edit Contact page');
     editBtn.setAttribute('data-testid', 'edit-contact-page-btn');
-    editBtn.textContent = 'Edit Page';
+    editBtn.textContent = t('admin.editPage');
     view.appendChild(editBtn);
 
     const controls = document.createElement('div');
     controls.className = 'contact-view__edit-controls contact-view__edit-controls--hidden';
     controls.innerHTML = `
       <button type="button" class="contact-view__save-btn"
-              data-testid="edit-contact-page-save">Save Changes</button>
+              data-testid="edit-contact-page-save">${t('form.saveChanges')}</button>
       <button type="button" class="contact-view__cancel-btn"
-              data-testid="edit-contact-page-cancel">Cancel</button>
+              data-testid="edit-contact-page-cancel">${t('admin.cancel')}</button>
       <span class="contact-view__edit-status" aria-live="polite"></span>`;
     view.appendChild(controls);
 
@@ -618,7 +619,7 @@ export class ContactView {
   // ── Collect DOM → payloads, PUT in parallel, report per-section results ──
   async _saveAll(view, editBtn, controls) {
     const status = controls.querySelector('.contact-view__edit-status');
-    status.textContent = 'Saving…';
+    status.textContent = t('form.saving');
 
     const payloads = {
       _hero:         this._collectHero(view),
@@ -669,7 +670,7 @@ export class ContactView {
       return;
     }
 
-    status.textContent = 'Saved!';
+    status.textContent = t('form.saved');
     setTimeout(() => this._exitPageEdit(view, editBtn, controls), 1200);
   }
 

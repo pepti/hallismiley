@@ -3,6 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { t, href } from '../i18n/i18n.js';
 
 // ── Default content — compelling placeholder biography ────────────────────
 const DEFAULT_CONTENT = {
@@ -119,7 +120,7 @@ export class HalliView {
   // ── Load content ─────────────────────────────────────────────────────────
   async _loadContent() {
     try {
-      const res = await fetch('/api/v1/content/halli_bio');
+      const res = await fetch(`/api/v1/content/halli_bio?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         this._content = await res.json();
         return;
@@ -378,8 +379,8 @@ export class HalliView {
         <p class="hb-body hb-reveal hb-d3">
           <span data-field="future_text2">${this._c('future_text2')}</span>
         </p>
-        <a href="#/" data-scroll="contact" class="hb-cta hb-reveal hb-d4">
-          Start a conversation
+        <a href="${href('/')}" data-scroll="contact" class="hb-cta hb-reveal hb-d4">
+          ${t('halli.startConversation')}
         </a>
       </div>
     </section>`;
@@ -497,15 +498,15 @@ export class HalliView {
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
       </svg>
-      Edit Page`;
+      ${t('admin.editPage')}`;
 
     // Save/cancel bar
     const controls = document.createElement('div');
     controls.className = 'hb-edit-controls';
     controls.setAttribute('data-testid', 'edit-controls');
     controls.innerHTML = `
-      <button type="button" class="hb-edit-save"   data-testid="edit-save-btn">Save</button>
-      <button type="button" class="hb-edit-cancel" data-testid="edit-cancel-btn">Cancel</button>
+      <button type="button" class="hb-edit-save"   data-testid="edit-save-btn">${t('form.save')}</button>
+      <button type="button" class="hb-edit-cancel" data-testid="edit-cancel-btn">${t('admin.cancel')}</button>
       <span class="hb-edit-status" aria-live="polite"></span>`;
 
     view.appendChild(editBtn);
@@ -563,7 +564,7 @@ export class HalliView {
 
   async _saveEdit(view, controls) {
     const status = controls.querySelector('.hb-edit-status');
-    status.textContent = 'Saving…';
+    status.textContent = t('form.saving');
 
     // Collect all data-field values from DOM
     const updated = { ...this._content };
@@ -589,7 +590,7 @@ export class HalliView {
       }
 
       this._content   = await res.json();
-      status.textContent = 'Saved!';
+      status.textContent = t('form.saved');
       setTimeout(() => { status.textContent = ''; }, 2500);
 
       const editBtn = view.querySelector('.hb-edit-btn');

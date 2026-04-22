@@ -1,5 +1,6 @@
 import { projectApi } from '../api/projectApi.js';
 import { showToast }  from './Toast.js';
+import { t } from '../i18n/i18n.js';
 
 export class ProjectForm {
   constructor(onSaved) {
@@ -16,54 +17,54 @@ export class ProjectForm {
     overlay.setAttribute('aria-labelledby', 'pform-title');
     overlay.innerHTML = `
       <div class="modal project-form-modal">
-        <button class="modal__close" aria-label="Close">&times;</button>
-        <h2 class="modal__title" id="pform-title">Add Project</h2>
+        <button class="modal__close" aria-label="${t('common.close')}">&times;</button>
+        <h2 class="modal__title" id="pform-title">${t('admin.createProject')}</h2>
         <form class="project-form" novalidate>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="pf-title">Title <span class="req">*</span></label>
+              <label class="form-label" for="pf-title">${t('admin.title')} <span class="req">*</span></label>
               <input class="form-input" id="pf-title" name="title" type="text" required maxlength="200" />
             </div>
             <div class="form-group">
-              <label class="form-label" for="pf-year">Year <span class="req">*</span></label>
+              <label class="form-label" for="pf-year">${t('admin.year')} <span class="req">*</span></label>
               <input class="form-input" id="pf-year" name="year" type="number"
                 min="1900" max="2100" required />
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label" for="pf-desc">Description <span class="req">*</span></label>
+            <label class="form-label" for="pf-desc">${t('admin.description')} <span class="req">*</span></label>
             <textarea class="form-input form-textarea" id="pf-desc" name="description"
               required maxlength="2000" rows="4"></textarea>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="pf-category">Category <span class="req">*</span></label>
+              <label class="form-label" for="pf-category">${t('admin.category')} <span class="req">*</span></label>
               <select class="form-input form-select" id="pf-category" name="category" required>
-                <option value="">Select…</option>
-                <option value="carpentry">Carpentry</option>
-                <option value="tech">Tech</option>
+                <option value="">${t('form.selectPlaceholder')}</option>
+                <option value="carpentry">${t('projects.carpentry')}</option>
+                <option value="tech">${t('projects.tech')}</option>
               </select>
             </div>
             <div class="form-group form-group--check">
               <label class="form-check">
                 <input type="checkbox" name="featured" id="pf-featured" />
-                <span>Featured project</span>
+                <span>${t('admin.featured')}</span>
               </label>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label" for="pf-tools">Tools used <span class="form-hint">(comma-separated)</span></label>
+            <label class="form-label" for="pf-tools">${t('admin.tools')} <span class="form-hint">(${t('projects.commaSeparated')})</span></label>
             <input class="form-input" id="pf-tools" name="tools_used" type="text"
               placeholder="e.g. Node.js, Express, PostgreSQL" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="pf-image">Image URL</label>
+            <label class="form-label" for="pf-image">${t('admin.imageUrl')}</label>
             <input class="form-input" id="pf-image" name="image_url" type="url" />
           </div>
           <p class="form-error" aria-live="polite"></p>
           <div class="form-actions">
-            <button class="btn btn--ghost" type="button" data-action="cancel">Cancel</button>
-            <button class="btn btn--primary" type="submit">Save project</button>
+            <button class="btn btn--ghost" type="button" data-action="cancel">${t('admin.cancel')}</button>
+            <button class="btn btn--primary" type="submit">${t('projects.saveProject')}</button>
           </div>
         </form>
       </div>
@@ -84,8 +85,8 @@ export class ProjectForm {
     this._project = project;
     const isEdit = !!project;
 
-    this._overlay.querySelector('#pform-title').textContent = isEdit ? 'Edit Project' : 'Add Project';
-    this._overlay.querySelector('[type=submit]').textContent = isEdit ? 'Save changes' : 'Save project';
+    this._overlay.querySelector('#pform-title').textContent = isEdit ? t('admin.editProject') : t('admin.createProject');
+    this._overlay.querySelector('[type=submit]').textContent = isEdit ? t('form.saveChanges') : t('projects.saveProject');
 
     const form = this._overlay.querySelector('.project-form');
     form.reset();
@@ -124,17 +125,17 @@ export class ProjectForm {
       category:    form.category.value,
       year:        Number(form.year.value),
       featured:    form.featured.checked,
-      tools_used:  form.tools_used.value.split(',').map(t => t.trim()).filter(Boolean),
+      tools_used:  form.tools_used.value.split(',').map(s => s.trim()).filter(Boolean),
       image_url:   form.image_url.value.trim() || null,
     };
 
     try {
       if (this._project) {
         await projectApi.update(this._project.id, data);
-        showToast('Project updated', 'success');
+        showToast(t('projects.projectUpdated'), 'success');
       } else {
         await projectApi.create(data);
-        showToast('Project created', 'success');
+        showToast(t('projects.projectCreated'), 'success');
       }
       this.close();
       this._onSaved?.();

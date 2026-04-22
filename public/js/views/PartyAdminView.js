@@ -2,6 +2,7 @@ import { isAuthenticated, isAdmin, canEdit, adminUpdateUser } from '../services/
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
+import { t, href } from '../i18n/i18n.js';
 
 export class PartyAdminView {
   constructor() {
@@ -14,16 +15,16 @@ export class PartyAdminView {
     this._el = el;
 
     if (!isAuthenticated() || !canEdit()) {
-      el.innerHTML = '<div class="party-error"><p>Admin or moderator access required.</p></div>';
+      el.innerHTML = `<div class="party-error"><p>${t('party.admin.accessRequired')}</p></div>`;
       return el;
     }
 
-    el.innerHTML = '<div class="party-admin-loading">Loading…</div>';
+    el.innerHTML = `<div class="party-admin-loading">${t('form.loading')}</div>`;
 
     try {
       await this._loadAndRender();
     } catch (err) {
-      el.innerHTML = `<div class="party-error"><p>Failed to load admin panel.</p></div>`;
+      el.innerHTML = `<div class="party-error"><p>${t('party.admin.loadError')}</p></div>`;
     }
 
     return el;
@@ -58,9 +59,9 @@ export class PartyAdminView {
     return `
       <div class="party-admin">
         <div class="party-admin__header">
-          <h1 class="party-admin__title">🎂 Party Admin</h1>
+          <h1 class="party-admin__title">🎂 ${t('party.admin.title')}</h1>
           ${this._renderHealthPill()}
-          <a href="#/party" class="lol-btn lol-btn--ghost">← Back to Party</a>
+          <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
         ${this._renderInvitedGuests()}
@@ -93,24 +94,24 @@ export class PartyAdminView {
 
     const rows = sorted.length
       ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
-      : `<tr><td colspan="${showRevoke ? 5 : 4}" class="party-empty">No invited guests yet. Share the invite code to get started.</td></tr>`;
+      : `<tr><td colspan="${showRevoke ? 5 : 4}" class="party-empty">${t('party.admin.noGuests')}</td></tr>`;
 
     return `
       <section class="party-admin__section">
-        <h2 class="party-admin__section-title">Invited Guests (${guests.length})</h2>
+        <h2 class="party-admin__section-title">${t('party.admin.invitedGuests', { n: guests.length })}</h2>
         <p class="party-admin__invited-summary">
-          <span class="party-admin__pill party-admin__pill--waiting">⏳ Waiting: ${counts.waiting || 0}</span>
-          <span class="party-admin__pill party-admin__pill--going">✅ Going: ${counts.rsvpd || 0}</span>
-          <span class="party-admin__pill party-admin__pill--declined">❌ Can't make it: ${counts.declined || 0}</span>
+          <span class="party-admin__pill party-admin__pill--waiting">⏳ ${t('party.admin.statusWaiting')}: ${counts.waiting || 0}</span>
+          <span class="party-admin__pill party-admin__pill--going">✅ ${t('party.admin.statusGoing')}: ${counts.rsvpd || 0}</span>
+          <span class="party-admin__pill party-admin__pill--declined">❌ ${t('party.admin.statusDeclined')}: ${counts.declined || 0}</span>
         </p>
         <div class="party-admin__table-wrap">
-          <table class="party-admin__table party-admin__table--invited" aria-label="Invited guests">
+          <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.invitedGuests', { n: '' }).trim()}">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th>RSVP'd at</th>
+                <th>${t('adminUsers.username')}</th>
+                <th>${t('adminUsers.email')}</th>
+                <th>${t('adminOrders.status')}</th>
+                <th>${t('party.admin.rsvpdAt')}</th>
                 ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
               </tr>
             </thead>
@@ -130,9 +131,9 @@ export class PartyAdminView {
       : '—';
 
     const statusHtml = {
-      rsvpd:    '<span class="party-admin__status party-admin__status--going">✅ Going</span>',
-      declined: '<span class="party-admin__status party-admin__status--declined">❌ Can\'t make it</span>',
-      waiting:  '<span class="party-admin__status party-admin__status--waiting">⏳ Waiting</span>',
+      rsvpd:    `<span class="party-admin__status party-admin__status--going">✅ ${t('party.admin.statusGoing')}</span>`,
+      declined: `<span class="party-admin__status party-admin__status--declined">❌ ${t('party.admin.statusDeclined')}</span>`,
+      waiting:  `<span class="party-admin__status party-admin__status--waiting">⏳ ${t('party.admin.statusWaiting')}</span>`,
     }[g.rsvp_status] || '—';
 
     // Detail row — full answer dump, hidden until row is clicked
@@ -144,11 +145,11 @@ export class PartyAdminView {
           const val = Array.isArray(a) ? a.map(escHtml).join(', ') : escHtml(String(a));
           return `<div><strong>${escHtml(f.label || f.id)}:</strong> ${val}</div>`;
         }).filter(Boolean).join('')
-      : '<em class="party-admin__no-answers">Hasn\'t RSVP\'d yet.</em>';
+      : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`;
 
     const colSpan = showRevoke ? 5 : 4;
     const revokeCell = showRevoke
-      ? `<td><button class="lol-btn lol-btn--ghost lol-btn--sm" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}">Revoke</button></td>`
+      ? `<td><button class="lol-btn lol-btn--ghost lol-btn--sm" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}">${t('profile.revoke')}</button></td>`
       : '';
 
     return `
@@ -191,17 +192,14 @@ export class PartyAdminView {
   _renderInviteCodeSection() {
     return `
       <section class="party-admin__section party-admin__invite">
-        <h2 class="party-admin__section-title">Invite Code</h2>
-        <p class="party-admin__invite-help">
-          Share this code with invited guests. They redeem it on the party page to unlock RSVP and Activities.
-          Change it any time to rotate access; already-redeemed guests keep their access.
-        </p>
+        <h2 class="party-admin__section-title">${t('party.inviteCode')}</h2>
+        <p class="party-admin__invite-help">${t('party.admin.inviteHelp')}</p>
         <form class="party-admin__invite-form" id="party-admin-invite-form">
           <input type="text" id="party-admin-invite-input" class="lol-input"
                  value="${escHtml(this._inviteCode)}" maxlength="100" autocomplete="off"
-                 aria-label="Invite code" />
-          <button type="submit" class="lol-btn lol-btn--primary">Save</button>
-          <button type="button" class="lol-btn lol-btn--ghost" id="party-admin-invite-copy">Copy</button>
+                 aria-label="${t('party.inviteCode')}" />
+          <button type="submit" class="lol-btn lol-btn--primary">${t('form.save')}</button>
+          <button type="button" class="lol-btn lol-btn--ghost" id="party-admin-invite-copy">${t('party.admin.copy')}</button>
           <span class="party-admin__invite-status" id="party-admin-invite-status" aria-live="polite"></span>
         </form>
       </section>`;
@@ -238,34 +236,34 @@ export class PartyAdminView {
       breakdownCards = `
         <div class="party-admin__stat">
           <span class="party-admin__stat-num">${day}</span>
-          <span class="party-admin__stat-label">☀️ Day only</span>
+          <span class="party-admin__stat-label">☀️ ${t('party.admin.dayOnly')}</span>
         </div>
         <div class="party-admin__stat">
           <span class="party-admin__stat-num">${evening}</span>
-          <span class="party-admin__stat-label">🌙 Evening only</span>
+          <span class="party-admin__stat-label">🌙 ${t('party.admin.eveningOnly')}</span>
         </div>
         <div class="party-admin__stat">
           <span class="party-admin__stat-num">${both}</span>
-          <span class="party-admin__stat-label">🎉 Both</span>
+          <span class="party-admin__stat-label">🎉 ${t('party.admin.both')}</span>
         </div>
         <div class="party-admin__stat party-admin__stat--muted">
           <span class="party-admin__stat-num">${declined}</span>
-          <span class="party-admin__stat-label">Can't make it</span>
+          <span class="party-admin__stat-label">${t('party.admin.statusDeclined')}</span>
         </div>`;
     }
 
     return `
       <section class="party-admin__section">
-        <h2 class="party-admin__section-title">Stats</h2>
+        <h2 class="party-admin__section-title">${t('party.admin.stats')}</h2>
         <div class="party-admin__stats">
           <div class="party-admin__stat">
             <span class="party-admin__stat-num">${rsvps.length}</span>
-            <span class="party-admin__stat-label">RSVPs submitted</span>
+            <span class="party-admin__stat-label">${t('party.admin.rsvpsSubmitted')}</span>
           </div>
           ${breakdownCards}
           <div class="party-admin__stat party-admin__stat--gold">
             <span class="party-admin__stat-num">${headcount}</span>
-            <span class="party-admin__stat-label">Total Headcount</span>
+            <span class="party-admin__stat-label">${t('party.admin.totalHeadcount')}</span>
           </div>
         </div>
       </section>`;
@@ -295,18 +293,18 @@ export class PartyAdminView {
           <td>${escHtml(r.email)}</td>
           ${fieldCells}
         </tr>`;
-    }).join('') || `<tr><td colspan="${colCount}" class="party-empty">No RSVPs yet</td></tr>`;
+    }).join('') || `<tr><td colspan="${colCount}" class="party-empty">${t('party.admin.noRsvps')}</td></tr>`;
 
     const fieldHeaders = fields.map(f => `<th>${escHtml(f.label || f.id)}</th>`).join('');
 
     return `
       <section class="party-admin__section">
-        <h2 class="party-admin__section-title">RSVPs</h2>
+        <h2 class="party-admin__section-title">${t('party.admin.totalRsvps')}</h2>
         <div class="party-admin__table-wrap">
-          <table class="party-admin__table" aria-label="RSVP list">
+          <table class="party-admin__table" aria-label="${t('party.admin.totalRsvps')}">
             <thead>
               <tr>
-                <th>Name</th><th>Email</th>${fieldHeaders}
+                <th>${t('adminUsers.username')}</th><th>${t('adminUsers.email')}</th>${fieldHeaders}
               </tr>
             </thead>
             <tbody>
@@ -374,7 +372,7 @@ export class PartyAdminView {
     const cards = helpers.map(({ rsvp, offers, detail }) => {
       const chips = offers.map(o => `<span class="party-admin__chip">${escHtml(o)}</span>`).join('');
       const detailHtml = detail
-        ? `<p class="party-admin__helper-detail"><strong>Activity:</strong> ${escHtml(detail)}</p>`
+        ? `<p class="party-admin__helper-detail"><strong>${t('party.admin.activity')}:</strong> ${escHtml(detail)}</p>`
         : '';
       return `
         <div class="party-admin__helper-card">
@@ -387,7 +385,7 @@ export class PartyAdminView {
 
     return `
       <section class="party-admin__section">
-        <h2 class="party-admin__section-title">🙋 Helpers (${helpers.length})</h2>
+        <h2 class="party-admin__section-title">🙋 ${t('party.admin.helpers', { n: helpers.length })}</h2>
         <div class="party-admin__helpers">${cards}</div>
       </section>`;
   }
@@ -408,8 +406,8 @@ export class PartyAdminView {
 
     return `
       <section class="party-admin__section">
-        <h2 class="party-admin__section-title">Guest List Export</h2>
-        <p class="party-admin__export-note">Copy and paste — ${this._rsvps.length} RSVPs:</p>
+        <h2 class="party-admin__section-title">${t('party.admin.guestListExport')}</h2>
+        <p class="party-admin__export-note">${t('party.admin.exportNote', { n: this._rsvps.length })}</p>
         <textarea class="lol-input lol-textarea party-admin__export-area" readonly
                   aria-label="Guest list export">${lines.join('\n\n')}</textarea>
       </section>`;
@@ -439,10 +437,10 @@ export class PartyAdminView {
         e.stopPropagation();
         const userId = btn.dataset.revokeUserId;
         const name   = btn.dataset.revokeUserName || 'this guest';
-        if (!confirm(`Revoke party access for ${name}? They will no longer see RSVP or Activities.`)) return;
+        if (!confirm(t('party.admin.confirmRevoke', { name }))) return;
 
         btn.disabled = true;
-        btn.textContent = 'Revoking…';
+        btn.textContent = t('profile.revoking');
         try {
           await adminUpdateUser(userId, { party_access: false });
           // Remove the two related rows and any cached entry
@@ -451,11 +449,11 @@ export class PartyAdminView {
           row?.remove();
           details?.remove();
           this._invitedGuests = (this._invitedGuests || []).filter(g => g.id !== userId);
-          showToast(`Revoked access for ${name}`, 'success');
+          showToast(t('party.admin.revokedAccess', { name }), 'success');
         } catch (err) {
-          showToast(err.message || 'Failed to revoke', 'error');
+          showToast(err.message || t('party.admin.revokeFailed'), 'error');
           btn.disabled = false;
-          btn.textContent = 'Revoke';
+          btn.textContent = t('profile.revoke');
         }
       });
     });
@@ -472,10 +470,10 @@ export class PartyAdminView {
       e.preventDefault();
       const code = (input?.value || '').trim();
       if (!code) {
-        status.textContent = 'Enter a code';
+        status.textContent = t('party.admin.enterCode');
         return;
       }
-      status.textContent = 'Saving…';
+      status.textContent = t('form.saving');
       try {
         const headers = await getCsrfHeaders();
         const res = await fetch('/api/v1/party/info', {
@@ -489,10 +487,10 @@ export class PartyAdminView {
           throw new Error(data.error || 'Save failed');
         }
         this._inviteCode = code;
-        status.textContent = 'Saved!';
+        status.textContent = t('form.success');
         setTimeout(() => { if (status) status.textContent = ''; }, 2500);
       } catch (err) {
-        status.textContent = `Error: ${err.message}`;
+        status.textContent = err.message;
       }
     });
 
@@ -501,9 +499,9 @@ export class PartyAdminView {
       if (!code) return;
       try {
         await navigator.clipboard.writeText(code);
-        showToast('Code copied', 'success');
+        showToast(t('party.admin.codeCopied'), 'success');
       } catch {
-        showToast('Copy failed — select and copy manually', 'error');
+        showToast(t('party.admin.copyFailed'), 'error');
       }
     });
   }

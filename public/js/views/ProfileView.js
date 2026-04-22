@@ -1,6 +1,7 @@
 import { isAuthenticated, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
+import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -20,7 +21,7 @@ function formatDateTime(str) {
 export class ProfileView {
   async render() {
     if (!isAuthenticated()) {
-      window.location.hash = '#/login';
+      window.location.hash = href('/login');
       return document.createTextNode('');
     }
 
@@ -28,7 +29,7 @@ export class ProfileView {
     el.className = 'main profile-page';
     el.innerHTML = `
       <div class="profile-container">
-        <div class="profile-loading">Loading profile…</div>
+        <div class="profile-loading">${t('profile.loading')}</div>
       </div>
     `;
 
@@ -42,6 +43,7 @@ export class ProfileView {
       const [profile, sessions] = await Promise.all([getProfile(), getSessions()]);
       wrap.innerHTML = this._buildHTML(profile, sessions);
       this._bindEdit(el, profile);
+      this._bindLangPref(el);
       this._bindPassword(el);
       this._bindSessions(el, sessions);
     } catch (err) {
@@ -52,23 +54,23 @@ export class ProfileView {
   _buildHTML(profile, sessions) {
     const avatarName = profile.avatar || 'avatar-01.svg';
     const roleBadge  = profile.role === 'admin'
-      ? `<span class="badge badge--admin">Admin</span>`
-      : `<span class="badge badge--user">User</span>`;
+      ? `<span class="badge badge--admin">${t('adminUsers.setRole')} — admin</span>`
+      : `<span class="badge badge--user">${t('adminUsers.setRole')} — user</span>`;
     const verified = profile.emailVerified
-      ? `<span class="verified-badge">✓ Verified</span>`
-      : `<span class="unverified-badge">✗ Unverified</span>`;
+      ? `<span class="verified-badge">✓ ${t('adminUsers.verified')}</span>`
+      : `<span class="unverified-badge">✗ ${t('adminUsers.unverified')}</span>`;
 
     const sessionRows = (Array.isArray(sessions) ? sessions : []).map(s => `
       <tr data-session-id="${escHtml(s.id)}">
         <td class="session-device">
           <span class="session-device__icon">${s.is_current ? '●' : '○'}</span>
           ${escHtml(s.user_agent || 'Unknown device')}
-          ${s.is_current ? '<span class="session-current-badge">Current</span>' : ''}
+          ${s.is_current ? `<span class="session-current-badge">${t('profile.current')}</span>` : ''}
         </td>
         <td class="session-ip">${escHtml(s.ip_address || '—')}</td>
         <td class="session-date">${formatDateTime(s.created_at)}</td>
         <td>
-          ${!s.is_current ? `<button class="btn btn--sm btn--danger" data-action="revoke" data-id="${escHtml(s.id)}">Revoke</button>` : '—'}
+          ${!s.is_current ? `<button class="btn btn--sm btn--danger" data-action="revoke" data-id="${escHtml(s.id)}">${t('profile.revoke')}</button>` : '—'}
         </td>
       </tr>`).join('');
 
@@ -85,23 +87,23 @@ export class ProfileView {
           </div>
           ${profile.displayName ? `<p class="profile-header__displayname">${escHtml(profile.displayName)}</p>` : ''}
           <p class="profile-header__email">${escHtml(profile.email)}</p>
-          <p class="profile-header__joined">Member since ${formatDate(profile.createdAt)}</p>
+          <p class="profile-header__joined">${t('profile.memberSince')} ${formatDate(profile.createdAt)}</p>
         </div>
-        <button class="btn btn--outline profile-edit-btn" id="profile-edit-btn" data-testid="edit-profile-btn">Edit Profile</button>
+        <button class="btn btn--outline profile-edit-btn" id="profile-edit-btn" data-testid="edit-profile-btn">${t('profile.editProfile')}</button>
       </div>
 
       <!-- Edit panel (hidden by default) -->
       <section class="profile-section" id="edit-section" hidden>
-        <h2 class="profile-section__title">Edit Profile</h2>
+        <h2 class="profile-section__title">${t('profile.editProfile')}</h2>
         <form class="profile-form" id="profile-form" novalidate>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="edit-displayname">Display Name</label>
+              <label class="form-label" for="edit-displayname">${t('signup.displayName')}</label>
               <input class="form-input" id="edit-displayname" name="displayName" type="text"
                      value="${escHtml(profile.displayName || '')}" placeholder="Your display name"/>
             </div>
             <div class="form-group">
-              <label class="form-label" for="edit-phone">Phone</label>
+              <label class="form-label" for="edit-phone">${t('checkout.phone')}</label>
               <input class="form-input" id="edit-phone" name="phone" type="tel"
                      value="${escHtml(profile.phone || '')}" placeholder="+1 555 000 0000"/>
             </div>
@@ -109,14 +111,14 @@ export class ProfileView {
 
           <!-- Custom avatar upload -->
           <div class="form-group">
-            <span class="form-label">Upload Avatar</span>
+            <span class="form-label">${t('profile.uploadAvatar')}</span>
             <div class="avatar-upload">
               <img class="avatar-upload__preview" id="avatar-upload-preview"
                    src="${avatarPathByName(avatarName)}" alt="Avatar preview"/>
               <div class="avatar-upload__controls">
                 <input type="file" id="avatar-upload-input" accept="image/jpeg,image/png,image/webp" hidden/>
-                <button type="button" class="btn btn--outline" id="avatar-upload-btn">Choose Image…</button>
-                <p class="avatar-upload__hint">JPG, PNG, or WebP. Max 5 MB.</p>
+                <button type="button" class="btn btn--outline" id="avatar-upload-btn">${t('profile.chooseImage')}</button>
+                <p class="avatar-upload__hint">${t('profile.avatarHint')}</p>
                 <p class="form-error" id="avatar-upload-error" aria-live="polite"></p>
               </div>
             </div>
@@ -124,42 +126,60 @@ export class ProfileView {
 
           <!-- Avatar picker in edit mode -->
           <div class="form-group">
-            <span class="form-label">Avatar</span>
+            <span class="form-label">${t('signup.chooseAvatar')}</span>
             <div class="avatar-picker" id="edit-avatar-picker"></div>
             <input type="hidden" id="edit-avatar" name="avatar" value="${escHtml(avatarName)}"/>
           </div>
 
           <p class="form-error" id="edit-error" aria-live="polite"></p>
           <div class="form-actions">
-            <button type="button" class="btn btn--ghost" id="edit-cancel-btn">Cancel</button>
-            <button type="submit" class="btn btn--primary" id="edit-save-btn">Save Changes</button>
+            <button type="button" class="btn btn--ghost" id="edit-cancel-btn">${t('admin.cancel')}</button>
+            <button type="submit" class="btn btn--primary" id="edit-save-btn">${t('profile.saveChanges')}</button>
           </div>
         </form>
       </section>
 
+      <!-- Language preference -->
+      <section class="profile-section" id="lang-section">
+        <h2 class="profile-section__title">${t('profile.languagePreference')}</h2>
+        <p style="font-size:14px;color:#888;margin:0 0 16px;">${t('profile.languageDescription')}</p>
+        <div class="form-group" style="max-width:260px;">
+          <select class="form-input" id="lang-select">
+            ${SUPPORTED_LOCALES.map(lc => `
+              <option value="${lc}" ${lc === (profile.preferredLocale || profile.preferred_locale || 'en') ? 'selected' : ''}>
+                ${lc === 'en' ? t('nav.switchToEn') : t('nav.switchToIs')}
+              </option>`).join('')}
+          </select>
+          <p class="form-error" id="lang-error" aria-live="polite" style="margin-top:8px;"></p>
+        </div>
+        <div class="form-actions" style="margin-top:12px;">
+          <button class="btn btn--primary" id="lang-save-btn">${t('profile.saveChanges')}</button>
+        </div>
+      </section>
+
       <!-- Change password -->
       <section class="profile-section">
-        <h2 class="profile-section__title">Change Password</h2>
+        <h2 class="profile-section__title">${t('profile.changePassword')}</h2>
         <form class="profile-form" id="pw-form" novalidate data-testid="change-password-form">
           <div class="form-group">
-            <label class="form-label" for="pw-current">Current Password</label>
+            <label class="form-label" for="pw-current">${t('profile.currentPassword')}</label>
             <input class="form-input" id="pw-current" name="currentPassword" type="password"
                    autocomplete="current-password" required/>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="pw-new">New Password</label>
+              <label class="form-label" for="pw-new">${t('profile.newPassword')}</label>
               <input class="form-input" id="pw-new" name="newPassword" type="password"
                      autocomplete="new-password" required/>
               <div class="password-strength" id="pw-strength-edit" aria-live="polite"></div>
               <ul class="pw-requirements">
-                <li id="edit-req-length">At least 8 characters</li>
-                <li id="edit-req-letter">At least 1 letter</li>
-                <li id="edit-req-number">At least 1 number</li>
+                <li id="edit-req-length">${t('signup.req8chars')}</li>
+                <li id="edit-req-letter">${t('signup.req1letter')}</li>
+                <li id="edit-req-number">${t('signup.req1number')}</li>
               </ul>
             </div>
             <div class="form-group">
-              <label class="form-label" for="pw-confirm">Confirm New Password</label>
+              <label class="form-label" for="pw-confirm">${t('profile.confirmNewPassword')}</label>
               <input class="form-input" id="pw-confirm" name="confirmPassword" type="password"
                      autocomplete="new-password" required/>
               <p class="form-field-status" id="pw-confirm-status"></p>
@@ -167,7 +187,7 @@ export class ProfileView {
           </div>
           <p class="form-error" id="pw-error" aria-live="polite"></p>
           <div class="form-actions">
-            <button type="submit" class="btn btn--primary" id="pw-save-btn">Update Password</button>
+            <button type="submit" class="btn btn--primary" id="pw-save-btn">${t('profile.updatePassword')}</button>
           </div>
         </form>
       </section>
@@ -175,21 +195,21 @@ export class ProfileView {
       <!-- Active sessions -->
       <section class="profile-section">
         <div class="profile-section__header-row">
-          <h2 class="profile-section__title">Active Sessions</h2>
-          <button class="btn btn--sm btn--danger" id="revoke-all-btn">Revoke All Others</button>
+          <h2 class="profile-section__title">${t('profile.activeSessions')}</h2>
+          <button class="btn btn--sm btn--danger" id="revoke-all-btn">${t('profile.revokeAllOthers')}</button>
         </div>
         <div class="admin-table-wrap" id="sessions-wrap" data-testid="sessions-list">
           <table class="admin-table">
             <thead>
               <tr>
-                <th>Device / Browser</th>
-                <th>IP Address</th>
-                <th>Started</th>
-                <th>Action</th>
+                <th>${t('profile.device')}</th>
+                <th>${t('profile.ipAddress')}</th>
+                <th>${t('profile.started')}</th>
+                <th>${t('adminUsers.actions')}</th>
               </tr>
             </thead>
             <tbody id="sessions-tbody">
-              ${sessionRows || '<tr><td colspan="4" class="empty-state">No sessions found.</td></tr>'}
+              ${sessionRows || `<tr><td colspan="4" class="empty-state">${t('profile.noSessions')}</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -236,17 +256,17 @@ export class ProfileView {
       const MAX = 5 * 1024 * 1024;
       const allowed = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowed.includes(file.type)) {
-        errEl.textContent = 'Please choose a JPG, PNG, or WebP image.';
+        errEl.textContent = t('profile.avatarTypeError');
         input.value = ''; return;
       }
       if (file.size > MAX) {
-        errEl.textContent = 'Image must not exceed 5 MB.';
+        errEl.textContent = t('profile.avatarSizeError');
         input.value = ''; return;
       }
 
       btn.disabled = true;
       const originalLabel = btn.textContent;
-      btn.textContent = 'Uploading…';
+      btn.textContent = t('form.uploading');
       try {
         const updated = await uploadAvatar(file);
         const newName = updated.avatar;
@@ -260,7 +280,7 @@ export class ProfileView {
         // Deselect any picker swatch since the avatar is now custom.
         el.querySelectorAll('.avatar-picker__item--selected')
           .forEach(b => b.classList.remove('avatar-picker__item--selected'));
-        showToast('Avatar updated', 'success');
+        showToast(t('profile.avatarUpdated'), 'success');
       } catch (err) {
         errEl.textContent = err.message;
       } finally {
@@ -296,7 +316,7 @@ export class ProfileView {
       const saveBtn = el.querySelector('#edit-save-btn');
       errEl.textContent = '';
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
+      saveBtn.textContent = t('form.saving');
       try {
         const updated = await updateProfile({
           displayName: form.displayName.value.trim() || null,
@@ -308,12 +328,12 @@ export class ProfileView {
         el.querySelector('#profile-avatar-img').src = avatarPathByName(avatarName);
         section.hidden = true;
         editBtn.hidden = false;
-        showToast('Profile updated', 'success');
+        showToast(t('profile.profileUpdated'), 'success');
       } catch (err) {
         errEl.textContent = err.message;
       } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Changes';
+        saveBtn.textContent = t('profile.saveChanges');
       }
     });
   }
@@ -340,7 +360,7 @@ export class ProfileView {
       const statusEl = el.querySelector('#pw-confirm-status');
       if (!pwConfirm.value) { statusEl.textContent = ''; return; }
       const match = pwConfirm.value === pwNew.value;
-      statusEl.textContent = match ? '✓ Passwords match' : '✗ Do not match';
+      statusEl.textContent = match ? `✓ ${t('signup.passwordsMatch')}` : `✗ ${t('signup.passwordsMismatch')}`;
       statusEl.className   = 'form-field-status ' + (match ? 'status--ok' : 'status--err');
     });
 
@@ -352,14 +372,14 @@ export class ProfileView {
       errEl.textContent = '';
 
       if (form.newPassword.value !== form.confirmPassword.value) {
-        errEl.textContent = 'Passwords do not match.'; return;
+        errEl.textContent = t('signup.passwordsMismatch'); return;
       }
       if (form.newPassword.value.length < 8) {
-        errEl.textContent = 'New password must be at least 8 characters.'; return;
+        errEl.textContent = t('signup.pwMinLength'); return;
       }
 
       btn.disabled = true;
-      btn.textContent = 'Updating…';
+      btn.textContent = t('profile.updating');
       try {
         await changePassword(form.currentPassword.value, form.newPassword.value);
         form.reset();
@@ -368,12 +388,36 @@ export class ProfileView {
         ['edit-req-length', 'edit-req-letter', 'edit-req-number'].forEach(id => {
           el.querySelector('#' + id).classList.remove('req--met');
         });
-        showToast('Password updated', 'success');
+        showToast(t('profile.passwordUpdated'), 'success');
       } catch (err) {
         errEl.textContent = err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Update Password';
+        btn.textContent = t('profile.updatePassword');
+      }
+    });
+  }
+
+  _bindLangPref(el) {
+    const select  = el.querySelector('#lang-select');
+    const saveBtn = el.querySelector('#lang-save-btn');
+    const errEl   = el.querySelector('#lang-error');
+    if (!select || !saveBtn) return;
+
+    saveBtn.addEventListener('click', async () => {
+      const locale = select.value;
+      errEl.textContent = '';
+      saveBtn.disabled = true;
+      saveBtn.textContent = t('profile.languageSaving');
+      try {
+        await updateProfile({ preferred_locale: locale });
+        showToast(t('profile.languageSaved'), 'success');
+        switchLocale(locale);
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = t('profile.saveChanges');
       }
     });
   }
@@ -386,27 +430,27 @@ export class ProfileView {
       if (!btn) return;
       const id = btn.dataset.id;
       btn.disabled = true;
-      btn.textContent = 'Revoking…';
+      btn.textContent = t('profile.revoking');
       try {
         await revokeSession(id);
         btn.closest('tr').remove();
-        showToast('Session revoked', 'success');
+        showToast(t('profile.sessionRevoked'), 'success');
       } catch (err) {
         showToast(err.message, 'error');
         btn.disabled = false;
-        btn.textContent = 'Revoke';
+        btn.textContent = t('profile.revoke');
       }
     });
 
     el.querySelector('#revoke-all-btn').addEventListener('click', async () => {
-      if (!confirm('Revoke all other sessions? You will remain logged in here.')) return;
+      if (!confirm(t('profile.confirmRevokeAll'))) return;
       try {
         await revokeAllSessions();
         // Remove all non-current rows
         tbody.querySelectorAll('tr').forEach(row => {
           if (!row.querySelector('.session-current-badge')) row.remove();
         });
-        showToast('All other sessions revoked', 'success');
+        showToast(t('profile.allSessionsRevoked'), 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }

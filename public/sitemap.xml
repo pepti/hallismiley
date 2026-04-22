@@ -1,28 +1,69 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <!-- Home -->
   <url>
     <loc>https://halliprojects.is/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://halliprojects.is/"/>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
+
+  <!-- Projects -->
   <url>
-    <loc>https://halliprojects.is/#/projects</loc>
+    <loc>https://halliprojects.is/#/en/projects</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/projects"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/projects"/>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
+
+  <!-- Halli bio -->
   <url>
-    <loc>https://halliprojects.is/#/about</loc>
+    <loc>https://halliprojects.is/#/en/halli</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/halli"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/halli"/>
     <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Shop -->
+  <url>
+    <loc>https://halliprojects.is/#/en/shop</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/shop"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/shop"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- News -->
+  <url>
+    <loc>https://halliprojects.is/#/en/news</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/news"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/news"/>
+    <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
+
+  <!-- Contact -->
   <url>
-    <loc>https://halliprojects.is/#/contact</loc>
+    <loc>https://halliprojects.is/#/en/contact</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/contact"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/contact"/>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+
+  <!-- Privacy -->
   <url>
-    <loc>https://halliprojects.is/#/privacy</loc>
+    <loc>https://halliprojects.is/#/en/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://halliprojects.is/#/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="is" href="https://halliprojects.is/#/is/privacy"/>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
+
 </urlset>

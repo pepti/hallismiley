@@ -2,52 +2,56 @@ import { tryRestoreSession } from './services/auth.js';
 import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
+import {
+  loadLocale, getLocaleFromHash, getPreferredLocale, t,
+} from './i18n/i18n.js';
 
-// Silently try to restore session from refresh token cookie before first render
+// ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();
 
+// ── 2. Determine and load the active locale ───────────────────────────────────
+// Priority: locale in the URL hash → user's saved preference → Accept-Language
+const initialLocale = getLocaleFromHash() || getPreferredLocale();
+await loadLocale(initialLocale);
+
+// ── 3. Render NavBar + mount Router ──────────────────────────────────────────
 const navBar = new NavBar();
 const navEl  = navBar.render();
 document.body.insertBefore(navEl, document.getElementById('app'));
 
-// ── OAuth redirect landing — show a toast for ?welcome or ?error, then strip the
-// query string from the hash so refresh doesn't re-fire the toast. Must run
-// BEFORE router.init(): the /login route redirects to /#/ on match, which
-// would erase our query params before we get to read them.
+// ── 4. OAuth redirect landing — show toast for ?welcome or ?error ─────────────
 (function handleOAuthLanding() {
   const hash = window.location.hash || '';
   const qIdx = hash.indexOf('?');
   if (qIdx < 0) return;
 
-  const params = new URLSearchParams(hash.slice(qIdx + 1));
+  const params  = new URLSearchParams(hash.slice(qIdx + 1));
   const welcome = params.get('welcome');
   const error   = params.get('error');
   if (!welcome && !error) return;
 
-  const OAUTH_ERRORS = {
-    invalid_state:             'Sign-in was interrupted. Please try again.',
-    oauth_failed:              'Sign-in failed. Please try again.',
-    account_disabled:          'This account has been disabled.',
-    google_profile_invalid:    'Your Google account did not return a verified email.',
-    google_not_configured:     'Google sign-in is not configured on this site.',
-    facebook_profile_invalid:  'Your Facebook account did not return an email. Please use a different sign-in method.',
-    facebook_not_configured:   'Facebook sign-in is not configured on this site.',
+  const OAUTH_ERROR_KEYS = {
+    invalid_state:            'auth.errors.invalidState',
+    oauth_failed:             'auth.errors.oauthFailed',
+    account_disabled:         'auth.errors.accountDisabled',
+    google_profile_invalid:   'auth.errors.googleProfileInvalid',
+    google_not_configured:    'auth.errors.googleNotConfigured',
+    facebook_profile_invalid: 'auth.errors.facebookProfileInvalid',
+    facebook_not_configured:  'auth.errors.facebookNotConfigured',
   };
 
   if (welcome === 'google') {
-    showToast('Signed in with Google', 'success');
+    showToast(t('auth.oauthSuccess.google'), 'success');
   } else if (welcome === 'facebook') {
-    showToast('Signed in with Facebook', 'success');
-  } else if (error && OAUTH_ERRORS[error]) {
-    showToast(OAUTH_ERRORS[error], 'error', 5000);
+    showToast(t('auth.oauthSuccess.facebook'), 'success');
+  } else if (error && OAUTH_ERROR_KEYS[error]) {
+    showToast(t(OAUTH_ERROR_KEYS[error]), 'error', 5000);
   }
 
-  // Strip welcome/error from the hash without triggering a hashchange (which
-  // would re-fire navigation and wipe the toast on re-render).
   params.delete('welcome');
   params.delete('error');
-  const rest = params.toString();
-  const path = hash.slice(1, qIdx); // strip leading '#'
+  const rest    = params.toString();
+  const path    = hash.slice(1, qIdx);
   const cleaned = '#' + path + (rest ? '?' + rest : '');
   window.history.replaceState(null, '', cleaned || '#/');
 })();

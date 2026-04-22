@@ -3,6 +3,7 @@ import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 import { Lightbox }     from '../components/Lightbox.js';
+import { t } from '../i18n/i18n.js';
 
 const PARTY_DATE = new Date('2026-07-25T14:00:00');
 const TOTAL_GUESTS = 60;
@@ -51,7 +52,7 @@ export class PartyView {
       this._startCountdown();
     } catch (err) {
       console.error('[PartyView] render failed:', err);
-      el.innerHTML = `<div class="party-error"><p>Failed to load party page. Please refresh.</p></div>`;
+      el.innerHTML = `<div class="party-error"><p>${t('party.loadError')}</p></div>`;
     }
 
     return el;
@@ -99,11 +100,11 @@ export class PartyView {
     }
 
     const ctaText = authed
-      ? 'Verify your email to view this section'
-      : 'Log in or sign up to view this section';
+      ? t('party.verifyToView')
+      : t('party.loginToView');
     const ctaBtn = authed
       ? ''
-      : `<button class="party-locked__signin-link" type="button">Log in</button>`;
+      : `<button class="party-locked__signin-link" type="button">${t('nav.signIn')}</button>`;
 
     const slug = title.toLowerCase().replace(/\s+/g, '-');
     return `
@@ -134,7 +135,7 @@ export class PartyView {
         <section class="party-section party-locked" aria-labelledby="locked-${slug}">
           <div class="party-section__inner">
             <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
-            <p class="party-locked__text">Enter the invite code above to unlock.</p>
+            <p class="party-locked__text">${t('party.enterCodeAbove')}</p>
           </div>
         </section>`;
     }
@@ -147,14 +148,14 @@ export class PartyView {
             <span class="party-locked__ornament" aria-hidden="true">✦</span>
             <span class="party-locked__rule" aria-hidden="true"></span>
           </div>
-          <p class="party-locked__text">Got an invite code? Enter it to unlock RSVP and Activities.</p>
+          <p class="party-locked__text">${t('party.gotInviteCode')}</p>
           <form class="party-invite-form" id="party-invite-form" novalidate>
             <input type="text" name="code" id="party-invite-code-input"
                    class="lol-input party-invite-form__input"
-                   placeholder="Invite code"
+                   placeholder="${t('party.inviteCode')}"
                    maxlength="100" autocomplete="off" required
-                   aria-label="Invite code" />
-            <button type="submit" class="lol-btn lol-btn--primary party-invite-form__submit">Unlock</button>
+                   aria-label="${t('party.inviteCode')}" />
+            <button type="submit" class="lol-btn lol-btn--primary party-invite-form__submit">${t('party.submitCode')}</button>
           </form>
           <div class="party-locked__ribbon" aria-hidden="true">
             <span class="party-locked__rule"></span>
@@ -203,22 +204,22 @@ export class PartyView {
           <div class="party-countdown" id="party-countdown" aria-live="polite" aria-label="Countdown to party">
             <div class="party-countdown__unit">
               <span class="party-countdown__num" id="cd-days">--</span>
-              <span class="party-countdown__label">days</span>
+              <span class="party-countdown__label">${t('party.days')}</span>
             </div>
             <span class="party-countdown__sep" aria-hidden="true">:</span>
             <div class="party-countdown__unit">
               <span class="party-countdown__num" id="cd-hours">--</span>
-              <span class="party-countdown__label">hours</span>
+              <span class="party-countdown__label">${t('party.hours')}</span>
             </div>
             <span class="party-countdown__sep" aria-hidden="true">:</span>
             <div class="party-countdown__unit">
               <span class="party-countdown__num" id="cd-mins">--</span>
-              <span class="party-countdown__label">mins</span>
+              <span class="party-countdown__label">${t('party.mins')}</span>
             </div>
             <span class="party-countdown__sep" aria-hidden="true">:</span>
             <div class="party-countdown__unit">
               <span class="party-countdown__num" id="cd-secs">--</span>
-              <span class="party-countdown__label">secs</span>
+              <span class="party-countdown__label">${t('party.secs')}</span>
             </div>
           </div>
         </div>
@@ -280,13 +281,13 @@ export class PartyView {
     const editBtn = canEdit() ? `
       <button class="party-edit-btn" data-edit-section="venue" aria-label="Edit venue section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit
+        ${t('admin.edit')}
       </button>` : '';
 
     const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="venue">
-        <button class="party-edit-save" data-save-section="venue">Save</button>
-        <button class="party-edit-cancel" data-cancel-section="venue">Cancel</button>
+        <button class="party-edit-save" data-save-section="venue">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="venue">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="venue" aria-live="polite"></span>
       </div>` : '';
 
@@ -294,10 +295,10 @@ export class PartyView {
       <section class="party-section party-venue" aria-labelledby="venue-heading">
         ${editBtn}
         <div class="party-section__inner">
-          <h2 class="party-section__title" id="venue-heading">📍 Venue</h2>
+          <h2 class="party-section__title" id="venue-heading">📍 ${t('party.venue')}</h2>
           <div class="party-venue__card">
             <div class="party-venue__name" data-field="venue_name">${venueName}</div>
-            <div class="party-venue__address" data-field="venue_address">${venueAddress || 'Address TBD'}</div>
+            <div class="party-venue__address" data-field="venue_address">${venueAddress || t('party.addressTbd')}</div>
             <div class="party-venue__rating" data-field="venue_rating">${venueRating ? `⭐ ${venueRating}` : ''}</div>
             <div class="party-venue__links">
               ${mapsLink  ? `<a href="${mapsLink}"  target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">📍 Google Maps</a>` : ''}
@@ -326,13 +327,13 @@ export class PartyView {
     const editBtn = canEdit() ? `
       <button class="party-edit-btn" data-edit-section="schedule" aria-label="Edit schedule section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit
+        ${t('admin.edit')}
       </button>` : '';
 
     const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="schedule">
-        <button class="party-edit-save" data-save-section="schedule">Save</button>
-        <button class="party-edit-cancel" data-cancel-section="schedule">Cancel</button>
+        <button class="party-edit-save" data-save-section="schedule">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="schedule">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="schedule" aria-live="polite"></span>
       </div>` : '';
 
@@ -342,7 +343,7 @@ export class PartyView {
       <section class="party-section party-schedule" aria-labelledby="schedule-heading">
         ${editBtn}
         <div class="party-section__inner">
-          <h2 class="party-section__title" id="schedule-heading">🗓 Schedule</h2>
+          <h2 class="party-section__title" id="schedule-heading">🗓 ${t('party.schedule')}</h2>
           <ol class="party-timeline" aria-label="Party schedule">
             ${items}
           </ol>
@@ -375,33 +376,33 @@ export class PartyView {
     const answers      = rsvp?.answers || {};
     const editor       = canEdit();
     const countHtml    = this._rsvpCount > 0
-      ? `<p class="party-rsvp__count">${this._rsvpCount} of ${TOTAL_GUESTS} guests attending</p>`
+      ? `<p class="party-rsvp__count">${t('party.guestsAttending', { n: this._rsvpCount, total: TOTAL_GUESTS })}</p>`
       : '';
 
     const editBtn = editor ? `
       <button class="party-edit-btn" data-edit-section="rsvp" aria-label="Edit RSVP form">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit
+        ${t('admin.edit')}
       </button>` : '';
 
     const editControls = editor ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp">
-        <button class="party-edit-save" data-save-section="rsvp">Save</button>
-        <button class="party-edit-cancel" data-cancel-section="rsvp">Cancel</button>
+        <button class="party-edit-save" data-save-section="rsvp">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="rsvp">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="rsvp" aria-live="polite"></span>
       </div>` : '';
 
     // If user already RSVP'd, show summary + "Update RSVP" toggle
     const summaryHtml = rsvp ? `
       <div class="party-rsvp__current">
-        <div class="party-rsvp__status party-rsvp__status--yes">✅ You've RSVP'd</div>
+        <div class="party-rsvp__status party-rsvp__status--yes">✅ ${t('party.youveRsvpd')}</div>
         ${this._rsvpForm.filter(f => !['heading','paragraph'].includes(f.type)).map(f => {
           const a = answers[f.id];
           if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
           const val = Array.isArray(a) ? a.map(x => escHtml(x)).join(', ') : escHtml(a);
           return `<p><strong>${escHtml(f.label)}:</strong> ${val}</p>`;
         }).join('')}
-        <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">Update RSVP</button>
+        <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">${t('party.updateRsvp')}</button>
       </div>` : '';
 
     return `
@@ -483,8 +484,8 @@ export class PartyView {
       <form class="party-rsvp__form" id="rsvp-form" novalidate>
         ${fields}
         <div class="party-form-actions">
-          <button type="submit" class="lol-btn lol-btn--primary party-rsvp__submit">Submit RSVP</button>
-          ${isUpdate ? '<button type="button" class="lol-btn lol-btn--ghost" id="rsvp-cancel-btn">Cancel</button>' : ''}
+          <button type="submit" class="lol-btn lol-btn--primary party-rsvp__submit">${t('party.submitRsvp')}</button>
+          ${isUpdate ? `<button type="button" class="lol-btn lol-btn--ghost" id="rsvp-cancel-btn">${t('admin.cancel')}</button>` : ''}
         </div>
       </form>`;
   }
@@ -511,13 +512,13 @@ export class PartyView {
     const editBtn = editor ? `
       <button class="party-edit-btn" data-edit-section="activities" aria-label="Edit activities section">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit
+        ${t('admin.edit')}
       </button>` : '';
 
     const editControls = editor ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="activities">
-        <button class="party-edit-save" data-save-section="activities">Save</button>
-        <button class="party-edit-cancel" data-cancel-section="activities">Cancel</button>
+        <button class="party-edit-save" data-save-section="activities">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="activities">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="activities" aria-live="polite"></span>
       </div>` : '';
 
@@ -525,15 +526,15 @@ export class PartyView {
       <section class="party-section party-activities" aria-labelledby="activities-heading">
         ${editBtn}
         <div class="party-section__inner">
-          <h2 class="party-section__title" id="activities-heading">🎯 Activities</h2>
+          <h2 class="party-section__title" id="activities-heading">🎯 ${t('party.activities')}</h2>
 
-          <h3 class="party-activities__sub-heading">☀️ Daytime Activities</h3>
+          <h3 class="party-activities__sub-heading">☀️ ${t('party.daytimeActivities')}</h3>
           <div class="party-activities__grid" data-activities-grid="daytime">
             ${daytimeCards}
           </div>
           ${addBtn('daytime')}
 
-          <h3 class="party-activities__sub-heading party-activities__sub-heading--evening">🌙 Evening Activities</h3>
+          <h3 class="party-activities__sub-heading party-activities__sub-heading--evening">🌙 ${t('party.eveningActivities')}</h3>
           <div class="party-activities__grid" data-activities-grid="evening">
             ${eveningCards}
           </div>
@@ -570,13 +571,13 @@ export class PartyView {
       e.preventDefault();
       const code = (input?.value || '').trim();
       if (!code) {
-        showToast('Enter a code first', 'error');
+        showToast(t('party.enterCodeFirst'), 'error');
         input?.focus();
         return;
       }
 
       btn.disabled = true;
-      btn.textContent = 'Unlocking…';
+      btn.textContent = t('party.unlocking');
       try {
         const headers = await getCsrfHeaders();
         const res = await fetch('/api/v1/party/redeem-invite-code', {
@@ -589,7 +590,7 @@ export class PartyView {
         if (!res.ok) throw new Error(data.error || 'Unable to redeem code');
 
         if (data.user) updateCachedUser(data.user);
-        showToast("You're in! 🎉", 'success');
+        showToast(t('party.youreIn'), 'success');
 
         // Re-fetch RSVP data now that we have access, then re-render the hub.
         await this._loadAll();
@@ -599,7 +600,7 @@ export class PartyView {
       } catch (err) {
         showToast(err.message, 'error');
         btn.disabled = false;
-        btn.textContent = 'Unlock';
+        btn.textContent = t('party.submitCode');
       }
     });
   }
@@ -886,7 +887,7 @@ export class PartyView {
     if (!sectionEl) return;
 
     const statusEl = sectionEl.querySelector(`[data-status="${section}"]`);
-    if (statusEl) statusEl.textContent = 'Saving…';
+    if (statusEl) statusEl.textContent = t('form.saving');
 
     const payload = {};
 
@@ -969,17 +970,17 @@ export class PartyView {
         if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
         this._bindRsvp();
         if (canEdit()) this._bindEditing();
-        showToast('Saved!', 'success');
+        showToast(t('form.success'), 'success');
         return;
       }
 
       if (statusEl) {
-        statusEl.textContent = 'Saved!';
+        statusEl.textContent = t('form.success');
         setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
       }
       this._exitEdit(section);
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+      if (statusEl) statusEl.textContent = err.message;
     }
   }
 
@@ -1082,7 +1083,7 @@ export class PartyView {
 
     if (diff <= 0) {
       const cd = this._el?.querySelector('#party-countdown');
-      if (cd) cd.innerHTML = '<span class="party-countdown__party">🎉 The party is NOW!</span>';
+      if (cd) cd.innerHTML = `<span class="party-countdown__party">🎉 ${t('party.partyNow')}</span>`;
       clearInterval(this._timerLoop);
       return;
     }
@@ -1148,7 +1149,7 @@ export class PartyView {
 
       const btn = form.querySelector('[type="submit"]');
       btn.disabled = true;
-      btn.textContent = 'Saving…';
+      btn.textContent = t('form.saving');
       try {
         const headers = await getCsrfHeaders();
         const res = await fetch('/api/v1/party/rsvp', {
@@ -1161,7 +1162,7 @@ export class PartyView {
         if (!res.ok) throw new Error(result.error || 'RSVP failed');
 
         this._rsvp = result;
-        showToast('RSVP saved!', 'success');
+        showToast(t('party.rsvpSubmitted'), 'success');
         // Re-render RSVP section
         const rsvpSection = this._el.querySelector('.party-rsvp');
         if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
@@ -1171,7 +1172,7 @@ export class PartyView {
         showToast(err.message, 'error');
       } finally {
         btn.disabled    = false;
-        btn.textContent = 'Submit RSVP';
+        btn.textContent = t('party.submitRsvp');
       }
     });
   }

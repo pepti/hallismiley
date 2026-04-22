@@ -619,6 +619,47 @@ const migrations = [
        END $$`,
     ],
   },
+  {
+    // Internationalisation (i18n) — Phase 1.
+    // Adds preferred_locale to users so emails and API responses are
+    // served in the user's language. Constraint allows exactly the two
+    // locales we ship; adding a third language requires a new migration.
+    name: '028_i18n_user_locale',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_locale TEXT NOT NULL DEFAULT 'en'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'users_preferred_locale_check'
+         ) THEN
+           ALTER TABLE users ADD CONSTRAINT users_preferred_locale_check
+             CHECK (preferred_locale IN ('en', 'is'));
+         END IF;
+       END $$`,
+    ],
+  },
+  {
+    // Internationalisation (i18n) — Phase 1 continued.
+    // Adds a locale column to site_content and promotes the primary key
+    // from (key) to (key, locale) so each editable content block can exist
+    // in multiple languages. Existing rows are backfilled with locale='en'
+    // and duplicated for locale='is' so both languages have content from day one.
+    name: '029_i18n_site_content_locale',
+    statements: [
+      // Add locale column; existing rows default to 'en'.
+      `ALTER TABLE site_content ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en'`,
+      // Drop the old single-column PK.
+      `ALTER TABLE site_content DROP CONSTRAINT IF EXISTS site_content_pkey`,
+      // New composite PK covering both key + locale.
+      `ALTER TABLE site_content ADD PRIMARY KEY (key, locale)`,
+      // Seed Icelandic copies of every English row (same value initially;
+      // admins translate via the CMS editor).
+      `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
+       SELECT key, 'is', value, updated_by, updated_at
+         FROM site_content
+        WHERE locale = 'en'
+       ON CONFLICT (key, locale) DO NOTHING`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

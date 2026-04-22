@@ -20,15 +20,16 @@ const lucia = new Lucia(adapter, {
   },
   getUserAttributes(attributes) {
     return {
-      username:       attributes.username,
-      email:          attributes.email,
-      role:           attributes.role,
-      avatar:         attributes.avatar,
-      display_name:   attributes.display_name,
-      phone:          attributes.phone,
-      email_verified: attributes.email_verified,
-      disabled:       attributes.disabled,
-      party_access:   attributes.party_access,
+      username:         attributes.username,
+      email:            attributes.email,
+      role:             attributes.role,
+      avatar:           attributes.avatar,
+      display_name:     attributes.display_name,
+      phone:            attributes.phone,
+      email_verified:   attributes.email_verified,
+      disabled:         attributes.disabled,
+      party_access:     attributes.party_access,
+      preferred_locale: attributes.preferred_locale,
     };
   },
   getSessionAttributes(attributes) {

@@ -3,6 +3,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { t, href } from '../i18n/i18n.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -115,7 +116,7 @@ export class HomeView {
   // ── Load skills content from API ───────────────────────────────────────
   async _loadContent() {
     try {
-      const res = await fetch('/api/v1/content/home_skills');
+      const res = await fetch(`/api/v1/content/home_skills?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         this._content = await res.json();
         return;
@@ -127,7 +128,7 @@ export class HomeView {
   // ── Load stats content from API ────────────────────────────────────────
   async _loadStats() {
     try {
-      const res = await fetch('/api/v1/content/home_stats');
+      const res = await fetch(`/api/v1/content/home_stats?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         const data = await res.json();
         this._statsContent = _coerceStatsArray(data);
@@ -140,7 +141,7 @@ export class HomeView {
   // ── Load discipline (projects categories) content from API ─────────────
   async _loadDiscipline() {
     try {
-      const res = await fetch('/api/v1/content/home_discipline');
+      const res = await fetch(`/api/v1/content/home_discipline?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         const data = await res.json();
         // Defensive: ensure required shape
@@ -169,9 +170,9 @@ export class HomeView {
           <span class="lol-hero__title-second">Smiley</span>
         </h1>
         <p class="lol-hero__subtitle">
-          Carpenter &amp; Computer Scientist — Building with wood &amp; code
+          ${t('halli.tagline')}
         </p>
-        <a href="#/projects" class="lol-hero__cta">View Projects</a>
+        <a href="${href('/projects')}" class="lol-hero__cta">${t('home.viewProjects')}</a>
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
@@ -210,7 +211,7 @@ export class HomeView {
         : `<div class="lol-news__card-img lol-news__card-img--placeholder" aria-hidden="true"></div>`;
 
       return `
-      <a href="#/news/${escHtml(a.slug)}" class="lol-news__card lol-news__card--link">
+      <a href="${href('/news/' + a.slug)}" class="lol-news__card lol-news__card--link">
         ${imgHtml}
         <div class="lol-news__card-body">
           <div class="lol-news__card-meta">
@@ -227,9 +228,9 @@ export class HomeView {
     <section class="lol-news" id="news" aria-label="Latest news">
       <div class="lol-news__inner">
         <div class="lol-news__header">
-          <a href="#/news" class="lol-news__heading-link"><h2 class="lol-news__heading">News</h2></a>
-          <a href="#/news" class="lol-news__view-all">
-            View All
+          <a href="${href('/news')}" class="lol-news__heading-link"><h2 class="lol-news__heading">${t('nav.news')}</h2></a>
+          <a href="${href('/news')}" class="lol-news__view-all">
+            ${t('home.viewAll')}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
               <polyline points="9 18 15 12 9 6"/>
@@ -265,8 +266,8 @@ export class HomeView {
           <h2 class="lol-projects__heading" data-disc-field="heading">${escHtml(d.heading)}</h2>
           <p class="lol-projects__desc" data-disc-field="description">${escHtml(d.description)}</p>
           <div class="lol-projects__btns">
-            <a href="#/projects" class="lol-btn--gold">View All Projects</a>
-            <a href="#/" class="lol-btn--teal" id="contact-btn">Get in Touch</a>
+            <a href="${href('/projects')}" class="lol-btn--gold">${t('home.viewAllProjects')}</a>
+            <a href="${href('/')}" class="lol-btn--teal" id="contact-btn">${t('home.getInTouch')}</a>
           </div>
           <div class="lol-projects__categories" role="tablist" aria-label="Project disciplines">
             ${catIcons}
@@ -347,35 +348,35 @@ export class HomeView {
     <section class="lol-contact" id="contact" aria-label="Contact">
       <div class="lol-contact__bg" aria-hidden="true"></div>
       <div class="lol-contact__inner">
-        <p class="lol-contact__eyebrow">Let's build something</p>
+        <p class="lol-contact__eyebrow">${t('contact.eyebrow')}</p>
         <h2 class="lol-contact__title">
-          Get in<br>Touch
+          ${t('contact.title')}
         </h2>
-        <form class="contact-form" id="contact-form" novalidate aria-label="Contact form">
+        <form class="contact-form" id="contact-form" novalidate aria-label="${t('contact.formLabel')}">
           <!-- Honeypot — hidden from real users, bots fill it in -->
           <input type="text" name="website" id="contact-honeypot"
                  tabindex="-1" autocomplete="off" aria-hidden="true"
                  style="position:absolute;left:-9999px;opacity:0;height:0;width:0;pointer-events:none;" />
           <div class="contact-form__row">
             <div class="contact-form__field">
-              <label for="contact-name" class="contact-form__label">Name <span aria-hidden="true" class="required-mark">*</span></label>
+              <label for="contact-name" class="contact-form__label">${t('contact.name')} <span aria-hidden="true" class="required-mark">*</span></label>
               <input type="text" id="contact-name" name="name" class="contact-form__input"
-                     required autocomplete="name" placeholder="Your name" maxlength="100" />
+                     required autocomplete="name" placeholder="${t('contact.namePlaceholder')}" maxlength="100" />
             </div>
             <div class="contact-form__field">
-              <label for="contact-email" class="contact-form__label">Email <span aria-hidden="true" class="required-mark">*</span></label>
+              <label for="contact-email" class="contact-form__label">${t('contact.email')} <span aria-hidden="true" class="required-mark">*</span></label>
               <input type="email" id="contact-email" name="email" class="contact-form__input"
-                     required autocomplete="email" placeholder="your@email.com" maxlength="200" />
+                     required autocomplete="email" placeholder="${t('contact.emailPlaceholder')}" maxlength="200" />
             </div>
           </div>
           <div class="contact-form__field">
-            <label for="contact-message" class="contact-form__label">Message <span aria-hidden="true" class="required-mark">*</span></label>
+            <label for="contact-message" class="contact-form__label">${t('contact.message')} <span aria-hidden="true" class="required-mark">*</span></label>
             <textarea id="contact-message" name="message" class="contact-form__textarea"
-                      required rows="5" placeholder="What is on your mind?" maxlength="2000"></textarea>
+                      required rows="5" placeholder="${t('contact.messagePlaceholder')}" maxlength="2000"></textarea>
           </div>
           <div aria-live="polite" id="contact-status" class="contact-form__status"></div>
           <button type="submit" class="lol-contact__btn contact-form__submit" id="contact-submit">
-            Send Message
+            ${t('contact.send')}
           </button>
         </form>
 
@@ -388,9 +389,9 @@ export class HomeView {
     return `
     <footer class="lol-footer">
 
-      <nav class="lol-footer__top" aria-label="Footer navigation">
-        <a href="#/halli"    class="lol-footer__nav-link">Halli</a>
-        <a href="#/projects" class="lol-footer__nav-link">Projects</a>
+      <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
+        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
+        <a href="${href('/projects')}" class="lol-footer__nav-link">${t('nav.projects')}</a>
         <a href="https://github.com/pepti/hallismiley" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">GitHub</a>
         <a href="https://www.linkedin.com/in/halliv/" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">LinkedIn</a>
       </nav>
@@ -421,11 +422,11 @@ export class HomeView {
       <div class="lol-footer__brand">
         <div class="lol-footer__logo">Halli Smiley</div>
         <p class="lol-footer__copy">
-          &copy; ${new Date().getFullYear()} Halli Smiley. A portfolio of nothing and everything.
+          &copy; ${new Date().getFullYear()} Halli Smiley. ${t('footer.tagline')}
         </p>
-        <nav class="lol-footer__legal" aria-label="Legal navigation">
-          <a href="#/privacy" class="lol-footer__legal-link">Privacy Policy</a>
-          <a href="#/terms"   class="lol-footer__legal-link">Terms of Service</a>
+        <nav class="lol-footer__legal" aria-label="${t('nav.legalNav')}">
+          <a href="${href('/privacy')}" class="lol-footer__legal-link">${t('footer.privacy')}</a>
+          <a href="${href('/terms')}"   class="lol-footer__legal-link">${t('footer.terms')}</a>
         </nav>
       </div>
 
@@ -1010,12 +1011,12 @@ export class HomeView {
 
       if (!name || !email || !message) {
         status.className = 'contact-form__status contact-form__status--error';
-        status.textContent = 'Please fill in all required fields.';
+        status.textContent = t('form.requiredFields');
         return;
       }
 
       submit.disabled = true;
-      submit.textContent = 'Sending…';
+      submit.textContent = t('form.sending');
       status.className = 'contact-form__status';
       status.textContent = '';
 
@@ -1028,7 +1029,7 @@ export class HomeView {
 
         if (res.ok) {
           status.className = 'contact-form__status contact-form__status--success';
-          status.textContent = 'Message sent — I\'ll be in touch soon.';
+          status.textContent = t('contact.sent');
           form.reset();
         } else {
           const data = await res.json().catch(() => ({}));
@@ -1039,7 +1040,7 @@ export class HomeView {
         status.textContent = err.message;
       } finally {
         submit.disabled = false;
-        submit.textContent = 'Send Message';
+        submit.textContent = t('contact.send');
       }
     });
   }

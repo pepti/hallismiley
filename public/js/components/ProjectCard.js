@@ -7,6 +7,7 @@ const CATEGORY_IMAGES = {
 };
 
 import { escHtml } from '../utils/escHtml.js';
+import { t } from '../i18n/i18n.js';
 
 export class ProjectCard {
   constructor(project, onClick) {
@@ -22,7 +23,7 @@ export class ProjectCard {
     card.dataset.category = category;
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
-    card.setAttribute('aria-label', `View project: ${title}`);
+    card.setAttribute('aria-label', `${t('projects.viewProject')}: ${title}`);
 
     const bgImg = image_url || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.tech;
 
@@ -33,7 +34,7 @@ export class ProjectCard {
         <div class="project-card__image-overlay"></div>
         <span class="project-card__category project-card__category--${escHtml(category)}">${escHtml(category)}</span>
         <span class="project-card__year">${year}</span>
-        ${featured ? '<span class="project-card__featured-star" title="Featured">★</span>' : ''}
+        ${featured ? `<span class="project-card__featured-star" title="${t('projects.featured')}">★</span>` : ''}
       </div>
       <div class="project-card__body">
         <h3 class="project-card__title">${escHtml(title)}</h3>

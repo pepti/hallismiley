@@ -1,5 +1,5 @@
-// CartIcon — nav badge that shows item count. Subscribes to cart pub/sub.
 import * as cart from '../services/cart.js';
+import { t, href } from '../i18n/i18n.js';
 
 export class CartIcon {
   constructor() {
@@ -9,9 +9,9 @@ export class CartIcon {
 
   render() {
     const a = document.createElement('a');
-    a.href = '#/cart';
+    a.href = href('/cart');
     a.className = 'lol-nav__cart';
-    a.setAttribute('aria-label', 'Shopping cart');
+    a.setAttribute('aria-label', t('cart.title'));
     a.setAttribute('data-testid', 'nav-cart');
     a.innerHTML = `
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"

@@ -430,7 +430,15 @@ async function handleCheckoutCompleted(session) {
   try {
     const items = await Order.listItems(order.id);
     const finalOrder = await Order.findById(order.id);
-    await sendOrderReceipt(finalOrder, items);
+    let locale = 'en';
+    if (finalOrder.user_id) {
+      const { rows: uRows } = await db.query(
+        'SELECT preferred_locale FROM users WHERE id = $1',
+        [finalOrder.user_id]
+      );
+      if (uRows[0]?.preferred_locale) locale = uRows[0].preferred_locale;
+    }
+    await sendOrderReceipt(finalOrder, items, locale);
   } catch (emailErr) {
     console.error(`[stripeWebhook] Receipt email failed for ${order.order_number}:`, emailErr);
   }

@@ -11,6 +11,7 @@ import * as cart from '../services/cart.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { LOW_STOCK_THRESHOLD } from '../components/ProductCard.js';
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
+import { t, href } from '../i18n/i18n.js';
 
 // Default chrome — rendered when shop_product_chrome is missing or network fails.
 // Templates use {n} (stock count) — substituted client-side.
@@ -108,7 +109,7 @@ export class ProductView {
     this._view.className = 'view shop-product';
     // Wrap the content in a body div so we can replace only the body on
     // re-paint and keep the floating edit button + controls untouched.
-    this._view.innerHTML = `<div id="shop-product-body"><div class="shop-product__loading">Loading…</div></div>`;
+    this._view.innerHTML = `<div id="shop-product-body"><div class="shop-product__loading">${t('form.loading')}</div></div>`;
 
     try {
       // Product detail + shared chrome load in parallel.
@@ -128,7 +129,7 @@ export class ProductView {
       body.innerHTML = `
         <div class="shop-product__error">
           <p>${_esc(err.message)}</p>
-          <a href="#/shop" class="shop-product__back">${_esc(this._chrome.back_label)}</a>
+          <a href="${href('/shop')}" class="shop-product__back">${_esc(this._chrome.back_label)}</a>
         </div>`;
       return this._view;
     }
@@ -141,7 +142,7 @@ export class ProductView {
 
   async _loadChrome() {
     try {
-      const res = await fetch('/api/v1/content/shop_product_chrome');
+      const res = await fetch(`/api/v1/content/shop_product_chrome?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         const data = await res.json();
         this._chrome = this._mergeWithDefaults(DEFAULT_CHROME, data);
@@ -195,7 +196,7 @@ export class ProductView {
 
     body.innerHTML = `
       <div class="shop-product__inner" data-section="product">
-        <a href="#/shop" class="shop-product__back" data-chrome-field="back_label">${_esc(c.back_label)}</a>
+        <a href="${href('/shop')}" class="shop-product__back" data-chrome-field="back_label">${_esc(c.back_label)}</a>
         <div class="shop-product__grid">
           <div class="shop-product__gallery">
             <div class="shop-product__cover" id="shop-cover">
@@ -306,7 +307,7 @@ export class ProductView {
       const variant = this._selectedVariant();
       if (hasVariants && !variant) {
         const confirm = this._view.querySelector('#shop-add-confirm');
-        confirm.textContent = 'Please select all options.';
+        confirm.textContent = t('shop.selectAllOptions');
         return;
       }
       const stock = this._effectiveStock();
@@ -316,7 +317,7 @@ export class ProductView {
       cart.add(p, variant, qty);
       const confirm = this._view.querySelector('#shop-add-confirm');
       const label = variant ? `${p.name} — ${variant.attributes.color ? (COLOR_LABELS[variant.attributes.color] || variant.attributes.color) : ''}${variant.attributes.size ? ' / ' + variant.attributes.size : ''}` : p.name;
-      confirm.textContent = `Added ${qty} × ${label} to cart.`;
+      confirm.textContent = t('shop.addedToCart', { qty, label });
     });
 
     this._updatePriceAndStock();
@@ -413,16 +414,16 @@ export class ProductView {
     editBtn.type = 'button';
     editBtn.className = 'shop-view__edit-btn';
     editBtn.setAttribute('data-testid', 'edit-product-page-btn');
-    editBtn.textContent = 'Edit Product';
+    editBtn.textContent = t('admin.editProduct');
     view.appendChild(editBtn);
 
     const controls = document.createElement('div');
     controls.className = 'shop-view__edit-controls shop-view__edit-controls--hidden';
     controls.innerHTML = `
       <button type="button" class="shop-view__save-btn"
-              data-testid="edit-product-page-save">Save Changes</button>
+              data-testid="edit-product-page-save">${t('form.saveChanges')}</button>
       <button type="button" class="shop-view__cancel-btn"
-              data-testid="edit-product-page-cancel">Cancel</button>
+              data-testid="edit-product-page-cancel">${t('admin.cancel')}</button>
       <span class="shop-view__edit-status" aria-live="polite"></span>`;
     view.appendChild(controls);
 
@@ -476,7 +477,7 @@ export class ProductView {
 
   async _saveAll(view, editBtn, controls) {
     const status = controls.querySelector('.shop-view__edit-status');
-    status.textContent = 'Saving…';
+    status.textContent = t('form.saving');
 
     // Collect the two payloads from the DOM.
     const nameEl  = view.querySelector('[data-product-field="name"]');
@@ -547,7 +548,7 @@ export class ProductView {
       status.textContent = `Saved with errors — ${errs.join('; ')}`;
       return;
     }
-    status.textContent = 'Saved!';
+    status.textContent = t('form.saved');
     setTimeout(() => this._exitEdit(view, editBtn, controls), 900);
   }
 

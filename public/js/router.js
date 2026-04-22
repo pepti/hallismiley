@@ -27,6 +27,10 @@ import { CheckoutCancelView }    from './views/CheckoutCancelView.js';
 import { OrderHistoryView }      from './views/OrderHistoryView.js';
 import { AdminProductsView }     from './views/AdminProductsView.js';
 import { AdminOrdersView }       from './views/AdminOrdersView.js';
+import {
+  SUPPORTED_LOCALES, DEFAULT_LOCALE,
+  loadLocale, getLocale, getPreferredLocale,
+} from './i18n/i18n.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -41,7 +45,7 @@ const ROUTES = [
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
-  { pattern: '/login',           factory: ()  => { /* handled by modal — redirect home */ window.location.hash = '#/'; return new HomeView(); } },
+  { pattern: '/login',           factory: ()  => { window.location.hash = '#/' + getLocale() + '/'; return new HomeView(); } },
   { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },
   { pattern: '/verify-email',    factory: (_, qs) => new VerifyEmailView(qs) },
   { pattern: '/forgot-password', factory: ()  => new ForgotPasswordView() },
@@ -62,10 +66,23 @@ const ROUTES = [
   { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && isAdmin()) ? new AdminOrdersView() : new HomeView() },
 ];
 
+// ── Hash parsing (locale-aware) ───────────────────────────────────────────────
+
 function parseHash(rawHash) {
-  // rawHash may include query string: /path?key=val
-  const [path, qs = ''] = rawHash.split('?');
-  return { path, qs };
+  const [pathAndLocale, qs = ''] = rawHash.split('?');
+  const parts = pathAndLocale.split('/').filter(Boolean);
+
+  let locale = null;
+  let path;
+
+  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) {
+    locale = parts[0];
+    path   = parts.length > 1 ? '/' + parts.slice(1).join('/') : '/';
+  } else {
+    path = pathAndLocale || '/';
+  }
+
+  return { path, qs, locale };
 }
 
 function matchRoute(path) {
@@ -89,6 +106,8 @@ function matchRoute(path) {
   return { factory: () => new NotFoundView(), params: {}, pattern: null };
 }
 
+// ── Router ────────────────────────────────────────────────────────────────────
+
 export class Router {
   constructor(mountEl, navBar) {
     this.mountEl      = mountEl;
@@ -105,32 +124,45 @@ export class Router {
   }
 
   async _navigate() {
-    const seq  = ++this._navSeq;
-    const raw  = window.location.hash.replace('#', '') || '/';
+    const seq = ++this._navSeq;
+    const raw = window.location.hash.replace('#', '') || '/';
+
+    // If the hash has no locale prefix, redirect to the preferred locale root.
+    const { locale: hashLocale } = parseHash(raw);
+    if (!hashLocale) {
+      const preferred = getPreferredLocale();
+      const target = '/' + preferred + (raw === '/' ? '/' : (raw.startsWith('/') ? raw : '/' + raw));
+      window.location.hash = '#' + target;
+      return;
+    }
+
+    // Load locale if it changed (triggers re-render with new strings).
+    if (hashLocale !== getLocale()) {
+      await loadLocale(hashLocale);
+      this.navBar.updateLocale();
+    }
+
     const { path, qs } = parseHash(raw);
 
     // Guard admin routes
     if (path === '/admin' && !isAuthenticated()) {
-      window.location.hash = '#/';
+      window.location.hash = '#/' + getLocale() + '/';
       return;
     }
     if (path === '/admin/users' && (!isAuthenticated() || !isAdmin())) {
-      window.location.hash = '#/';
+      window.location.hash = '#/' + getLocale() + '/';
       return;
     }
-    // Guard profile
     if (path === '/profile' && !isAuthenticated()) {
-      window.location.hash = '#/login';
+      window.location.hash = '#/' + getLocale() + '/login';
       return;
     }
-    // Guard order history
     if (path === '/orders' && !isAuthenticated()) {
-      window.location.hash = '#/login';
+      window.location.hash = '#/' + getLocale() + '/login';
       return;
     }
-    // Guard admin shop routes
     if (path.startsWith('/admin/shop') && (!isAuthenticated() || !isAdmin())) {
-      window.location.hash = '#/';
+      window.location.hash = '#/' + getLocale() + '/';
       return;
     }
 
@@ -138,13 +170,11 @@ export class Router {
     const view = factory(params, qs);
     const el   = await view.render();
 
-    // Discard if a newer navigation started while we were awaiting render
     if (seq !== this._navSeq) {
       if (typeof view.destroy === 'function') view.destroy();
       return;
     }
 
-    // Destroy the outgoing view before replacing it
     if (this._currentView && typeof this._currentView.destroy === 'function') {
       this._currentView.destroy();
     }

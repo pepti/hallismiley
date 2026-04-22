@@ -1,4 +1,5 @@
-// CheckoutCancelView — customer cancelled at Stripe. Route: #/checkout/cancel
+import { t, href } from '../i18n/i18n.js';
+
 export class CheckoutCancelView {
   constructor() { this._view = null; }
 
@@ -7,11 +8,11 @@ export class CheckoutCancelView {
     this._view.className = 'view shop-cancel';
     this._view.innerHTML = `
       <div class="shop-cancel__inner">
-        <h1>Checkout cancelled</h1>
-        <p>Your cart is still here if you'd like to finish the order.</p>
+        <h1>${t('checkout.cancelledTitle')}</h1>
+        <p>${t('checkout.cancelledMessage')}</p>
         <div class="shop-cancel__actions">
-          <a href="#/cart" class="shop-cancel__btn">Return to cart</a>
-          <a href="#/shop" class="shop-cancel__link">Continue shopping</a>
+          <a href="${href('/cart')}" class="shop-cancel__btn">${t('cart.title')}</a>
+          <a href="${href('/shop')}" class="shop-cancel__link">${t('shop.continueShopping')}</a>
         </div>
       </div>
     `;

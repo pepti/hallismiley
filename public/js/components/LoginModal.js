@@ -1,5 +1,6 @@
-import { login }      from '../services/auth.js';
-import { showToast }  from './Toast.js';
+import { login }     from '../services/auth.js';
+import { showToast } from './Toast.js';
+import { t, href }   from '../i18n/i18n.js';
 
 export class LoginModal {
   constructor() {
@@ -14,41 +15,40 @@ export class LoginModal {
     overlay.setAttribute('aria-labelledby', 'login-title');
     overlay.innerHTML = `
       <div class="modal login-modal">
-        <button class="modal__close" aria-label="Close">&times;</button>
-        <p class="login-modal__eyebrow">Welcome Back</p>
-        <h2 class="modal__title" id="login-title">Sign in</h2>
+        <button class="modal__close" aria-label="${t('login.close')}">&times;</button>
+        <h2 class="modal__title" id="login-title">${t('login.title')}</h2>
 
         <a class="btn btn--outline btn--full btn--google" href="/auth/google"
            data-testid="login-google">
           <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
-          <span>Continue with Google</span>
+          <span>${t('login.continueWithGoogle')}</span>
         </a>
         <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook"
            data-testid="login-facebook">
           <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
-          <span>Continue with Facebook</span>
+          <span>${t('login.continueWithFacebook')}</span>
         </a>
-        <div class="login-modal__divider"><span>or</span></div>
+        <div class="login-modal__divider"><span>${t('login.orSignInWithEmail')}</span></div>
 
         <form class="login-form" novalidate data-testid="login-form">
           <div class="form-group">
-            <label class="form-label" for="login-username">Username</label>
+            <label class="form-label" for="login-username">${t('login.email')}</label>
             <input class="form-input" id="login-username" name="username"
               type="text" autocomplete="username" required />
           </div>
           <div class="form-group">
-            <label class="form-label" for="login-password">Password</label>
+            <label class="form-label" for="login-password">${t('login.password')}</label>
             <input class="form-input" id="login-password" name="password"
               type="password" autocomplete="current-password" required />
           </div>
           <p class="form-error" aria-live="polite"></p>
-          <button class="btn btn--primary btn--full" type="submit" data-testid="login-submit">Sign in</button>
+          <button class="btn btn--primary btn--full" type="submit" data-testid="login-submit">${t('login.submit')}</button>
           <div class="login-modal__footer">
-            <a href="#/forgot-password" class="login-modal__link" data-route="/forgot-password"
-               id="login-forgot-link">Forgot password?</a>
+            <a href="${href('/forgot-password')}" class="login-modal__link" data-route="/forgot-password"
+               id="login-forgot-link">${t('login.forgotPassword')}</a>
             <span class="login-modal__sep">·</span>
-            <a href="#/signup" class="login-modal__link" data-route="/signup"
-               id="login-signup-link">Create account</a>
+            <a href="${href('/signup')}" class="login-modal__link" data-route="/signup"
+               id="login-signup-link">${t('login.signUp')}</a>
           </div>
         </form>
       </div>
@@ -59,7 +59,6 @@ export class LoginModal {
     overlay.querySelector('.login-form').addEventListener('submit', e => this._onSubmit(e));
     document.addEventListener('keydown', e => { if (e.key === 'Escape') this.close(); });
 
-    // Close modal when navigating via footer links
     overlay.querySelector('#login-forgot-link').addEventListener('click', () => this.close());
     overlay.querySelector('#login-signup-link').addEventListener('click', () => this.close());
 
@@ -90,18 +89,18 @@ export class LoginModal {
     const password = form.password.value;
 
     errEl.textContent = '';
-    btn.disabled = true;
-    btn.textContent = 'Signing in…';
+    btn.disabled    = true;
+    btn.textContent = t('login.signingIn');
 
     try {
       await login(username, password);
       this.close();
-      showToast('Signed in', 'success');
+      showToast(t('auth.signIn'), 'success');
     } catch (err) {
       errEl.textContent = err.message;
     } finally {
-      btn.disabled = false;
-      btn.textContent = 'Sign in';
+      btn.disabled    = false;
+      btn.textContent = t('login.submit');
     }
   }
 }

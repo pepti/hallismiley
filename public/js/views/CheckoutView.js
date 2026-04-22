@@ -3,6 +3,7 @@
 import * as cart from '../services/cart.js';
 import { getUser } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
+import { t, href } from '../i18n/i18n.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -37,14 +38,14 @@ export class CheckoutView {
   async render() {
     this._view = document.createElement('div');
     this._view.className = 'view shop-checkout';
-    this._view.innerHTML = `<div class="shop-checkout__loading">Loading…</div>`;
+    this._view.innerHTML = `<div class="shop-checkout__loading">${t('form.loading')}</div>`;
 
     const items = cart.list();
     if (items.length === 0) {
       this._view.innerHTML = `
         <div class="shop-checkout__inner">
-          <p class="shop-checkout__empty">Your cart is empty.</p>
-          <a href="#/shop" class="shop-checkout__back">← Back to shop</a>
+          <p class="shop-checkout__empty">${t('cart.empty')}</p>
+          <a href="${href('/shop')}" class="shop-checkout__back">← ${t('checkout.backToShop')}</a>
         </div>`;
       return this._view;
     }
@@ -82,33 +83,33 @@ export class CheckoutView {
 
     this._view.innerHTML = `
       <div class="shop-checkout__inner">
-        <a href="#/cart" class="shop-checkout__back">← Back to cart</a>
-        <h1 class="shop-checkout__title">Checkout</h1>
+        <a href="${href('/cart')}" class="shop-checkout__back">← ${t('checkout.backToCart')}</a>
+        <h1 class="shop-checkout__title">${t('checkout.title')}</h1>
 
         <div class="shop-checkout__grid">
           <form class="shop-checkout__form" id="shop-checkout-form" novalidate>
             ${user ? `
               <p class="shop-checkout__logged-in">
-                Signed in as <strong>${_esc(user.email || user.username)}</strong>.
+                ${t('checkout.signedInAs')} <strong>${_esc(user.email || user.username)}</strong>.
               </p>
             ` : `
               <fieldset class="shop-checkout__fieldset">
-                <legend>Contact</legend>
-                <label>Email
+                <legend>${t('checkout.contact')}</legend>
+                <label>${t('checkout.email')}
                   <input type="email" name="guest_email" required maxlength="254" autocomplete="email"/>
                 </label>
-                <label>Full name
+                <label>${t('checkout.fullName')}
                   <input type="text" name="guest_name" required maxlength="100" autocomplete="name"/>
                 </label>
               </fieldset>
             `}
 
             <fieldset class="shop-checkout__fieldset">
-              <legend>Delivery</legend>
+              <legend>${t('checkout.delivery')}</legend>
               <div class="shop-checkout__radios">
                 <label>
                   <input type="radio" name="shipping_method" value="flat_rate" checked/>
-                  <span>Shipping
+                  <span>${t('checkout.shipping')}
                     <em class="shop-checkout__rate">
                       ${cart.formatMoney(cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur, cur)}
                     </em>
@@ -116,38 +117,38 @@ export class CheckoutView {
                 </label>
                 <label>
                   <input type="radio" name="shipping_method" value="local_pickup"/>
-                  <span>Local pickup
-                    <em class="shop-checkout__rate">Free</em>
+                  <span>${t('checkout.localPickup')}
+                    <em class="shop-checkout__rate">${t('checkout.free')}</em>
                   </span>
                 </label>
               </div>
             </fieldset>
 
             <fieldset class="shop-checkout__fieldset" id="shop-checkout-address">
-              <legend>Shipping address</legend>
-              <label>Name on delivery
+              <legend>${t('checkout.shippingAddress')}</legend>
+              <label>${t('checkout.nameOnDelivery')}
                 <input type="text" name="name" required maxlength="100" autocomplete="shipping name"/>
               </label>
-              <label>Address line 1
+              <label>${t('checkout.address1')}
                 <input type="text" name="line1" required maxlength="200" autocomplete="shipping address-line1"/>
               </label>
-              <label>Address line 2 (optional)
+              <label>${t('checkout.address2')}
                 <input type="text" name="line2" maxlength="200" autocomplete="shipping address-line2"/>
               </label>
               <div class="shop-checkout__row">
-                <label>City
+                <label>${t('checkout.city')}
                   <input type="text" name="city" required maxlength="100" autocomplete="shipping address-level2"/>
                 </label>
-                <label>Postal code
+                <label>${t('checkout.postalCode')}
                   <input type="text" name="postal" required maxlength="20" autocomplete="shipping postal-code"/>
                 </label>
               </div>
-              <label>Country
+              <label>${t('checkout.country')}
                 <select name="country" required autocomplete="shipping country">
                   ${COUNTRIES.map(c => `<option value="${c.code}" ${c.code === 'IS' ? 'selected' : ''}>${_esc(c.name)}</option>`).join('')}
                 </select>
               </label>
-              <label>Phone (optional)
+              <label>${t('checkout.phone')}
                 <input type="tel" name="phone" maxlength="30" autocomplete="shipping tel"/>
               </label>
             </fieldset>
@@ -156,24 +157,24 @@ export class CheckoutView {
 
             <button type="submit" class="shop-checkout__submit" id="shop-checkout-submit"
                     data-testid="checkout-submit">
-              Pay ${cart.formatMoney(subtotal + (cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur), cur)}
+              ${t('checkout.pay')} ${cart.formatMoney(subtotal + (cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur), cur)}
             </button>
-            <p class="shop-checkout__vat-note">Prices include 24% VAT. You will be redirected to Stripe to complete payment.</p>
+            <p class="shop-checkout__vat-note">${t('checkout.vatNote')}</p>
           </form>
 
           <aside class="shop-checkout__summary">
-            <h2>Order summary</h2>
+            <h2>${t('checkout.orderSummary')}</h2>
             <ul class="shop-checkout__items">${itemsHtml}</ul>
             <div class="shop-checkout__summary-total">
-              <span>Subtotal</span>
+              <span>${t('cart.subtotal')}</span>
               <span id="shop-checkout-subtotal">${cart.formatMoney(subtotal, cur)}</span>
             </div>
             <div class="shop-checkout__summary-total">
-              <span>Shipping</span>
+              <span>${t('checkout.shipping')}</span>
               <span id="shop-checkout-shipping-total"></span>
             </div>
             <div class="shop-checkout__summary-grand">
-              <span>Total</span>
+              <span>${t('orders.total')}</span>
               <span id="shop-checkout-grand"></span>
             </div>
           </aside>
@@ -199,7 +200,7 @@ export class CheckoutView {
         : 0;
       this._view.querySelector('#shop-checkout-shipping-total').textContent = cart.formatMoney(shippingAmt, cur);
       this._view.querySelector('#shop-checkout-grand').textContent = cart.formatMoney(subtotal + shippingAmt, cur);
-      submitBtn.textContent = `Pay ${cart.formatMoney(subtotal + shippingAmt, cur)}`;
+      submitBtn.textContent = `${t('checkout.pay')} ${cart.formatMoney(subtotal + shippingAmt, cur)}`;
     };
     form.addEventListener('change', (e) => {
       if (e.target.name === 'shipping_method') syncShipping();
@@ -210,7 +211,7 @@ export class CheckoutView {
       e.preventDefault();
       errorEl.textContent = '';
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Redirecting to payment…';
+      submitBtn.textContent = t('checkout.redirecting');
 
       const fd = new FormData(form);
       const shipping_method = fd.get('shipping_method');

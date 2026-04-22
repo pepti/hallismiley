@@ -2,6 +2,7 @@ import { projectApi } from '../api/projectApi.js';
 import { escHtml }    from '../utils/escHtml.js';
 import { Lightbox }   from '../components/Lightbox.js';
 import { getUser }    from '../services/auth.js';
+import { t, href }    from '../i18n/i18n.js';
 
 const CATEGORY_HERO = {
   tech:        'https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=1920&h=1080&fit=crop&q=80&auto=format',
@@ -53,8 +54,8 @@ export class ProjectDetailView {
     } catch {
       this._view.innerHTML = `
         <div class="pd-error">
-          <p>Project not found.</p>
-          <a href="#/projects" class="pd-back-btn">← Back to Projects</a>
+          <p>${t('projectDetail.notFound')}</p>
+          <a href="${href('/projects')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToProjects')}</a>
         </div>`;
     }
 
@@ -136,18 +137,18 @@ export class ProjectDetailView {
         <div class="pd-hero__bg" style="background-image:url('${escHtml(heroImg)}')"></div>
         <div class="pd-hero__overlay"></div>
         <div class="pd-hero__content">
-          <a href="#/projects" class="pd-back-link">&#x2190; All Projects</a>
+          <a href="${href('/projects')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
           <div class="pd-hero__meta">
             <span class="badge badge--${escHtml(p.category)}">${escHtml(p.category)}</span>
             <span class="pd-hero__year">${p.year}</span>
-            ${p.featured ? '<span class="pd-hero__featured">&#x2605; Featured</span>' : ''}
+            ${p.featured ? `<span class="pd-hero__featured">&#x2605; ${t('projectDetail.featured')}</span>` : ''}
           </div>
           <h1 class="pd-hero__title">${escHtml(p.title)}</h1>
         </div>
         ${canEdit ? `
         <div class="pd-edit-toggle-wrap">
-          <button class="pd-edit-toggle" type="button" aria-label="Enter edit mode" data-testid="edit-project-btn">
-            &#x270E; Edit Project
+          <button class="pd-edit-toggle" type="button" aria-label="${t('projectDetail.enterEditMode')}" data-testid="edit-project-btn">
+            &#x270E; ${t('projectDetail.editProject')}
           </button>
         </div>` : ''}
       </div>
@@ -157,23 +158,15 @@ export class ProjectDetailView {
 
           <section class="pd-section" aria-label="Project description">
             <p class="pd-lead">${escHtml(p.description)}</p>
-            <p class="pd-para">
-              Every detail was approached with the same care applied across all work at
-              Halli Smiley — whether hand-selecting timber grain for a cabinet face or
-              architecting a database schema built to survive years of production traffic
-              without a rewrite.
-            </p>
-            <p class="pd-para">
-              The result is a finished piece that balances function and aesthetic, built
-              to outlast trends and hold up under real-world use.
-            </p>
+            <p class="pd-para">${t('projectDetail.brandPara1')}</p>
+            <p class="pd-para">${t('projectDetail.brandPara2')}</p>
           </section>
 
           ${p.tools_used && p.tools_used.length ? `
           <section class="pd-section" aria-label="Tools used">
-            <h2 class="pd-section__heading">Tools &amp; Technologies</h2>
+            <h2 class="pd-section__heading">${t('projectDetail.toolsAndTech')}</h2>
             <div class="pd-tools">
-              ${p.tools_used.map(t => `<span class="tool-tag tool-tag--large">${escHtml(t)}</span>`).join('')}
+              ${p.tools_used.map(tool => `<span class="tool-tag tool-tag--large">${escHtml(tool)}</span>`).join('')}
             </div>
           </section>` : ''}
 
@@ -181,7 +174,7 @@ export class ProjectDetailView {
 
           ${hasMedia ? `
           <section class="pd-section pd-gallery-section" aria-label="Project gallery">
-            <h2 class="pd-section__heading">Project Gallery</h2>
+            <h2 class="pd-section__heading">${t('projectDetail.gallery')}</h2>
             ${legacyFlat ? `
             <div class="gallery-grid" role="list">
               ${buckets[0].items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
@@ -190,7 +183,7 @@ export class ProjectDetailView {
               const desc = g.section && g.section.description && g.section.description.trim();
               return `
               <section class="pd-gallery-group" data-section-id="${g.section ? g.section.id : ''}">
-                <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
+                <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : t('projectDetail.ungrouped'))}</h3>
                 ${desc ? `<p class="pd-gallery-group__description">${escHtml(desc)}</p>` : ''}
                 <div class="gallery-grid" role="list">
                   ${g.items.map(item => this._buildGridItem(item, globalIndex++)).join('')}
@@ -203,7 +196,7 @@ export class ProjectDetailView {
           ${videoPosition === 'below_gallery' ? videoBlock : ''}
 
           <div class="pd-back-wrap">
-            <a href="#/projects" class="pd-back-btn">&#x2190; Back to All Projects</a>
+            <a href="${href('/projects')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToAllProjects')}</a>
           </div>
 
         </div>
@@ -226,17 +219,17 @@ export class ProjectDetailView {
 
     // Target section dropdown for new uploads (default: Ungrouped)
     const uploadTargetOptions = `
-      <option value="">Ungrouped</option>
+      <option value="">${t('projectDetail.ungrouped')}</option>
       ${this._sections.map(s =>
         `<option value="${s.id}" ${this._uploadTargetSec === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`
       ).join('')}`;
 
     return `
       <div class="pd-edit-banner">
-        <span class="pd-edit-banner__label">&#x270E; Edit Mode</span>
+        <span class="pd-edit-banner__label">&#x270E; ${t('projectDetail.editMode')}</span>
         <div class="pd-edit-banner__actions">
-          <button class="btn--edit-save" type="button" id="pd-save-btn">Save Changes</button>
-          <button class="btn--edit-cancel" type="button" id="pd-cancel-btn">Cancel</button>
+          <button class="btn--edit-save" type="button" id="pd-save-btn">${t('projectDetail.saveChanges')}</button>
+          <button class="btn--edit-cancel" type="button" id="pd-cancel-btn">${t('projectDetail.cancel')}</button>
         </div>
       </div>
 
@@ -244,18 +237,18 @@ export class ProjectDetailView {
         <div class="pd-hero__bg" style="background-image:url('${escHtml(heroImg)}')"></div>
         <div class="pd-hero__overlay"></div>
         <div class="pd-hero__content">
-          <a href="#/projects" class="pd-back-link">&#x2190; All Projects</a>
+          <a href="${href('/projects')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
           <div class="pd-hero__meta" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <select class="pd-edit-select" id="pd-edit-category" name="category">
-              <option value="carpentry" ${p.category === 'carpentry' ? 'selected' : ''}>Carpentry</option>
-              <option value="tech"      ${p.category === 'tech'      ? 'selected' : ''}>Tech</option>
+              <option value="carpentry" ${p.category === 'carpentry' ? 'selected' : ''}>${t('projectDetail.carpentry')}</option>
+              <option value="tech"      ${p.category === 'tech'      ? 'selected' : ''}>${t('projectDetail.tech')}</option>
             </select>
             <input class="pd-edit-year" id="pd-edit-year" name="year"
               type="number" min="1900" max="2100" value="${p.year}">
             <label class="pd-edit-featured">
               <input type="checkbox" id="pd-edit-featured" name="featured"
                 ${p.featured ? 'checked' : ''}>
-              Featured
+              ${t('projectDetail.featured')}
             </label>
           </div>
           <input class="pd-edit-field pd-edit-title" id="pd-edit-title"
@@ -268,27 +261,27 @@ export class ProjectDetailView {
         <div class="pd-body__inner">
 
           <section class="pd-section">
-            <h2 class="pd-section__heading">Description</h2>
+            <h2 class="pd-section__heading">${t('projectDetail.description')}</h2>
             <textarea class="pd-edit-field pd-edit-description"
               id="pd-edit-description" name="description"
               maxlength="2000">${escHtml(p.description)}</textarea>
           </section>
 
           <section class="pd-section">
-            <h2 class="pd-section__heading">Tools &amp; Technologies</h2>
+            <h2 class="pd-section__heading">${t('projectDetail.toolsAndTech')}</h2>
             <input class="pd-edit-field pd-edit-tools" id="pd-edit-tools"
               name="tools_used" type="text"
-              placeholder="Comma-separated, e.g. Node.js, PostgreSQL"
+              placeholder="${t('projectDetail.commaSeparated')}"
               value="${escHtml((p.tools_used || []).join(', '))}">
             <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:6px;">
-              Separate tools with commas.
+              ${t('projectDetail.separateWithCommas')}
             </p>
           </section>
 
           ${videoPosition === 'above_gallery' ? videoEditBlock : ''}
 
           <section class="pd-section pd-gallery-section" aria-label="Project gallery">
-            <h2 class="pd-section__heading">Project Gallery</h2>
+            <h2 class="pd-section__heading">${t('projectDetail.gallery')}</h2>
 
             <div class="pd-section-toolbar">
               <div class="pd-section-toolbar__chips">
@@ -312,7 +305,7 @@ export class ProjectDetailView {
                 `).join('')}
               </div>
               <button class="pd-section-add-btn" type="button" id="pd-add-section-btn">
-                + Add Section
+                ${t('projectDetail.addSection')}
               </button>
             </div>
 
@@ -322,32 +315,32 @@ export class ProjectDetailView {
               const descVal = g.section && g.section.description ? g.section.description : '';
               return `
               <section class="pd-gallery-group pd-gallery-group--edit" data-section-id="${secId}">
-                <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : 'Ungrouped')}</h3>
+                <h3 class="pd-gallery-group__heading">${escHtml(g.section ? g.section.name : t('projectDetail.ungrouped'))}</h3>
                 ${g.section ? `
                 <textarea
                   class="pd-edit-field pd-gallery-group__description-edit"
                   data-section-desc-id="${g.section.id}"
                   rows="2"
                   maxlength="2000"
-                  placeholder="Add a description for this section (optional)…"
+                  placeholder="${t('projectDetail.sectionDescPlaceholder')}"
                 >${escHtml(descVal)}</textarea>` : ''}
                 <div class="gallery-grid gallery-grid--edit${isEmpty ? ' gallery-grid--empty' : ''}"
                      data-section-id="${secId}" role="list">
                   ${g.items.map(item => this._buildEditGridItem(item, globalIndex++, canDelete)).join('')}
-                  ${isEmpty ? '<div class="gallery-grid__drop-hint">Drag images here</div>' : ''}
+                  ${isEmpty ? `<div class="gallery-grid__drop-hint">${t('projectDetail.dragHere')}</div>` : ''}
                 </div>
               </section>`;
             }).join('')}
 
             <div class="pd-add-media-wrap">
               <label class="pd-upload-target-label">
-                Upload into:
+                ${t('projectDetail.uploadInto')}
                 <select class="pd-edit-select" id="pd-upload-target">
                   ${uploadTargetOptions}
                 </select>
               </label>
               <button class="pd-add-media-btn" type="button" id="pd-add-media-btn">
-                + Add Image / Video
+                ${t('projectDetail.addImageVideo')}
               </button>
               <input type="file" id="pd-media-file-input"
                 accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
@@ -359,7 +352,7 @@ export class ProjectDetailView {
           ${videoPosition === 'below_gallery' ? videoEditBlock : ''}
 
           <div class="pd-back-wrap">
-            <a href="#/projects" class="pd-back-btn">&#x2190; Back to All Projects</a>
+            <a href="${href('/projects')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToAllProjects')}</a>
           </div>
 
         </div>
@@ -399,7 +392,7 @@ export class ProjectDetailView {
     // View mode: simple grid of players, optional titles
     return `
       <section class="pd-section pd-video-section" aria-label="Project videos">
-        <h2 class="pd-section__heading">Videos</h2>
+        <h2 class="pd-section__heading">${t('projectDetail.videos')}</h2>
         <div class="pd-video-grid">
           ${this._videos.map(v => `
             <article class="pd-video-item" data-video-id="${v.id}">
@@ -418,15 +411,15 @@ export class ProjectDetailView {
 
     return `
       <section class="pd-section pd-video-section pd-video-section--edit" aria-label="Project videos">
-        <h2 class="pd-section__heading">Videos</h2>
+        <h2 class="pd-section__heading">${t('projectDetail.videos')}</h2>
 
         <div class="pd-video-toolbar">
           <div class="pd-video-toolbar__position">
-            <span class="pd-video-toolbar__label">Section position:</span>
+            <span class="pd-video-toolbar__label">${t('projectDetail.sectionPosition')}</span>
             <button class="gallery-btn gallery-btn--order" type="button"
               data-action="video-section-up"
               ${isAbove ? 'disabled' : ''} aria-label="Move section up (above gallery)">&#x25B2;</button>
-            <span class="pd-video-toolbar__value">${isAbove ? 'Above gallery' : 'Below gallery'}</span>
+            <span class="pd-video-toolbar__value">${isAbove ? t('projectDetail.aboveGallery') : t('projectDetail.belowGallery')}</span>
             <button class="gallery-btn gallery-btn--order" type="button"
               data-action="video-section-down"
               ${!isAbove ? 'disabled' : ''} aria-label="Move section down (below gallery)">&#x25BC;</button>
@@ -434,12 +427,12 @@ export class ProjectDetailView {
           ${canDelete && count > 0 ? `
           <button class="gallery-btn gallery-btn--delete" type="button"
             data-action="video-section-delete">
-            Delete Video Section
+            ${t('projectDetail.deleteVideoSection')}
           </button>` : ''}
         </div>
 
         <div class="pd-video-grid pd-video-grid--edit${count === 0 ? ' pd-video-grid--empty' : ''}">
-          ${count === 0 ? '<div class="pd-video-grid__empty-hint">No videos yet — add one below.</div>' : ''}
+          ${count === 0 ? `<div class="pd-video-grid__empty-hint">${t('projectDetail.noVideos')}</div>` : ''}
           ${this._videos.map((v, i) => `
             <article class="pd-video-item pd-video-item--edit" data-video-id="${v.id}">
               ${this._buildVideoItemPlayer(v)}
@@ -455,7 +448,7 @@ export class ProjectDetailView {
                 </div>
                 <button class="gallery-btn gallery-btn--delete" type="button"
                   data-action="video-delete" data-video-id="${v.id}">
-                  Delete
+                  ${t('projectDetail.delete')}
                 </button>
               </div>
 
@@ -472,13 +465,13 @@ export class ProjectDetailView {
 
         <div class="pd-video-add-wrap">
           <button class="pd-add-media-btn" type="button" id="pd-add-video-file-btn">
-            + Add Video File
+            ${t('projectDetail.addVideoFile')}
           </button>
           <input type="file" id="pd-video-file-input"
             accept="video/mp4,video/webm"
             style="display:none">
           <button class="pd-add-media-btn" type="button" id="pd-add-video-youtube-btn">
-            + Add YouTube URL
+            ${t('projectDetail.addYouTube')}
           </button>
         </div>
         <p class="pd-upload-status" id="pd-video-upload-status"></p>
@@ -492,7 +485,7 @@ export class ProjectDetailView {
       : `<img
            class="gallery-grid__img"
            src="${escHtml(item.file_path)}"
-           alt="${item.caption ? escHtml(item.caption) : `Photo ${index + 1}`}"
+           alt="${item.caption ? escHtml(item.caption) : t('projectDetail.photoAlt', { n: index + 1 })}"
            loading="lazy"
          >`;
 
@@ -502,7 +495,7 @@ export class ProjectDetailView {
         role="listitem"
         data-gallery-index="${index}"
         tabindex="0"
-        aria-label="${isVideo ? 'Play video' : `Open photo ${index + 1}`}"
+        aria-label="${isVideo ? t('projectDetail.playVideo') : t('projectDetail.openPhoto', { n: index + 1 })}"
       >
         ${thumb}
         ${isVideo ? `
@@ -511,7 +504,7 @@ export class ProjectDetailView {
             <circle cx="40" cy="40" r="38" fill="rgba(1,10,19,0.7)" stroke="rgba(200,170,110,0.5)" stroke-width="1.5"/>
             <polygon points="32,24 60,40 32,56" fill="#C8AA6E"/>
           </svg>
-          <span class="gallery-grid__video-label">Video</span>
+          <span class="gallery-grid__video-label">${t('projectDetail.videoLabel')}</span>
         </div>` : `
         <div class="gallery-grid__overlay" aria-hidden="true">
           <svg class="gallery-grid__zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -537,11 +530,11 @@ export class ProjectDetailView {
              <circle cx="40" cy="40" r="38" fill="rgba(1,10,19,0.7)" stroke="rgba(200,170,110,0.5)" stroke-width="1.5"/>
              <polygon points="32,24 60,40 32,56" fill="#C8AA6E"/>
            </svg>
-           <span class="gallery-grid__video-label">Video</span>
+           <span class="gallery-grid__video-label">${t('projectDetail.videoLabel')}</span>
          </div>`
       : `<img class="gallery-grid__img"
            src="${escHtml(item.file_path)}"
-           alt="${item.caption ? escHtml(item.caption) : `Photo ${index + 1}`}"
+           alt="${item.caption ? escHtml(item.caption) : t('projectDetail.photoAlt', { n: index + 1 })}"
            loading="lazy">`;
 
     return `
@@ -568,12 +561,12 @@ export class ProjectDetailView {
         <div class="gallery-grid__edit-controls">
           <button class="gallery-btn gallery-btn--cover" type="button"
             data-action="set-cover" data-media-id="${item.id}">
-            Set Cover
+            ${t('projectDetail.setCover')}
           </button>
           ${canDelete ? `
           <button class="gallery-btn gallery-btn--delete" type="button"
             data-action="delete-media" data-media-id="${item.id}">
-            Delete
+            ${t('projectDetail.delete')}
           </button>` : ''}
         </div>
 
@@ -720,7 +713,7 @@ export class ProjectDetailView {
   async _saveChanges(view) {
     const saveBtn = view.querySelector('#pd-save-btn');
     saveBtn.disabled    = true;
-    saveBtn.textContent = 'Saving\u2026';
+    saveBtn.textContent = t('projectDetail.saving');
 
     try {
       const title       = view.querySelector('#pd-edit-title').value.trim();
@@ -729,18 +722,18 @@ export class ProjectDetailView {
       const year        = parseInt(view.querySelector('#pd-edit-year').value, 10);
       const featured    = view.querySelector('#pd-edit-featured').checked;
       const toolsRaw    = view.querySelector('#pd-edit-tools').value;
-      const tools_used  = toolsRaw.split(',').map(t => t.trim()).filter(Boolean);
+      const tools_used  = toolsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
       if (!title) {
-        this._setStatus(view, 'Title is required', 'error');
+        this._setStatus(view, t('projectDetail.titleRequired'), 'error');
         return;
       }
       if (!description) {
-        this._setStatus(view, 'Description is required', 'error');
+        this._setStatus(view, t('projectDetail.descriptionRequired'), 'error');
         return;
       }
       if (!year || year < 1900 || year > 2100) {
-        this._setStatus(view, 'Year must be between 1900 and 2100', 'error');
+        this._setStatus(view, t('projectDetail.yearRequired'), 'error');
         return;
       }
 
@@ -751,11 +744,11 @@ export class ProjectDetailView {
       this._editMode    = false;
       this._renderContent();
     } catch (err) {
-      this._setStatus(view, err.message || 'Save failed', 'error');
+      this._setStatus(view, err.message || t('projectDetail.saveFailed'), 'error');
     } finally {
       if (saveBtn) {
         saveBtn.disabled    = false;
-        saveBtn.textContent = 'Save Changes';
+        saveBtn.textContent = t('projectDetail.saveChanges');
       }
     }
   }
@@ -768,7 +761,7 @@ export class ProjectDetailView {
       this._project  = updated;
       this._renderContent(); // stay in edit mode; hero background updates
     } catch (err) {
-      alert('Could not set cover image: ' + err.message);
+      alert(t('projectDetail.coverError') + ': ' + err.message);
     }
   }
 
@@ -776,14 +769,14 @@ export class ProjectDetailView {
 
   async _handleDeleteMedia(mediaId, canDelete) {
     if (!canDelete) return;
-    if (!confirm('Delete this media item? This cannot be undone.')) return;
+    if (!confirm(t('projectDetail.deleteMedia'))) return;
 
     try {
       await projectApi.deleteMedia(this._project.id, mediaId);
       this._media = this._media.filter(m => m.id !== mediaId);
       this._renderContent();
     } catch (err) {
-      alert('Could not delete media: ' + err.message);
+      alert(t('projectDetail.deleteMediaError') + ': ' + err.message);
     }
   }
 
@@ -813,7 +806,7 @@ export class ProjectDetailView {
         const reordered = await projectApi.reorderMedia(this._project.id, order);
         this._media = reordered;
       } catch (err) {
-        alert('Could not reorder media: ' + err.message);
+        alert(t('projectDetail.reorderError') + ': ' + err.message);
       }
     }, 500);
   }
@@ -950,28 +943,28 @@ export class ProjectDetailView {
   // ── Section CRUD ───────────────────────────────────────────────────────────
 
   async _handleAddSection() {
-    const name = prompt('Section name (e.g. Kitchen, Living Room):');
+    const name = prompt(t('projectDetail.sectionNamePrompt'));
     if (!name || !name.trim()) return;
     try {
       const created = await projectApi.createSection(this._project.id, name.trim());
       this._sections = [...this._sections, created];
       this._renderContent();
     } catch (err) {
-      alert('Could not create section: ' + err.message);
+      alert(t('projectDetail.sectionCreateError') + ': ' + err.message);
     }
   }
 
   async _handleRenameSection(sectionId) {
     const current = this._sections.find(s => s.id === sectionId);
     if (!current) return;
-    const name = prompt('Rename section:', current.name);
+    const name = prompt(t('projectDetail.renamePrompt'), current.name);
     if (!name || !name.trim() || name.trim() === current.name) return;
     try {
       const updated = await projectApi.updateSection(this._project.id, sectionId, { name: name.trim() });
       this._sections = this._sections.map(s => s.id === sectionId ? updated : s);
       this._renderContent();
     } catch (err) {
-      alert('Could not rename section: ' + err.message);
+      alert(t('projectDetail.renameError') + ': ' + err.message);
     }
   }
 
@@ -981,7 +974,7 @@ export class ProjectDetailView {
       // Update state in place without a full re-render — the textarea is already in sync
       this._sections = this._sections.map(s => s.id === sectionId ? updated : s);
     } catch (err) {
-      alert('Could not save section description: ' + err.message);
+      alert(t('projectDetail.sectionDescError') + ': ' + err.message);
     }
   }
 
@@ -991,8 +984,8 @@ export class ProjectDetailView {
     if (!current) return;
     const affected = this._media.filter(m => m.section_id === sectionId).length;
     const msg = affected === 0
-      ? `Delete section "${current.name}"?`
-      : `Delete section "${current.name}"? ${affected} photo(s) will move back to Ungrouped.`;
+      ? t('projectDetail.deleteSectionConfirm', { name: current.name })
+      : t('projectDetail.deleteSectionConfirmWithPhotos', { name: current.name, n: affected });
     if (!confirm(msg)) return;
     try {
       await projectApi.deleteSection(this._project.id, sectionId);
@@ -1003,7 +996,7 @@ export class ProjectDetailView {
       );
       this._renderContent();
     } catch (err) {
-      alert('Could not delete section: ' + err.message);
+      alert(t('projectDetail.deleteSectionError') + ': ' + err.message);
     }
   }
 
@@ -1023,7 +1016,7 @@ export class ProjectDetailView {
       const updated = await projectApi.reorderSections(this._project.id, payload);
       this._sections = updated;
     } catch (err) {
-      alert('Could not reorder sections: ' + err.message);
+      alert(t('projectDetail.reorderSectionError') + ': ' + err.message);
     }
   }
 
@@ -1037,20 +1030,20 @@ export class ProjectDetailView {
       this._project = updated;
       this._renderContent();
     } catch (err) {
-      alert('Could not move video section: ' + err.message);
+      alert(t('projectDetail.videoPositionError') + ': ' + err.message);
     }
   }
 
   async _handleDeleteVideoSection(canDelete) {
     if (!canDelete) return;
     if (!this._videos.length) return;
-    if (!confirm(`Delete the entire Video section? ${this._videos.length} video(s) will be removed.`)) return;
+    if (!confirm(t('projectDetail.deleteVideoSectionConfirm', { n: this._videos.length }))) return;
     try {
       await projectApi.deleteVideoSection(this._project.id);
       this._videos = [];
       this._renderContent();
     } catch (err) {
-      alert('Could not delete video section: ' + err.message);
+      alert(t('projectDetail.deleteVideoSectionError') + ': ' + err.message);
     }
   }
 
@@ -1076,19 +1069,19 @@ export class ProjectDetailView {
         const updated = await projectApi.reorderVideos(this._project.id, order);
         this._videos = updated;
       } catch (err) {
-        alert('Could not reorder videos: ' + err.message);
+        alert(t('projectDetail.reorderVideoError') + ': ' + err.message);
       }
     }, 400);
   }
 
   async _handleDeleteVideo(videoId) {
-    if (!confirm('Delete this video?')) return;
+    if (!confirm(t('projectDetail.deleteVideoConfirm'))) return;
     try {
       await projectApi.deleteVideo(this._project.id, videoId);
       this._videos = this._videos.filter(v => v.id !== videoId);
       this._renderContent();
     } catch (err) {
-      alert('Could not delete video: ' + err.message);
+      alert(t('projectDetail.deleteVideoError') + ': ' + err.message);
     }
   }
 
@@ -1097,34 +1090,34 @@ export class ProjectDetailView {
       const updated = await projectApi.updateVideo(this._project.id, videoId, { title });
       this._videos = this._videos.map(v => v.id === videoId ? updated : v);
     } catch (err) {
-      alert('Could not save video title: ' + err.message);
+      alert(t('projectDetail.videoTitleError') + ': ' + err.message);
     }
   }
 
   async _handleVideoFileUpload(file, view) {
     const ALLOWED = ['video/mp4', 'video/webm'];
     if (!ALLOWED.includes(file.type)) {
-      this._setVideoStatus(view, 'Only mp4 / webm videos are allowed', 'error');
+      this._setVideoStatus(view, t('projectDetail.videoTypeError'), 'error');
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      this._setVideoStatus(view, 'File too large (max 50 MB)', 'error');
+      this._setVideoStatus(view, t('projectDetail.videoSizeError'), 'error');
       return;
     }
     const fileInput = view.querySelector('#pd-video-file-input');
     const addBtn    = view.querySelector('#pd-add-video-file-btn');
     if (addBtn) addBtn.disabled = true;
-    this._setVideoStatus(view, 'Uploading video…', '');
+    this._setVideoStatus(view, t('projectDetail.uploadingVideo'), '');
 
     const formData = new FormData();
     formData.append('file', file);
     try {
       const row = await projectApi.addVideo(this._project.id, formData);
       this._videos = [...this._videos, row];
-      this._setVideoStatus(view, 'Uploaded', 'ok');
+      this._setVideoStatus(view, t('projectDetail.uploaded'), 'ok');
       this._renderContent();
     } catch (err) {
-      this._setVideoStatus(view, err.message || 'Upload failed', 'error');
+      this._setVideoStatus(view, err.message || t('projectDetail.uploadFailed'), 'error');
     } finally {
       if (addBtn)    addBtn.disabled = false;
       if (fileInput) fileInput.value = '';
@@ -1132,16 +1125,16 @@ export class ProjectDetailView {
   }
 
   async _handleAddYouTubeVideo(view) {
-    const url = prompt('Paste a YouTube URL (watch, shorts, youtu.be, or embed):');
+    const url = prompt(t('projectDetail.youtubePrompt'));
     if (!url || !url.trim()) return;
-    this._setVideoStatus(view, 'Adding YouTube video…', '');
+    this._setVideoStatus(view, t('projectDetail.addingYouTube'), '');
     try {
       const row = await projectApi.addVideo(this._project.id, { url: url.trim() });
       this._videos = [...this._videos, row];
-      this._setVideoStatus(view, 'Added', 'ok');
+      this._setVideoStatus(view, t('projectDetail.added'), 'ok');
       this._renderContent();
     } catch (err) {
-      this._setVideoStatus(view, err.message || 'Could not add YouTube video', 'error');
+      this._setVideoStatus(view, err.message || t('projectDetail.youtubeError'), 'error');
     }
   }
 
@@ -1160,18 +1153,18 @@ export class ProjectDetailView {
 
     const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'];
     if (!ALLOWED.includes(file.type)) {
-      this._setStatus(view, 'Only jpg/png/webp images and mp4/webm videos are allowed', 'error');
+      this._setStatus(view, t('projectDetail.mediaTypeError'), 'error');
       return;
     }
     const isImage = file.type.startsWith('image/');
     const maxBytes = isImage ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
     if (file.size > maxBytes) {
-      this._setStatus(view, `File too large (max ${isImage ? '10 MB' : '50 MB'})`, 'error');
+      this._setStatus(view, isImage ? t('projectDetail.imageSizeError') : t('projectDetail.videoSizeError'), 'error');
       return;
     }
 
     if (addBtn) addBtn.disabled = true;
-    this._setStatus(view, 'Uploading\u2026', '');
+    this._setStatus(view, t('projectDetail.uploadingMedia'), '');
 
     const formData = new FormData();
     formData.append('file', file);
@@ -1183,10 +1176,10 @@ export class ProjectDetailView {
     try {
       const newItem = await projectApi.addMedia(this._project.id, formData);
       this._media   = [...this._media, newItem];
-      this._setStatus(view, 'Uploaded successfully', 'ok');
+      this._setStatus(view, t('projectDetail.uploadedSuccessfully'), 'ok');
       this._renderContent();
     } catch (err) {
-      this._setStatus(view, err.message || 'Upload failed', 'error');
+      this._setStatus(view, err.message || t('projectDetail.uploadFailed'), 'error');
     } finally {
       if (addBtn)    addBtn.disabled = false;
       if (fileInput) fileInput.value = '';

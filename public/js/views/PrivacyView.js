@@ -1,3 +1,5 @@
+import { t, href } from '../i18n/i18n.js';
+
 export class PrivacyView {
   async render() {
     const view = document.createElement('div');
@@ -6,8 +8,8 @@ export class PrivacyView {
       <main class="main legal-page" id="main-content">
         <article class="legal-article">
           <header class="legal-header">
-            <p class="admin-eyebrow">Legal</p>
-            <h1 class="legal-title">Privacy Policy</h1>
+            <p class="admin-eyebrow">${t('legal.eyebrow')}</p>
+            <h1 class="legal-title">${t('privacy.title')}</h1>
             <p class="legal-meta">Last updated: 28 March 2026</p>
           </header>
 
@@ -56,7 +58,7 @@ export class PrivacyView {
           </section>
 
           <footer class="legal-footer-nav">
-            <a href="#/" class="btn btn--outline">Back to Home</a>
+            <a href="${href('/')}" class="btn btn--outline">${t('common.backToHome')}</a>
           </footer>
         </article>
       </main>

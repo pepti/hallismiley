@@ -1,5 +1,6 @@
 // ProductCard — grid tile for the shop listing.
 import { formatMoney, getCurrency } from '../services/cart.js';
+import { t } from '../i18n/i18n.js';
 
 // Shared across ProductCard + ProductView so "low" means the same everywhere.
 export const LOW_STOCK_THRESHOLD = 3;
@@ -13,11 +14,11 @@ function _esc(s) {
 function stockBadgeHtml(stock) {
   if (stock === 0) {
     return `<span class="product-card__badge product-card__badge--out"
-                   data-testid="stock-badge-out">Out of stock</span>`;
+                   data-testid="stock-badge-out">${t('shop.outOfStock')}</span>`;
   }
   if (stock > 0 && stock <= LOW_STOCK_THRESHOLD) {
     return `<span class="product-card__badge product-card__badge--low"
-                   data-testid="stock-badge-low">Only ${stock} left</span>`;
+                   data-testid="stock-badge-low">${t('shop.lowStock', { n: stock })}</span>`;
   }
   return '';
 }
@@ -42,7 +43,7 @@ export function renderProductCard(product) {
     <div class="product-card__media">
       ${cover
         ? `<img src="${_esc(cover)}" alt="${_esc(product.name)}" loading="lazy"/>`
-        : `<div class="product-card__placeholder" aria-hidden="true">No image</div>`}
+        : `<div class="product-card__placeholder" aria-hidden="true">${t('shop.noImage')}</div>`}
       ${stockBadgeHtml(stock)}
     </div>
     <div class="product-card__body">

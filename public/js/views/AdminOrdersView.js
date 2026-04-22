@@ -1,6 +1,7 @@
 // AdminOrdersView — admin list & fulfillment view. Route: #/admin/shop/orders
 import { getCSRFToken } from '../utils/api.js';
 import * as cart from '../services/cart.js';
+import { t } from '../i18n/i18n.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -25,18 +26,18 @@ export class AdminOrdersView {
     this._view.innerHTML = `
       <div class="admin-shop__inner">
         <header class="admin-shop__header">
-          <h1>Manage orders</h1>
+          <h1>${t('adminOrders.title')}</h1>
           <select id="admin-orders-filter" class="admin-shop__select">
-            <option value="">All</option>
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="shipped">Shipped</option>
-            <option value="failed">Failed</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="refunded">Refunded</option>
+            <option value="">${t('adminOrders.all')}</option>
+            <option value="pending">${t('adminOrders.pending')}</option>
+            <option value="paid">${t('adminOrders.paid')}</option>
+            <option value="shipped">${t('adminOrders.shipped')}</option>
+            <option value="failed">${t('adminOrders.failed')}</option>
+            <option value="cancelled">${t('adminOrders.cancelled')}</option>
+            <option value="refunded">${t('adminOrders.refunded')}</option>
           </select>
         </header>
-        <div id="admin-orders-body"><p>Loading…</p></div>
+        <div id="admin-orders-body"><p>${t('form.loading')}</p></div>
       </div>
     `;
     this._view.querySelector('#admin-orders-filter').addEventListener('change', (e) => {
@@ -66,13 +67,13 @@ export class AdminOrdersView {
   _paint() {
     const body = this._view.querySelector('#admin-orders-body');
     if (this._orders.length === 0) {
-      body.innerHTML = `<p>No orders${this._filter ? ` with status "${_esc(this._filter)}"` : ''}.</p>`;
+      body.innerHTML = `<p>${t('adminOrders.noOrders')}${this._filter ? ` — ${_esc(this._filter)}` : ''}.</p>`;
       return;
     }
     body.innerHTML = `
       <table class="admin-shop__table">
         <thead><tr>
-          <th>Order</th><th>Date</th><th>Customer</th><th>Status</th><th>Total</th><th></th>
+          <th>${t('orders.order')}</th><th>${t('orders.date')}</th><th>${t('adminOrders.customer')}</th><th>${t('orders.status')}</th><th>${t('orders.total')}</th><th></th>
         </tr></thead>
         <tbody>
           ${this._orders.map(o => `
@@ -83,8 +84,8 @@ export class AdminOrdersView {
               <td><span class="admin-shop__status admin-shop__status--${_esc(o.status)}">${_esc(o.status)}</span></td>
               <td>${cart.formatMoney(o.total, o.currency)}</td>
               <td>
-                ${o.status === 'paid' ? `<button type="button" class="admin-shop__link" data-action="ship" data-id="${_esc(o.id)}">Mark shipped</button>` : ''}
-                ${(o.status === 'pending' || o.status === 'paid') ? `<button type="button" class="admin-shop__link" data-action="cancel" data-id="${_esc(o.id)}">Cancel</button>` : ''}
+                ${o.status === 'paid' ? `<button type="button" class="admin-shop__link" data-action="ship" data-id="${_esc(o.id)}">${t('adminOrders.markShipped')}</button>` : ''}
+                ${(o.status === 'pending' || o.status === 'paid') ? `<button type="button" class="admin-shop__link" data-action="cancel" data-id="${_esc(o.id)}">${t('admin.cancel')}</button>` : ''}
               </td>
             </tr>`).join('')}
         </tbody>
@@ -95,7 +96,7 @@ export class AdminOrdersView {
     });
     body.querySelectorAll('[data-action="cancel"]').forEach(btn => {
       btn.addEventListener('click', () => {
-        if (confirm('Cancel this order?')) this._updateStatus(btn.dataset.id, 'cancelled');
+        if (confirm(t('adminOrders.confirmCancel'))) this._updateStatus(btn.dataset.id, 'cancelled');
       });
     });
   }

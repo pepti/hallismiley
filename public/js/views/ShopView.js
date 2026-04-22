@@ -10,6 +10,7 @@ import { ShopFilters, applyFilters, parseStateFromQs, stateToQs } from '../compo
 import * as cart from '../services/cart.js';
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { openProductFormModal } from './AdminProductsView.js';
+import { t } from '../i18n/i18n.js';
 
 // Default copy — rendered when the DB row is missing or the network fails.
 const DEFAULT_HERO = {
@@ -57,7 +58,7 @@ export class ShopView {
         <p class="shop-page__count" id="shop-page-count" aria-live="polite"></p>
 
         <div class="shop-page__grid" id="shop-grid" aria-live="polite">
-          <div class="shop-page__loading">Loading…</div>
+          <div class="shop-page__loading">${t('form.loading')}</div>
         </div>
       </div>
     `;
@@ -99,7 +100,7 @@ export class ShopView {
 
   async _loadHero() {
     try {
-      const res = await fetch('/api/v1/content/shop_hero');
+      const res = await fetch(`/api/v1/content/shop_hero?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         const data = await res.json();
         this._hero = this._mergeWithDefaults(DEFAULT_HERO, data);
@@ -145,9 +146,9 @@ export class ShopView {
     const total = this._products.length;
     const shown = this._filtered.length;
     if (shown === total) {
-      count.textContent = `${total} ${total === 1 ? 'product' : 'products'}`;
+      count.textContent = `${total} ${t('shop.products')}`;
     } else {
-      count.textContent = `${shown} of ${total} products`;
+      count.textContent = `${shown} ${t('shop.of')} ${total} ${t('shop.products')}`;
     }
 
     if (this._filtered.length === 0) {
@@ -155,7 +156,7 @@ export class ShopView {
       grid.innerHTML = `
         <p class="shop-page__empty">
           ${_esc(this._hero.empty_state || DEFAULT_HERO.empty_state)}
-          <button type="button" class="shop-page__empty-reset" id="shop-empty-reset">Clear filters</button>
+          <button type="button" class="shop-page__empty-reset" id="shop-empty-reset">${t('shop.clearFilters')}</button>
         </p>`;
       grid.querySelector('#shop-empty-reset')?.addEventListener('click', () => {
         this._filters.resetState();
@@ -185,7 +186,7 @@ export class ShopView {
     editBtn.type = 'button';
     editBtn.className = 'shop-view__edit-btn';
     editBtn.setAttribute('data-testid', 'edit-shop-page-btn');
-    editBtn.textContent = 'Edit Page';
+    editBtn.textContent = t('admin.editPage');
     view.appendChild(editBtn);
 
     // "Add Product" floating button — admin only (creation uses the
@@ -197,7 +198,7 @@ export class ShopView {
       addBtn.type = 'button';
       addBtn.className = 'shop-view__add-btn';
       addBtn.setAttribute('data-testid', 'add-product-btn');
-      addBtn.textContent = '+ Add Product';
+      addBtn.textContent = `+ ${t('admin.addProduct')}`;
       view.appendChild(addBtn);
 
       addBtn.addEventListener('click', () => {
@@ -212,9 +213,9 @@ export class ShopView {
     controls.className = 'shop-view__edit-controls shop-view__edit-controls--hidden';
     controls.innerHTML = `
       <button type="button" class="shop-view__save-btn"
-              data-testid="edit-shop-page-save">Save Changes</button>
+              data-testid="edit-shop-page-save">${t('form.saveChanges')}</button>
       <button type="button" class="shop-view__cancel-btn"
-              data-testid="edit-shop-page-cancel">Cancel</button>
+              data-testid="edit-shop-page-cancel">${t('admin.cancel')}</button>
       <span class="shop-view__edit-status" aria-live="polite"></span>`;
     view.appendChild(controls);
 
@@ -290,7 +291,7 @@ export class ShopView {
 
   async _saveHero(view, editBtn, controls) {
     const status = controls.querySelector('.shop-view__edit-status');
-    status.textContent = 'Saving…';
+    status.textContent = t('form.saving');
 
     const header = view.querySelector('[data-section="hero"]');
     const next = {
@@ -322,7 +323,7 @@ export class ShopView {
       this._repaintHero(view);
       // Also repaint the grid's empty-state copy (if visible).
       this._repaintGrid();
-      status.textContent = 'Saved!';
+      status.textContent = t('form.saved');
       setTimeout(() => this._exitEdit(view, editBtn, controls), 900);
     } catch (err) {
       status.textContent = `Save failed — ${err.message}`;

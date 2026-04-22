@@ -7,7 +7,8 @@ const { userAvatarDir }  = require('../config/paths');
 
 const scrypt = new Scrypt();
 
-const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, created_at';
+const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, preferred_locale, created_at';
+const { SUPPORTED_LOCALES } = require('../config/i18n');
 
 // Only delete files that match the user-upload pattern (never the baked SVGs).
 const UPLOADED_AVATAR_RE = /^user-\d+-\d+-[a-z0-9]+\.(jpg|jpeg|png|webp)$/i;
@@ -35,7 +36,7 @@ const userController = {
   // Field validation handled upstream by validateProfileUpdate middleware.
   async updateMe(req, res, next) {
     try {
-      const allowed  = ['display_name', 'phone', 'avatar'];
+      const allowed  = ['display_name', 'phone', 'avatar', 'preferred_locale'];
       const updates  = {};
       for (const key of allowed) {
         if (key in req.body) updates[key] = req.body[key];
@@ -43,6 +44,10 @@ const userController = {
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No updatable fields provided', code: 400 });
+      }
+
+      if ('preferred_locale' in updates && !SUPPORTED_LOCALES.includes(updates.preferred_locale)) {
+        return res.status(400).json({ error: 'Unsupported locale', code: 400 });
       }
 
       const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);

@@ -1,5 +1,6 @@
 // CurrencySelector — ISK/EUR toggle. Persists to localStorage via cart service.
 import * as cart from '../services/cart.js';
+import { t } from '../i18n/i18n.js';
 
 export class CurrencySelector {
   constructor({ onChange } = {}) {
@@ -12,7 +13,7 @@ export class CurrencySelector {
     const wrap = document.createElement('div');
     wrap.className = 'shop-currency';
     wrap.setAttribute('role', 'group');
-    wrap.setAttribute('aria-label', 'Currency selector');
+    wrap.setAttribute('aria-label', t('currency.label'));
     wrap.innerHTML = `
       <button type="button" class="shop-currency__btn" data-cur="ISK" data-testid="currency-isk">ISK</button>
       <button type="button" class="shop-currency__btn" data-cur="EUR" data-testid="currency-eur">EUR</button>

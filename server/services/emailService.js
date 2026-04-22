@@ -1,6 +1,7 @@
 // Email service using Resend API.
 // Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
+const { t }      = require('../i18n');
 
 const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
 const FROM_ADDR = process.env.EMAIL_FROM || 'noreply@hallismiley.is';
@@ -27,9 +28,10 @@ function getClient() {
 
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
 
-function emailShell(title, bodyHtml) {
+function emailShell(title, bodyHtml, locale = 'en') {
+  const footer = t(locale, 'email.footer', { appUrl: APP_URL });
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -57,8 +59,7 @@ function emailShell(title, bodyHtml) {
           <tr>
             <td style="padding:24px 40px;border-top:1px solid #222;background-color:#0d0d0d;">
               <p style="margin:0;font-size:12px;color:#444;text-align:center;">
-                You received this email from <a href="${APP_URL}" style="color:#c9a84c;text-decoration:none;">hallismiley.is</a>.
-                If you did not request this, you can safely ignore it.
+                ${footer}
               </p>
             </td>
           </tr>
@@ -72,7 +73,7 @@ function emailShell(title, bodyHtml) {
 
 // ── Verification email ────────────────────────────────────────────────────────
 
-async function sendVerificationEmail(to, token) {
+async function sendVerificationEmail(to, token, locale = 'en') {
   const link = `${APP_URL}/#/verify-email?token=${token}`;
 
   if (!isConfigured()) {
@@ -83,12 +84,11 @@ async function sendVerificationEmail(to, token) {
     return;
   }
 
-  const subject = 'Verify your Halli Smiley account';
+  const subject = t(locale, 'email.verify.subject');
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">Verify your email</h2>
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${t(locale, 'email.verify.heading')}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
-      Thanks for signing up! Click the button below to verify your email address
-      and activate your account. This link expires in <strong style="color:#c9a84c;">24 hours</strong>.
+      ${t(locale, 'email.verify.body')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       <tr>
@@ -96,16 +96,16 @@ async function sendVerificationEmail(to, token) {
           <a href="${link}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
                     color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
-            Verify Email Address
+            ${t(locale, 'email.verify.button')}
           </a>
         </td>
       </tr>
     </table>
     <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
-      Or paste this link into your browser:<br/>
+      ${t(locale, 'email.verify.fallback')}<br/>
       <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
     </p>
-  `);
+  `, locale);
 
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
@@ -115,7 +115,7 @@ async function sendVerificationEmail(to, token) {
 
 // ── Password reset email ──────────────────────────────────────────────────────
 
-async function sendPasswordResetEmail(to, token) {
+async function sendPasswordResetEmail(to, token, locale = 'en') {
   const link = `${APP_URL}/#/reset-password?token=${token}`;
 
   if (!isConfigured()) {
@@ -126,12 +126,11 @@ async function sendPasswordResetEmail(to, token) {
     return;
   }
 
-  const subject = 'Reset your Halli Smiley password';
+  const subject = t(locale, 'email.reset.subject');
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">Reset your password</h2>
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${t(locale, 'email.reset.heading')}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
-      We received a request to reset the password for your account. Click the button
-      below to choose a new password. This link expires in <strong style="color:#c9a84c;">1 hour</strong>.
+      ${t(locale, 'email.reset.body')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       <tr>
@@ -139,19 +138,19 @@ async function sendPasswordResetEmail(to, token) {
           <a href="${link}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
                     color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
-            Reset Password
+            ${t(locale, 'email.reset.button')}
           </a>
         </td>
       </tr>
     </table>
     <p style="margin:0 0 16px;font-size:13px;color:#555;line-height:1.6;">
-      Or paste this link into your browser:<br/>
+      ${t(locale, 'email.reset.fallback')}<br/>
       <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
     </p>
     <p style="margin:0;font-size:13px;color:#444;">
-      If you did not request a password reset, no action is needed — your password remains unchanged.
+      ${t(locale, 'email.reset.noAction')}
     </p>
-  `);
+  `, locale);
 
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
@@ -177,7 +176,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-async function sendOrderReceipt(order, items) {
+async function sendOrderReceipt(order, items, locale = 'en') {
   const to = order.guest_email || order.user_email;
   if (!to) {
     console.warn(`[EmailService] No recipient for order ${order.order_number} receipt`);
@@ -202,36 +201,39 @@ async function sendOrderReceipt(order, items) {
     return;
   }
 
-  const subject = `Your Halli Smiley order ${order.order_number}`;
+  const methodLabel = order.shipping_method === 'local_pickup'
+    ? t(locale, 'email.order.localPickup')
+    : t(locale, 'email.order.shippingMethod');
+
+  const subject = t(locale, 'email.order.subject', { orderNumber: order.order_number });
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">Thank you for your order</h2>
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${t(locale, 'email.order.heading')}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
-      Your order <strong style="color:#c9a84c;">${escapeHtml(order.order_number)}</strong>
-      has been received. A confirmation of the full details is below.
+      ${t(locale, 'email.order.body', { orderNumber: escapeHtml(order.order_number) })}
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;">
       ${itemsHtml}
       <tr>
-        <td style="padding:12px 0 8px;color:#666;font-size:13px;border-top:1px solid #222;">Subtotal</td>
+        <td style="padding:12px 0 8px;color:#666;font-size:13px;border-top:1px solid #222;">${t(locale, 'email.order.subtotal')}</td>
         <td style="padding:12px 0 8px;color:#aaa;font-size:13px;text-align:right;border-top:1px solid #222;">
           ${formatMoney(order.subtotal, order.currency)}
         </td>
       </tr>
       <tr>
-        <td style="padding:4px 0;color:#666;font-size:13px;">Shipping (${escapeHtml(order.shipping_method === 'local_pickup' ? 'Local pickup' : 'Shipping')})</td>
+        <td style="padding:4px 0;color:#666;font-size:13px;">${t(locale, 'email.order.shipping', { method: methodLabel })}</td>
         <td style="padding:4px 0;color:#aaa;font-size:13px;text-align:right;">
           ${formatMoney(order.shipping, order.currency)}
         </td>
       </tr>
       <tr>
-        <td style="padding:12px 0 0;color:#e0e0e0;font-size:16px;font-weight:600;border-top:1px solid #222;">Total</td>
+        <td style="padding:12px 0 0;color:#e0e0e0;font-size:16px;font-weight:600;border-top:1px solid #222;">${t(locale, 'email.order.total')}</td>
         <td style="padding:12px 0 0;color:#c9a84c;font-size:16px;font-weight:600;text-align:right;border-top:1px solid #222;">
           ${formatMoney(order.total, order.currency)}
         </td>
       </tr>
     </table>
     <p style="margin:0 0 16px;font-size:12px;color:#555;">
-      Price includes 24% VAT (VSK).
+      ${t(locale, 'email.order.vatNote')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
@@ -239,15 +241,15 @@ async function sendOrderReceipt(order, items) {
           <a href="${orderUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
                     color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
-            View Order
+            ${t(locale, 'email.order.viewButton')}
           </a>
         </td>
       </tr>
     </table>
     <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
-      Questions? Reply to this email and we'll get back to you.
+      ${t(locale, 'email.order.questions')}
     </p>
-  `);
+  `, locale);
 
   const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
@@ -255,6 +257,7 @@ async function sendOrderReceipt(order, items) {
 }
 
 // ── RSVP notification to admins ───────────────────────────────────────────────
+// Admin notification emails are always sent in English (admins may not all speak Icelandic).
 
 async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEmails }) {
   if (!adminEmails || adminEmails.length === 0) return;
@@ -263,12 +266,13 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     return;
   }
 
-  const name = user.display_name || user.username || user.email;
+  const locale = 'en';
+  const name   = user.display_name || user.username || user.email;
   const subject = isUpdate
-    ? `RSVP updated: ${name}`
-    : `New RSVP from ${name}`;
+    ? t(locale, 'email.rsvpNotification.subject.update', { name })
+    : t(locale, 'email.rsvpNotification.subject.new',    { name });
 
-  const fields = Array.isArray(rsvpForm) ? rsvpForm : [];
+  const fields     = Array.isArray(rsvpForm) ? rsvpForm : [];
   const dataFields = fields.filter(f => !['heading', 'paragraph'].includes(f.type));
 
   const answerRows = dataFields.map(f => {
@@ -293,16 +297,17 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
   }).join('');
 
   const partyUrl = `${APP_URL}/#/party/admin`;
-  const heading  = isUpdate ? 'An RSVP was updated' : 'A new RSVP came in';
+  const heading  = t(locale, isUpdate ? 'email.rsvpNotification.heading.update' : 'email.rsvpNotification.heading.new');
+  const bodyText = t(locale, isUpdate ? 'email.rsvpNotification.body.update' : 'email.rsvpNotification.body.new',
+    { name: escapeHtml(name), email: escapeHtml(user.email || '') });
 
   const html = emailShell(subject, `
     <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
-      <strong style="color:#c9a84c;">${escapeHtml(name)}</strong>
-      (${escapeHtml(user.email || '')}) ${isUpdate ? 'updated their RSVP' : 'sent an RSVP'}.
+      ${bodyText}
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;">
-      ${answerRows || rawRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">(no answers)</td></tr>`}
+      ${answerRows || rawRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">${t(locale, 'email.rsvpNotification.noAnswers')}</td></tr>`}
     </table>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
@@ -310,12 +315,12 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
           <a href="${partyUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
                     color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
-            Open Party Admin
+            ${t(locale, 'email.rsvpNotification.button')}
           </a>
         </td>
       </tr>
     </table>
-  `);
+  `, locale);
 
   const { data, error } = await getClient().emails.send({
     from: FROM, to: adminEmails, subject, html,
@@ -333,12 +338,12 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
     return;
   }
 
-  const name = user.display_name || user.username || 'there';
-  const subject = isUpdate
-    ? "Your RSVP to Halli's 40th — updated"
-    : "Your RSVP to Halli's 40th — we've got it!";
+  const locale = user.preferred_locale || 'en';
+  const name   = user.display_name || user.username || 'there';
 
-  const fields = Array.isArray(rsvpForm) ? rsvpForm : [];
+  const subject = t(locale, isUpdate ? 'email.rsvpConfirmation.subject.update' : 'email.rsvpConfirmation.subject.new');
+
+  const fields     = Array.isArray(rsvpForm) ? rsvpForm : [];
   const dataFields = fields.filter(f => !['heading', 'paragraph'].includes(f.type));
 
   const answerRows = dataFields.map(f => {
@@ -362,33 +367,31 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
           : '');
 
   const partyUrl = `${APP_URL}/#/party`;
-  const headline = isUpdate
-    ? 'Your RSVP has been updated'
-    : "You're on the list! 🎉";
+  const heading  = t(locale, isUpdate ? 'email.rsvpConfirmation.heading.update' : 'email.rsvpConfirmation.heading.new');
+  const bodyText = t(locale, isUpdate ? 'email.rsvpConfirmation.body.update' : 'email.rsvpConfirmation.body.new',
+    { name: escapeHtml(name) });
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(headline)}</h2>
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
-      Hi ${escapeHtml(name)} — ${isUpdate
-        ? "your updated answers are saved. Here's what we have:"
-        : "thanks for letting Halli know you'll be there. Here's a copy of your answers:"}
+      ${bodyText}
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;">
-      ${answerRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">(no answers on file)</td></tr>`}
+      ${answerRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">${t(locale, 'email.rsvpConfirmation.noAnswers')}</td></tr>`}
     </table>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
       <tr>
         <td style="padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">When &amp; where</p>
+          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
           <p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>
           ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
           ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
-          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">📍 Open in Google Maps</a></p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
         </td>
       </tr>
     </table>
     <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">
-      Need to change anything? You can update your RSVP any time:
+      ${t(locale, 'email.rsvpConfirmation.updateNote')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
@@ -396,15 +399,15 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
           <a href="${partyUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
                     color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
-            Update RSVP
+            ${t(locale, 'email.rsvpConfirmation.button')}
           </a>
         </td>
       </tr>
     </table>
     <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
-      Can't wait to celebrate with you!
+      ${t(locale, 'email.rsvpConfirmation.closing')}
     </p>
-  `);
+  `, locale);
 
   const { data, error } = await getClient().emails.send({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);

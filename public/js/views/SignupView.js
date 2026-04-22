@@ -1,5 +1,6 @@
 import { signup, checkUsername, checkEmail, resendVerification } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { t, href } from '../i18n/i18n.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -31,28 +32,28 @@ export class SignupView {
       <div class="signup-container">
         <div class="signup-card">
           <div class="signup-card__header">
-            <p class="signup-eyebrow">Join the Community</p>
-            <h1 class="signup-title">Create Account</h1>
-            <p class="signup-subtitle">Already have an account? <a href="#/login" class="signup-link" data-route="/login">Sign in</a></p>
+            <p class="signup-eyebrow">${t('signup.eyebrow')}</p>
+            <h1 class="signup-title">${t('signup.title')}</h1>
+            <p class="signup-subtitle">${t('signup.alreadyHaveAccount')} <a href="${href('/login')}" class="signup-link" data-route="/login">${t('nav.signIn')}</a></p>
           </div>
 
           <a class="btn btn--outline btn--full btn--google" href="/auth/google"
              data-testid="signup-google">
             <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
-            <span>Continue with Google</span>
+            <span>${t('signup.continueWithGoogle')}</span>
           </a>
           <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook"
              data-testid="signup-facebook">
             <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
-            <span>Continue with Facebook</span>
+            <span>${t('signup.continueWithFacebook')}</span>
           </a>
-          <div class="login-modal__divider signup-divider"><span>or sign up with email</span></div>
+          <div class="login-modal__divider signup-divider"><span>${t('signup.orEmail')}</span></div>
 
           <form class="signup-form" id="signup-form" novalidate data-testid="signup-form">
 
             <!-- Avatar picker -->
             <div class="form-group">
-              <span class="form-label">Choose Avatar</span>
+              <span class="form-label">${t('signup.chooseAvatar')}</span>
               <div class="avatar-picker" id="avatar-picker" data-testid="avatar-picker"></div>
               <input type="hidden" id="signup-avatar" name="avatar" value=""/>
             </div>
@@ -60,13 +61,13 @@ export class SignupView {
             <!-- Email + Username -->
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="signup-email">Email <span class="req">*</span></label>
+                <label class="form-label" for="signup-email">${t('checkout.email')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-email" name="email" type="email"
                        autocomplete="email" required placeholder="you@example.com"/>
                 <p class="form-field-status" id="email-status"></p>
               </div>
               <div class="form-group">
-                <label class="form-label" for="signup-username">Username <span class="req">*</span></label>
+                <label class="form-label" for="signup-username">${t('adminUsers.username')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-username" name="username" type="text"
                        autocomplete="username" required placeholder="cooluser42"
                        minlength="3" maxlength="32"/>
@@ -78,14 +79,14 @@ export class SignupView {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="signup-displayname">
-                  Display Name <span class="form-hint">(optional)</span>
+                  ${t('signup.displayName')} <span class="form-hint">(${t('form.optional')})</span>
                 </label>
                 <input class="form-input" id="signup-displayname" name="displayName" type="text"
                        autocomplete="name" placeholder="Cool User"/>
               </div>
               <div class="form-group">
                 <label class="form-label" for="signup-phone">
-                  Phone <span class="form-hint">(optional)</span>
+                  ${t('checkout.phone')} <span class="form-hint">(${t('form.optional')})</span>
                 </label>
                 <input class="form-input" id="signup-phone" name="phone" type="tel"
                        autocomplete="tel" placeholder="+1 555 000 0000"/>
@@ -95,18 +96,18 @@ export class SignupView {
             <!-- Password -->
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="signup-password">Password <span class="req">*</span></label>
+                <label class="form-label" for="signup-password">${t('signup.password')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-password" name="password" type="password"
                        autocomplete="new-password" required/>
                 <div class="password-strength" id="pw-strength" aria-live="polite"></div>
                 <ul class="pw-requirements">
-                  <li id="req-length">At least 8 characters</li>
-                  <li id="req-letter">At least 1 letter</li>
-                  <li id="req-number">At least 1 number</li>
+                  <li id="req-length">${t('signup.req8chars')}</li>
+                  <li id="req-letter">${t('signup.req1letter')}</li>
+                  <li id="req-number">${t('signup.req1number')}</li>
                 </ul>
               </div>
               <div class="form-group">
-                <label class="form-label" for="signup-confirm">Confirm Password <span class="req">*</span></label>
+                <label class="form-label" for="signup-confirm">${t('signup.confirmPassword')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-confirm" name="confirm" type="password"
                        autocomplete="new-password" required/>
                 <p class="form-field-status" id="confirm-status"></p>
@@ -114,23 +115,23 @@ export class SignupView {
             </div>
 
             <p class="form-error" id="signup-error" aria-live="polite"></p>
-            <button class="btn btn--primary btn--full" type="submit" id="signup-btn">Create Account</button>
+            <button class="btn btn--primary btn--full" type="submit" id="signup-btn">${t('signup.title')}</button>
           </form>
 
           <div class="signup-success" id="signup-success" hidden>
             <div class="signup-success__icon">✉</div>
-            <h2 class="signup-success__title">Check Your Email</h2>
+            <h2 class="signup-success__title">${t('signup.checkEmail')}</h2>
             <p class="signup-success__text">
-              We've sent a verification link to <strong id="signup-success-email"></strong>.
-              Click the link in the email to activate your account.
+              ${t('signup.emailSentTo')} <strong id="signup-success-email"></strong>.
+              ${t('signup.clickLink')}
             </p>
             <p class="signup-resend" id="signup-resend-wrap">
-              Didn't receive it?
-              <button type="button" class="signup-resend__btn" id="signup-resend-btn">Resend email</button>
+              ${t('signup.didntReceive')}
+              <button type="button" class="signup-resend__btn" id="signup-resend-btn">${t('signup.resend')}</button>
               <span class="signup-resend__countdown" id="signup-resend-countdown" hidden></span>
             </p>
             <p class="signup-resend__msg" id="signup-resend-msg" aria-live="polite"></p>
-            <a href="#/login" class="btn btn--outline" data-route="/login">Go to Sign In</a>
+            <a href="${href('/login')}" class="btn btn--outline" data-route="/login">${t('signup.goToSignIn')}</a>
           </div>
         </div>
       </div>
@@ -178,7 +179,7 @@ export class SignupView {
       _usernameTimer = setTimeout(async () => {
         try {
           const { available } = await checkUsername(val);
-          statusEl.textContent = available ? '✓ Available' : '✗ Already taken';
+          statusEl.textContent = available ? `✓ ${t('signup.available')}` : `✗ ${t('signup.taken')}`;
           statusEl.className   = 'form-field-status ' + (available ? 'status--ok' : 'status--err');
         } catch { statusEl.textContent = ''; }
       }, 500);
@@ -195,7 +196,7 @@ export class SignupView {
       _emailTimer = setTimeout(async () => {
         try {
           const { available } = await checkEmail(val);
-          statusEl.textContent = available ? '✓ Available' : '✗ Already registered';
+          statusEl.textContent = available ? `✓ ${t('signup.available')}` : `✗ ${t('signup.emailTaken')}`;
           statusEl.className   = 'form-field-status ' + (available ? 'status--ok' : 'status--err');
         } catch { statusEl.textContent = ''; }
       }, 500);
@@ -225,7 +226,7 @@ export class SignupView {
       const statusEl = el.querySelector('#confirm-status');
       if (!confirmInput.value) { statusEl.textContent = ''; return; }
       const match = confirmInput.value === pwInput.value;
-      statusEl.textContent = match ? '✓ Passwords match' : '✗ Passwords do not match';
+      statusEl.textContent = match ? `✓ ${t('signup.passwordsMatch')}` : `✗ ${t('signup.passwordsMismatch')}`;
       statusEl.className   = 'form-field-status ' + (match ? 'status--ok' : 'status--err');
     });
 
@@ -247,23 +248,23 @@ export class SignupView {
 
     // Client-side validation
     if (!email || !username || !password) {
-      errEl.textContent = 'Please fill in all required fields.'; return;
+      errEl.textContent = t('form.requiredFields'); return;
     }
     if (password.length < 8) {
-      errEl.textContent = 'Password must be at least 8 characters.'; return;
+      errEl.textContent = t('signup.pwMinLength'); return;
     }
     if (!/[A-Za-z]/.test(password)) {
-      errEl.textContent = 'Password must contain at least 1 letter.'; return;
+      errEl.textContent = t('signup.pwNeedsLetter'); return;
     }
     if (!/\d/.test(password)) {
-      errEl.textContent = 'Password must contain at least 1 number.'; return;
+      errEl.textContent = t('signup.pwNeedsNumber'); return;
     }
     if (password !== confirm) {
-      errEl.textContent = 'Passwords do not match.'; return;
+      errEl.textContent = t('signup.passwordsMismatch'); return;
     }
 
     btn.disabled = true;
-    btn.textContent = 'Creating account…';
+    btn.textContent = t('signup.creating');
 
     try {
       await signup({
@@ -284,7 +285,7 @@ export class SignupView {
     } catch (err) {
       errEl.textContent = err.message;
       btn.disabled = false;
-      btn.textContent = 'Create Account';
+      btn.textContent = t('signup.title');
     }
   }
 
@@ -316,10 +317,10 @@ export class SignupView {
       msgEl.textContent = '';
       try {
         await resendVerification(email);
-        msgEl.textContent = 'Verification email sent!';
+        msgEl.textContent = t('signup.emailResent');
         startCountdown();
       } catch (err) {
-        msgEl.textContent = err.message || 'Could not resend. Please try again shortly.';
+        msgEl.textContent = err.message || t('signup.resendFailed');
       }
     });
   }

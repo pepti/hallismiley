@@ -1,3 +1,5 @@
+import { t } from '../i18n/i18n.js';
+
 export class FilterBar {
   constructor(onChange) {
     this.onChange = onChange;
@@ -9,9 +11,9 @@ export class FilterBar {
     bar.className = 'filter-bar';
 
     const filters = [
-      { key: 'all',       label: 'All Projects' },
-      { key: 'carpentry', label: 'Carpentry' },
-      { key: 'tech',      label: 'Tech' },
+      { key: 'all',       label: t('projects.all') },
+      { key: 'carpentry', label: t('projects.carpentry') },
+      { key: 'tech',      label: t('projects.tech') },
     ];
 
     filters.forEach(({ key, label }) => {

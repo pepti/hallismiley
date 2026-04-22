@@ -1,12 +1,14 @@
 'use strict';
 // Site-content controller — reads/writes rows from the `site_content` table.
-// Each row is keyed (e.g. 'home_skills') with a JSONB `value` blob.
+// Since migration 029 each row is keyed by (key, locale).
+// GET falls back to DEFAULT_LOCALE if no row exists for the requested locale.
 
 const path   = require('path');
 const fs     = require('fs');
 const multer = require('multer');
 const db     = require('../config/database');
 const { MIME_TO_EXT } = require('../middleware/upload');
+const { DEFAULT_LOCALE } = require('../config/i18n');
 
 // ── Image upload: store under public/assets/content/ ─────────────────────────
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'content');
@@ -22,8 +24,7 @@ const storage = multer.diskStorage({
       cb(err);
     }
   },
-  filename:    (req, file, cb) => {
-    // Extension from MIME type (not originalname) to prevent extension spoofing
+  filename: (req, file, cb) => {
     const ext = MIME_TO_EXT[file.mimetype] || '.jpg';
     const key = String(req.params.key || 'content').replace(/[^\w-]/g, '');
     cb(null, `${key}-${Date.now()}${ext}`);
@@ -42,11 +43,18 @@ const upload = multer({
 }).single('file');
 
 // ── GET /api/v1/content/:key ─────────────────────────────────────────────────
+// Locale fallback: tries req.locale first, then DEFAULT_LOCALE.
 async function getContent(req, res, next) {
   try {
+    const locale = req.locale || DEFAULT_LOCALE;
     const { rows } = await db.query(
-      'SELECT value FROM site_content WHERE key = $1',
-      [req.params.key]
+      `SELECT value FROM site_content
+        WHERE key = $1 AND locale = $2
+        UNION ALL
+       SELECT value FROM site_content
+        WHERE key = $1 AND locale = $3
+        LIMIT 1`,
+      [req.params.key, locale, DEFAULT_LOCALE]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
     return res.json(rows[0].value);
@@ -54,27 +62,26 @@ async function getContent(req, res, next) {
 }
 
 // ── PUT /api/v1/content/:key ─────────────────────────────────────────────────
+// Accepts an optional ?locale= query param to target a specific locale.
 async function putContent(req, res, next) {
   try {
+    const locale = req.query.locale || req.locale || DEFAULT_LOCALE;
     const userId = req.user?.id || null;
     const { rows } = await db.query(
-      `INSERT INTO site_content (key, value, updated_by, updated_at)
-       VALUES ($1, $2::jsonb, $3, NOW())
-       ON CONFLICT (key) DO UPDATE
-         SET value = EXCLUDED.value,
+      `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, NOW())
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value      = EXCLUDED.value,
              updated_by = EXCLUDED.updated_by,
              updated_at = NOW()
        RETURNING value`,
-      [req.params.key, JSON.stringify(req.body), userId]
+      [req.params.key, locale, JSON.stringify(req.body), userId]
     );
     return res.json(rows[0].value);
   } catch (err) { return next(err); }
 }
 
 // ── POST /api/v1/content/:key/image ──────────────────────────────────────────
-// Query param ?merge=false — return the URL only, skip the DB merge. Used for
-// nested image fields (e.g. discipline categories) where the caller persists
-// the URL via a follow-up PUT against the parent key.
 function uploadImage(req, res, next) {
   upload(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -82,19 +89,19 @@ function uploadImage(req, res, next) {
 
     const imageUrl = `/assets/content/${req.file.filename}`;
     const merge    = req.query.merge !== 'false';
+    const locale   = req.query.locale || req.locale || DEFAULT_LOCALE;
 
     if (!merge) return res.json({ image_url: imageUrl });
 
     try {
-      // Merge image_url into the existing JSONB value (or create a new row)
       await db.query(
-        `INSERT INTO site_content (key, value, updated_by, updated_at)
-         VALUES ($1, jsonb_build_object('image_url', $2::text), $3, NOW())
-         ON CONFLICT (key) DO UPDATE
-           SET value = site_content.value || jsonb_build_object('image_url', $2::text),
+        `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
+         VALUES ($1, $2, jsonb_build_object('image_url', $3::text), $4, NOW())
+         ON CONFLICT (key, locale) DO UPDATE
+           SET value      = site_content.value || jsonb_build_object('image_url', $3::text),
                updated_by = EXCLUDED.updated_by,
                updated_at = NOW()`,
-        [req.params.key, imageUrl, req.user?.id || null]
+        [req.params.key, locale, imageUrl, req.user?.id || null]
       );
       return res.json({ image_url: imageUrl });
     } catch (dbErr) { return next(dbErr); }

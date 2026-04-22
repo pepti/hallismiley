@@ -1,4 +1,5 @@
 import { escHtml } from '../utils/escHtml.js';
+import { t } from '../i18n/i18n.js';
 
 export class ProjectModal {
   constructor() {
@@ -22,22 +23,22 @@ export class ProjectModal {
     const modal = this.overlay.querySelector('.modal');
 
     modal.innerHTML = `
-      <button class="modal__close" aria-label="Close">&times;</button>
+      <button class="modal__close" aria-label="${t('common.close')}">&times;</button>
       <div class="modal__eyebrow">
         <span class="badge badge--${category}">${category}</span>
-        ${featured ? '<span class="featured-star">★ Featured</span>' : ''}
+        ${featured ? `<span class="featured-star">★ ${t('projects.featured')}</span>` : ''}
       </div>
       <h2 class="modal__title">${escHtml(title)}</h2>
       <p class="modal__desc">${escHtml(description)}</p>
       <div class="modal__meta">
         <div>
-          <div class="modal__meta-label">Year</div>
+          <div class="modal__meta-label">${t('projects.year')}</div>
           <div style="font-family:var(--font-mono);font-size:0.95rem">${year}</div>
         </div>
         <div>
-          <div class="modal__meta-label">Tools & Technologies</div>
+          <div class="modal__meta-label">${t('projects.tools')}</div>
           <div class="modal__tools">
-            ${tools_used.map(t => `<span class="modal__tool-tag">${escHtml(t)}</span>`).join('')}
+            ${tools_used.map(tool => `<span class="modal__tool-tag">${escHtml(tool)}</span>`).join('')}
           </div>
         </div>
       </div>

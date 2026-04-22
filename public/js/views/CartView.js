@@ -1,6 +1,7 @@
 // CartView — review/edit the cart before checkout. Route: #/cart
 import * as cart from '../services/cart.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
+import { t, href } from '../i18n/i18n.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -21,7 +22,7 @@ export class CartView {
     this._view.innerHTML = `
       <div class="shop-cart__inner">
         <header class="shop-cart__header">
-          <h1>Your cart</h1>
+          <h1>${t('cart.title')}</h1>
           <div id="shop-cart-currency"></div>
         </header>
         <div id="shop-cart-body"></div>
@@ -43,8 +44,8 @@ export class CartView {
 
     if (items.length === 0) {
       body.innerHTML = `
-        <p class="shop-cart__empty">Your cart is empty.</p>
-        <a href="#/shop" class="shop-cart__continue">← Continue shopping</a>
+        <p class="shop-cart__empty">${t('cart.empty')}</p>
+        <a href="${href('/shop')}" class="shop-cart__continue">← ${t('cart.continueShopping')}</a>
       `;
       return;
     }
@@ -60,19 +61,19 @@ export class CartView {
               ? `<img class="shop-cart__thumb" src="${_esc(it.imageUrl)}" alt=""/>`
               : `<div class="shop-cart__thumb shop-cart__thumb--placeholder" aria-hidden="true"></div>`}
             <div>
-              <a href="#/shop/${encodeURIComponent(it.slug)}" class="shop-cart__name">${_esc(it.name)}</a>
+              <a href="${href('/shop/' + encodeURIComponent(it.slug))}" class="shop-cart__name">${_esc(it.name)}</a>
               ${it.variantLabel ? `<p class="shop-cart__variant">${_esc(it.variantLabel)}</p>` : ''}
-              <p class="shop-cart__unit">${cart.formatMoney(price, cur)} each</p>
+              <p class="shop-cart__unit">${cart.formatMoney(price, cur)} ${t('cart.each')}</p>
             </div>
           </td>
           <td class="shop-cart__cell">
             <input type="number" class="shop-cart__qty" min="0" value="${it.qty}"
-                   data-key="${_esc(key)}" aria-label="Quantity for ${_esc(it.name)}"/>
+                   data-key="${_esc(key)}" aria-label="${t('cart.qtyFor')} ${_esc(it.name)}"/>
           </td>
           <td class="shop-cart__cell shop-cart__cell--line">${cart.formatMoney(line, cur)}</td>
           <td class="shop-cart__cell">
             <button type="button" class="shop-cart__remove" data-key="${_esc(key)}"
-                    aria-label="Remove ${_esc(it.name)}">✕</button>
+                    aria-label="${t('cart.remove')} ${_esc(it.name)}">✕</button>
           </td>
         </tr>`;
     }).join('');
@@ -82,7 +83,7 @@ export class CartView {
       <table class="shop-cart__table">
         <thead>
           <tr>
-            <th>Item</th><th>Qty</th><th>Subtotal</th><th></th>
+            <th>${t('cart.item')}</th><th>${t('cart.qty')}</th><th>${t('cart.subtotal')}</th><th></th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
@@ -90,13 +91,13 @@ export class CartView {
 
       <div class="shop-cart__totals">
         <div class="shop-cart__total-row">
-          <span>Subtotal</span>
+          <span>${t('cart.subtotal')}</span>
           <span>${cart.formatMoney(subtotal, cur)}</span>
         </div>
-        <p class="shop-cart__vat-note">Shipping calculated at checkout. Prices include 24% VAT.</p>
+        <p class="shop-cart__vat-note">${t('orders.vatNote')}</p>
         <div class="shop-cart__actions">
-          <a href="#/shop" class="shop-cart__continue">← Continue shopping</a>
-          <a href="#/checkout" class="shop-cart__checkout" data-testid="cart-checkout">Proceed to checkout</a>
+          <a href="${href('/shop')}" class="shop-cart__continue">← ${t('cart.continueShopping')}</a>
+          <a href="${href('/checkout')}" class="shop-cart__checkout" data-testid="cart-checkout">${t('cart.checkout')}</a>
         </div>
       </div>
     `;

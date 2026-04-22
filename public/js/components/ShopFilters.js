@@ -2,30 +2,16 @@
 // Fully client-side: receives the full product list, emits filtered+sorted
 // results + a URL-query-string representation via onChange.
 import * as cart from '../services/cart.js';
+import { t } from '../i18n/i18n.js';
 
-const SHAPES = [
-  { id: 'aero',    label: 'Aero' },
-  { id: 'tall',    label: 'Tall' },
-  { id: 'long',    label: 'Long' },
-  { id: 'low',     label: 'Low-profile' },
-  { id: 'cube',    label: 'Utility' },
-  { id: 'classic', label: 'Classic' },
-];
+const SHAPE_IDS = ['aero', 'tall', 'long', 'low', 'cube', 'classic'];
 
+// Buckets are non-overlapping so a product never matches more than one.
+// "450L+" is inclusive (450 counts as 450L+).
 const CAPACITY_BUCKETS = [
-  // Buckets are non-overlapping so a product never matches more than one.
-  // "450L+" is inclusive (450 counts as 450L+).
-  { id: 'under-350', label: 'Up to 349L', min: 0,   max: 349 },
-  { id: '350-449',   label: '350–449L',   min: 350, max: 449 },
-  { id: 'over-450',  label: '450L+',      min: 450, max: 99999 },
-];
-
-const SORTS = [
-  { id: 'featured',   label: 'Featured' },
-  { id: 'price-asc',  label: 'Price: low to high' },
-  { id: 'price-desc', label: 'Price: high to low' },
-  { id: 'newest',     label: 'Newest first' },
-  { id: 'name',       label: 'Name A–Z' },
+  { id: 'under-350', min: 0,   max: 349 },
+  { id: '350-449',   min: 350, max: 449 },
+  { id: 'over-450',  min: 450, max: 99999 },
 ];
 
 const DEFAULT_STATE = {
@@ -183,6 +169,14 @@ export class ShopFilters {
     const s   = this._state;
     const cur = cart.getCurrency();
     const pricePlaceholder = cur === 'ISK' ? 'kr.' : '€';
+    const shapes = SHAPE_IDS.map(id => ({ id, label: t('filters.shape.' + id) }));
+    const sorts = [
+      { id: 'featured',   label: t('filters.sort.featured') },
+      { id: 'price-asc',  label: t('filters.sort.priceAsc') },
+      { id: 'price-desc', label: t('filters.sort.priceDesc') },
+      { id: 'newest',     label: t('filters.sort.newest') },
+      { id: 'name',       label: t('filters.sort.name') },
+    ];
 
     this._el.innerHTML = `
       <div class="shop-filters__top">
@@ -193,24 +187,24 @@ export class ShopFilters {
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input type="search" id="shop-filters-q" class="shop-filters__input"
-                 placeholder="Search roof boxes" value="${_esc(s.q)}"
+                 placeholder="${t('filters.searchPlaceholder')}" value="${_esc(s.q)}"
                  autocomplete="off" data-testid="shop-search"/>
           ${s.q ? `<button type="button" class="shop-filters__clear-search" id="shop-filters-clear-q"
                     aria-label="Clear search">✕</button>` : ''}
         </div>
         <label class="shop-filters__sort">
-          <span class="shop-filters__sort-label">Sort</span>
+          <span class="shop-filters__sort-label">${t('filters.sort')}</span>
           <select id="shop-filters-sort" data-testid="shop-sort">
-            ${SORTS.map(o => `<option value="${o.id}" ${o.id === s.sort ? 'selected' : ''}>${o.label}</option>`).join('')}
+            ${sorts.map(o => `<option value="${o.id}" ${o.id === s.sort ? 'selected' : ''}>${o.label}</option>`).join('')}
           </select>
         </label>
       </div>
 
       ${this._hasShape ? `
       <div class="shop-filters__row">
-        <span class="shop-filters__row-label">Shape</span>
-        <div class="shop-filters__chips" role="group" aria-label="Filter by shape">
-          ${SHAPES.map(sh => `
+        <span class="shop-filters__row-label">${t('filters.shape')}</span>
+        <div class="shop-filters__chips" role="group" aria-label="${t('filters.filterByShape')}">
+          ${shapes.map(sh => `
             <button type="button" class="shop-filters__chip ${s.shapes.includes(sh.id) ? 'active' : ''}"
                     data-shape="${sh.id}" data-testid="shape-${sh.id}">${sh.label}</button>
           `).join('')}
@@ -219,37 +213,37 @@ export class ShopFilters {
 
       ${this._hasCapacity ? `
       <div class="shop-filters__row">
-        <span class="shop-filters__row-label">Capacity</span>
-        <div class="shop-filters__chips" role="group" aria-label="Filter by capacity">
+        <span class="shop-filters__row-label">${t('filters.capacity')}</span>
+        <div class="shop-filters__chips" role="group" aria-label="${t('filters.filterByCapacity')}">
           ${CAPACITY_BUCKETS.map(b => `
             <button type="button" class="shop-filters__chip ${s.capacities.includes(b.id) ? 'active' : ''}"
-                    data-cap="${b.id}" data-testid="cap-${b.id}">${b.label}</button>
+                    data-cap="${b.id}" data-testid="cap-${b.id}">${t('filters.capacity.' + b.id)}</button>
           `).join('')}
         </div>
       </div>` : ''}
 
       <div class="shop-filters__row shop-filters__row--wrap">
-        <span class="shop-filters__row-label">Price (${cur})</span>
+        <span class="shop-filters__row-label">${t('filters.price')} (${cur})</span>
         <div class="shop-filters__price">
           <input type="number" inputmode="numeric" min="0" step="any"
                  class="shop-filters__price-input" id="shop-filters-min"
-                 placeholder="Min ${pricePlaceholder}" value="${_esc(s.priceMin)}"
+                 placeholder="${t('filters.minPrice')} ${pricePlaceholder}" value="${_esc(s.priceMin)}"
                  aria-label="Minimum price"/>
           <span class="shop-filters__price-sep">—</span>
           <input type="number" inputmode="numeric" min="0" step="any"
                  class="shop-filters__price-input" id="shop-filters-max"
-                 placeholder="Max ${pricePlaceholder}" value="${_esc(s.priceMax)}"
+                 placeholder="${t('filters.maxPrice')} ${pricePlaceholder}" value="${_esc(s.priceMax)}"
                  aria-label="Maximum price"/>
         </div>
 
         <label class="shop-filters__toggle">
           <input type="checkbox" id="shop-filters-stock" ${s.inStockOnly ? 'checked' : ''}/>
-          <span>In stock only</span>
+          <span>${t('filters.inStockOnly')}</span>
         </label>
 
         ${this._activeFilterCount() > 0 || s.q || s.sort !== 'featured'
           ? `<button type="button" class="shop-filters__reset" id="shop-filters-reset"
-                     data-testid="shop-filters-reset">Clear all</button>`
+                     data-testid="shop-filters-reset">${t('filters.clearAll')}</button>`
           : ''}
       </div>
     `;

@@ -179,7 +179,7 @@ const authController = {
       // If email fails the account still exists (unverified) — user can resend.
       if (requireVerify) {
         try {
-          await sendVerificationEmail(email.toLowerCase(), verifyToken);
+          await sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale);
         } catch (emailErr) {
           // Log but don't fail the request — account is created, resend flow covers this.
           console.error('[signup] Verification email failed:', emailErr.message);
@@ -245,7 +245,7 @@ const authController = {
       }
 
       const { rows } = await dbQuery(
-        'SELECT id FROM users WHERE email = $1 AND disabled = FALSE',
+        'SELECT id, preferred_locale FROM users WHERE email = $1 AND disabled = FALSE',
         [email.toLowerCase()]
       );
 
@@ -260,7 +260,7 @@ const authController = {
         );
 
         try {
-          await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+          await sendPasswordResetEmail(email.toLowerCase(), resetToken, rows[0].preferred_locale || req.locale);
         } catch (emailErr) {
           console.error('[forgot-password] Email failed:', emailErr.message);
         }
@@ -401,7 +401,7 @@ const authController = {
       );
 
       try {
-        await sendVerificationEmail(email.toLowerCase(), newToken);
+        await sendVerificationEmail(email.toLowerCase(), newToken, req.locale);
       } catch (emailErr) {
         console.error('[resend-verification] Email failed:', emailErr.message);
       }
