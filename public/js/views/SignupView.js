@@ -1,6 +1,7 @@
 import { signup, checkUsername, checkEmail, resendVerification } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
+import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -232,6 +233,8 @@ export class SignupView {
 
     // Form submit
     el.querySelector('#signup-form').addEventListener('submit', e => this._onSubmit(e, el));
+
+    bindAllPasswordToggles(el);
   }
 
   async _onSubmit(e, el) {

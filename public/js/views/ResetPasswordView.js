@@ -1,5 +1,6 @@
 import { resetPassword } from '../services/auth.js';
 import { t, href } from '../i18n/i18n.js';
+import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 
 export class ResetPasswordView {
   constructor(queryString = '') {
@@ -56,6 +57,8 @@ export class ResetPasswordView {
         </div>
       </div>
     `;
+
+    bindAllPasswordToggles(el);
 
     const pwInput      = el.querySelector('#reset-password');
     const confirmInput = el.querySelector('#reset-confirm');

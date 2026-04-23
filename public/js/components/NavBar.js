@@ -84,7 +84,7 @@ export class NavBar {
         </a>
       </div>
 
-      <!-- Center: Navigation links -->
+      <!-- Center: Navigation links + (on mobile) language toggle + auth CTAs -->
       <div class="lol-nav__center" id="nav-menu">
         <a href="${navHref('/')}"        class="lol-nav__link" data-route="/"        data-i18n="nav.home">${t('nav.home')}</a>
         <a href="${navHref('/projects')}" class="lol-nav__link" data-route="/projects" data-i18n="nav.projects">${t('nav.projects')}</a>
@@ -95,6 +95,10 @@ export class NavBar {
         <a href="${navHref('/party')}"    class="lol-nav__link lol-nav__party-link" data-route="/party"
            id="nav-party-link" aria-label="${t('nav.partyAriaLabel')}" data-i18n-aria="nav.partyAriaLabel"
            data-i18n="nav.party">${t('nav.party')}</a>
+        <div class="lol-nav__mobile-extras">
+          ${this._langSwitcherHtml()}
+          <div class="lol-nav__auth" id="nav-auth-mobile"></div>
+        </div>
       </div>
 
       <!-- Right: Cart + Language + Hamburger + Auth -->
@@ -159,10 +163,21 @@ export class NavBar {
   }
 
   _renderAuth() {
-    const container =
-      document.getElementById('nav-auth') ||
-      this._nav?.querySelector('#nav-auth');
-    if (!container) return;
+    // Render auth into both the top-bar slot (desktop + mobile when logged-in)
+    // and the drawer slot (mobile when logged-out).  CSS hides the non-applicable
+    // one per breakpoint.  We render twice so each has its own event listeners.
+    const containers = [
+      this._nav?.querySelector('#nav-auth'),
+      this._nav?.querySelector('#nav-auth-mobile'),
+    ].filter(Boolean);
+    containers.forEach(c => this._renderAuthInto(c));
+
+    // Re-bind the language switcher after each auth re-render
+    // (lives outside the auth containers but we need to ensure it's wired)
+    this._bindLangSwitcher(this._nav);
+  }
+
+  _renderAuthInto(container) {
     container.innerHTML = '';
 
     if (isAuthenticated()) {
@@ -210,7 +225,7 @@ export class NavBar {
           ${t('nav.myOrders')}
         </a>
         <hr class="lol-nav__dropdown-divider"/>
-        <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" id="nav-signout-btn" data-testid="nav-signout">
+        <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" data-signout data-testid="nav-signout">
           ${t('nav.signOut')}
         </button>
       `;
@@ -231,7 +246,7 @@ export class NavBar {
         userBtn.setAttribute('aria-expanded', 'false');
       });
 
-      dropdown.querySelector('#nav-signout-btn').addEventListener('click', async () => {
+      dropdown.querySelector('[data-signout]').addEventListener('click', async () => {
         await logout();
         navigate(navHref('/'));
       });
@@ -252,7 +267,10 @@ export class NavBar {
       signIn.className = 'lol-nav__cta lol-nav__cta--ghost';
       signIn.setAttribute('data-testid', 'nav-signin');
       signIn.textContent = t('nav.signIn');
-      signIn.addEventListener('click', () => this._loginModal.open());
+      signIn.addEventListener('click', () => {
+        this._closeMenu();
+        this._loginModal.open();
+      });
 
       const signUp = document.createElement('a');
       signUp.className = 'lol-nav__cta lol-nav__cta--ghost';
@@ -262,16 +280,13 @@ export class NavBar {
       signUp.textContent = t('nav.signUp');
       signUp.addEventListener('click', e => {
         e.preventDefault();
+        this._closeMenu();
         navigate(navHref('/signup'));
       });
 
       container.appendChild(signIn);
       container.appendChild(signUp);
     }
-
-    // Re-bind the language switcher after each auth re-render
-    // (it lives outside #nav-auth but we need to ensure it's wired)
-    this._bindLangSwitcher(this._nav);
   }
 
   _bindHomeLinks(nav) {

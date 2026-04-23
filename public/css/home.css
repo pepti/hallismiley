@@ -19,6 +19,17 @@
   width: 100%; height: 100%;
   object-fit: cover;
   object-position: center;
+  pointer-events: none;
+}
+/* Hide the iOS / Safari start-playback overlay when autoplay is blocked.
+   Without this, iPhones render a large centred play button over the
+   muted background video, breaking the hero composition. */
+.lol-hero__bg::-webkit-media-controls,
+.lol-hero__bg::-webkit-media-controls-start-playback-button,
+.lol-hero__bg::-webkit-media-controls-overlay-play-button,
+.lol-hero__bg::-webkit-media-controls-panel {
+  display: none !important;
+  -webkit-appearance: none;
 }
 @keyframes subtleDrift {
   from { background-position: center 40%; }

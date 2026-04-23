@@ -49,6 +49,8 @@
   "auth.resetPassword": "Reset Password",
   "auth.verifyEmail": "Verify Email",
   "auth.resendVerification": "Resend verification",
+  "auth.showPassword": "Show password",
+  "auth.hidePassword": "Hide password",
   "auth.chooseAvatar": "Choose Avatar",
   "auth.passwordLabel": "Password",
   "auth.confirmPassword": "Confirm Password",
@@ -214,7 +216,7 @@
   "signup.resendFailed": "Failed to resend. Please try again.",
 
   "login.title": "Sign In",
-  "login.email": "Email",
+  "login.email": "Email or username",
   "login.password": "Password",
   "login.submit": "Sign In",
   "login.signingIn": "Signing in...",

@@ -139,6 +139,13 @@
 
 .lol-nav__auth { display: flex; align-items: center; gap: 10px; }
 
+/* ── Mobile-only extras inside the hamburger drawer ──
+      Holds a copy of the language toggle and the auth CTAs so users can
+      reach them when the viewport is too narrow for a full nav. Hidden on
+      desktop — the right-side copies are what users see there. */
+.lol-nav__mobile-extras { display: none; }
+.lol-nav__mobile-extras .lol-nav__user-wrap { display: none; }
+
 .lol-nav__cta {
   padding: 7px 18px;
   min-height: 44px;
@@ -311,6 +318,10 @@
 
 /* ── Mobile nav ── */
 @media (max-width: 640px) {
+  .lol-nav { padding: 0 16px; }
+  .lol-nav__brand { width: auto; }
+  .lol-nav__right { width: auto; gap: 8px; }
+
   .lol-nav__hamburger { display: flex; }
 
   .lol-nav__center {
@@ -329,4 +340,29 @@
     font-size: 0.8rem;
   }
   .lol-nav__link::after { display: none; }
+
+  /* Hide the top-bar copies of the language toggle and the auth CTAs — they
+     move into the drawer via .lol-nav__mobile-extras. The user dropdown
+     (.lol-nav__user-wrap) stays visible in the top bar so signed-in users
+     can reach their profile with one tap. */
+  .lol-nav__right .lol-nav__lang { display: none; }
+  .lol-nav__right .lol-nav__cta { display: none; }
+
+  /* Show the drawer extras with a visual separator and comfortable padding. */
+  .lol-nav__mobile-extras {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 24px 8px;
+    margin-top: 8px;
+    border-top: 1px solid rgba(200,170,110,0.15);
+  }
+  .lol-nav__mobile-extras .lol-nav__lang { align-self: flex-start; }
+  .lol-nav__mobile-extras .lol-nav__auth {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .lol-nav__mobile-extras .lol-nav__cta { width: 100%; }
 }

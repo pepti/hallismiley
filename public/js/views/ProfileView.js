@@ -4,6 +4,7 @@ import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -331,6 +332,8 @@ export class ProfileView {
   }
 
   _bindPassword(el) {
+    bindAllPasswordToggles(el.querySelector('#pw-form'));
+
     const pwNew     = el.querySelector('#pw-new');
     const pwConfirm = el.querySelector('#pw-confirm');
 

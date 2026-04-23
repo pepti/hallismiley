@@ -32,13 +32,20 @@ const authController = {
         return res.status(400).json({ error: t(req.locale, 'errors.auth.usernamePasswordRequired'), code: 400 });
       }
 
+      // Accept either a username or an email in the same field. The login
+      // modal labels this "Email or username" — we look up case-insensitively
+      // against both columns so users don't have to remember which they used.
+      // UNIQUE indexes on username and email guarantee at most one row matches.
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, password_hash,
                 failed_login_attempts, locked_until,
                 disabled, disabled_reason,
                 avatar, display_name, phone,
                 email_verified, party_access
-         FROM users WHERE username = $1`,
+         FROM users
+         WHERE LOWER(username) = LOWER($1)
+            OR LOWER(email)    = LOWER($1)
+         LIMIT 1`,
         [username]
       );
       const user = rows[0] ?? null;

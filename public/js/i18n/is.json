@@ -49,6 +49,8 @@
   "auth.resetPassword": "Endurstilla lykilorð",
   "auth.verifyEmail": "Staðfesta tölvupóst",
   "auth.resendVerification": "Senda staðfestingu aftur",
+  "auth.showPassword": "Sýna lykilorð",
+  "auth.hidePassword": "Fela lykilorð",
   "auth.chooseAvatar": "Veldu auðkenni",
   "auth.passwordLabel": "Lykilorð",
   "auth.confirmPassword": "Staðfesta lykilorð",
@@ -214,7 +216,7 @@
   "signup.resendFailed": "Mistókst að senda aftur. Reyndu aftur.",
 
   "login.title": "Innskrá",
-  "login.email": "Tölvupóstur",
+  "login.email": "Netfang eða notandanafn",
   "login.password": "Lykilorð",
   "login.submit": "Innskrá",
   "login.signingIn": "Skrái inn...",

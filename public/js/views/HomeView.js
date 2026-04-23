@@ -461,10 +461,23 @@ export class HomeView {
   _initHeroVideo(view) {
     const video = view.querySelector('.lol-hero__bg');
     if (!video) return;
+
+    // iOS requires muted + playsInline to be set on the element before play()
+    // is invoked.  The HTML attributes cover this, but set them on the property
+    // side too so that any runtime mutation (e.g. reduced-data mode) can't
+    // leave us showing the native start-playback overlay.
+    video.muted       = true;
+    video.playsInline = true;
+
     requestAnimationFrame(() => {
       video.play().catch(() => {
-        const resume = () => { video.play().catch(() => {}); document.removeEventListener('click', resume); };
-        document.addEventListener('click', resume, { once: true });
+        const resume = () => {
+          video.play().catch(() => {});
+          document.removeEventListener('click',      resume);
+          document.removeEventListener('touchstart', resume);
+        };
+        document.addEventListener('click',      resume, { once: true });
+        document.addEventListener('touchstart', resume, { once: true });
       });
     });
   }

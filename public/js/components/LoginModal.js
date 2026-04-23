@@ -1,6 +1,7 @@
 import { login }     from '../services/auth.js';
 import { showToast } from './Toast.js';
 import { t, href }   from '../i18n/i18n.js';
+import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 
 export class LoginModal {
   constructor() {
@@ -34,7 +35,9 @@ export class LoginModal {
           <div class="form-group">
             <label class="form-label" for="login-username">${t('login.email')}</label>
             <input class="form-input" id="login-username" name="username"
-              type="text" autocomplete="username" required />
+              type="text" autocomplete="username"
+              inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
+              required />
           </div>
           <div class="form-group">
             <label class="form-label" for="login-password">${t('login.password')}</label>
@@ -64,6 +67,8 @@ export class LoginModal {
 
     document.body.appendChild(overlay);
     this._overlay = overlay;
+
+    bindAllPasswordToggles(overlay);
   }
 
   open() {

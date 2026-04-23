@@ -305,6 +305,24 @@
 }
 .form-check input[type=checkbox] { accent-color: var(--gold); width: 15px; height: 15px; }
 .form-error { font-size: 0.8rem; color: var(--error); min-height: 1.2em; }
+
+/* ── Password reveal toggle ── */
+.password-toggle { position: relative; display: block; }
+.password-toggle .form-input { padding-right: 40px; }
+.password-toggle__btn {
+  position: absolute; top: 50%; right: 6px;
+  transform: translateY(-50%);
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+.password-toggle__btn:hover { color: var(--gold); }
+.password-toggle__btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .form-actions {
   display: flex; justify-content: flex-end; gap: var(--sp-3);
   margin-top: var(--sp-2);
