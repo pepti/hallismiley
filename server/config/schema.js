@@ -1031,6 +1031,81 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
           AND is_row.value = en_row.value`,
     ],
   },
+  {
+    // i18n — insert the missing contact_* IS rows.
+    //
+    // Real root cause (finally diagnosed): on prod, 5 of the 6 contact_*
+    // IS rows simply don't exist. The contentController's locale fallback
+    // quietly returns the EN row when IS is missing, so curl against
+    // ?locale=is looked identical to ?locale=en and we assumed the IS rows
+    // existed but held duplicate EN content. They don't. Migrations 036
+    // and 037 both no-op'd their UPDATE ... FROM ... WHERE joins because
+    // there was no `is_row` to find.
+    //
+    // Only contact_availability has an IS row (seeded or edited through a
+    // different path, now correctly Icelandic via 036).
+    //
+    // Fix: INSERT ... ON CONFLICT (key, locale) DO UPDATE WHERE ...
+    //   - Missing row -> INSERT with Icelandic value
+    //   - Existing row still equal to EN -> UPDATE to Icelandic
+    //   - Existing row with genuine IS edits -> left untouched (the WHERE
+    //     clause on DO UPDATE evaluates false)
+    //
+    // Idempotent: re-runs find the IS row already Icelandic, DO UPDATE
+    // WHERE sees value != EN, and skips.
+    name: '038_i18n_contact_icelandic_insert',
+    statements: [
+      // contact_hero
+      `INSERT INTO site_content (key, locale, value)
+       VALUES ('contact_hero', 'is', '{"eyebrow":"HAFA SAMBAND","subtitle":"Verkefni, samstarf, ráðgjöf eða bara til að heilsa","title_line1":"SMÍÐUM EITTHVAÐ","title_accent":"Í VIÐI EÐA Í KÓÐA."}'::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_hero' AND locale = 'en')`,
+
+      // contact_card
+      `INSERT INTO site_content (key, locale, value)
+       VALUES ('contact_card', 'is', '{"items":[{"href":"halli@hallismiley.is","type":"email","label":"NETFANG","value":"halli [at] hallismiley [dot] is"},{"href":"https://github.com/pepti/hallismiley","type":"github","label":"GITHUB","value":"pepti/hallismiley"},{"href":"https://www.linkedin.com/in/halliv/","type":"linkedin","label":"LINKEDIN","value":"halliv"},{"meta":"Yfirleitt svar innan 2–3 daga","type":"location","label":"STAÐSETNING","value":"Hafnarfjörður · GMT"}]}'::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_card' AND locale = 'en')`,
+
+      // contact_form
+      `INSERT INTO site_content (key, locale, value)
+       VALUES ('contact_form', 'is', '{"title":"SEGÐU MÉR HVAÐ ÞÚ ERT AÐ HUGSA UM","eyebrow":"SENDU SKILABOÐ","submit_label":"SENDA SKILABOÐ","fallback_link":"Sendu mér tölvupóst beint.","fallback_prefix":"Frekar netfang?"}'::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_form' AND locale = 'en')`,
+
+      // contact_availability — already Icelandic on prod via 036; the
+      // ON CONFLICT WHERE clause evaluates false and this is a no-op.
+      // Included for completeness so a fresh DB gets all six.
+      `INSERT INTO site_content (key, locale, value)
+       VALUES ('contact_availability', 'is', '{"cards":[{"body":"Tek að mér verkefni sem stangast ekki á við starf mitt hjá NetApp.","label":"HUGBÚNAÐUR Í LAUSAVINNU","status":"open"},{"body":"Get veitt ráðgjöf um hvers kyns smíðaverkefni á Íslandi — fellingar, húsgögn, innanhússfrágang, húsasmíði og fleira.","label":"SMÍÐARÁÐGJÖF","status":"open"},{"body":"Til í að halda erindi um hvað sem er.","label":"SAMSTARF & ERINDI","status":"limited"}],"title":"HVAÐ ÉG ER TILBÚINN Í","eyebrow":"NÚNA"}'::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_availability' AND locale = 'en')`,
+
+      // contact_built_with
+      `INSERT INTO site_content (key, locale, value)
+       VALUES ('contact_built_with', 'is', '{"body1":"Þessi síða er handsmíðað verkefnasafn sem keyrir á Node.js og Express með PostgreSQL gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn rammi, ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, tölvupóstur fer í gegnum Resend, skráarupphleðsla í gegnum Multer, vöktun gegnum Pino og Sentry, og allt saman er dreift á Azure eða Railway.","body2":"Öll frumskrár eru á GitHub — þér er velkomið að klóna eða fork-a. Ef þig vantar aðstoð við að koma þessu í loftið eða halda því við, hafðu samband og ég aðstoða með ánægju við uppsetningu, hýsingu eða áframhaldandi umsjón.","pills":["Node.js","Express","PostgreSQL","Lucia Auth","Helmet","CSRF","Resend","Multer","Pino","Sentry","Vanilla JS SPA","Azure","Railway"],"title":"BYGGT MEÐ — OG ÞITT AÐ AFRITA","eyebrow":"UNDIR HÚDDINU","github_url":"https://github.com/pepti/hallismiley","email_btn_label":"SENDU MÉR PÓST UM UPPSETNINGU","github_btn_label":"SKOÐA Á GITHUB"}'::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_built_with' AND locale = 'en')`,
+
+      // contact_footer
+      `INSERT INTO site_content (key, locale, value)
+       VALUES ('contact_footer', 'is', '{"nav_links":[{"href":"/HALLI","label":"HALLI"},{"href":"/PROJECTS","label":"VERKEFNI"},{"href":"HTTPS://GITHUB.COM/PEPTI/HALLISMILEY","label":"GITHUB"},{"href":"HTTPS://WWW.LINKEDIN.COM/IN/HALLIV/","label":"LINKEDIN"}],"brand_name":"HALLI SMILEY","copy_suffix":"Verkefnasafn um allt og ekkert.","legal_links":[{"href":"/PRIVACY","label":"PERSÓNUVERNDARSTEFNA"},{"href":"/TERMS","label":"NOTKUNARSKILMÁLAR"}]}'::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_footer' AND locale = 'en')`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
