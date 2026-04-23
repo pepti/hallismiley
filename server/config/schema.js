@@ -950,6 +950,87 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
           AND is_row.value::text = en_row.value::text`,
     ],
   },
+  {
+    // i18n — retry of migration 036 with a jsonb equality guard.
+    //
+    // Migration 036 used `is_row.value::text = en_row.value::text` as its
+    // "only translate when IS still duplicates EN" guard. On production
+    // that guard matched contact_availability but failed for the other
+    // five contact_* rows, even though curl against both locales returned
+    // byte-identical JSON. The divergence is at the jsonb::text layer:
+    // rows written through different paths (migration 029 seed vs. CMS
+    // re-save vs. admin edit round-trips) end up with internal jsonb
+    // representations whose canonical text serialization differs by
+    // whitespace / key ordering, despite being semantically equal.
+    //
+    // Fix: switch the guard to the jsonb `=` operator, which compares by
+    // parsed value rather than text. This matches all five remaining
+    // English-duplicate IS rows and no-ops on contact_availability (whose
+    // IS value was already flipped to Icelandic by 036, so `=` is false).
+    //
+    // All six UPDATE bodies are byte-identical to 036 — only the guard
+    // changes. Still idempotent (after this runs, IS differs from EN, so
+    // the guard is false on re-run) and still safe against genuine future
+    // IS admin edits.
+    name: '037_i18n_contact_icelandic_backfill_retry',
+    statements: [
+      // contact_hero
+      `UPDATE site_content AS is_row
+          SET value      = '{"eyebrow":"HAFA SAMBAND","subtitle":"Verkefni, samstarf, ráðgjöf eða bara til að heilsa","title_line1":"SMÍÐUM EITTHVAÐ","title_accent":"Í VIÐI EÐA Í KÓÐA."}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_hero' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_hero' AND en_row.locale = 'en'
+          AND is_row.value = en_row.value`,
+
+      // contact_card
+      `UPDATE site_content AS is_row
+          SET value      = '{"items":[{"href":"halli@hallismiley.is","type":"email","label":"NETFANG","value":"halli [at] hallismiley [dot] is"},{"href":"https://github.com/pepti/hallismiley","type":"github","label":"GITHUB","value":"pepti/hallismiley"},{"href":"https://www.linkedin.com/in/halliv/","type":"linkedin","label":"LINKEDIN","value":"halliv"},{"meta":"Yfirleitt svar innan 2–3 daga","type":"location","label":"STAÐSETNING","value":"Hafnarfjörður · GMT"}]}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_card' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_card' AND en_row.locale = 'en'
+          AND is_row.value = en_row.value`,
+
+      // contact_form
+      `UPDATE site_content AS is_row
+          SET value      = '{"title":"SEGÐU MÉR HVAÐ ÞÚ ERT AÐ HUGSA UM","eyebrow":"SENDU SKILABOÐ","submit_label":"SENDA SKILABOÐ","fallback_link":"Sendu mér tölvupóst beint.","fallback_prefix":"Frekar netfang?"}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_form' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_form' AND en_row.locale = 'en'
+          AND is_row.value = en_row.value`,
+
+      // contact_availability — already flipped by 036; included for symmetry.
+      // The `=` guard evaluates false (IS is Icelandic, EN is English) so
+      // this is a guaranteed no-op.
+      `UPDATE site_content AS is_row
+          SET value      = '{"cards":[{"body":"Tek að mér verkefni sem stangast ekki á við starf mitt hjá NetApp.","label":"HUGBÚNAÐUR Í LAUSAVINNU","status":"open"},{"body":"Get veitt ráðgjöf um hvers kyns smíðaverkefni á Íslandi — fellingar, húsgögn, innanhússfrágang, húsasmíði og fleira.","label":"SMÍÐARÁÐGJÖF","status":"open"},{"body":"Til í að halda erindi um hvað sem er.","label":"SAMSTARF & ERINDI","status":"limited"}],"title":"HVAÐ ÉG ER TILBÚINN Í","eyebrow":"NÚNA"}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_availability' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_availability' AND en_row.locale = 'en'
+          AND is_row.value = en_row.value`,
+
+      // contact_built_with
+      `UPDATE site_content AS is_row
+          SET value      = '{"body1":"Þessi síða er handsmíðað verkefnasafn sem keyrir á Node.js og Express með PostgreSQL gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn rammi, ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, tölvupóstur fer í gegnum Resend, skráarupphleðsla í gegnum Multer, vöktun gegnum Pino og Sentry, og allt saman er dreift á Azure eða Railway.","body2":"Öll frumskrár eru á GitHub — þér er velkomið að klóna eða fork-a. Ef þig vantar aðstoð við að koma þessu í loftið eða halda því við, hafðu samband og ég aðstoða með ánægju við uppsetningu, hýsingu eða áframhaldandi umsjón.","pills":["Node.js","Express","PostgreSQL","Lucia Auth","Helmet","CSRF","Resend","Multer","Pino","Sentry","Vanilla JS SPA","Azure","Railway"],"title":"BYGGT MEÐ — OG ÞITT AÐ AFRITA","eyebrow":"UNDIR HÚDDINU","github_url":"https://github.com/pepti/hallismiley","email_btn_label":"SENDU MÉR PÓST UM UPPSETNINGU","github_btn_label":"SKOÐA Á GITHUB"}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_built_with' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_built_with' AND en_row.locale = 'en'
+          AND is_row.value = en_row.value`,
+
+      // contact_footer
+      `UPDATE site_content AS is_row
+          SET value      = '{"nav_links":[{"href":"/HALLI","label":"HALLI"},{"href":"/PROJECTS","label":"VERKEFNI"},{"href":"HTTPS://GITHUB.COM/PEPTI/HALLISMILEY","label":"GITHUB"},{"href":"HTTPS://WWW.LINKEDIN.COM/IN/HALLIV/","label":"LINKEDIN"}],"brand_name":"HALLI SMILEY","copy_suffix":"Verkefnasafn um allt og ekkert.","legal_links":[{"href":"/PRIVACY","label":"PERSÓNUVERNDARSTEFNA"},{"href":"/TERMS","label":"NOTKUNARSKILMÁLAR"}]}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_footer' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_footer' AND en_row.locale = 'en'
+          AND is_row.value = en_row.value`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
