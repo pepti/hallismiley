@@ -863,6 +863,93 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
         WHERE slug = 'x-11'`,
     ],
   },
+  {
+    // i18n — translate the six contact_* site_content IS rows in place.
+    //
+    // Background: migration 029 seeded IS rows by duplicating EN rows at the
+    // time it ran. Halli has since customised the EN content via the CMS
+    // (uppercase labels etc); every CMS save writes to the active locale
+    // only, so the IS rows never diverged — they remain byte-for-byte EN
+    // copies on production today. The JS DEFAULT_* IS fallbacks in
+    // ContactView.js therefore never get a chance to render because the
+    // DB fetch succeeds with EN content and merges OVER the defaults.
+    //
+    // Fix: replace the IS value with real Icelandic copy, guarded by
+    // "only when IS is still identical to EN" so:
+    //   - Idempotent on re-run (after we translate, the guard fails and
+    //     the UPDATE is a no-op)
+    //   - Safe against any future genuine IS edits by admin (if Halli
+    //     later saves real IS content that differs from EN, this never
+    //     overwrites it)
+    //
+    // Matches Halli's current all-caps header style so the IS page has
+    // the same visual rhythm as the EN one. Leaves URLs and proper nouns
+    // (HALLI SMILEY brand, product-name pills, GitHub/LinkedIn handles,
+    // href values) unchanged.
+    name: '036_i18n_contact_icelandic_backfill',
+    statements: [
+      // contact_hero — landing eyebrow + title + subtitle
+      `UPDATE site_content AS is_row
+          SET value      = '{"eyebrow":"HAFA SAMBAND","subtitle":"Verkefni, samstarf, ráðgjöf eða bara til að heilsa","title_line1":"SMÍÐUM EITTHVAÐ","title_accent":"Í VIÐI EÐA Í KÓÐA."}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_hero' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_hero' AND en_row.locale = 'en'
+          AND is_row.value::text = en_row.value::text`,
+
+      // contact_card — 4-item contact links row. Values (emails, handles,
+      // address) are language-neutral; only labels + the "typical reply"
+      // meta line get localised.
+      `UPDATE site_content AS is_row
+          SET value      = '{"items":[{"href":"halli@hallismiley.is","type":"email","label":"NETFANG","value":"halli [at] hallismiley [dot] is"},{"href":"https://github.com/pepti/hallismiley","type":"github","label":"GITHUB","value":"pepti/hallismiley"},{"href":"https://www.linkedin.com/in/halliv/","type":"linkedin","label":"LINKEDIN","value":"halliv"},{"meta":"Yfirleitt svar innan 2–3 daga","type":"location","label":"STAÐSETNING","value":"Hafnarfjörður · GMT"}]}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_card' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_card' AND en_row.locale = 'en'
+          AND is_row.value::text = en_row.value::text`,
+
+      // contact_form — section headers + submit button + fallback prompts.
+      `UPDATE site_content AS is_row
+          SET value      = '{"title":"SEGÐU MÉR HVAÐ ÞÚ ERT AÐ HUGSA UM","eyebrow":"SENDU SKILABOÐ","submit_label":"SENDA SKILABOÐ","fallback_link":"Sendu mér tölvupóst beint.","fallback_prefix":"Frekar netfang?"}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_form' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_form' AND en_row.locale = 'en'
+          AND is_row.value::text = en_row.value::text`,
+
+      // contact_availability — "Right now / What I'm open to" + 3 cards.
+      // status values ('open', 'limited') are enum-style and stay untranslated.
+      `UPDATE site_content AS is_row
+          SET value      = '{"cards":[{"body":"Tek að mér verkefni sem stangast ekki á við starf mitt hjá NetApp.","label":"HUGBÚNAÐUR Í LAUSAVINNU","status":"open"},{"body":"Get veitt ráðgjöf um hvers kyns smíðaverkefni á Íslandi — fellingar, húsgögn, innanhússfrágang, húsasmíði og fleira.","label":"SMÍÐARÁÐGJÖF","status":"open"},{"body":"Til í að halda erindi um hvað sem er.","label":"SAMSTARF & ERINDI","status":"limited"}],"title":"HVAÐ ÉG ER TILBÚINN Í","eyebrow":"NÚNA"}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_availability' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_availability' AND en_row.locale = 'en'
+          AND is_row.value::text = en_row.value::text`,
+
+      // contact_built_with — "Under the hood / Built with" + two body
+      // paragraphs + CTA buttons. Tech-stack pill names and github_url
+      // are product identifiers and stay unchanged.
+      `UPDATE site_content AS is_row
+          SET value      = '{"body1":"Þessi síða er handsmíðað verkefnasafn sem keyrir á Node.js og Express með PostgreSQL gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn rammi, ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, tölvupóstur fer í gegnum Resend, skráarupphleðsla í gegnum Multer, vöktun gegnum Pino og Sentry, og allt saman er dreift á Azure eða Railway.","body2":"Öll frumskrár eru á GitHub — þér er velkomið að klóna eða fork-a. Ef þig vantar aðstoð við að koma þessu í loftið eða halda því við, hafðu samband og ég aðstoða með ánægju við uppsetningu, hýsingu eða áframhaldandi umsjón.","pills":["Node.js","Express","PostgreSQL","Lucia Auth","Helmet","CSRF","Resend","Multer","Pino","Sentry","Vanilla JS SPA","Azure","Railway"],"title":"BYGGT MEÐ — OG ÞITT AÐ AFRITA","eyebrow":"UNDIR HÚDDINU","github_url":"https://github.com/pepti/hallismiley","email_btn_label":"SENDU MÉR PÓST UM UPPSETNINGU","github_btn_label":"SKOÐA Á GITHUB"}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_built_with' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_built_with' AND en_row.locale = 'en'
+          AND is_row.value::text = en_row.value::text`,
+
+      // contact_footer — brand + tagline + nav/legal link labels.
+      // hrefs are preserved verbatim (a separate pre-existing bug has them
+      // uppercased in EN — intentionally not fixed in this i18n migration).
+      `UPDATE site_content AS is_row
+          SET value      = '{"nav_links":[{"href":"/HALLI","label":"HALLI"},{"href":"/PROJECTS","label":"VERKEFNI"},{"href":"HTTPS://GITHUB.COM/PEPTI/HALLISMILEY","label":"GITHUB"},{"href":"HTTPS://WWW.LINKEDIN.COM/IN/HALLIV/","label":"LINKEDIN"}],"brand_name":"HALLI SMILEY","copy_suffix":"Verkefnasafn um allt og ekkert.","legal_links":[{"href":"/PRIVACY","label":"PERSÓNUVERNDARSTEFNA"},{"href":"/TERMS","label":"NOTKUNARSKILMÁLAR"}]}'::jsonb,
+              updated_at = NOW()
+         FROM site_content AS en_row
+        WHERE is_row.key = 'contact_footer' AND is_row.locale = 'is'
+          AND en_row.key = 'contact_footer' AND en_row.locale = 'en'
+          AND is_row.value::text = en_row.value::text`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
