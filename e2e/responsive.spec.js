@@ -76,14 +76,14 @@ test.describe('Responsive layout — 375px mobile', () => {
       const extras = page.locator('.lol-nav__mobile-extras');
       await expect(extras).toBeVisible();
       await expect(extras.locator('.lol-nav__lang')).toBeVisible();
-      await expect(extras.locator('[data-testid="nav-signin"]')).toBeVisible();
-      await expect(extras.locator('[data-testid="nav-signup"]')).toBeVisible();
+      await expect(page.locator('[data-testid="nav-signin-drawer"]')).toBeVisible();
+      await expect(page.locator('[data-testid="nav-signup-drawer"]')).toBeVisible();
     });
 
     test('sign-in button inside the drawer opens the login modal', async ({ page }) => {
       await page.goto('/');
       await page.locator('#nav-hamburger').click();
-      await page.locator('.lol-nav__mobile-extras [data-testid="nav-signin"]').click();
+      await page.locator('[data-testid="nav-signin-drawer"]').click();
       await expect(page.locator('.login-modal-overlay')).toHaveClass(/open/);
       await expect(page.locator('#login-username')).toBeVisible();
     });

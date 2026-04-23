@@ -12,13 +12,13 @@ async function loginAsAdmin(page) {
   await page.goto('/');
 
   // Already logged in?
-  if (await page.locator('.lol-nav__user-btn').isVisible()) return;
+  if (await page.locator('[data-testid="nav-user-btn"]').isVisible()) return;
 
-  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.locator('[data-testid="nav-signin"]').click();
   await page.fill('#login-username', TEST_ADMIN.username);
   await page.fill('#login-password', TEST_ADMIN.password);
   await page.click('.login-form [type=submit]');
-  await page.waitForSelector('.lol-nav__user-btn', { timeout: 10_000 });
+  await page.waitForSelector('[data-testid="nav-user-btn"]', { timeout: 10_000 });
 }
 
 /**

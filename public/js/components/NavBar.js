@@ -163,22 +163,36 @@ export class NavBar {
   }
 
   _renderAuth() {
-    // Render auth into both the top-bar slot (desktop + mobile when logged-in)
-    // and the drawer slot (mobile when logged-out).  CSS hides the non-applicable
-    // one per breakpoint.  We render twice so each has its own event listeners.
-    const containers = [
-      this._nav?.querySelector('#nav-auth'),
-      this._nav?.querySelector('#nav-auth-mobile'),
-    ].filter(Boolean);
-    containers.forEach(c => this._renderAuthInto(c));
+    // Top bar: always populated (renders the user dropdown when logged-in,
+    // or the Sign In / Sign Up CTAs when logged-out).  The top-bar CTAs are
+    // hidden via CSS on mobile so the drawer copy takes over.  This slot
+    // owns the canonical `data-testid` values so existing tests resolve to
+    // exactly one element.
+    const topBar = this._nav?.querySelector('#nav-auth');
+    if (topBar) this._renderAuthInto(topBar, 'top');
+
+    // Drawer: only populated with CTAs when logged-out.  When logged-in we
+    // leave it empty — the user dropdown lives in the top bar on mobile
+    // too (avatar is small enough to fit).  Drawer CTAs get `-drawer`
+    // suffixed testids so Playwright's strict mode can still pick either
+    // copy unambiguously.
+    const drawer = this._nav?.querySelector('#nav-auth-mobile');
+    if (drawer) {
+      if (isAuthenticated()) {
+        drawer.innerHTML = '';
+      } else {
+        this._renderAuthInto(drawer, 'drawer');
+      }
+    }
 
     // Re-bind the language switcher after each auth re-render
     // (lives outside the auth containers but we need to ensure it's wired)
     this._bindLangSwitcher(this._nav);
   }
 
-  _renderAuthInto(container) {
+  _renderAuthInto(container, slot = 'top') {
     container.innerHTML = '';
+    const suffix = slot === 'drawer' ? '-drawer' : '';
 
     if (isAuthenticated()) {
       const user = getUser();
@@ -188,7 +202,7 @@ export class NavBar {
       userBtn.setAttribute('aria-haspopup', 'true');
       userBtn.setAttribute('aria-expanded', 'false');
       userBtn.setAttribute('aria-label', t('nav.userMenu'));
-      userBtn.setAttribute('data-testid', 'nav-user-btn');
+      userBtn.setAttribute('data-testid', `nav-user-btn${suffix}`);
       userBtn.innerHTML = `
         <img class="lol-nav__user-avatar" src="${avatarPathByName(user?.avatar)}"
              alt="${escHtml(user?.username || 'User')}" />
@@ -225,7 +239,7 @@ export class NavBar {
           ${t('nav.myOrders')}
         </a>
         <hr class="lol-nav__dropdown-divider"/>
-        <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" data-signout data-testid="nav-signout">
+        <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" data-signout data-testid="nav-signout${suffix}">
           ${t('nav.signOut')}
         </button>
       `;
@@ -265,7 +279,7 @@ export class NavBar {
     } else {
       const signIn = document.createElement('button');
       signIn.className = 'lol-nav__cta lol-nav__cta--ghost';
-      signIn.setAttribute('data-testid', 'nav-signin');
+      signIn.setAttribute('data-testid', `nav-signin${suffix}`);
       signIn.textContent = t('nav.signIn');
       signIn.addEventListener('click', () => {
         this._closeMenu();
@@ -274,7 +288,7 @@ export class NavBar {
 
       const signUp = document.createElement('a');
       signUp.className = 'lol-nav__cta lol-nav__cta--ghost';
-      signUp.setAttribute('data-testid', 'nav-signup');
+      signUp.setAttribute('data-testid', `nav-signup${suffix}`);
       signUp.href = navHref('/signup');
       signUp.dataset.route = '/signup';
       signUp.textContent = t('nav.signUp');
