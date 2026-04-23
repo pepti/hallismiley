@@ -187,9 +187,9 @@ export class PartyView {
 
     return `
       ${this._renderHero()}
-      ${this._renderVenue(info)}
-      ${this._renderSchedule(schedule)}
       ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟', { primary: true })}
+      ${this._renderSchedule(schedule)}
+      ${this._renderVenue(info)}
       ${unlocked ? this._renderActivities(activities) : this._renderLockedSection('Activities', '🎯', { primary: false })}`;
   }
 
@@ -200,7 +200,7 @@ export class PartyView {
         <div class="party-hero__content">
           <p class="party-hero__eyebrow">July 25, 2026</p>
           <h1 class="party-hero__title">HALLI'S <span class="party-gold">40<sup>th</sup></span></h1>
-          <p class="party-hero__sub">The big four-zero — let's make it legendary</p>
+          <p class="party-hero__sub">${t('party.heroSubtitle')}</p>
           <div class="party-countdown" id="party-countdown" aria-live="polite" aria-label="Countdown to party">
             <div class="party-countdown__unit">
               <span class="party-countdown__num" id="cd-days">--</span>
