@@ -537,6 +537,130 @@
   background: rgba(200, 170, 110, 0.03);
 }
 
+/* ── Skill groups (CV categorised lists) ──────────────────────────────────── */
+.hb-skill-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: clamp(1.2rem, 3vw, 2rem);
+  margin-top: 2.5rem;
+}
+.hb-skill-group {
+  border-left: 2px solid var(--gold-dark);
+  padding: 0.2rem 0 0.2rem 1.1rem;
+}
+.hb-skill-group__title {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 0.8rem;
+}
+.hb-skill-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #A9B4C0;
+}
+.hb-skill-list li { padding: 0.2rem 0; }
+.hb-skill-list li::before { content: '— '; color: var(--gold-dark); }
+
+/* ── Experience cards (CV project entries) ────────────────────────────────── */
+.hb-experience {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+.hb-exp-card {
+  padding: 1.3rem 1.4rem;
+  background: rgba(200, 170, 110, 0.03);
+  border: 1px solid rgba(200, 170, 110, 0.10);
+  border-top: 2px solid var(--gold-dark);
+  transition: border-color 0.25s, background 0.25s;
+}
+.hb-exp-card:hover {
+  border-top-color: var(--gold);
+  background: rgba(200, 170, 110, 0.06);
+}
+.hb-exp-card__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: #F0E6D3;
+  margin: 0 0 0.35rem;
+  line-height: 1.3;
+}
+.hb-exp-card__meta {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 0.7rem;
+}
+.hb-exp-card__outcome {
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: #A9B4C0;
+  margin: 0;
+}
+
+/* ── Blend "bridge" motif (Wood ──── Code) ────────────────────────────────── */
+.hb-bridge {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2rem);
+  margin: 2.5rem auto 2rem;
+  max-width: 520px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.hb-bridge__side { text-align: center; opacity: 0.75; }
+.hb-bridge__link {
+  width: 100%;
+  min-width: 60px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
+}
+
+/* ── Array-editing affordances (Add/Remove row buttons) ───────────────────── */
+.halli-bio:not(.halli-bio--editing) [data-array-ctrl] { display: none; }
+.halli-bio--editing [data-array-ctrl] {
+  display: inline-block;
+  margin-top: 0.6rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px dashed var(--gold-dark);
+  background: transparent;
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.halli-bio--editing [data-array-ctrl]:hover {
+  border-style: solid;
+  border-color: var(--gold);
+}
+.halli-bio--editing .hb-array-remove {
+  margin-left: 0;
+  opacity: 0.7;
+}
+.halli-bio--editing .hb-array-remove:hover { opacity: 1; }
+
+/* ── Hint: make the array containers visible as editable zones ─────────────── */
+.halli-bio--editing [data-array] {
+  outline: 1px dashed rgba(200, 170, 110, 0.18);
+  outline-offset: 8px;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .hb-title    { font-size: clamp(26px, 9vw, 42px); }

@@ -1106,6 +1106,62 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          WHERE site_content.value = (SELECT value FROM site_content WHERE key = 'contact_footer' AND locale = 'en')`,
     ],
   },
+  {
+    // CV refactor for the halli_bio page — adds six array keys
+    // (skill_groups + experience, one pair per CV section: craft, code, blend).
+    //
+    // Merge strategy: `defaults || value` means existing keys in `value` win,
+    // so admin edits to any other key are preserved. The WHERE guard makes the
+    // migration idempotent — it runs once, then short-circuits on re-run.
+    //
+    // Dollar-quoted JSON literals ($j$...$j$) sidestep single-quote escaping
+    // for apostrophes in the English copy (e.g. "customer's room").
+    //
+    // Legacy keys (craft_highlight1..3, beginning_text2, life_text2) are kept
+    // in the row as dead-but-harmless fallback data — the view has a
+    // synthesised fallback path that reads craft_highlight1..3 when the new
+    // craft_skill_groups array is missing.
+    name: '039_halli_bio_cv_arrays',
+    statements: [
+      // English
+      `UPDATE site_content
+          SET value = jsonb_build_object(
+                'craft_skill_groups', $j$[{"id":"framing","title":"Framing & Structural","items":["Timber-frame construction and traditional joinery","Load-bearing layout, lintel and header sizing","Roof trusses, hip and valley cuts","Insulation, vapour barrier and air-sealing detailing","Retrofit work in heritage and out-of-square buildings"]},{"id":"finish","title":"Finish & Cabinetry","items":["Fitted kitchens and built-in storage","Hand-cut dovetail and mortise-and-tenon joinery","Solid-wood furniture design and fabrication","Hardwood flooring and stair construction","Natural oil and hard-wax finishes"]}]$j$::jsonb,
+                'craft_experience',   $j$[{"id":"reykjavik-kitchen","title":"Heritage-home kitchen fit-out","meta":"Reykjavík · 2023 · 6 weeks","outcome":"Custom birch cabinetry fitted into a 1930s building with no square walls. Zero visible shims; every panel scribed on-site."},{"id":"summerhouse-frame","title":"Timber-frame summer house","meta":"South Iceland · 2022 · Lead carpenter","outcome":"Traditional post-and-beam frame, raised in four days with a three-person crew. Still standing square after three winters."},{"id":"walnut-table","title":"Commissioned walnut dining table","meta":"Private client · 2024","outcome":"2.8 m solid walnut slab, hand-planed and finished with hard-wax oil. Designed to outlast its owner."}]$j$::jsonb,
+                'code_skill_groups',  $j$[{"id":"backend","title":"Backend & Data","items":["Node.js and Express API design","PostgreSQL schema modelling and migrations","Authentication, CSRF, and role-based access","Background jobs and queue design","Integration with third-party APIs"]},{"id":"frontend","title":"Frontend & UX","items":["Vanilla-JS SPAs without framework bloat","Accessible, keyboard-first UI","i18n and locale-aware content","Responsive layout without CSS frameworks","Performance: lazy loading, asset hygiene"]},{"id":"ops","title":"Ops & Delivery","items":["Linux servers, nginx, TLS, systemd","CI pipelines and deployment automation","Monitoring, logging, incident response","Database backup and restore strategy","Working with non-technical stakeholders"]}]$j$::jsonb,
+                'code_experience',    $j$[{"id":"workshop-inventory","title":"Workshop inventory & job-tracking system","meta":"Self-built · production since 2022","outcome":"Internal tool that tracks 400+ materials, open jobs, and client quotes. Replaced three spreadsheets and a whiteboard."},{"id":"client-portal","title":"Contractor client portal","meta":"Freelance · 2024","outcome":"Quote → contract → progress photos in one URL. Cut invoicing friction for a small construction firm."},{"id":"site-rebuild","title":"This website","meta":"Greenfield · Node + Postgres + vanilla JS","outcome":"Full-stack, bilingual, CMS-driven. Every line written, reviewed, and deployed by one person."}]$j$::jsonb,
+                'blend_skill_groups', $j$[{"id":"diagnosis","title":"Diagnosis","items":["Seeing the problem behind the stated problem","Reading what a system tells you about itself","Separating symptom from cause under time pressure"]},{"id":"precision","title":"Precision & Measurement","items":["Committing in millimetres or milliseconds","Tolerance-driven thinking","Planning cuts you cannot take back"]},{"id":"horizon","title":"Long-Horizon Thinking","items":["Building for the next twenty years, not the next sprint","Choosing materials and dependencies that age well","Documentation as a gift to future maintainers"]},{"id":"communication","title":"Client Communication","items":["Translating craft vocabulary into business terms","Quoting honestly, including the inconvenient","Saying no to the wrong scope"]}]$j$::jsonb,
+                'blend_experience',   $j$[{"id":"cabinet-config","title":"Parametric cabinet configurator","meta":"Hybrid project · 2023","outcome":"Web tool that turns a customer's room dimensions into a cut list and a price. The shop floor reads what the browser sent."},{"id":"job-tracker","title":"Job-site progress app","meta":"Field-tested on three builds","outcome":"Mobile-friendly snapshot of a build's state — what is framed, what is wired, what is blocked. Written by someone who has been on both sides of the paper trail."},{"id":"design-review","title":"Technical design review for a small studio","meta":"Advisory · 2024","outcome":"Two days on-site, a written report, a follow-up call. The same eye that spots a warped joist spots a fragile API contract."}]$j$::jsonb
+              ) || value,
+              updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'en'
+          AND (NOT value ? 'craft_skill_groups'
+            OR NOT value ? 'craft_experience'
+            OR NOT value ? 'code_skill_groups'
+            OR NOT value ? 'code_experience'
+            OR NOT value ? 'blend_skill_groups'
+            OR NOT value ? 'blend_experience')`,
+
+      // Icelandic
+      `UPDATE site_content
+          SET value = jsonb_build_object(
+                'craft_skill_groups', $j$[{"id":"framing","title":"Burðarvirki & uppistöður","items":["Timburrammabygging og hefðbundin samskeyti","Burðarvirkjauppsetning og stærðir bita og þverslár","Þaksperrur og nákvæmar skurðir á hornum","Einangrun, rakavörn og loftþétting","Endurbætur í eldri byggingum og skökkum húsum"]},{"id":"finish","title":"Innréttingar & húsgögn","items":["Sérsmíðuð eldhús og innbyggðar geymslulausnir","Handskornar sinkur og tappa-samskeyti","Hönnun og smíði húsgagna úr harðviði","Harðviðargólf og trappsmíði","Náttúruolíu- og vaxfrágangur"]}]$j$::jsonb,
+                'craft_experience',   $j$[{"id":"reykjavik-kitchen","title":"Innrétting eldhúss í gömlu húsi","meta":"Reykjavík · 2023 · 6 vikur","outcome":"Sérsmíðaðar birkiinnréttingar í byggingu frá 1930 þar sem engir veggir eru réttir. Engir sýnilegir fyllingar; hver plata mótuð á staðnum."},{"id":"summerhouse-frame","title":"Timburrammabyggt sumarhús","meta":"Suðurland · 2022 · Aðalsmiður","outcome":"Hefðbundinn stauarammi reistur á fjórum dögum með þriggja manna hópi. Stendur enn rétt eftir þrjá vetur."},{"id":"walnut-table","title":"Borðstofuborð úr valhnetu","meta":"Einkaviðskipti · 2024","outcome":"2,8 m gegnheil valhneta, handsöguð og frágengin með vaxolíu. Hönnuð til að endast lengur en eigandinn."}]$j$::jsonb,
+                'code_skill_groups',  $j$[{"id":"backend","title":"Bakendi & gögn","items":["Hönnun API með Node.js og Express","PostgreSQL skema og gagnaflutningur","Auðkenning, CSRF og hlutverkabundið aðgengi","Bakgrunnsverk og biðraðahönnun","Samþætting við þriðja aðila API"]},{"id":"frontend","title":"Viðmót & notendaupplifun","items":["Hreint JavaScript vefforrit án ramma","Aðgengileg viðmót með áherslu á lyklaborð","Fjöltungu- og staðfæringarstuðningur","Svörandi útlit án CSS-ramma","Afköst: lata hleðslu og efnisstjórnun"]},{"id":"ops","title":"Rekstur & afhending","items":["Linux-þjónar, nginx, TLS, systemd","CI-leiðslur og sjálfvirkar uppsetningar","Vöktun, loggun og viðbrögð við atvikum","Öryggisafritun og endurheimt gagnagrunna","Samvinna við ótæknilega hagsmunaaðila"]}]$j$::jsonb,
+                'code_experience',    $j$[{"id":"workshop-inventory","title":"Birgða- og verkbókunarkerfi fyrir smíðaverkstæði","meta":"Sjálfsmíðað · í rekstri síðan 2022","outcome":"Innra kerfi sem fylgist með 400+ efnum, opnum verkum og tilboðum. Leysti af þrjú töflureiknirit og eina töflu."},{"id":"client-portal","title":"Viðskiptavinagátt fyrir verktaka","meta":"Lausaverkefni · 2024","outcome":"Tilboð → samningur → framvindumyndir í einni slóð. Minnkaði núning í reikningagerð lítils verktaka."},{"id":"site-rebuild","title":"Þessi vefur","meta":"Nýsmíði · Node + Postgres + hreint JS","outcome":"Full-stack, tvítyngt, CMS-stýrt. Hver lína skrifuð, yfirfarin og birt af einni manneskju."}]$j$::jsonb,
+                'blend_skill_groups', $j$[{"id":"diagnosis","title":"Greining","items":["Að sjá vandamálið á bak við það sem er nefnt","Að lesa hvað kerfið segir um sig sjálft","Að aðgreina einkenni frá orsök undir tímapressu"]},{"id":"precision","title":"Nákvæmni & mæling","items":["Að skuldbinda í millímetrum eða millísekúndum","Vikmörk-miðuð hugsun","Að skipuleggja skurði sem ekki verður hægt að taka til baka"]},{"id":"horizon","title":"Langtímahugsun","items":["Að byggja fyrir næstu tuttugu árin, ekki næsta sprett","Að velja efni og skilyrðingar sem eldast vel","Skjölun sem gjöf til framtíðarumsjónarmanna"]},{"id":"communication","title":"Viðskiptavinasamskipti","items":["Að þýða handverksmál yfir á viðskiptamál","Að gera tilboð heiðarlega, þar á meðal óþægilegu atriðin","Að segja nei við röngum umfangi"]}]$j$::jsonb,
+                'blend_experience',   $j$[{"id":"cabinet-config","title":"Breytulegur skáphönnunarvefur","meta":"Blendingsverkefni · 2023","outcome":"Vefverkfæri sem breytir málum viðskiptavinarins í skurðalista og verð. Verkstæðisgólfið les það sem vafrinn sendi."},{"id":"job-tracker","title":"Framvinduforrit fyrir byggingarsvæði","meta":"Prófað á þremur byggingum","outcome":"Farsímavænt yfirlit yfir stöðu byggingar — hvað er rammað, hvað er raflagt, hvað er stöðvað. Skrifað af þeim sem hefur staðið báðum megin við pappírinn."},{"id":"design-review","title":"Tæknileg hönnunarrýni fyrir lítið fyrirtæki","meta":"Ráðgjöf · 2024","outcome":"Tvö dagar á staðnum, skrifleg skýrsla, framhaldssímtal. Sama auga sem sér skakkan bita sér einnig viðkvæma API-samninga."}]$j$::jsonb
+              ) || value,
+              updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'is'
+          AND (NOT value ? 'craft_skill_groups'
+            OR NOT value ? 'craft_experience'
+            OR NOT value ? 'code_skill_groups'
+            OR NOT value ? 'code_experience'
+            OR NOT value ? 'blend_skill_groups'
+            OR NOT value ? 'blend_experience')`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
