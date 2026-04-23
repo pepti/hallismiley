@@ -131,7 +131,6 @@ const DEFAULT_CONTENT = {
 
   blend_eyebrow: 'The combined edge',
   blend_title: 'The Blend',
-  blend_quote: 'A craftsman does not choose their tools at random. They choose the sharpest, the most honest — and they learn to use them until the tool becomes an extension of thought.',
   blend_text: 'Carpentry and software are the same discipline with different materials. Both reward patience, both punish guesswork, both are fundamentally about diagnosis — seeing the problem behind the problem a client describes.',
   blend_text2: 'Hire Halli when a project crosses domains: when a shop-floor workflow needs a digital twin, when software decisions will outlast their authors, or when you want an engineer who has also had to stand behind their joinery for twenty years.',
 
@@ -204,19 +203,6 @@ const DEFAULT_CONTENT = {
   life_tile4: 'Reading',
   life_tile5: 'Coffee',
 
-  future_eyebrow: 'Start a conversation',
-  future_title: "What's Next",
-  future_text: 'If you are working on something at the junction of physical and digital — a product, a build, a tool that does not exist yet — reach out. The best work always begins with a conversation.',
-  future_text2: 'Consultation, full-project engagements, and design reviews all start the same way: a short call to understand what you are trying to make and whether I am the right person to help.',
-
-  counter1_num: '20+',
-  counter1_label: 'Years crafting wood',
-  counter2_num: '10K+',
-  counter2_label: 'Lines of code written',
-  counter3_num: '80+',
-  counter3_label: 'Projects completed',
-  counter4_num: '1',
-  counter4_label: 'Island nation called home',
 };
 
 // ── Wave SVG helper ────────────────────────────────────────────────────────
@@ -235,10 +221,8 @@ function wave(fromBg, toFill, flip = false) {
 // ── HalliView class ────────────────────────────────────────────────────────
 export class HalliView {
   constructor() {
-    this._content      = null;
-    this._observer     = null;
-    this._counterObs   = null;
-    this._countersAnimated = false;
+    this._content  = null;
+    this._observer = null;
   }
 
   async render() {
@@ -249,7 +233,6 @@ export class HalliView {
     view.innerHTML = this._renderContent();
 
     this._initScrollReveal(view);
-    this._initCounters(view);
     this._initVideo(view);
     this._initAdminEdit(view);
     this._bindArrayControls(view);
@@ -259,7 +242,6 @@ export class HalliView {
 
   destroy() {
     this._observer?.disconnect();
-    this._counterObs?.disconnect();
   }
 
   // ── Load content ─────────────────────────────────────────────────────────
@@ -406,46 +388,11 @@ export class HalliView {
     </section>`;
   }
 
-  // ── SECTION: Counters ─────────────────────────────────────────────────────
-  _counters() {
-    return `
-    <section class="hb-section hb-section--amber hb-counters" aria-label="Key milestones">
-      <div class="hb-counters__grid">
-        <div class="hb-reveal hb-reveal--scale">
-          <span class="hb-counter__num" data-counter="counter1_num"
-                data-target="${escHtml(this._content.counter1_num ?? DEFAULT_CONTENT.counter1_num)}">0</span>
-          <span class="hb-counter__label" data-field="counter1_label">${this._c('counter1_label')}</span>
-        </div>
-        <div class="hb-reveal hb-reveal--scale hb-d1">
-          <span class="hb-counter__num" data-counter="counter2_num"
-                data-target="${escHtml(this._content.counter2_num ?? DEFAULT_CONTENT.counter2_num)}">0</span>
-          <span class="hb-counter__label" data-field="counter2_label">${this._c('counter2_label')}</span>
-        </div>
-        <div class="hb-reveal hb-reveal--scale hb-d2">
-          <span class="hb-counter__num" data-counter="counter3_num"
-                data-target="${escHtml(this._content.counter3_num ?? DEFAULT_CONTENT.counter3_num)}">0</span>
-          <span class="hb-counter__label" data-field="counter3_label">${this._c('counter3_label')}</span>
-        </div>
-        <div class="hb-reveal hb-reveal--scale hb-d3">
-          <span class="hb-counter__num" data-counter="counter4_num"
-                data-target="${escHtml(this._content.counter4_num ?? DEFAULT_CONTENT.counter4_num)}">0</span>
-          <span class="hb-counter__label" data-field="counter4_label">${this._c('counter4_label')}</span>
-        </div>
-      </div>
-    </section>`;
-  }
-
   // ── SECTION: Blend (Combined Edge CV) ─────────────────────────────────────
   _blend() {
     return `
-    <section class="hb-section hb-section--1" aria-labelledby="hb-blend-title">
+    <section class="hb-section hb-section--2" aria-labelledby="hb-blend-title">
       <div class="hb-inner">
-        <div class="hb-quote hb-reveal">
-          <blockquote class="hb-quote__text">
-            <span data-field="blend_quote">${this._c('blend_quote')}</span>
-          </blockquote>
-          <span class="hb-quote__attr">— Halli</span>
-        </div>
         <div class="hb-bridge hb-reveal" aria-hidden="true">
           <span class="hb-bridge__side">Wood</span>
           <span class="hb-bridge__link"></span>
@@ -513,30 +460,6 @@ export class HalliView {
     </section>
     <div class="hb-image-break hb-image-break--life hb-reveal" role="img"
          aria-label="Iceland landscape"></div>`;
-  }
-
-  // ── SECTION: Future ───────────────────────────────────────────────────────
-  _future() {
-    return `
-    <section class="hb-section hb-section--2" aria-labelledby="hb-future-title">
-      <div class="hb-inner">
-        <span class="hb-eyebrow hb-reveal">
-          <span data-field="future_eyebrow">${this._c('future_eyebrow')}</span>
-        </span>
-        <h2 class="hb-title hb-reveal hb-d1" id="hb-future-title">
-          <span data-field="future_title">${this._c('future_title')}</span>
-        </h2>
-        <p class="hb-body hb-reveal hb-d2">
-          <span data-field="future_text">${this._c('future_text')}</span>
-        </p>
-        <p class="hb-body hb-reveal hb-d3">
-          <span data-field="future_text2">${this._c('future_text2')}</span>
-        </p>
-        <a href="${href('/')}" data-scroll="contact" class="hb-cta hb-reveal hb-d4">
-          ${t('halli.startConversation')}
-        </a>
-      </div>
-    </section>`;
   }
 
   // ── Decorative Iceland SVG ────────────────────────────────────────────────
@@ -651,14 +574,10 @@ export class HalliView {
       ${this._craft()}
       ${wave('#060e1c', '#040c1a')}
       ${this._code()}
-      ${wave('#040c1a', '#080700', true)}
-      ${this._counters()}
-      ${wave('#080700', '#040c1a')}
+      ${wave('#040c1a', '#060e1c', true)}
       ${this._blend()}
-      ${wave('#040c1a', '#0A1428', true)}
+      ${wave('#060e1c', '#0A1428')}
       ${this._life()}
-      ${wave('#0A1428', '#060e1c')}
-      ${this._future()}
     `;
   }
 
@@ -728,8 +647,6 @@ export class HalliView {
 
     // Disconnect old observers — they reference soon-to-be-orphaned nodes
     this._observer?.disconnect();
-    this._counterObs?.disconnect();
-    this._countersAnimated = false;
 
     view.innerHTML = this._renderContent();
 
@@ -737,9 +654,8 @@ export class HalliView {
     if (editBtn)  view.appendChild(editBtn);
     if (controls) view.appendChild(controls);
 
-    // Re-init scroll reveal + counters + video on the new nodes
+    // Re-init scroll reveal + video on the new nodes
     this._initScrollReveal(view);
-    this._initCounters(view);
     this._initVideo(view);
   }
 
@@ -761,44 +677,6 @@ export class HalliView {
     );
 
     els.forEach(el => this._observer.observe(el));
-  }
-
-  // ── Init: counter animations ──────────────────────────────────────────────
-  _initCounters(view) {
-    const counters = view.querySelectorAll('[data-counter]');
-    if (!counters.length) return;
-
-    this._counterObs = new IntersectionObserver(
-      entries => {
-        if (this._countersAnimated) return;
-        if (entries.some(e => e.isIntersecting)) {
-          this._countersAnimated = true;
-          counters.forEach(el => this._animateCounter(el, el.dataset.target));
-          this._counterObs.disconnect();
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    counters.forEach(el => this._counterObs.observe(el));
-  }
-
-  _animateCounter(el, target) {
-    const m = String(target).match(/^(\d+(?:\.\d+)?)(.*)/);
-    if (!m) { el.textContent = target; return; }
-
-    const num    = parseFloat(m[1]);
-    const suffix = m[2];       // e.g. '+', 'K+', ''
-    const dur    = 1400;
-    const t0     = performance.now();
-
-    const step = ts => {
-      const p = Math.min((ts - t0) / dur, 1);
-      const e = 1 - Math.pow(1 - p, 3); // ease-out cubic
-      el.textContent = Math.round(num * e) + suffix;
-      if (p < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
   }
 
   // ── Init: hero video autoplay ─────────────────────────────────────────────
