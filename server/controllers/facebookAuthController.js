@@ -10,9 +10,9 @@
 //   2. GET /auth/facebook/callback?code=…&state=…
 //        → verify state matches the cookie, exchange code for tokens, fetch
 //          the Graph API /me profile, find-or-create / auto-link the user,
-//          create a Lucia session, 302 to /#/?welcome=facebook.
+//          create a Lucia session, 302 to /<locale>/#/?welcome=facebook.
 //
-// Errors bubble back to /#/login?error=<code> so the SPA can render them.
+// Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 
 const { query: dbQuery }           = require('../config/database');
 const { lucia }                    = require('../auth/lucia');
@@ -38,16 +38,19 @@ function clearOAuthCookies(res) {
   res.clearCookie('facebook_oauth_state');
 }
 
-function redirectWithError(res, code) {
+function redirectWithError(res, code, locale = 'en') {
   clearOAuthCookies(res);
-  return res.redirect(`/#/login?error=${encodeURIComponent(code)}`);
+  // Include the locale prefix so the browser lands directly on the locale-prefixed
+  // SPA path without a second server redirect from GET / → GET /en/. Without the
+  // prefix the i18n catch-all would swallow the hash fragment in some browsers.
+  return res.redirect(`/${locale}/#/?error=${encodeURIComponent(code)}`);
 }
 
 // GET /auth/facebook
 async function start(req, res, next) {
   try {
     if (!isConfigured()) {
-      return redirectWithError(res, 'facebook_not_configured');
+      return redirectWithError(res, 'facebook_not_configured', req.locale);
     }
 
     const { client, generateState } = await loadArctic();
@@ -66,14 +69,14 @@ async function start(req, res, next) {
 async function callback(req, res, next) {
   try {
     if (!isConfigured()) {
-      return redirectWithError(res, 'facebook_not_configured');
+      return redirectWithError(res, 'facebook_not_configured', req.locale);
     }
 
     const { code, state } = req.query;
     const storedState     = req.cookies?.facebook_oauth_state;
 
     if (!code || !state || !storedState || state !== storedState) {
-      return redirectWithError(res, 'invalid_state');
+      return redirectWithError(res, 'invalid_state', req.locale);
     }
 
     let profile;
@@ -92,7 +95,7 @@ async function callback(req, res, next) {
       profile = await userinfoRes.json();
     } catch (err) {
       console.error('[facebook-oauth] token exchange failed:', err.message);
-      return redirectWithError(res, 'oauth_failed');
+      return redirectWithError(res, 'oauth_failed', req.locale);
     }
 
     clearOAuthCookies(res);
@@ -101,7 +104,7 @@ async function callback(req, res, next) {
     // flag. Email can be absent when the user registered FB without one, or
     // declined the `email` permission during consent. Reject if missing.
     if (!profile?.id || !profile.email) {
-      return redirectWithError(res, 'facebook_profile_invalid');
+      return redirectWithError(res, 'facebook_profile_invalid', req.locale);
     }
 
     const email      = String(profile.email).toLowerCase();
@@ -112,7 +115,7 @@ async function callback(req, res, next) {
       `SELECT id, disabled FROM users WHERE facebook_id = $1`,
       [facebookId],
     );
-    if (byFacebook[0]?.disabled) return redirectWithError(res, 'account_disabled');
+    if (byFacebook[0]?.disabled) return redirectWithError(res, 'account_disabled', req.locale);
     let userId = byFacebook[0]?.id ?? null;
 
     // 2. Else existing by email → auto-link. Note: unlike Google, Facebook
@@ -123,7 +126,7 @@ async function callback(req, res, next) {
         [email],
       );
       if (byEmail[0]) {
-        if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled');
+        if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled', req.locale);
         await dbQuery(
           `UPDATE users
              SET facebook_id = $1,
@@ -165,7 +168,7 @@ async function callback(req, res, next) {
     });
     res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
-    return res.redirect('/#/?welcome=facebook');
+    return res.redirect(`/${req.locale}/#/?welcome=facebook`);
   } catch (err) {
     return next(err);
   }

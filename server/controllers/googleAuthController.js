@@ -7,9 +7,9 @@
 //   2. GET /auth/google/callback?code=…&state=…
 //        → verify state matches the cookie, exchange code + verifier for tokens,
 //          fetch the userinfo profile, find-or-create / auto-link the user,
-//          create a Lucia session, 302 to /#/?welcome=google.
+//          create a Lucia session, 302 to /<locale>/#/?welcome=google.
 //
-// Errors bubble back to /#/login?error=<code> so the SPA can render them.
+// Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 
 const { query: dbQuery }          = require('../config/database');
 const { lucia }                   = require('../auth/lucia');
@@ -36,16 +36,19 @@ function clearOAuthCookies(res) {
   res.clearCookie('google_oauth_code_verifier');
 }
 
-function redirectWithError(res, code) {
+function redirectWithError(res, code, locale = 'en') {
   clearOAuthCookies(res);
-  return res.redirect(`/#/login?error=${encodeURIComponent(code)}`);
+  // Include the locale prefix so the browser lands directly on the locale-prefixed
+  // SPA path without a second server redirect from GET / → GET /en/. Without the
+  // prefix the i18n catch-all would swallow the hash fragment in some browsers.
+  return res.redirect(`/${locale}/#/?error=${encodeURIComponent(code)}`);
 }
 
 // GET /auth/google
 async function start(req, res, next) {
   try {
     if (!isConfigured()) {
-      return redirectWithError(res, 'google_not_configured');
+      return redirectWithError(res, 'google_not_configured', req.locale);
     }
 
     const { client, generateState, generateCodeVerifier } = await loadArctic();
@@ -68,7 +71,7 @@ async function start(req, res, next) {
 async function callback(req, res, next) {
   try {
     if (!isConfigured()) {
-      return redirectWithError(res, 'google_not_configured');
+      return redirectWithError(res, 'google_not_configured', req.locale);
     }
 
     const { code, state }    = req.query;
@@ -76,7 +79,7 @@ async function callback(req, res, next) {
     const codeVerifier       = req.cookies?.google_oauth_code_verifier;
 
     if (!code || !state || !storedState || !codeVerifier || state !== storedState) {
-      return redirectWithError(res, 'invalid_state');
+      return redirectWithError(res, 'invalid_state', req.locale);
     }
 
     let profile;
@@ -95,13 +98,13 @@ async function callback(req, res, next) {
       profile = await userinfoRes.json();
     } catch (err) {
       console.error('[google-oauth] token exchange failed:', err.message);
-      return redirectWithError(res, 'oauth_failed');
+      return redirectWithError(res, 'oauth_failed', req.locale);
     }
 
     clearOAuthCookies(res);
 
     if (!profile?.sub || !profile.email || profile.email_verified !== true) {
-      return redirectWithError(res, 'google_profile_invalid');
+      return redirectWithError(res, 'google_profile_invalid', req.locale);
     }
 
     const email = String(profile.email).toLowerCase();
@@ -111,7 +114,7 @@ async function callback(req, res, next) {
       `SELECT id, disabled FROM users WHERE google_id = $1`,
       [profile.sub],
     );
-    if (byGoogle[0]?.disabled) return redirectWithError(res, 'account_disabled');
+    if (byGoogle[0]?.disabled) return redirectWithError(res, 'account_disabled', req.locale);
     let userId = byGoogle[0]?.id ?? null;
 
     // 2. Else existing by email → auto-link (Google has verified the email).
@@ -121,7 +124,7 @@ async function callback(req, res, next) {
         [email],
       );
       if (byEmail[0]) {
-        if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled');
+        if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled', req.locale);
         await dbQuery(
           `UPDATE users
              SET google_id = $1,
@@ -163,7 +166,7 @@ async function callback(req, res, next) {
     });
     res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
-    return res.redirect('/#/?welcome=google');
+    return res.redirect(`/${req.locale}/#/?welcome=google`);
   } catch (err) {
     return next(err);
   }
