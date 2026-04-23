@@ -1,5 +1,6 @@
 const TEST_ADMIN = {
   username: 'testadmin',
+  email:    'admin@e2e.test',
   password: 'AdminPass123',
 };
 

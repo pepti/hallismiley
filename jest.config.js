@@ -31,12 +31,17 @@ module.exports = {
   // i18n / SEO overhaul added ~1,500 lines of new server code (validation
   // refactor, server-side t() helper, ssrMeta middleware, locale-aware
   // controllers) which temporarily pulled the global number to ~64%. Keep
-  // the floor at the new baseline — raise it back to 70 once follow-up
-  // tests land for ssrMeta's admin-meta override path + emailService
-  // locale routing.
+  // ratcheting the floor upward as we land follow-up tests — eventual target
+  // is back to 70. Per-file thresholds below protect security-critical
+  // surfaces from coverage regression even when the global number drifts.
   coverageThreshold: {
     global: {
-      lines: 60,
+      lines: 62,
+    },
+    // authController handles login/signup/reset — any regression in its
+    // test coverage should fail CI immediately.  Currently at 90%.
+    'server/controllers/authController.js': {
+      lines: 88,
     },
   },
 };

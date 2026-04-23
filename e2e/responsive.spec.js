@@ -56,4 +56,37 @@ test.describe('Responsive layout — 375px mobile', () => {
     await expect(page.locator('.halli-bio')).toBeVisible();
   });
 
+  // Mobile nav layout: language toggle + auth CTAs move into the hamburger
+  // drawer at <=640px so the top bar stays uncluttered. See
+  // public/css/layout.css @media (max-width: 640px).
+  test.describe('Mobile navigation drawer', () => {
+    test('top bar hides language toggle and sign-in CTAs', async ({ page }) => {
+      await page.goto('/');
+      const topLang = page.locator('.lol-nav__right .lol-nav__lang');
+      const topSignIn = page.locator('.lol-nav__right [data-testid="nav-signin"]');
+      await expect(topLang).toBeHidden();
+      await expect(topSignIn).toBeHidden();
+      await expect(page.locator('#nav-hamburger')).toBeVisible();
+    });
+
+    test('drawer exposes language toggle and auth CTAs when opened', async ({ page }) => {
+      await page.goto('/');
+      await page.locator('#nav-hamburger').click();
+
+      const extras = page.locator('.lol-nav__mobile-extras');
+      await expect(extras).toBeVisible();
+      await expect(extras.locator('.lol-nav__lang')).toBeVisible();
+      await expect(extras.locator('[data-testid="nav-signin"]')).toBeVisible();
+      await expect(extras.locator('[data-testid="nav-signup"]')).toBeVisible();
+    });
+
+    test('sign-in button inside the drawer opens the login modal', async ({ page }) => {
+      await page.goto('/');
+      await page.locator('#nav-hamburger').click();
+      await page.locator('.lol-nav__mobile-extras [data-testid="nav-signin"]').click();
+      await expect(page.locator('.login-modal-overlay')).toHaveClass(/open/);
+      await expect(page.locator('#login-username')).toBeVisible();
+    });
+  });
+
 });

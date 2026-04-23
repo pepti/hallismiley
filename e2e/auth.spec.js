@@ -72,6 +72,47 @@ test.describe('Auth flows', () => {
 
       await expect(page.locator('[data-testid="login-form"] .form-error')).not.toBeEmpty({ timeout: 8_000 });
     });
+
+    test('signing in with the admin email (any case) works', async ({ page }) => {
+      await page.goto('/');
+      await page.locator('[data-testid="nav-signin"]').click();
+      await page.fill('#login-username', TEST_ADMIN.email.toUpperCase());
+      await page.fill('#login-password', TEST_ADMIN.password);
+      await page.locator('[data-testid="login-submit"]').click();
+
+      await expect(page.locator('[data-testid="nav-user-btn"]')).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('login field has mobile-friendly keyboard hints', async ({ page }) => {
+      await page.goto('/');
+      await page.locator('[data-testid="nav-signin"]').click();
+      const input = page.locator('#login-username');
+      await expect(input).toHaveAttribute('inputmode', 'email');
+      await expect(input).toHaveAttribute('autocapitalize', 'none');
+      await expect(input).toHaveAttribute('autocorrect', 'off');
+      await expect(input).toHaveAttribute('spellcheck', 'false');
+    });
+
+    test('password reveal toggle flips input type and aria-pressed', async ({ page }) => {
+      await page.goto('/');
+      await page.locator('[data-testid="nav-signin"]').click();
+
+      const pw     = page.locator('#login-password');
+      const toggle = page.locator('.login-modal-overlay .password-toggle__btn');
+
+      await expect(pw).toHaveAttribute('type', 'password');
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+      await toggle.click();
+
+      await expect(pw).toHaveAttribute('type', 'text');
+      await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+      await toggle.click();
+
+      await expect(pw).toHaveAttribute('type', 'password');
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    });
   });
 
   test.describe('Logout', () => {

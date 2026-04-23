@@ -97,6 +97,64 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/disabled/i);
   });
+
+  // Tests covering the "email or username" + case-insensitive lookup added so
+  // users who typed their email (the login label reads "Email or username")
+  // can actually sign in.  See server/controllers/authController.js login query.
+  test('login succeeds when the identifier is the account email', async () => {
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ username: 'admin@test.com', password: process.env.ADMIN_PASSWORD });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.username).toBe(process.env.ADMIN_USERNAME);
+    expect(res.body.user.email).toBe('admin@test.com');
+  });
+
+  test('login succeeds when the email is typed with different casing', async () => {
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ username: 'ADMIN@TEST.COM', password: process.env.ADMIN_PASSWORD });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.username).toBe(process.env.ADMIN_USERNAME);
+  });
+
+  test('login succeeds when the username is typed with different casing', async () => {
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ username: process.env.ADMIN_USERNAME.toUpperCase(), password: process.env.ADMIN_PASSWORD });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.username).toBe(process.env.ADMIN_USERNAME);
+  });
+
+  test('login by email with wrong password still returns 401', async () => {
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ username: 'admin@test.com', password: 'wrongpassword' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Invalid credentials');
+  });
+
+  test('login by email still enforces the lockout counter', async () => {
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/auth/login')
+        .send({ username: 'admin@test.com', password: 'bad' });
+    }
+
+    // A valid password now should still be rejected with "locked" because
+    // the email lookup must resolve to the same underlying row as the
+    // username lookup — otherwise the counter would never increment.
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ username: 'admin@test.com', password: process.env.ADMIN_PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/locked/i);
+  });
 });
 
 // ── Account lockout ───────────────────────────────────────────────────────────
