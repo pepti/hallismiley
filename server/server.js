@@ -33,61 +33,11 @@ process.on('uncaughtException', (err) => {
 });
 
 async function start() {
-  // Run pending database migrations before accepting traffic
+  // Run pending database migrations before accepting traffic. Seeds and
+  // admin bootstrap are NOT run here — they live in `npm run bootstrap`
+  // so cold boots (especially on Azure with a cross-region DB) don't
+  // pay 5–7 extra SELECTs before listen().
   await migrate();
-
-  // First-boot seed: populate sample data if core tables are empty.
-  // Safe to leave enabled — each check is a no-op once data exists.
-  try {
-    const { rows: p } = await pool.query('SELECT COUNT(*)::int AS n FROM projects');
-    if (p[0].n === 0) {
-      const { seedProjects } = require('./scripts/seed');
-      await seedProjects();
-    }
-    const { rows: n } = await pool.query('SELECT COUNT(*)::int AS n FROM news_articles');
-    if (n[0].n === 0) {
-      const { seedNews } = require('./scripts/seed-news');
-      await seedNews();
-    }
-  } catch (err) {
-    logger.warn({ err: err.message }, '[server] First-boot seed skipped');
-  }
-
-  // Idempotent project seeds — ensure gallery projects exist with their media.
-  // Each seed checks for existing rows and skips duplicates.
-  try {
-    const { seedStofanBakhus } = require('./scripts/seed-stofan-bakhus');
-    await seedStofanBakhus();
-    const { seedArnarhraun } = require('./scripts/seed-arnarhraun');
-    await seedArnarhraun();
-  } catch (err) {
-    logger.warn({ err: err.message }, '[server] Project gallery seed skipped');
-  }
-
-  // Admin bootstrap: create the initial admin user from env vars if none exists.
-  // Required env: ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD. No-op once an admin exists.
-  try {
-    const { ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
-    if (ADMIN_USERNAME && ADMIN_EMAIL && ADMIN_PASSWORD) {
-      const { rows } = await pool.query(
-        "SELECT 1 FROM users WHERE role = 'admin' LIMIT 1"
-      );
-      if (rows.length === 0) {
-        const { Scrypt } = require('oslo/password');
-        const hash = await new Scrypt().hash(ADMIN_PASSWORD);
-        await pool.query(
-          `INSERT INTO users (email, username, password_hash, role)
-           VALUES ($1, $2, $3, 'admin')
-           ON CONFLICT (username) DO UPDATE
-             SET email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, role = 'admin'`,
-          [ADMIN_EMAIL, ADMIN_USERNAME, hash]
-        );
-        logger.info({ username: ADMIN_USERNAME }, '[server] Admin user bootstrapped');
-      }
-    }
-  } catch (err) {
-    logger.warn({ err: err.message }, '[server] Admin bootstrap skipped');
-  }
 
   // One-shot boot-time notice if outbound email isn't configured. RSVP
   // confirmations + admin notifications silently no-op when this is missing.

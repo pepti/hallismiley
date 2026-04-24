@@ -8,6 +8,7 @@
     "start": "node server/server.js",
     "dev": "nodemon server/server.js",
     "migrate": "node server/scripts/migrate.js",
+    "bootstrap": "node server/scripts/bootstrap.js",
     "seed": "node server/scripts/seed.js",
     "seed:arnarhraun": "node server/scripts/seed-arnarhraun.js",
     "test": "jest",
