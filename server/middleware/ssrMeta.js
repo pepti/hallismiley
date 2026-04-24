@@ -504,11 +504,12 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
 
   let title, description, ogImage;
   let schemas = [];
+  let detailRow = null;
 
   if (detail) {
     // ── Detail page (news article / product / project) ─────────────────
-    const row = await fetchDetailRow(detail);
-    if (!row) {
+    detailRow = await fetchDetailRow(detail);
+    if (!detailRow) {
       // Not found — fall back to section defaults so the SPA can render
       // its own 404 and we still serve *something* sensible to crawlers.
       const sectionKey = detail.section === 'shop' ? 'shop'
@@ -521,24 +522,24 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     } else {
       const canonical = `${APP_URL}${req.path}`;
       if (detail.type === 'news') {
-        title       = pickLocale(row, 'title', 'title_is', locale);
-        description = pickLocale(row, 'summary', 'summary_is', locale);
-        const img   = locale === 'is' && row.cover_image_is ? row.cover_image_is : row.cover_image;
+        title       = pickLocale(detailRow, 'title', 'title_is', locale);
+        description = pickLocale(detailRow, 'summary', 'summary_is', locale);
+        const img   = locale === 'is' && detailRow.cover_image_is ? detailRow.cover_image_is : detailRow.cover_image;
         ogImage     = img ? absUrl(img) : `${APP_URL}${OG_IMAGE_PATH}`;
-        schemas.push(articleSchema(row, locale, canonical));
-        schemas.push(breadcrumbSchema({ section: 'news', detailName: title, localePath: `/news/${row.slug}`, locale }));
+        schemas.push(articleSchema(detailRow, locale, canonical));
+        schemas.push(breadcrumbSchema({ section: 'news', detailName: title, localePath: `/news/${detailRow.slug}`, locale }));
       } else if (detail.type === 'product') {
-        title       = pickLocale(row, 'name', 'name_is', locale);
-        description = stripHtml(pickLocale(row, 'description', 'description_is', locale)).slice(0, 200);
-        ogImage     = row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
-        schemas.push(productSchema(row, locale, canonical));
-        schemas.push(breadcrumbSchema({ section: 'shop', detailName: title, localePath: `/shop/${row.slug}`, locale }));
+        title       = pickLocale(detailRow, 'name', 'name_is', locale);
+        description = stripHtml(pickLocale(detailRow, 'description', 'description_is', locale)).slice(0, 200);
+        ogImage     = detailRow.image_url ? absUrl(detailRow.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
+        schemas.push(productSchema(detailRow, locale, canonical));
+        schemas.push(breadcrumbSchema({ section: 'shop', detailName: title, localePath: `/shop/${detailRow.slug}`, locale }));
       } else if (detail.type === 'project') {
-        title       = pickLocale(row, 'title', 'title_is', locale);
-        description = stripHtml(pickLocale(row, 'description', 'description_is', locale)).slice(0, 200);
-        ogImage     = row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
-        schemas.push(creativeWorkSchema(row, locale, canonical));
-        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/projects/${row.id}`, locale }));
+        title       = pickLocale(detailRow, 'title', 'title_is', locale);
+        description = stripHtml(pickLocale(detailRow, 'description', 'description_is', locale)).slice(0, 200);
+        ogImage     = detailRow.image_url ? absUrl(detailRow.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
+        schemas.push(creativeWorkSchema(detailRow, locale, canonical));
+        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/projects/${detailRow.id}`, locale }));
       }
     }
   } else {
@@ -584,8 +585,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   // renderer handles it and social scrapers can read the <head> alone.
   let crawlerHtml = '';
   if (detail) {
-    const row = await fetchDetailRow(detail);
-    if (row) crawlerHtml = crawlerDetailHtml(detail.type, row, locale);
+    if (detailRow) crawlerHtml = crawlerDetailHtml(detail.type, detailRow, locale);
   } else if (route === '/news' || route === '/shop' || route === '/projects') {
     const section = route.slice(1);
     const rows    = await fetchListRows(section, 10);
