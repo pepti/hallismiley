@@ -345,8 +345,11 @@ app.use(['/auth', '/api/v1'], dbCircuitBreakerMiddleware);
 // In production UPLOAD_ROOT is the Azure Files mount (/app/uploads) so
 // user uploads survive container redeploys.
 const { UPLOAD_ROOT } = require('./config/paths');
+// Uploaded file names embed a timestamp + random suffix (see server/middleware/upload.js),
+// so the URL is effectively unique per file — safe to serve with immutable + a long max-age.
 const uploadStaticOpts = {
-  maxAge: '1h',
+  maxAge: '365d',
+  immutable: true,
   etag: true,
   lastModified: true,
   fallthrough: true,
