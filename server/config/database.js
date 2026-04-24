@@ -9,6 +9,11 @@ const pool = new Pool({
   max: 10,              // max connections in pool
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  // Idle TCP sockets on a cross-region DB get killed by NAT middleboxes;
+  // keepalive keeps them warm so the next query doesn't re-handshake.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  statement_timeout: 15000,
 });
 
 // Fail fast on startup if DB is unreachable
