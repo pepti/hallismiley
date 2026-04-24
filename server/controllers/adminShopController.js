@@ -18,13 +18,27 @@ const adminShopController = {
   async listProducts(req, res, next) {
     try {
       const products = await Product.findAll({ activeOnly: false, limit: 200 });
-      // Attach first image + variants (admin needs to see inactive variants too)
-      const withAll = await Promise.all(products.map(async (p) => {
-        const [images, variants] = await Promise.all([
-          Product.listImages(p.id),
-          ProductVariant.listForProduct(p.id, { activeOnly: false }),
-        ]);
-        return { ...p, images, variants };
+      if (products.length === 0) return res.json({ products: [] });
+      const productIds = products.map(p => p.id);
+      // Admin needs to see inactive variants too, so activeOnly: false.
+      const [images, variants] = await Promise.all([
+        Product.listImagesForProducts(productIds),
+        ProductVariant.listForProducts(productIds, { activeOnly: false }),
+      ]);
+      const imagesByProduct   = new Map();
+      const variantsByProduct = new Map();
+      for (const img of images) {
+        const arr = imagesByProduct.get(img.product_id);
+        if (arr) arr.push(img); else imagesByProduct.set(img.product_id, [img]);
+      }
+      for (const v of variants) {
+        const arr = variantsByProduct.get(v.product_id);
+        if (arr) arr.push(v); else variantsByProduct.set(v.product_id, [v]);
+      }
+      const withAll = products.map(p => ({
+        ...p,
+        images:   imagesByProduct.get(p.id)   || [],
+        variants: variantsByProduct.get(p.id) || [],
       }));
       return res.json({ products: withAll });
     } catch (err) { next(err); }
