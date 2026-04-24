@@ -152,6 +152,8 @@ export class Router {
     if (!href || href.startsWith('#') || a.target === '_blank' || a.hasAttribute('download')) return;
     // Only intercept same-origin absolute paths — leave http(s)://, mailto:, tel: to the browser.
     if (!href.startsWith('/')) return;
+    // Leave server endpoints to the browser — they need a full-page navigation.
+    if (href.startsWith('/auth/') || href.startsWith('/api/')) return;
     e.preventDefault();
     navigate(href);
   }
