@@ -158,6 +158,19 @@ class Product {
     return rows;
   }
 
+  // Bulk fetch across multiple products — avoids N+1 on list endpoints.
+  // Caller groups by product_id; ordering preserves per-product position/created_at.
+  static async listImagesForProducts(productIds) {
+    if (!productIds || productIds.length === 0) return [];
+    const { rows } = await db.query(
+      `SELECT ${IMG_COLUMNS} FROM product_images
+        WHERE product_id = ANY($1::text[])
+        ORDER BY product_id, position ASC, created_at ASC`,
+      [productIds.map(String)]
+    );
+    return rows;
+  }
+
   static async addImage(productId, { url, alt_text = null }) {
     const { rows: maxRows } = await db.query(
       `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM product_images WHERE product_id = $1`,

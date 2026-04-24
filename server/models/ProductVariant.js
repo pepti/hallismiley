@@ -19,6 +19,20 @@ class ProductVariant {
     return rows;
   }
 
+  // Bulk fetch across multiple products — avoids N+1 on list endpoints.
+  // Caller groups by product_id; ordering preserves per-product sku order.
+  static async listForProducts(productIds, { activeOnly = true } = {}) {
+    if (!productIds || productIds.length === 0) return [];
+    const where = activeOnly ? 'AND active = TRUE' : '';
+    const { rows } = await db.query(
+      `SELECT ${COLUMNS} FROM product_variants
+        WHERE product_id = ANY($1::text[]) ${where}
+        ORDER BY product_id, sku ASC`,
+      [productIds.map(String)]
+    );
+    return rows;
+  }
+
   static async findById(id) {
     const { rows } = await db.query(
       `SELECT ${COLUMNS} FROM product_variants WHERE id = $1`,

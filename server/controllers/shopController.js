@@ -81,12 +81,26 @@ const shopController = {
   async listProducts(req, res, next) {
     try {
       const products = await Product.findAll({ activeOnly: true, limit: 100, locale: req.locale });
-      const withAll = await Promise.all(products.map(async (p) => {
-        const [images, variants] = await Promise.all([
-          Product.listImages(p.id),
-          ProductVariant.listForProduct(p.id, { activeOnly: true }),
-        ]);
-        return { ...p, images, variants };
+      if (products.length === 0) return res.json({ products: [] });
+      const productIds = products.map(p => p.id);
+      const [images, variants] = await Promise.all([
+        Product.listImagesForProducts(productIds),
+        ProductVariant.listForProducts(productIds, { activeOnly: true }),
+      ]);
+      const imagesByProduct   = new Map();
+      const variantsByProduct = new Map();
+      for (const img of images) {
+        const arr = imagesByProduct.get(img.product_id);
+        if (arr) arr.push(img); else imagesByProduct.set(img.product_id, [img]);
+      }
+      for (const v of variants) {
+        const arr = variantsByProduct.get(v.product_id);
+        if (arr) arr.push(v); else variantsByProduct.set(v.product_id, [v]);
+      }
+      const withAll = products.map(p => ({
+        ...p,
+        images:   imagesByProduct.get(p.id)   || [],
+        variants: variantsByProduct.get(p.id) || [],
       }));
       return res.json({ products: withAll });
     } catch (err) { next(err); }
