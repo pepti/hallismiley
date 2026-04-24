@@ -43,5 +43,12 @@ module.exports = {
     'server/controllers/authController.js': {
       lines: 88,
     },
+    // OAuth controllers — 9 integration tests each cover all branch paths.
+    'server/controllers/googleAuthController.js': {
+      lines: 80,
+    },
+    'server/controllers/facebookAuthController.js': {
+      lines: 80,
+    },
   },
 };
