@@ -78,6 +78,15 @@ export class ProjectForm {
             </div>
           </fieldset>
 
+          <!-- Auto-translate opt-in. Default on; untick to save EN-only (IS
+               stays null and falls back to EN on read via COALESCE). -->
+          <div class="form-group form-check">
+            <label class="form-check__label">
+              <input type="checkbox" name="__autoTranslate" id="pf-autotranslate" checked />
+              <span>${t('admin.autoTranslate')}</span>
+            </label>
+          </div>
+
           <p class="form-error" aria-live="polite"></p>
           <div class="form-actions">
             <button class="btn btn--ghost" type="button" data-action="cancel">${t('admin.cancel')}</button>
@@ -149,6 +158,9 @@ export class ProjectForm {
       // Icelandic siblings — empty → null → IS visitors see the EN fallback.
       title_is:       form.title_is.value.trim()       || null,
       description_is: form.description_is.value.trim() || null,
+      // Opt-in flag consumed by the server's autoTranslateFields helper;
+      // stripped from the payload before it reaches SQL.
+      __autoTranslate: form.__autoTranslate?.checked !== false,
     };
 
     try {

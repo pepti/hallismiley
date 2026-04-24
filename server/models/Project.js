@@ -154,7 +154,7 @@ class ProjectSection {
     return rows;
   }
 
-  static async create(projectId, name, description = null) {
+  static async create(projectId, name, description = null, { name_is = null, description_is = null } = {}) {
     // New section goes to the end
     const { rows: maxRows } = await db.query(
       `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
@@ -163,11 +163,15 @@ class ProjectSection {
     );
     const nextOrder = maxRows[0].next;
 
+    // Empty string → null so "clear the translation" is expressible.
+    const ni = typeof name_is        === 'string' && name_is.trim()        === '' ? null : (name_is        || null);
+    const di = typeof description_is === 'string' && description_is.trim() === '' ? null : (description_is || null);
+
     const { rows } = await db.query(
-      `INSERT INTO project_sections (project_id, name, description, sort_order)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO project_sections (project_id, name, description, name_is, description_is, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${SECTION_COLUMNS}`,
-      [Number(projectId), name, description, nextOrder]
+      [Number(projectId), name, description, ni, di, nextOrder]
     );
     return rows[0];
   }
@@ -275,7 +279,7 @@ class ProjectVideo {
     return rows;
   }
 
-  static async create(projectId, { kind, file_path, youtube_id, title }) {
+  static async create(projectId, { kind, file_path, youtube_id, title, title_is } = {}) {
     // Next sort_order
     const { rows: maxRows } = await db.query(
       `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
@@ -284,11 +288,13 @@ class ProjectVideo {
     );
     const nextOrder = maxRows[0].next;
 
+    const ti = typeof title_is === 'string' && title_is.trim() === '' ? null : (title_is || null);
+
     const { rows } = await db.query(
-      `INSERT INTO project_videos (project_id, kind, file_path, youtube_id, title, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO project_videos (project_id, kind, file_path, youtube_id, title, title_is, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${VIDEO_COLUMNS}`,
-      [Number(projectId), kind, file_path || null, youtube_id || null, title || null, nextOrder]
+      [Number(projectId), kind, file_path || null, youtube_id || null, title || null, ti, nextOrder]
     );
     return rows[0];
   }

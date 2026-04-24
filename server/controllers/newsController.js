@@ -5,6 +5,15 @@ const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 const { parseYouTubeId } = require('../utils/youtube');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
+const { autoTranslateFields } = require('../services/autoTranslateFields');
+
+// Field pairs for EN → IS auto-translation on admin save. `cover_image_is`
+// is omitted deliberately: it is a URL/path, not translatable prose.
+const NEWS_TRANSLATE_PAIRS = [
+  ['title',   'title_is',   'plain'],
+  ['summary', 'summary_is', 'plain'],
+  ['body',    'body_is',    'markdown'],
+];
 
 const MEDIA_COLS = 'id, article_id, kind, file_path, youtube_id, caption, sort_order, created_at';
 
@@ -177,6 +186,11 @@ const newsController = {
   // Admin/moderator — create a new article.
   async create(req, res, next) {
     try {
+      // Auto-fill any empty IS fields from their EN counterparts before
+      // validation. No-op when the feature flag is off or the admin sent
+      // `__autoTranslate: false`. The flag itself is stripped from req.body.
+      await autoTranslateFields(req.body, NEWS_TRANSLATE_PAIRS);
+
       const {
         title, summary, body, cover_image = null,
         title_is = null, summary_is = null, body_is = null, cover_image_is = null,
@@ -225,6 +239,11 @@ const newsController = {
       if (!existing[0]) return res.status(404).json({ error: t(req.locale, 'errors.news.articleNotFound'), code: 404 });
 
       const current = existing[0];
+
+      // Fill any empty IS fields from EN before resolving the merged record.
+      // Passing `existingRow: current` ensures we don't overwrite manual IS
+      // edits stored in the DB when the payload only updates the EN side.
+      await autoTranslateFields(req.body, NEWS_TRANSLATE_PAIRS, { existingRow: current });
 
       const title          = req.body.title          !== undefined ? req.body.title          : current.title;
       const summary        = req.body.summary        !== undefined ? req.body.summary        : current.summary;

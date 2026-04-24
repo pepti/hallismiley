@@ -287,6 +287,13 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
           </label>
         </fieldset>
 
+        <!-- Auto-translate opt-in for the save. Server translates empty
+             name_is / description_is from their EN counterparts. -->
+        <label class="admin-product-form__check">
+          <input type="checkbox" name="__autoTranslate" checked/>
+          ${t('admin.autoTranslate')}
+        </label>
+
         <p class="admin-shop__error" id="admin-product-error" role="alert"></p>
         <div class="admin-shop__form-actions">
           ${isEdit ? `<button type="button" class="admin-shop__delete" id="admin-product-deactivate">${t('adminProducts.deactivate')}</button>` : ''}
@@ -338,6 +345,8 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
       price_eur:      Number(fd.get('price_eur')),
       stock:          Number(fd.get('stock') || 0),
       active:         fd.get('active') === 'on',
+      // Server-side EN → IS auto-translation of empty IS fields on save.
+      __autoTranslate: fd.get('__autoTranslate') !== null,
     };
     const wg = fd.get('weight_grams');
     if (wg !== null && wg !== '') body.weight_grams = Number(wg);

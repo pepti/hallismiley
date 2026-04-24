@@ -103,6 +103,11 @@ class Product {
       let v = data[field];
       if (numeric.has(field)) v = v === null ? null : Number(v);
       if (bool.has(field))    v = Boolean(v);
+      // Mirror Project.js: empty-string IS fields clear the translation back
+      // to null, which lets COALESCE(name_is, name) fall back to EN on read.
+      if ((field === 'name_is' || field === 'description_is') && typeof v === 'string' && v.trim() === '') {
+        v = null;
+      }
       if (jsonField.has(field)) {
         v = typeof v === 'string' ? v : JSON.stringify(v);
         params.push(v);

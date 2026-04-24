@@ -7,6 +7,13 @@ const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
+const { autoTranslateFields } = require('../services/autoTranslateFields');
+
+// EN → IS pairs for auto-translation on admin save.
+const PRODUCT_TRANSLATE_PAIRS = [
+  ['name',        'name_is',        'plain'],
+  ['description', 'description_is', 'markdown'],
+];
 
 function validateSlug(slug) {
   return typeof slug === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
@@ -44,6 +51,9 @@ const adminShopController = {
 
   async createProduct(req, res, next) {
     try {
+      // Auto-fill empty IS fields from EN before we pluck fields out of body.
+      await autoTranslateFields(req.body, PRODUCT_TRANSLATE_PAIRS);
+
       const {
         slug, name, description,
         name_is, description_is,
@@ -94,6 +104,11 @@ const adminShopController = {
       if (req.body.slug !== undefined && !validateSlug(req.body.slug)) {
         return res.status(400).json({ error: 'invalid slug', code: 400 });
       }
+      // Look up current product so auto-translate won't overwrite manual IS
+      // edits when the payload only changes EN fields.
+      const existingRow = await Product.findById(req.params.id);
+      await autoTranslateFields(req.body, PRODUCT_TRANSLATE_PAIRS, { existingRow });
+
       const product = await Product.update(req.params.id, req.body);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       return res.json({ product });

@@ -297,6 +297,13 @@ export class NewsView {
               <input type="checkbox" name="published" ${isNew || article?.published ? 'checked' : ''}>
               Published
             </label>
+            <!-- Auto-translate opt-in. Default on — server translates empty
+                 *_is fields from their EN counterparts. Untick to save EN
+                 only; IS readers fall back to EN via COALESCE. -->
+            <label class="news-editor__check">
+              <input type="checkbox" name="__autoTranslate" checked>
+              ${t('admin.autoTranslate')}
+            </label>
           </div>
 
           <!-- Media Section — always visible; queues for new articles, uploads directly for existing -->
@@ -396,6 +403,8 @@ export class NewsView {
     const titleIs     = form.querySelector('[name="title_is"]')?.value.trim()   || null;
     const summaryIs   = form.querySelector('[name="summary_is"]')?.value.trim() || null;
     const bodyIs      = form.querySelector('[name="body_is"]')?.value.trim()    || null;
+    // Opt-in flag for server-side EN→IS auto-translate; stripped before SQL.
+    const autoTranslate = form.querySelector('[name="__autoTranslate"]')?.checked !== false;
 
     // Basic client-side validation so the user gets feedback on required fields
     if (!title || !summary || !body) {
@@ -416,6 +425,7 @@ export class NewsView {
         title_is:   titleIs,
         summary_is: summaryIs,
         body_is:    bodyIs,
+        __autoTranslate: autoTranslate,
       };
       if (slug) payload.slug = slug;
 
