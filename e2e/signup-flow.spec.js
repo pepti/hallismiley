@@ -80,7 +80,7 @@ test.describe('Signup flow', () => {
     await expect(page.locator('#signup-error')).not.toBeEmpty({ timeout: 8_000 });
   });
 
-  test('successful signup shows verification message with email', async ({ page }) => {
+  test('successful signup logs user in and shows welcome screen', async ({ page, context }) => {
     const uid   = Date.now();
     const email = `e2esignup${uid}@e2e.test`;
 
@@ -93,6 +93,14 @@ test.describe('Signup flow', () => {
 
     await expect(page.locator('#signup-success')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('#signup-success-email')).toContainText(email);
+
+    // Auto-login: the signup response should have set a session cookie.
+    const cookies = await context.cookies();
+    expect(cookies.some(c => c.name === 'auth_session')).toBe(true);
+
+    // Continue button routes home via the SPA router.
+    await page.click('[data-testid="signup-continue"]');
+    await expect(page).not.toHaveURL(/\/signup/);
   });
 
   test('selecting a different avatar updates the hidden input', async ({ page }) => {

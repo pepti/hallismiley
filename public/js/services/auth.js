@@ -94,7 +94,21 @@ export async function signup(data) {
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || 'Signup failed');
+  // Cache the user silently — the welcome screen wants to stay rendered.
+  // Dispatching authchange here would cause the router (which listens on it)
+  // to re-render SignupView and wipe the success panel. SignupView fires
+  // authchange itself once the user clicks Continue and leaves the page.
+  if (body.user) {
+    _user = body.user;
+    _csrfToken = null;
+  }
   return body;
+}
+
+/** Notify the app that auth state changed. Used by SignupView to sync the
+ *  NavBar after the user clicks Continue from the welcome screen. */
+export function notifyAuthChange() {
+  _dispatch();
 }
 
 export async function verifyEmail(token) {

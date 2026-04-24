@@ -1,4 +1,4 @@
-import { signup, checkUsername, checkEmail, resendVerification } from '../services/auth.js';
+import { signup, checkUsername, checkEmail, resendVerification, notifyAuthChange } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
@@ -132,7 +132,7 @@ export class SignupView {
               <span class="signup-resend__countdown" id="signup-resend-countdown" hidden></span>
             </p>
             <p class="signup-resend__msg" id="signup-resend-msg" aria-live="polite"></p>
-            <a href="${href('/login')}" class="btn btn--outline" data-route="/login">${t('signup.goToSignIn')}</a>
+            <a href="${href('/')}" class="btn btn--primary" data-route="/" data-testid="signup-continue">${t('signup.goToSignIn')}</a>
           </div>
         </div>
       </div>
@@ -284,6 +284,7 @@ export class SignupView {
       el.querySelector('#signup-form').hidden = true;
       el.querySelector('#signup-success').hidden = false;
       this._bindResend(el, email);
+      this._bindContinue(el);
 
     } catch (err) {
       errEl.textContent = err.message;
@@ -325,6 +326,18 @@ export class SignupView {
       } catch (err) {
         msgEl.textContent = err.message || t('signup.resendFailed');
       }
+    });
+  }
+
+  // The router re-navigates on 'authchange', which would wipe the welcome
+  // panel. We defer the dispatch until the user leaves via Continue: the SPA
+  // click interceptor pushes the new URL first, then this handler fires
+  // authchange asynchronously so the NavBar syncs to the logged-in state.
+  _bindContinue(el) {
+    const btn = el.querySelector('[data-testid="signup-continue"]');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      setTimeout(() => notifyAuthChange(), 0);
     });
   }
 }

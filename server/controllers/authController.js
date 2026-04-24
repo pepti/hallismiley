@@ -127,6 +127,8 @@ const authController = {
 
   // POST /auth/signup  { username, email, password, phone?, display_name?, avatar? }
   // Validation (format + length) handled upstream by validateSignup middleware.
+  // Creates the account, logs the user in via a session cookie, and sends an
+  // optional verification email. Verification is never required to use the site.
   async signup(req, res, next) {
     try {
       const { username, email, password, phone, display_name, avatar } = req.body;
@@ -150,16 +152,10 @@ const authController = {
         return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
       }
 
-      const passwordHash    = await scrypt.hash(password);
-      const chosenAvatar    = avatar ?? 'avatar-01.svg';
-      const requireVerify   = process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
-
-      let verifyToken  = null;
-      let verifyExpiry = null;
-      if (requireVerify) {
-        verifyToken  = makeToken();
-        verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
-      }
+      const passwordHash = await scrypt.hash(password);
+      const chosenAvatar = avatar ?? 'avatar-01.svg';
+      const verifyToken  = makeToken();
+      const verifyExpiry = new Date(Date.now() + VERIFY_TTL_MS);
 
       const { rows } = await dbQuery(
         `INSERT INTO users
@@ -167,8 +163,9 @@ const authController = {
             display_name, phone, avatar,
             email_verified,
             email_verify_token, email_verify_expires)
-         VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8, $9)
-         RETURNING id, username, email, role`,
+         VALUES ($1, $2, $3, 'user', $4, $5, $6, FALSE, $7, $8)
+         RETURNING id, username, email, role, avatar, display_name, phone,
+                   email_verified, party_access`,
         [
           username,
           email.toLowerCase(),
@@ -176,34 +173,40 @@ const authController = {
           display_name ?? null,
           phone ?? null,
           chosenAvatar,
-          !requireVerify, // email_verified = true unless verification is required
           verifyToken,
           verifyExpiry,
         ]
       );
       const newUser = rows[0];
 
-      // Send verification email after the INSERT commits.
-      // If email fails the account still exists (unverified) — user can resend.
-      if (requireVerify) {
-        try {
-          await sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale);
-        } catch (emailErr) {
-          // Log but don't fail the request — account is created, resend flow covers this.
-          console.error('[signup] Verification email failed:', emailErr.message);
-        }
+      // Fire-and-log the verification email. Verification is optional, so a
+      // delivery failure must not block signup — the resend flow covers retries.
+      try {
+        await sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale);
+      } catch (emailErr) {
+        console.error('[signup] Verification email failed:', emailErr.message);
       }
 
-      if (requireVerify) {
-        return res.status(201).json({
-          message: t(req.locale, 'errors.auth.accountCreatedVerify'),
-          user: newUser,
-        });
-      }
+      // Log the new user in immediately — no extra round-trip through /login.
+      const session = await lucia.createSession(newUser.id, {
+        ip_address: req.ip ?? null,
+        user_agent: req.headers['user-agent'] ?? null,
+      });
+      res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
       return res.status(201).json({
         message: t(req.locale, 'errors.auth.accountCreated'),
-        user: newUser,
+        user: {
+          id:             newUser.id,
+          username:       newUser.username,
+          email:          newUser.email,
+          role:           newUser.role,
+          avatar:         newUser.avatar,
+          display_name:   newUser.display_name,
+          phone:          newUser.phone,
+          email_verified: newUser.email_verified,
+          party_access:   newUser.party_access,
+        },
       });
     } catch (err) { next(err); }
   },

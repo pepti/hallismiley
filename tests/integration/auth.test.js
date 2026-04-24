@@ -555,21 +555,14 @@ describe('GET /auth/check-email/:email', () => {
   });
 });
 
-// ── Signup with REQUIRE_EMAIL_VERIFICATION=true ───────────────────────────────
+// ── Signup creates session + sends optional verification email ────────────────
 
-describe('POST /auth/signup — email verification flow', () => {
-  const origEnv = process.env.REQUIRE_EMAIL_VERIFICATION;
-
+describe('POST /auth/signup — auto-login and optional verification', () => {
   beforeEach(() => {
-    process.env.REQUIRE_EMAIL_VERIFICATION = 'true';
     emailService.sendVerificationEmail.mockClear();
   });
 
-  afterAll(() => {
-    process.env.REQUIRE_EMAIL_VERIFICATION = origEnv;
-  });
-
-  test('creates unverified user and sends verification email', async () => {
+  test('creates unverified user, logs them in, and sends verification email', async () => {
     const res = await request(app).post('/auth/signup').send({
       username: 'unverifuser',
       email:    'unverif@example.com',
@@ -577,24 +570,48 @@ describe('POST /auth/signup — email verification flow', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.message).toMatch(/verify/i);
+    expect(res.body.user).toMatchObject({
+      username:       'unverifuser',
+      email:          'unverif@example.com',
+      email_verified: false,
+      role:           'user',
+    });
 
-    // User should exist in DB and be unverified
+    // Session cookie must be set — the user is logged in immediately.
+    const setCookie = res.headers['set-cookie'];
+    expect(setCookie).toBeDefined();
+    expect(setCookie.some(c => /auth_session=/.test(c))).toBe(true);
+
     const { rows } = await db.query(
-      `SELECT email_verified, email_verify_token FROM users WHERE username = $1`,
+      `SELECT email_verified, email_verify_token, email_verify_expires
+         FROM users WHERE username = $1`,
       ['unverifuser']
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].email_verified).toBe(false);
     expect(rows[0].email_verify_token).not.toBeNull();
+    expect(rows[0].email_verify_expires).not.toBeNull();
 
-    // emailService should have been called
     expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
     expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
       'unverif@example.com',
       expect.any(String),
-      expect.any(String)  // locale — added by the i18n refactor
+      expect.any(String)
     );
+  });
+
+  test('signup still succeeds when verification email fails to send', async () => {
+    emailService.sendVerificationEmail.mockRejectedValueOnce(new Error('SMTP down'));
+
+    const res = await request(app).post('/auth/signup').send({
+      username: 'emailfailuser',
+      email:    'emailfail@example.com',
+      password: 'password123',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.user.username).toBe('emailfailuser');
+    expect(res.headers['set-cookie'].some(c => /auth_session=/.test(c))).toBe(true);
   });
 });
 
