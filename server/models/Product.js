@@ -55,6 +55,18 @@ class Product {
     return rows[0] || null;
   }
 
+  // Bulk fetch — avoids N+1 on checkout when validating a cart of variants.
+  static async findByIds(ids, { activeOnly = false, locale = null } = {}) {
+    if (!ids || ids.length === 0) return [];
+    const where = activeOnly ? 'AND active = TRUE' : '';
+    const cols  = locale ? publicCols(locale) : COLUMNS;
+    const { rows } = await db.query(
+      `SELECT ${cols} FROM products WHERE id = ANY($1::text[]) ${where}`,
+      [ids.map(String)]
+    );
+    return rows;
+  }
+
   // ── WRITE ─────────────────────────────────────────────────────────────────
 
   static async create(data) {
