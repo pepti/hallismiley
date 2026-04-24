@@ -176,6 +176,19 @@ const shopController = {
       // ── Re-fetch prices from DB (A04: never trust client prices) ──────
       // Each item is either { variantId, quantity } (variant-backed SKU) or
       // { productId, quantity } (single-SKU product with no variants).
+      // Bulk-fetch variants + their parent products up front so the
+      // per-item validation loop does zero DB round trips in the common
+      // cart case (all variant-backed items). Single-SKU productId items
+      // still take the slug/id fallback path per item below.
+      const variantIds = items.filter(it => it.variantId).map(it => String(it.variantId));
+      const variants = variantIds.length ? await ProductVariant.findByIds(variantIds) : [];
+      const variantById = new Map(variants.map(v => [String(v.id), v]));
+      const variantProductIds = [...new Set(variants.map(v => String(v.product_id)))];
+      const variantProducts = variantProductIds.length
+        ? await Product.findByIds(variantProductIds, { activeOnly: true, locale: req.locale })
+        : [];
+      const productById = new Map(variantProducts.map(p => [String(p.id), p]));
+
       const resolvedItems = [];
       for (const it of items) {
         const qty = Math.floor(Number(it.quantity));
@@ -184,11 +197,11 @@ const shopController = {
         }
 
         if (it.variantId) {
-          const variant = await ProductVariant.findById(String(it.variantId));
+          const variant = variantById.get(String(it.variantId));
           if (!variant || !variant.active) {
             return res.status(404).json({ error: t(req.locale, 'errors.shop.variantNotFound', { id: it.variantId }), code: 404 });
           }
-          const product = await Product.findById(variant.product_id, { activeOnly: true, locale: req.locale });
+          const product = productById.get(String(variant.product_id));
           if (!product) {
             return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
           }
