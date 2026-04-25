@@ -49,3 +49,12 @@ jobs:
         with:
           app-name: hallismiley-app
           images: hallismileyacr.azurecr.io/hallismiley:${{ github.sha }}
+
+      # azure/webapps-deploy updates the configured image tag but on B1
+      # (no slots) doesn't reliably trigger a container swap — observed on
+      # 2026-04-24 where six successive successful deploys all reported
+      # success while the container kept running a 10-hour-old image. Force
+      # a restart so the new image is actually running. Brief (~30-60s)
+      # unavailability per deploy until we move to a tier with slots.
+      - name: Force restart to activate new image
+        run: az webapp restart --resource-group hallismiley-rg --name hallismiley-app
