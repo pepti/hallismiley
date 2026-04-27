@@ -7,9 +7,12 @@ import {
   loadLocale, getLocaleFromHash, getPreferredLocale, t,
 } from './i18n/i18n.js';
 
+// Install the fetch wrapper before any awaits so every subsequent fetch —
+// including the one tryRestoreSession() may issue — is covered.
+installRateLimitGuard();
+
 // ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();
-installRateLimitGuard();
 
 // ── 2. Determine and load the active locale ───────────────────────────────────
 // Priority: locale in the URL hash → user's saved preference → Accept-Language
