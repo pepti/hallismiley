@@ -9,7 +9,14 @@ module.exports = {
   ],
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/.claude/',
+    // Ignore other Claude worktrees when running from the main checkout.
+    // <rootDir> resolves to the directory of this config file, so when
+    // running from inside a worktree this pattern matches nothing inside
+    // the worktree itself — it only filters parallel worktrees that are
+    // children of the current root. Without <rootDir> the bare '/.claude/'
+    // pattern would match every absolute path under .claude/worktrees/*,
+    // ignoring the worktree's own tests when run from inside it.
+    '<rootDir>/.claude/',
   ],
   testTimeout:      30000,
   forceExit:        true,
