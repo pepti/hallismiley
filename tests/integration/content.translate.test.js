@@ -39,6 +39,28 @@ async function readRow(key, locale) {
   return rows[0] ? rows[0].value : null;
 }
 
+// The IS auto-translate side effect runs as a fire-and-forget background
+// task in contentController.putContent — see runAutoTranslateSideEffect.
+// Tests that assert on IS state after a save must poll for the row, since
+// supertest's `.send()` resolves as soon as the EN response is sent (which
+// is now BEFORE the IS write happens).
+async function waitForIs(key, predicate, timeoutMs = 2000) {
+  const start = Date.now();
+  // 25ms poll cadence: tight enough for tests to feel instant, loose
+  // enough to avoid hammering the test DB.
+  while (Date.now() - start < timeoutMs) {
+    const row = await readRow(key, 'is');
+    if (predicate(row)) return row;
+    await new Promise(r => setTimeout(r, 25));
+  }
+  return await readRow(key, 'is');
+}
+
+// For tests that expect the IS write to NOT happen (flag off, opt-out,
+// translator returns null/throws), give any misbehaving background promise
+// one event-loop tick to fire so the absence is meaningful, not racy.
+const tick = () => new Promise(r => setImmediate(r));
+
 describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
   test('PUT ?locale=en inserts matching IS row from translateTree output', async () => {
     translateTree.mockResolvedValue({
@@ -57,7 +79,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
     expect(res.status).toBe(200);
     expect(res.body.eyebrow).toBe('HELLO'); // EN response unchanged
 
-    const isRow = await readRow('test_hero', 'is');
+    const isRow = await waitForIs('test_hero', r => r && r.eyebrow === 'HALLÓ');
     expect(isRow).toEqual({
       eyebrow: 'HALLÓ',
       subtitle: 'Prófunartexti',
@@ -82,6 +104,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .put('/api/v1/content/test_skip?locale=en')
       .set('Cookie', adminCookie)
       .send({ title: 'T', __autoTranslate: false });
+    await tick(); // give any errant background promise a chance to fire
 
     expect(translateTree).not.toHaveBeenCalled();
     const isRow = await readRow('test_skip', 'is');
@@ -93,6 +116,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .put('/api/v1/content/test_direct_is?locale=is')
       .set('Cookie', adminCookie)
       .send({ title: 'Beint á íslensku' });
+    await tick();
 
     expect(translateTree).not.toHaveBeenCalled();
     const isRow = await readRow('test_direct_is', 'is');
@@ -112,7 +136,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .set('Cookie', adminCookie)
       .send({ eyebrow: 'NEW', title: 'Hello' });
 
-    const isRow = await readRow('test_merge', 'is');
+    const isRow = await waitForIs('test_merge', r => r && r.eyebrow === 'NÝR');
     // Eyebrow was null → filled from translation; title was a real manual IS
     // edit (differs from EN) → preserved.
     expect(isRow.eyebrow).toBe('NÝR');
@@ -148,7 +172,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
         manual_is: 'Some new English here', // EN side edited
       });
 
-    const isRow = await readRow('test_stale', 'is');
+    const isRow = await waitForIs('test_stale', r => r && r.eyebrow === 'NÝR EYEBROW');
     // Stale-EN-as-IS leaves get the new translation
     expect(isRow.eyebrow).toBe('NÝR EYEBROW');
     expect(isRow.title).toBe('NÝR TITLE');
@@ -171,6 +195,9 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .set('Cookie', adminCookie)
       .send({ title: 'Hello world' }); // differs from existing IS
 
+    // Wait briefly for any background write — the merge SHOULD leave the
+    // manual edit alone, but if it ever broke we want to catch it.
+    await new Promise(r => setTimeout(r, 100));
     const isRow = await readRow('test_real_is', 'is');
     expect(isRow.title).toBe('Frumlegt íslenskt'); // manual edit preserved
   });
@@ -183,6 +210,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .send({ title: 'T' });
 
     expect(res.status).toBe(200);
+    await tick(); // let the background rejection log + settle
     const enRow = await readRow('test_err', 'en');
     expect(enRow).toEqual({ title: 'T' });
     const isRow = await readRow('test_err', 'is');
@@ -195,6 +223,7 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .put('/api/v1/content/test_nullout?locale=en')
       .set('Cookie', adminCookie)
       .send({ title: 'T' });
+    await tick();
 
     const isRow = await readRow('test_nullout', 'is');
     expect(isRow).toBeNull();
@@ -206,9 +235,35 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .put('/api/v1/content/test_flag_off?locale=en')
       .set('Cookie', adminCookie)
       .send({ title: 'T' });
+    await tick();
 
     expect(translateTree).not.toHaveBeenCalled();
     const isRow = await readRow('test_flag_off', 'is');
     expect(isRow).toBeNull();
+  });
+
+  test('returns the EN response without waiting for IS translation', async () => {
+    // Hold the translator promise open so we can prove the response returned
+    // BEFORE the IS write (the whole point of fire-and-forget).
+    let resolveTranslator;
+    translateTree.mockImplementation(() => new Promise(r => {
+      resolveTranslator = r;
+    }));
+
+    const res = await request(app)
+      .put('/api/v1/content/test_async?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Hi there' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe('Hi there');
+    // Background translation is still in flight — IS must NOT exist yet.
+    const isBefore = await readRow('test_async', 'is');
+    expect(isBefore).toBeNull();
+
+    // Unblock the translator and confirm the IS row appears shortly after.
+    resolveTranslator({ title: 'Halló' });
+    const isAfter = await waitForIs('test_async', r => r && r.title === 'Halló');
+    expect(isAfter).toEqual({ title: 'Halló' });
   });
 });

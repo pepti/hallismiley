@@ -139,14 +139,45 @@ function mergeTranslatedTree(translatedEn, existingIs, sourceEn) {
   return translatedEn;
 }
 
+// ── Auto-translate side effect ───────────────────────────────────────────────
+// Translates `sourceEn` (the just-saved EN body) and merges into the IS row.
+// Run in the background — never awaited from the request handler — so the
+// browser does not sit on "Saving…" while the LLM works through dozens of
+// nested string leaves on big jsonb keys like halli_bio.
+async function runAutoTranslateSideEffect(key, sourceEn, userId) {
+  const translated = await translateTree(sourceEn);
+  if (!translated) return;
+  const { rows } = await db.query(
+    `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
+    [key, 'is']
+  );
+  const existingIs = rows[0] ? rows[0].value : null;
+  // Pass the original EN body as the third arg so the merge can detect
+  // stale-EN-as-IS leaves (IS string === source EN string) and overwrite
+  // them with the new translation.
+  const merged = mergeTranslatedTree(translated, existingIs, sourceEn);
+  await db.query(
+    `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
+     VALUES ($1, 'is', $2::jsonb, $3, NOW())
+     ON CONFLICT (key, locale) DO UPDATE
+       SET value      = EXCLUDED.value,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+    [key, JSON.stringify(merged), userId]
+  );
+}
+
 // ── PUT /api/v1/content/:key ─────────────────────────────────────────────────
 // Accepts an optional ?locale= query param to target a specific locale.
 // When admin PUTs an English row AND auto-translate is on, also upsert a
-// matching IS row with translated string leaves.
+// matching IS row with translated string leaves — but the EN response
+// returns immediately; the IS write happens in the background. The browser
+// stays responsive even when translateTree walks 100+ string leaves.
 async function putContent(req, res, next) {
   try {
     const locale = req.query.locale || req.locale || DEFAULT_LOCALE;
     const userId = req.user?.id || null;
+    const key = req.params.key;
 
     // Consume and strip the auto-translate flag from the incoming body so it
     // never reaches the jsonb column (or the translator prompt).
@@ -162,49 +193,31 @@ async function putContent(req, res, next) {
              updated_by = EXCLUDED.updated_by,
              updated_at = NOW()
        RETURNING value`,
-      [req.params.key, locale, JSON.stringify(req.body), userId]
+      [key, locale, JSON.stringify(req.body), userId]
     );
 
-    // Fire-and-forget-ish: run the translator side effect only when saving EN
-    // content AND the feature flag / opt-in allow it. Failures are swallowed
-    // so the EN save always succeeds.
-    const otherLocale = 'is';
-    if (
+    // Send the EN response immediately. The background translation below
+    // continues in the same Node process; it does not affect the response.
+    res.json(rows[0].value);
+
+    // Run the translator side effect only when saving EN content AND the
+    // feature flag / opt-in allow it. Captures the body locally because
+    // req can become unsafe to read after the response is sent.
+    const shouldTranslate =
       wantsAutoTranslate
       && locale === DEFAULT_LOCALE
       && translatorEnabled()
-      && !SITE_CONTENT_TRANSLATE_SKIP.has(req.params.key)
-      && req.body && typeof req.body === 'object'
-    ) {
-      try {
-        const translated = await translateTree(req.body);
-        if (translated) {
-          const { rows: existingIsRows } = await db.query(
-            `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
-            [req.params.key, otherLocale]
-          );
-          const existingIs = existingIsRows[0] ? existingIsRows[0].value : null;
-          // Pass the original EN body as the third arg so the merge can
-          // detect stale-EN-as-IS leaves (IS string === source EN string)
-          // and overwrite them with the new translation.
-          const merged = mergeTranslatedTree(translated, existingIs, req.body);
-          await db.query(
-            `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
-             VALUES ($1, $2, $3::jsonb, $4, NOW())
-             ON CONFLICT (key, locale) DO UPDATE
-               SET value      = EXCLUDED.value,
-                   updated_by = EXCLUDED.updated_by,
-                   updated_at = NOW()`,
-            [req.params.key, otherLocale, JSON.stringify(merged), userId]
-          );
-        }
-      } catch (sideErr) {
-        // Never break the EN save because of a translator issue.
-        logger.error({ err: sideErr, key: req.params.key }, 'contentController.putContent IS auto-fill failed');
-      }
-    }
+      && !SITE_CONTENT_TRANSLATE_SKIP.has(key)
+      && req.body && typeof req.body === 'object';
 
-    return res.json(rows[0].value);
+    if (shouldTranslate) {
+      const sourceEn = req.body;
+      runAutoTranslateSideEffect(key, sourceEn, userId)
+        .catch(err => logger.error(
+          { err, key },
+          'contentController.putContent IS auto-fill failed (background)'
+        ));
+    }
   } catch (err) { return next(err); }
 }
 
