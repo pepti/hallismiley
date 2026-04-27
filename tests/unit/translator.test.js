@@ -177,6 +177,80 @@ describe('server/services/translator', () => {
       expect(out).toEqual(tree);
       expect(mockCreate).not.toHaveBeenCalled();
     });
+
+    test('chunks large trees into multiple parallel batched calls', async () => {
+      // The CHUNK_SIZE is 25; build a tree of 60 leaves so it must split
+      // into 3 chunks (25, 25, 10).
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+
+      const tree = {};
+      for (let i = 0; i < 60; i++) tree[`k${i}`] = `EN-${i}`;
+
+      const callPayloads = [];
+      mockCreate.mockImplementation(async ({ messages }) => {
+        const input = JSON.parse(messages[0].content);
+        callPayloads.push(input.length);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(input.map(s => `IS:${s}`)) }],
+        };
+      });
+
+      const out = await translator.translateTree(tree);
+
+      // Three batched calls: two full chunks (25 each) + one short (10).
+      expect(callPayloads).toHaveLength(3);
+      expect(callPayloads.sort((a, b) => a - b)).toEqual([10, 25, 25]);
+
+      // All 60 leaves translated.
+      for (let i = 0; i < 60; i++) {
+        expect(out[`k${i}`]).toBe(`IS:EN-${i}`);
+      }
+    });
+
+    test('chunked trees fall back to per-leaf only for the failed chunk', async () => {
+      // 60 leaves → 3 chunks; make the FIRST chunk return bad JSON so it
+      // alone falls through to per-leaf, while chunks 2 + 3 succeed.
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+
+      const tree = {};
+      for (let i = 0; i < 60; i++) tree[`k${i}`] = `EN-${i}`;
+
+      let firstChunkSeen = false;
+      mockCreate.mockImplementation(async ({ messages }) => {
+        const raw = messages[0].content;
+        // Per-leaf calls send a plain string, not JSON; batched calls
+        // send a JSON array as the user message.
+        let input;
+        try { input = JSON.parse(raw); } catch { input = null; }
+
+        if (Array.isArray(input)) {
+          // Batched call. First batched call (the first chunk that hits
+          // here, with 25 entries starting "EN-0") returns wrong-length
+          // JSON to trigger per-leaf fallback for that chunk only.
+          const isFirstChunk = input.length === 25 && input[0] === 'EN-0' && !firstChunkSeen;
+          if (isFirstChunk) {
+            firstChunkSeen = true;
+            return { content: [{ type: 'text', text: '["only-one"]' }] };
+          }
+          return { content: [{ type: 'text', text: JSON.stringify(input.map(s => `IS:${s}`)) }] };
+        }
+        // Per-leaf fallback (raw is a single string)
+        return { content: [{ type: 'text', text: `IS-LEAF:${raw}` }] };
+      });
+
+      const out = await translator.translateTree(tree);
+
+      // Failed chunk's leaves came back via per-leaf fallback
+      for (let i = 0; i < 25; i++) {
+        expect(out[`k${i}`]).toBe(`IS-LEAF:EN-${i}`);
+      }
+      // Successful chunks kept their batched translations
+      for (let i = 25; i < 60; i++) {
+        expect(out[`k${i}`]).toBe(`IS:EN-${i}`);
+      }
+    });
   });
 
   describe('_internal.collectLeaves', () => {

@@ -267,11 +267,27 @@ async function translateBatch(strings) {
   }
 }
 
+// Maximum string leaves to translate in a single batched LLM call. Each
+// chunk asks the model to produce a JSON array of N translations; with
+// N > ~30 the output token budget for a single call regularly exceeds
+// the per-call timeout (TRANSLATE_TIMEOUT_MS=8000ms) on big jsonb keys
+// like halli_bio (~200 leaves total). At CHUNK_SIZE=25 each batched
+// call comfortably fits within the timeout; chunks run in parallel via
+// Promise.all so the wall-clock cost is roughly the slowest single
+// chunk (~3-6s) regardless of total leaf count.
+const TRANSLATE_TREE_CHUNK_SIZE = 25;
+
 /**
  * Translate all string leaves (outside BLOCK_KEYS) of a jsonb-style tree.
- * Returns a deep-cloned tree with translations substituted. If the batched
- * call fails, falls back to per-leaf calls. If everything fails, returns
- * null so the caller can decide whether to skip writing an IS row.
+ * Returns a deep-cloned tree with translations substituted.
+ *
+ * Strategy (in order):
+ *   1. Single batched call if leaves <= CHUNK_SIZE — same as before.
+ *   2. Chunked batched calls in parallel, each batch sized to fit
+ *      within TRANSLATE_TIMEOUT_MS. Successful chunks contribute their
+ *      translations; failed chunks fall through to per-leaf for those
+ *      specific leaves only, NOT the whole tree.
+ *   3. If everything fails, return null so the caller skips the write.
  */
 async function translateTree(tree, { format = 'plain' } = {}) {
   // format is reserved; today we treat every string leaf as plain because
@@ -286,15 +302,55 @@ async function translateTree(tree, { format = 'plain' } = {}) {
   collectLeaves(clone, [], 0, leaves);
   if (leaves.length === 0) return clone;
 
-  // Attempt one batched call first.
-  const batched = await translateBatch(leaves.map(l => l.value));
-  if (batched) {
-    leaves.forEach((leaf, i) => setPath(clone, leaf.path, batched[i]));
-    return clone;
+  // For small trees the single batched call is most efficient — one
+  // round-trip and no overhead from chunk coordination.
+  if (leaves.length <= TRANSLATE_TREE_CHUNK_SIZE) {
+    const batched = await translateBatch(leaves.map(l => l.value));
+    if (batched) {
+      leaves.forEach((leaf, i) => setPath(clone, leaf.path, batched[i]));
+      return clone;
+    }
+    // Single batch failed — fall through to per-leaf below.
+  } else {
+    // Chunk the leaves and translate chunks in parallel. Each chunk
+    // returns an array (success) or null (failure for that chunk).
+    const chunks = [];
+    for (let i = 0; i < leaves.length; i += TRANSLATE_TREE_CHUNK_SIZE) {
+      chunks.push(leaves.slice(i, i + TRANSLATE_TREE_CHUNK_SIZE));
+    }
+    const chunkResults = await Promise.all(
+      chunks.map(chunk => translateBatch(chunk.map(l => l.value)))
+    );
+
+    // Apply translations from successful chunks. Track which leaves
+    // still need per-leaf translation (chunks that failed).
+    const needsPerLeaf = [];
+    chunks.forEach((chunkLeaves, ci) => {
+      const result = chunkResults[ci];
+      if (result && Array.isArray(result) && result.length === chunkLeaves.length) {
+        chunkLeaves.forEach((leaf, li) => setPath(clone, leaf.path, result[li]));
+      } else {
+        needsPerLeaf.push(...chunkLeaves);
+      }
+    });
+
+    if (needsPerLeaf.length === 0) return clone;
+    logger.warn(
+      { failed: needsPerLeaf.length, total: leaves.length },
+      'translator.translateTree falling back to per-leaf for failed chunks'
+    );
+    // Fall through to per-leaf only for the leaves whose chunk failed.
+    return await fillPerLeaf(clone, needsPerLeaf);
   }
 
-  // Fallback: translate each leaf individually. If any single call returns
-  // null we keep the original EN text for that leaf and carry on.
+  // Per-leaf fallback for the small-tree path (single batch failed).
+  return await fillPerLeaf(clone, leaves);
+}
+
+// Translate the given leaves one at a time and apply to clone. Returns
+// the populated clone if at least one leaf succeeded, null otherwise.
+// Used as the last-resort fallback when batched translation fails.
+async function fillPerLeaf(clone, leaves) {
   let anyOk = false;
   for (const leaf of leaves) {
     const t = await translate({ text: leaf.value, format: 'plain' });
