@@ -832,5 +832,6 @@
   "admin.englishField": "Enska",
   "admin.icelandicField": "Íslenska",
   "admin.translationsHint": "Fylltu út íslensku reitina til að sýna þýddan texta fyrir íslenska gesti. Skildu þá eftir auða til að sýna enska útgáfu.",
-  "admin.autoTranslate": "Þýða sjálfkrafa auða íslenska reiti við vistun"
+  "admin.autoTranslate": "Þýða sjálfkrafa auða íslenska reiti við vistun",
+  "rateLimit.lowQuotaWarning": "Vistunarmörk að klárast — aðeins {remaining} af {limit} vistanir eftir á þessu tímabili. Vistaðu og bíddu í nokkrar mínútur."
 }

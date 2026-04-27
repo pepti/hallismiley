@@ -832,5 +832,6 @@
   "admin.englishField": "English",
   "admin.icelandicField": "Icelandic",
   "admin.translationsHint": "Fill in Icelandic fields to show translated copy to Icelandic visitors. Leave blank to fall back to English.",
-  "admin.autoTranslate": "Auto-translate empty Icelandic fields on save"
+  "admin.autoTranslate": "Auto-translate empty Icelandic fields on save",
+  "rateLimit.lowQuotaWarning": "Save limit running low — only {remaining} of {limit} saves left in this window. Save and pause for a few minutes."
 }

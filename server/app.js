@@ -149,7 +149,7 @@ app.use(globalLimiter);
 // ── A01 Broken Access Control: stricter limiter on write endpoints ─────────────
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 90,
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
