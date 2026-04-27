@@ -306,7 +306,7 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
           <h3>${t('adminProducts.images')}</h3>
           <div class="admin-shop__image-list" id="admin-product-images"></div>
           <label class="admin-shop__upload-btn">
-            <input type="file" accept="image/jpeg,image/png,image/webp" id="admin-product-image-input"/>
+            <input type="file" accept="image/jpeg,image/png,image/webp" id="admin-product-image-input" multiple/>
             ${t('adminProducts.uploadImage')}
           </label>
         </section>
@@ -388,26 +388,47 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     if (paintImages)   paintImages(modal, existing);
 
     modal.querySelector('#admin-product-image-input')?.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      if (!files.length) return;
+
+      const token  = await getCSRFToken();
+      const total  = files.length;
+      let done     = 0;
+      let failed   = 0;
+
+      for (const file of files) {
+        done++;
+        errorEl.textContent = t('adminProducts.uploadingProgress', { n: done, total, name: file.name });
+        try {
+          const fdata = new FormData();
+          fdata.append('file', file);
+          const res = await fetch(`/api/v1/admin/shop/products/${existing.id}/images`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'X-CSRF-Token': token || '' }, body: fdata,
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Upload failed');
+          existing.images = [...(existing.images || []), data.image];
+          if (paintImages) paintImages(modal, existing);
+        } catch (err) {
+          failed++;
+          console.error(`Upload failed for ${file.name}:`, err);
+        }
+      }
+
       try {
-        const token = await getCSRFToken();
-        const fdata = new FormData();
-        fdata.append('file', file);
-        const res = await fetch(`/api/v1/admin/shop/products/${existing.id}/images`, {
-          method: 'POST', credentials: 'include',
-          headers: { 'X-CSRF-Token': token || '' }, body: fdata,
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed');
         const refreshed = await (await fetch(`/api/v1/admin/shop/products/${existing.id}`, { credentials: 'include' })).json();
         existing.images = refreshed.product.images;
         if (paintImages) paintImages(modal, existing);
-        e.target.value = '';
         await onSaved(refreshed.product);
       } catch (err) {
-        errorEl.textContent = err.message;
+        console.error('Refresh after upload failed:', err);
       }
+
+      errorEl.textContent = failed === 0
+        ? t('adminProducts.uploadedAll', { n: total })
+        : t('adminProducts.uploadedPartial', { ok: total - failed, total, failed });
     });
   }
 }

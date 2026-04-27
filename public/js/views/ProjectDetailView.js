@@ -344,6 +344,7 @@ export class ProjectDetailView {
               </button>
               <input type="file" id="pd-media-file-input"
                 accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+                multiple
                 style="display:none">
             </div>
             <p class="pd-upload-status" id="pd-upload-status"></p>
@@ -469,6 +470,7 @@ export class ProjectDetailView {
           </button>
           <input type="file" id="pd-video-file-input"
             accept="video/mp4,video/webm"
+            multiple
             style="display:none">
           <button class="pd-add-media-btn" type="button" id="pd-add-video-youtube-btn">
             ${t('projectDetail.addYouTube')}
@@ -649,7 +651,10 @@ export class ProjectDetailView {
     if (addBtn && fileInput) {
       addBtn.addEventListener('click',    () => fileInput.click());
       fileInput.addEventListener('change', () => {
-        if (fileInput.files.length) this._handleFileUpload(fileInput.files[0], view);
+        if (fileInput.files.length) {
+          this._handleFileUploads(Array.from(fileInput.files), view);
+        }
+        fileInput.value = '';
       });
     }
 
@@ -685,7 +690,10 @@ export class ProjectDetailView {
     if (addVideoFileBtn && videoFileInput) {
       addVideoFileBtn.addEventListener('click', () => videoFileInput.click());
       videoFileInput.addEventListener('change', () => {
-        if (videoFileInput.files.length) this._handleVideoFileUpload(videoFileInput.files[0], view);
+        if (videoFileInput.files.length) {
+          this._handleVideoFileUploads(Array.from(videoFileInput.files), view);
+        }
+        videoFileInput.value = '';
       });
     }
 
@@ -1094,33 +1102,55 @@ export class ProjectDetailView {
     }
   }
 
-  async _handleVideoFileUpload(file, view) {
-    const ALLOWED = ['video/mp4', 'video/webm'];
-    if (!ALLOWED.includes(file.type)) {
-      this._setVideoStatus(view, t('projectDetail.videoTypeError'), 'error');
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      this._setVideoStatus(view, t('projectDetail.videoSizeError'), 'error');
-      return;
-    }
-    const fileInput = view.querySelector('#pd-video-file-input');
-    const addBtn    = view.querySelector('#pd-add-video-file-btn');
+  async _handleVideoFileUploads(files, view) {
+    const ALLOWED  = ['video/mp4', 'video/webm'];
+    const MAX_SIZE = 50 * 1024 * 1024;
+    const addBtn   = view.querySelector('#pd-add-video-file-btn');
     if (addBtn) addBtn.disabled = true;
-    this._setVideoStatus(view, t('projectDetail.uploadingVideo'), '');
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const total  = files.length;
+    let done     = 0;
+    let failed   = 0;
+    let rendered = false;
+
     try {
-      const row = await projectApi.addVideo(this._project.id, formData);
-      this._videos = [...this._videos, row];
-      this._setVideoStatus(view, t('projectDetail.uploaded'), 'ok');
-      this._renderContent();
-    } catch (err) {
-      this._setVideoStatus(view, err.message || t('projectDetail.uploadFailed'), 'error');
+      for (const file of files) {
+        done++;
+        if (!ALLOWED.includes(file.type)) {
+          failed++;
+          console.warn(`Skipping ${file.name}: ${t('projectDetail.videoTypeError')}`);
+          continue;
+        }
+        if (file.size > MAX_SIZE) {
+          failed++;
+          console.warn(`Skipping ${file.name}: ${t('projectDetail.videoSizeError')}`);
+          continue;
+        }
+
+        this._setVideoStatus(view, t('projectDetail.uploadingProgress', { n: done, total, name: file.name }), '');
+
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const row = await projectApi.addVideo(this._project.id, formData);
+          this._videos = [...this._videos, row];
+          this._renderContent();
+          rendered = true;
+        } catch (err) {
+          failed++;
+          console.error(`Upload failed for ${file.name}:`, err);
+        }
+      }
+
+      if (failed === 0) {
+        this._setVideoStatus(view, t('projectDetail.uploadedAll', { n: total }), 'ok');
+      } else {
+        this._setVideoStatus(view, t('projectDetail.uploadedPartial', { ok: total - failed, total, failed }), 'error');
+      }
     } finally {
-      if (addBtn)    addBtn.disabled = false;
-      if (fileInput) fileInput.value = '';
+      // _renderContent re-binds DOM; addBtn reference may be stale, so re-query.
+      const liveBtn = rendered ? document.querySelector('#pd-add-video-file-btn') : addBtn;
+      if (liveBtn) liveBtn.disabled = false;
     }
   }
 
@@ -1147,42 +1177,61 @@ export class ProjectDetailView {
 
   // ── File upload ────────────────────────────────────────────────────────────
 
-  async _handleFileUpload(file, view) {
-    const addBtn    = view.querySelector('#pd-add-media-btn');
-    const fileInput = view.querySelector('#pd-media-file-input');
-
+  async _handleFileUploads(files, view) {
     const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'];
-    if (!ALLOWED.includes(file.type)) {
-      this._setStatus(view, t('projectDetail.mediaTypeError'), 'error');
-      return;
-    }
-    const isImage = file.type.startsWith('image/');
-    const maxBytes = isImage ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      this._setStatus(view, isImage ? t('projectDetail.imageSizeError') : t('projectDetail.videoSizeError'), 'error');
-      return;
-    }
-
+    const addBtn  = view.querySelector('#pd-add-media-btn');
     if (addBtn) addBtn.disabled = true;
-    this._setStatus(view, t('projectDetail.uploadingMedia'), '');
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('sort_order', String(this._media.length));
-    if (this._uploadTargetSec !== null && this._uploadTargetSec !== undefined) {
-      formData.append('section_id', String(this._uploadTargetSec));
-    }
+    const total  = files.length;
+    let done     = 0;
+    let failed   = 0;
+    let rendered = false;
 
     try {
-      const newItem = await projectApi.addMedia(this._project.id, formData);
-      this._media   = [...this._media, newItem];
-      this._setStatus(view, t('projectDetail.uploadedSuccessfully'), 'ok');
-      this._renderContent();
-    } catch (err) {
-      this._setStatus(view, err.message || t('projectDetail.uploadFailed'), 'error');
+      for (const file of files) {
+        done++;
+        if (!ALLOWED.includes(file.type)) {
+          failed++;
+          console.warn(`Skipping ${file.name}: ${t('projectDetail.mediaTypeError')}`);
+          continue;
+        }
+        const isImage  = file.type.startsWith('image/');
+        const maxBytes = isImage ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+        if (file.size > maxBytes) {
+          failed++;
+          console.warn(`Skipping ${file.name}: ${isImage ? t('projectDetail.imageSizeError') : t('projectDetail.videoSizeError')}`);
+          continue;
+        }
+
+        this._setStatus(view, t('projectDetail.uploadingProgress', { n: done, total, name: file.name }), '');
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('sort_order', String(this._media.length));
+        if (this._uploadTargetSec !== null && this._uploadTargetSec !== undefined) {
+          formData.append('section_id', String(this._uploadTargetSec));
+        }
+
+        try {
+          const newItem = await projectApi.addMedia(this._project.id, formData);
+          this._media   = [...this._media, newItem];
+          this._renderContent();
+          rendered = true;
+        } catch (err) {
+          failed++;
+          console.error(`Upload failed for ${file.name}:`, err);
+        }
+      }
+
+      if (failed === 0) {
+        this._setStatus(view, t('projectDetail.uploadedAll', { n: total }), 'ok');
+      } else {
+        this._setStatus(view, t('projectDetail.uploadedPartial', { ok: total - failed, total, failed }), 'error');
+      }
     } finally {
-      if (addBtn)    addBtn.disabled = false;
-      if (fileInput) fileInput.value = '';
+      // _renderContent re-binds DOM; addBtn reference may be stale, so re-query.
+      const liveBtn = rendered ? document.querySelector('#pd-add-media-btn') : addBtn;
+      if (liveBtn) liveBtn.disabled = false;
     }
   }
 
