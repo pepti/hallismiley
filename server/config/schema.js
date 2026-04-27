@@ -1162,6 +1162,32 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
             OR NOT value ? 'blend_experience')`,
     ],
   },
+  {
+    // Seed defaults for the two CSS-derived hero images on /halli so admins
+    // can replace them via the inline image-edit UI without breaking the
+    // signed-out look. `beginning_image_url` is intentionally left absent —
+    // its absence triggers the inline _icelandSvg() fallback in HalliView.
+    name: '040_halli_bio_image_urls',
+    statements: [
+      `UPDATE site_content
+          SET value = value || jsonb_build_object(
+                'craft_image_url', 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=1600&h=600&fit=crop&q=80',
+                'life_image_url',  'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1600&h=600&fit=crop&q=80'
+              ),
+              updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'en'
+          AND (NOT value ? 'craft_image_url' OR NOT value ? 'life_image_url')`,
+
+      `UPDATE site_content
+          SET value = value || jsonb_build_object(
+                'craft_image_url', 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=1600&h=600&fit=crop&q=80',
+                'life_image_url',  'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1600&h=600&fit=crop&q=80'
+              ),
+              updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'is'
+          AND (NOT value ? 'craft_image_url' OR NOT value ? 'life_image_url')`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

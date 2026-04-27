@@ -177,6 +177,13 @@ async function putContent(req, res, next) {
 }
 
 // ── POST /api/v1/content/:key/image ──────────────────────────────────────────
+// Optional `?field=` selects which JSON key inside the row to populate
+// (defaults to `image_url` for back-compat with `home_skills`). When the
+// caller does NOT specify a locale, the URL is fanned out to every locale so
+// admins don't have to re-upload the same visual per language.
+const FIELD_RE = /^[A-Za-z_][\w]{0,63}$/;
+const ALL_LOCALES = ['en', 'is'];
+
 function uploadImage(req, res, next) {
   upload(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -184,21 +191,28 @@ function uploadImage(req, res, next) {
 
     const imageUrl = `/assets/content/${req.file.filename}`;
     const merge    = req.query.merge !== 'false';
-    const locale   = req.query.locale || req.locale || DEFAULT_LOCALE;
+    const rawField = typeof req.query.field === 'string' ? req.query.field : '';
+    const field    = FIELD_RE.test(rawField) ? rawField : 'image_url';
+    const localeProvided = typeof req.query.locale === 'string' && req.query.locale.length > 0;
+    const targets  = localeProvided
+      ? [req.query.locale]
+      : ALL_LOCALES;
 
-    if (!merge) return res.json({ image_url: imageUrl });
+    if (!merge) return res.json({ image_url: imageUrl, field });
 
     try {
-      await db.query(
-        `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
-         VALUES ($1, $2, jsonb_build_object('image_url', $3::text), $4, NOW())
-         ON CONFLICT (key, locale) DO UPDATE
-           SET value      = site_content.value || jsonb_build_object('image_url', $3::text),
-               updated_by = EXCLUDED.updated_by,
-               updated_at = NOW()`,
-        [req.params.key, locale, imageUrl, req.user?.id || null]
-      );
-      return res.json({ image_url: imageUrl });
+      for (const locale of targets) {
+        await db.query(
+          `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
+           VALUES ($1, $2, jsonb_build_object($5::text, $3::text), $4, NOW())
+           ON CONFLICT (key, locale) DO UPDATE
+             SET value      = site_content.value || jsonb_build_object($5::text, $3::text),
+                 updated_by = EXCLUDED.updated_by,
+                 updated_at = NOW()`,
+          [req.params.key, locale, imageUrl, req.user?.id || null, field]
+        );
+      }
+      return res.json({ image_url: imageUrl, field });
     } catch (dbErr) { return next(dbErr); }
   });
 }
