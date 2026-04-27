@@ -200,9 +200,14 @@ function uploadImage(req, res, next) {
 
     if (!merge) return res.json({ image_url: imageUrl, field });
 
+    // Locale fan-out runs inside a single transaction so EN/IS rows never
+    // diverge if a query fails partway. Using a checked-out client (rather
+    // than db.query) keeps every statement on the same connection.
+    const client = await db.pool.connect();
     try {
+      await client.query('BEGIN');
       for (const locale of targets) {
-        await db.query(
+        await client.query(
           `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
            VALUES ($1, $2, jsonb_build_object($5::text, $3::text), $4, NOW())
            ON CONFLICT (key, locale) DO UPDATE
@@ -212,8 +217,14 @@ function uploadImage(req, res, next) {
           [req.params.key, locale, imageUrl, req.user?.id || null, field]
         );
       }
+      await client.query('COMMIT');
       return res.json({ image_url: imageUrl, field });
-    } catch (dbErr) { return next(dbErr); }
+    } catch (dbErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      return next(dbErr);
+    } finally {
+      client.release();
+    }
   });
 }
 
