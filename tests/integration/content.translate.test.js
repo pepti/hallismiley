@@ -182,8 +182,8 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
   });
 
   test('still preserves IS that differs from EN even when EN matches the translation', async () => {
-    // Defensive: ensure the new "byte-identical to EN" rule is the ONLY new
-    // overwrite signal — IS that differs from EN must still be preserved.
+    // Defensive: ensure that with NO previous EN row (first-time save) and
+    // EN that differs from existing IS, the IS manual edit is preserved.
     await db.query(
       `INSERT INTO site_content (key, locale, value) VALUES ($1, 'is', $2::jsonb)`,
       ['test_real_is', JSON.stringify({ title: 'Frumlegt íslenskt' })]
@@ -200,6 +200,62 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
     await new Promise(r => setTimeout(r, 100));
     const isRow = await readRow('test_real_is', 'is');
     expect(isRow.title).toBe('Frumlegt íslenskt'); // manual edit preserved
+  });
+
+  test('overwrites stale-translated IS when EN changed since last save', async () => {
+    // Reproduces the production halli_bio bug: previous EN was "The Beginning",
+    // IS got "Upphafið". Admin edits EN to "Years of experience" — IS should
+    // become "Ára reynsla", not stay at "Upphafið".
+    //
+    // Seed previous state: an EN row + a matching IS row that's a real
+    // translation of the previous EN.
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'en', $2::jsonb)`,
+      ['test_drift', JSON.stringify({ title: 'The Beginning', untouched: 'Stays the same' })]
+    );
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'is', $2::jsonb)`,
+      ['test_drift', JSON.stringify({ title: 'Upphafið', untouched: 'Helst eins' })]
+    );
+    translateTree.mockResolvedValue({
+      title: 'Ára reynsla',
+      untouched: 'Helst eins (translated)',
+    });
+
+    // Now simulate the admin editing the title in EN
+    await request(app)
+      .put('/api/v1/content/test_drift?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Years of experience', untouched: 'Stays the same' });
+
+    const isRow = await waitForIs('test_drift', r => r && r.title === 'Ára reynsla');
+    expect(isRow.title).toBe('Ára reynsla');           // EN changed → IS retranslated
+    expect(isRow.untouched).toBe('Helst eins');        // EN unchanged → IS preserved
+  });
+
+  test('preserves manual IS edits on leaves where EN did not change', async () => {
+    // The "EN changed" rule must not be too eager — leaves where EN stays
+    // the same keep their manual IS edits, even when the admin saves
+    // changes to OTHER leaves.
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'en', $2::jsonb)`,
+      ['test_partial', JSON.stringify({ title: 'Hello', subtitle: 'World' })]
+    );
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'is', $2::jsonb)`,
+      ['test_partial', JSON.stringify({ title: 'Halló', subtitle: 'Sérsniðin íslenska' })]
+    );
+    translateTree.mockResolvedValue({ title: 'Halló nýtt', subtitle: 'Heimur' });
+
+    // Admin edits only the title; subtitle EN stays the same
+    await request(app)
+      .put('/api/v1/content/test_partial?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Hello new', subtitle: 'World' });
+
+    const isRow = await waitForIs('test_partial', r => r && r.title === 'Halló nýtt');
+    expect(isRow.title).toBe('Halló nýtt');             // EN changed → retranslated
+    expect(isRow.subtitle).toBe('Sérsniðin íslenska');  // EN same → manual IS kept
   });
 
   test('swallows translator errors — EN save still succeeds', async () => {

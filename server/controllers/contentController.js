@@ -76,35 +76,49 @@ async function getContent(req, res, next) {
 //
 //   1. The IS leaf is null / undefined / empty — nothing to preserve.
 //   2. The IS leaf is byte-identical to the corresponding ORIGINAL EN leaf
-//      (sourceEn) — that is the unambiguous fingerprint of "stale-EN-as-IS"
-//      content (e.g. a row seeded by copying EN to IS, or an inline-editor
-//      flow that wrote EN text into the IS field). Replacing it with the
-//      proper Icelandic translation is what the admin actually wants.
+//      (sourceEn) — fingerprint of "stale-EN-as-IS" content (a row that
+//      was seeded by copying EN to IS, or an inline-editor flow that
+//      wrote EN text into the IS field). Replace with the proper
+//      Icelandic translation.
+//   3. The corresponding leaf in the PREVIOUS EN row (previousEn) was a
+//      string AND it differs from the new sourceEn[k] — i.e. the admin
+//      just edited that EN leaf. The user's stated intent is "EN is the
+//      source of truth, IS auto-tracks", so changes to EN should always
+//      flow through to IS, even when the IS leaf currently holds a stale
+//      translation of the previous EN value (e.g. EN was "The Beginning"
+//      → IS got "Upphafið"; EN now "Years of experience" → IS still
+//      shows "Upphafið" without this rule).
 //
-// Anything else — IS that differs from EN — is treated as a real manual
-// IS edit and left alone. Keys in the translator's BLOCK_KEYS list never
-// appear in `translatedEn` because `translateTree` filters them out.
+// Anything else — IS differs from sourceEn AND EN didn't change — is
+// treated as a genuine manual IS edit and left alone.
+//
+// Keys in the translator's BLOCK_KEYS list never appear in `translatedEn`
+// because `translateTree` filters them out.
 //
 // Falls back to the translated EN tree when no IS row exists yet.
-function mergeTranslatedTree(translatedEn, existingIs, sourceEn) {
+function mergeTranslatedTree(translatedEn, existingIs, sourceEn, previousEn) {
   if (existingIs === null || existingIs === undefined) return translatedEn;
   if (Array.isArray(translatedEn)) {
     if (!Array.isArray(existingIs)) return translatedEn;
     const srcArr = Array.isArray(sourceEn) ? sourceEn : null;
+    const prevArr = Array.isArray(previousEn) ? previousEn : null;
     const out = existingIs.slice();
     for (let i = 0; i < translatedEn.length; i++) {
       const en = translatedEn[i];
       const is = out[i];
       const src = srcArr ? srcArr[i] : undefined;
+      const prev = prevArr ? prevArr[i] : undefined;
       if (typeof en === 'string') {
-        const isEmpty = typeof is !== 'string' || is.trim() === '';
+        const isEmpty       = typeof is !== 'string' || is.trim() === '';
         const isStaleEnCopy = typeof is === 'string' && typeof src === 'string' && is === src;
-        if (isEmpty || isStaleEnCopy) out[i] = en;
+        const enChanged     = typeof prev === 'string' && typeof src === 'string' && prev !== src;
+        if (isEmpty || isStaleEnCopy || enChanged) out[i] = en;
       } else if (en && typeof en === 'object') {
         out[i] = mergeTranslatedTree(
           en,
           is && typeof is === 'object' ? is : null,
           src && typeof src === 'object' ? src : null,
+          prev && typeof prev === 'object' ? prev : null,
         );
       } else if (is === undefined) {
         out[i] = en;
@@ -114,21 +128,25 @@ function mergeTranslatedTree(translatedEn, existingIs, sourceEn) {
   }
   if (translatedEn && typeof translatedEn === 'object') {
     if (!existingIs || typeof existingIs !== 'object') return translatedEn;
-    const srcObj = sourceEn && typeof sourceEn === 'object' && !Array.isArray(sourceEn) ? sourceEn : null;
+    const srcObj  = sourceEn   && typeof sourceEn   === 'object' && !Array.isArray(sourceEn)   ? sourceEn   : null;
+    const prevObj = previousEn && typeof previousEn === 'object' && !Array.isArray(previousEn) ? previousEn : null;
     const out = { ...existingIs };
     for (const key of Object.keys(translatedEn)) {
       const en = translatedEn[key];
       const is = out[key];
-      const src = srcObj ? srcObj[key] : undefined;
+      const src  = srcObj  ? srcObj[key]  : undefined;
+      const prev = prevObj ? prevObj[key] : undefined;
       if (typeof en === 'string') {
-        const isEmpty = typeof is !== 'string' || is.trim() === '';
+        const isEmpty       = typeof is !== 'string' || is.trim() === '';
         const isStaleEnCopy = typeof is === 'string' && typeof src === 'string' && is === src;
-        if (isEmpty || isStaleEnCopy) out[key] = en;
+        const enChanged     = typeof prev === 'string' && typeof src === 'string' && prev !== src;
+        if (isEmpty || isStaleEnCopy || enChanged) out[key] = en;
       } else if (en && typeof en === 'object') {
         out[key] = mergeTranslatedTree(
           en,
           is && typeof is === 'object' ? is : null,
           src && typeof src === 'object' ? src : null,
+          prev && typeof prev === 'object' ? prev : null,
         );
       } else if (is === undefined) {
         out[key] = en;
@@ -144,7 +162,12 @@ function mergeTranslatedTree(translatedEn, existingIs, sourceEn) {
 // Run in the background — never awaited from the request handler — so the
 // browser does not sit on "Saving…" while the LLM works through dozens of
 // nested string leaves on big jsonb keys like halli_bio.
-async function runAutoTranslateSideEffect(key, sourceEn, userId) {
+//
+// `previousEn` is the EN row's value BEFORE the just-completed upsert
+// (or null if the EN row didn't exist yet). Passing it lets the merge
+// detect "EN leaf changed since last save" and overwrite the stale
+// IS translation that no longer matches the new EN.
+async function runAutoTranslateSideEffect(key, sourceEn, previousEn, userId) {
   const translated = await translateTree(sourceEn);
   if (!translated) return;
   const { rows } = await db.query(
@@ -152,10 +175,7 @@ async function runAutoTranslateSideEffect(key, sourceEn, userId) {
     [key, 'is']
   );
   const existingIs = rows[0] ? rows[0].value : null;
-  // Pass the original EN body as the third arg so the merge can detect
-  // stale-EN-as-IS leaves (IS string === source EN string) and overwrite
-  // them with the new translation.
-  const merged = mergeTranslatedTree(translated, existingIs, sourceEn);
+  const merged = mergeTranslatedTree(translated, existingIs, sourceEn, previousEn);
   await db.query(
     `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
      VALUES ($1, 'is', $2::jsonb, $3, NOW())
@@ -185,6 +205,21 @@ async function putContent(req, res, next) {
       || req.body.__autoTranslate !== false;
     if (req.body && typeof req.body === 'object') delete req.body.__autoTranslate;
 
+    // The upsert below cannot return the OLD row's value (postgres only
+    // exposes EXCLUDED + the merged result). Capture the prior EN value
+    // via a separate SELECT first. The auto-translate merge uses this
+    // to detect which leaves changed since the last save and need their
+    // IS counterpart retranslated. Skipped when saving an IS row
+    // directly — we never need previousEn for a non-EN write path.
+    let previousEn = null;
+    if (locale === DEFAULT_LOCALE) {
+      const prev = await db.query(
+        `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
+        [key, DEFAULT_LOCALE]
+      );
+      previousEn = prev.rows[0] ? prev.rows[0].value : null;
+    }
+
     const { rows } = await db.query(
       `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
        VALUES ($1, $2, $3::jsonb, $4, NOW())
@@ -212,7 +247,7 @@ async function putContent(req, res, next) {
 
     if (shouldTranslate) {
       const sourceEn = req.body;
-      runAutoTranslateSideEffect(key, sourceEn, userId)
+      runAutoTranslateSideEffect(key, sourceEn, previousEn, userId)
         .catch(err => logger.error(
           { err, key },
           'contentController.putContent IS auto-fill failed (background)'
