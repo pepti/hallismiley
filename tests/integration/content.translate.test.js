@@ -113,9 +113,66 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
       .send({ eyebrow: 'NEW', title: 'Hello' });
 
     const isRow = await readRow('test_merge', 'is');
-    // Eyebrow was null → filled from translation; title was filled → preserved.
+    // Eyebrow was null → filled from translation; title was a real manual IS
+    // edit (differs from EN) → preserved.
     expect(isRow.eyebrow).toBe('NÝR');
     expect(isRow.title).toBe('Halldórssamningur');
+  });
+
+  test('overwrites IS leaves that are byte-identical to the source EN (stale-EN-as-IS)', async () => {
+    // Seed an IS row where every leaf is a verbatim copy of an old EN value —
+    // simulating the contamination state we hit on production halli_bio:
+    // earlier saves wrote EN text into the IS row (or migration 029 copied
+    // EN to IS), and the merge logic preserved those non-empty English
+    // strings forever, swallowing every subsequent translation.
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'is', $2::jsonb)`,
+      ['test_stale', JSON.stringify({
+        eyebrow:  'OLD EYEBROW',     // identical to source EN below
+        title:    'OLD TITLE',        // identical to source EN below
+        manual_is: 'Þetta er handskrifað', // a real IS edit — should be kept
+      })]
+    );
+    translateTree.mockResolvedValue({
+      eyebrow:   'NÝR EYEBROW',
+      title:     'NÝR TITLE',
+      manual_is: 'AUTO TRANSLATED',
+    });
+
+    await request(app)
+      .put('/api/v1/content/test_stale?locale=en')
+      .set('Cookie', adminCookie)
+      .send({
+        eyebrow:   'OLD EYEBROW',           // unchanged from what's in IS
+        title:     'OLD TITLE',             // unchanged from what's in IS
+        manual_is: 'Some new English here', // EN side edited
+      });
+
+    const isRow = await readRow('test_stale', 'is');
+    // Stale-EN-as-IS leaves get the new translation
+    expect(isRow.eyebrow).toBe('NÝR EYEBROW');
+    expect(isRow.title).toBe('NÝR TITLE');
+    // The IS leaf that was a real manual Icelandic edit (not equal to EN)
+    // is still preserved, even though EN changed
+    expect(isRow.manual_is).toBe('Þetta er handskrifað');
+  });
+
+  test('still preserves IS that differs from EN even when EN matches the translation', async () => {
+    // Defensive: ensure the new "byte-identical to EN" rule is the ONLY new
+    // overwrite signal — IS that differs from EN must still be preserved.
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'is', $2::jsonb)`,
+      ['test_real_is', JSON.stringify({ title: 'Frumlegt íslenskt' })]
+    );
+    translateTree.mockResolvedValue({ title: 'Halló heimur' });
+
+    await request(app)
+      .put('/api/v1/content/test_real_is?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Hello world' }); // differs from existing IS
+
+    const isRow = await readRow('test_real_is', 'is');
+    expect(isRow.title).toBe('Frumlegt íslenskt'); // manual edit preserved
   });
 
   test('swallows translator errors — EN save still succeeds', async () => {
