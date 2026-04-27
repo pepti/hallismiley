@@ -203,6 +203,12 @@ const DEFAULT_CONTENT = {
   life_tile4: 'Reading',
   life_tile5: 'Coffee',
 
+  // Image slots — admin-replaceable hero/divider images. The two URL keys
+  // mirror the CSS fallbacks in halli-bio.css. `beginning_image_url` is left
+  // unset so the inline _icelandSvg() decorative fallback renders by default.
+  craft_image_url: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=1600&h=600&fit=crop&q=80',
+  life_image_url:  'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1600&h=600&fit=crop&q=80',
+
 };
 
 // ── Wave SVG helper ────────────────────────────────────────────────────────
@@ -302,7 +308,7 @@ export class HalliView {
           </div>
           <div class="hb-reveal hb-reveal--right hb-d2" aria-hidden="true"
                style="display:flex;align-items:center;justify-content:center">
-            ${this._icelandSvg()}
+            ${this._beginningImage()}
           </div>
         </div>
       </div>
@@ -340,7 +346,9 @@ export class HalliView {
       </div>
     </section>
     <div class="hb-image-break hb-image-break--craft hb-reveal" role="img"
-         aria-label="Workshop — carpentry in progress"></div>`;
+         aria-label="Workshop — carpentry in progress"
+         data-image-field="craft_image_url"
+         style="background-image:url('${escHtml(this._content?.craft_image_url || '')}')"></div>`;
   }
 
   // ── SECTION: Code (Tech CV) ───────────────────────────────────────────────
@@ -459,7 +467,25 @@ export class HalliView {
       </div>
     </section>
     <div class="hb-image-break hb-image-break--life hb-reveal" role="img"
-         aria-label="Iceland landscape"></div>`;
+         aria-label="Iceland landscape"
+         data-image-field="life_image_url"
+         style="background-image:url('${escHtml(this._content?.life_image_url || '')}')"></div>`;
+  }
+
+  // ── Beginning section right-column image ──────────────────────────────────
+  // Renders an admin-uploaded raster image when set, otherwise the decorative
+  // Iceland SVG fallback. Wrapper carries `data-image-field` so the edit
+  // handler can find the slot whether or not an image has been uploaded.
+  _beginningImage() {
+    const url = this._content?.beginning_image_url;
+    if (url) {
+      return `<img src="${escHtml(url)}" alt="" data-image-field="beginning_image_url"
+                   style="max-width:280px;width:100%;height:auto;border-radius:3px"/>`;
+    }
+    return `<div data-image-field="beginning_image_url"
+                 style="display:flex;align-items:center;justify-content:center">
+              ${this._icelandSvg()}
+            </div>`;
   }
 
   // ── Decorative Iceland SVG ────────────────────────────────────────────────
@@ -657,6 +683,10 @@ export class HalliView {
     // Re-init scroll reveal + video on the new nodes
     this._initScrollReveal(view);
     this._initVideo(view);
+
+    // Re-attach the hidden file input that the image-edit handler relies on.
+    // The click-delegation listener is on `view` itself and survives.
+    this._initImageEdit(view, controls);
   }
 
   // ── Init: scroll reveal via IntersectionObserver ──────────────────────────
@@ -737,6 +767,106 @@ export class HalliView {
       this._exitEdit(view, editBtn, controls);
       if (_snapshot) this._restoreContent(view, _snapshot);
     });
+
+    this._initImageEdit(view, controls);
+  }
+
+  // ── Init: admin inline image upload ───────────────────────────────────────
+  // Attaches a delegated click handler on `view` for any [data-image-field]
+  // element. While in edit mode, clicking opens a file picker, the chosen
+  // image is uploaded to /api/v1/content/halli_bio/image?field=<slot>, and the
+  // DOM is patched in place — no full re-render — so the admin's edit-mode
+  // state is preserved.
+  _initImageEdit(view, controls) {
+    if (!isAdmin() && !hasRole('moderator')) return;
+
+    // Ensure a hidden file input exists in the DOM. Re-rendering the page
+    // replaces view.innerHTML so we may need to recreate it.
+    if (!this._imageFileInput || !view.contains(this._imageFileInput)) {
+      const input = document.createElement('input');
+      input.type   = 'file';
+      input.accept = 'image/jpeg,image/png,image/webp';
+      input.className = 'hb-image-file-input';
+      input.style.display = 'none';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        const field = this._activeImageField;
+        if (!file || !field) return;
+        await this._uploadImageField(view, controls, file, field);
+      });
+      view.appendChild(input);
+      this._imageFileInput = input;
+    }
+
+    // Click delegation on `view` — bound once for the lifetime of the view.
+    // Because `view` itself is not destroyed by _rerenderSections, the
+    // listener survives across re-renders and works on any new descendants.
+    if (!view.dataset.imageEditWired) {
+      view.dataset.imageEditWired = '1';
+      view.addEventListener('click', (ev) => {
+        if (!view.classList.contains('halli-bio--editing')) return;
+        const slot = ev.target.closest('[data-image-field]');
+        if (!slot || !view.contains(slot)) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        this._activeImageField = slot.dataset.imageField;
+        if (this._imageFileInput) {
+          this._imageFileInput.value = '';
+          this._imageFileInput.click();
+        }
+      });
+    }
+  }
+
+  async _uploadImageField(view, controls, file, field) {
+    const status = controls?.querySelector('.hb-edit-status');
+    if (status) status.textContent = t('form.saving');
+
+    try {
+      const token = await getCSRFToken();
+      const fd = new FormData();
+      fd.append('file', file);
+
+      const res = await fetch(
+        `/api/v1/content/halli_bio/image?field=${encodeURIComponent(field)}`,
+        {
+          method:      'POST',
+          credentials: 'include',
+          headers: token ? { 'X-CSRF-Token': token } : {},
+          body:        fd,
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const { image_url } = await res.json();
+      if (!this._content) this._content = {};
+      this._content[field] = image_url;
+
+      // Patch in place — preserves edit-mode state and avoids re-render.
+      view.querySelectorAll(`[data-image-field="${field}"]`).forEach(el => {
+        if (el.tagName === 'IMG') {
+          el.src = image_url;
+        } else if (field === 'beginning_image_url') {
+          // The SVG fallback wrapper — swap its contents for an <img>.
+          el.outerHTML = `<img src="${escHtml(image_url)}" alt=""
+                               data-image-field="beginning_image_url"
+                               style="max-width:280px;width:100%;height:auto;border-radius:3px"/>`;
+        } else {
+          el.style.backgroundImage = `url('${image_url}')`;
+        }
+      });
+
+      if (status) {
+        status.textContent = t('form.saved');
+        setTimeout(() => { if (status.textContent === t('form.saved')) status.textContent = ''; }, 2500);
+      }
+    } catch (err) {
+      if (status) status.textContent = `Error: ${err.message}`;
+    }
   }
 
   _enterEdit(view, editBtn, controls) {

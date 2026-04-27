@@ -537,6 +537,37 @@
   background: rgba(200, 170, 110, 0.03);
 }
 
+/* ── Image-replace affordance (admin edit mode) ─────────────────────────── */
+.halli-bio--editing [data-image-field] {
+  position: relative;
+  cursor: pointer;
+  outline: 1px dashed rgba(200, 170, 110, 0.55);
+  outline-offset: 2px;
+  transition: outline-color 0.15s ease;
+}
+.halli-bio--editing [data-image-field]:hover {
+  outline-color: var(--gold);
+}
+.halli-bio--editing [data-image-field]::after {
+  content: 'Click to replace image';
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--gold);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.halli-bio--editing [data-image-field]:hover::after {
+  opacity: 1;
+}
+
 /* ── Skill groups (CV categorised lists) ──────────────────────────────────── */
 .hb-skill-groups {
   display: grid;
