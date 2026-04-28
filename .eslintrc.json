@@ -34,6 +34,13 @@
       }
     },
     {
+      "files": ["tests/unit/rateLimitDecide.test.js"],
+      "parserOptions": {
+        "sourceType": "module",
+        "ecmaVersion": 2022
+      }
+    },
+    {
       "files": ["public/js/**/*.js"],
       "env": {
         "browser": true,
