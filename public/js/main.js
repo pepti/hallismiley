@@ -2,9 +2,14 @@ import { tryRestoreSession } from './services/auth.js';
 import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
+import { installRateLimitGuard } from './api/rateLimitGuard.js';
 import {
   loadLocale, getLocaleFromHash, getPreferredLocale, t,
 } from './i18n/i18n.js';
+
+// Install the fetch wrapper before any awaits so every subsequent fetch —
+// including the one tryRestoreSession() may issue — is covered.
+installRateLimitGuard();
 
 // ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();
