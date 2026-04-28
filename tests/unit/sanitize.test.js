@@ -118,6 +118,80 @@ describe('sanitizeBody — array handling', () => {
   });
 });
 
+describe('sanitizeBody — rich-text fields (body, content)', () => {
+  test('preserves allowed formatting tags in body', () => {
+    const req  = mockReq({ body: '<p>Hello <strong>world</strong></p>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.body).toContain('<p>');
+    expect(req.body.body).toContain('<strong>world</strong>');
+  });
+
+  test('strips <script> tag and its contents from body', () => {
+    const req  = mockReq({ body: '<p>safe</p><script>alert(1)</script>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.body).toContain('<p>safe</p>');
+    expect(req.body.body).not.toMatch(/<script/i);
+    expect(req.body.body).not.toContain('alert(1)');
+  });
+
+  test('strips onerror attribute from img (and the img tag itself, since not allowed)', () => {
+    const req  = mockReq({ body: '<p>x</p><img src=x onerror=alert(1)>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.body).not.toMatch(/onerror/i);
+    expect(req.body.body).not.toMatch(/<img/i);
+  });
+
+  test('rejects javascript: hrefs on anchors', () => {
+    const req  = mockReq({ body: '<a href="javascript:alert(1)">click</a>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.body).not.toMatch(/javascript:/i);
+  });
+
+  test('forces rel="noopener noreferrer" on anchors', () => {
+    const req  = mockReq({ body: '<a href="https://example.com">link</a>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.body).toMatch(/rel="[^"]*noopener[^"]*noreferrer/);
+  });
+
+  test('strips null bytes from body', () => {
+    const req  = mockReq({ body: '<p>safe\u0000body</p>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.body).not.toContain('\u0000');
+    expect(req.body.body).toContain('safebody');
+  });
+
+  test('content field gets the same allowlist treatment as body', () => {
+    const req  = mockReq({ content: '<p>ok</p><script>x</script>' });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.content).toContain('<p>ok</p>');
+    expect(req.body.content).not.toMatch(/<script/i);
+  });
+});
+
+describe('sanitizeBody — nested object recursion', () => {
+  test('strips tags in nested object string values', () => {
+    const req  = mockReq({ rsvp: { answers: { food: '<b>vegan</b>' } } });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.rsvp.answers.food).toBe('vegan');
+  });
+
+  test('strips tags in objects inside arrays', () => {
+    const req  = mockReq({ items: [{ name: '<b>x</b>' }, { name: 'y' }] });
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(req.body.items[0].name).toBe('x');
+    expect(req.body.items[1].name).toBe('y');
+  });
+});
+
 describe('sanitizeBody — edge cases', () => {
   test('calls next() when body is null', () => {
     const req  = { body: null };

@@ -58,6 +58,10 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // ── A05 Security Misconfiguration: HTTP security headers ──────────────────────
+//
+// CSP violation reports are POSTed by the browser to /csp-report (registered
+// below, BEFORE the global rate limiter so reports aren't 429'd). The endpoint
+// just structured-logs the report and returns 204 — no auth, no DB write.
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -73,6 +77,8 @@ app.use(helmet({
       frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://checkout.stripe.com'],
       // Allow shop checkout redirect to POST to Stripe
       formAction: ["'self'", 'https://checkout.stripe.com'],
+      // Browser POSTs CSP violations here so they show up in our log aggregator.
+      reportUri:  ['/csp-report'],
       // Helmet 8 adds upgrade-insecure-requests by default; disable it so the
       // site works over plain HTTP on LAN IPs (e.g. phone testing on 192.168.x.x).
       // The directive upgrades sub-resource requests to HTTPS — fine in production
@@ -80,8 +86,26 @@ app.use(helmet({
       upgradeInsecureRequests: null,
     },
   },
+  // Block other origins from loading our uploaded media via <img>/<script>/etc.
+  // 'same-site' (rather than 'same-origin') keeps subdomain + apex compatible
+  // and doesn't break the Stripe/YouTube cross-origin embeds we already allow
+  // via frameSrc above.
+  crossOriginResourcePolicy: { policy: 'same-site' },
   crossOriginEmbedderPolicy: false,
 }));
+
+// CSP violation report sink — register BEFORE the global rate limiter so a
+// page that triggers many violations doesn't 429 itself. Browsers send the
+// report with Content-Type: application/csp-report (legacy) or
+// application/reports+json (newer Reporting API). Accept both.
+app.post(
+  '/csp-report',
+  express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '32kb' }),
+  (req, res) => {
+    logger.warn({ cspViolation: req.body }, 'CSP violation reported');
+    res.status(204).end();
+  },
+);
 
 // Restrict access to browser features not used by this app.
 // payment=* allowed so Stripe Checkout can use the Payment Request API.
