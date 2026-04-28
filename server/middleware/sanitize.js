@@ -2,12 +2,37 @@
 // Prevents stored XSS and null-byte injection.
 //
 // RICH_TEXT_FIELDS are excluded from tag-stripping because they legitimately
-// contain HTML markup (e.g. news article body, content sections).  These fields
-// are protected downstream by:
-//   - Parameterized SQL queries (no injection risk)
-//   - Server-side allowed-list HTML sanitization (TODO: add sanitize-html)
-//   - Client-side DOMParser allowlist in ArticleView.js at display time
+// contain HTML markup (e.g. news article body, content sections). They are
+// instead passed through an allowlist-based HTML sanitizer (sanitize-html)
+// whose tag/attribute set MIRRORS the client-side allowlist in
+// public/js/views/ArticleView.js. The two layers must stay in sync — the
+// client-side check is for display, this server-side check is the durable
+// guard against stored XSS payloads from non-browser clients.
+const sanitizeHtml = require('sanitize-html');
+
 const RICH_TEXT_FIELDS = new Set(['body', 'content']);
+
+// Mirror of ALLOWED_TAGS in public/js/views/ArticleView.js (lowercased).
+const RICH_TEXT_ALLOWED_TAGS = [
+  'p', 'h2', 'h3', 'h4', 'strong', 'em', 'b', 'i', 'a',
+  'ul', 'ol', 'li', 'blockquote', 'br', 'hr',
+  'span', 'div', 'figure', 'figcaption',
+];
+
+const RICH_TEXT_OPTIONS = {
+  allowedTags:    RICH_TEXT_ALLOWED_TAGS,
+  allowedAttributes: { a: ['href', 'target', 'rel'] },
+  // Restrict link schemes — bans javascript:, data:, vbscript:.
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesAppliedToAttributes: ['href'],
+  // Drop disallowed tags entirely (and their content) when they're known
+  // script-bearing elements; default for unknown tags is unwrap (keep text).
+  nonTextTags: ['style', 'script', 'textarea', 'option', 'noscript'],
+  // Force external link safety attributes.
+  transformTags: {
+    a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }, /* merge */ true),
+  },
+};
 
 function sanitizeString(value) {
   if (typeof value !== 'string') return value;
@@ -17,10 +42,12 @@ function sanitizeString(value) {
     .trim();
 }
 
-// Only strip null bytes from rich-text fields; preserve their HTML markup.
+// Allowlist-based HTML sanitization for rich-text fields. Strips tags and
+// attributes outside RICH_TEXT_ALLOWED_TAGS and forces rel=noopener noreferrer
+// on anchors. Also strips null bytes (not handled by sanitize-html).
 function sanitizeRichText(value) {
   if (typeof value !== 'string') return value;
-  return value.replace(/\0/g, '');
+  return sanitizeHtml(value.replace(/\0/g, ''), RICH_TEXT_OPTIONS);
 }
 
 function sanitizeBody(req, res, next) {

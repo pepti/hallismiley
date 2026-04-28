@@ -9,7 +9,10 @@
 const { doubleCsrf } = require('csrf-csrf');
 
 const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
-  getSecret: () => process.env.CSRF_SECRET ?? 'dev-csrf-secret-change-in-production',
+  // CSRF_SECRET is enforced as a required env var at server startup
+  // (see server/server.js REQUIRED_ENV), so by the time this getter runs
+  // the value is guaranteed present.
+  getSecret: () => process.env.CSRF_SECRET,
   // Tie CSRF token to the current auth session so tokens can't be reused across sessions.
   getSessionIdentifier: (req) => {
     const cookie = req.headers.cookie ?? '';
