@@ -36,5 +36,14 @@ module.exports = defineConfig({
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      // The dev server now hard-fails when CSRF_SECRET / NODE_ENV are unset
+      // (see server/server.js REQUIRED_ENV). Provide ephemeral defaults so
+      // both CI and local Playwright runs spin up cleanly. The secret here
+      // has no security meaning — it just signs CSRF tokens for the
+      // throwaway E2E server.
+      CSRF_SECRET: process.env.CSRF_SECRET || 'e2e-only-csrf-secret-do-not-use-in-prod',
+      NODE_ENV:    process.env.NODE_ENV    || 'test',
+    },
   },
 });

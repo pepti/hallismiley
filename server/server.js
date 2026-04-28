@@ -7,7 +7,11 @@ if (process.env.SENTRY_DSN) {
 }
 
 // ── Required env var validation — fail fast on misconfiguration ────────────────
-const REQUIRED_ENV = ['DATABASE_URL', 'ALLOWED_ORIGINS'];
+// CSRF_SECRET and NODE_ENV are load-bearing for security: a missing CSRF_SECRET
+// previously fell back to a hardcoded dev value (CSRF bypass), and a missing
+// NODE_ENV used to silently skip rate limiters. Both are now hard requirements
+// so a misconfigured deploy refuses to start instead of degrading silently.
+const REQUIRED_ENV = ['DATABASE_URL', 'ALLOWED_ORIGINS', 'CSRF_SECRET', 'NODE_ENV'];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length) {
   console.error(`[server] Missing required environment variables: ${missing.join(', ')}`);
