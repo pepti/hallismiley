@@ -135,7 +135,9 @@ function validateQuery(req, res, next) {
 // ── User / auth validation ────────────────────────────────────────────────────
 
 const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
+// Icelandic letters (both cases) are allowed so OAuth-derived usernames like
+// "jónþórsson" pass validation on subsequent profile updates.
+const USERNAME_RE = /^[a-zA-Z0-9_áéíóúýðþæöÁÉÍÓÚÝÐÞÆÖ]{3,40}$/;
 // phone: E.164-ish — digits, spaces, dashes, parentheses, leading +
 const PHONE_RE    = /^\+?[\d\s\-().]{7,20}$/;
 

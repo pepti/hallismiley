@@ -7,13 +7,15 @@ const { query: dbQuery } = require('../config/database');
 // creating a brand-new user off an OAuth profile that has no username yet.
 async function generateUniqueUsername(email, name) {
   const raw  = name || email.split('@')[0] || 'user';
-  const base = raw.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'user';
+  // Keep ASCII alphanumerics plus the lowercase Icelandic letters so names like
+  // "Jón Þórsson" survive as "jónþórsson" instead of being mangled to "jnrsson".
+  const base = raw.toLowerCase().replace(/[^a-z0-9áéíóúýðþæö]+/g, '').slice(0, 40) || 'user';
   // Signup validator requires ≥ 3 chars — pad if too short.
-  const padded = base.length < 3 ? (base + '123').slice(0, 20) : base;
+  const padded = base.length < 3 ? (base + '123').slice(0, 40) : base;
 
   for (let i = 0; i < 5; i++) {
     const suffix    = i === 0 ? '' : crypto.randomBytes(2).toString('hex');
-    const candidate = (padded + suffix).slice(0, 32);
+    const candidate = (padded + suffix).slice(0, 40);
     const { rows } = await dbQuery(
       `SELECT 1 FROM users WHERE username = $1`,
       [candidate],

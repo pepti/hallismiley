@@ -71,7 +71,7 @@ export class SignupView {
                 <label class="form-label" for="signup-username">${t('adminUsers.username')} <span class="req">*</span></label>
                 <input class="form-input" id="signup-username" name="username" type="text"
                        autocomplete="username" required placeholder="${t('auth.usernamePlaceholder')}"
-                       minlength="3" maxlength="32"/>
+                       minlength="3" maxlength="40"/>
                 <p class="form-field-status" id="username-status"></p>
               </div>
             </div>
