@@ -203,7 +203,14 @@ function validateSignup(req, res, next) {
 
 // PATCH /api/v1/users/me
 function validateProfileUpdate(req, res, next) {
-  const { username, display_name, phone, avatar } = req.body;
+  const { display_name, phone, avatar } = req.body;
+  // Trim whitespace so "  bob  " can't sneak past the unique-index check
+  // by differing in invisible characters from "bob". Mutating req.body here
+  // means downstream (controller, DB UPDATE) sees the canonical form.
+  if (typeof req.body.username === 'string') {
+    req.body.username = req.body.username.trim();
+  }
+  const { username } = req.body;
   const errors = [];
 
   if (username !== undefined) {

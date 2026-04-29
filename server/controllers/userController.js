@@ -51,26 +51,25 @@ const userController = {
         return res.status(400).json({ error: t(req.locale, 'errors.user.unsupportedLocale'), code: 400 });
       }
 
-      // Username uniqueness — case-insensitive, ignoring the caller's own row so
-      // a no-op save (or a case-only change) is allowed.
-      if ('username' in updates) {
-        const { rows: dup } = await dbQuery(
-          'SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id != $2',
-          [updates.username, req.user.id]
-        );
-        if (dup.length > 0) {
-          return res.status(409).json({ error: t(req.locale, 'errors.auth.usernameTaken'), code: 409 });
-        }
-      }
-
       const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);
       const values     = [req.user.id, ...Object.values(updates)];
 
-      const { rows } = await dbQuery(
-        `UPDATE users SET ${setClauses.join(', ')} WHERE id = $1
-         RETURNING ${PROFILE_FIELDS}`,
-        values
-      );
+      let rows;
+      try {
+        // Case-insensitive uniqueness on username is enforced by the
+        // users_username_lower_idx unique index (migration 041). Letting
+        // the DB enforce it atomically removes the read-then-write race.
+        ({ rows } = await dbQuery(
+          `UPDATE users SET ${setClauses.join(', ')} WHERE id = $1
+           RETURNING ${PROFILE_FIELDS}`,
+          values
+        ));
+      } catch (err) {
+        if (err.code === '23505' && 'username' in updates) {
+          return res.status(409).json({ error: t(req.locale, 'errors.auth.usernameTaken'), code: 409 });
+        }
+        throw err;
+      }
 
       return res.json(rows[0]);
     } catch (err) { next(err); }

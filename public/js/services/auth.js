@@ -191,7 +191,11 @@ export async function updateProfile(updates) {
     body:        JSON.stringify(updates),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Update failed');
+  if (!res.ok) {
+    const err = new Error(data.error || 'Update failed');
+    err.status = res.status;
+    throw err;
+  }
   if (data.user) { _user = data.user; _dispatch(); }
   return data;
 }

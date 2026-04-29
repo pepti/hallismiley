@@ -511,6 +511,19 @@ describe('validateProfileUpdate — PATCH /users/me', () => {
     const { next } = runValidator(validateProfileUpdate, { display_name: 'X' });
     expect(next).toHaveBeenCalledTimes(1);
   });
+
+  test('username with surrounding whitespace is trimmed before validation', () => {
+    const { req, next } = runValidator(validateProfileUpdate, { username: '  bob  ' });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.body.username).toBe('bob');
+  });
+
+  test('whitespace-only username fails as required', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: '   ' });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(res._body.error).toMatch(/username/i);
+    expect(next).not.toHaveBeenCalled();
+  });
 });
 
 // ── validatePasswordChange ────────────────────────────────────────────────────

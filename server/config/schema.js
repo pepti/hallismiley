@@ -1188,6 +1188,24 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
           AND (NOT value ? 'craft_image_url' OR NOT value ? 'life_image_url')`,
     ],
   },
+  {
+    // Case-insensitive uniqueness on username, enforced at the DB level so
+    // concurrent updates can't slip a duplicate past a SELECT-then-UPDATE check.
+    // Login (authController) already matches LOWER(username) = LOWER($1), so
+    // this index also serves that lookup. Existing case-sensitive UNIQUE on
+    // users.username (from 002_auth_users) stays in place; the two coexist.
+    //
+    // LOWER() relies on the database's lc_ctype. Postgres on hosted UTF-8
+    // locales (en_US.UTF-8, C.UTF-8, is_IS.UTF-8) lowercases Icelandic
+    // letters correctly (Á→á, Þ→þ, Ð→ð, Æ→æ, Ö→ö, etc.). A `C`-locale
+    // cluster would not — but every environment we deploy to (Azure
+    // Database for PostgreSQL, Railway, local dev) uses a UTF-8 locale,
+    // and login already depends on the same assumption.
+    name: '041_users_username_lower_unique',
+    statements: [
+      `CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON users (LOWER(username))`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

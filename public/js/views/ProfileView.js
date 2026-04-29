@@ -340,7 +340,16 @@ export class ProfileView {
         editBtn.hidden = false;
         showToast(t('profile.profileUpdated'), 'success');
       } catch (err) {
-        errEl.textContent = err.message;
+        // 409 from a username collision: surface a specific message near the
+        // username field instead of the generic server error.
+        if (err.status === 409) {
+          const msg = t('signup.usernameTaken');
+          errEl.textContent = msg;
+          form.username.focus();
+          form.username.select();
+        } else {
+          errEl.textContent = err.message;
+        }
       } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = t('profile.saveChanges');

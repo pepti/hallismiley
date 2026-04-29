@@ -216,6 +216,80 @@ describe('PATCH /api/v1/users/me', () => {
       expect(res.status).toBe(200);
       expect(res.body.username).toBe('jónþórsson');
     });
+
+    // The DB unique index on LOWER(username) replaces a SELECT-then-UPDATE check
+    // that was vulnerable to a TOCTOU race. These tests exercise the constraint
+    // violation path directly to confirm 23505 surfaces as a clean 409.
+
+    test('case-different duplicate is rejected by the DB index, not a pre-check', async () => {
+      // Seed a row whose username differs only in case from the target.
+      const { Scrypt } = require('oslo/password');
+      const scrypt = new Scrypt();
+      const hash = await scrypt.hash('password123');
+      await db.query(
+        `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+         VALUES ('test-other-id', 'other@test.com', 'CamelCase', $1, 'user', TRUE)`,
+        [hash]
+      );
+
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'camelcase' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/taken|already/i);
+    });
+
+    test('whitespace-padded duplicate is trimmed, then rejected as duplicate', async () => {
+      const { Scrypt } = require('oslo/password');
+      const scrypt = new Scrypt();
+      const hash = await scrypt.hash('password123');
+      await db.query(
+        `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+         VALUES ('test-other-id', 'other@test.com', 'taken_handle', $1, 'user', TRUE)`,
+        [hash]
+      );
+
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: '  taken_handle  ' });
+
+      expect(res.status).toBe(409);
+    });
+
+    test('username is persisted trimmed', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: '  spaced_name  ' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.username).toBe('spaced_name');
+
+      const { rows } = await db.query('SELECT username FROM users WHERE id = $1', [adminId]);
+      expect(rows[0].username).toBe('spaced_name');
+    });
+
+    test('DB unique index on LOWER(username) blocks case-only duplicates at insert time', async () => {
+      const { Scrypt } = require('oslo/password');
+      const scrypt = new Scrypt();
+      const hash = await scrypt.hash('password123');
+      await db.query(
+        `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+         VALUES ('idx-test-a', 'a@test.com', 'IndexCheck', $1, 'user', TRUE)`,
+        [hash]
+      );
+
+      await expect(
+        db.query(
+          `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+           VALUES ('idx-test-b', 'b@test.com', 'indexcheck', $1, 'user', TRUE)`,
+          [hash]
+        )
+      ).rejects.toMatchObject({ code: '23505' });
+    });
   });
 });
 
