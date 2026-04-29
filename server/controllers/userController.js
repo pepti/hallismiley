@@ -65,7 +65,10 @@ const userController = {
           values
         ));
       } catch (err) {
-        if (err.code === '23505' && 'username' in updates) {
+        if (
+          err.code === '23505' &&
+          (err.constraint === 'users_username_lower_idx' || err.constraint === 'users_username_key')
+        ) {
           return res.status(409).json({ error: t(req.locale, 'errors.auth.usernameTaken'), code: 409 });
         }
         throw err;

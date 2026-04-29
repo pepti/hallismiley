@@ -72,7 +72,7 @@
   "validation.limit.intRange": "Hámark verður að vera heil tala á milli 1 og {max}",
   "validation.offset.nonNegative": "Frávik verður að vera 0 eða hærri heiltala",
   "validation.username.required": "Notandanafn er nauðsynlegt",
-  "validation.username.invalid": "Notandanafn verður að vera 3-30 stafir, aðeins bókstafir/tölur/undirstrik",
+  "validation.username.invalid": "Notandanafn verður að vera 3-40 stafir, aðeins bókstafir/tölur/undirstrik",
   "validation.email.required": "Netfang er nauðsynlegt",
   "validation.email.invalid": "Netfang verður að vera gilt netfang",
   "validation.password.required": "Lykilorð er nauðsynlegt",

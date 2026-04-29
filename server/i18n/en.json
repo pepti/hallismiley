@@ -72,7 +72,7 @@
   "validation.limit.intRange": "Limit must be an integer between 1 and {max}",
   "validation.offset.nonNegative": "Offset must be a non-negative integer",
   "validation.username.required": "Username is required",
-  "validation.username.invalid": "Username must be 3-30 characters, letters/numbers/underscore only",
+  "validation.username.invalid": "Username must be 3-40 characters, letters/numbers/underscore only",
   "validation.email.required": "Email is required",
   "validation.email.invalid": "Email must be a valid email address",
   "validation.password.required": "Password is required",
