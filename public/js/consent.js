@@ -14,6 +14,8 @@
   'use strict';
 
   var STORAGE_KEY = 'cookie_consent';
+  var SUPPORTED_LOCALES = ['en', 'is'];
+  var DEFAULT_LOCALE = 'en';
 
   function getConsent() {
     try {
@@ -21,6 +23,22 @@
     } catch (_) {
       return null;
     }
+  }
+
+  // Resolve current locale without importing the ES-module i18n helper —
+  // consent.js is a classic script. Order mirrors i18n.getPreferredLocale():
+  // window.__locale (set by loadLocale) → URL path prefix → localStorage.
+  function resolveLocale() {
+    if (window.__locale && SUPPORTED_LOCALES.indexOf(window.__locale) !== -1) {
+      return window.__locale;
+    }
+    var first = (window.location.pathname || '/').split('/').filter(Boolean)[0];
+    if (first && SUPPORTED_LOCALES.indexOf(first) !== -1) return first;
+    try {
+      var saved = localStorage.getItem('preferred_locale');
+      if (saved && SUPPORTED_LOCALES.indexOf(saved) !== -1) return saved;
+    } catch (_) { /* ignore storage errors */ }
+    return DEFAULT_LOCALE;
   }
 
   function setConsent(value) {
@@ -85,10 +103,25 @@
 
     var text = document.createElement('p');
     text.style.cssText = 'margin:0;flex:1 1 300px';
-    text.innerHTML =
-      'This site uses cookies for analytics. See our ' +
-      '<a href="#/privacy" style="color:#a0a090;text-decoration:underline">Privacy Policy</a>. ' +
-      'Do you consent to analytics cookies?';
+    // Build the privacy link as an element so we can compute the locale-
+    // prefixed href at click time and route through the SPA — a static
+    // '#/privacy' no longer works since the router moved to clean URLs.
+    var privacyLink = document.createElement('a');
+    privacyLink.textContent = 'Privacy Policy';
+    privacyLink.style.cssText = 'color:#a0a090;text-decoration:underline';
+    privacyLink.href = '/' + resolveLocale() + '/privacy';
+    privacyLink.addEventListener('click', function (e) {
+      if (e.defaultPrevented || e.button !== 0 ||
+          e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      var target = '/' + resolveLocale() + '/privacy';
+      history.pushState(null, '', target);
+      window.dispatchEvent(new Event('spa:navigate'));
+    });
+
+    text.appendChild(document.createTextNode('This site uses cookies for analytics. See our '));
+    text.appendChild(privacyLink);
+    text.appendChild(document.createTextNode('. Do you consent to analytics cookies?'));
 
     var actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:0.5rem;flex-shrink:0';
