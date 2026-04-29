@@ -153,6 +153,33 @@ describe('GET /auth/google/callback', () => {
     expect(rows[0].username.length).toBeGreaterThanOrEqual(3);
   });
 
+  test('Icelandic profile name produces a username with Icelandic letters intact', async () => {
+    // Override the userinfo response for this test only — beforeEach resets it.
+    mockUserinfo.response = {
+      sub: 'google-sub-icelandic',
+      email: 'jon@example.is',
+      email_verified: true,
+      name: 'Jón Þórsson',
+    };
+
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/en/#/?welcome=google');
+
+    const { rows } = await db.query(
+      `SELECT username FROM users WHERE email = $1`,
+      ['jon@example.is'],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].username).toBe('jónþórsson');
+    // Stored username must satisfy the signup validator's USERNAME_RE
+    // so subsequent profile updates can re-submit it without 400ing.
+    expect(rows[0].username).toMatch(/^[a-zA-Z0-9_áéíóúýðþæöÁÉÍÓÚÝÐÞÆÖ]{3,40}$/);
+  });
+
   test('returning user (existing google_id) logs in without creating a new row', async () => {
     // Insert a user already linked to google-sub-1.
     await db.query(

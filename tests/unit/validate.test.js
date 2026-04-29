@@ -351,6 +351,50 @@ describe('validateSignup — new user registration', () => {
     expect(res.status).toHaveBeenCalledWith(HTTP_400);
     expect(next).not.toHaveBeenCalled();
   });
+
+  // ── Icelandic-letter usernames ──────────────────────────────────────────────
+  // OAuth-derived usernames may contain lowercase Icelandic letters
+  // (á é í ó ú ý ð þ æ ö). USERNAME_RE accepts both cases up to 40 chars.
+
+  test('lowercase Icelandic username is accepted', () => {
+    const { next } = runValidator(validateSignup, { ...validBody, username: 'jónþórsson' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('mixed Icelandic + ASCII username is accepted', () => {
+    const { next } = runValidator(validateSignup, { ...validBody, username: 'anna_þórsdóttir3' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('uppercase Icelandic letters are accepted', () => {
+    const { next } = runValidator(validateSignup, { ...validBody, username: 'ÁÉÍÓÚÝÐÞÆÖ' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('username at the new 40-char ceiling is accepted', () => {
+    const { next } = runValidator(validateSignup, { ...validBody, username: 'a'.repeat(40) });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('username of 41 chars returns 400 (above ceiling)', () => {
+    const { res, next } = runValidator(validateSignup, { ...validBody, username: 'a'.repeat(41) });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('Icelandic username of 41 chars returns 400', () => {
+    const { res, next } = runValidator(validateSignup, { ...validBody, username: 'þ'.repeat(41) });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('non-Icelandic accented letter (é vs ñ) is rejected', () => {
+    // ñ is not in the Icelandic alphabet — must be rejected to keep the
+    // allowed set tight.
+    const { res, next } = runValidator(validateSignup, { ...validBody, username: 'señor' });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
 });
 
 describe('ALLOWED_AVATARS constant', () => {
