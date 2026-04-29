@@ -89,6 +89,13 @@ export class ProfileView {
       <section class="profile-section" id="edit-section" hidden>
         <h2 class="profile-section__title">${t('profile.editProfile')}</h2>
         <form class="profile-form" id="profile-form" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="edit-username">${t('signup.username')}</label>
+            <input class="form-input" id="edit-username" name="username" type="text"
+                   value="${escHtml(profile.username || '')}"
+                   placeholder="${t('profile.usernamePlaceholder')}"
+                   minlength="3" maxlength="40" autocomplete="username"/>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="edit-displayname">${t('signup.displayName')}</label>
@@ -311,14 +318,24 @@ export class ProfileView {
       saveBtn.disabled = true;
       saveBtn.textContent = t('form.saving');
       try {
-        const updated = await updateProfile({
+        const newUsername = form.username.value.trim();
+        const payload = {
           displayName: form.displayName.value.trim() || null,
           phone:       form.phone.value.trim() || null,
           avatar:      form.avatar.value,
-        });
-        // Update header avatar + display name
-        const avatarName = updated.user?.avatar || form.avatar.value;
+        };
+        if (newUsername && newUsername !== profile.username) {
+          payload.username = newUsername;
+        }
+        const updated = await updateProfile(payload);
+        // Update header avatar + username + cached profile
+        const avatarName = updated.avatar || updated.user?.avatar || form.avatar.value;
         el.querySelector('#profile-avatar-img').src = avatarPathByName(avatarName);
+        if (updated.username) {
+          profile.username = updated.username;
+          const headerName = el.querySelector('.profile-header__username');
+          if (headerName) headerName.textContent = updated.username;
+        }
         section.hidden = true;
         editBtn.hidden = false;
         showToast(t('profile.profileUpdated'), 'success');

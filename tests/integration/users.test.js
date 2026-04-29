@@ -112,6 +112,111 @@ describe('PATCH /api/v1/users/me', () => {
     const res = await request(app).patch('/api/v1/users/me').send({ display_name: 'X' });
     expect(res.status).toBe(401);
   });
+
+  // ── Username editing ──────────────────────────────────────────────────────
+  describe('username updates', () => {
+    test('updates username with valid value', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'new_handle_42' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.username).toBe('new_handle_42');
+
+      // DB confirms the persisted change
+      const { rows } = await db.query('SELECT username FROM users WHERE id = $1', [adminId]);
+      expect(rows[0].username).toBe('new_handle_42');
+    });
+
+    test('rejects duplicate username with 409', async () => {
+      // Seed a second user that owns the target username
+      const { Scrypt } = require('oslo/password');
+      const scrypt = new Scrypt();
+      const hash = await scrypt.hash('password123');
+      await db.query(
+        `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+         VALUES ('test-other-id', 'other@test.com', 'takenname', $1, 'user', TRUE)`,
+        [hash]
+      );
+
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'takenname' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/taken|already/i);
+    });
+
+    test('duplicate check is case-insensitive', async () => {
+      const { Scrypt } = require('oslo/password');
+      const scrypt = new Scrypt();
+      const hash = await scrypt.hash('password123');
+      await db.query(
+        `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+         VALUES ('test-other-id', 'other@test.com', 'MixedCaseName', $1, 'user', TRUE)`,
+        [hash]
+      );
+
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'mixedcasename' });
+
+      expect(res.status).toBe(409);
+    });
+
+    test('allows the caller to keep their own username unchanged', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: process.env.ADMIN_USERNAME });
+
+      expect(res.status).toBe(200);
+      expect(res.body.username).toBe(process.env.ADMIN_USERNAME);
+    });
+
+    test('rejects username shorter than 3 chars (400)', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'ab' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/username/i);
+    });
+
+    test('rejects username longer than 40 chars (400)', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'a'.repeat(41) });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/username/i);
+    });
+
+    test('rejects username with invalid characters (400)', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'has spaces!' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/username/i);
+    });
+
+    test('accepts Icelandic letters in username', async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', sessionCookie)
+        .send({ username: 'jónþórsson' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.username).toBe('jónþórsson');
+    });
+  });
 });
 
 // ── PATCH /api/v1/users/me/password ──────────────────────────────────────────

@@ -33,11 +33,11 @@ const userController = {
     } catch (err) { next(err); }
   },
 
-  // PATCH /api/v1/users/me  { display_name?, phone?, avatar? }
+  // PATCH /api/v1/users/me  { username?, display_name?, phone?, avatar? }
   // Field validation handled upstream by validateProfileUpdate middleware.
   async updateMe(req, res, next) {
     try {
-      const allowed  = ['display_name', 'phone', 'avatar', 'preferred_locale'];
+      const allowed  = ['username', 'display_name', 'phone', 'avatar', 'preferred_locale'];
       const updates  = {};
       for (const key of allowed) {
         if (key in req.body) updates[key] = req.body[key];
@@ -49,6 +49,18 @@ const userController = {
 
       if ('preferred_locale' in updates && !SUPPORTED_LOCALES.includes(updates.preferred_locale)) {
         return res.status(400).json({ error: t(req.locale, 'errors.user.unsupportedLocale'), code: 400 });
+      }
+
+      // Username uniqueness — case-insensitive, ignoring the caller's own row so
+      // a no-op save (or a case-only change) is allowed.
+      if ('username' in updates) {
+        const { rows: dup } = await dbQuery(
+          'SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id != $2',
+          [updates.username, req.user.id]
+        );
+        if (dup.length > 0) {
+          return res.status(409).json({ error: t(req.locale, 'errors.auth.usernameTaken'), code: 409 });
+        }
       }
 
       const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);

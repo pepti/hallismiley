@@ -821,6 +821,7 @@
   "auth.phonePlaceholder": "+354 555 0000",
   "profile.displayNamePlaceholder": "Birtingarnafnið þitt",
   "profile.phonePlaceholder": "+354 555 0000",
+  "profile.usernamePlaceholder": "notandanafnid_thitt",
 
   "admin.editingInEn": "Þú ert að breyta ensku — skiptu um tungumál efst til að breyta íslensku",
   "admin.editingInIs": "Þú ert að breyta íslensku — skiptu um tungumál efst til að breyta ensku",

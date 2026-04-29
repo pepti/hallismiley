@@ -203,8 +203,16 @@ function validateSignup(req, res, next) {
 
 // PATCH /api/v1/users/me
 function validateProfileUpdate(req, res, next) {
-  const { display_name, phone, avatar } = req.body;
+  const { username, display_name, phone, avatar } = req.body;
   const errors = [];
+
+  if (username !== undefined) {
+    if (!username || typeof username !== 'string') {
+      errors.push({ key: 'validation.username.required' });
+    } else if (!USERNAME_RE.test(username)) {
+      errors.push({ key: 'validation.username.invalid' });
+    }
+  }
 
   if (display_name !== undefined && display_name !== null) {
     if (typeof display_name !== 'string' || display_name.trim().length > 100)

@@ -821,6 +821,7 @@
   "auth.phonePlaceholder": "+354 555 0000",
   "profile.displayNamePlaceholder": "Your display name",
   "profile.phonePlaceholder": "+354 555 0000",
+  "profile.usernamePlaceholder": "your_username",
 
   "admin.editingInEn": "Editing English — switch languages in the nav to edit Icelandic",
   "admin.editingInIs": "Editing Icelandic — switch languages in the nav to edit English",

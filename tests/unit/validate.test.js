@@ -450,6 +450,67 @@ describe('validateProfileUpdate — PATCH /users/me', () => {
     expect(res.status).toHaveBeenCalledWith(HTTP_400);
     expect(next).not.toHaveBeenCalled();
   });
+
+  // ── Username field on profile update ────────────────────────────────────────
+  // Same character/length rules as signup (USERNAME_RE), but only checked when
+  // the field is present in the body.
+
+  test('valid username calls next()', () => {
+    const { next } = runValidator(validateProfileUpdate, { username: 'new_handle' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('username shorter than 3 chars returns 400', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: 'ab' });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(res._body.error).toMatch(/username/i);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('username longer than 40 chars returns 400', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: 'a'.repeat(41) });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('username with spaces returns 400', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: 'has space' });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('username with special chars returns 400', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: 'bad!chars' });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('empty username returns 400 (treated as required when present)', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: '' });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('non-string username returns 400', () => {
+    const { res, next } = runValidator(validateProfileUpdate, { username: 12345 });
+    expect(res.status).toHaveBeenCalledWith(HTTP_400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('Icelandic letters in username are accepted', () => {
+    const { next } = runValidator(validateProfileUpdate, { username: 'jónþórsson' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('username at the 40-char ceiling is accepted', () => {
+    const { next } = runValidator(validateProfileUpdate, { username: 'a'.repeat(40) });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('omitting username entirely calls next() (field is optional)', () => {
+    const { next } = runValidator(validateProfileUpdate, { display_name: 'X' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ── validatePasswordChange ────────────────────────────────────────────────────
