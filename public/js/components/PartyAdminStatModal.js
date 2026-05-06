@@ -31,10 +31,11 @@ export class PartyAdminStatModal {
       : `<p class="party-empty">${t('party.admin.statEmpty')}</p>`;
 
     const count = (rsvps && rsvps.length) || 0;
+    const detailsKey = count === 1 ? 'party.admin.statDetailsOne' : 'party.admin.statDetails';
     modal.innerHTML = `
       <button class="modal__close" aria-label="${t('common.close')}">&times;</button>
       <h2 class="modal__title">${escHtml(title)}</h2>
-      <p class="modal__desc">${t('party.admin.statDetails', { n: count })}</p>
+      <p class="modal__desc">${t(detailsKey, { n: count })}</p>
       ${list}
     `;
     modal.querySelector('.modal__close').addEventListener('click', () => this.close());

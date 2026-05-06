@@ -469,6 +469,7 @@
   "party.admin.both": "Both",
   "party.admin.totalHeadcount": "Total Headcount",
   "party.admin.statDetails": "{n} people",
+  "party.admin.statDetailsOne": "1 person",
   "party.admin.statEmpty": "No one yet",
   "party.admin.statClickHint": "Click to see who",
   "party.admin.activity": "Activity",
