@@ -4,6 +4,7 @@ const db      = require('../../server/config/database');
 const {
   createTestAdminUser,
   createTestRegularUser,
+  createTestModeratorUser,
   getTestSessionCookie,
   cleanTables,
 } = require('../helpers');
@@ -493,5 +494,172 @@ describe('Old invite endpoints return 410 Gone', () => {
       .delete('/api/v1/party/invites/1')
       .set('Cookie', adminCookie);
     expect(res.status).toBe(410);
+  });
+});
+
+// ── Logistics endpoints ──────────────────────────────────────────────────────
+
+describe('Logistics endpoints', () => {
+  test('GET /api/v1/party/logistics — unauthenticated returns 401', async () => {
+    const res = await request(app).get('/api/v1/party/logistics');
+    expect(res.status).toBe(401);
+  });
+
+  test('GET /api/v1/party/logistics — non-admin user returns 403', async () => {
+    const res = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', userCookie);
+    expect(res.status).toBe(403);
+  });
+
+  test('admin: full CRUD round-trip (create, list, update, delete)', async () => {
+    // Create
+    const createRes = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Cups', quantity: '100', assigned_to: 'Bjarni' });
+    expect(createRes.status).toBe(201);
+    expect(createRes.body).toMatchObject({
+      name: 'Cups', quantity: '100', assigned_to: 'Bjarni',
+      bought: false, at_venue: false,
+    });
+    const id = createRes.body.id;
+
+    // List
+    const listRes = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body).toHaveLength(1);
+    expect(listRes.body[0].id).toBe(id);
+
+    // Update — flip bought
+    const patch1 = await request(app)
+      .patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie)
+      .send({ bought: true });
+    expect(patch1.status).toBe(200);
+    expect(patch1.body.bought).toBe(true);
+    expect(patch1.body.at_venue).toBe(false);
+
+    // Update — flip at_venue independently
+    const patch2 = await request(app)
+      .patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie)
+      .send({ at_venue: true });
+    expect(patch2.status).toBe(200);
+    expect(patch2.body.bought).toBe(true);
+    expect(patch2.body.at_venue).toBe(true);
+
+    // Delete
+    const delRes = await request(app)
+      .delete(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie);
+    expect(delRes.status).toBe(204);
+
+    const afterRes = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    expect(afterRes.body).toHaveLength(0);
+  });
+
+  test('moderator can also add / update / delete', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+
+    const createRes = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', modCookie)
+      .send({ name: 'Plates' });
+    expect(createRes.status).toBe(201);
+    const id = createRes.body.id;
+
+    const patchRes = await request(app)
+      .patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', modCookie)
+      .send({ bought: true });
+    expect(patchRes.status).toBe(200);
+
+    const delRes = await request(app)
+      .delete(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', modCookie);
+    expect(delRes.status).toBe(204);
+  });
+
+  test('POST returns 400 when name is missing or empty', async () => {
+    const res1 = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({});
+    expect(res1.status).toBe(400);
+
+    const res2 = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: '   ' });
+    expect(res2.status).toBe(400);
+  });
+
+  test('POST returns 400 when name exceeds 200 chars', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'x'.repeat(201) });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST returns 403 for non-admin user', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', userCookie)
+      .send({ name: 'Sneaky' });
+    expect(res.status).toBe(403);
+  });
+
+  test('PATCH returns 404 for non-existent id', async () => {
+    const res = await request(app)
+      .patch('/api/v1/party/logistics/999999')
+      .set('Cookie', adminCookie)
+      .send({ bought: true });
+    expect(res.status).toBe(404);
+  });
+
+  test('PATCH returns 400 when no recognized fields provided', async () => {
+    const createRes = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Ice' });
+    const id = createRes.body.id;
+
+    const res = await request(app)
+      .patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie)
+      .send({ unknown_field: 'x' });
+    expect(res.status).toBe(400);
+  });
+
+  test('DELETE returns 404 for non-existent id', async () => {
+    const res = await request(app)
+      .delete('/api/v1/party/logistics/999999')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(404);
+  });
+
+  test('items are returned in sort_order, then id', async () => {
+    const a = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'A' });
+    const b = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'B' });
+    const c = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'C' });
+
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    expect(list.body.map(i => i.name)).toEqual(['A', 'B', 'C']);
+    expect(list.body[0].sort_order).toBeLessThan(list.body[1].sort_order);
+    expect(list.body[1].sort_order).toBeLessThan(list.body[2].sort_order);
+    // sanity — IDs match
+    expect([a.body.id, b.body.id, c.body.id]).toEqual(list.body.map(i => i.id));
   });
 });

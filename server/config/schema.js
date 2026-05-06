@@ -1206,6 +1206,31 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON users (LOWER(username))`,
     ],
   },
+  {
+    // Logistics tracker — items the planner needs to buy and bring to the
+    // venue. Two independent boolean flags (`bought`, `at_venue`) so the day
+    // the cups are bought is decoupled from the day they actually arrive at
+    // Mýrarkot. quantity / assigned_to are free text — "5 packs" or "Bjarni"
+    // are both valid; assigned_to is intentionally NOT a foreign key so the
+    // planner can credit non-guests too (caterer, family).
+    name: '042_party_logistics_items',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_logistics_items (
+        id           SERIAL      PRIMARY KEY,
+        name         TEXT        NOT NULL,
+        quantity     TEXT,
+        assigned_to  TEXT,
+        bought       BOOLEAN     NOT NULL DEFAULT FALSE,
+        at_venue     BOOLEAN     NOT NULL DEFAULT FALSE,
+        sort_order   INTEGER     NOT NULL DEFAULT 0,
+        created_by   TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_logistics_sort
+         ON party_logistics_items (sort_order, id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

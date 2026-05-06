@@ -1375,3 +1375,50 @@
   padding: 0.3rem 0.75rem;
   font-size: 0.8rem;
 }
+
+/* Logistics tracker — admin-only section under Invited Guests. */
+.party-admin__logistics-help {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0 0 var(--sp-3) 0;
+}
+.party-admin__logistics-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.party-admin__logistics-add .lol-input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.party-admin__logistics-add .party-admin__logistics-qty,
+.party-admin__logistics-add .party-admin__logistics-assigned {
+  flex: 0 1 140px;
+}
+.party-admin__logistics-status {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-left: var(--sp-2);
+}
+.party-admin__logistics-checkcell {
+  text-align: center;
+  white-space: nowrap;
+}
+.party-admin__logistics-checkcell input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  accent-color: #d4b877;
+}
+.party-admin__logistics-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.party-admin__logistics-row--bought td {
+  background: rgba(76, 175, 80, 0.04);
+}
+.party-admin__logistics-row--at-venue td {
+  background: rgba(76, 175, 80, 0.08);
+}

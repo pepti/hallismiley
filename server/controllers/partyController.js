@@ -269,6 +269,124 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // ── Logistics (admin/moderator) ──────────────────────────────────────────────
+  // Items the planner needs to buy and bring to the venue. Two independent
+  // boolean flags so "bought" and "at venue" can be ticked in either order.
+
+  async listLogistics(_req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, name, quantity, assigned_to, bought, at_venue,
+                sort_order, created_by, created_at, updated_at
+           FROM party_logistics_items
+          ORDER BY sort_order ASC, id ASC`
+      );
+      res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  async addLogisticsItem(req, res, next) {
+    try {
+      const { name, quantity = null, assigned_to = null } = req.body || {};
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameRequired'), code: 400 });
+      }
+      if (name.length > 200) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameTooLong', { n: 200 }), code: 400 });
+      }
+      if (quantity != null && (typeof quantity !== 'string' || quantity.length > 100)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsQtyTooLong', { n: 100 }), code: 400 });
+      }
+      if (assigned_to != null && (typeof assigned_to !== 'string' || assigned_to.length > 100)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsAssignedTooLong', { n: 100 }), code: 400 });
+      }
+
+      const { rows } = await db.query(
+        `INSERT INTO party_logistics_items (name, quantity, assigned_to, sort_order, created_by)
+         VALUES (
+           $1, $2, $3,
+           COALESCE((SELECT MAX(sort_order) FROM party_logistics_items), 0) + 1,
+           $4
+         )
+         RETURNING id, name, quantity, assigned_to, bought, at_venue,
+                   sort_order, created_by, created_at, updated_at`,
+        [name.trim(), quantity ? quantity.trim() : null, assigned_to ? assigned_to.trim() : null, req.user.id]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async updateLogisticsItem(req, res, next) {
+    try {
+      const id = req.params.id;
+      const allowed = ['name', 'quantity', 'assigned_to', 'bought', 'at_venue'];
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      for (const key of allowed) {
+        if (!Object.prototype.hasOwnProperty.call(req.body || {}, key)) continue;
+        let v = req.body[key];
+
+        if (key === 'name') {
+          if (typeof v !== 'string' || v.trim().length === 0) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameRequired'), code: 400 });
+          }
+          if (v.length > 200) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameTooLong', { n: 200 }), code: 400 });
+          }
+          v = v.trim();
+        } else if (key === 'quantity' || key === 'assigned_to') {
+          if (v != null && typeof v !== 'string') {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeString', { name: key }), code: 400 });
+          }
+          if (typeof v === 'string') {
+            const max = 100;
+            if (v.length > max) {
+              const errKey = key === 'quantity' ? 'errors.party.logisticsQtyTooLong' : 'errors.party.logisticsAssignedTooLong';
+              return res.status(400).json({ error: t(req.locale, errKey, { n: max }), code: 400 });
+            }
+            v = v.trim() || null;
+          }
+        } else if (key === 'bought' || key === 'at_venue') {
+          if (typeof v !== 'boolean') {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeString', { name: key }), code: 400 });
+          }
+        }
+
+        sets.push(`${key} = $${idx++}`);
+        values.push(v);
+      }
+
+      if (sets.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNoFields'), code: 400 });
+      }
+
+      values.push(id);
+      const { rows } = await db.query(
+        `UPDATE party_logistics_items
+            SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE id = $${idx}
+          RETURNING id, name, quantity, assigned_to, bought, at_venue,
+                    sort_order, created_by, created_at, updated_at`,
+        values
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.logisticsItemNotFound'), code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async deleteLogisticsItem(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `DELETE FROM party_logistics_items WHERE id = $1 RETURNING id`,
+        [req.params.id]
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.logisticsItemNotFound'), code: 404 });
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
   // ── Guestbook ─────────────────────────────────────────────────────────────────
 
   async postGuestbook(req, res, next) {
