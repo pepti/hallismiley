@@ -383,6 +383,7 @@ app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    u
 app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
+app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  uploadStaticOpts));
 
 // Dynamic /sitemap.xml — must come BEFORE express.static so it shadows
 // any stale public/sitemap.xml file and reflects live DB state.

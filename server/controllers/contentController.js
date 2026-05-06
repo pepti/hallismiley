@@ -3,13 +3,13 @@
 // Since migration 029 each row is keyed by (key, locale).
 // GET falls back to DEFAULT_LOCALE if no row exists for the requested locale.
 
-const path   = require('path');
 const fs     = require('fs');
 const multer = require('multer');
 const db     = require('../config/database');
 const logger = require('../logger');
 const { MIME_TO_EXT } = require('../middleware/upload');
 const { DEFAULT_LOCALE } = require('../config/i18n');
+const { contentUploadDir } = require('../config/paths');
 const { t }   = require('../i18n');
 const { translateTree, isEnabled: translatorEnabled } = require('../services/translator');
 
@@ -18,8 +18,12 @@ const { translateTree, isEnabled: translatorEnabled } = require('../services/tra
 // or tech pills). Start empty; extend if admins report noise.
 const SITE_CONTENT_TRANSLATE_SKIP = new Set([]);
 
-// ── Image upload: store under public/assets/content/ ─────────────────────────
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'content');
+// ── Image upload: store under UPLOAD_ROOT/content/ ──────────────────────────
+// In dev that resolves to public/assets/content/ (committed tree); in prod it's
+// the Azure Files mount at /app/uploads/content/ so uploads survive redeploys
+// and are reachable across replicas. Express serves the URL via the matching
+// /assets/content static handler in server/app.js.
+const UPLOAD_DIR = contentUploadDir();
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024; // 15 MB — admin-uploaded hero/divider images can be high-resolution photos
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 

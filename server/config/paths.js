@@ -12,6 +12,7 @@
 //   UPLOAD_ROOT/news/<articleId>/   ← news article media
 //   UPLOAD_ROOT/party/              ← party photos
 //   UPLOAD_ROOT/projects/<id>/      ← project media
+//   UPLOAD_ROOT/content/            ← admin-uploaded images for site_content rows
 
 const path = require('path');
 
@@ -26,4 +27,5 @@ module.exports = {
   partyUploadDir() { return path.join(UPLOAD_ROOT, 'party'); },
   userAvatarDir() { return path.join(UPLOAD_ROOT, 'avatars'); },
   productUploadDir(productId) { return path.join(UPLOAD_ROOT, 'products', String(productId)); },
+  contentUploadDir() { return path.join(UPLOAD_ROOT, 'content'); },
 };
