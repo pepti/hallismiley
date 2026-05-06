@@ -211,19 +211,6 @@ const DEFAULT_CONTENT = {
 
 };
 
-// ── Wave SVG helper ────────────────────────────────────────────────────────
-function wave(fromBg, toFill, flip = false) {
-  const path = flip
-    ? 'M0,40 C480,0 960,80 1440,40 L1440,80 L0,80 Z'
-    : 'M0,40 C480,80 960,0 1440,40 L1440,80 L0,80 Z';
-  return `<div class="hb-wave" style="background:${fromBg}">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 80"
-         preserveAspectRatio="none" aria-hidden="true" height="80">
-      <path d="${path}" fill="${toFill}"/>
-    </svg>
-  </div>`;
-}
-
 // ── HalliView class ────────────────────────────────────────────────────────
 export class HalliView {
   constructor() {
@@ -626,15 +613,10 @@ export class HalliView {
   _renderContent() {
     return `
       ${this._hero()}
-      ${wave('#000', '#040c1a')}
       ${this._beginning()}
-      ${wave('#040c1a', '#060e1c', true)}
       ${this._craft()}
-      ${wave('#060e1c', '#040c1a')}
       ${this._code()}
-      ${wave('#040c1a', '#060e1c', true)}
       ${this._blend()}
-      ${wave('#060e1c', '#0A1428')}
       ${this._life()}
     `;
   }
