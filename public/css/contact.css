@@ -59,7 +59,7 @@
 /* ── Contact card section ──────────────────────────────────── */
 .contact-card-section {
   padding: 60px 24px;
-  background: var(--bg-base);
+  background: var(--bg-nav);
 }
 
 .contact-card-section__inner {
@@ -192,7 +192,7 @@
 .availability {
   position: relative;
   padding: 100px 24px;
-  background: var(--bg-base);
+  background: var(--bg-nav);
 }
 
 .availability__inner {

@@ -1,10 +1,6 @@
 /* ── Halli Bio Page — cinematic biographical layout ─────────────────────── */
 
 .halli-bio {
-  --hb-1:     #040c1a;
-  --hb-2:     #060e1c;
-  --hb-3:     #0A1428;
-  --hb-amber: #080700;
   --hb-pad:   clamp(80px, 12vw, 140px);
   --hb-max:   1200px;
 }
@@ -36,9 +32,9 @@
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(var(--bg-nav-rgb), 0.2) 0%,
-    rgba(var(--bg-nav-rgb), 0.05) 50%,
-    rgba(var(--bg-nav-rgb), 0.9) 100%
+    rgba(var(--bg-base-rgb), 0.2) 0%,
+    rgba(var(--bg-base-rgb), 0.05) 50%,
+    rgba(var(--bg-base-rgb), 1) 100%
   );
 }
 
@@ -144,10 +140,13 @@
   padding: var(--hb-pad) 0;
   position: relative;
 }
-.hb-section--1     { background-image: var(--bg-tint); background-color: var(--bg-nav); }
-.hb-section--2     { background-image: var(--bg-tint); background-color: var(--bg-base); }
-.hb-section--3     { background-image: var(--bg-tint); background-color: var(--bg-surface); }
-.hb-section--amber { background: #080700; }
+/* Sections are transparent so the body's fixed --bg-tint gradient shows
+   through the entire page as one continuous ambient surface — no per-
+   section color steps, no stacked tints that would read as banding. */
+.hb-section--1,
+.hb-section--2,
+.hb-section--3,
+.hb-section--amber { background: transparent; }
 
 .hb-section::before {
   content: '';

@@ -430,7 +430,7 @@
    ───────────────────────────────────────────── */
 .lol-stats {
   background-image: var(--bg-tint);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-nav);
   padding: 64px 0;
   border-top: 1px solid rgba(200,170,110,0.15);
   border-bottom: 1px solid rgba(200,170,110,0.15);
