@@ -160,6 +160,8 @@
   "errors.party.logisticsAssignedTooLong": "Á ábyrgð má ekki vera lengra en {n} stafir",
   "errors.party.logisticsItemNotFound": "Hlutur fannst ekki",
   "errors.party.logisticsNoFields": "Engin gild svið til að uppfæra",
+  "errors.party.reorderIdsRequired": "ids verður að vera ekki-tómur listi",
+  "errors.party.reorderIdsIntegers": "Öll ids verða að vera heilar tölur",
 
   "errors.shop.productNotFound": "Vara fannst ekki",
   "errors.shop.checkoutUnavailable": "Ekki hægt að klára kaup í augnablikinu",

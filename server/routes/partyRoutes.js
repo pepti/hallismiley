@@ -141,6 +141,16 @@ router.post('/logistics',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.addLogisticsItem);
 
+// Specific logistics actions MUST be declared before the /:id routes,
+// otherwise Express matches them as PATCH/DELETE on an item with id="reorder".
+router.post('/logistics/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.reorderLogistics);
+
+router.post('/logistics/all-at-venue',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.markAllAtVenue);
+
 router.patch('/logistics/:id',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.updateLogisticsItem);

@@ -160,6 +160,8 @@
   "errors.party.logisticsAssignedTooLong": "Assigned to must not exceed {n} characters",
   "errors.party.logisticsItemNotFound": "Logistics item not found",
   "errors.party.logisticsNoFields": "No valid fields to update",
+  "errors.party.reorderIdsRequired": "ids must be a non-empty array",
+  "errors.party.reorderIdsIntegers": "All ids must be integers",
 
   "errors.shop.productNotFound": "Product not found",
   "errors.shop.checkoutUnavailable": "Checkout is not available yet",

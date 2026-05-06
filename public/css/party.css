@@ -1468,3 +1468,72 @@
 .party-admin__logistics-row--at-venue td {
   background: rgba(76, 175, 80, 0.08);
 }
+
+/* Inline-editable text cells: blend into the row by default; only on focus
+ * do they look like inputs (subtle gold underline). */
+.party-admin__logistics-cell-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 0;
+  outline: none;
+  border-radius: 0;
+}
+.party-admin__logistics-cell-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.party-admin__logistics-cell-input:hover {
+  border-bottom-color: rgba(200, 170, 110, 0.25);
+}
+.party-admin__logistics-cell-input:focus {
+  border-bottom-color: var(--gold);
+  background: rgba(200, 170, 110, 0.05);
+}
+.party-admin__logistics-cell-input:invalid {
+  border-bottom-color: #e57373;
+}
+
+/* Toolbar above the logistics table — hide-bought toggle + bulk button. */
+.party-admin__logistics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.party-admin__logistics-hide-bought {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.party-admin__logistics-hide-bought input {
+  accent-color: #d4b877;
+}
+
+/* Drag-to-reorder handle column. */
+.party-admin__logistics-handle {
+  width: 1.5rem;
+  text-align: center;
+  cursor: grab;
+  color: var(--text-muted);
+  user-select: none;
+  font-size: 1rem;
+  line-height: 1;
+}
+.party-admin__logistics-handle:hover { color: var(--gold); }
+.party-admin__logistics-handle:active { cursor: grabbing; }
+.party-admin__logistics-row--dragging td { opacity: 0.4; }
+.party-admin__logistics-row--drop-above td {
+  border-top: 2px solid var(--gold);
+}
+.party-admin__logistics-row--drop-below td {
+  border-bottom: 2px solid var(--gold);
+}
