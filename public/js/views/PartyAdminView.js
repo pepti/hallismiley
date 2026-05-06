@@ -3,6 +3,7 @@ import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
+import { PartyAdminStatModal } from '../components/PartyAdminStatModal.js';
 
 export class PartyAdminView {
   constructor() {
@@ -319,48 +320,50 @@ export class PartyAdminView {
         const a = r.answers?.[attendField.id];
         if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
       });
-      const pickCount = (regex) => {
+      // pickMatch returns the first option matching `regex` along with its count,
+      // so the rendered card carries the actual option string for click-to-filter.
+      const pickMatch = (regex) => {
         for (const [opt, count] of Object.entries(tally)) {
-          if (regex.test(opt)) return count;
+          if (regex.test(opt)) return { opt, count };
         }
-        return 0;
+        return { opt: null, count: 0 };
       };
-      const day      = pickCount(/day/i);
-      const evening  = pickCount(/evening/i);
-      const both     = pickCount(/both|all day/i);
-      const declined = pickCount(/can'?t|sorry|no/i);
-      breakdownCards = `
-        <div class="party-admin__stat">
-          <span class="party-admin__stat-num">${day}</span>
-          <span class="party-admin__stat-label">☀️ ${t('party.admin.dayOnly')}</span>
-        </div>
-        <div class="party-admin__stat">
-          <span class="party-admin__stat-num">${evening}</span>
-          <span class="party-admin__stat-label">🌙 ${t('party.admin.eveningOnly')}</span>
-        </div>
-        <div class="party-admin__stat">
-          <span class="party-admin__stat-num">${both}</span>
-          <span class="party-admin__stat-label">🎉 ${t('party.admin.both')}</span>
-        </div>
-        <div class="party-admin__stat party-admin__stat--muted">
-          <span class="party-admin__stat-num">${declined}</span>
-          <span class="party-admin__stat-label">${t('party.admin.statusDeclined')}</span>
-        </div>`;
+      const breakdownCard = (match, labelHtml, modifierClass = '') => {
+        const dataAttrs = match.opt
+          ? `data-stat-key="field:${escHtml(attendField.id)}:${escHtml(match.opt)}" data-stat-field="${escHtml(attendField.id)}" data-stat-value="${escHtml(match.opt)}" data-stat-multi="false"`
+          : `data-stat-key="empty"`;
+        const cls = 'party-admin__stat' + (modifierClass ? ' ' + modifierClass : '');
+        return `
+        <button type="button" class="${cls}" ${dataAttrs}>
+          <span class="party-admin__stat-num">${match.count}</span>
+          <span class="party-admin__stat-label">${labelHtml}</span>
+        </button>`;
+      };
+      const day      = pickMatch(/day/i);
+      const evening  = pickMatch(/evening/i);
+      const both     = pickMatch(/both|all day/i);
+      const declined = pickMatch(/can'?t|sorry|no/i);
+      breakdownCards = [
+        breakdownCard(day,      `☀️ ${t('party.admin.dayOnly')}`),
+        breakdownCard(evening,  `🌙 ${t('party.admin.eveningOnly')}`),
+        breakdownCard(both,     `🎉 ${t('party.admin.both')}`),
+        breakdownCard(declined, t('party.admin.statusDeclined'), 'party-admin__stat--muted'),
+      ].join('');
     }
 
     return `
       <section class="party-admin__section">
         <h2 class="party-admin__section-title">${t('party.admin.stats')}</h2>
         <div class="party-admin__stats">
-          <div class="party-admin__stat">
+          <button type="button" class="party-admin__stat" data-stat-key="all">
             <span class="party-admin__stat-num">${rsvps.length}</span>
             <span class="party-admin__stat-label">${t('party.admin.rsvpsSubmitted')}</span>
-          </div>
+          </button>
           ${breakdownCards}
-          <div class="party-admin__stat party-admin__stat--gold">
+          <button type="button" class="party-admin__stat party-admin__stat--gold" data-stat-key="headcount">
             <span class="party-admin__stat-num">${headcount}</span>
             <span class="party-admin__stat-label">${t('party.admin.totalHeadcount')}</span>
-          </div>
+          </button>
         </div>
       </section>`;
   }
@@ -429,11 +432,17 @@ export class PartyAdminView {
           tally[ans] = (tally[ans] || 0) + 1;
         }
       });
+      const multi = g.type === 'checkbox-group';
       const items = Object.entries(tally).map(([name, count]) => `
-        <div class="party-admin__stat">
+        <button type="button" class="party-admin__stat"
+                data-stat-key="field:${escHtml(g.id)}:${escHtml(name)}"
+                data-stat-field="${escHtml(g.id)}"
+                data-stat-value="${escHtml(name)}"
+                data-stat-multi="${multi}"
+                aria-label="${escHtml(name)}: ${count}. ${t('party.admin.statClickHint')}">
           <span class="party-admin__stat-num">${count}</span>
           <span class="party-admin__stat-label">${escHtml(name)}</span>
-        </div>`).join('');
+        </button>`).join('');
       return `
         <section class="party-admin__section">
           <h2 class="party-admin__section-title">${escHtml(g.label || 'Tally')}</h2>
@@ -513,6 +522,46 @@ export class PartyAdminView {
     this._bindInviteCodeForm();
     this._bindInvitedGuests();
     this._bindLogistics();
+    this._bindStatCards();
+  }
+
+  _bindStatCards() {
+    if (!this._statModal) this._statModal = new PartyAdminStatModal();
+    if (this._statClickHandler) {
+      // Re-render replaces the inner HTML but keeps `this._el`, so the listener
+      // attached to it survives — bail out to avoid double-firing.
+      return;
+    }
+    this._statClickHandler = (e) => {
+      const card = e.target.closest('.party-admin__stat');
+      if (!card || !this._el.contains(card)) return;
+      const key = card.dataset.statKey;
+      if (!key || key === 'empty') return;
+
+      let rsvps;
+      let title;
+      if (key === 'all') {
+        rsvps = this._rsvps;
+        title = t('party.admin.rsvpsSubmitted');
+      } else if (key === 'headcount') {
+        rsvps = this._rsvps.filter(r => r.attending);
+        title = t('party.admin.totalHeadcount');
+      } else if (key.startsWith('field:')) {
+        const fieldId = card.dataset.statField;
+        const value   = card.dataset.statValue;
+        const multi   = card.dataset.statMulti === 'true';
+        rsvps = this._rsvps.filter(r => {
+          const a = r.answers?.[fieldId];
+          return multi ? Array.isArray(a) && a.includes(value) : a === value;
+        });
+        title = value;
+      } else {
+        return;
+      }
+
+      this._statModal.open({ title, rsvps });
+    };
+    this._el.addEventListener('click', this._statClickHandler);
   }
 
   _bindLogistics() {

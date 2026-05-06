@@ -723,6 +723,45 @@
   color: var(--text-muted);
 }
 
+button.party-admin__stat {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+button.party-admin__stat:hover,
+button.party-admin__stat:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(200, 170, 110, 0.5);
+  background: rgba(200, 170, 110, 0.05);
+}
+button.party-admin__stat:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.party-admin__stat-modal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.party-admin__stat-modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+.party-admin__stat-modal-name { color: var(--text-primary); font-weight: 600; }
+.party-admin__stat-modal-email { color: var(--text-muted); font-size: 0.85rem; word-break: break-all; }
+
 .party-admin__helpers {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -764,19 +803,6 @@
   font-size: 0.875rem;
   color: var(--text-secondary);
   line-height: 1.4;
-}
-
-.party-admin__invite-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  max-width: 480px;
-  margin-bottom: var(--sp-5);
-}
-
-.party-admin__invite-textarea {
-  min-height: 100px;
-  resize: vertical;
 }
 
 .party-admin__table-wrap {
@@ -1297,7 +1323,7 @@
 .party-admin__invite-help {
   color: var(--text-secondary);
   font-size: 0.9rem;
-  margin-bottom: var(--sp-3);
+  margin-bottom: var(--sp-2);
 }
 
 .party-admin__invite-form {
@@ -1305,6 +1331,8 @@
   gap: var(--sp-2);
   align-items: center;
   flex-wrap: wrap;
+  max-width: 560px;
+  margin-bottom: var(--sp-3);
 }
 
 .party-admin__invite-form .lol-input {
