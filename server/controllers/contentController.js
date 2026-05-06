@@ -20,7 +20,7 @@ const SITE_CONTENT_TRANSLATE_SKIP = new Set([]);
 
 // ── Image upload: store under public/assets/content/ ─────────────────────────
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'content');
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_IMAGE_SIZE = 15 * 1024 * 1024; // 15 MB — admin-uploaded hero/divider images can be high-resolution photos
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 
 const storage = multer.diskStorage({

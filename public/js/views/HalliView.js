@@ -348,7 +348,9 @@ export class HalliView {
     <div class="hb-image-break hb-image-break--craft hb-reveal" role="img"
          aria-label="Workshop — carpentry in progress"
          data-image-field="craft_image_url"
-         style="background-image:url('${escHtml(this._content?.craft_image_url || '')}')"></div>`;
+         style="background-image:url('${escHtml(this._content?.craft_image_url || '')}'); --hb-image-scale:${this._imageScale('craft_image_size')}">
+      ${this._resizeControls('craft_image_size')}
+    </div>`;
   }
 
   // ── SECTION: Code (Tech CV) ───────────────────────────────────────────────
@@ -469,7 +471,9 @@ export class HalliView {
     <div class="hb-image-break hb-image-break--life hb-reveal" role="img"
          aria-label="Iceland landscape"
          data-image-field="life_image_url"
-         style="background-image:url('${escHtml(this._content?.life_image_url || '')}')"></div>`;
+         style="background-image:url('${escHtml(this._content?.life_image_url || '')}'); --hb-image-scale:${this._imageScale('life_image_size')}">
+      ${this._resizeControls('life_image_size')}
+    </div>`;
   }
 
   // ── Beginning section right-column image ──────────────────────────────────
@@ -477,15 +481,43 @@ export class HalliView {
   // Iceland SVG fallback. Wrapper carries `data-image-field` so the edit
   // handler can find the slot whether or not an image has been uploaded.
   _beginningImage() {
-    const url = this._content?.beginning_image_url;
-    if (url) {
-      return `<img src="${escHtml(url)}" alt="" data-image-field="beginning_image_url"
-                   style="max-width:280px;width:100%;height:auto;border-radius:3px"/>`;
-    }
-    return `<div data-image-field="beginning_image_url"
-                 style="display:flex;align-items:center;justify-content:center">
-              ${this._icelandSvg()}
+    const url   = this._content?.beginning_image_url;
+    const scale = this._imageScale('beginning_image_size');
+    const inner = url
+      ? `<img src="${escHtml(url)}" alt="" data-image-field="beginning_image_url"
+              style="max-width:calc(280px * var(--hb-image-scale, 1));width:100%;height:auto;border-radius:3px"/>`
+      : `<div data-image-field="beginning_image_url"
+              style="display:flex;align-items:center;justify-content:center">
+           ${this._icelandSvg()}
+         </div>`;
+    return `<div class="hb-image-slot-wrapper" style="position:relative;display:inline-block;--hb-image-scale:${scale}">
+              ${inner}
+              ${this._resizeControls('beginning_image_size')}
             </div>`;
+  }
+
+  // Render the +/- size widget for an image slot. Only visible to admins
+  // (and only while .halli-bio--editing is on, gated by CSS); for everyone
+  // else this returns an empty string so the DOM stays clean.
+  _resizeControls(sizeKey) {
+    if (!isAdmin() && !hasRole('moderator')) return '';
+    const pct = Math.round(this._imageScale(sizeKey) * 100);
+    return `
+      <div class="hb-image-resize" data-resize-slot="${sizeKey}">
+        <button type="button" class="hb-image-resize__btn" data-resize-step="-0.1" aria-label="Smaller">−</button>
+        <span class="hb-image-resize__value" data-resize-readout>${pct}%</span>
+        <button type="button" class="hb-image-resize__btn" data-resize-step="0.1" aria-label="Bigger">+</button>
+      </div>`;
+  }
+
+  // ── Image scale helper ─────────────────────────────────────────────────────
+  // Returns a multiplier (0.3–3.0) clamped from the stored size value, default 1.
+  // Used as a CSS variable so .hb-image-break heights and beginning-img widths
+  // can be scaled by admin via the +/− controls in edit mode.
+  _imageScale(key) {
+    const raw = Number(this._content?.[key]);
+    if (!Number.isFinite(raw) || raw <= 0) return 1;
+    return Math.max(0.3, Math.min(3.0, raw));
   }
 
   // ── Decorative Iceland SVG ────────────────────────────────────────────────
@@ -805,6 +837,17 @@ export class HalliView {
       view.dataset.imageEditWired = '1';
       view.addEventListener('click', (ev) => {
         if (!view.classList.contains('halli-bio--editing')) return;
+
+        // Resize buttons are nested inside the image-field slot, so check them
+        // FIRST and bail before the slot-click code path opens the file picker.
+        const resizeBtn = ev.target.closest('[data-resize-step]');
+        if (resizeBtn && view.contains(resizeBtn)) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this._handleResizeStep(view, resizeBtn);
+          return;
+        }
+
         const slot = ev.target.closest('[data-image-field]');
         if (!slot || !view.contains(slot)) return;
         ev.preventDefault();
@@ -816,6 +859,37 @@ export class HalliView {
         }
       });
     }
+  }
+
+  // ── Resize step handler ───────────────────────────────────────────────────
+  // Adjusts the stored size for an image slot by `step`, clamps to [0.3, 3.0],
+  // updates the CSS variable in place (no re-render), and refreshes the
+  // percentage readout. The new value is preserved by _saveEdit because
+  // _collectContent does `{...this._content}` first.
+  _handleResizeStep(view, btn) {
+    const widget  = btn.closest('[data-resize-slot]');
+    const sizeKey = widget?.dataset.resizeSlot;
+    if (!sizeKey) return;
+
+    const step    = Number(btn.dataset.resizeStep);
+    const current = this._imageScale(sizeKey);
+    const next    = Math.max(0.3, Math.min(3.0, +(current + step).toFixed(2)));
+    if (next === current) return;
+
+    if (!this._content) this._content = {};
+    this._content[sizeKey] = next;
+
+    // The size variable can live on either the slot itself (divider strips,
+    // beginning <img>) or on the wrapper around the beginning slot. Walk up
+    // the tree from the widget and update every relevant ancestor.
+    const slotContainers = [
+      widget.parentElement,                                // .hb-image-break OR .hb-image-slot-wrapper
+      widget.parentElement?.querySelector('[data-image-field]'),  // beginning <img> sibling
+    ].filter(Boolean);
+    slotContainers.forEach(el => { el.style.setProperty('--hb-image-scale', next); });
+
+    const readout = widget.querySelector('[data-resize-readout]');
+    if (readout) readout.textContent = `${Math.round(next * 100)}%`;
   }
 
   async _uploadImageField(view, controls, file, field) {

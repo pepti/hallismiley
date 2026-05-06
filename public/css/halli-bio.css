@@ -203,9 +203,11 @@
 }
 
 /* ── Image break ─────────────────────────────────────────────────────────── */
+/* Height is multiplied by --hb-image-scale (default 1) so admins can resize
+   the divider strip via the inline +/− controls in edit mode. */
 .hb-image-break {
   width: 100%;
-  height: clamp(180px, 28vw, 420px);
+  height: calc(clamp(180px, 28vw, 420px) * var(--hb-image-scale, 1));
   display: block;
   background-size: cover;
   background-position: center;
@@ -566,6 +568,62 @@
 }
 .halli-bio--editing [data-image-field]:hover::after {
   opacity: 1;
+}
+
+/* Resize widget — only visible while .halli-bio--editing is on. Sits in the
+   top-right corner of each image slot (or wrapper, for the beginning <img>). */
+.hb-image-resize {
+  display: none;
+}
+.halli-bio--editing .hb-image-resize {
+  display: inline-flex;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.4rem;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(200, 170, 110, 0.4);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  z-index: 2;
+}
+.hb-image-resize__btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.45);
+  border-radius: 2px;
+  color: var(--gold);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  width: 1.6rem;
+  height: 1.6rem;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.hb-image-resize__btn:hover,
+.hb-image-resize__btn:focus-visible {
+  background: rgba(200, 170, 110, 0.12);
+  border-color: var(--gold);
+  outline: none;
+}
+.hb-image-resize__value {
+  min-width: 3rem;
+  text-align: center;
+}
+
+/* The hb-image-slot-wrapper around the beginning <img> needs to be a
+   positioning context for the resize widget. The inline `position:relative`
+   on the wrapper handles that; this rule just guarantees the wrapper doesn't
+   stretch to fill the column. */
+.hb-image-slot-wrapper {
+  max-width: 100%;
 }
 
 /* ── Skill groups (CV categorised lists) ──────────────────────────────────── */
