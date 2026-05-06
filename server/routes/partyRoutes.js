@@ -116,6 +116,23 @@ router.get('/invited-guests',
   requireAuth, requireRole('admin', 'moderator'),
   partyController.listInvitedGuests);
 
+// ── Logistics (admin/moderator) ───────────────────────────────────────────────
+router.get('/logistics',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listLogistics);
+
+router.post('/logistics',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addLogisticsItem);
+
+router.patch('/logistics/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updateLogisticsItem);
+
+router.delete('/logistics/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deleteLogisticsItem);
+
 // ── Guestbook ─────────────────────────────────────────────────────────────────
 router.post('/guestbook',
   requireAuth, requirePartyAccess, csrfProtect,

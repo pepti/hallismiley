@@ -31,23 +31,26 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, inviteRes, healthRes, guestsRes] = await Promise.all([
+    const [rsvpsRes, infoRes, inviteRes, healthRes, guestsRes, logisticsRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',          { credentials: 'include' }),
       fetch('/api/v1/party/info',           { credentials: 'include' }),
       fetch('/api/v1/party/invite-code',    { credentials: 'include' }),
       fetch('/api/v1/admin/email-health',   { credentials: 'include' }),
       fetch('/api/v1/party/invited-guests', { credentials: 'include' }),
+      fetch('/api/v1/party/logistics',      { credentials: 'include' }),
     ]);
-    const rsvps   = await rsvpsRes.json();
-    const info    = await infoRes.json();
-    const invite  = inviteRes.ok ? await inviteRes.json() : { code: '' };
-    const health  = healthRes.ok ? await healthRes.json() : null;
-    const guests  = guestsRes.ok ? await guestsRes.json() : [];
+    const rsvps     = await rsvpsRes.json();
+    const info      = await infoRes.json();
+    const invite    = inviteRes.ok ? await inviteRes.json() : { code: '' };
+    const health    = healthRes.ok ? await healthRes.json() : null;
+    const guests    = guestsRes.ok ? await guestsRes.json() : [];
+    const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
 
     this._rsvps         = Array.isArray(rsvps) ? rsvps : [];
     this._inviteCode    = invite.code || '';
     this._emailHealth   = health;
     this._invitedGuests = Array.isArray(guests) ? guests : [];
+    this._logistics     = Array.isArray(logistics) ? logistics : [];
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
@@ -65,6 +68,7 @@ export class PartyAdminView {
         </div>
 
         ${this._renderInvitedGuests()}
+        ${this._renderLogistics()}
         ${this._renderInviteCodeSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
@@ -163,6 +167,98 @@ export class PartyAdminView {
       <tr class="party-admin__invited-details" data-guest-details="${escHtml(g.id)}" hidden>
         <td colspan="${colSpan}">
           <div class="party-admin__invited-detail-box">${detailsHtml}</div>
+        </td>
+      </tr>`;
+  }
+
+  _renderLogistics() {
+    const items = this._logistics || [];
+    const total    = items.length;
+    const bought   = items.filter(i => i.bought).length;
+    const atVenue  = items.filter(i => i.at_venue).length;
+
+    const rows = items.length
+      ? items.map(i => this._renderLogisticsRow(i)).join('')
+      : `<tr><td colspan="6" class="party-empty">${t('party.admin.logisticsNoItems')}</td></tr>`;
+
+    return `
+      <section class="party-admin__section" id="party-admin-logistics">
+        <h2 class="party-admin__section-title">🛒 ${t('party.admin.logistics')}</h2>
+        <p class="party-admin__logistics-help">${t('party.admin.logisticsHelp')}</p>
+        <p class="party-admin__invited-summary">
+          <span class="party-admin__pill">${t('party.admin.logisticsTotal', { n: total })}</span>
+          <span class="party-admin__pill party-admin__pill--waiting">${t('party.admin.logisticsBoughtCount', { n: bought })}</span>
+          <span class="party-admin__pill party-admin__pill--going">${t('party.admin.logisticsAtVenueCount', { n: atVenue })}</span>
+        </p>
+        <form class="party-admin__logistics-add" id="party-admin-logistics-form">
+          <input type="text" id="party-admin-logistics-name" class="lol-input"
+                 placeholder="${escHtml(t('party.admin.logisticsNamePh'))}"
+                 maxlength="200" required
+                 aria-label="${t('party.admin.logisticsItem')}" />
+          <input type="text" id="party-admin-logistics-qty"
+                 class="lol-input party-admin__logistics-qty"
+                 placeholder="${escHtml(t('party.admin.logisticsQtyPh'))}"
+                 maxlength="100"
+                 aria-label="${t('party.admin.logisticsQty')}" />
+          <input type="text" id="party-admin-logistics-assigned"
+                 class="lol-input party-admin__logistics-assigned"
+                 placeholder="${escHtml(t('party.admin.logisticsAssignedPh'))}"
+                 maxlength="100"
+                 aria-label="${t('party.admin.logisticsAssignedTo')}" />
+          <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.logisticsAdd')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-logistics-status" aria-live="polite"></span>
+        </form>
+        <div class="party-admin__table-wrap">
+          <table class="party-admin__table" aria-label="${t('party.admin.logistics')}">
+            <thead>
+              <tr>
+                <th>${t('party.admin.logisticsItem')}</th>
+                <th>${t('party.admin.logisticsQty')}</th>
+                <th>${t('party.admin.logisticsAssignedTo')}</th>
+                <th>${t('party.admin.logisticsBought')}</th>
+                <th>${t('party.admin.logisticsAtVenue')}</th>
+                <th aria-label="Actions"></th>
+              </tr>
+            </thead>
+            <tbody id="party-admin-logistics-rows">
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </section>`;
+  }
+
+  _renderLogisticsRow(item) {
+    const id   = String(item.id);
+    const name = escHtml(item.name || '');
+    const qty  = escHtml(item.quantity || '');
+    const to   = escHtml(item.assigned_to || '');
+    const rowClasses = [
+      item.bought   ? 'party-admin__logistics-row--bought'   : '',
+      item.at_venue ? 'party-admin__logistics-row--at-venue' : '',
+    ].filter(Boolean).join(' ');
+
+    return `
+      <tr data-logistics-row="${escHtml(id)}" class="${rowClasses}">
+        <td>${name}</td>
+        <td>${qty || '—'}</td>
+        <td>${to || '—'}</td>
+        <td class="party-admin__logistics-checkcell">
+          <input type="checkbox" data-logistics-id="${escHtml(id)}" data-field="bought"
+                 ${item.bought ? 'checked' : ''}
+                 aria-label="${t('party.admin.logisticsBought')}" />
+        </td>
+        <td class="party-admin__logistics-checkcell">
+          <input type="checkbox" data-logistics-id="${escHtml(id)}" data-field="at_venue"
+                 ${item.at_venue ? 'checked' : ''}
+                 aria-label="${t('party.admin.logisticsAtVenue')}" />
+        </td>
+        <td class="party-admin__logistics-actions">
+          <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                  data-logistics-delete="${escHtml(id)}"
+                  data-logistics-name="${name}">
+            ${t('party.admin.logisticsDelete')}
+          </button>
         </td>
       </tr>`;
   }
@@ -416,6 +512,122 @@ export class PartyAdminView {
   _bind() {
     this._bindInviteCodeForm();
     this._bindInvitedGuests();
+    this._bindLogistics();
+  }
+
+  _bindLogistics() {
+    const section = this._el.querySelector('#party-admin-logistics');
+    if (!section) return;
+
+    const form    = section.querySelector('#party-admin-logistics-form');
+    const status  = section.querySelector('#party-admin-logistics-status');
+    const nameEl  = section.querySelector('#party-admin-logistics-name');
+    const qtyEl   = section.querySelector('#party-admin-logistics-qty');
+    const toEl    = section.querySelector('#party-admin-logistics-assigned');
+
+    // Add item
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = (nameEl?.value || '').trim();
+      if (!name) return;
+      status.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/logistics', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({
+            name,
+            quantity:    (qtyEl?.value || '').trim() || null,
+            assigned_to: (toEl?.value  || '').trim() || null,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.logisticsAddFailed'));
+        }
+        const item = await res.json();
+        this._logistics = [...(this._logistics || []), item];
+        if (nameEl) nameEl.value = '';
+        if (qtyEl)  qtyEl.value  = '';
+        if (toEl)   toEl.value   = '';
+        status.textContent = '';
+        this._rerenderLogistics();
+        nameEl?.focus();
+      } catch (err) {
+        status.textContent = err.message || t('party.admin.logisticsAddFailed');
+      }
+    });
+
+    // Toggle bought / at_venue — optimistic, revert on failure
+    section.querySelectorAll('input[type="checkbox"][data-logistics-id]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const id    = cb.dataset.logisticsId;
+        const field = cb.dataset.field;
+        const next  = cb.checked;
+
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({ [field]: next }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
+          }
+          const updated = await res.json();
+          this._logistics = (this._logistics || []).map(i => i.id === updated.id ? updated : i);
+          this._rerenderLogistics();
+        } catch (err) {
+          cb.checked = !next;
+          showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+        }
+      });
+    });
+
+    // Delete
+    section.querySelectorAll('[data-logistics-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id   = btn.dataset.logisticsDelete;
+        const name = btn.dataset.logisticsName || '';
+        if (!confirm(t('party.admin.logisticsConfirmDelete', { name }))) return;
+
+        btn.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+            method:      'DELETE',
+            credentials: 'include',
+            headers,
+          });
+          if (!res.ok && res.status !== 204) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsDeleteFailed'));
+          }
+          this._logistics = (this._logistics || []).filter(i => String(i.id) !== String(id));
+          this._rerenderLogistics();
+        } catch (err) {
+          showToast(err.message || t('party.admin.logisticsDeleteFailed'), 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  // Re-render only the logistics section in place — keeps state in other
+  // sections (expanded guest details, invite-code input value) intact.
+  _rerenderLogistics() {
+    const old = this._el.querySelector('#party-admin-logistics');
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderLogistics();
+    const next = tmp.firstElementChild;
+    old.replaceWith(next);
+    this._bindLogistics();
   }
 
   _bindInvitedGuests() {

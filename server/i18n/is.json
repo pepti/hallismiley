@@ -153,6 +153,12 @@
   "errors.party.bodyPlainObject": "Innihald verður að vera venjulegur hlutur",
   "errors.party.invalidField": "Ógilt svið: {name}",
   "errors.party.fieldMustBeString": "{name} verður að vera texti",
+  "errors.party.logisticsNameRequired": "Heiti hlutar er nauðsynlegt",
+  "errors.party.logisticsNameTooLong": "Heiti má ekki vera lengra en {n} stafir",
+  "errors.party.logisticsQtyTooLong": "Magn má ekki vera lengra en {n} stafir",
+  "errors.party.logisticsAssignedTooLong": "Á ábyrgð má ekki vera lengra en {n} stafir",
+  "errors.party.logisticsItemNotFound": "Hlutur fannst ekki",
+  "errors.party.logisticsNoFields": "Engin gild svið til að uppfæra",
 
   "errors.shop.productNotFound": "Vara fannst ekki",
   "errors.shop.checkoutUnavailable": "Ekki hægt að klára kaup í augnablikinu",
