@@ -144,9 +144,9 @@
   padding: var(--hb-pad) 0;
   position: relative;
 }
-.hb-section--1     { background: var(--bg-nav); }
-.hb-section--2     { background: var(--bg-base); }
-.hb-section--3     { background: var(--bg-surface); }
+.hb-section--1     { background-image: var(--bg-tint); background-color: var(--bg-nav); }
+.hb-section--2     { background-image: var(--bg-tint); background-color: var(--bg-base); }
+.hb-section--3     { background-image: var(--bg-tint); background-color: var(--bg-surface); }
 .hb-section--amber { background: #080700; }
 
 .hb-section::before {

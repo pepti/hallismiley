@@ -7,6 +7,13 @@
   --bg-nav:      #141414;
   --bg-nav-rgb:  20, 20, 20;
   --bg-hover:    #383838;
+  /* Subtle two-stop tint used to break up flat dark surfaces — gold glow
+     at top, teal glow at bottom. Layered over a solid base color via
+     `background-image: var(--bg-tint); background-color: var(--bg-base);`
+     (or any base var). Same pattern as the /contact hero overlay. */
+  --bg-tint:
+    radial-gradient(ellipse at top, rgba(200, 170, 110, 0.12), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(11, 196, 227, 0.08), transparent 60%);
 
   --border:       rgba(120, 90, 40, 0.6);
   --border-dim:   rgba(120, 90, 40, 0.3);
