@@ -153,6 +153,7 @@
   "errors.party.bodyPlainObject": "Body must be a plain object",
   "errors.party.invalidField": "Invalid field: {name}",
   "errors.party.fieldMustBeString": "{name} must be a string",
+  "errors.party.fieldMustBeBoolean": "{name} must be true or false",
   "errors.party.logisticsNameRequired": "Item name is required",
   "errors.party.logisticsNameTooLong": "Item name must not exceed {n} characters",
   "errors.party.logisticsQtyTooLong": "Quantity must not exceed {n} characters",
