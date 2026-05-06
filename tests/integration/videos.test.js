@@ -46,9 +46,6 @@ afterEach(() => {
   uploadDirs.clear();
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 async function seedYoutube(id, sortOrder = 0, title = null) {
   const { rows } = await db.query(

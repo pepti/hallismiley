@@ -67,9 +67,6 @@ beforeEach(async () => {
   global.fetch.mockClear();
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── GET /auth/facebook ────────────────────────────────────────────────────────
 

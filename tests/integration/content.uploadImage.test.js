@@ -47,7 +47,6 @@ afterEach(() => {
 
 afterAll(async () => {
   await db.query('DELETE FROM site_content WHERE key = $1', [TEST_KEY]);
-  await db.pool.end();
 });
 
 function trackedFilePathFromUrl(url) {

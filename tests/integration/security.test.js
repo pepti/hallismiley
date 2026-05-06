@@ -5,7 +5,6 @@
  */
 const request = require('supertest');
 const app     = require('../../server/app');
-const db      = require('../../server/config/database');
 const { getTestSessionCookie, cleanTables, validProject } = require('../helpers');
 
 let sessionCookie;
@@ -15,9 +14,6 @@ beforeEach(async () => {
   sessionCookie = await getTestSessionCookie();
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── XSS / HTML injection ──────────────────────────────────────────────────────
 

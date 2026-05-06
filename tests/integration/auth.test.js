@@ -15,9 +15,6 @@ beforeEach(async () => {
   await createTestAdminUser();
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── POST /auth/login ──────────────────────────────────────────────────────────
 

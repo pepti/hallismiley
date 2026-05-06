@@ -1,6 +1,5 @@
 const request = require('supertest');
 const app     = require('../../server/app');
-const db      = require('../../server/config/database');
 const {
   getTestSessionCookie,
   createTestModeratorUser,
@@ -16,9 +15,6 @@ beforeEach(async () => {
   adminCookie = await getTestSessionCookie(); // admin session
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── GET /api/v1/news ─────────────────────────────────────────────────────────
 

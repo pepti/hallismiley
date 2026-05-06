@@ -30,9 +30,6 @@ beforeEach(async () => {
   projectId = res.body.id;
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 async function seedSection(name, sortOrder = 0) {
   const { rows } = await db.query(

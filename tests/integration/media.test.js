@@ -56,9 +56,6 @@ afterEach(() => {
   uploadDirs.clear();
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── Helper: seed a media row directly ────────────────────────────────────────
 

@@ -24,9 +24,6 @@ beforeEach(async () => {
   // Regular user has party_access = FALSE (default)
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── GET /api/v1/party/access ──────────────────────────────────────────────────
 
@@ -444,6 +441,86 @@ describe('DELETE /api/v1/party/photos/:id', () => {
   test('unauthenticated returns 401', async () => {
     const res = await request(app).delete('/api/v1/party/photos/1');
     expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/v1/party/cover-image ────────────────────────────────────────────
+
+describe('POST /api/v1/party/cover-image', () => {
+  const fakePng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64'
+  );
+
+  test('admin can upload a cover image, persists to default locale, returns merged info', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/cover-image')
+      .set('Cookie', adminCookie)
+      .attach('file', fakePng, { filename: 'cover.png', contentType: 'image/png' });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('cover_image');
+    expect(res.body.cover_image).toMatch(/^\/assets\/party\//);
+
+    const { rows } = await db.query(
+      `SELECT locale, value FROM site_content WHERE key = 'party_cover_image'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].locale).toBe('en'); // DEFAULT_LOCALE
+    expect(typeof rows[0].value).toBe('string');
+    expect(rows[0].value).toMatch(/^\/assets\/party\//);
+  });
+
+  test('returns 400 when no file is provided', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/cover-image')
+      .set('Cookie', adminCookie)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 400 for non-image file type', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/cover-image')
+      .set('Cookie', adminCookie)
+      .attach('file', Buffer.from('GIF89a'), { filename: 'a.gif', contentType: 'image/gif' });
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 403 for non-admin user', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/cover-image')
+      .set('Cookie', userCookie)
+      .attach('file', fakePng, { filename: 'cover.png', contentType: 'image/png' });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).post('/api/v1/party/cover-image');
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── PATCH /api/v1/party/info clears cover_image ──────────────────────────────
+
+describe('PATCH /api/v1/party/info { cover_image: "" } clears the cover', () => {
+  test('admin can clear the cover image via PATCH', async () => {
+    // Seed an existing cover image row
+    await db.query(
+      `INSERT INTO site_content (key, locale, value, updated_by) VALUES
+       ('party_cover_image', 'en', '"/assets/party/seeded.jpg"'::jsonb, $1)
+       ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value`,
+      [adminId]
+    );
+
+    const res = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ cover_image: '' });
+    expect(res.status).toBe(200);
+    expect(res.body.cover_image).toBe('');
+
+    const get = await request(app).get('/api/v1/party/info');
+    expect(get.body.cover_image).toBe('');
   });
 });
 

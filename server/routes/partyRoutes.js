@@ -99,6 +99,22 @@ router.patch('/info',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.updateInfo);
 
+// Hero cover image (admin/moderator only — see partyController.uploadCoverImage)
+router.post('/cover-image',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  (req, res, next) => {
+    partyPhotoUpload.single('file')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: `Upload error: ${err.message}`, code: 400 });
+      }
+      if (err) {
+        return res.status(400).json({ error: err.message, code: 400 });
+      }
+      next();
+    });
+  },
+  partyController.uploadCoverImage);
+
 // ── RSVP ─────────────────────────────────────────────────────────────────────
 router.post('/rsvp',
   requireAuth, requirePartyAccess, csrfProtect,

@@ -194,9 +194,29 @@ export class PartyView {
   }
 
   _renderHero() {
+    const coverUrl = this._partyInfo?.cover_image || '';
+    const bg = coverUrl
+      ? `<div class="party-hero__bg party-hero__bg--photo" style="background-image: url('${escHtml(coverUrl)}')" aria-hidden="true">
+           <div class="party-hero__scrim" aria-hidden="true"></div>
+         </div>`
+      : `<div class="party-hero__bg" aria-hidden="true"></div>`;
+
+    const editor = canEdit();
+    const heroAdmin = editor ? `
+      <div class="party-hero__admin" data-hero-admin>
+        <button class="party-edit-btn" type="button" data-hero-change>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          ${coverUrl ? t('party.admin.changeCover') : t('party.admin.uploadCover')}
+        </button>
+        ${coverUrl ? `<button class="party-edit-btn party-edit-btn--danger" type="button" data-hero-remove>${t('party.admin.removeCover')}</button>` : ''}
+        <span class="party-edit-status" data-hero-status aria-live="polite"></span>
+        <input type="file" accept="image/jpeg,image/png,image/webp" data-hero-file hidden>
+      </div>` : '';
+
     return `
       <section class="party-hero" aria-label="Party hero">
-        <div class="party-hero__bg" aria-hidden="true"></div>
+        ${bg}
+        ${heroAdmin}
         <div class="party-hero__content">
           <p class="party-hero__eyebrow">July 25, 2026</p>
           <h1 class="party-hero__title">HALLI'S <span class="party-gold">40<sup>th</sup></span></h1>
@@ -619,6 +639,111 @@ export class PartyView {
     this._el.querySelectorAll('[data-cancel-section]').forEach(btn => {
       btn.addEventListener('click', () => this._cancelEdit(btn.dataset.cancelSection));
     });
+
+    this._bindHeroEditing();
+  }
+
+  _bindHeroEditing() {
+    const admin = this._el.querySelector('[data-hero-admin]');
+    if (!admin) return;
+
+    const fileInput = admin.querySelector('[data-hero-file]');
+    const changeBtn = admin.querySelector('[data-hero-change]');
+    const removeBtn = admin.querySelector('[data-hero-remove]');
+
+    changeBtn?.addEventListener('click', () => fileInput?.click());
+
+    fileInput?.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      this._uploadCoverImage(file);
+      fileInput.value = '';
+    });
+
+    removeBtn?.addEventListener('click', () => this._removeCoverImage());
+  }
+
+  async _uploadCoverImage(file) {
+    const status = this._el.querySelector('[data-hero-status]');
+    const setStatus = (msg) => { if (status) status.textContent = msg; };
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setStatus(t('party.admin.coverInvalidType'));
+      showToast(t('party.admin.coverInvalidType'), 'error');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setStatus(t('party.admin.coverTooLarge'));
+      showToast(t('party.admin.coverTooLarge'), 'error');
+      return;
+    }
+
+    setStatus(t('party.admin.coverUploading'));
+    try {
+      const headers = await getCsrfHeaders();
+      // Browser must set Content-Type with the multipart boundary — strip any
+      // JSON Content-Type that getCsrfHeaders includes by default.
+      delete headers['Content-Type'];
+      delete headers['content-type'];
+
+      const fd = new FormData();
+      fd.append('file', file);
+
+      const res = await fetch('/api/v1/party/cover-image', {
+        method:      'POST',
+        credentials: 'include',
+        headers,
+        body:        fd,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Upload failed');
+      }
+      this._partyInfo = await res.json();
+      this._rerenderHero();
+      setStatus(t('party.admin.coverUploaded'));
+      showToast(t('party.admin.coverUploaded'), 'success');
+      setTimeout(() => setStatus(''), 2500);
+    } catch (err) {
+      setStatus(err.message);
+      showToast(err.message, 'error');
+    }
+  }
+
+  async _removeCoverImage() {
+    const status = this._el.querySelector('[data-hero-status]');
+    const setStatus = (msg) => { if (status) status.textContent = msg; };
+
+    setStatus(t('form.saving'));
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch('/api/v1/party/info', {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body:        JSON.stringify({ cover_image: '' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Save failed');
+      }
+      this._partyInfo = await res.json();
+      this._rerenderHero();
+      setStatus('');
+      showToast(t('form.success'), 'success');
+    } catch (err) {
+      setStatus(err.message);
+      showToast(err.message, 'error');
+    }
+  }
+
+  _rerenderHero() {
+    const heroEl = this._el.querySelector('.party-hero');
+    if (!heroEl) return;
+    heroEl.outerHTML = this._renderHero();
+    if (canEdit()) this._bindHeroEditing();
+    this._startCountdown();
   }
 
   _enterEdit(section) {
