@@ -172,14 +172,22 @@ export class PartyAdminView {
   }
 
   _renderLogistics() {
-    const items = this._logistics || [];
-    const total    = items.length;
-    const bought   = items.filter(i => i.bought).length;
-    const atVenue  = items.filter(i => i.at_venue).length;
+    const all = this._logistics || [];
+    const total    = all.length;
+    const bought   = all.filter(i => i.bought).length;
+    const atVenue  = all.filter(i => i.at_venue).length;
 
-    const rows = items.length
-      ? items.map(i => this._renderLogisticsRow(i)).join('')
-      : `<tr><td colspan="6" class="party-empty">${t('party.admin.logisticsNoItems')}</td></tr>`;
+    // Hide-bought is session-only (lives on `this`, not localStorage). Filters
+    // the table; the summary pills always reflect true totals.
+    const visible = this._hideBought ? all.filter(i => !i.bought) : all;
+
+    const emptyMsg = (this._hideBought && all.length > 0 && visible.length === 0)
+      ? t('party.admin.logisticsAllBoughtEmpty')
+      : t('party.admin.logisticsNoItems');
+
+    const rows = visible.length
+      ? visible.map(i => this._renderLogisticsRow(i)).join('')
+      : `<tr><td colspan="7" class="party-empty">${emptyMsg}</td></tr>`;
 
     return `
       <section class="party-admin__section" id="party-admin-logistics">
@@ -190,6 +198,19 @@ export class PartyAdminView {
           <span class="party-admin__pill party-admin__pill--waiting">${t('party.admin.logisticsBoughtCount', { n: bought })}</span>
           <span class="party-admin__pill party-admin__pill--going">${t('party.admin.logisticsAtVenueCount', { n: atVenue })}</span>
         </p>
+        <div class="party-admin__logistics-toolbar">
+          <label class="party-admin__logistics-hide-bought">
+            <input type="checkbox" id="party-admin-logistics-hide-bought"
+                   ${this._hideBought ? 'checked' : ''}
+                   aria-label="${t('party.admin.logisticsHideBoughtAria')}" />
+            ${t('party.admin.logisticsHideBought')}
+          </label>
+          <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                  id="party-admin-logistics-all-at-venue"
+                  ${total === 0 ? 'disabled' : ''}>
+            ${t('party.admin.logisticsAllAtVenue')}
+          </button>
+        </div>
         <form class="party-admin__logistics-add" id="party-admin-logistics-form">
           <input type="text" id="party-admin-logistics-name" class="lol-input"
                  placeholder="${escHtml(t('party.admin.logisticsNamePh'))}"
@@ -212,6 +233,7 @@ export class PartyAdminView {
           <table class="party-admin__table" aria-label="${t('party.admin.logistics')}">
             <thead>
               <tr>
+                <th aria-label="${t('party.admin.logisticsReorderHandle')}"></th>
                 <th>${t('party.admin.logisticsItem')}</th>
                 <th>${t('party.admin.logisticsQty')}</th>
                 <th>${t('party.admin.logisticsAssignedTo')}</th>
@@ -239,10 +261,28 @@ export class PartyAdminView {
     ].filter(Boolean).join(' ');
 
     return `
-      <tr data-logistics-row="${escHtml(id)}" class="${rowClasses}">
-        <td>${name}</td>
-        <td>${qty || '—'}</td>
-        <td>${to || '—'}</td>
+      <tr data-logistics-row="${escHtml(id)}" class="${rowClasses}" draggable="true">
+        <td class="party-admin__logistics-handle"
+            title="${t('party.admin.logisticsReorderHandle')}"
+            aria-label="${t('party.admin.logisticsReorderHandle')}">⋮⋮</td>
+        <td>
+          <input type="text" class="party-admin__logistics-cell-input"
+                 data-logistics-id="${escHtml(id)}" data-field="name"
+                 value="${name}" maxlength="200" required
+                 aria-label="${t('party.admin.logisticsItem')}" />
+        </td>
+        <td>
+          <input type="text" class="party-admin__logistics-cell-input"
+                 data-logistics-id="${escHtml(id)}" data-field="quantity"
+                 value="${qty}" maxlength="100" placeholder="—"
+                 aria-label="${t('party.admin.logisticsQty')}" />
+        </td>
+        <td>
+          <input type="text" class="party-admin__logistics-cell-input"
+                 data-logistics-id="${escHtml(id)}" data-field="assigned_to"
+                 value="${to}" maxlength="100" placeholder="—"
+                 aria-label="${t('party.admin.logisticsAssignedTo')}" />
+        </td>
         <td class="party-admin__logistics-checkcell">
           <input type="checkbox" data-logistics-id="${escHtml(id)}" data-field="bought"
                  ${item.bought ? 'checked' : ''}
@@ -614,6 +654,222 @@ export class PartyAdminView {
           btn.disabled = false;
         }
       });
+    });
+
+    // Inline cell editing — auto-save on blur (the 'change' event on text
+    // inputs fires on blur). Enter saves and jumps to the next row's name
+    // input (or the add-item name input if there is no next row).
+    section.querySelectorAll('input[type="text"][data-logistics-id]').forEach(input => {
+      input.addEventListener('change', () => this._saveLogisticsCell(input));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this._saveLogisticsCell(input);
+          this._focusNextLogisticsName(input);
+        }
+      });
+    });
+
+    // Hide-bought toggle (session-only state).
+    const hideBoughtCb = section.querySelector('#party-admin-logistics-hide-bought');
+    hideBoughtCb?.addEventListener('change', () => {
+      this._hideBought = hideBoughtCb.checked;
+      this._rerenderLogistics();
+    });
+
+    // Mark-all-at-venue button.
+    const allAtVenueBtn = section.querySelector('#party-admin-logistics-all-at-venue');
+    allAtVenueBtn?.addEventListener('click', async () => {
+      if (!confirm(t('party.admin.logisticsAllAtVenueConfirm'))) return;
+      allAtVenueBtn.disabled = true;
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/logistics/all-at-venue', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+        });
+        if (!res.ok && res.status !== 204) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
+        }
+        this._logistics = (this._logistics || []).map(i => ({ ...i, at_venue: true }));
+        this._rerenderLogistics();
+        showToast(t('party.admin.logisticsAllAtVenueDone'), 'success');
+      } catch (err) {
+        showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+        allAtVenueBtn.disabled = false;
+      }
+    });
+
+    // Drag-to-reorder. Rows are draggable; the handle visually telegraphs
+    // it but a stray dragstart on an input is blocked so users can still
+    // select text normally.
+    this._bindLogisticsDrag(section);
+  }
+
+  // Save a single text-cell edit. No-op if the value is unchanged. On
+  // failure (empty name, network error, etc.) reverts the input value.
+  async _saveLogisticsCell(input) {
+    const value = input.value.trim();
+    const last  = input.dataset.lastSaved !== undefined
+      ? input.dataset.lastSaved
+      : (input.defaultValue ?? '');
+    if (value === last) return;
+
+    const id    = input.dataset.logisticsId;
+    const field = input.dataset.field;
+    input.dataset.lastSaved = value;
+
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ [field]: value === '' ? null : value }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
+      }
+      const updated = await res.json();
+      this._logistics = (this._logistics || []).map(i =>
+        String(i.id) === String(updated.id) ? updated : i
+      );
+      // Keep the delete-button's confirm dialog in sync with the new name.
+      if (field === 'name') {
+        const row = input.closest('tr');
+        const del = row?.querySelector('[data-logistics-delete]');
+        if (del) del.dataset.logisticsName = value;
+      }
+    } catch (err) {
+      input.value = last;
+      input.dataset.lastSaved = last;
+      showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+    }
+  }
+
+  _focusNextLogisticsName(currentInput) {
+    const row = currentInput.closest('tr');
+    let next = row?.nextElementSibling;
+    while (next) {
+      const target = next.querySelector('input[data-field="name"]');
+      if (target) {
+        target.focus();
+        target.select();
+        return;
+      }
+      next = next.nextElementSibling;
+    }
+    // No more rows — jump to the add-item name input.
+    const addInput = this._el.querySelector('#party-admin-logistics-name');
+    addInput?.focus();
+  }
+
+  _bindLogisticsDrag(section) {
+    const tbody = section.querySelector('#party-admin-logistics-rows');
+    if (!tbody) return;
+    let draggedId = null;
+
+    const clearDropMarkers = () => {
+      tbody.querySelectorAll(
+        '.party-admin__logistics-row--drop-above, .party-admin__logistics-row--drop-below'
+      ).forEach(r => r.classList.remove(
+        'party-admin__logistics-row--drop-above',
+        'party-admin__logistics-row--drop-below'
+      ));
+    };
+
+    tbody.addEventListener('dragstart', (e) => {
+      // Block drag from anything other than the handle so users can still
+      // select text inside cell inputs without accidentally starting a drag.
+      const handle = e.target.closest?.('.party-admin__logistics-handle');
+      if (!handle) {
+        e.preventDefault();
+        return;
+      }
+      const row = handle.closest('tr[data-logistics-row]');
+      if (!row) { e.preventDefault(); return; }
+      draggedId = row.dataset.logisticsRow;
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox requires data to be set for drag to begin.
+      try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
+      row.classList.add('party-admin__logistics-row--dragging');
+    });
+
+    tbody.addEventListener('dragend', (e) => {
+      const row = e.target.closest?.('tr[data-logistics-row]');
+      row?.classList.remove('party-admin__logistics-row--dragging');
+      clearDropMarkers();
+      draggedId = null;
+    });
+
+    tbody.addEventListener('dragover', (e) => {
+      if (!draggedId) return;
+      const row = e.target.closest('tr[data-logistics-row]');
+      if (!row || row.dataset.logisticsRow === draggedId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const rect    = row.getBoundingClientRect();
+      const isAbove = (e.clientY - rect.top) < (rect.height / 2);
+      clearDropMarkers();
+      row.classList.add(isAbove
+        ? 'party-admin__logistics-row--drop-above'
+        : 'party-admin__logistics-row--drop-below');
+    });
+
+    tbody.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      if (!draggedId) return;
+      const row = e.target.closest('tr[data-logistics-row]');
+      if (!row || row.dataset.logisticsRow === draggedId) {
+        clearDropMarkers();
+        return;
+      }
+
+      const targetId = row.dataset.logisticsRow;
+      const isAbove  = row.classList.contains('party-admin__logistics-row--drop-above');
+      clearDropMarkers();
+
+      const items   = this._logistics || [];
+      const dragged = items.find(i => String(i.id) === String(draggedId));
+      if (!dragged) return;
+
+      const without    = items.filter(i => String(i.id) !== String(draggedId));
+      const targetIdx  = without.findIndex(i => String(i.id) === String(targetId));
+      if (targetIdx < 0) return;
+      const insertAt   = isAbove ? targetIdx : targetIdx + 1;
+      const reordered  = [
+        ...without.slice(0, insertAt),
+        dragged,
+        ...without.slice(insertAt),
+      ];
+      const ids = reordered.map(i => i.id);
+
+      // Optimistic local reorder.
+      const previous = this._logistics;
+      this._logistics = reordered.map((i, idx) => ({ ...i, sort_order: idx + 1 }));
+      this._rerenderLogistics();
+
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/logistics/reorder', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok && res.status !== 204) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.logisticsReorderFailed'));
+        }
+      } catch (err) {
+        this._logistics = previous;
+        this._rerenderLogistics();
+        showToast(err.message || t('party.admin.logisticsReorderFailed'), 'error');
+      }
     });
   }
 

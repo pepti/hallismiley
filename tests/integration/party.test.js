@@ -739,4 +739,124 @@ describe('Logistics endpoints', () => {
     // sanity — IDs match
     expect([a.body.id, b.body.id, c.body.id]).toEqual(list.body.map(i => i.id));
   });
+
+  // Inline editing relies on PATCH accepting a single field without
+  // disturbing the rest. Guard against future refactors breaking that.
+  test('PATCH with a single field updates only that field', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Original', quantity: '50', assigned_to: 'Mom' });
+    const id = created.body.id;
+    const initialSortOrder = created.body.sort_order;
+
+    const renamed = await request(app)
+      .patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Renamed' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.name).toBe('Renamed');
+    expect(renamed.body.quantity).toBe('50');
+    expect(renamed.body.assigned_to).toBe('Mom');
+    expect(renamed.body.bought).toBe(false);
+    expect(renamed.body.at_venue).toBe(false);
+    expect(renamed.body.sort_order).toBe(initialSortOrder);
+  });
+
+  // ── Reorder ────────────────────────────────────────────────────────────────
+
+  test('POST /logistics/reorder applies new sort order', async () => {
+    const a = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'A' });
+    const b = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'B' });
+    const c = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'C' });
+
+    const reorderRes = await request(app)
+      .post('/api/v1/party/logistics/reorder')
+      .set('Cookie', adminCookie)
+      .send({ ids: [c.body.id, a.body.id, b.body.id] });
+    expect(reorderRes.status).toBe(204);
+
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    expect(list.body.map(i => i.name)).toEqual(['C', 'A', 'B']);
+    expect(list.body.map(i => i.sort_order)).toEqual([1, 2, 3]);
+  });
+
+  test('POST /logistics/reorder rejects empty / non-array / non-integer ids', async () => {
+    const res1 = await request(app).post('/api/v1/party/logistics/reorder')
+      .set('Cookie', adminCookie).send({});
+    expect(res1.status).toBe(400);
+
+    const res2 = await request(app).post('/api/v1/party/logistics/reorder')
+      .set('Cookie', adminCookie).send({ ids: 'foo' });
+    expect(res2.status).toBe(400);
+
+    const res3 = await request(app).post('/api/v1/party/logistics/reorder')
+      .set('Cookie', adminCookie).send({ ids: [] });
+    expect(res3.status).toBe(400);
+
+    const res4 = await request(app).post('/api/v1/party/logistics/reorder')
+      .set('Cookie', adminCookie).send({ ids: ['a', 'b'] });
+    expect(res4.status).toBe(400);
+  });
+
+  test('POST /logistics/reorder requires admin/moderator', async () => {
+    const anon = await request(app).post('/api/v1/party/logistics/reorder')
+      .send({ ids: [1] });
+    expect(anon.status).toBe(401);
+
+    const user = await request(app).post('/api/v1/party/logistics/reorder')
+      .set('Cookie', userCookie).send({ ids: [1] });
+    expect(user.status).toBe(403);
+  });
+
+  // ── Mark all at venue ──────────────────────────────────────────────────────
+
+  test('POST /logistics/all-at-venue flips every item', async () => {
+    const a = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'A' });
+    await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'B' });
+    await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'C' });
+
+    // Pre-flip one of them so we exercise the "skip rows already true" branch.
+    await request(app).patch(`/api/v1/party/logistics/${a.body.id}`)
+      .set('Cookie', adminCookie).send({ at_venue: true });
+
+    const res = await request(app)
+      .post('/api/v1/party/logistics/all-at-venue')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(204);
+
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    expect(list.body.every(i => i.at_venue === true)).toBe(true);
+  });
+
+  test('POST /logistics/all-at-venue is idempotent', async () => {
+    await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'A' });
+
+    const first = await request(app).post('/api/v1/party/logistics/all-at-venue')
+      .set('Cookie', adminCookie);
+    expect(first.status).toBe(204);
+    const second = await request(app).post('/api/v1/party/logistics/all-at-venue')
+      .set('Cookie', adminCookie);
+    expect(second.status).toBe(204);
+  });
+
+  test('POST /logistics/all-at-venue requires admin/moderator', async () => {
+    const anon = await request(app).post('/api/v1/party/logistics/all-at-venue');
+    expect(anon.status).toBe(401);
+
+    const user = await request(app).post('/api/v1/party/logistics/all-at-venue')
+      .set('Cookie', userCookie);
+    expect(user.status).toBe(403);
+  });
 });

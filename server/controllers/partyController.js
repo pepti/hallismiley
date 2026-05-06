@@ -388,6 +388,50 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // Apply a new sort order. Body: { ids: [n, n, n, ...] }. Sequential
+  // sort_order values are written 1..N in array order, inside a single
+  // transaction so a partial failure can't leave the list half-reordered.
+  async reorderLogistics(req, res, next) {
+    try {
+      const { ids } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsRequired'), code: 400 });
+      }
+      if (!ids.every(n => Number.isInteger(n))) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsIntegers'), code: 400 });
+      }
+
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (let i = 0; i < ids.length; i++) {
+          await client.query(
+            `UPDATE party_logistics_items SET sort_order = $1, updated_at = NOW() WHERE id = $2`,
+            [i + 1, ids[i]]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // Day-of-party convenience: flip every item to at_venue=true in one shot.
+  // Idempotent — running twice is a no-op for already-true rows.
+  async markAllAtVenue(_req, res, next) {
+    try {
+      await db.query(
+        `UPDATE party_logistics_items SET at_venue = TRUE, updated_at = NOW() WHERE at_venue = FALSE`
+      );
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
   // ── Guestbook ─────────────────────────────────────────────────────────────────
 
   async postGuestbook(req, res, next) {
