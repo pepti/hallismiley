@@ -1,10 +1,12 @@
 :root {
-  /* LoL-inspired palette */
-  --bg-base:     #0A1428;
-  --bg-surface:  #1E2328;
-  --bg-elevated: #16213E;
-  --bg-nav:      #010A13;
-  --bg-hover:    #2A2D31;
+  /* Charcoal-mid palette */
+  --bg-base:     #202020;
+  --bg-base-rgb: 32, 32, 32;
+  --bg-surface:  #2A2A2A;
+  --bg-elevated: #303030;
+  --bg-nav:      #141414;
+  --bg-nav-rgb:  20, 20, 20;
+  --bg-hover:    #383838;
 
   --border:       rgba(120, 90, 40, 0.6);
   --border-dim:   rgba(120, 90, 40, 0.3);

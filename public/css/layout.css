@@ -5,7 +5,7 @@
 /* ── Skip Navigation (accessibility) ── */
 .skip-nav {
   position: absolute; top: -100%; left: 0;
-  padding: 8px 16px; background: var(--gold); color: #010A13;
+  padding: 8px 16px; background: var(--gold); color: var(--bg-nav);
   font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700;
   text-decoration: none; z-index: 9999;
   transition: top 0ms;
@@ -17,7 +17,7 @@
   position: sticky; top: 0; z-index: 100;
   display: flex; align-items: center; justify-content: space-between;
   height: 56px;
-  background: #010A13;
+  background: var(--bg-nav);
   padding: 0 24px;
   border-bottom: 1px solid rgba(200,170,110,0.08);
 }
@@ -32,7 +32,7 @@
 .lol-nav__logo-icon {
   width: 38px; height: 38px;
   background: linear-gradient(135deg, #C8AA6E 0%, #785A28 100%);
-  color: #010A13;
+  color: var(--bg-nav);
   font-family: var(--font-display);
   font-size: 1.1rem; font-weight: 900;
   display: flex; align-items: center; justify-content: center;
@@ -149,7 +149,7 @@
 .lol-nav__cta {
   padding: 7px 18px;
   min-height: 44px;
-  background: #0BC4E3; color: #010A13;
+  background: #0BC4E3; color: var(--bg-nav);
   font-family: var(--font-sans);
   font-size: 0.7rem; font-weight: 700;
   letter-spacing: 0.12em; text-transform: uppercase;
@@ -238,7 +238,7 @@
 /* ── Modal overlay ── */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 200;
-  background: rgba(1,10,19,0.92); backdrop-filter: blur(6px);
+  background: rgba(var(--bg-nav-rgb), 0.92); backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center;
   padding: var(--sp-4);
   opacity: 0; pointer-events: none;
@@ -328,7 +328,7 @@
     display: none;
     position: absolute; top: 56px; left: 0; right: 0;
     flex-direction: column; gap: 0;
-    background: #010A13;
+    background: var(--bg-nav);
     border-bottom: 1px solid rgba(200,170,110,0.15);
     padding: 8px 0;
     z-index: 99;

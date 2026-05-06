@@ -11,7 +11,7 @@
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   text-align: center; overflow: hidden;
-  background: #010A13;
+  background: var(--bg-nav);
 }
 
 .lol-hero__bg {
@@ -40,9 +40,9 @@
   position: absolute; inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(1,10,19,0.25) 0%,
-    rgba(1,10,19,0.45) 40%,
-    rgba(1,10,19,0.75) 100%
+    rgba(var(--bg-nav-rgb), 0.25) 0%,
+    rgba(var(--bg-nav-rgb), 0.45) 40%,
+    rgba(var(--bg-nav-rgb), 0.75) 100%
   );
 }
 
@@ -262,7 +262,7 @@
 /* Gold button — same as LoL "DISCOVER MORE CHAMPIONS" */
 .lol-btn--gold {
   padding: 13px 30px;
-  background: #C89B3C; color: #010A13;
+  background: #C89B3C; color: var(--bg-nav);
   font-family: 'Barlow', sans-serif;
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
@@ -275,7 +275,7 @@
 /* Teal button — same as LoL "PLAY NOW" */
 .lol-btn--teal {
   padding: 13px 30px;
-  background: #0BC4E3; color: #010A13;
+  background: #0BC4E3; color: var(--bg-nav);
   font-family: 'Barlow', sans-serif;
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
@@ -351,7 +351,7 @@
    ───────────────────────────────────────────────────── */
 .lol-skills {
   position: relative; padding: 100px 0;
-  overflow: hidden; background: #010A13;
+  overflow: hidden; background: var(--bg-nav);
 }
 
 .lol-skills__bg {
@@ -427,7 +427,7 @@
    SECTION 6 (Optional): Stats — dark mid section
    ───────────────────────────────────────────── */
 .lol-stats {
-  background: #1E2328; padding: 64px 0;
+  background: var(--bg-surface); padding: 64px 0;
   border-top: 1px solid rgba(200,170,110,0.15);
   border-bottom: 1px solid rgba(200,170,110,0.15);
 }
@@ -457,7 +457,7 @@
    ───────────────────────────────────────────────── */
 .lol-contact {
   position: relative; padding: 120px 0;
-  overflow: hidden; background: #010A13;
+  overflow: hidden; background: var(--bg-nav);
 }
 
 .lol-contact__bg {
@@ -563,7 +563,7 @@
    FOOTER — enterprise-grade LoL-inspired footer
    ──────────────────────────────────────────────── */
 .lol-footer {
-  background: #010A13;
+  background: var(--bg-nav);
   border-top: 1px solid rgba(200,170,110,0.12);
 }
 
@@ -711,7 +711,7 @@
 .lol-skills__save-btn {
   background: #C89B3C;
   border: 1px solid #C89B3C;
-  color: #010A13;
+  color: var(--bg-nav);
   font-weight: 700;
 }
 .lol-skills__save-btn:hover { background: #dbb04a; }
@@ -841,7 +841,7 @@
 .lol-projects__save-btn {
   background: #C89B3C;
   border: 1px solid #C89B3C;
-  color: #010A13;
+  color: var(--bg-nav);
   font-weight: 700;
 }
 .lol-projects__save-btn:hover { background: #dbb04a; }

@@ -36,9 +36,9 @@
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(4, 12, 26, 0.2) 0%,
-    rgba(4, 12, 26, 0.05) 50%,
-    rgba(4, 12, 26, 0.9) 100%
+    rgba(var(--bg-nav-rgb), 0.2) 0%,
+    rgba(var(--bg-nav-rgb), 0.05) 50%,
+    rgba(var(--bg-nav-rgb), 0.9) 100%
   );
 }
 
@@ -144,9 +144,9 @@
   padding: var(--hb-pad) 0;
   position: relative;
 }
-.hb-section--1     { background: #040c1a; }
-.hb-section--2     { background: #060e1c; }
-.hb-section--3     { background: #0A1428; }
+.hb-section--1     { background: var(--bg-nav); }
+.hb-section--2     { background: var(--bg-base); }
+.hb-section--3     { background: var(--bg-surface); }
 .hb-section--amber { background: #080700; }
 
 .hb-section::before {
@@ -458,7 +458,7 @@
 }
 .hb-cta:hover {
   background: var(--gold);
-  color: #040c1a;
+  color: var(--bg-nav);
   border-color: var(--gold);
 }
 
@@ -472,7 +472,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.9rem;
-  background: rgba(4, 12, 26, 0.92);
+  background: rgba(var(--bg-nav-rgb), 0.92);
   border: 1px solid var(--gold-dark);
   color: var(--gold);
   font-family: var(--font-mono);
@@ -498,7 +498,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.9rem;
-  background: rgba(4, 12, 26, 0.92);
+  background: rgba(var(--bg-nav-rgb), 0.92);
   border: 1px solid var(--gold-dark);
   backdrop-filter: blur(8px);
   flex-wrap: wrap;
@@ -517,7 +517,7 @@
   background: transparent;
 }
 .hb-edit-save   { border-color: var(--gold); color: var(--gold); }
-.hb-edit-save:hover { background: var(--gold); color: #040c1a; }
+.hb-edit-save:hover { background: var(--gold); color: var(--bg-nav); }
 .hb-edit-cancel { border-color: rgba(200,170,110,0.3); color: #A9B4C0; }
 .hb-edit-cancel:hover { border-color: var(--gold); color: #F0E6D3; }
 
