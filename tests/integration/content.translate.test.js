@@ -28,7 +28,6 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await db.query("DELETE FROM site_content WHERE key LIKE 'test_%'");
-  await db.pool.end();
 });
 
 async function readRow(key, locale) {

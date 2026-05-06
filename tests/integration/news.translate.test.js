@@ -12,7 +12,6 @@ jest.mock('../../server/services/translator', () => ({
 
 const request = require('supertest');
 const app     = require('../../server/app');
-const db      = require('../../server/config/database');
 const {
   getTestSessionCookie,
   cleanTables,
@@ -30,9 +29,6 @@ beforeEach(async () => {
   isEnabled.mockReturnValue(true);
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 describe('POST /api/v1/news — auto-translate on create', () => {
   test('fills empty IS fields when translator is enabled', async () => {

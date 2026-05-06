@@ -16,9 +16,6 @@ beforeEach(async () => {
   sessionCookie = await getTestSessionCookie(adminId);
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── GET /api/v1/users/me ──────────────────────────────────────────────────────
 

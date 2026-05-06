@@ -24,9 +24,6 @@ beforeEach(async () => {
   // Regular user has party_access = FALSE (default)
 });
 
-afterAll(async () => {
-  await db.pool.end();
-});
 
 // ── GET /api/v1/party/access ──────────────────────────────────────────────────
 
