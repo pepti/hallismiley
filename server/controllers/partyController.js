@@ -11,6 +11,7 @@ const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 // Default party info stored in site_content under key 'party_info'
 const DEFAULT_PARTY_INFO = {
   date: 'July 25, 2026',
+  cover_image: '',
   venue_name: 'Mýrarkot og SPA',
   venue_address: 'Lambhagavegi 23, 113 Reykjavík',
   venue_link: 'https://www.salir.is/index.php/is/skoda/1169',
@@ -500,6 +501,59 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // ── Hero cover image (admin-only) ─────────────────────────────────────────────
+  // Stored under DEFAULT_LOCALE so a single image is shared across all locales.
+
+  async uploadCoverImage(req, res, next) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: t(req.locale, 'errors.user.noFileUploaded'), code: 400 });
+      }
+
+      if (req.file.size > MAX_PHOTO_SIZE) {
+        _tryUnlink(`/assets/party/${req.file.filename}`);
+        return res.status(400).json({ error: t(req.locale, 'errors.party.photoTooLarge'), code: 400 });
+      }
+
+      const filePath = `/assets/party/${req.file.filename}`;
+
+      // Read previous cover so we can unlink the orphaned file after replacing it.
+      const { rows: prev } = await db.query(
+        `SELECT value FROM site_content WHERE key = 'party_cover_image' AND locale = $1`,
+        [DEFAULT_LOCALE]
+      );
+
+      await db.query(
+        `INSERT INTO site_content (key, locale, value, updated_by) VALUES ($1, $2, $3::jsonb, $4)
+         ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value,
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        ['party_cover_image', DEFAULT_LOCALE, JSON.stringify(filePath), req.user.id]
+      );
+
+      const oldPath = typeof prev[0]?.value === 'string' ? prev[0].value : null;
+      if (oldPath && oldPath !== filePath) _tryUnlink(oldPath);
+
+      // Return the merged party info (mirrors updateInfo's response shape).
+      const locale = req.locale || DEFAULT_LOCALE;
+      const { rows } = await db.query(
+        `SELECT DISTINCT ON (key) key, value FROM site_content
+          WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
+            AND (locale = $1 OR locale = $2)
+          ORDER BY key, (locale = $1) DESC`,
+        [locale, DEFAULT_LOCALE]
+      );
+      const info = { ...DEFAULT_PARTY_INFO };
+      for (const row of rows) {
+        const k = row.key.replace(/^party_/, '');
+        info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
+      }
+      res.json(info);
+    } catch (err) {
+      if (req.file) _tryUnlink(`/assets/party/${req.file.filename}`);
+      next(err);
+    }
+  },
+
   // ── Party info (site_content) ─────────────────────────────────────────────────
 
   async getInfo(req, res, next) {
@@ -579,7 +633,7 @@ const partyController = {
 
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'invite_code'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'invite_code', 'cover_image'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {

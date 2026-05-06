@@ -49,10 +49,56 @@
   z-index: 0;
 }
 
+.party-hero__bg--photo {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Layered scrim keeps the title and countdown legible on any uploaded photo
+   while still letting the image show through clearly. */
+.party-hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.55) 100%),
+    radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.45) 100%);
+}
+
 .party-hero__content {
   position: relative;
   z-index: 1;
   max-width: 700px;
+}
+
+.party-hero__admin {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  z-index: 11;
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Override the absolute-positioning .party-edit-btn applies by default —
+   inside the hero admin cluster the buttons must lay out in flex flow. */
+.party-hero__admin .party-edit-btn {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
+.party-edit-btn--danger {
+  background: rgba(220, 50, 50, .15);
+  border-color: rgba(220, 50, 50, .5);
+  color: #ff8f8f;
+}
+.party-edit-btn--danger:hover {
+  background: rgba(220, 50, 50, .3);
+  border-color: #ff8f8f;
 }
 
 .party-hero__eyebrow {

@@ -519,6 +519,13 @@
   "party.enterCodeFirst": "Sláðu inn kóða fyrst",
   "party.youreIn": "Þú ert inni! 🎉",
   "party.partyNow": "Veislan er NU!",
+  "party.admin.uploadCover": "Hlaða upp forsíðumynd",
+  "party.admin.changeCover": "Breyta forsíðumynd",
+  "party.admin.removeCover": "Fjarlægja forsíðumynd",
+  "party.admin.coverUploading": "Hleð upp…",
+  "party.admin.coverUploaded": "Forsíða uppfærð",
+  "party.admin.coverTooLarge": "Mynd verður að vera undir 10 MB",
+  "party.admin.coverInvalidType": "Notaðu JPEG, PNG eða WebP",
 
   "contact.title": "Hafa samband",
   "contact.send": "Senda",

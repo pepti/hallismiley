@@ -519,6 +519,13 @@
   "party.enterCodeFirst": "Enter a code first",
   "party.youreIn": "You're in! 🎉",
   "party.partyNow": "The party is NOW!",
+  "party.admin.uploadCover": "Upload cover photo",
+  "party.admin.changeCover": "Change cover photo",
+  "party.admin.removeCover": "Remove cover photo",
+  "party.admin.coverUploading": "Uploading…",
+  "party.admin.coverUploaded": "Cover updated",
+  "party.admin.coverTooLarge": "Image must be under 10 MB",
+  "party.admin.coverInvalidType": "Use JPEG, PNG, or WebP",
 
   "contact.title": "Contact",
   "contact.send": "Send",
