@@ -908,3 +908,95 @@
   z-index: 5;
 }
 .lol-projects__img-overlay:hover { background: rgba(0,0,0,.7); }
+
+/* ─────────────────────────────────────────────
+   HERO SECTION — Admin / Moderator edit mode
+   ───────────────────────────────────────────── */
+
+.lol-hero__edit-btn {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem .85rem;
+  background: rgba(200,155,60,.18);
+  border: 1px solid rgba(200,155,60,.55);
+  border-radius: 4px;
+  color: #C89B3C;
+  font-size: .75rem;
+  font-family: inherit;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+  z-index: 20;
+}
+.lol-hero__edit-btn:hover { background: rgba(200,155,60,.32); border-color: #C89B3C; }
+.lol-hero__edit-btn--hidden { display: none; }
+
+.lol-hero__edit-controls {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1.5rem;
+  background: rgba(10,12,18,.92);
+  border-top: 1px solid rgba(200,155,60,.3);
+  z-index: 20;
+}
+.lol-hero__edit-controls--hidden { display: none; }
+
+.lol-hero__save-btn,
+.lol-hero__cancel-btn {
+  padding: .4rem 1rem;
+  border-radius: 4px;
+  font-size: .8rem;
+  font-family: inherit;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s;
+}
+.lol-hero__save-btn {
+  background: #C89B3C;
+  border: 1px solid #C89B3C;
+  color: var(--bg-nav);
+  font-weight: 700;
+}
+.lol-hero__save-btn:hover { background: #dbb04a; }
+.lol-hero__cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.3);
+  color: #ccc;
+}
+.lol-hero__cancel-btn:hover { border-color: #fff; color: #fff; }
+
+.lol-hero__edit-status {
+  font-size: .8rem;
+  color: #C89B3C;
+  margin-left: .25rem;
+}
+
+/* Editable fields — subtle gold underline while in edit mode */
+.lol-hero--editing [contenteditable="true"] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-radius: 0;
+  cursor: text;
+  min-width: 2ch;
+  transition: border-color .2s;
+}
+.lol-hero--editing [contenteditable="true"]:focus {
+  border-bottom-color: #C89B3C;
+}
+
+/* CTA is an <a>; reset its hover transform during edit so the focus ring stays put */
+.lol-hero--editing .lol-hero__cta { pointer-events: auto; }
+.lol-hero--editing .lol-hero__cta:hover { transform: none; }
+
+/* Hide the decorative scroll indicator while editing — the controls bar lives there */
+.lol-hero--editing .lol-hero__scroll { display: none; }

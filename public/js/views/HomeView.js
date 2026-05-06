@@ -76,6 +76,25 @@ const DEFAULT_STATS_CONTENT = [
   { num: '40',  label: 'Years of creating all kinds of trouble' },
 ];
 
+// ── Default hero content — fallback if API row is unavailable. Shaped as
+// { en, is } for locale-aware fallback (picked via getLocale() at load time).
+// Values mirror the previous hardcoded title + halli.tagline + home.viewProjects
+// i18n entries so first-load (no DB row yet) renders identically to before.
+const DEFAULT_HERO_CONTENT = {
+  en: {
+    title_first:  'Halli',
+    title_second: 'Smiley',
+    subtitle:     'Where wood meets code',
+    cta_label:    'View Projects',
+  },
+  is: {
+    title_first:  'Halli',
+    title_second: 'Smiley',
+    subtitle:     'Þar sem tré og tækni mætast',
+    cta_label:    'Skoða verkefni',
+  },
+};
+
 // Historical rows in site_content were sometimes saved as an object with
 // numeric string keys (`{"0": {...}, "1": {...}}`) instead of a JSON array.
 // Both shapes carry the same data; normalise to an array so .map works.
@@ -94,6 +113,7 @@ export class HomeView {
     this._content = null;       // skills — loaded from API in render()
     this._statsContent = null;  // stats — loaded from API in render()
     this._discipline = null;    // discipline (projects categories) — loaded from API
+    this._heroContent = null;   // hero — loaded from API in render()
     this._newsArticles = [];
   }
 
@@ -102,6 +122,7 @@ export class HomeView {
       this._loadContent(),
       this._loadStats(),
       this._loadDiscipline(),
+      this._loadHero(),
       this._loadNews(),
     ]);
 
@@ -121,6 +142,7 @@ export class HomeView {
     this._initProjects(view);
     this._initContactForm(view);
     this._initHeroVideo(view);
+    this._initHeroEdit(view);
     this._initSkillsEdit(view);
     this._initDisciplineEdit(view);
     this._initFooterLinks(view);
@@ -169,8 +191,25 @@ export class HomeView {
     this._discipline = JSON.parse(JSON.stringify(defaults));
   }
 
+  // ── Load hero content from API ─────────────────────────────────────────
+  async _loadHero() {
+    try {
+      const res = await fetch(`/api/v1/content/home_hero?locale=${encodeURIComponent(window.__locale || 'en')}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          this._heroContent = data;
+          return;
+        }
+      }
+    } catch { /* network error — fall through to default */ }
+    const defaults = DEFAULT_HERO_CONTENT[getLocale()] || DEFAULT_HERO_CONTENT.en;
+    this._heroContent = JSON.parse(JSON.stringify(defaults));
+  }
+
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
   _hero() {
+    const h = this._heroContent || DEFAULT_HERO_CONTENT.en;
     return `
     <section class="lol-hero" aria-label="Introduction">
       <video class="lol-hero__bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
@@ -181,13 +220,11 @@ export class HomeView {
 
       <div class="lol-hero__content">
         <h1 class="lol-hero__title">
-          <span>Halli</span>
-          <span class="lol-hero__title-second">Smiley</span>
+          <span data-hero-field="title_first">${escHtml(h.title_first)}</span>
+          <span class="lol-hero__title-second" data-hero-field="title_second">${escHtml(h.title_second)}</span>
         </h1>
-        <p class="lol-hero__subtitle">
-          ${t('halli.tagline')}
-        </p>
-        <a href="${href('/projects')}" class="lol-hero__cta">${t('home.viewProjects')}</a>
+        <p class="lol-hero__subtitle" data-hero-field="subtitle">${escHtml(h.subtitle)}</p>
+        <a href="${href('/projects')}" class="lol-hero__cta" data-hero-field="cta_label">${escHtml(h.cta_label)}</a>
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
@@ -195,6 +232,129 @@ export class HomeView {
         <div class="lol-hero__scroll-line"></div>
       </div>
     </section>`;
+  }
+
+  // ── Hero section — inline edit for admin/moderator ─────────────────────
+  _initHeroEdit(view) {
+    if (!isAdmin() && !hasRole('moderator')) return;
+
+    const section = view.querySelector('.lol-hero');
+    if (!section) return;
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'lol-hero__edit-btn';
+    editBtn.id        = 'hero-edit-btn';
+    editBtn.type      = 'button';
+    editBtn.setAttribute('aria-label', 'Edit hero section');
+    editBtn.setAttribute('data-testid', 'edit-hero-btn');
+    editBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit Section`;
+    section.style.position = 'relative';
+    section.appendChild(editBtn);
+
+    const controls = document.createElement('div');
+    controls.className  = 'lol-hero__edit-controls lol-hero__edit-controls--hidden';
+    controls.id         = 'hero-edit-bar';
+    controls.setAttribute('data-testid', 'edit-hero-controls');
+    controls.innerHTML  = `
+      ${adminLocaleBadgeHtml()}
+      <button type="button" class="lol-hero__save-btn" data-testid="edit-hero-save">Save Changes</button>
+      <button type="button" class="lol-hero__cancel-btn" data-testid="edit-hero-cancel">Cancel</button>
+      <span   class="lol-hero__edit-status" aria-live="polite"></span>`;
+    section.appendChild(controls);
+
+    // CTA is an <a> — block navigation while editing so clicks land in the editable region.
+    const cta = section.querySelector('.lol-hero__cta');
+    if (cta) cta.addEventListener('click', e => {
+      if (section.classList.contains('lol-hero--editing')) e.preventDefault();
+    });
+
+    let _snapshot = null;
+
+    editBtn.addEventListener('click', () => {
+      _snapshot = JSON.parse(JSON.stringify(this._heroContent));
+      this._enterHeroEdit(section, editBtn, controls);
+    });
+
+    controls.querySelector('.lol-hero__save-btn').addEventListener('click', () =>
+      this._saveHeroEdit(section, controls)
+    );
+
+    controls.querySelector('.lol-hero__cancel-btn').addEventListener('click', () => {
+      this._exitHeroEdit(section, editBtn, controls);
+      if (_snapshot) this._restoreHeroEdit(section, _snapshot);
+    });
+  }
+
+  _enterHeroEdit(section, editBtn, controls) {
+    section.classList.add('lol-hero--editing');
+    editBtn.classList.add('lol-hero__edit-btn--hidden');
+    controls.classList.remove('lol-hero__edit-controls--hidden');
+    checkUntranslated('home_hero', controls);
+
+    section.querySelectorAll('[data-hero-field]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck      = true;
+    });
+  }
+
+  _exitHeroEdit(section, editBtn, controls) {
+    section.classList.remove('lol-hero--editing');
+    editBtn.classList.remove('lol-hero__edit-btn--hidden');
+    controls.classList.add('lol-hero__edit-controls--hidden');
+    controls.querySelector('.lol-hero__edit-status').textContent = '';
+
+    section.querySelectorAll('[data-hero-field]').forEach(el => {
+      el.contentEditable = 'false';
+      el.removeAttribute('contenteditable');
+    });
+  }
+
+  _restoreHeroEdit(section, snapshot) {
+    section.querySelector('[data-hero-field="title_first"]').innerHTML  = escHtml(snapshot.title_first);
+    section.querySelector('[data-hero-field="title_second"]').innerHTML = escHtml(snapshot.title_second);
+    section.querySelector('[data-hero-field="subtitle"]').innerHTML     = escHtml(snapshot.subtitle);
+    section.querySelector('[data-hero-field="cta_label"]').innerHTML    = escHtml(snapshot.cta_label);
+    this._heroContent = snapshot;
+  }
+
+  async _saveHeroEdit(section, controls) {
+    const status = controls.querySelector('.lol-hero__edit-status');
+    status.textContent = 'Saving…';
+
+    // textContent (not innerText) so CSS text-transform: uppercase on
+    // .lol-hero__title / __subtitle / __cta doesn't get baked into stored values.
+    const title_first  = section.querySelector('[data-hero-field="title_first"]')?.textContent.trim()  ?? this._heroContent.title_first;
+    const title_second = section.querySelector('[data-hero-field="title_second"]')?.textContent.trim() ?? this._heroContent.title_second;
+    const subtitle     = section.querySelector('[data-hero-field="subtitle"]')?.textContent.trim()     ?? this._heroContent.subtitle;
+    const cta_label    = section.querySelector('[data-hero-field="cta_label"]')?.textContent.trim()    ?? this._heroContent.cta_label;
+
+    const updated = { title_first, title_second, subtitle, cta_label };
+
+    try {
+      const token = await getCSRFToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
+      };
+
+      const res = await fetch('/api/v1/content/home_hero', {
+        method: 'PUT', credentials: 'include', headers,
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+
+      this._heroContent = await res.json();
+      status.textContent = 'Saved!';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    }
   }
 
   // ── Load news articles from API ─────────────────────────────────────────
