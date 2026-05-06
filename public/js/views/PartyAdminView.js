@@ -549,12 +549,11 @@ export class PartyAdminView {
         }
         const item = await res.json();
         this._logistics = [...(this._logistics || []), item];
-        if (nameEl) nameEl.value = '';
-        if (qtyEl)  qtyEl.value  = '';
-        if (toEl)   toEl.value   = '';
-        status.textContent = '';
+        // _rerenderLogistics replaces the section, so old input refs are
+        // detached. Re-render first, then re-query for focus so the planner
+        // can keep typing the next item without clicking.
         this._rerenderLogistics();
-        nameEl?.focus();
+        this._el.querySelector('#party-admin-logistics-name')?.focus();
       } catch (err) {
         status.textContent = err.message || t('party.admin.logisticsAddFailed');
       }

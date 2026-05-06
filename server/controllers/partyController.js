@@ -351,7 +351,7 @@ const partyController = {
           }
         } else if (key === 'bought' || key === 'at_venue') {
           if (typeof v !== 'boolean') {
-            return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeString', { name: key }), code: 400 });
+            return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeBoolean', { name: key }), code: 400 });
           }
         }
 
