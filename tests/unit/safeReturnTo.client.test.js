@@ -38,6 +38,12 @@ describe('safeReturnTo (client) — isSafeReturnTo', () => {
     expect(isSafeReturnTo('\\evil.com')).toBe(false);
   });
 
+  test('rejects percent-encoded backslash (%5c, %5C)', () => {
+    expect(isSafeReturnTo('/%5cevil.com')).toBe(false);
+    expect(isSafeReturnTo('/%5Cevil.com')).toBe(false);
+    expect(isSafeReturnTo('/foo%5cbar')).toBe(false);
+  });
+
   test('rejects null bytes (raw and percent-encoded)', () => {
     expect(isSafeReturnTo('/foo\0bar')).toBe(false);
     expect(isSafeReturnTo('/foo%00bar')).toBe(false);
