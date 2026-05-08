@@ -3,16 +3,36 @@
 const crypto             = require('crypto');
 const { query: dbQuery } = require('../config/database');
 
+// Path segments we never want to bounce a user back to after login/signup —
+// landing on the auth page they came from would create a redirect loop or a
+// confusing UX. Substring match against the lowercased path so locale prefixes
+// like /en/login or /is/signup are caught too.
+const AUTH_PATH_BLOCKLIST = [
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+];
+
 // Validate a `returnTo` value supplied by the SPA on /auth/<provider>?returnTo=…
 // Reject anything that could be used as an open redirect: protocol-relative URLs,
-// absolute URLs, schemes (mailto:, javascript:), and over-long values. The SPA
-// only ever sends `window.location.pathname`, so a strict allowlist is fine.
+// absolute URLs, schemes (mailto:, javascript:), backslash-tricks (browsers
+// normalize `\` → `/`, so `/\evil.com` becomes `//evil.com`), null-byte injection,
+// over-long values, and auth pages that would loop. The SPA only ever sends
+// `window.location.pathname`, so a strict allowlist is fine.
 function isSafeReturnTo(value) {
   if (typeof value !== 'string') return false;
   if (value.length === 0 || value.length > 500) return false;
   if (!value.startsWith('/')) return false;
   if (value.startsWith('//')) return false;
+  if (value.includes('\\')) return false;
+  if (value.includes('\0') || value.toLowerCase().includes('%00')) return false;
   if (value.includes('://')) return false;
+  const lower = value.toLowerCase();
+  for (const blocked of AUTH_PATH_BLOCKLIST) {
+    if (lower.includes(blocked)) return false;
+  }
   return true;
 }
 

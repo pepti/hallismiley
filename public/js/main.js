@@ -24,16 +24,15 @@ const navBar = new NavBar();
 const navEl  = navBar.render();
 document.body.insertBefore(navEl, document.getElementById('app'));
 
-// ── 4. OAuth redirect landing — show toast for ?welcome or ?error ─────────────
+// ── 4. OAuth redirect landing — show toast for ?error ────────────────────────
 (function handleOAuthLanding() {
   const hash = window.location.hash || '';
   const qIdx = hash.indexOf('?');
   if (qIdx < 0) return;
 
-  const params  = new URLSearchParams(hash.slice(qIdx + 1));
-  const welcome = params.get('welcome');
-  const error   = params.get('error');
-  if (!welcome && !error) return;
+  const params = new URLSearchParams(hash.slice(qIdx + 1));
+  const error  = params.get('error');
+  if (!error) return;
 
   const OAUTH_ERROR_KEYS = {
     invalid_state:            'auth.errors.invalidState',
@@ -45,15 +44,10 @@ document.body.insertBefore(navEl, document.getElementById('app'));
     facebook_not_configured:  'auth.errors.facebookNotConfigured',
   };
 
-  if (welcome === 'google') {
-    showToast(t('auth.oauthSuccess.google'), 'success');
-  } else if (welcome === 'facebook') {
-    showToast(t('auth.oauthSuccess.facebook'), 'success');
-  } else if (error && OAUTH_ERROR_KEYS[error]) {
+  if (OAUTH_ERROR_KEYS[error]) {
     showToast(t(OAUTH_ERROR_KEYS[error]), 'error', 5000);
   }
 
-  params.delete('welcome');
   params.delete('error');
   const rest    = params.toString();
   const path    = hash.slice(1, qIdx);

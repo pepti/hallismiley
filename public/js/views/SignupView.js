@@ -1,5 +1,6 @@
 import { signup, checkUsername, checkEmail, resendVerification, notifyAuthChange } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { isSafeReturnTo } from '../utils/safeReturnTo.js';
 import { t, href } from '../i18n/i18n.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 
@@ -358,13 +359,14 @@ export class SignupView {
     const btn = el.querySelector('[data-testid="signup-continue"]');
     if (!btn) return;
     // Override the static href('/') with the path we stashed when this view
-    // first rendered. Falls back to home if nothing was stored.
+    // first rendered. sessionStorage is writable by any same-origin script,
+    // so re-validate the value before trusting it as a navigation target.
     const stored = sessionStorage.getItem('signupReturnTo');
-    if (stored) {
+    if (stored && isSafeReturnTo(stored)) {
       btn.setAttribute('href', stored);
       btn.setAttribute('data-route', stored);
-      sessionStorage.removeItem('signupReturnTo');
     }
+    sessionStorage.removeItem('signupReturnTo');
     btn.addEventListener('click', () => {
       setTimeout(() => notifyAuthChange(), 0);
     });
