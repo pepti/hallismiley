@@ -25,10 +25,31 @@ function passwordStrength(pw) {
 let _usernameTimer = null;
 let _emailTimer    = null;
 
+// Pull the previous in-app pathname out of document.referrer so we can drop
+// the user back where they were after signing up. Skip if the referrer is
+// empty, cross-origin, or already the signup page itself.
+function captureSignupReferrer() {
+  try {
+    const ref = document.referrer;
+    if (!ref) return;
+    const u = new URL(ref);
+    if (u.origin !== window.location.origin) return;
+    const path = u.pathname || '/';
+    // Don't save the signup page itself (covers /en/signup, /is/signup).
+    if (/\/signup\/?$/.test(path)) return;
+    sessionStorage.setItem('signupReturnTo', path);
+  } catch { /* ignore */ }
+}
+
 export class SignupView {
   async render() {
+    captureSignupReferrer();
     const el = document.createElement('div');
     el.className = 'main signup-page';
+    // Send the OAuth providers a returnTo so they can drop the user back on
+    // the page they were on before opening the signup view.
+    const oauthReturnTo = sessionStorage.getItem('signupReturnTo') || '/';
+    const rtParam       = `?returnTo=${encodeURIComponent(oauthReturnTo)}`;
     el.innerHTML = `
       <div class="signup-container">
         <div class="signup-card">
@@ -38,12 +59,12 @@ export class SignupView {
             <p class="signup-subtitle">${t('signup.alreadyHaveAccount')} <a href="${href('/login')}" class="signup-link" data-route="/login">${t('nav.signIn')}</a></p>
           </div>
 
-          <a class="btn btn--outline btn--full btn--google" href="/auth/google"
+          <a class="btn btn--outline btn--full btn--google" href="/auth/google${rtParam}"
              data-testid="signup-google">
             <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
             <span>${t('signup.continueWithGoogle')}</span>
           </a>
-          <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook"
+          <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook${rtParam}"
              data-testid="signup-facebook">
             <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
             <span>${t('signup.continueWithFacebook')}</span>
@@ -336,6 +357,14 @@ export class SignupView {
   _bindContinue(el) {
     const btn = el.querySelector('[data-testid="signup-continue"]');
     if (!btn) return;
+    // Override the static href('/') with the path we stashed when this view
+    // first rendered. Falls back to home if nothing was stored.
+    const stored = sessionStorage.getItem('signupReturnTo');
+    if (stored) {
+      btn.setAttribute('href', stored);
+      btn.setAttribute('data-route', stored);
+      sessionStorage.removeItem('signupReturnTo');
+    }
     btn.addEventListener('click', () => {
       setTimeout(() => notifyAuthChange(), 0);
     });

@@ -14,17 +14,20 @@ export class LoginModal {
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-labelledby', 'login-title');
+    // After OAuth, return the user to the page they opened the modal from.
+    const returnTo = window.location.pathname;
+    const rtParam  = `?returnTo=${encodeURIComponent(returnTo)}`;
     overlay.innerHTML = `
       <div class="modal login-modal">
         <button class="modal__close" aria-label="${t('login.close')}">&times;</button>
         <h2 class="modal__title" id="login-title">${t('login.title')}</h2>
 
-        <a class="btn btn--outline btn--full btn--google" href="/auth/google"
+        <a class="btn btn--outline btn--full btn--google" href="/auth/google${rtParam}"
            data-testid="login-google">
           <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
           <span>${t('login.continueWithGoogle')}</span>
         </a>
-        <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook"
+        <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook${rtParam}"
            data-testid="login-facebook">
           <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
           <span>${t('login.continueWithFacebook')}</span>
@@ -73,8 +76,19 @@ export class LoginModal {
 
   open() {
     if (!this._overlay) this.mount();
+    // Refresh OAuth returnTo on every open — the modal mounts once but the
+    // user's current path may have changed since the last open.
+    this._refreshOAuthReturnTo();
     requestAnimationFrame(() => this._overlay.classList.add('open'));
     this._overlay.querySelector('#login-username').focus();
+  }
+
+  _refreshOAuthReturnTo() {
+    const rtParam = `?returnTo=${encodeURIComponent(window.location.pathname)}`;
+    const g = this._overlay.querySelector('[data-testid="login-google"]');
+    const f = this._overlay.querySelector('[data-testid="login-facebook"]');
+    if (g) g.href = `/auth/google${rtParam}`;
+    if (f) f.href = `/auth/facebook${rtParam}`;
   }
 
   close() {

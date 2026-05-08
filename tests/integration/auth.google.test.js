@@ -87,6 +87,34 @@ describe('GET /auth/google', () => {
     expect(stateCookie).toMatch(/HttpOnly/i);
     expect(stateCookie).toMatch(/SameSite=Lax/i);
   });
+
+  test('persists a safe returnTo as an HttpOnly cookie', async () => {
+    const res = await request(app).get('/auth/google?returnTo=%2Fis%2Fparty');
+
+    expect(res.status).toBe(302);
+    const cookies = res.headers['set-cookie'] ?? [];
+    const rt = cookies.find(c => c.startsWith('google_oauth_return_to='));
+    expect(rt).toBeDefined();
+    expect(rt).toMatch(/HttpOnly/i);
+    expect(rt).toMatch(/SameSite=Lax/i);
+    expect(rt).toMatch(/google_oauth_return_to=%2Fis%2Fparty/);
+  });
+
+  test('drops an unsafe returnTo (open redirect) silently', async () => {
+    const res = await request(app).get('/auth/google?returnTo=https%3A%2F%2Fevil.com');
+
+    expect(res.status).toBe(302);
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('google_oauth_return_to='))).toBe(false);
+  });
+
+  test('drops a protocol-relative returnTo silently', async () => {
+    const res = await request(app).get('/auth/google?returnTo=%2F%2Fevil.com');
+
+    expect(res.status).toBe(302);
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('google_oauth_return_to='))).toBe(false);
+  });
 });
 
 // ── GET /auth/google/callback ────────────────────────────────────────────────
@@ -130,7 +158,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?welcome=google');
+    expect(res.headers.location).toBe('/en/');
 
     // Sets an auth_session cookie (Lucia).
     const cookies = res.headers['set-cookie'] ?? [];
@@ -164,7 +192,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?welcome=google');
+    expect(res.headers.location).toBe('/en/');
 
     const { rows } = await db.query(
       `SELECT username FROM users WHERE email = $1`,
@@ -191,7 +219,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?welcome=google');
+    expect(res.headers.location).toBe('/en/');
 
     const countAfter = (await db.query(`SELECT COUNT(*)::int AS n FROM users`)).rows[0].n;
     expect(countAfter).toBe(countBefore);
@@ -212,7 +240,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?welcome=google');
+    expect(res.headers.location).toBe('/en/');
 
     const { rows } = await db.query(
       `SELECT google_id, oauth_provider, email_verified
@@ -253,5 +281,31 @@ describe('GET /auth/google/callback', () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('/en/#/?error=oauth_failed');
+  });
+
+  test('redirects to the returnTo cookie when present and clears it', async () => {
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', `${cookieHeader}; google_oauth_return_to=%2Fis%2Fparty`);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/is/party');
+
+    // The returnTo cookie should have been cleared on the response.
+    const cookies = res.headers['set-cookie'] ?? [];
+    const cleared = cookies.find(c => c.startsWith('google_oauth_return_to='));
+    expect(cleared).toBeDefined();
+    expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+  });
+
+  test('ignores a tampered returnTo cookie value (defense-in-depth)', async () => {
+    // Even though /start would never persist this, an attacker who somehow
+    // sets the cookie shouldn't get an open redirect — the callback re-validates.
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', `${cookieHeader}; google_oauth_return_to=https%3A%2F%2Fevil.com`);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/en/');
   });
 });

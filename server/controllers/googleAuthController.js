@@ -14,7 +14,7 @@
 const { query: dbQuery }          = require('../config/database');
 const { lucia }                   = require('../auth/lucia');
 const { loadArctic, isConfigured } = require('../auth/google');
-const { generateUniqueUsername }  = require('../auth/oauthHelpers');
+const { generateUniqueUsername, isSafeReturnTo } = require('../auth/oauthHelpers');
 
 const COOKIE_TTL_MS = 10 * 60 * 1000;
 const USERINFO_URL  = 'https://openidconnect.googleapis.com/v1/userinfo';
@@ -34,6 +34,7 @@ function setOAuthCookie(res, name, value) {
 function clearOAuthCookies(res) {
   res.clearCookie('google_oauth_state');
   res.clearCookie('google_oauth_code_verifier');
+  res.clearCookie('google_oauth_return_to');
 }
 
 function redirectWithError(res, code, locale = 'en') {
@@ -61,6 +62,13 @@ async function start(req, res, next) {
     setOAuthCookie(res, 'google_oauth_state',         state);
     setOAuthCookie(res, 'google_oauth_code_verifier', codeVerifier);
 
+    // Optional ?returnTo= — only persist if the SPA sent a safe relative path.
+    // Stored as an httpOnly cookie so the value can't be tampered with by the
+    // OAuth provider's redirect chain.
+    if (isSafeReturnTo(req.query.returnTo)) {
+      setOAuthCookie(res, 'google_oauth_return_to', req.query.returnTo);
+    }
+
     return res.redirect(url.toString());
   } catch (err) {
     return next(err);
@@ -77,6 +85,10 @@ async function callback(req, res, next) {
     const { code, state }    = req.query;
     const storedState        = req.cookies?.google_oauth_state;
     const codeVerifier       = req.cookies?.google_oauth_code_verifier;
+    // Read the returnTo cookie up-front and revalidate — never trust a value
+    // we read from a cookie without re-checking it satisfies the safe-path rule.
+    const rawReturnTo        = req.cookies?.google_oauth_return_to;
+    const returnTo           = isSafeReturnTo(rawReturnTo) ? rawReturnTo : null;
 
     if (!code || !state || !storedState || !codeVerifier || state !== storedState) {
       return redirectWithError(res, 'invalid_state', req.locale);
@@ -164,9 +176,11 @@ async function callback(req, res, next) {
       ip_address: req.ip ?? null,
       user_agent: req.headers['user-agent'] ?? null,
     });
-    res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
+    // append() — not setHeader() — so we don't clobber the clearCookie() calls
+    // above (state, code_verifier, return_to) that were appended earlier.
+    res.append('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
-    return res.redirect(`/${req.locale}/#/?welcome=google`);
+    return res.redirect(returnTo || `/${req.locale}/`);
   } catch (err) {
     return next(err);
   }

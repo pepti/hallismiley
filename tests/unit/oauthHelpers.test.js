@@ -12,7 +12,7 @@ jest.mock('../../server/config/database', () => ({
 }));
 
 const { query: dbQuery } = require('../../server/config/database');
-const { generateUniqueUsername } = require('../../server/auth/oauthHelpers');
+const { generateUniqueUsername, isSafeReturnTo } = require('../../server/auth/oauthHelpers');
 
 // Default: the candidate is always free (no row found).
 function mockUsernameFree() {
@@ -133,5 +133,80 @@ describe('generateUniqueUsername', () => {
       const username = await generateUniqueUsername(email, name);
       expect(username).toMatch(USERNAME_RE);
     }
+  });
+});
+
+describe('isSafeReturnTo', () => {
+  test('accepts a simple absolute path', () => {
+    expect(isSafeReturnTo('/party')).toBe(true);
+  });
+
+  test('accepts a locale-prefixed path', () => {
+    expect(isSafeReturnTo('/is/party')).toBe(true);
+    expect(isSafeReturnTo('/en/projects/123')).toBe(true);
+  });
+
+  test('accepts a path with query string', () => {
+    expect(isSafeReturnTo('/shop?category=mugs')).toBe(true);
+  });
+
+  test('accepts a bare slash', () => {
+    expect(isSafeReturnTo('/')).toBe(true);
+  });
+
+  test('rejects protocol-relative URLs (open redirect via //)', () => {
+    expect(isSafeReturnTo('//evil.com/phish')).toBe(false);
+    expect(isSafeReturnTo('//evil.com')).toBe(false);
+  });
+
+  test('rejects absolute URLs with http(s) scheme', () => {
+    expect(isSafeReturnTo('http://evil.com')).toBe(false);
+    expect(isSafeReturnTo('https://evil.com')).toBe(false);
+  });
+
+  test('rejects javascript: and data: schemes', () => {
+    expect(isSafeReturnTo('javascript:alert(1)')).toBe(false);
+    expect(isSafeReturnTo('data:text/html,<script>alert(1)</script>')).toBe(false);
+  });
+
+  test('rejects mailto: and other schemes', () => {
+    expect(isSafeReturnTo('mailto:foo@bar.com')).toBe(false);
+    expect(isSafeReturnTo('tel:+15551234')).toBe(false);
+  });
+
+  test('rejects relative paths (must start with /)', () => {
+    expect(isSafeReturnTo('party')).toBe(false);
+    expect(isSafeReturnTo('./party')).toBe(false);
+    expect(isSafeReturnTo('../party')).toBe(false);
+  });
+
+  test('rejects empty / nullish values', () => {
+    expect(isSafeReturnTo('')).toBe(false);
+    expect(isSafeReturnTo(null)).toBe(false);
+    expect(isSafeReturnTo(undefined)).toBe(false);
+  });
+
+  test('rejects non-string values', () => {
+    expect(isSafeReturnTo(123)).toBe(false);
+    expect(isSafeReturnTo({})).toBe(false);
+    expect(isSafeReturnTo([])).toBe(false);
+    expect(isSafeReturnTo(true)).toBe(false);
+  });
+
+  test('rejects values longer than 500 chars', () => {
+    const long = '/' + 'a'.repeat(500);
+    expect(long.length).toBe(501);
+    expect(isSafeReturnTo(long)).toBe(false);
+  });
+
+  test('accepts values up to 500 chars', () => {
+    const exact = '/' + 'a'.repeat(499);
+    expect(exact.length).toBe(500);
+    expect(isSafeReturnTo(exact)).toBe(true);
+  });
+
+  test('rejects embedded :// even after a leading /', () => {
+    // Prevents "/redirect?next=https://evil.com" from sneaking through.
+    expect(isSafeReturnTo('/redirect?next=https://evil.com')).toBe(false);
   });
 });

@@ -3,6 +3,19 @@
 const crypto             = require('crypto');
 const { query: dbQuery } = require('../config/database');
 
+// Validate a `returnTo` value supplied by the SPA on /auth/<provider>?returnTo=…
+// Reject anything that could be used as an open redirect: protocol-relative URLs,
+// absolute URLs, schemes (mailto:, javascript:), and over-long values. The SPA
+// only ever sends `window.location.pathname`, so a strict allowlist is fine.
+function isSafeReturnTo(value) {
+  if (typeof value !== 'string') return false;
+  if (value.length === 0 || value.length > 500) return false;
+  if (!value.startsWith('/')) return false;
+  if (value.startsWith('//')) return false;
+  if (value.includes('://')) return false;
+  return true;
+}
+
 // Derive a unique username from display name or email local-part. Used when
 // creating a brand-new user off an OAuth profile that has no username yet.
 async function generateUniqueUsername(email, name) {
@@ -26,4 +39,4 @@ async function generateUniqueUsername(email, name) {
   return `user_${crypto.randomBytes(6).toString('hex')}`;
 }
 
-module.exports = { generateUniqueUsername };
+module.exports = { generateUniqueUsername, isSafeReturnTo };
