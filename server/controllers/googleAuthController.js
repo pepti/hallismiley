@@ -1,13 +1,15 @@
 // Google Sign-In — OAuth 2.0 Authorization Code flow with PKCE.
 //
 // Flow:
-//   1. GET /auth/google
+//   1. GET /auth/google?returnTo=/some/path
 //        → generate state + code_verifier, set both as short-lived httpOnly
-//          cookies, 302 to Google's consent screen.
+//          cookies. If returnTo is a safe relative path, also persist it as
+//          an httpOnly cookie. 302 to Google's consent screen.
 //   2. GET /auth/google/callback?code=…&state=…
 //        → verify state matches the cookie, exchange code + verifier for tokens,
 //          fetch the userinfo profile, find-or-create / auto-link the user,
-//          create a Lucia session, 302 to /<locale>/#/?welcome=google.
+//          create a Lucia session, 302 to the (revalidated) returnTo cookie or
+//          /<locale>/ as fallback.
 //
 // Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 

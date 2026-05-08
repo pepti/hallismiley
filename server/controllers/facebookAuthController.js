@@ -4,13 +4,15 @@
 // is httpOnly + SameSite=Lax and uses arctic.generateState() (crypto random).
 //
 // Flow:
-//   1. GET /auth/facebook
-//        → generate state, set it as a short-lived httpOnly cookie,
+//   1. GET /auth/facebook?returnTo=/some/path
+//        → generate state, set it as a short-lived httpOnly cookie. If returnTo
+//          is a safe relative path, also persist it as an httpOnly cookie.
 //          302 to Facebook's consent dialog.
 //   2. GET /auth/facebook/callback?code=…&state=…
 //        → verify state matches the cookie, exchange code for tokens, fetch
 //          the Graph API /me profile, find-or-create / auto-link the user,
-//          create a Lucia session, 302 to /<locale>/#/?welcome=facebook.
+//          create a Lucia session, 302 to the (revalidated) returnTo cookie or
+//          /<locale>/ as fallback.
 //
 // Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 

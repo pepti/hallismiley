@@ -209,4 +209,69 @@ describe('isSafeReturnTo', () => {
     // Prevents "/redirect?next=https://evil.com" from sneaking through.
     expect(isSafeReturnTo('/redirect?next=https://evil.com')).toBe(false);
   });
+
+  test('rejects backslash (browsers normalize \\ → /, turning /\\evil.com into //evil.com)', () => {
+    expect(isSafeReturnTo('/\\evil.com')).toBe(false);
+    expect(isSafeReturnTo('/\\\\evil.com')).toBe(false);
+    expect(isSafeReturnTo('/foo\\bar')).toBe(false);
+    expect(isSafeReturnTo('\\evil.com')).toBe(false);
+  });
+
+  test('rejects percent-encoded backslash (%5c, %5C)', () => {
+    expect(isSafeReturnTo('/%5cevil.com')).toBe(false);
+    expect(isSafeReturnTo('/%5Cevil.com')).toBe(false);
+    expect(isSafeReturnTo('/foo%5cbar')).toBe(false);
+  });
+
+  test('rejects raw null bytes', () => {
+    expect(isSafeReturnTo('/foo\0bar')).toBe(false);
+    expect(isSafeReturnTo('/\0')).toBe(false);
+  });
+
+  test('rejects percent-encoded null bytes (%00)', () => {
+    expect(isSafeReturnTo('/foo%00bar')).toBe(false);
+    expect(isSafeReturnTo('/%00')).toBe(false);
+    // case-insensitive
+    expect(isSafeReturnTo('/foo%00')).toBe(false);
+  });
+
+  test('rejects auth pages that would loop the user (login, signup, etc.)', () => {
+    expect(isSafeReturnTo('/login')).toBe(false);
+    expect(isSafeReturnTo('/signup')).toBe(false);
+    expect(isSafeReturnTo('/forgot-password')).toBe(false);
+    expect(isSafeReturnTo('/reset-password')).toBe(false);
+    expect(isSafeReturnTo('/verify-email')).toBe(false);
+  });
+
+  test('rejects locale-prefixed auth pages', () => {
+    expect(isSafeReturnTo('/en/login')).toBe(false);
+    expect(isSafeReturnTo('/is/signup')).toBe(false);
+    expect(isSafeReturnTo('/en/forgot-password')).toBe(false);
+    expect(isSafeReturnTo('/is/reset-password?token=abc')).toBe(false);
+    expect(isSafeReturnTo('/en/verify-email?token=xyz')).toBe(false);
+  });
+
+  test('rejects auth-page case variants', () => {
+    expect(isSafeReturnTo('/Login')).toBe(false);
+    expect(isSafeReturnTo('/EN/SIGNUP')).toBe(false);
+  });
+
+  test('still accepts non-auth paths that share a prefix only outside the blocklist', () => {
+    // sanity: routes that don't contain any auth substring still pass
+    expect(isSafeReturnTo('/en/party')).toBe(true);
+    expect(isSafeReturnTo('/projects/123')).toBe(true);
+    expect(isSafeReturnTo('/is/contact')).toBe(true);
+  });
+
+  test('does not blanket-block paths whose segments merely contain an auth keyword', () => {
+    // segment match — full segment must equal "login"/"signup"/etc, not contain it.
+    expect(isSafeReturnTo('/en/projects/login-system')).toBe(true);
+    expect(isSafeReturnTo('/is/news/signup-trends')).toBe(true);
+    expect(isSafeReturnTo('/en/projects/forgot-password-flow-redesign')).toBe(true);
+  });
+
+  test('still blocks auth segments inside a query/hash-stripped path', () => {
+    expect(isSafeReturnTo('/login?next=/foo')).toBe(false);
+    expect(isSafeReturnTo('/en/signup?ref=banner')).toBe(false);
+  });
 });

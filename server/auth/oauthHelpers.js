@@ -3,16 +3,44 @@
 const crypto             = require('crypto');
 const { query: dbQuery } = require('../config/database');
 
+// Path segments we never want to bounce a user back to after login/signup —
+// landing on the auth page they came from would create a redirect loop or a
+// confusing UX. Match against decoded path segments (locale prefixes like
+// /en/login or /is/signup are caught) without false-positives on routes that
+// merely contain these substrings (e.g. /en/projects/login-system is fine).
+const AUTH_PATH_BLOCKLIST = [
+  'login',
+  'signup',
+  'forgot-password',
+  'reset-password',
+  'verify-email',
+];
+
 // Validate a `returnTo` value supplied by the SPA on /auth/<provider>?returnTo=…
 // Reject anything that could be used as an open redirect: protocol-relative URLs,
-// absolute URLs, schemes (mailto:, javascript:), and over-long values. The SPA
-// only ever sends `window.location.pathname`, so a strict allowlist is fine.
+// absolute URLs, schemes (mailto:, javascript:), backslash-tricks (browsers
+// normalize `\` → `/`, so `/\evil.com` becomes `//evil.com` — covers raw `\`
+// and the percent-encoded `%5c`), null-byte injection (raw `\0` and `%00`),
+// over-long values, and auth pages that would loop. The SPA only ever sends
+// `window.location.pathname`, so a strict allowlist is fine.
 function isSafeReturnTo(value) {
   if (typeof value !== 'string') return false;
   if (value.length === 0 || value.length > 500) return false;
   if (!value.startsWith('/')) return false;
   if (value.startsWith('//')) return false;
+  if (value.includes('\\')) return false;
+  if (value.includes('\0')) return false;
+  const lower = value.toLowerCase();
+  if (lower.includes('%00')) return false;
+  if (lower.includes('%5c')) return false;
   if (value.includes('://')) return false;
+  // Segment-match the auth blocklist on the path portion only (strip query/hash)
+  // so /en/login is blocked but /en/projects/login-system is allowed.
+  const pathOnly  = lower.split(/[?#]/)[0];
+  const segments  = pathOnly.split('/');
+  for (const blocked of AUTH_PATH_BLOCKLIST) {
+    if (segments.includes(blocked)) return false;
+  }
   return true;
 }
 
