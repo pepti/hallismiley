@@ -704,7 +704,12 @@ const partyController = {
         try { jsonb = JSON.parse(value); } catch { jsonb = value; }
 
         // guest_cap is a non-negative integer, capped to a sane upper bound.
+        // Explicitly reject empty/whitespace input — Number('') and Number(' ')
+        // both coerce to 0, which would silently store a zero cap.
         if (key === 'guest_cap') {
+          if (typeof value !== 'string' || value.trim() === '') {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.invalidField', { name: key }), code: 400 });
+          }
           const n = Number(jsonb);
           if (!Number.isInteger(n) || n < 0 || n > 10000) {
             return res.status(400).json({ error: t(req.locale, 'errors.party.invalidField', { name: key }), code: 400 });

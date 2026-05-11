@@ -395,7 +395,8 @@ export class PartyView {
     const rsvp         = this._rsvp;
     const answers      = rsvp?.answers || {};
     const editor       = canEdit();
-    const totalGuests  = Number(this._partyInfo?.guest_cap) || DEFAULT_GUEST_CAP;
+    const capNum       = Number(this._partyInfo?.guest_cap);
+    const totalGuests  = Number.isFinite(capNum) ? capNum : DEFAULT_GUEST_CAP;
     const showCount    = editor || this._rsvpCount > 0;
     const [before, after = ''] = t('party.guestsAttending', { n: this._rsvpCount, total: '__CAP__' }).split('__CAP__');
     const capEditBtn = editor ? `
@@ -1032,7 +1033,8 @@ export class PartyView {
         throw new Error(data.error || 'Save failed');
       }
       this._partyInfo = await res.json();
-      const stored = Number(this._partyInfo?.guest_cap) || DEFAULT_GUEST_CAP;
+      const storedNum = Number(this._partyInfo?.guest_cap);
+      const stored = Number.isFinite(storedNum) ? storedNum : DEFAULT_GUEST_CAP;
       capEl.textContent = String(stored);
       this._exitEditGuestCap();
       showToast(t('form.success'), 'success');
