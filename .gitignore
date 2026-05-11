@@ -36,3 +36,17 @@ build/
 
 # Test coverage reports (generated, not committed)
 coverage/
+
+# Playwright / test runner artifacts
+playwright-report/
+test-results/
+
+# Runtime uploads — local-disk fallback for the upload paths that hit Azure
+# blob storage in production. Patterns target the timestamp-/UUID-prefixed
+# names the server generates, so committed default assets (avatar-NN.svg,
+# party/venue/*.jpg, etc.) stay tracked.
+public/assets/avatars/user-*
+public/assets/party/[0-9]*-*
+public/assets/products/
+public/assets/content/
+public/assets/responsive-screenshots/
