@@ -1,7 +1,7 @@
 // Session validation middleware — reads auth_session cookie, validates via Lucia,
 // attaches req.user and req.session, extends fresh sessions automatically.
 const { lucia } = require('./lucia');
-const { SUPPORTED_LOCALES } = require('../config/i18n');
+const { resolveLocale } = require('../middleware/locale');
 
 async function requireAuth(req, res, next) {
   const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
@@ -35,12 +35,12 @@ async function requireAuth(req, res, next) {
   req.user    = user;
   req.session = session;
 
-  // Locale middleware ran earlier (before auth) with req.user undefined, so it
-  // could only consult request-level signals. Now that we know who's logged
-  // in, the user's saved preferred_locale takes priority — override.
-  if (user.preferred_locale && SUPPORTED_LOCALES.includes(user.preferred_locale)) {
-    req.locale = user.preferred_locale;
-  }
+  // The global locale middleware ran before auth (req.user was undefined), so
+  // the user's saved preferred_locale couldn't participate in resolution.
+  // Re-resolve now that we know who's logged in — explicit per-request signals
+  // (query/header/cookie) still win, so a user with preferred_locale='is' can
+  // still browse /en/* without their saved preference overriding the URL.
+  req.locale = resolveLocale(req);
 
   next();
 }
