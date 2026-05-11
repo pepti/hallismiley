@@ -398,7 +398,11 @@ export class PartyView {
     const capNum       = Number(this._partyInfo?.guest_cap);
     const totalGuests  = Number.isFinite(capNum) ? capNum : DEFAULT_GUEST_CAP;
     const showCount    = editor || this._rsvpCount > 0;
-    const [before, after = ''] = t('party.guestsAttending', { n: this._rsvpCount, total: '__CAP__' }).split('__CAP__');
+    // Use a private-use Unicode sentinel that no translation will ever contain,
+    // so we can wrap the {total} portion in editable HTML without sending HTML
+    // through the i18n interpolator.
+    const CAP_MARKER = String.fromCharCode(0xE000);
+    const [before, after = ''] = t('party.guestsAttending', { n: this._rsvpCount, total: CAP_MARKER }).split(CAP_MARKER);
     const capEditBtn = editor ? `
         <button class="party-edit-btn party-edit-btn--inline" data-edit-section="guestCap" aria-label="${t('admin.edit')}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
