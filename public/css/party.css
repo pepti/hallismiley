@@ -990,7 +990,7 @@ button.party-admin__stat:focus-visible {
 
 /* The hero is overflow:hidden, which clips position:sticky from
    .party-edit-controls. Pin the hero's controls bar to its bottom edge. */
-.party-hero .party-edit-controls {
+.party-hero__edit-controls {
   position: absolute;
   left: 0; right: 0; bottom: 0;
 }
