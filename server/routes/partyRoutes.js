@@ -132,6 +132,12 @@ router.get('/invited-guests',
   requireAuth, requireRole('admin', 'moderator'),
   partyController.listInvitedGuests);
 
+// Send a single email to the union of going (+ optionally maybe) guests.
+// Admin/moderator only — body { subject?, body?, includeMaybe? }.
+router.post('/email-going',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.emailGoingGuests);
+
 // ── Logistics (admin/moderator) ───────────────────────────────────────────────
 router.get('/logistics',
   requireAuth, requireRole('admin', 'moderator'),

@@ -422,4 +422,78 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
   console.log(`[EmailService] RSVP confirmation sent: user=${user.id} isUpdate=${isUpdate} id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification, sendRsvpConfirmation, emailHealthCheck, isConfigured };
+// ── Party announcement to going/maybe guests ──────────────────────────────────
+// Single Resend send with `to: recipients[]` — Resend bcc-style fans out to
+// every address, so guests don't see each other's emails. Body is the host's
+// free-form message (optional); falls back to the i18n default copy.
+// Always sent in English: the host writes the message himself in one language.
+
+async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
+  if (!Array.isArray(recipients) || recipients.length === 0) return;
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — party announcement skipped (recipients=${recipients.length})`);
+    return;
+  }
+
+  const locale       = 'en';
+  const finalSubject = (subject && subject.trim()) || t(locale, 'email.partyAnnouncement.subject');
+  const introText    = (body && body.trim())    || t(locale, 'email.partyAnnouncement.intro');
+  const signoffText  = t(locale, 'email.partyAnnouncement.signoff');
+
+  // Render the host's body as plain text with line breaks preserved.
+  const bodyHtml = escapeHtml(introText).replace(/\n/g, '<br/>');
+
+  const info         = partyInfo || {};
+  const venueName    = escapeHtml(info.venue_name    || '');
+  const venueAddress = escapeHtml(info.venue_address || '');
+  const partyDate    = escapeHtml(info.date          || '');
+  const mapsLink     = info.venue_maps_link
+    || (info.venue_address
+          ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address)}`
+          : '');
+
+  const partyUrl  = `${APP_URL}/#/party`;
+  const heading   = t(locale, 'email.partyAnnouncement.heading');
+
+  const html = emailShell(finalSubject, `
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#cccccc;line-height:1.6;">
+      ${bodyHtml}
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
+          ${partyDate    ? `<p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>` : ''}
+          ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
+          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
+        </td>
+      </tr>
+    </table>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${partyUrl}"
+             style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            ${t(locale, 'email.partyAnnouncement.button')}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+      ${escapeHtml(signoffText)}
+    </p>
+  `, locale);
+
+  // Single send with array `to`: Resend treats this like bcc — each
+  // recipient gets a copy, no cross-visibility of addresses.
+  const { data, error } = await getClient().emails.send({
+    from: FROM, to: recipients, subject: finalSubject, html,
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Party announcement sent: recipients=${recipients.length} id=${data.id}`);
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, emailHealthCheck, isConfigured };

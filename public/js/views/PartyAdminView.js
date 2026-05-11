@@ -68,7 +68,8 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
-        ${this._renderInvitedGuests()}
+        ${this._renderAcceptedAndPending()}
+        ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
         ${this._renderInviteCodeSection()}
         ${this._renderStats()}
@@ -79,12 +80,15 @@ export class PartyAdminView {
       </div>`;
   }
 
-  _renderInvitedGuests() {
-    const guests = this._invitedGuests || [];
+  // Top section: everyone still in play — going, maybe, or hasn't replied.
+  // Sort order: going → maybe → waiting so the most-committed guests bubble
+  // up when scanning the list. Pills above the table show the breakdown and
+  // host the "Email accepted + maybe" action.
+  _renderAcceptedAndPending() {
+    const guests = (this._invitedGuests || []).filter(g => g.rsvp_status !== 'declined');
     const showRevoke = isAdmin();
 
-    // Sort: waiting first (need attention), then going, then declined. Alpha within.
-    const order = { waiting: 0, rsvpd: 1, declined: 2 };
+    const order = { going: 0, maybe: 1, waiting: 2 };
     const byName = (a, b) =>
       (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
     const sorted = [...guests].sort((a, b) => {
@@ -97,25 +101,36 @@ export class PartyAdminView {
       return acc;
     }, {});
 
+    const colSpan = this._invitedGuestColSpan(showRevoke);
     const rows = sorted.length
       ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
-      : `<tr><td colspan="${showRevoke ? 5 : 4}" class="party-empty">${t('party.admin.noGuests')}</td></tr>`;
+      : `<tr><td colspan="${colSpan}" class="party-empty">${t('party.admin.noGuests')}</td></tr>`;
+
+    // Email button only renders for admins who actually have someone to email.
+    const emailableCount = (counts.going || 0) + (counts.maybe || 0);
+    const emailBtn = (showRevoke && emailableCount > 0)
+      ? `<button type="button" class="lol-btn lol-btn--primary lol-btn--sm" id="party-admin-email-going-btn">${t('party.admin.emailGoingBtn')}</button>`
+      : '';
 
     return `
-      <section class="party-admin__section">
-        <h2 class="party-admin__section-title">${t('party.admin.invitedGuests', { n: guests.length })}</h2>
-        <p class="party-admin__invited-summary">
-          <span class="party-admin__pill party-admin__pill--waiting">⏳ ${t('party.admin.statusWaiting')}: ${counts.waiting || 0}</span>
-          <span class="party-admin__pill party-admin__pill--going">✅ ${t('party.admin.statusGoing')}: ${counts.rsvpd || 0}</span>
-          <span class="party-admin__pill party-admin__pill--declined">❌ ${t('party.admin.statusDeclined')}: ${counts.declined || 0}</span>
-        </p>
+      <section class="party-admin__section" id="party-admin-accepted-pending">
+        <h2 class="party-admin__section-title">${t('party.admin.acceptedAndPending', { n: guests.length })}</h2>
+        <div class="party-admin__invited-toolbar">
+          <p class="party-admin__invited-summary">
+            <span class="party-admin__pill party-admin__pill--going">✅ ${t('party.admin.statusGoing')}: ${counts.going || 0}</span>
+            <span class="party-admin__pill party-admin__pill--maybe">🤔 ${t('party.admin.statusMaybe')}: ${counts.maybe || 0}</span>
+            <span class="party-admin__pill party-admin__pill--waiting">⏳ ${t('party.admin.statusPending')}: ${counts.waiting || 0}</span>
+          </p>
+          ${emailBtn}
+        </div>
         <div class="party-admin__table-wrap">
-          <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.invitedGuests', { n: '' }).trim()}">
+          <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.acceptedAndPending', { n: '' }).trim()}">
             <thead>
               <tr>
                 <th>${t('adminUsers.username')}</th>
                 <th>${t('adminUsers.email')}</th>
                 <th>${t('adminOrders.status')}</th>
+                <th>${t('party.admin.bringing')}</th>
                 <th>${t('party.admin.rsvpdAt')}</th>
                 ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
               </tr>
@@ -128,6 +143,70 @@ export class PartyAdminView {
       </section>`;
   }
 
+  // Bottom section: declined guests, wrapped in a collapsed <details> so the
+  // host can glance past them. Returns empty string when nobody has declined
+  // so the empty section doesn't clutter the page.
+  _renderDeclinedGuests() {
+    const declined = (this._invitedGuests || []).filter(g => g.rsvp_status === 'declined');
+    if (declined.length === 0) return '';
+    const showRevoke = isAdmin();
+
+    const byName = (a, b) =>
+      (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
+    const sorted = [...declined].sort(byName);
+
+    const rows = sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('');
+
+    return `
+      <section class="party-admin__section">
+        <details class="party-admin__declined-details">
+          <summary class="party-admin__declined-summary">
+            <span class="party-admin__pill party-admin__pill--declined">❌ ${t('party.admin.declinedGuests', { n: declined.length })}</span>
+          </summary>
+          <div class="party-admin__table-wrap party-admin__declined-table-wrap">
+            <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.declinedGuests', { n: '' }).trim()}">
+              <thead>
+                <tr>
+                  <th>${t('adminUsers.username')}</th>
+                  <th>${t('adminUsers.email')}</th>
+                  <th>${t('adminOrders.status')}</th>
+                  <th>${t('party.admin.bringing')}</th>
+                  <th>${t('party.admin.rsvpdAt')}</th>
+                  ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>`;
+  }
+
+  _invitedGuestColSpan(showRevoke) {
+    // Name, Email, Status, Bringing, RSVP'd at (+ Actions if admin)
+    return showRevoke ? 6 : 5;
+  }
+
+  // Surface plus-one / family-member info from the RSVP form answers. Scans
+  // form field ids for any plus-one-like name so the column lights up when
+  // the host adds a "plus_one_name", "family", or "bringing" field to the
+  // form. Falls back to "—" so the layout stays consistent.
+  _bringingFor(g) {
+    const ans = g.rsvp_answers;
+    if (!ans) return '—';
+    const re = /plus.?one|guest|family|bringing|maki|fjölskylda|gestir/i;
+    for (const [k, v] of Object.entries(ans)) {
+      if (!re.test(k)) continue;
+      if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue;
+      if (v === false || v === 'false' || v === 'no' || v === 'nei') continue;
+      const val = Array.isArray(v) ? v.map(escHtml).join(', ') : escHtml(String(v));
+      return val;
+    }
+    return '—';
+  }
+
   _renderInvitedGuestRow(g, showRevoke) {
     const name     = escHtml(g.display_name || g.username || '—');
     const email    = escHtml(g.email || '');
@@ -136,10 +215,13 @@ export class PartyAdminView {
       : '—';
 
     const statusHtml = {
-      rsvpd:    `<span class="party-admin__status party-admin__status--going">✅ ${t('party.admin.statusGoing')}</span>`,
+      going:    `<span class="party-admin__status party-admin__status--going">✅ ${t('party.admin.statusGoing')}</span>`,
+      maybe:    `<span class="party-admin__status party-admin__status--maybe">🤔 ${t('party.admin.statusMaybe')}</span>`,
       declined: `<span class="party-admin__status party-admin__status--declined">❌ ${t('party.admin.statusDeclined')}</span>`,
-      waiting:  `<span class="party-admin__status party-admin__status--waiting">⏳ ${t('party.admin.statusWaiting')}</span>`,
+      waiting:  `<span class="party-admin__status party-admin__status--waiting">⏳ ${t('party.admin.statusPending')}</span>`,
     }[g.rsvp_status] || '—';
+
+    const bringingHtml = this._bringingFor(g);
 
     // Detail row — full answer dump, hidden until row is clicked
     const detailFields = (this._rsvpForm || []).filter(f => !['heading','paragraph'].includes(f.type));
@@ -152,7 +234,7 @@ export class PartyAdminView {
         }).filter(Boolean).join('')
       : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`;
 
-    const colSpan = showRevoke ? 5 : 4;
+    const colSpan = this._invitedGuestColSpan(showRevoke);
     const revokeCell = showRevoke
       ? `<td><button class="lol-btn lol-btn--ghost lol-btn--sm" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}">${t('profile.revoke')}</button></td>`
       : '';
@@ -162,6 +244,7 @@ export class PartyAdminView {
         <td>${name}</td>
         <td>${email}</td>
         <td>${statusHtml}</td>
+        <td class="party-admin__invited-bringing">${bringingHtml}</td>
         <td>${rsvpedAt}</td>
         ${revokeCell}
       </tr>
@@ -563,6 +646,133 @@ export class PartyAdminView {
     this._bindInvitedGuests();
     this._bindLogistics();
     this._bindStatCards();
+    this._bindEmailGoing();
+  }
+
+  _bindEmailGoing() {
+    const btn = this._el.querySelector('#party-admin-email-going-btn');
+    if (!btn) return;
+    btn.addEventListener('click', () => this._openEmailGoingModal());
+  }
+
+  _emailGoingRecipientCount(includeMaybe) {
+    const guests = this._invitedGuests || [];
+    return guests.filter(g =>
+      g.rsvp_status === 'going' || (includeMaybe && g.rsvp_status === 'maybe')
+    ).length;
+  }
+
+  _openEmailGoingModal() {
+    // Lazy-create the overlay so we don't add a hidden DOM node on every page render.
+    if (!this._emailOverlay) {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay party-admin__email-overlay';
+      overlay.innerHTML = `<div class="modal party-admin__email-modal" role="dialog" aria-modal="true" tabindex="-1"></div>`;
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) this._closeEmailGoingModal();
+      });
+      document.body.appendChild(overlay);
+      this._emailOverlay = overlay;
+      this._emailKeyHandler = (e) => {
+        if (e.key === 'Escape') this._closeEmailGoingModal();
+      };
+    }
+
+    const includeMaybeDefault = true;
+    const initialCount = this._emailGoingRecipientCount(includeMaybeDefault);
+    const modal = this._emailOverlay.querySelector('.modal');
+    modal.innerHTML = `
+      <button class="modal__close" type="button" aria-label="${t('common.close')}" data-email-close>&times;</button>
+      <h2 class="modal__title">${t('party.admin.emailGoingTitle')}</h2>
+      <p class="modal__desc">${t('party.admin.emailGoingDesc')}</p>
+      <form class="party-admin__email-form" id="party-admin-email-form">
+        <label class="party-admin__email-field">
+          <span>${t('party.admin.emailGoingSubjectLabel')}</span>
+          <input type="text" class="lol-input" name="subject" maxlength="200"
+                 placeholder="${escHtml(t('party.admin.emailGoingSubjectPh'))}" />
+        </label>
+        <label class="party-admin__email-field">
+          <span>${t('party.admin.emailGoingBodyLabel')}</span>
+          <textarea class="lol-input lol-textarea" name="body" rows="6" maxlength="5000"
+                    placeholder="${escHtml(t('party.admin.emailGoingBodyPh'))}"></textarea>
+        </label>
+        <label class="party-admin__email-checkbox">
+          <input type="checkbox" name="include_maybe" ${includeMaybeDefault ? 'checked' : ''} />
+          ${t('party.admin.emailGoingIncludeMaybe')}
+        </label>
+        <p class="party-admin__email-recipients" id="party-admin-email-recipients" aria-live="polite">
+          ${t('party.admin.emailGoingRecipients', { n: initialCount })}
+        </p>
+        <div class="party-admin__email-actions">
+          <button type="button" class="lol-btn lol-btn--ghost" data-email-close>${t('party.admin.emailGoingCancel')}</button>
+          <button type="submit" class="lol-btn lol-btn--primary" ${initialCount === 0 ? 'disabled' : ''}>
+            ${t('party.admin.emailGoingSend')}
+          </button>
+        </div>
+        <p class="party-admin__email-status" id="party-admin-email-status" aria-live="polite"></p>
+      </form>
+    `;
+
+    // Close-button + cancel-button wiring (both use the same data-email-close attribute)
+    modal.querySelectorAll('[data-email-close]').forEach(el => {
+      el.addEventListener('click', () => this._closeEmailGoingModal());
+    });
+
+    // Live recipient count when Maybe checkbox flips.
+    const form           = modal.querySelector('#party-admin-email-form');
+    const includeMaybeCb = form.querySelector('input[name="include_maybe"]');
+    const recipientsEl   = form.querySelector('#party-admin-email-recipients');
+    const submitBtn      = form.querySelector('button[type="submit"]');
+    includeMaybeCb.addEventListener('change', () => {
+      const n = this._emailGoingRecipientCount(includeMaybeCb.checked);
+      recipientsEl.textContent = t('party.admin.emailGoingRecipients', { n });
+      submitBtn.disabled = n === 0;
+    });
+
+    // Submit → POST to the new endpoint.
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const statusEl = form.querySelector('#party-admin-email-status');
+      const subject  = form.querySelector('input[name="subject"]').value.trim();
+      const body     = form.querySelector('textarea[name="body"]').value.trim();
+      const includeMaybe = includeMaybeCb.checked;
+
+      submitBtn.disabled = true;
+      statusEl.textContent = t('party.admin.emailGoingSending');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/email-going', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({
+            subject: subject || undefined,
+            body:    body    || undefined,
+            includeMaybe,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.emailGoingFailed'));
+        }
+        const { sent } = await res.json();
+        this._closeEmailGoingModal();
+        showToast(t('party.admin.emailGoingSent', { n: sent }), 'success');
+      } catch (err) {
+        statusEl.textContent = err.message || t('party.admin.emailGoingFailed');
+        submitBtn.disabled = false;
+      }
+    });
+
+    this._emailOverlay.classList.add('open');
+    document.addEventListener('keydown', this._emailKeyHandler);
+    modal.focus();
+  }
+
+  _closeEmailGoingModal() {
+    if (!this._emailOverlay) return;
+    this._emailOverlay.classList.remove('open');
+    document.removeEventListener('keydown', this._emailKeyHandler);
   }
 
   _bindStatCards() {
