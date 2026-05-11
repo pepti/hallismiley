@@ -423,16 +423,19 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
 }
 
 // ── Party announcement to going/maybe guests ──────────────────────────────────
-// Single Resend send with `to: recipients[]` — Resend bcc-style fans out to
-// every address, so guests don't see each other's emails. Body is the host's
-// free-form message (optional); falls back to the i18n default copy.
-// Always sent in English: the host writes the message himself in one language.
+// Sends one email per recipient (not a single message with array `to`) — that
+// way each guest only sees their own address in the To: header. Resend's
+// default rate limit is 100 req/sec, well above any plausible guest list.
+// Body is the host's free-form message (optional); falls back to the i18n
+// default copy. Always sent in English: the host writes the message himself
+// in one language. Returns { sent, failed } so the caller can report partial
+// failures (e.g. a single bounce shouldn't blank the whole result).
 
 async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
-  if (!Array.isArray(recipients) || recipients.length === 0) return;
+  if (!Array.isArray(recipients) || recipients.length === 0) return { sent: 0, failed: 0 };
   if (!isConfigured()) {
     console.log(`[EmailService] Resend not configured — party announcement skipped (recipients=${recipients.length})`);
-    return;
+    return { sent: 0, failed: 0 };
   }
 
   const locale       = 'en';
@@ -440,7 +443,9 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   const introText    = (body && body.trim())    || t(locale, 'email.partyAnnouncement.intro');
   const signoffText  = t(locale, 'email.partyAnnouncement.signoff');
 
-  // Render the host's body as plain text with line breaks preserved.
+  // Render the host's body as plain text with line breaks preserved. Escape
+  // first, then turn newlines into <br/> so a literal "<br/>" in the body
+  // stays escaped.
   const bodyHtml = escapeHtml(introText).replace(/\n/g, '<br/>');
 
   const info         = partyInfo || {};
@@ -455,6 +460,7 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   const partyUrl  = `${APP_URL}/#/party`;
   const heading   = t(locale, 'email.partyAnnouncement.heading');
 
+  // Body is identical per recipient (no personalization yet), so render once.
   const html = emailShell(finalSubject, `
     <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#cccccc;line-height:1.6;">
@@ -487,13 +493,26 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
     </p>
   `, locale);
 
-  // Single send with array `to`: Resend treats this like bcc — each
-  // recipient gets a copy, no cross-visibility of addresses.
-  const { data, error } = await getClient().emails.send({
-    from: FROM, to: recipients, subject: finalSubject, html,
+  // Fan out one-by-one so no recipient sees another's address. Use
+  // allSettled so one bounce doesn't abort the rest of the send.
+  const client = getClient();
+  const results = await Promise.allSettled(
+    recipients.map(to => client.emails.send({ from: FROM, to, subject: finalSubject, html }))
+  );
+
+  let sent = 0, failed = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && !r.value.error) sent++;
+    else {
+      failed++;
+      const msg = r.status === 'rejected' ? r.reason?.message : r.value?.error?.message;
+      // Log the index, not the address — index is enough to correlate with
+      // the recipient list at the call site without leaking PII into logs.
+      console.error(`[EmailService] Party announcement send failed (idx=${i}): ${msg}`);
+    }
   });
-  if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party announcement sent: recipients=${recipients.length} id=${data.id}`);
+  console.log(`[EmailService] Party announcement: sent=${sent} failed=${failed} total=${recipients.length}`);
+  return { sent, failed };
 }
 
 module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, emailHealthCheck, isConfigured };

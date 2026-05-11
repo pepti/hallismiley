@@ -467,7 +467,7 @@
   "party.admin.hasntRsvpd": "Hefur ekki sent RSVP ennþá.",
   "party.admin.emailGoingBtn": "Senda póst á gesti",
   "party.admin.emailGoingTitle": "Senda póst á gesti sem koma eða eru kannski",
-  "party.admin.emailGoingDesc": "Sendu einn tölvupóst á alla sem koma eða eru kannski. Viðtakendur eru afritaðir (bcc) — þeir sjá ekki netföng hvers annars.",
+  "party.admin.emailGoingDesc": "Sendu afrit af þessum skilaboðum á alla sem koma eða eru kannski. Hver gestur fær sinn eigin póst — netföng eru ekki sýnileg öðrum.",
   "party.admin.emailGoingSubjectLabel": "Efni",
   "party.admin.emailGoingBodyLabel": "Skilaboð",
   "party.admin.emailGoingSubjectPh": "Áminning: veislan 25. júlí",

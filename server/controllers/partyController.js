@@ -274,11 +274,12 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
-  // POST /api/v1/party/email-going — admin/moderator only.
-  // Sends one email to the union of going (+ optionally maybe) guests so the
-  // host can blast reminders / venue updates without copy-pasting addresses.
-  // Body: { subject?: string, body?: string, includeMaybe?: boolean }.
-  // Returns immediately with the recipient count; the actual send is
+  // POST /api/v1/party/email-going — admin only.
+  // Sends one email per recipient (see emailService.sendPartyAnnouncement —
+  // recipients never see each other's addresses) to going (+ optionally
+  // maybe) guests, so the host can blast reminders / venue updates without
+  // copy-pasting addresses. Body: { subject?, body?, includeMaybe? }.
+  // Returns immediately with the recipient count; the actual fan-out is
   // fire-and-forget so a slow Resend call never blocks the admin UI.
   async emailGoingGuests(req, res, next) {
     try {
@@ -322,6 +323,10 @@ const partyController = {
         partyInfo[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
       }
 
+      // One Resend call per recipient (see emailService.sendPartyAnnouncement)
+      // so guests can't see each other's addresses. Partial failures are
+      // logged but never surfaced to the admin — by the time we get here the
+      // response has already been sent.
       emailService.sendPartyAnnouncement({
         recipients,
         subject: subject?.trim() || null,

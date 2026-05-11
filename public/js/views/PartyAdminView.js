@@ -189,14 +189,15 @@ export class PartyAdminView {
     return showRevoke ? 6 : 5;
   }
 
-  // Surface plus-one / family-member info from the RSVP form answers. Scans
-  // form field ids for any plus-one-like name so the column lights up when
-  // the host adds a "plus_one_name", "family", or "bringing" field to the
-  // form. Falls back to "—" so the layout stays consistent.
+  // Surface plus-one / family-member info from the RSVP form answers. The
+  // regex is anchored at word boundaries so a generic field id like
+  // "guest_message" doesn't accidentally bleed personal notes into the
+  // Bringing column — only fields that clearly *name* this concept match.
+  // Falls back to "—" so the layout stays consistent.
   _bringingFor(g) {
     const ans = g.rsvp_answers;
     if (!ans) return '—';
-    const re = /plus.?one|guest|family|bringing|maki|fjölskylda|gestir/i;
+    const re = /^(plus[_-]?one|plus[_-]?ones|bringing|companions?|family|maki|fjölskylda|gestir)(_|$)/i;
     for (const [k, v] of Object.entries(ans)) {
       if (!re.test(k)) continue;
       if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue;
@@ -667,7 +668,7 @@ export class PartyAdminView {
     if (!this._emailOverlay) {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay party-admin__email-overlay';
-      overlay.innerHTML = `<div class="modal party-admin__email-modal" role="dialog" aria-modal="true" tabindex="-1"></div>`;
+      overlay.innerHTML = `<div class="modal party-admin__email-modal" role="dialog" aria-modal="true" aria-labelledby="party-admin-email-title" tabindex="-1"></div>`;
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) this._closeEmailGoingModal();
       });
@@ -683,7 +684,7 @@ export class PartyAdminView {
     const modal = this._emailOverlay.querySelector('.modal');
     modal.innerHTML = `
       <button class="modal__close" type="button" aria-label="${t('common.close')}" data-email-close>&times;</button>
-      <h2 class="modal__title">${t('party.admin.emailGoingTitle')}</h2>
+      <h2 class="modal__title" id="party-admin-email-title">${t('party.admin.emailGoingTitle')}</h2>
       <p class="modal__desc">${t('party.admin.emailGoingDesc')}</p>
       <form class="party-admin__email-form" id="party-admin-email-form">
         <label class="party-admin__email-field">

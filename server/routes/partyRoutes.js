@@ -22,6 +22,15 @@ const inviteRedeemLimiter = rateLimit({
   message: { error: 'Too many attempts. Try again in an hour.', code: 429 },
 });
 
+// Bulk email to guests: 10 sends/hr/IP — defense in depth against a
+// compromised admin session blasting the guest list.
+const emailBlastLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  skip: isTest,
+  message: { error: 'Too many email sends. Try again later.', code: 429 },
+});
+
 // ── Party photo upload (images only, max 10 MB) ────────────────────────────────
 const PARTY_PHOTO_DIR = partyUploadDir();
 
@@ -132,10 +141,11 @@ router.get('/invited-guests',
   requireAuth, requireRole('admin', 'moderator'),
   partyController.listInvitedGuests);
 
-// Send a single email to the union of going (+ optionally maybe) guests.
-// Admin/moderator only — body { subject?, body?, includeMaybe? }.
+// Send one email per recipient (privacy: no shared To:) to going + maybe
+// guests. Admin-only — moderators can view guests but can't blast emails
+// under the host's name. Body { subject?, body?, includeMaybe? }.
 router.post('/email-going',
-  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  requireAuth, requireRole('admin'), emailBlastLimiter, csrfProtect,
   partyController.emailGoingGuests);
 
 // ── Logistics (admin/moderator) ───────────────────────────────────────────────

@@ -467,7 +467,7 @@
   "party.admin.hasntRsvpd": "Hasn't RSVP'd yet.",
   "party.admin.emailGoingBtn": "Email accepted + maybe",
   "party.admin.emailGoingTitle": "Email accepted + maybe guests",
-  "party.admin.emailGoingDesc": "Send one email to everyone who's coming or might come. Recipients are bcc'd — they won't see each other's addresses.",
+  "party.admin.emailGoingDesc": "Send a copy of this message to everyone who's coming or might come. Each guest gets their own email — addresses stay private.",
   "party.admin.emailGoingSubjectLabel": "Subject",
   "party.admin.emailGoingBodyLabel": "Message",
   "party.admin.emailGoingSubjectPh": "Reminder: party on July 25",
