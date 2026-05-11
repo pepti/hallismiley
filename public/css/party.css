@@ -976,6 +976,25 @@ button.party-admin__stat:focus-visible {
   font-style: italic;
 }
 
+/* Hero is not a .party-section, so it needs its own editable affordance. */
+.party-hero--editing [data-party-hero-field] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  cursor: text;
+  min-width: 2ch;
+  padding-bottom: 1px;
+}
+.party-hero--editing [data-party-hero-field]:focus {
+  border-bottom-color: #C89B3C;
+}
+
+/* The hero is overflow:hidden, which clips position:sticky from
+   .party-edit-controls. Pin the hero's controls bar to its bottom edge. */
+.party-hero .party-edit-controls {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+}
+
 /* Schedule/Games add & delete row buttons */
 .party-edit-row-delete {
   background: rgba(220,50,50,.2);
