@@ -127,6 +127,19 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
   ]);
 }
 
+/** Derive an RSVP status bucket from the free-text `attend_when` answer.
+ *  Order matters — decline phrases are checked first so "I'm definitely not
+ *  going maybe" classifies as declined rather than maybe. Patterns cover
+ *  English + Icelandic so localized form choices land in the right bucket.
+ *  Returns 'waiting' (no RSVP), 'declined', 'maybe', or 'going'.            */
+function _deriveRsvpStatus(answers) {
+  if (!answers) return 'waiting';
+  const a = typeof answers.attend_when === 'string' ? answers.attend_when : '';
+  if (/can'?t|sorry|kemst ekki|afþakka|kem ekki/i.test(a)) return 'declined';
+  if (/\bmaybe\b|kannski|óvíst/i.test(a))                  return 'maybe';
+  return 'going';
+}
+
 /** Check party access via the users.party_access flag.
  *  The email-invite pathway (party_invites table) was removed with the old
  *  party scope; access is now granted purely by the admin-toggleable flag. */
@@ -227,9 +240,10 @@ const partyController = {
 
   // GET /api/v1/party/invited-guests — admin/moderator only.
   // Returns every user with party_access=true, LEFT JOINed with their RSVP
-  // row so the UI can show "✅ Going / ⏳ Waiting / ❌ Can't make it" at a
-  // glance. The `attend_when` sentinel that marks a decline is derived from
-  // the site's default RSVP form; callers should match against it loosely.
+  // row so the UI can show "✅ Going / 🤔 Maybe / ⏳ Pending / ❌ Declined"
+  // at a glance. Status is derived from the free-text `attend_when` answer:
+  // explicit decline phrases first, then "maybe", otherwise "going". The
+  // patterns cover English + Icelandic so localized forms classify correctly.
   async listInvitedGuests(req, res, next) {
     try {
       const { rows } = await db.query(
@@ -244,29 +258,81 @@ const partyController = {
          ORDER BY COALESCE(u.display_name, u.username) ASC`
       );
 
-      const shaped = rows.map(r => {
-        const answers   = r.rsvp_answers || null;
-        const attendAns = answers?.attend_when;
-        let status = 'waiting';
-        if (answers) {
-          status = (typeof attendAns === 'string' && /can'?t|sorry|no/i.test(attendAns))
-            ? 'declined'
-            : 'rsvpd';
-        }
-        return {
-          id:              r.id,
-          username:        r.username,
-          display_name:    r.display_name,
-          email:           r.email,
-          avatar:          r.avatar,
-          role:            r.role,
-          rsvp_status:     status,
-          rsvp_answers:    answers,
-          rsvp_created_at: r.rsvp_created_at,
-          rsvp_updated_at: r.rsvp_updated_at,
-        };
-      });
+      const shaped = rows.map(r => ({
+        id:              r.id,
+        username:        r.username,
+        display_name:    r.display_name,
+        email:           r.email,
+        avatar:          r.avatar,
+        role:            r.role,
+        rsvp_status:     _deriveRsvpStatus(r.rsvp_answers),
+        rsvp_answers:    r.rsvp_answers || null,
+        rsvp_created_at: r.rsvp_created_at,
+        rsvp_updated_at: r.rsvp_updated_at,
+      }));
       res.json(shaped);
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/party/email-going — admin only.
+  // Sends one email per recipient (see emailService.sendPartyAnnouncement —
+  // recipients never see each other's addresses) to going (+ optionally
+  // maybe) guests, so the host can blast reminders / venue updates without
+  // copy-pasting addresses. Body: { subject?, body?, includeMaybe? }.
+  // Returns immediately with the recipient count; the actual fan-out is
+  // fire-and-forget so a slow Resend call never blocks the admin UI.
+  async emailGoingGuests(req, res, next) {
+    try {
+      const { subject, body, includeMaybe = true } = req.body || {};
+
+      if (subject != null && (typeof subject !== 'string' || subject.length > 200)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.emailSubjectInvalid'), code: 400 });
+      }
+      if (body != null && (typeof body !== 'string' || body.length > 5000)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.emailBodyInvalid'), code: 400 });
+      }
+
+      const allowedStatuses = includeMaybe ? ['going', 'maybe'] : ['going'];
+      const { rows } = await db.query(
+        `SELECT u.id, u.email, u.display_name, u.username, r.answers AS rsvp_answers
+           FROM users u
+           LEFT JOIN party_rsvps r ON r.user_id = u.id
+          WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL`
+      );
+
+      const recipients = rows
+        .filter(r => allowedStatuses.includes(_deriveRsvpStatus(r.rsvp_answers)))
+        .map(r => r.email)
+        .filter(Boolean);
+
+      // Respond first; email send happens in the background.
+      res.json({ sent: recipients.length });
+
+      if (recipients.length === 0) return;
+
+      // Pull party info for the venue/date block at the bottom of the email.
+      const infoRes = await db.query(
+        `SELECT DISTINCT ON (key) key, value FROM site_content
+          WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
+          ORDER BY key, (locale = $1) DESC`,
+        [DEFAULT_LOCALE]
+      );
+      const partyInfo = { ...DEFAULT_PARTY_INFO };
+      for (const row of infoRes.rows) {
+        const k = row.key.replace(/^party_/, '');
+        partyInfo[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
+      }
+
+      // One Resend call per recipient (see emailService.sendPartyAnnouncement)
+      // so guests can't see each other's addresses. Partial failures are
+      // logged but never surfaced to the admin — by the time we get here the
+      // response has already been sent.
+      emailService.sendPartyAnnouncement({
+        recipients,
+        subject: subject?.trim() || null,
+        body:    body?.trim()    || null,
+        partyInfo,
+      }).catch(err => console.error(`[partyController] Party announcement failed: ${err.message}`));
     } catch (err) { next(err); }
   },
 
