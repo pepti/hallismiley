@@ -3,7 +3,7 @@ import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 import { Lightbox }     from '../components/Lightbox.js';
-import { t } from '../i18n/i18n.js';
+import { t, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 const PARTY_DATE = new Date('2026-07-25T14:00:00');
 const DEFAULT_GUEST_CAP = 60;
@@ -59,8 +59,9 @@ export class PartyView {
   }
 
   async _loadAll() {
-    // Party info is public — always fetch
-    const infoRes = await fetch('/api/v1/party/info');
+    // Party info is public — always fetch. Pass ?locale= so the server returns
+    // the row matching the active UI locale (URL prefix → window.__locale).
+    const infoRes = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`);
     this._partyInfo = await infoRes.json();
 
     // Admin-designed RSVP form (list of fields). Fall back to a seeded default
@@ -306,6 +307,7 @@ export class PartyView {
 
     const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="venue">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="venue">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="venue">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="venue" aria-live="polite"></span>
@@ -352,6 +354,7 @@ export class PartyView {
 
     const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="schedule">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="schedule">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="schedule">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="schedule" aria-live="polite"></span>
@@ -427,6 +430,7 @@ export class PartyView {
 
     const editControls = editor ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="rsvp">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="rsvp">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="rsvp" aria-live="polite"></span>
@@ -557,6 +561,7 @@ export class PartyView {
 
     const editControls = editor ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="activities">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="activities">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="activities">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="activities" aria-live="polite"></span>
@@ -710,7 +715,7 @@ export class PartyView {
       const fd = new FormData();
       fd.append('file', file);
 
-      const res = await fetch('/api/v1/party/cover-image', {
+      const res = await fetch(`/api/v1/party/cover-image?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'POST',
         credentials: 'include',
         headers,
@@ -738,7 +743,7 @@ export class PartyView {
     setStatus(t('form.saving'));
     try {
       const headers = await getCsrfHeaders();
-      const res = await fetch('/api/v1/party/info', {
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'PATCH',
         credentials: 'include',
         headers,
@@ -1169,7 +1174,7 @@ export class PartyView {
 
     try {
       const headers = await getCsrfHeaders();
-      const res = await fetch('/api/v1/party/info', {
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'PATCH',
         credentials: 'include',
         headers,
