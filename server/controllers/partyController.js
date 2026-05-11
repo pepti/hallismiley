@@ -19,7 +19,7 @@ const DEFAULT_PARTY_INFO = {
   venue_rating: '4.3/5 on Google (20 reviews)',
   venue_details: JSON.stringify({
     hall: [
-      'Veisluskáli seats 40 at 6 long tables, romantic atmosphere with Bluetooth speaker',
+      'Banquet hall seats 40 at 6 long tables, romantic atmosphere with Bluetooth speaker',
       'Small kitchen inside, two large outdoor grills + fridge',
       'Guests bring own food, drinks, and tableware',
       '15 min drive from downtown Reykjavík, near Bauhaus by Úlfarsfell',
