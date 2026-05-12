@@ -1,7 +1,14 @@
 name: Deploy to Azure
 
+# Deploy is gated on CI: it runs only after the CI workflow finishes
+# successfully on main, deploying the exact SHA that CI validated.
+# `workflow_dispatch` stays available as a manual override — used when
+# we need to ship an image without re-running CI (e.g. after a
+# subscription/billing outage where the previous CI was already green).
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -10,6 +17,11 @@ jobs:
     name: Build & Deploy
     runs-on: ubuntu-latest
 
+    # Fail closed: deploy only fires when CI succeeded for this SHA, or
+    # when a human explicitly dispatched the workflow. Any CI failure
+    # (red tests, audit, docker build) leaves prod untouched.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
     # Required for OIDC federated login against Azure AD — the job gets a
     # short-lived token from GitHub that Azure exchanges for a service-
     # principal session, no long-lived secrets in the repo.
@@ -17,9 +29,18 @@ jobs:
       id-token: write
       contents: read
 
+    env:
+      # For workflow_run, deploy the exact commit CI validated (not whatever
+      # is at main HEAD now — main may have advanced between CI completion
+      # and this job starting). For workflow_dispatch, fall back to the SHA
+      # at the time of dispatch.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v3
@@ -42,13 +63,13 @@ jobs:
           push: true
           tags: |
             hallismileyacr.azurecr.io/hallismiley:latest
-            hallismileyacr.azurecr.io/hallismiley:${{ github.sha }}
+            hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: hallismiley-app
-          images: hallismileyacr.azurecr.io/hallismiley:${{ github.sha }}
+          images: hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
 
       # azure/webapps-deploy updates the configured image tag but on B1
       # (no slots) doesn't reliably trigger a container swap — observed on

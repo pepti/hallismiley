@@ -107,6 +107,10 @@ jobs:
   docker:
     name: Docker build
     runs-on: ubuntu-latest
+    # Gate on test — otherwise a green Docker job can mask a red test job
+    # at the workflow-summary level, and the workflow_run trigger in
+    # deploy.yml only sees the overall conclusion.
+    needs: test
     steps:
       - name: Checkout
         uses: actions/checkout@v6
