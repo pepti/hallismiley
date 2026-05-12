@@ -4,14 +4,14 @@ const db   = require('../config/database');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
 const { t }        = require('../i18n');
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES } = require('../config/i18n');
+const { DEFAULT_LOCALE } = require('../config/i18n');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
 // Default party info stored in site_content under key 'party_info'
 const DEFAULT_PARTY_INFO = {
   date: 'July 25, 2026',
-  guest_cap: 60,
+  rsvp_message: '',
   cover_image: '',
   venue_name: 'Mýrarkot og SPA',
   venue_address: 'Lambhagavegi 23, 113 Reykjavík',
@@ -744,7 +744,7 @@ const partyController = {
 
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'invite_code', 'cover_image', 'guest_cap'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'invite_code', 'cover_image', 'rsvp_message'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {
@@ -769,31 +769,23 @@ const partyController = {
         let jsonb;
         try { jsonb = JSON.parse(value); } catch { jsonb = value; }
 
-        // guest_cap is a non-negative integer, capped to a sane upper bound.
-        // Explicitly reject empty/whitespace input — Number('') and Number(' ')
-        // both coerce to 0, which would silently store a zero cap.
-        if (key === 'guest_cap') {
-          if (typeof value !== 'string' || value.trim() === '') {
+        // rsvp_message is a free-form paragraph. Cap length so the row stays
+        // sane and prevent an admin from accidentally pasting a novel.
+        if (key === 'rsvp_message') {
+          if (typeof jsonb !== 'string') {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeString', { name: key }), code: 400 });
+          }
+          if (jsonb.length > 2000) {
             return res.status(400).json({ error: t(req.locale, 'errors.party.invalidField', { name: key }), code: 400 });
           }
-          const n = Number(jsonb);
-          if (!Number.isInteger(n) || n < 0 || n > 10000) {
-            return res.status(400).json({ error: t(req.locale, 'errors.party.invalidField', { name: key }), code: 400 });
-          }
-          jsonb = n;
         }
 
-        // guest_cap is locale-agnostic — mirror to all supported locales so it
-        // stays consistent across languages. Other fields are per-locale.
-        const targetLocales = key === 'guest_cap' ? SUPPORTED_LOCALES : [locale];
-        for (const loc of targetLocales) {
-          await db.query(
-            `INSERT INTO site_content (key, locale, value, updated_by) VALUES ($1, $2, $3::jsonb, $4)
-             ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value,
-               updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-            [`party_${key}`, loc, JSON.stringify(jsonb), req.user.id]
-          );
-        }
+        await db.query(
+          `INSERT INTO site_content (key, locale, value, updated_by) VALUES ($1, $2, $3::jsonb, $4)
+           ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value,
+             updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+          [`party_${key}`, locale, JSON.stringify(jsonb), req.user.id]
+        );
       }
 
       // Return the merged result (for the request's locale, falling back to default)
