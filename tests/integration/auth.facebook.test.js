@@ -264,10 +264,21 @@ describe('GET /auth/facebook/callback', () => {
     expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
   });
 
-  test('ignores a tampered returnTo cookie value (defense-in-depth)', async () => {
+  // See the matching block in auth.google.test.js for the full rationale —
+  // these cases pin that the callback re-runs isSafeReturnTo() on the cookie
+  // before redirecting, so every attack vector PR #33's validator added is
+  // rejected end-to-end (not just at the entry point).
+  test.each([
+    ['absolute URL',          'https%3A%2F%2Fevil.com'],
+    ['protocol-relative',     '%2F%2Fevil.com%2Fx'],
+    ['backslash-prefixed',    '%2F%5Cevil.com'],
+    ['url-encoded backslash', '%5C%5Cevil.com'],
+    ['javascript scheme',     'javascript%3Aalert(1)'],
+    ['data scheme',           'data%3Atext%2Fhtml%2C%3Cscript%3Ealert(1)%3C%2Fscript%3E'],
+  ])('ignores tampered returnTo cookie — %s', async (_label, encodedReturnTo) => {
     const res = await request(app)
       .get('/auth/facebook/callback?code=abc&state=test-state-xyz')
-      .set('Cookie', `${cookieHeader}; facebook_oauth_return_to=https%3A%2F%2Fevil.com`);
+      .set('Cookie', `${cookieHeader}; facebook_oauth_return_to=${encodedReturnTo}`);
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('/en/');
