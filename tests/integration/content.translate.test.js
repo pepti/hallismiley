@@ -122,6 +122,36 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
     expect(isRow).toEqual({ title: 'Beint á íslensku' });
   });
 
+  test('PUT ?locale=is writes only the IS row and leaves the EN row untouched', async () => {
+    // Regression for the bilingual-overwrite bug: an admin editing /is/halli
+    // saved Icelandic content and the EN row got overwritten because the SPA
+    // omitted ?locale=is on the PUT, falling back to DEFAULT_LOCALE on the
+    // server. With the fix in place the explicit ?locale=is in the URL must
+    // land in the IS row only, no matter what req.locale resolves to.
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES
+         ($1, 'en', $2::jsonb),
+         ($1, 'is', $3::jsonb)`,
+      [
+        'test_isolation',
+        JSON.stringify({ title: 'English title', body: 'English body' }),
+        JSON.stringify({ title: 'Íslenskur titill', body: 'Íslenskur texti' }),
+      ]
+    );
+
+    const res = await request(app)
+      .put('/api/v1/content/test_isolation?locale=is')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Nýr titill', body: 'Nýr texti' });
+    expect(res.status).toBe(200);
+
+    const enRow = await readRow('test_isolation', 'en');
+    expect(enRow).toEqual({ title: 'English title', body: 'English body' });
+
+    const isRow = await readRow('test_isolation', 'is');
+    expect(isRow).toEqual({ title: 'Nýr titill', body: 'Nýr texti' });
+  });
+
   test('merges translation into an existing IS row without overwriting filled leaves', async () => {
     // Seed an IS row where the title is already filled but eyebrow is null
     await db.query(

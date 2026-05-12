@@ -732,9 +732,10 @@ export class ContactView {
       token = null;
     }
 
+    const locale = encodeURIComponent(window.__locale || 'en');
     const puts = SECTIONS.map(async s => {
       const body = payloads[s.field];
-      const res = await fetch(`/api/v1/content/${s.key}`, {
+      const res = await fetch(`/api/v1/content/${s.key}?locale=${locale}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {

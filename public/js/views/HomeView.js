@@ -343,7 +343,7 @@ export class HomeView {
         ...(token ? { 'X-CSRF-Token': token } : {}),
       };
 
-      const res = await fetch('/api/v1/content/home_hero', {
+      const res = await fetch(`/api/v1/content/home_hero?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method: 'PUT', credentials: 'include', headers,
         body: JSON.stringify(updated),
       });
@@ -903,13 +903,14 @@ export class HomeView {
       };
 
       // Save both in parallel
+      const locale = encodeURIComponent(window.__locale || 'en');
       const [skillsRes, statsRes] = await Promise.all([
-        fetch('/api/v1/content/home_skills', {
+        fetch(`/api/v1/content/home_skills?locale=${locale}`, {
           method: 'PUT', credentials: 'include', headers,
           body: JSON.stringify(updated),
         }),
         statsSection
-          ? fetch('/api/v1/content/home_stats', {
+          ? fetch(`/api/v1/content/home_stats?locale=${locale}`, {
               method: 'PUT', credentials: 'include', headers,
               body: JSON.stringify(statsItems),
             })
@@ -1173,7 +1174,7 @@ export class HomeView {
         ...(token ? { 'X-CSRF-Token': token } : {}),
       };
 
-      const res = await fetch('/api/v1/content/home_discipline', {
+      const res = await fetch(`/api/v1/content/home_discipline?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method: 'PUT', credentials: 'include', headers,
         body: JSON.stringify(updated),
       });
