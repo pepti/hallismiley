@@ -32,7 +32,8 @@ RUN mkdir -p /app/public/assets/content /app/uploads/news /app/uploads/party /ap
 # Drop to non-root user
 USER appuser
 
-# Railway injects PORT at runtime; default to 3000 for local docker run
+# Azure App Service injects PORT (=8080 by default) at runtime; default to
+# 3000 for local docker run.
 ENV NODE_ENV=production
 EXPOSE 3000
 

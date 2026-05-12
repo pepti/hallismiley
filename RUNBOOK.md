@@ -1,29 +1,70 @@
 # Runbook — Halli Smiley
 
-Operational procedures for the production deployment on Railway.
+Operational procedures for the production deployment on Azure App Service.
+
+Key resource names (see also project memory):
+
+| Resource | Name |
+| --- | --- |
+| Resource group | `hallismiley-rg` |
+| App Service | `hallismiley-app` |
+| Container registry | `hallismileyacr.azurecr.io` |
+| Postgres Flexible Server | `hallismiley-db` |
 
 ---
 
 ## Rollback Procedures
 
-### One-Click Rollback (Railway Dashboard)
+The deploy pipeline tags every image with its commit SHA
+(`hallismileyacr.azurecr.io/hallismiley:<sha>`), so a rollback is a one-command
+swap of which tag the App Service points at — no rebuild, no CI rerun.
 
-1. Open [Railway](https://railway.app) and navigate to your project.
-2. Select the **web service** (not the PostgreSQL plugin).
-3. Click the **Deployments** tab.
-4. Find the last known-good deployment and click the **...** menu → **Redeploy**.
-5. Railway will re-run that exact image. Monitor the deployment logs to confirm it starts cleanly.
-
-> Note: A rollback re-deploys the previous Docker image but does NOT revert the database. If the rollback target used a different schema, run the corresponding migration rollback manually (see below).
-
-### Manual Rollback via CLI
+### Pin App Service to a previous image SHA (preferred)
 
 ```bash
-# List recent deployments
-railway deployments list
+# 1. List recent image tags in ACR, newest first.
+az acr repository show-tags \
+  --name hallismileyacr --repository hallismiley \
+  --orderby time_desc --top 20 -o tsv
 
-# Redeploy a specific deployment ID
-railway redeploy <deployment-id>
+# 2. Point the App Service at the previous-known-good tag.
+az webapp config container set \
+  --resource-group hallismiley-rg \
+  --name hallismiley-app \
+  --container-image-name hallismileyacr.azurecr.io/hallismiley:<previous-sha>
+
+# 3. Force a restart so the new image is actually running.
+az webapp restart \
+  --resource-group hallismiley-rg --name hallismiley-app
+```
+
+Verify with `curl -I https://www.hallismiley.is/health` once the restart settles
+(~30–60s on the B1 tier; brief unavailability during the swap).
+
+> A rollback re-deploys the previous Docker image but does NOT revert the
+> database. If the rollback target used a different schema, run a corrective
+> migration manually (see **Database Migration Rollback** below).
+
+### Git-based rollback (slower, but goes through CI)
+
+When the bad change is small and you'd rather have CI validate the rollback:
+
+```bash
+git revert <bad-commit-sha>
+git push origin main
+```
+
+CI runs against the revert commit; on green, the gated Deploy workflow
+auto-fires and ships the reverted code. Takes ~5–8 minutes vs. the ~1 minute
+of the image-pin approach.
+
+### Emergency manual deploy (skip CI gate)
+
+Used yesterday after the subscription outage — fires Deploy directly without
+waiting for a new CI run:
+
+```bash
+gh workflow run "Deploy to Azure" --ref main
 ```
 
 ---
@@ -88,32 +129,71 @@ container mounts at `/app/uploads`.
 
 ## Common Incidents
 
-### Server returns 503 on /health
+### "Web App is stopped" (HTTP 403, Azure platform page)
 
-1. Check the Railway deployment logs for startup errors.
-2. Verify all required env vars are set in the Railway dashboard (see README → Environment Variables).
-3. Check the PostgreSQL plugin is running: Railway dashboard → PostgreSQL → Metrics.
-4. If the DB is up but the server is crashing, check for `[server] Startup failed` in logs.
+This is the platform's own error page, served before the Node container.
+Almost always means either the App Service was stopped or the subscription is
+disabled. Check in this order:
+
+```bash
+# Is the App Service stopped?
+az webapp show --resource-group hallismiley-rg --name hallismiley-app \
+  --query "{state:state, availabilityState:availabilityState}" -o json
+
+# Is the subscription enabled?
+az account show --query "{name:name, state:state}" -o json
+```
+
+If `state: "Stopped"` → `az webapp start --resource-group hallismiley-rg --name hallismiley-app`.
+If the subscription is disabled → resolve billing in Azure Portal first; the
+App Service will auto-resume once the subscription is reactivated.
+
+### Server returns 503 on /health (Node is running but failing)
+
+1. Tail container logs:
+   ```bash
+   az webapp log tail --resource-group hallismiley-rg --name hallismiley-app
+   ```
+2. Verify required app settings are in place:
+   ```bash
+   az webapp config appsettings list --resource-group hallismiley-rg --name hallismiley-app -o table
+   ```
+   Missing `DATABASE_URL`, `CSRF_SECRET`, `ALLOWED_ORIGINS` typically surface
+   as startup failures. Compare against `.env.example`.
+3. Check Postgres reachability — `hallismiley-db.postgres.database.azure.com`
+   must accept inbound from App Service outbound IPs:
+   ```bash
+   az postgres flexible-server firewall-rule list \
+     --resource-group hallismiley-rg --name hallismiley-db -o table
+   ```
+4. If the DB is up but the server is crashing, look for `[server] Startup failed`
+   in `az webapp log tail` output.
 
 ### Out-of-memory / container restart loop
 
-1. Check Railway metrics for memory usage spikes.
-2. If caused by a bad deployment, roll back immediately (see above).
-3. If persistent, increase the Railway service's memory limit or investigate query/memory leak.
-
-### JWT auth broken after deployment
-
-Likely cause: `PRIVATE_KEY` or `PUBLIC_KEY` env vars were changed or not set.
-
-1. Verify both keys are present in Railway env vars.
-2. Ensure newlines are encoded as `\n` (single-line format).
-3. Restart the service after correcting env vars.
+1. Open the **Metrics** blade for `hallismiley-app` in the Azure Portal — chart
+   *Memory Working Set* and *CPU Percentage* over the last 24h.
+2. If caused by a bad deploy, roll back via the image-pin recipe above.
+3. If persistent, scale the plan up:
+   ```bash
+   az appservice plan update \
+     --resource-group hallismiley-rg --name hallismiley-plan --sku B2
+   ```
+   B1 has 1.75 GB; B2 has 3.5 GB.
 
 ### High rate-limit 429 errors
 
-1. Check `/health` — if the server is healthy, the source is a bot or crawler.
-2. Add the IP to Railway's DDoS protection or a WAF if available.
-3. Tighten rate limits in `server/app.js` or `server/routes/authRoutes.js` if needed.
+1. Hit `/health` directly — if the server is healthy, the source is a bot/crawler.
+2. Inspect recent requests via App Service Log Stream or
+   `az webapp log tail`. Use the `requestId` field to correlate.
+3. Add an IP access restriction if needed:
+   ```bash
+   az webapp config access-restriction add \
+     --resource-group hallismiley-rg --name hallismiley-app \
+     --rule-name block-abuse --action Deny --ip-address <ip>/32 --priority 100
+   ```
+4. Tighten rate limits in `server/app.js` or `server/routes/authRoutes.js` if
+   the source is widely distributed.
 
 ---
 
@@ -140,7 +220,22 @@ See `README.md → Environment-Specific Configuration` and `.env.example` for th
 
 ## Log Access
 
-Logs are available in the Railway dashboard under your service → **Logs** tab. Use the `requestId` field (`X-Request-ID` header) to correlate requests across log lines.
+Live tail from the terminal (Pino structured JSON, one line per request):
+
+```bash
+az webapp log tail --resource-group hallismiley-rg --name hallismiley-app
+```
+
+In the portal: **App Service `hallismiley-app` → Monitoring → Log Stream**.
+
+Use the `requestId` field (`X-Request-ID` header on the corresponding response)
+to correlate log lines across a single request. Filter further by severity
+with `jq`:
+
+```bash
+az webapp log tail -g hallismiley-rg -n hallismiley-app \
+  | grep -E '^\{' | jq 'select(.level >= 40)'   # warn (40) and above
+```
 
 ---
 

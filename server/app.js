@@ -32,7 +32,7 @@ const { trackRequest } = require('./observability/alerts');
 
 const app = express();
 
-// Trust the first proxy (Railway's reverse proxy) so req.ip and rate limiting work correctly
+// Trust the first proxy (Azure App Service's reverse proxy) so req.ip and rate limiting work correctly
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }

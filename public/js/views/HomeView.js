@@ -62,7 +62,7 @@ const DEFAULT_SKILLS_CONTENT = {
     { label: 'Backend',   value: 'Node · Express · REST' },
     { label: 'Database',  value: 'PostgreSQL · Redis' },
     { label: 'Carpentry', value: '20+ yrs hand & power tools' },
-    { label: 'Cloud',     value: 'Azure · Railway' },
+    { label: 'Cloud',     value: 'Azure' },
     { label: 'Security',  value: 'OWASP · OAuth 2.0 · RS256' },
   ],
   image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',

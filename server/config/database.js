@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // On hosted services (Supabase, Railway, Render) SSL is required
+  // On hosted services (Azure, Supabase, Render, etc.) SSL is required
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : false,
   max: 10,              // max connections in pool
   idleTimeoutMillis: 30000,

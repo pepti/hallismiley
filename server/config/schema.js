@@ -1199,7 +1199,7 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // locales (en_US.UTF-8, C.UTF-8, is_IS.UTF-8) lowercases Icelandic
     // letters correctly (Á→á, Þ→þ, Ð→ð, Æ→æ, Ö→ö, etc.). A `C`-locale
     // cluster would not — but every environment we deploy to (Azure
-    // Database for PostgreSQL, Railway, local dev) uses a UTF-8 locale,
+    // Database for PostgreSQL and local dev) uses a UTF-8 locale,
     // and login already depends on the same assumption.
     name: '041_users_username_lower_unique',
     statements: [
@@ -1229,6 +1229,44 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       )`,
       `CREATE INDEX IF NOT EXISTS idx_party_logistics_sort
          ON party_logistics_items (sort_order, id)`,
+    ],
+  },
+  {
+    // Strip stale Railway references from the seeded site_content rows.
+    // Production moved off Railway to Azure App Service back on 2026-04-09,
+    // but earlier migrations (007 home_skills, 030/036/037/038 contact_built_with,
+    // and their locale backfills) baked "Railway" into the JSONB values that
+    // end up rendered on the homepage Cloud stat and the Contact page
+    // "Built with" pills + body prose. The corresponding JS fallbacks in
+    // HomeView.js and ContactView.js have been updated; this migration
+    // rewrites the DB rows so the live site doesn't keep serving the
+    // stale copy.
+    //
+    // Safe to rerun: each UPDATE filters with `WHERE … LIKE '%Railway%'`,
+    // so a second pass touches zero rows. Replacement targets are unique
+    // enough that an accidental partial match is implausible (admin edits
+    // post-deploy that reintroduce "Railway" would simply not be touched
+    // by a re-run, since the migration only runs once anyway).
+    name: '043_strip_stale_railway_references',
+    statements: [
+      // home_skills: cloud stat "Azure · Railway" → "Azure" (en + is rows)
+      `UPDATE site_content
+          SET value = REPLACE(value::text, '"Azure · Railway"', '"Azure"')::jsonb,
+              updated_at = NOW()
+        WHERE key = 'home_skills' AND value::text LIKE '%"Azure · Railway"%'`,
+
+      // contact_built_with: strip "Railway" pill, replace "Azure or Railway"
+      // / "Azure eða Railway" with "Azure App Service" in body prose. Done
+      // as nested REPLACE on the text representation so all three edits land
+      // in a single UPDATE.
+      `UPDATE site_content
+          SET value = REPLACE(REPLACE(REPLACE(
+                value::text,
+                ',"Railway"',         ''
+              ), 'Azure or Railway',  'Azure App Service'
+              ), 'Azure eða Railway', 'Azure App Service')::jsonb,
+              updated_at = NOW()
+        WHERE key = 'contact_built_with' AND value::text LIKE '%Railway%'`,
     ],
   },
 ];
