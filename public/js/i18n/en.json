@@ -544,7 +544,7 @@
   "party.venue": "Venue",
   "party.schedule": "Schedule",
   "party.addressTbd": "Address TBD",
-  "party.guestsAttending": "{n} of {total} guests attending",
+  "party.admin.rsvpMessagePlaceholder": "Click to add a message above the RSVP form…",
   "party.youveRsvpd": "You've RSVP'd",
   "party.daytimeActivities": "Daytime Activities",
   "party.eveningActivities": "Evening Activities",

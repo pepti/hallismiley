@@ -352,15 +352,43 @@
 
 /* ── RSVP ──────────────────────────────────────────────────────────────────── */
 
-.party-rsvp__intro,
-.party-rsvp__count {
+.party-rsvp__intro {
   color: var(--text-secondary);
   margin-bottom: var(--sp-4);
 }
 
-.party-rsvp__count {
-  font-size: 0.875rem;
-  color: var(--gold);
+/* Admin-curated paragraph shown above the RSVP form/summary. */
+.party-rsvp__message-block {
+  position: relative;
+  margin-bottom: var(--sp-5);
+}
+
+.party-rsvp__message {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.party-rsvp__message--editing {
+  outline: none;
+  border: 1px solid rgba(200, 155, 60, 0.55);
+  background: rgba(200, 155, 60, 0.08);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: text;
+  min-height: 3em;
+}
+
+.party-rsvp__message--editing:focus {
+  border-color: #C89B3C;
+  background: rgba(200, 155, 60, 0.14);
+}
+
+.party-rsvp__message-placeholder {
+  color: rgba(200, 155, 60, 0.55);
+  font-style: italic;
 }
 
 .party-rsvp__current {
@@ -993,44 +1021,30 @@ button.party-admin__stat:focus-visible {
 .party-edit-row-delete:hover { background: rgba(220,50,50,.4); }
 .party-edit-row-delete--hidden { display: none; }
 
-/* Inline guest-cap edit (the "60" in "X of 60 guests attending") */
+/* Inline-variant edit affordances (used by the RSVP message paragraph). */
 .party-edit-btn--inline {
-  position: static;
-  padding: .15rem .3rem;
-  margin-left: .35rem;
-  font-size: .65rem;
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: .25rem .55rem;
+  font-size: .7rem;
   letter-spacing: .04em;
   gap: 0;
-  vertical-align: baseline;
 }
 .party-edit-controls--inline {
   position: static;
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   padding: 0;
-  margin-left: .35rem;
+  margin-top: var(--sp-2);
   background: transparent;
   border-top: none;
-  gap: .35rem;
-  vertical-align: baseline;
+  gap: .5rem;
 }
 .party-edit-controls--inline .party-edit-save,
 .party-edit-controls--inline .party-edit-cancel {
-  padding: .15rem .55rem;
-  font-size: .65rem;
-}
-.party-rsvp__cap {
-  display: inline-block;
-  min-width: 2ch;
-  padding: 0 .1rem;
-}
-.party-rsvp__cap--editing {
-  outline: none;
-  border-bottom: 2px solid #C89B3C;
-  background: rgba(200,155,60,.1);
-  cursor: text;
-}
-.party-rsvp__cap--editing:focus {
-  background: rgba(200,155,60,.18);
+  padding: .25rem .8rem;
+  font-size: .7rem;
 }
 
 .party-edit-add {

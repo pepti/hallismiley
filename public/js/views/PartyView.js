@@ -6,7 +6,6 @@ import { Lightbox }     from '../components/Lightbox.js';
 import { t, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 const PARTY_DATE = new Date('2026-07-25T14:00:00');
-const DEFAULT_GUEST_CAP = 60;
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -398,29 +397,36 @@ export class PartyView {
     const rsvp         = this._rsvp;
     const answers      = rsvp?.answers || {};
     const editor       = canEdit();
-    const capNum       = Number(this._partyInfo?.guest_cap);
-    const totalGuests  = Number.isFinite(capNum) ? capNum : DEFAULT_GUEST_CAP;
-    const showCount    = editor || this._rsvpCount > 0;
-    // Use a private-use Unicode sentinel that no translation will ever contain,
-    // so we can wrap the {total} portion in editable HTML without sending HTML
-    // through the i18n interpolator.
-    const CAP_MARKER = String.fromCharCode(0xE000);
-    const [before, after = ''] = t('party.guestsAttending', { n: this._rsvpCount, total: CAP_MARKER }).split(CAP_MARKER);
-    const capEditBtn = editor ? `
-        <button class="party-edit-btn party-edit-btn--inline" data-edit-section="guestCap" aria-label="${t('admin.edit')}">
+    // Free-form admin-curated paragraph shown above the RSVP form/summary.
+    // Always visible to any guest who can see the RSVP section (before or
+    // after they submit). Admins get an inline edit affordance even when
+    // the message is empty so they can author it.
+    const rsvpMessage      = typeof this._partyInfo?.rsvp_message === 'string' ? this._partyInfo.rsvp_message : '';
+    const hasMessage       = rsvpMessage.trim().length > 0;
+    const showMessageBlock = editor || hasMessage;
+    const messageEditBtn = editor ? `
+        <button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvpMessage" aria-label="${t('admin.edit')}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>` : '';
-    const capControls = editor ? `
-        <span class="party-edit-controls party-edit-controls--inline party-edit-controls--hidden" data-controls="guestCap">
-          <button class="party-edit-save" data-save-section="guestCap">${t('form.save')}</button>
-          <button class="party-edit-cancel" data-cancel-section="guestCap">${t('admin.cancel')}</button>
-          <span class="party-edit-status" data-status="guestCap" aria-live="polite"></span>
-        </span>` : '';
-    const countHtml = showCount ? `
-      <p class="party-rsvp__count">
-        ${escHtml(before)}<span class="party-rsvp__cap" data-guest-cap>${totalGuests}</span>${escHtml(after)}
-        ${capEditBtn}${capControls}
-      </p>` : '';
+    const messageControls = editor ? `
+        <div class="party-edit-controls party-edit-controls--inline party-edit-controls--hidden" data-controls="rsvpMessage">
+          ${adminLocaleBadgeHtml()}
+          <button class="party-edit-save" data-save-section="rsvpMessage">${t('form.save')}</button>
+          <button class="party-edit-cancel" data-cancel-section="rsvpMessage">${t('admin.cancel')}</button>
+          <span class="party-edit-status" data-status="rsvpMessage" aria-live="polite"></span>
+        </div>` : '';
+    // Placeholder text only shows for admins when the message is empty, so
+    // there's a visible target to click. Non-admins with no message never
+    // see this block.
+    const messageBodyHtml = hasMessage
+      ? escHtml(rsvpMessage).replace(/\n/g, '<br>')
+      : (editor ? `<span class="party-rsvp__message-placeholder">${t('party.admin.rsvpMessagePlaceholder')}</span>` : '');
+    const messageHtml = showMessageBlock ? `
+      <div class="party-rsvp__message-block">
+        <p class="party-rsvp__message" data-rsvp-message>${messageBodyHtml}</p>
+        ${messageEditBtn}
+        ${messageControls}
+      </div>` : '';
 
     const editBtn = editor ? `
       <button class="party-edit-btn" data-edit-section="rsvp" aria-label="Edit RSVP form">
@@ -453,7 +459,7 @@ export class PartyView {
       <section class="party-section party-rsvp" aria-labelledby="rsvp-heading" id="rsvp">
         ${editBtn}
         <div class="party-section__inner" id="rsvp-inner">
-          ${countHtml}
+          ${messageHtml}
           ${summaryHtml}
           <div class="party-rsvp__form-wrap" id="rsvp-form-wrap" ${rsvp ? 'hidden' : ''}>
             ${this._renderRsvpForm(answers, !!rsvp)}
@@ -774,8 +780,8 @@ export class PartyView {
   _enterEdit(section) {
     // RSVP uses a custom form-builder editing flow
     if (section === 'rsvp') { this._enterEditRsvpForm(); return; }
-    // Guest cap is a tiny inline edit on a single number — handled separately
-    if (section === 'guestCap') { this._enterEditGuestCap(); return; }
+    // RSVP message is a free-form paragraph — inline edit handled separately
+    if (section === 'rsvpMessage') { this._enterEditRsvpMessage(); return; }
 
     const sectionEl = this._getSectionEl(section);
     if (!sectionEl) return;
@@ -978,74 +984,91 @@ export class PartyView {
     return fields;
   }
 
-  // ── Guest cap (the "60" in "X of 60 guests attending") ─────────────────────
-  // Tiny inline edit on a single number, separate from the section-level
-  // edit flow because it lives inside the RSVP section but is independent
-  // of the form-builder editor.
+  // ── RSVP message (admin-curated paragraph above the RSVP form) ────────────
+  // Inline edit on a free-form paragraph. Per-locale, so admins can write
+  // separate EN and IS versions. Visible to anyone with party access.
 
-  _enterEditGuestCap() {
-    const capEl = this._el.querySelector('[data-guest-cap]');
-    if (!capEl) return;
-    this._editSnapshots.guestCap = capEl.textContent;
+  _enterEditRsvpMessage() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    if (!msgEl) return;
+    const placeholder = msgEl.querySelector('.party-rsvp__message-placeholder');
+    // Snapshot the saved text (not the placeholder), so cancel restores cleanly.
+    this._editSnapshots.rsvpMessage = placeholder
+      ? ''
+      : this._partyInfo?.rsvp_message || '';
 
-    this._el.querySelector('[data-edit-section="guestCap"]')?.classList.add('party-edit-btn--hidden');
-    this._el.querySelector('[data-controls="guestCap"]')?.classList.remove('party-edit-controls--hidden');
+    this._el.querySelector('[data-edit-section="rsvpMessage"]')?.classList.add('party-edit-btn--hidden');
+    this._el.querySelector('[data-controls="rsvpMessage"]')?.classList.remove('party-edit-controls--hidden');
 
-    capEl.contentEditable = 'true';
-    capEl.spellcheck = false;
-    capEl.classList.add('party-rsvp__cap--editing');
-    capEl.focus();
+    // Replace any placeholder span with raw text so contentEditable acts on plain text.
+    msgEl.textContent = this._editSnapshots.rsvpMessage;
+    msgEl.contentEditable = 'true';
+    msgEl.spellcheck = true;
+    msgEl.classList.add('party-rsvp__message--editing');
+    msgEl.focus();
+    // Place caret at the end so admin can keep typing where they left off.
     const range = document.createRange();
-    range.selectNodeContents(capEl);
+    range.selectNodeContents(msgEl);
+    range.collapse(false);
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
   }
 
-  _cancelEditGuestCap() {
-    const capEl = this._el.querySelector('[data-guest-cap]');
-    if (capEl && this._editSnapshots.guestCap != null) {
-      capEl.textContent = this._editSnapshots.guestCap;
-    }
-    this._exitEditGuestCap();
+  _cancelEditRsvpMessage() {
+    this._renderRsvpMessageBody();
+    this._exitEditRsvpMessage();
   }
 
-  _exitEditGuestCap() {
-    const capEl = this._el.querySelector('[data-guest-cap]');
-    if (capEl) {
-      capEl.contentEditable = 'false';
-      capEl.classList.remove('party-rsvp__cap--editing');
+  _exitEditRsvpMessage() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    if (msgEl) {
+      msgEl.contentEditable = 'false';
+      msgEl.classList.remove('party-rsvp__message--editing');
     }
-    this._el.querySelector('[data-edit-section="guestCap"]')?.classList.remove('party-edit-btn--hidden');
-    this._el.querySelector('[data-controls="guestCap"]')?.classList.add('party-edit-controls--hidden');
-    const statusEl = this._el.querySelector('[data-status="guestCap"]');
+    this._el.querySelector('[data-edit-section="rsvpMessage"]')?.classList.remove('party-edit-btn--hidden');
+    this._el.querySelector('[data-controls="rsvpMessage"]')?.classList.add('party-edit-controls--hidden');
+    const statusEl = this._el.querySelector('[data-status="rsvpMessage"]');
     if (statusEl) statusEl.textContent = '';
   }
 
-  async _saveGuestCap() {
-    const capEl = this._el.querySelector('[data-guest-cap]');
-    const statusEl = this._el.querySelector('[data-status="guestCap"]');
-    if (!capEl) return;
+  // Refresh the message paragraph from this._partyInfo. Used after save and
+  // cancel to render the placeholder/text without rebuilding the whole section.
+  _renderRsvpMessageBody() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    if (!msgEl) return;
+    const text = typeof this._partyInfo?.rsvp_message === 'string' ? this._partyInfo.rsvp_message : '';
+    if (text.trim()) {
+      msgEl.innerHTML = escHtml(text).replace(/\n/g, '<br>');
+    } else if (canEdit()) {
+      msgEl.innerHTML = `<span class="party-rsvp__message-placeholder">${escHtml(t('party.admin.rsvpMessagePlaceholder'))}</span>`;
+    } else {
+      msgEl.innerHTML = '';
+    }
+  }
 
-    const raw = capEl.textContent.trim();
+  async _saveRsvpMessage() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    const statusEl = this._el.querySelector('[data-status="rsvpMessage"]');
+    if (!msgEl) return;
+
+    const raw = msgEl.innerText.replace(/\r\n/g, '\n').trim();
     if (statusEl) statusEl.textContent = t('form.saving');
     try {
       const headers = await getCsrfHeaders();
-      const res = await fetch('/api/v1/party/info', {
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'PATCH',
         credentials: 'include',
         headers,
-        body:        JSON.stringify({ guest_cap: raw }),
+        body:        JSON.stringify({ rsvp_message: raw }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Save failed');
       }
       this._partyInfo = await res.json();
-      const storedNum = Number(this._partyInfo?.guest_cap);
-      const stored = Number.isFinite(storedNum) ? storedNum : DEFAULT_GUEST_CAP;
-      capEl.textContent = String(stored);
-      this._exitEditGuestCap();
+      this._renderRsvpMessageBody();
+      this._exitEditRsvpMessage();
       showToast(t('form.success'), 'success');
     } catch (err) {
       if (statusEl) statusEl.textContent = err.message;
@@ -1085,7 +1108,7 @@ export class PartyView {
   }
 
   _cancelEdit(section) {
-    if (section === 'guestCap') { this._cancelEditGuestCap(); return; }
+    if (section === 'rsvpMessage') { this._cancelEditRsvpMessage(); return; }
     if (section === 'rsvp') {
       const sectionEl = this._getSectionEl('rsvp');
       const inner     = sectionEl?.querySelector('#rsvp-inner');
@@ -1110,7 +1133,7 @@ export class PartyView {
   }
 
   async _saveSection(section) {
-    if (section === 'guestCap') { await this._saveGuestCap(); return; }
+    if (section === 'rsvpMessage') { await this._saveRsvpMessage(); return; }
     const sectionEl = this._getSectionEl(section);
     if (!sectionEl) return;
 
