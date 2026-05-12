@@ -4,12 +4,18 @@
 // every `npm test` — codifies what the team did manually before this fix.
 const { Pool } = require('pg');
 
-// Stable 32-bit key for pg_advisory_lock on the admin DB. Serialises
-// concurrent globalSetup runs (e.g. an editor's auto-test + a pre-push)
-// so the DROP/CREATE pair from one process can't interleave with another's,
-// which used to crash with "duplicate key violates pg_database_datname_index"
-// or leave the migration runner racing against a half-recreated DB.
-const SETUP_LOCK_KEY = 0x68616c6c | 0; // ascii "hall" as int32
+// Stable key for pg_advisory_lock on the admin DB. Serialises the DROP/CREATE
+// step across concurrent globalSetup runs (e.g. an editor's auto-test +
+// a pre-push) so they can't crash with "duplicate key violates
+// pg_database_datname_index".
+//
+// Note: this lock only covers DROP/CREATE, not migration or test execution.
+// Two truly concurrent `npm test` runs against the same DB still race —
+// process B's drop can wipe process A's data mid-test. The user-visible
+// failure mode becomes a clean "database does not exist" instead of a
+// pile of cascading FK errors, which is a strict improvement. For real
+// parallel safety you'd want per-pid DB names.
+const SETUP_LOCK_KEY = 1751215212; // 0x68616c6c — "hall" as int32
 
 module.exports = async function globalSetup() {
   const dbUrl = process.env.TEST_DATABASE_URL

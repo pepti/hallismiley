@@ -1,12 +1,30 @@
-const db     = require('../server/config/database');
+const crypto    = require('crypto');
+const db        = require('../server/config/database');
 const { lucia } = require('../server/auth/lucia');
 const { Scrypt } = require('oslo/password');
-const { generateIdFromEntropySize } = require('lucia/dist/crypto.js');
 
 const scrypt = new Scrypt();
 
-// 30 days — must match lucia's sessionExpiresIn default
+// Lucia validates sessions by primary-key lookup, not by format, so any
+// unique opaque string works as a session id in tests. 30d expiry is just
+// "far enough in the future that no test trips the expiry check."
 const SESSION_EXPIRES_MS = 30 * 24 * 60 * 60 * 1000;
+
+function generateSessionId() {
+  return crypto.randomBytes(25).toString('hex');
+}
+
+// Centralised so the admin spec is defined once. Both createTestAdminUser
+// and getTestSessionCookie's default-admin path read from this.
+function adminUserSpec(password_hash) {
+  return {
+    id:            'test-admin-id',
+    email:         'admin@test.com',
+    username:      process.env.ADMIN_USERNAME,
+    password_hash,
+    role:          'admin',
+  };
+}
 
 /**
  * Upsert a user row using a caller-provided client so it shares a connection
@@ -40,13 +58,7 @@ async function createTestAdminUser() {
   const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
   const client = await db.pool.connect();
   try {
-    return await upsertUserOn(client, {
-      id:            'test-admin-id',
-      email:         'admin@test.com',
-      username:      process.env.ADMIN_USERNAME,
-      password_hash: hash,
-      role:          'admin',
-    });
+    return await upsertUserOn(client, adminUserSpec(hash));
   } finally {
     client.release();
   }
@@ -106,15 +118,12 @@ async function createTestRegularUser() {
 async function getTestSessionCookie(userId) {
   const client = await db.pool.connect();
   try {
-    const id = userId ?? await upsertUserOn(client, {
-      id:            'test-admin-id',
-      email:         'admin@test.com',
-      username:      process.env.ADMIN_USERNAME,
-      password_hash: await scrypt.hash(process.env.ADMIN_PASSWORD),
-      role:          'admin',
-    });
+    const id = userId ?? await upsertUserOn(
+      client,
+      adminUserSpec(await scrypt.hash(process.env.ADMIN_PASSWORD))
+    );
 
-    const sessionId = generateIdFromEntropySize(25);
+    const sessionId = generateSessionId();
     const expiresAt = new Date(Date.now() + SESSION_EXPIRES_MS);
     await client.query(
       `INSERT INTO user_sessions (id, user_id, expires_at, ip_address, user_agent)
