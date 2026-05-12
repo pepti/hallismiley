@@ -565,10 +565,13 @@ export class HomeView {
     <footer class="lol-footer">
 
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
-        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
+        <a href="${href('/')}"         class="lol-footer__nav-link">${t('nav.home')}</a>
         <a href="${href('/projects')}" class="lol-footer__nav-link">${t('nav.projects')}</a>
-        <a href="https://github.com/pepti/hallismiley" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">GitHub</a>
-        <a href="https://www.linkedin.com/in/halliv/" target="_blank" rel="noopener noreferrer" class="lol-footer__nav-link">LinkedIn</a>
+        <a href="${href('/shop')}"     class="lol-footer__nav-link">${t('nav.shop')}</a>
+        <a href="${href('/news')}"     class="lol-footer__nav-link">${t('nav.news')}</a>
+        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
+        <a href="${href('/contact')}"  class="lol-footer__nav-link">${t('nav.contact')}</a>
+        <a href="${href('/party')}"    class="lol-footer__nav-link">${t('nav.party')}</a>
       </nav>
 
       <div class="lol-footer__social">

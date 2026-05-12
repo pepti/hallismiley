@@ -9,7 +9,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, getLocale, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // Pick the locale-resolved slice of a `{ en, is }` default blob. Falls back
 // to English if an unknown locale is active or the .is key is missing.
@@ -168,12 +168,6 @@ const DEFAULT_FOOTER = {
   en: {
     brand_name:  'Halli Smiley',
     copy_suffix: 'A portfolio of nothing and everything.',
-    nav_links: [
-      { label: 'Halli',    href: '/halli' },
-      { label: 'Projects', href: '/projects' },
-      { label: 'GitHub',   href: 'https://github.com/pepti/hallismiley' },
-      { label: 'LinkedIn', href: 'https://www.linkedin.com/in/halliv/' },
-    ],
     legal_links: [
       { label: 'Privacy Policy',   href: '/privacy' },
       { label: 'Terms of Service', href: '/terms' },
@@ -182,12 +176,6 @@ const DEFAULT_FOOTER = {
   is: {
     brand_name:  'Halli Smiley',
     copy_suffix: 'Verkefnasafn um allt og ekkert.',
-    nav_links: [
-      { label: 'Halli',     href: '/halli' },
-      { label: 'Verkefni',  href: '/projects' },
-      { label: 'GitHub',    href: 'https://github.com/pepti/hallismiley' },
-      { label: 'LinkedIn',  href: 'https://www.linkedin.com/in/halliv/' },
-    ],
     legal_links: [
       { label: 'Persónuverndarstefna', href: '/privacy' },
       { label: 'Notkunarskilmálar',    href: '/terms' },
@@ -505,17 +493,6 @@ export class ContactView {
          </span>`
       : '';
 
-    const nav = f.nav_links.map((l, i) => {
-      const external = /^https?:/.test(l.href);
-      const attrs = external ? 'target="_blank" rel="noopener noreferrer"' : '';
-      return `
-        <a href="${escHtml(l.href)}" ${attrs} class="lol-footer__nav-link"
-           data-nav-index="${i}">
-          <span data-field="label">${escHtml(l.label)}</span>
-          ${hrefRow(l.href)}
-        </a>`;
-    }).join('');
-
     const legal = f.legal_links.map((l, i) => `
       <a href="${escHtml(l.href)}" class="lol-footer__legal-link" data-legal-index="${i}">
         <span data-field="label">${escHtml(l.label)}</span>
@@ -524,8 +501,14 @@ export class ContactView {
 
     return `
     <footer class="lol-footer" data-section="footer">
-      <nav class="lol-footer__top" aria-label="Footer navigation">
-        ${nav}
+      <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
+        <a href="${href('/')}"         class="lol-footer__nav-link">${t('nav.home')}</a>
+        <a href="${href('/projects')}" class="lol-footer__nav-link">${t('nav.projects')}</a>
+        <a href="${href('/shop')}"     class="lol-footer__nav-link">${t('nav.shop')}</a>
+        <a href="${href('/news')}"     class="lol-footer__nav-link">${t('nav.news')}</a>
+        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
+        <a href="${href('/contact')}"  class="lol-footer__nav-link">${t('nav.contact')}</a>
+        <a href="${href('/party')}"    class="lol-footer__nav-link">${t('nav.party')}</a>
       </nav>
 
       <div class="lol-footer__brand">
@@ -853,13 +836,6 @@ export class ContactView {
     const brand_name = this._readField(section, 'brand_name', this._footer.brand_name);
     const copy_suffix = this._readField(section, 'copy_suffix', this._footer.copy_suffix);
 
-    const nav_links = [];
-    section.querySelectorAll('[data-nav-index]').forEach(el => {
-      nav_links.push({
-        label: this._readField(el, 'label', ''),
-        href:  this._readField(el, 'href',  ''),
-      });
-    });
     const legal_links = [];
     section.querySelectorAll('[data-legal-index]').forEach(el => {
       legal_links.push({
@@ -867,7 +843,7 @@ export class ContactView {
         href:  this._readField(el, 'href',  ''),
       });
     });
-    return { brand_name, copy_suffix, nav_links, legal_links };
+    return { brand_name, copy_suffix, legal_links };
   }
 
   // Reads the first descendant [data-field="name"] innerText (trimmed), or fallback.
