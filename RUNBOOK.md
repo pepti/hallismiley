@@ -141,3 +141,51 @@ See `README.md → Environment-Specific Configuration` and `.env.example` for th
 ## Log Access
 
 Logs are available in the Railway dashboard under your service → **Logs** tab. Use the `requestId` field (`X-Request-ID` header) to correlate requests across log lines.
+
+---
+
+## Local Development — Test Database
+
+`npm test` is fully self-managed: [`tests/globalSetup.js`](tests/globalSetup.js)
+drops and recreates the test database from scratch and runs every migration
+before any suite executes, and [`tests/env.js`](tests/env.js) sets every env
+var the app reads at require time. All you need to provide is a reachable
+Postgres with the matching credentials.
+
+**Default expectations** (overridable via `TEST_DATABASE_URL`):
+
+| Setting | Value |
+| --- | --- |
+| Host / port | `localhost:5432` |
+| Admin user / password | `postgres` / `postgres` |
+| Test database name | `hallismiley_test` (auto-created) |
+
+The DB name **must** end in `_test` — `globalSetup` refuses to drop anything
+else as a safety check.
+
+**Quickest path — disposable Postgres in Docker:**
+
+```bash
+docker run --rm -d --name halli-pg-test \
+  -p 5432:5432 \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=postgres \
+  postgres:16-alpine
+
+npm test                       # creates hallismiley_test, migrates, runs suite
+docker stop halli-pg-test      # tear down when done
+```
+
+**Using an existing Postgres** (Homebrew, system service, etc.) — ensure the
+admin role can `CREATE DATABASE`, then point Jest at it:
+
+```bash
+TEST_DATABASE_URL='postgresql://USER:PASS@HOST:5432/hallismiley_test' npm test
+```
+
+**Skipping the seeded test DB is what makes `npm test` fail locally.** If
+`npm test` is producing dozens of `401`/`null row` errors, that's the signal
+— spin up Postgres above and rerun. CI uses a Postgres service container with
+the same defaults (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)),
+so passing locally with the values above gives you the same environment.

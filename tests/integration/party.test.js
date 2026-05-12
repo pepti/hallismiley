@@ -500,6 +500,106 @@ describe('POST /api/v1/party/cover-image', () => {
   });
 });
 
+// ── PATCH /api/v1/party/info { guest_cap } ───────────────────────────────────
+
+describe('PATCH /api/v1/party/info { guest_cap }', () => {
+  test('GET returns DEFAULT_PARTY_INFO.guest_cap when no row exists', async () => {
+    const res = await request(app).get('/api/v1/party/info');
+    expect(res.status).toBe(200);
+    expect(res.body.guest_cap).toBe(60);
+  });
+
+  test('admin can set the guest cap and it persists', async () => {
+    const patch = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ guest_cap: '75' });
+    expect(patch.status).toBe(200);
+    expect(patch.body.guest_cap).toBe(75);
+
+    const get = await request(app).get('/api/v1/party/info');
+    expect(get.body.guest_cap).toBe(75);
+  });
+
+  test('moderator can also set the guest cap', async () => {
+    const modId = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', modCookie)
+      .send({ guest_cap: '120' });
+    expect(res.status).toBe(200);
+    expect(res.body.guest_cap).toBe(120);
+  });
+
+  test('non-admin user gets 403', async () => {
+    const res = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', userCookie)
+      .send({ guest_cap: '50' });
+    expect(res.status).toBe(403);
+  });
+
+  test('writes guest_cap to every supported locale so the value never drifts', async () => {
+    await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ guest_cap: '99' });
+
+    const { rows } = await db.query(
+      `SELECT locale, value FROM site_content WHERE key = 'party_guest_cap' ORDER BY locale`
+    );
+    // SUPPORTED_LOCALES is 'en,is' by default — both rows must exist with the same value.
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    const values = rows.map(r => r.value);
+    expect(new Set(values).size).toBe(1);
+    expect(Number(values[0])).toBe(99);
+  });
+
+  test.each([
+    ['negative',         '-1'],
+    ['non-numeric',      'abc'],
+    ['decimal',          '7.5'],
+    ['above upper bound','10001'],
+  ])('rejects %s input with 400', async (_label, bad) => {
+    const res = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ guest_cap: bad });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/guest_cap/);
+  });
+
+  test.each([
+    ['empty string',     ''],
+    ['whitespace only',  '   '],
+    ['tab',              '\t'],
+  ])('rejects %s with 400 (no silent coercion to 0)', async (_label, bad) => {
+    const res = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ guest_cap: bad });
+    expect(res.status).toBe(400);
+
+    // The cap must not be stored as 0 when input was blank.
+    const { rows } = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_guest_cap'`
+    );
+    for (const row of rows) {
+      expect(Number(row.value)).not.toBe(0);
+    }
+  });
+
+  test('accepts 0 as an explicit, valid cap', async () => {
+    const res = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ guest_cap: '0' });
+    expect(res.status).toBe(200);
+    expect(res.body.guest_cap).toBe(0);
+  });
+});
+
 // ── PATCH /api/v1/party/info clears cover_image ──────────────────────────────
 
 describe('PATCH /api/v1/party/info { cover_image: "" } clears the cover', () => {

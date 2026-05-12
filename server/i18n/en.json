@@ -48,6 +48,12 @@
   "email.rsvpConfirmation.button": "Update RSVP",
   "email.rsvpConfirmation.closing": "Can't wait to celebrate with you!",
 
+  "email.partyAnnouncement.subject": "An update about Halli's 40th",
+  "email.partyAnnouncement.heading": "A note from Halli",
+  "email.partyAnnouncement.intro": "Hey — quick update about the party. Looking forward to seeing you there!",
+  "email.partyAnnouncement.button": "Open the party page",
+  "email.partyAnnouncement.signoff": "— Halli",
+
   "validation.title.required": "Title is required",
   "validation.title.nonEmptyString": "Title must be a non-empty string",
   "validation.title.maxLength": "Title must be at most {n} characters",
@@ -162,6 +168,8 @@
   "errors.party.logisticsNoFields": "No valid fields to update",
   "errors.party.reorderIdsRequired": "ids must be a non-empty array",
   "errors.party.reorderIdsIntegers": "All ids must be integers",
+  "errors.party.emailSubjectInvalid": "Subject must be a string of at most 200 characters",
+  "errors.party.emailBodyInvalid": "Body must be a string of at most 5000 characters",
 
   "errors.shop.productNotFound": "Product not found",
   "errors.shop.checkoutUnavailable": "Checkout is not available yet",

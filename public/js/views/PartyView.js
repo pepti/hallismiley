@@ -3,10 +3,10 @@ import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
 import { Lightbox }     from '../components/Lightbox.js';
-import { t } from '../i18n/i18n.js';
+import { t, adminLocaleBadgeHtml } from '../i18n/i18n.js';
 
 const PARTY_DATE = new Date('2026-07-25T14:00:00');
-const TOTAL_GUESTS = 60;
+const DEFAULT_GUEST_CAP = 60;
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -59,8 +59,9 @@ export class PartyView {
   }
 
   async _loadAll() {
-    // Party info is public — always fetch
-    const infoRes = await fetch('/api/v1/party/info');
+    // Party info is public — always fetch. Pass ?locale= so the server returns
+    // the row matching the active UI locale (URL prefix → window.__locale).
+    const infoRes = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`);
     this._partyInfo = await infoRes.json();
 
     // Admin-designed RSVP form (list of fields). Fall back to a seeded default
@@ -306,6 +307,7 @@ export class PartyView {
 
     const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="venue">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="venue">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="venue">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="venue" aria-live="polite"></span>
@@ -352,6 +354,7 @@ export class PartyView {
 
     const editControls = canEdit() ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="schedule">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="schedule">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="schedule">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="schedule" aria-live="polite"></span>
@@ -395,9 +398,29 @@ export class PartyView {
     const rsvp         = this._rsvp;
     const answers      = rsvp?.answers || {};
     const editor       = canEdit();
-    const countHtml    = this._rsvpCount > 0
-      ? `<p class="party-rsvp__count">${t('party.guestsAttending', { n: this._rsvpCount, total: TOTAL_GUESTS })}</p>`
-      : '';
+    const capNum       = Number(this._partyInfo?.guest_cap);
+    const totalGuests  = Number.isFinite(capNum) ? capNum : DEFAULT_GUEST_CAP;
+    const showCount    = editor || this._rsvpCount > 0;
+    // Use a private-use Unicode sentinel that no translation will ever contain,
+    // so we can wrap the {total} portion in editable HTML without sending HTML
+    // through the i18n interpolator.
+    const CAP_MARKER = String.fromCharCode(0xE000);
+    const [before, after = ''] = t('party.guestsAttending', { n: this._rsvpCount, total: CAP_MARKER }).split(CAP_MARKER);
+    const capEditBtn = editor ? `
+        <button class="party-edit-btn party-edit-btn--inline" data-edit-section="guestCap" aria-label="${t('admin.edit')}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>` : '';
+    const capControls = editor ? `
+        <span class="party-edit-controls party-edit-controls--inline party-edit-controls--hidden" data-controls="guestCap">
+          <button class="party-edit-save" data-save-section="guestCap">${t('form.save')}</button>
+          <button class="party-edit-cancel" data-cancel-section="guestCap">${t('admin.cancel')}</button>
+          <span class="party-edit-status" data-status="guestCap" aria-live="polite"></span>
+        </span>` : '';
+    const countHtml = showCount ? `
+      <p class="party-rsvp__count">
+        ${escHtml(before)}<span class="party-rsvp__cap" data-guest-cap>${totalGuests}</span>${escHtml(after)}
+        ${capEditBtn}${capControls}
+      </p>` : '';
 
     const editBtn = editor ? `
       <button class="party-edit-btn" data-edit-section="rsvp" aria-label="Edit RSVP form">
@@ -407,6 +430,7 @@ export class PartyView {
 
     const editControls = editor ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="rsvp">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="rsvp">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="rsvp" aria-live="polite"></span>
@@ -537,6 +561,7 @@ export class PartyView {
 
     const editControls = editor ? `
       <div class="party-edit-controls party-edit-controls--hidden" data-controls="activities">
+        ${adminLocaleBadgeHtml()}
         <button class="party-edit-save" data-save-section="activities">${t('form.save')}</button>
         <button class="party-edit-cancel" data-cancel-section="activities">${t('admin.cancel')}</button>
         <span class="party-edit-status" data-status="activities" aria-live="polite"></span>
@@ -690,7 +715,7 @@ export class PartyView {
       const fd = new FormData();
       fd.append('file', file);
 
-      const res = await fetch('/api/v1/party/cover-image', {
+      const res = await fetch(`/api/v1/party/cover-image?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'POST',
         credentials: 'include',
         headers,
@@ -718,7 +743,7 @@ export class PartyView {
     setStatus(t('form.saving'));
     try {
       const headers = await getCsrfHeaders();
-      const res = await fetch('/api/v1/party/info', {
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'PATCH',
         credentials: 'include',
         headers,
@@ -749,6 +774,8 @@ export class PartyView {
   _enterEdit(section) {
     // RSVP uses a custom form-builder editing flow
     if (section === 'rsvp') { this._enterEditRsvpForm(); return; }
+    // Guest cap is a tiny inline edit on a single number — handled separately
+    if (section === 'guestCap') { this._enterEditGuestCap(); return; }
 
     const sectionEl = this._getSectionEl(section);
     if (!sectionEl) return;
@@ -951,6 +978,80 @@ export class PartyView {
     return fields;
   }
 
+  // ── Guest cap (the "60" in "X of 60 guests attending") ─────────────────────
+  // Tiny inline edit on a single number, separate from the section-level
+  // edit flow because it lives inside the RSVP section but is independent
+  // of the form-builder editor.
+
+  _enterEditGuestCap() {
+    const capEl = this._el.querySelector('[data-guest-cap]');
+    if (!capEl) return;
+    this._editSnapshots.guestCap = capEl.textContent;
+
+    this._el.querySelector('[data-edit-section="guestCap"]')?.classList.add('party-edit-btn--hidden');
+    this._el.querySelector('[data-controls="guestCap"]')?.classList.remove('party-edit-controls--hidden');
+
+    capEl.contentEditable = 'true';
+    capEl.spellcheck = false;
+    capEl.classList.add('party-rsvp__cap--editing');
+    capEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(capEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  _cancelEditGuestCap() {
+    const capEl = this._el.querySelector('[data-guest-cap]');
+    if (capEl && this._editSnapshots.guestCap != null) {
+      capEl.textContent = this._editSnapshots.guestCap;
+    }
+    this._exitEditGuestCap();
+  }
+
+  _exitEditGuestCap() {
+    const capEl = this._el.querySelector('[data-guest-cap]');
+    if (capEl) {
+      capEl.contentEditable = 'false';
+      capEl.classList.remove('party-rsvp__cap--editing');
+    }
+    this._el.querySelector('[data-edit-section="guestCap"]')?.classList.remove('party-edit-btn--hidden');
+    this._el.querySelector('[data-controls="guestCap"]')?.classList.add('party-edit-controls--hidden');
+    const statusEl = this._el.querySelector('[data-status="guestCap"]');
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  async _saveGuestCap() {
+    const capEl = this._el.querySelector('[data-guest-cap]');
+    const statusEl = this._el.querySelector('[data-status="guestCap"]');
+    if (!capEl) return;
+
+    const raw = capEl.textContent.trim();
+    if (statusEl) statusEl.textContent = t('form.saving');
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch('/api/v1/party/info', {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body:        JSON.stringify({ guest_cap: raw }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Save failed');
+      }
+      this._partyInfo = await res.json();
+      const storedNum = Number(this._partyInfo?.guest_cap);
+      const stored = Number.isFinite(storedNum) ? storedNum : DEFAULT_GUEST_CAP;
+      capEl.textContent = String(stored);
+      this._exitEditGuestCap();
+      showToast(t('form.success'), 'success');
+    } catch (err) {
+      if (statusEl) statusEl.textContent = err.message;
+    }
+  }
+
   _exitEdit(section) {
     const sectionEl = this._getSectionEl(section);
     if (!sectionEl) return;
@@ -984,6 +1085,7 @@ export class PartyView {
   }
 
   _cancelEdit(section) {
+    if (section === 'guestCap') { this._cancelEditGuestCap(); return; }
     if (section === 'rsvp') {
       const sectionEl = this._getSectionEl('rsvp');
       const inner     = sectionEl?.querySelector('#rsvp-inner');
@@ -1008,6 +1110,7 @@ export class PartyView {
   }
 
   async _saveSection(section) {
+    if (section === 'guestCap') { await this._saveGuestCap(); return; }
     const sectionEl = this._getSectionEl(section);
     if (!sectionEl) return;
 
@@ -1071,7 +1174,7 @@ export class PartyView {
 
     try {
       const headers = await getCsrfHeaders();
-      const res = await fetch('/api/v1/party/info', {
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'PATCH',
         credentials: 'include',
         headers,
