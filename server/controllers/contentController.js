@@ -57,10 +57,13 @@ const upload = multer({
 }).single('file');
 
 // ── GET /api/v1/content/:key ─────────────────────────────────────────────────
-// Locale fallback: tries req.locale first, then DEFAULT_LOCALE.
+// Locale resolution mirrors putContent: an explicit ?locale= query param wins
+// over req.locale (which the middleware derives from req.user.preferred_locale,
+// cookie, Accept-Language, etc.). This keeps reads symmetric with writes — the
+// SPA always passes ?locale= and expects to get that exact locale's row back.
 async function getContent(req, res, next) {
   try {
-    const locale = req.locale || DEFAULT_LOCALE;
+    const locale = req.query.locale || req.locale || DEFAULT_LOCALE;
     const { rows } = await db.query(
       `SELECT value FROM site_content
         WHERE key = $1 AND locale = $2

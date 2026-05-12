@@ -962,7 +962,7 @@ export class HalliView {
 
     try {
       const token = await getCSRFToken();
-      const res = await fetch('/api/v1/content/halli_bio', {
+      const res = await fetch(`/api/v1/content/halli_bio?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method:      'PUT',
         credentials: 'include',
         headers: {
