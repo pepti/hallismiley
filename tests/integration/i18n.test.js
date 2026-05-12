@@ -3,7 +3,7 @@
 /**
  * Integration tests for the i18n stack:
  *   • server-side t() helper + fallback
- *   • locale middleware priority (user pref > query > header > cookie > Accept-Language)
+ *   • locale middleware priority (query > header > cookie > user pref > Accept-Language)
  *   • PATCH preferred_locale round-trip via the Lucia session
  *   • locale-aware content controller GET / PUT with per-locale rows
  *   • validation errors translate to Icelandic
@@ -72,7 +72,7 @@ describe('locale middleware priority', () => {
     expect(res.body.error).toBe(tIs('errors.auth.usernamePasswordRequired'));
   });
 
-  test('logged-in user preferred_locale beats request-level signals', async () => {
+  test('explicit X-Locale overrides logged-in user preferred_locale', async () => {
     const cookie = await getTestSessionCookie();
     // Save preferred_locale = 'is'
     await request(app)
@@ -80,11 +80,29 @@ describe('locale middleware priority', () => {
       .set('Cookie', cookie)
       .send({ preferred_locale: 'is' })
       .expect(200);
-    // Even though we send X-Locale: en, the session's preferred_locale wins.
+    // X-Locale: en is an explicit per-request signal and must win over the
+    // saved account preference — so validation errors come back in English.
     const res = await request(app)
       .patch('/api/v1/users/me')
       .set('Cookie', cookie)
       .set('X-Locale', 'en')
+      .send({ phone: 'garbage' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(t('en', 'validation.phone.invalid'));
+  });
+
+  test('logged-in user preferred_locale wins when no explicit signal is sent', async () => {
+    const cookie = await getTestSessionCookie();
+    await request(app)
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookie)
+      .send({ preferred_locale: 'is' })
+      .expect(200);
+    // No ?locale=, no X-Locale, no preferred_locale cookie — the saved
+    // account preference is the strongest remaining signal.
+    const res = await request(app)
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookie)
       .send({ phone: 'garbage' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe(tIs('validation.phone.invalid'));
