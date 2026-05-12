@@ -420,7 +420,7 @@ export class PartyView {
     // see this block.
     const messageBodyHtml = hasMessage
       ? escHtml(rsvpMessage).replace(/\n/g, '<br>')
-      : (editor ? `<span class="party-rsvp__message-placeholder">${t('party.admin.rsvpMessagePlaceholder')}</span>` : '');
+      : (editor ? `<span class="party-rsvp__message-placeholder">${escHtml(t('party.admin.rsvpMessagePlaceholder'))}</span>` : '');
     const messageHtml = showMessageBlock ? `
       <div class="party-rsvp__message-block">
         <p class="party-rsvp__message" data-rsvp-message>${messageBodyHtml}</p>

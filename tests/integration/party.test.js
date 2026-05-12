@@ -570,6 +570,18 @@ describe('PATCH /api/v1/party/info { rsvp_message }', () => {
     expect(isGet.body.rsvp_message).toBe('Íslenskur texti');
   });
 
+  test('locale with no row falls back to DEFAULT_PARTY_INFO.rsvp_message', async () => {
+    // Seed only the IS row.
+    await request(app)
+      .patch('/api/v1/party/info?locale=is')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: 'IS-only message' });
+
+    // EN viewer should see the empty default, not the IS row.
+    const en = await request(app).get('/api/v1/party/info?locale=en');
+    expect(en.body.rsvp_message).toBe('');
+  });
+
   test('preserves newlines so paragraphs survive a round-trip', async () => {
     const body = 'Line one\nLine two\n\nLine four';
     const patch = await request(app)
