@@ -298,12 +298,36 @@ describe('GET /auth/google/callback', () => {
     expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
   });
 
-  test('ignores a tampered returnTo cookie value (defense-in-depth)', async () => {
-    // Even though /start would never persist this, an attacker who somehow
-    // sets the cookie shouldn't get an open redirect — the callback re-validates.
+  // The /auth/google entry-point only persists a returnTo cookie if
+  // isSafeReturnTo() accepts it (see line 91-117 tests). But the cookie is
+  // HttpOnly + SameSite=Lax, not signed — an attacker who can write cookies
+  // (XSS in a sibling subdomain, an MITM with a CA mistake, a future Set-Cookie
+  // bug, an adjacent app sharing the same parent domain) could still place a
+  // hostile value there. The callback's defense is to re-run isSafeReturnTo()
+  // before honoring the cookie. These cases pin that the callback rejects
+  // every attack vector PR #33's validator added — without them, a refactor
+  // that drops the re-validation (e.g. "we already validated on the way in,
+  // we can trust the cookie") would compile, lint, and pass every other
+  // existing test.
+  //
+  // Each vector tests a specific shape we have seen in the wild:
+  //   - https://evil.com                : classic open redirect via absolute URL
+  //   - //evil.com/x                    : protocol-relative URL
+  //   - /\\evil.com                     : backslash-prefixed (some browsers parse as host)
+  //   - %5c%5cevil.com                  : URL-encoded backslashes
+  //   - javascript:alert(1)             : javascript: scheme (XSS via redirect)
+  //   - /admin\\..\\..\\evil.com        : mixed backslash path traversal
+  test.each([
+    ['absolute URL',          'https%3A%2F%2Fevil.com'],
+    ['protocol-relative',     '%2F%2Fevil.com%2Fx'],
+    ['backslash-prefixed',    '%2F%5Cevil.com'],
+    ['url-encoded backslash', '%5C%5Cevil.com'],
+    ['javascript scheme',     'javascript%3Aalert(1)'],
+    ['data scheme',           'data%3Atext%2Fhtml%2C%3Cscript%3Ealert(1)%3C%2Fscript%3E'],
+  ])('ignores tampered returnTo cookie — %s', async (_label, encodedReturnTo) => {
     const res = await request(app)
       .get('/auth/google/callback?code=abc&state=test-state-123')
-      .set('Cookie', `${cookieHeader}; google_oauth_return_to=https%3A%2F%2Fevil.com`);
+      .set('Cookie', `${cookieHeader}; google_oauth_return_to=${encodedReturnTo}`);
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('/en/');
