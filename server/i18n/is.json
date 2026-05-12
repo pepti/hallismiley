@@ -48,6 +48,12 @@
   "email.rsvpConfirmation.button": "Uppfæra skráningu",
   "email.rsvpConfirmation.closing": "Hlakka til að fagna með þér!",
 
+  "email.partyAnnouncement.subject": "Uppfærsla um fertugsafmæli Halla",
+  "email.partyAnnouncement.heading": "Skilaboð frá Halla",
+  "email.partyAnnouncement.intro": "Hæ — bara stutt uppfærsla um veisluna. Hlakka til að sjá þig!",
+  "email.partyAnnouncement.button": "Opna veislusíðuna",
+  "email.partyAnnouncement.signoff": "— Halli",
+
   "validation.title.required": "Titill er nauðsynlegur",
   "validation.title.nonEmptyString": "Titill má ekki vera tómur",
   "validation.title.maxLength": "Titill má að hámarki vera {n} stafir",
@@ -162,6 +168,8 @@
   "errors.party.logisticsNoFields": "Engin gild svið til að uppfæra",
   "errors.party.reorderIdsRequired": "ids verður að vera ekki-tómur listi",
   "errors.party.reorderIdsIntegers": "Öll ids verða að vera heilar tölur",
+  "errors.party.emailSubjectInvalid": "Efni verður að vera strengur að hámarki 200 stafir",
+  "errors.party.emailBodyInvalid": "Skilaboð verða að vera strengur að hámarki 5000 stafir",
 
   "errors.shop.productNotFound": "Vara fannst ekki",
   "errors.shop.checkoutUnavailable": "Ekki hægt að klára kaup í augnablikinu",
