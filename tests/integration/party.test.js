@@ -249,6 +249,35 @@ describe('POST /api/v1/party/guestbook', () => {
       .send({ message: 'Hello' });
     expect(res.status).toBe(401);
   });
+
+  // Guestbook entries render in an authenticated-but-shared view (every party
+  // attendee sees every other attendee's messages), so stored-XSS would impact
+  // everyone if the controller ever accepted raw HTML. The global sanitizeBody
+  // middleware strips tags before the handler sees req.body — this test pins
+  // that protection at the guestbook entry point so a future refactor that
+  // bypasses or moves the middleware fails loudly.
+  test('strips HTML via global sanitize middleware (POST and round-trip)', async () => {
+    const post = await request(app)
+      .post('/api/v1/party/guestbook')
+      .set('Cookie', adminCookie)
+      .send({ message: 'Hi <script>alert(1)</script> <img src=x onerror=alert(2)> there' });
+    expect(post.status).toBe(201);
+    expect(post.body.message).not.toMatch(/<script/i);
+    expect(post.body.message).not.toMatch(/<img/i);
+    expect(post.body.message).not.toMatch(/onerror/i);
+    expect(post.body.message).toMatch(/Hi/);
+    expect(post.body.message).toMatch(/there/);
+
+    // Round-trip via GET — sanitization is on the way IN (storage), so the
+    // GET reflects the sanitized form regardless of any later display layer.
+    const list = await request(app)
+      .get('/api/v1/party/guestbook')
+      .set('Cookie', adminCookie);
+    expect(list.status).toBe(200);
+    expect(list.body[0].message).not.toMatch(/<script/i);
+    expect(list.body[0].message).not.toMatch(/<img/i);
+    expect(list.body[0].message).not.toMatch(/onerror/i);
+  });
 });
 
 // ── GET /api/v1/party/guestbook ──────────────────────────────────────────────
