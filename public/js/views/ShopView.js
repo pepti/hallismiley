@@ -307,7 +307,7 @@ export class ShopView {
     try { token = await getCSRFToken(); } catch { /* fine */ }
 
     try {
-      const res = await fetch('/api/v1/content/shop_hero', {
+      const res = await fetch(`/api/v1/content/shop_hero?locale=${encodeURIComponent(window.__locale || 'en')}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {

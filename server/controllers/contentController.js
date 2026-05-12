@@ -16,7 +16,9 @@ const { translateTree, isEnabled: translatorEnabled } = require('../services/tra
 // Keys on site_content that should NEVER auto-fill their IS sibling row
 // (e.g. rows that are intentionally locale-neutral, like footer link lists
 // or tech pills). Start empty; extend if admins report noise.
-const SITE_CONTENT_TRANSLATE_SKIP = new Set([]);
+//   party_hero — branded values ("HALLI'S", "40", "th") and a numeric
+//   superscript don't translate cleanly; admins flip locale and edit IS by hand.
+const SITE_CONTENT_TRANSLATE_SKIP = new Set(['party_hero']);
 
 // ── Image upload: store under UPLOAD_ROOT/content/ ──────────────────────────
 // In dev that resolves to public/assets/content/ (committed tree); in prod it's
@@ -55,10 +57,13 @@ const upload = multer({
 }).single('file');
 
 // ── GET /api/v1/content/:key ─────────────────────────────────────────────────
-// Locale fallback: tries req.locale first, then DEFAULT_LOCALE.
+// Locale resolution mirrors putContent: an explicit ?locale= query param wins
+// over req.locale (which the middleware derives from req.user.preferred_locale,
+// cookie, Accept-Language, etc.). This keeps reads symmetric with writes — the
+// SPA always passes ?locale= and expects to get that exact locale's row back.
 async function getContent(req, res, next) {
   try {
-    const locale = req.locale || DEFAULT_LOCALE;
+    const locale = req.query.locale || req.locale || DEFAULT_LOCALE;
     const { rows } = await db.query(
       `SELECT value FROM site_content
         WHERE key = $1 AND locale = $2

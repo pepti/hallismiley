@@ -519,7 +519,7 @@ export class ProductView {
       return data.product;
     });
 
-    const chromeSave = fetch('/api/v1/content/shop_product_chrome', {
+    const chromeSave = fetch(`/api/v1/content/shop_product_chrome?locale=${encodeURIComponent(window.__locale || 'en')}`, {
       method: 'PUT',
       credentials: 'include',
       headers,

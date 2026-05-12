@@ -544,7 +544,7 @@
   "party.venue": "Staðsetning",
   "party.schedule": "Dagskrá",
   "party.addressTbd": "Heimilisfang TBD",
-  "party.guestsAttending": "{n} af {total} gestum mæta",
+  "party.admin.rsvpMessagePlaceholder": "Smelltu hér til að bæta við skilaboðum fyrir ofan RSVP formið…",
   "party.youveRsvpd": "Þú hefur sent RSVP",
   "party.daytimeActivities": "Dagathafnir",
   "party.eveningActivities": "Kvöldathafnir",

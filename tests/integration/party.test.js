@@ -500,103 +500,244 @@ describe('POST /api/v1/party/cover-image', () => {
   });
 });
 
-// ── PATCH /api/v1/party/info { guest_cap } ───────────────────────────────────
+// ── PATCH /api/v1/party/info { rsvp_message } ────────────────────────────────
 
-describe('PATCH /api/v1/party/info { guest_cap }', () => {
-  test('GET returns DEFAULT_PARTY_INFO.guest_cap when no row exists', async () => {
+describe('PATCH /api/v1/party/info { rsvp_message }', () => {
+  test('GET returns the empty default when no row exists', async () => {
     const res = await request(app).get('/api/v1/party/info');
     expect(res.status).toBe(200);
-    expect(res.body.guest_cap).toBe(60);
+    expect(res.body.rsvp_message).toBe('');
   });
 
-  test('admin can set the guest cap and it persists', async () => {
+  test('admin can set the message and it persists', async () => {
     const patch = await request(app)
       .patch('/api/v1/party/info')
       .set('Cookie', adminCookie)
-      .send({ guest_cap: '75' });
+      .send({ rsvp_message: 'Please RSVP by July 1st!' });
     expect(patch.status).toBe(200);
-    expect(patch.body.guest_cap).toBe(75);
+    expect(patch.body.rsvp_message).toBe('Please RSVP by July 1st!');
 
     const get = await request(app).get('/api/v1/party/info');
-    expect(get.body.guest_cap).toBe(75);
+    expect(get.body.rsvp_message).toBe('Please RSVP by July 1st!');
   });
 
-  test('moderator can also set the guest cap', async () => {
+  test('moderator can also set the message', async () => {
     const modId = await createTestModeratorUser();
     const modCookie = await getTestSessionCookie(modId);
     const res = await request(app)
       .patch('/api/v1/party/info')
       .set('Cookie', modCookie)
-      .send({ guest_cap: '120' });
+      .send({ rsvp_message: 'See you soon' });
     expect(res.status).toBe(200);
-    expect(res.body.guest_cap).toBe(120);
+    expect(res.body.rsvp_message).toBe('See you soon');
   });
 
   test('non-admin user gets 403', async () => {
     const res = await request(app)
       .patch('/api/v1/party/info')
       .set('Cookie', userCookie)
-      .send({ guest_cap: '50' });
+      .send({ rsvp_message: 'sneaky' });
     expect(res.status).toBe(403);
   });
 
-  test('writes guest_cap to every supported locale so the value never drifts', async () => {
+  test('writes rsvp_message to the request locale only (per-locale)', async () => {
+    await request(app)
+      .patch('/api/v1/party/info?locale=is')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: 'Skilaboð á íslensku' });
+
+    const { rows } = await db.query(
+      `SELECT locale, value FROM site_content WHERE key = 'party_rsvp_message' ORDER BY locale`
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].locale).toBe('is');
+    expect(rows[0].value).toBe('Skilaboð á íslensku');
+  });
+
+  test('EN and IS rows are independent', async () => {
+    await request(app)
+      .patch('/api/v1/party/info?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: 'English text' });
+    await request(app)
+      .patch('/api/v1/party/info?locale=is')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: 'Íslenskur texti' });
+
+    const enGet = await request(app).get('/api/v1/party/info?locale=en');
+    const isGet = await request(app).get('/api/v1/party/info?locale=is');
+    expect(enGet.body.rsvp_message).toBe('English text');
+    expect(isGet.body.rsvp_message).toBe('Íslenskur texti');
+  });
+
+  test('locale with no row falls back to DEFAULT_PARTY_INFO.rsvp_message', async () => {
+    // Seed only the IS row.
+    await request(app)
+      .patch('/api/v1/party/info?locale=is')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: 'IS-only message' });
+
+    // EN viewer should see the empty default, not the IS row.
+    const en = await request(app).get('/api/v1/party/info?locale=en');
+    expect(en.body.rsvp_message).toBe('');
+  });
+
+  test('preserves newlines so paragraphs survive a round-trip', async () => {
+    const body = 'Line one\nLine two\n\nLine four';
+    const patch = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: body });
+    expect(patch.status).toBe(200);
+    expect(patch.body.rsvp_message).toBe(body);
+  });
+
+  test('empty string is allowed (clears the message)', async () => {
     await request(app)
       .patch('/api/v1/party/info')
       .set('Cookie', adminCookie)
-      .send({ guest_cap: '99' });
+      .send({ rsvp_message: 'something' });
 
-    const { rows } = await db.query(
-      `SELECT locale, value FROM site_content WHERE key = 'party_guest_cap' ORDER BY locale`
-    );
-    // SUPPORTED_LOCALES is 'en,is' by default — both rows must exist with the same value.
-    expect(rows.length).toBeGreaterThanOrEqual(2);
-    const values = rows.map(r => r.value);
-    expect(new Set(values).size).toBe(1);
-    expect(Number(values[0])).toBe(99);
+    const cleared = await request(app)
+      .patch('/api/v1/party/info')
+      .set('Cookie', adminCookie)
+      .send({ rsvp_message: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.rsvp_message).toBe('');
   });
 
-  test.each([
-    ['negative',         '-1'],
-    ['non-numeric',      'abc'],
-    ['decimal',          '7.5'],
-    ['above upper bound','10001'],
-  ])('rejects %s input with 400', async (_label, bad) => {
+  test('rejects message longer than 2000 chars with 400', async () => {
+    const tooLong = 'a'.repeat(2001);
     const res = await request(app)
       .patch('/api/v1/party/info')
       .set('Cookie', adminCookie)
-      .send({ guest_cap: bad });
+      .send({ rsvp_message: tooLong });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/guest_cap/);
+    expect(res.body.error).toMatch(/rsvp_message/);
   });
 
-  test.each([
-    ['empty string',     ''],
-    ['whitespace only',  '   '],
-    ['tab',              '\t'],
-  ])('rejects %s with 400 (no silent coercion to 0)', async (_label, bad) => {
+  test('strips HTML via global sanitize middleware', async () => {
     const res = await request(app)
       .patch('/api/v1/party/info')
       .set('Cookie', adminCookie)
-      .send({ guest_cap: bad });
-    expect(res.status).toBe(400);
-
-    // The cap must not be stored as 0 when input was blank.
-    const { rows } = await db.query(
-      `SELECT value FROM site_content WHERE key = 'party_guest_cap'`
-    );
-    for (const row of rows) {
-      expect(Number(row.value)).not.toBe(0);
-    }
-  });
-
-  test('accepts 0 as an explicit, valid cap', async () => {
-    const res = await request(app)
-      .patch('/api/v1/party/info')
-      .set('Cookie', adminCookie)
-      .send({ guest_cap: '0' });
+      .send({ rsvp_message: 'Hello <script>alert(1)</script> world' });
     expect(res.status).toBe(200);
-    expect(res.body.guest_cap).toBe(0);
+    expect(res.body.rsvp_message).not.toMatch(/<script>/);
+    expect(res.body.rsvp_message).toMatch(/Hello/);
+    expect(res.body.rsvp_message).toMatch(/world/);
+  });
+});
+
+// ── PUT /api/v1/content/party_hero (admin inline-edit hero text) ─────────────
+
+describe('PUT /api/v1/content/party_hero', () => {
+  const ENBlob = {
+    title_prefix: "HALLI'S",
+    title_main:   '40',
+    title_suffix: 'th',
+    subtitle:     "The big four-zero — let's make it legendary",
+  };
+  const ISBlob = {
+    title_prefix: "HALLI'S",
+    title_main:   '40',
+    title_suffix: 'ára',
+    subtitle:     'Stóru fjórir-núll — gerum þetta goðsagnakennt',
+  };
+
+  // cleanTables() does not include site_content; clear party_hero rows
+  // explicitly so each test starts from a known state.
+  beforeEach(async () => {
+    await db.query(`DELETE FROM site_content WHERE key = 'party_hero'`);
+  });
+  afterAll(async () => {
+    await db.query(`DELETE FROM site_content WHERE key = 'party_hero'`);
+  });
+
+  test('GET returns 404 when no row exists (client falls back to defaults)', async () => {
+    const res = await request(app).get('/api/v1/content/party_hero');
+    expect(res.status).toBe(404);
+  });
+
+  test('admin PUT ?locale=en persists the EN row and echoes the body', async () => {
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie)
+      .send(ENBlob);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(ENBlob);
+
+    const { rows } = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_hero' AND locale = 'en'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].value).toEqual(ENBlob);
+  });
+
+  test('admin PUT ?locale=is persists a separate IS row', async () => {
+    await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie)
+      .send(ENBlob);
+
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=is')
+      .set('Cookie', adminCookie)
+      .send(ISBlob);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(ISBlob);
+
+    const { rows } = await db.query(
+      `SELECT locale, value FROM site_content WHERE key = 'party_hero' ORDER BY locale`
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find(r => r.locale === 'en').value).toEqual(ENBlob);
+    expect(rows.find(r => r.locale === 'is').value).toEqual(ISBlob);
+  });
+
+  test('editing EN does not touch the IS row (locale rows are independent)', async () => {
+    await request(app).put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie).send(ENBlob);
+    await request(app).put('/api/v1/content/party_hero?locale=is')
+      .set('Cookie', adminCookie).send(ISBlob);
+
+    // Re-edit just EN — IS row must stay exactly as written.
+    const newEn = { ...ENBlob, title_main: '41' };
+    await request(app).put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie).send(newEn);
+
+    const en = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_hero' AND locale = 'en'`
+    );
+    const is = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_hero' AND locale = 'is'`
+    );
+    expect(en.rows[0].value.title_main).toBe('41');
+    expect(is.rows[0].value).toEqual(ISBlob);
+  });
+
+  test('moderator can also save', async () => {
+    const modId = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', modCookie)
+      .send(ENBlob);
+    expect(res.status).toBe(200);
+  });
+
+  test('regular user gets 403', async () => {
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', userCookie)
+      .send(ENBlob);
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated request gets 401', async () => {
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .send(ENBlob);
+    expect(res.status).toBe(401);
   });
 });
 
