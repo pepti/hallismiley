@@ -20,6 +20,7 @@ let adminCookie;
 
 beforeEach(async () => {
   await db.query("DELETE FROM site_content WHERE key LIKE 'test_%'");
+  await db.query("DELETE FROM site_content WHERE key = 'party_hero'");
   adminCookie = await getTestSessionCookie();
   translateTree.mockReset();
   isEnabled.mockReset();
@@ -28,6 +29,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await db.query("DELETE FROM site_content WHERE key LIKE 'test_%'");
+  await db.query("DELETE FROM site_content WHERE key = 'party_hero'");
 });
 
 async function readRow(key, locale) {
@@ -320,5 +322,28 @@ describe('PUT /api/v1/content/:key — site_content auto-translate', () => {
     resolveTranslator({ title: 'Halló' });
     const isAfter = await waitForIs('test_async', r => r && r.title === 'Halló');
     expect(isAfter).toEqual({ title: 'Halló' });
+  });
+
+  // SITE_CONTENT_TRANSLATE_SKIP keys: the EN row is saved, but the IS
+  // side effect is skipped entirely — branded values, ordinals, etc.
+  // shouldn't be auto-translated.
+  test('party_hero is in TRANSLATE_SKIP — EN save does not call translator or create IS row', async () => {
+    translateTree.mockResolvedValue({ subtitle: 'NEVER USED' });
+
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie)
+      .send({
+        title_prefix: "HALLI'S",
+        title_main:   '40',
+        title_suffix: 'th',
+        subtitle:     "The big four-zero — let's make it legendary",
+      });
+    expect(res.status).toBe(200);
+    await tick();
+
+    expect(translateTree).not.toHaveBeenCalled();
+    const isRow = await readRow('party_hero', 'is');
+    expect(isRow).toBeNull();
   });
 });
