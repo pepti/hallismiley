@@ -600,6 +600,119 @@ describe('PATCH /api/v1/party/info { guest_cap }', () => {
   });
 });
 
+// ── PUT /api/v1/content/party_hero (admin inline-edit hero text) ─────────────
+
+describe('PUT /api/v1/content/party_hero', () => {
+  const ENBlob = {
+    title_prefix: "HALLI'S",
+    title_main:   '40',
+    title_suffix: 'th',
+    subtitle:     "The big four-zero — let's make it legendary",
+  };
+  const ISBlob = {
+    title_prefix: "HALLI'S",
+    title_main:   '40',
+    title_suffix: 'ára',
+    subtitle:     'Stóru fjórir-núll — gerum þetta goðsagnakennt',
+  };
+
+  // cleanTables() does not include site_content; clear party_hero rows
+  // explicitly so each test starts from a known state.
+  beforeEach(async () => {
+    await db.query(`DELETE FROM site_content WHERE key = 'party_hero'`);
+  });
+  afterAll(async () => {
+    await db.query(`DELETE FROM site_content WHERE key = 'party_hero'`);
+  });
+
+  test('GET returns 404 when no row exists (client falls back to defaults)', async () => {
+    const res = await request(app).get('/api/v1/content/party_hero');
+    expect(res.status).toBe(404);
+  });
+
+  test('admin PUT ?locale=en persists the EN row and echoes the body', async () => {
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie)
+      .send(ENBlob);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(ENBlob);
+
+    const { rows } = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_hero' AND locale = 'en'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].value).toEqual(ENBlob);
+  });
+
+  test('admin PUT ?locale=is persists a separate IS row', async () => {
+    await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie)
+      .send(ENBlob);
+
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=is')
+      .set('Cookie', adminCookie)
+      .send(ISBlob);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(ISBlob);
+
+    const { rows } = await db.query(
+      `SELECT locale, value FROM site_content WHERE key = 'party_hero' ORDER BY locale`
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find(r => r.locale === 'en').value).toEqual(ENBlob);
+    expect(rows.find(r => r.locale === 'is').value).toEqual(ISBlob);
+  });
+
+  test('editing EN does not touch the IS row (locale rows are independent)', async () => {
+    await request(app).put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie).send(ENBlob);
+    await request(app).put('/api/v1/content/party_hero?locale=is')
+      .set('Cookie', adminCookie).send(ISBlob);
+
+    // Re-edit just EN — IS row must stay exactly as written.
+    const newEn = { ...ENBlob, title_main: '41' };
+    await request(app).put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', adminCookie).send(newEn);
+
+    const en = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_hero' AND locale = 'en'`
+    );
+    const is = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_hero' AND locale = 'is'`
+    );
+    expect(en.rows[0].value.title_main).toBe('41');
+    expect(is.rows[0].value).toEqual(ISBlob);
+  });
+
+  test('moderator can also save', async () => {
+    const modId = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', modCookie)
+      .send(ENBlob);
+    expect(res.status).toBe(200);
+  });
+
+  test('regular user gets 403', async () => {
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .set('Cookie', userCookie)
+      .send(ENBlob);
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated request gets 401', async () => {
+    const res = await request(app)
+      .put('/api/v1/content/party_hero?locale=en')
+      .send(ENBlob);
+    expect(res.status).toBe(401);
+  });
+});
+
 // ── PATCH /api/v1/party/info clears cover_image ──────────────────────────────
 
 describe('PATCH /api/v1/party/info { cover_image: "" } clears the cover', () => {

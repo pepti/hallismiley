@@ -16,7 +16,9 @@ const { translateTree, isEnabled: translatorEnabled } = require('../services/tra
 // Keys on site_content that should NEVER auto-fill their IS sibling row
 // (e.g. rows that are intentionally locale-neutral, like footer link lists
 // or tech pills). Start empty; extend if admins report noise.
-const SITE_CONTENT_TRANSLATE_SKIP = new Set([]);
+//   party_hero — branded values ("HALLI'S", "40", "th") and a numeric
+//   superscript don't translate cleanly; admins flip locale and edit IS by hand.
+const SITE_CONTENT_TRANSLATE_SKIP = new Set(['party_hero']);
 
 // ── Image upload: store under UPLOAD_ROOT/content/ ──────────────────────────
 // In dev that resolves to public/assets/content/ (committed tree); in prod it's
