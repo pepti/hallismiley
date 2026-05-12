@@ -15,7 +15,7 @@ Live site: **https://www.hallismiley.is**
 | Database | PostgreSQL 16 |
 | Frontend | Vanilla JS SPA (MVC + Component pattern) |
 | Auth | RS256 JWT (access + refresh tokens) |
-| Deployment | Railway |
+| Deployment | Azure App Service (Linux container, image pushed to Azure Container Registry) |
 
 ---
 
@@ -97,7 +97,7 @@ All variables are documented in `.env.example`. Key ones:
 |----------|-------------|
 | `PORT` | HTTP port (default `3000`) |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `DB_SSL` | Set `true` for hosted PostgreSQL (Railway, Supabase, Render) |
+| `DB_SSL` | Set `true` for hosted PostgreSQL (Azure, Supabase, Render, etc.) |
 | `ADMIN_USERNAME` | Admin login username |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash — generate with `setup-admin.js` |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins |
@@ -118,41 +118,73 @@ The script prompts for a username and password, hashes the password with bcrypt,
 
 ---
 
-## Deployment on Railway
+## Deployment on Azure App Service
 
-1. Push the repo to GitHub.
-2. Create a new Railway project and connect the GitHub repo.
-3. Add a PostgreSQL plugin — Railway sets `DATABASE_URL` automatically.
-4. Set `DB_SSL=true` and all other required environment variables in the Railway dashboard.
-5. Railway runs `npm start` by default (configured in `railway.toml`).
-6. Run migrations once after first deploy:
-   ```bash
-   railway run npm run migrate
-   ```
+Production is on **Azure App Service** (Linux container, B1 plan), with images
+pushed to **Azure Container Registry** and a managed **Azure Database for
+PostgreSQL Flexible Server**. Deploys are fully automated via GitHub Actions
+using OIDC federated credentials — no long-lived secrets in the repo.
+
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full first-time-setup
+guide (resource provisioning, OIDC trust, custom domain, Azure Files mount for
+uploads). The summary for routine work:
+
+1. Push to `main`. The `CI` workflow (`.github/workflows/ci.yml`) runs lint +
+   `npm audit` + integration tests + E2E + Docker build.
+2. On CI success, the `Deploy to Azure` workflow (`.github/workflows/deploy.yml`)
+   auto-triggers via `workflow_run`, builds the image, pushes to ACR
+   (`hallismileyacr.azurecr.io/hallismiley:<sha>`), and updates the App Service
+   container reference + restarts.
+3. Migrations run automatically at container startup via `server/scripts/migrate.js`
+   — no manual migration step.
+
+Manual deploy (emergency override, bypasses CI gate):
+```bash
+gh workflow run "Deploy to Azure" --ref main
+```
 
 ---
 
 ## Database Backup Strategy
 
-This app relies on Railway's managed PostgreSQL service.
+Production data lives in **Azure Database for PostgreSQL Flexible Server**
+(`hallismiley-db`), which provides automatic, encrypted backups managed by
+Azure — no application-side cron required.
 
-**Automatic backups (Railway):**
-- Railway provides automatic daily backups on paid plans. Verify this is enabled in the Railway dashboard under your PostgreSQL plugin settings.
-- Retention period depends on your Railway plan (typically 7 days).
+**Automatic backups (Azure):**
+- Daily full + log backups for point-in-time restore.
+- Default retention: 7 days (configurable up to 35 days).
+- Geo-redundant storage is available but not currently enabled on this server.
 
-**Verifying backups are working:**
-1. In the Railway dashboard, open the PostgreSQL plugin.
-2. Navigate to **Backups** — confirm recent snapshots are listed.
-3. Periodically test a restore to a staging environment to validate backup integrity.
-
-**Manual backup (on-demand):**
+**Inspect current backup settings:**
 ```bash
-pg_dump "$DATABASE_URL" --no-acl --no-owner -F c -f backup_$(date +%Y%m%d).dump
+az postgres flexible-server show \
+  --resource-group hallismiley-rg --name hallismiley-db \
+  --query "{retention:backup.backupRetentionDays, geoRedundant:backup.geoRedundantBackup}"
 ```
 
-**Restore from dump:**
+**Point-in-time restore (PITR):**
 ```bash
-pg_restore --clean --no-acl --no-owner -d "$DATABASE_URL" backup_YYYYMMDD.dump
+az postgres flexible-server restore \
+  --resource-group hallismiley-rg \
+  --name hallismiley-db-restore-$(date +%Y%m%d) \
+  --source-server hallismiley-db \
+  --restore-time "2026-05-12T12:00:00Z"
+```
+Restores create a new server; swap the App Service's `DATABASE_URL` to point
+at the restored server once it's healthy.
+
+**Ad-hoc logical dump (locally, against the prod DB):**
+```bash
+pg_dump "postgresql://halliadmin:<url-encoded-pw>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require" \
+  --no-acl --no-owner -F c -f backup_$(date +%Y%m%d).dump
+```
+
+**Restore an ad-hoc dump into a dev/staging server:**
+```bash
+pg_restore --clean --no-acl --no-owner \
+  -d "postgresql://USER:PW@HOST:5432/DBNAME?sslmode=require" \
+  backup_YYYYMMDD.dump
 ```
 
 ---

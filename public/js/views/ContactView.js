@@ -126,7 +126,7 @@ const DEFAULT_BUILT_WITH = {
       'This site is a hand-built portfolio running on Node.js and Express with a PostgreSQL ' +
       'database and a vanilla-JS single-page frontend — no framework, no build step. Auth uses ' +
       'Lucia with CSRF and Helmet hardening, email goes through Resend, uploads through Multer, ' +
-      'observability through Pino and Sentry, and the whole thing deploys to Azure or Railway.',
+      'observability through Pino and Sentry, and the whole thing deploys to Azure App Service.',
     body2:
       'The full source is on GitHub — feel free to fork or clone it. If you would like a hand ' +
       'getting it running or keeping it maintained, drop me a line and I am happy to help ' +
@@ -134,7 +134,7 @@ const DEFAULT_BUILT_WITH = {
     pills: [
       'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
       'Helmet', 'CSRF', 'Resend', 'Multer',
-      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure', 'Railway',
+      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure',
     ],
     github_btn_label: 'View on GitHub',
     email_btn_label:  'Email me for setup help',
@@ -148,7 +148,7 @@ const DEFAULT_BUILT_WITH = {
       'gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn rammi, ' +
       'ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, tölvupóstur ' +
       'fer í gegnum Resend, skráarupphleðsla í gegnum Multer, vöktun gegnum Pino og Sentry, ' +
-      'og allt saman er dreift á Azure eða Railway.',
+      'og allt saman er dreift á Azure App Service.',
     body2:
       'Öll frumskrár eru á GitHub — þér er velkomið að klóna eða fork-a. Ef þig vantar aðstoð ' +
       'við að koma þessu í loftið eða halda því við, hafðu samband og ég aðstoða með ánægju ' +
@@ -156,7 +156,7 @@ const DEFAULT_BUILT_WITH = {
     pills: [
       'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
       'Helmet', 'CSRF', 'Resend', 'Multer',
-      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure', 'Railway',
+      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure',
     ],
     github_btn_label: 'Skoða á GitHub',
     email_btn_label:  'Sendu mér póst um uppsetningu',
