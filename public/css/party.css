@@ -493,12 +493,14 @@
   font-size: 1rem;
   color: var(--gold);
   margin-bottom: var(--sp-2);
+  overflow-wrap: anywhere;
 }
 
 .party-activity-card__desc {
   color: var(--text-secondary);
   font-size: 0.875rem;
   margin-bottom: var(--sp-2);
+  overflow-wrap: anywhere;
 }
 
 .party-activity-card__rules {
@@ -507,6 +509,7 @@
   border-top: 1px solid rgba(255,255,255,0.05);
   padding-top: var(--sp-2);
   margin-top: var(--sp-2);
+  overflow-wrap: anywhere;
 }
 
 /* ── Locked section (elegant gold ribbon) ──────────────────────────────────── */
@@ -974,6 +977,13 @@ button.party-admin__stat:focus-visible {
   content: 'Click to edit…';
   color: rgba(200,155,60,.4);
   font-style: italic;
+}
+
+/* Activity rules value is a <span> (inline); promote to inline-block in edit
+   mode so min-width applies and gives the empty span a clickable area. */
+.party-section--editing [data-activity="rules-text"][contenteditable="true"] {
+  display: inline-block;
+  min-width: 6ch;
 }
 
 /* Schedule/Games add & delete row buttons */
