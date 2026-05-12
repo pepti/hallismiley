@@ -807,3 +807,4 @@ const partyController = {
 
 module.exports = partyController;
 module.exports._checkInviteAccess = _checkInviteAccess;
+module.exports._deriveRsvpStatus  = _deriveRsvpStatus;
