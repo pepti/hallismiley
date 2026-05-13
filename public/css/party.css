@@ -1007,8 +1007,11 @@ button.party-admin__stat:focus-visible {
   font-style: italic;
 }
 
-/* Activity rules value is a <span> (inline); promote to inline-block in edit
-   mode so min-width applies and gives the empty span a clickable area. */
+/* Activity rules label + value are inline elements; promote both to
+   inline-block in edit mode so min-width applies and gives empty
+   contenteditable areas a clickable surface. The existing
+   :empty::before rule then renders the "Click to edit…" placeholder. */
+.party-section--editing [data-activity="rules-label"][contenteditable="true"],
 .party-section--editing [data-activity="rules-text"][contenteditable="true"] {
   display: inline-block;
   min-width: 6ch;

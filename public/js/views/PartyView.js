@@ -586,13 +586,27 @@ export class PartyView {
   _renderActivities(activities) {
     const editor = canEdit();
 
-    const renderCards = (list, group) => list.map((g, i) => `
+    const renderCards = (list, group) => list.map((g, i) => {
+      // Per-activity editable label. Default to "Rules:" (colon included —
+      // the admin types the punctuation themselves so they can switch to
+      // "Notes —", "Link:", etc.). The whole row hides on the public view
+      // when both label and value are empty, but stays visible in edit mode
+      // so admins can opt back in.
+      const rulesLabel = g.rulesLabel ?? 'Rules:';
+      const rulesValue = g.rules ?? '';
+      const hideRulesRow = !editor && !rulesLabel.trim() && !rulesValue.trim();
+      const rulesRow = hideRulesRow ? '' : `
+        <p class="party-activity-card__rules" data-activity="rules">
+          <strong data-activity="rules-label">${escHtml(rulesLabel)}</strong>
+          <span data-activity="rules-text">${escHtml(rulesValue)}</span>
+        </p>`;
+      return `
       <div class="party-activity-card" data-activity-index="${i}" data-activity-group="${group}">
         ${editor ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-activity="${group}-${i}" aria-label="Remove this activity" title="Remove">✕</button>` : ''}
         <h3 class="party-activity-card__name" data-activity="name">${escHtml(g.name)}</h3>
-        <p class="party-activity-card__desc" data-activity="desc">${escHtml(g.description)}</p>
-        <p class="party-activity-card__rules" data-activity="rules"><strong>Rules:</strong> <span data-activity="rules-text">${escHtml(g.rules)}</span></p>
-      </div>`).join('');
+        <p class="party-activity-card__desc" data-activity="desc">${escHtml(g.description)}</p>${rulesRow}
+      </div>`;
+    }).join('');
 
     const daytimeCards = renderCards(activities.daytime || [], 'daytime');
     const eveningCards = renderCards(activities.evening || [], 'evening');
@@ -952,7 +966,7 @@ export class PartyView {
     const editableSelectors = {
       venue:      '[data-field], [data-detail]',
       schedule:   '[data-sched]',
-      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-text"]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"]',
     };
     sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
       el.contentEditable = 'true';
@@ -1240,7 +1254,7 @@ export class PartyView {
     const editableSelectors = {
       venue:      '[data-field], [data-detail]',
       schedule:   '[data-sched]',
-      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-text"]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"]',
     };
     sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
       el.contentEditable = 'false';
@@ -1334,9 +1348,10 @@ export class PartyView {
         const items = [];
         sectionEl.querySelectorAll(`[data-activity-group="${group}"]`).forEach(card => {
           items.push({
-            name:        card.querySelector('[data-activity="name"]')?.innerText.trim()       || '',
-            description: card.querySelector('[data-activity="desc"]')?.innerText.trim()       || '',
-            rules:       card.querySelector('[data-activity="rules-text"]')?.innerText.trim() || '',
+            name:        card.querySelector('[data-activity="name"]')?.innerText.trim()        || '',
+            description: card.querySelector('[data-activity="desc"]')?.innerText.trim()        || '',
+            rulesLabel:  card.querySelector('[data-activity="rules-label"]')?.innerText.trim() || '',
+            rules:       card.querySelector('[data-activity="rules-text"]')?.innerText.trim()  || '',
           });
         });
         return items;
@@ -1460,7 +1475,10 @@ export class PartyView {
           <button class="party-edit-row-delete" data-delete-activity="${group}-${count}" aria-label="Remove this activity" title="Remove">✕</button>
           <h3 class="party-activity-card__name" data-activity="name" contenteditable="true" spellcheck="true">New Activity</h3>
           <p class="party-activity-card__desc" data-activity="desc" contenteditable="true" spellcheck="true">Description</p>
-          <p class="party-activity-card__rules" data-activity="rules"><strong>Rules:</strong> <span data-activity="rules-text" contenteditable="true" spellcheck="true">Rules here</span></p>`;
+          <p class="party-activity-card__rules" data-activity="rules">
+            <strong data-activity="rules-label" contenteditable="true" spellcheck="true">Rules:</strong>
+            <span data-activity="rules-text" contenteditable="true" spellcheck="true">Rules here</span>
+          </p>`;
         grid.appendChild(card);
         this._bindActivitiesAddDelete(sectionEl);
         card.querySelector('[data-activity="name"]')?.focus();
