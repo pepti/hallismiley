@@ -1,10 +1,16 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
+const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
 const { t }        = require('../i18n');
 const { DEFAULT_LOCALE } = require('../config/i18n');
+const { isEnabled: translatorEnabled } = require('../services/translator');
+const {
+  SITE_CONTENT_TRANSLATE_SKIP,
+  runAutoTranslateSideEffect,
+} = require('../services/siteContentTranslate');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -54,10 +60,10 @@ const DEFAULT_PARTY_INFO = {
   ]),
   activities: JSON.stringify({
     daytime: [
-      { name: 'TBD', description: 'TBD', rules: 'TBD' },
+      { name: 'TBD', description: 'TBD', rulesLabel: 'Rules:', rules: 'TBD' },
     ],
     evening: [
-      { name: 'TBD', description: 'TBD', rules: 'TBD' },
+      { name: 'TBD', description: 'TBD', rulesLabel: 'Rules:', rules: 'TBD' },
     ],
   }),
 };
@@ -751,8 +757,21 @@ const partyController = {
         return res.status(400).json({ error: t(req.locale, 'errors.party.bodyPlainObject'), code: 400 });
       }
 
+      // Consume and strip the auto-translate opt-out flag so it never reaches
+      // the jsonb column or the translator prompt. Mirrors contentController.
+      const wantsAutoTranslate = !Object.prototype.hasOwnProperty.call(updates, '__autoTranslate')
+        || updates.__autoTranslate !== false;
+      delete updates.__autoTranslate;
+
       // Write to the request's locale — admins switching languages edit per-locale content.
       const locale = req.locale || DEFAULT_LOCALE;
+
+      // Captured per-key so the EN→IS background translate can detect which
+      // leaves the admin just changed and overwrite stale IS translations.
+      // Only populated when writing the EN locale; for IS writes we never
+      // need previousEn.
+      const previousEnByKey = {};
+      const parsedByKey     = {};
 
       for (const [key, value] of Object.entries(updates)) {
         if (!allowed.includes(key)) {
@@ -768,6 +787,7 @@ const partyController = {
         // it as a JSON string.
         let jsonb;
         try { jsonb = JSON.parse(value); } catch { jsonb = value; }
+        parsedByKey[key] = jsonb;
 
         // rsvp_message is a free-form paragraph. Cap length so the row stays
         // sane and prevent an admin from accidentally pasting a novel.
@@ -778,6 +798,17 @@ const partyController = {
           if (jsonb.length > 2000) {
             return res.status(400).json({ error: t(req.locale, 'errors.party.invalidField', { name: key }), code: 400 });
           }
+        }
+
+        // Capture the prior EN row BEFORE the upsert so the merge logic can
+        // detect "EN leaf changed since last save" and overwrite stale IS
+        // translations that no longer match the new EN value.
+        if (locale === DEFAULT_LOCALE) {
+          const prev = await db.query(
+            `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
+            [`party_${key}`, DEFAULT_LOCALE]
+          );
+          previousEnByKey[key] = prev.rows[0] ? prev.rows[0].value : null;
         }
 
         await db.query(
@@ -800,7 +831,28 @@ const partyController = {
         const k = row.key.replace(/^party_/, '');
         info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
       }
+      // Respond first — the IS auto-fill below runs in the background so the
+      // browser does not sit on "Saving…" while the LLM translates large
+      // jsonb blobs (e.g. activities with many entries).
       res.json(info);
+
+      // Mirrors contentController.putContent's auto-translate side effect.
+      // Runs only when saving the EN locale, the translator is enabled, and
+      // the caller did not opt out via __autoTranslate: false. Per-key so a
+      // single bulk patch can fan out into multiple background translates.
+      if (locale === DEFAULT_LOCALE && wantsAutoTranslate && translatorEnabled()) {
+        for (const key of Object.keys(parsedByKey)) {
+          const fullKey = `party_${key}`;
+          if (SITE_CONTENT_TRANSLATE_SKIP.has(fullKey)) continue;
+          const sourceEn = parsedByKey[key];
+          if (sourceEn === null || sourceEn === undefined) continue;
+          runAutoTranslateSideEffect(fullKey, sourceEn, previousEnByKey[key], req.user.id)
+            .catch(err => logger.error(
+              { err, key: fullKey },
+              'partyController.updateInfo IS auto-fill failed (background)'
+            ));
+        }
+      }
     } catch (err) { next(err); }
   },
 };
