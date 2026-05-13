@@ -28,12 +28,16 @@ const logger = require('../logger');
 
 // Keys that must NEVER be translated when walking a site_content jsonb.
 // Extend as new structural keys are introduced.
+//
+// `fieldId` is the show-if reference inside party_rsvp_form entries
+// (`{ showIf: { fieldId: 'helping', value: '…' } }`). Translating it would
+// break the dependent-field matching in PartyView's _showIfAttrs.
 const BLOCK_KEYS = new Set([
   'href', 'url', 'src', 'image_url', 'cover_image',
   'type', 'kind', 'icon', 'status',
   'github_url', 'twitter_url', 'linkedin_url',
   'brand_name', 'email', 'phone',
-  'id', 'slug', 'key', 'locale',
+  'id', 'slug', 'key', 'locale', 'fieldId',
 ]);
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';

@@ -484,7 +484,10 @@ export class PartyView {
         <span class="party-edit-status" data-status="rsvp" aria-live="polite"></span>
       </div>` : '';
 
-    // If user already RSVP'd, show summary + "Update RSVP" toggle
+    // If user already RSVP'd, show summary + "Update RSVP" toggle.
+    // Each summary line carries data-rsvp-summary-line + data-field-id so
+    // inline-edit mode can make the <strong data-field-label> editable and
+    // mirror changes into the (hidden) form fields below for the same field.
     const summaryHtml = rsvp ? `
       <div class="party-rsvp__current">
         <div class="party-rsvp__status party-rsvp__status--yes">✅ ${t('party.youveRsvpd')}</div>
@@ -492,7 +495,7 @@ export class PartyView {
           const a = answers[f.id];
           if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
           const val = Array.isArray(a) ? a.map(x => escHtml(x)).join(', ') : escHtml(a);
-          return `<p><strong>${escHtml(f.label)}:</strong> ${val}</p>`;
+          return `<p data-rsvp-summary-line data-field-id="${escHtml(f.id)}"><strong data-field-label>${escHtml(f.label)}</strong>: ${val}</p>`;
         }).join('')}
         <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">${t('party.updateRsvp')}</button>
       </div>` : '';
@@ -514,41 +517,43 @@ export class PartyView {
   _renderField(field, answers) {
     const id  = `rsvp-f-${field.id}`;
     const ans = answers?.[field.id];
+    // data-field-label marks the inline-editable label text for the inline
+    // edit mode; data-option-index does the same for radio/checkbox options.
     switch (field.type) {
       case 'heading':
-        return `<h2 class="party-section__title" data-field-id="${escHtml(field.id)}">${escHtml(field.label)}</h2>`;
+        return `<h2 class="party-section__title" data-field-id="${escHtml(field.id)}" data-field-label>${escHtml(field.label)}</h2>`;
       case 'paragraph':
-        return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}">${escHtml(field.label).replace(/\n/g, '<br>')}</p>`;
+        return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}" data-field-label>${escHtml(field.label).replace(/\n/g, '<br>')}</p>`;
       case 'checkbox-group': {
-        const opts = (field.options || []).map(opt => `
+        const opts = (field.options || []).map((opt, i) => `
           <label class="party-checkbox">
             <input type="checkbox" name="f_${escHtml(field.id)}" value="${escHtml(opt)}"
                    ${Array.isArray(ans) && ans.includes(opt) ? 'checked' : ''} />
-            <span>${escHtml(opt)}</span>
+            <span data-option-index="${i}">${escHtml(opt)}</span>
           </label>`).join('');
         return `
           <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="checkbox-group"${this._showIfAttrs(field)}>
-            <label class="party-label">${escHtml(field.label)}</label>
+            <label class="party-label" data-field-label>${escHtml(field.label)}</label>
             <div class="party-checkbox-group">${opts}</div>
           </div>`;
       }
       case 'radio-group': {
-        const opts = (field.options || []).map(opt => `
+        const opts = (field.options || []).map((opt, i) => `
           <label class="party-checkbox">
             <input type="radio" name="f_${escHtml(field.id)}" value="${escHtml(opt)}"
                    ${typeof ans === 'string' && ans === opt ? 'checked' : ''} />
-            <span>${escHtml(opt)}</span>
+            <span data-option-index="${i}">${escHtml(opt)}</span>
           </label>`).join('');
         return `
           <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="radio-group"${this._showIfAttrs(field)}>
-            <label class="party-label">${escHtml(field.label)}</label>
+            <label class="party-label" data-field-label>${escHtml(field.label)}</label>
             <div class="party-checkbox-group party-radio-group">${opts}</div>
           </div>`;
       }
       case 'text':
         return `
           <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="text"${this._showIfAttrs(field)}>
-            <label class="party-label" for="${id}">${escHtml(field.label)}</label>
+            <label class="party-label" for="${id}" data-field-label>${escHtml(field.label)}</label>
             <input id="${id}" class="lol-input" type="text" name="f_${escHtml(field.id)}"
                    placeholder="${escHtml(field.placeholder || '')}"
                    value="${escHtml(ans || '')}" maxlength="200" />
@@ -556,7 +561,7 @@ export class PartyView {
       case 'textarea':
         return `
           <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="textarea"${this._showIfAttrs(field)}>
-            <label class="party-label" for="${id}">${escHtml(field.label)}</label>
+            <label class="party-label" for="${id}" data-field-label>${escHtml(field.label)}</label>
             <textarea id="${id}" class="lol-input lol-textarea" name="f_${escHtml(field.id)}"
                       placeholder="${escHtml(field.placeholder || '')}" maxlength="1000">${escHtml(ans || '')}</textarea>
           </div>`;
@@ -974,12 +979,168 @@ export class PartyView {
     }
   }
 
+  // ── RSVP form: inline label/option editing (per-locale) ────────────────────
+  //
+  // Default BREYTA flow. Makes every label and option visible in the summary
+  // card + form contentEditable so admins can rename them in place. Save
+  // routes through PUT /api/v1/content/party_rsvp_form?locale=<active>, which
+  // upserts the matching per-locale row and (for EN) auto-translates string
+  // leaves into the IS sibling. Structural edits (add/remove fields, set
+  // show-if) remain reachable via the "+ Manage fields" toggle, which calls
+  // _enterEditRsvpStructural below.
   _enterEditRsvpForm() {
     const sectionEl = this._getSectionEl('rsvp');
     if (!sectionEl) return;
 
+    // Snapshot the form array (not innerHTML) so cancel restores cleanly via
+    // _paintRsvpLabels without rebuilding the section.
+    this._editSnapshots['rsvp'] = JSON.parse(JSON.stringify(this._rsvpForm || []));
+
+    sectionEl.classList.add('party-section--editing');
+    sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.add('party-edit-btn--hidden');
+    const controls = sectionEl.querySelector('[data-controls="rsvp"]');
+    controls?.classList.remove('party-edit-controls--hidden');
+
+    // ⚠ Óþýtt chip: surfaces when the IS row is identical to (or empty vs.) EN.
+    checkUntranslated('party_rsvp_form', controls);
+
+    // Make every label + option editable. data-field-label is on the form
+    // labels AND on the <strong> inside the summary card; data-option-index
+    // is on each option <span>.
+    sectionEl.querySelectorAll('[data-field-label], [data-option-index]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck = true;
+    });
+
+    // Mirror label edits between summary and form for the same field id —
+    // they share the same logical label, so editing in one place updates
+    // both visually during the edit session.
+    sectionEl.querySelectorAll('[data-field-label]').forEach(el => {
+      el.addEventListener('input', () => this._mirrorFieldLabel(el));
+    });
+
+    // Add a "+ Manage fields" button that swaps into the structural editor
+    // for adding/removing fields. Only inject once per edit session.
+    if (controls && !controls.querySelector('[data-rsvp-manage-fields]')) {
+      const manageBtn = document.createElement('button');
+      manageBtn.type = 'button';
+      manageBtn.className = 'party-edit-add party-edit-add--sm';
+      manageBtn.setAttribute('data-rsvp-manage-fields', '');
+      manageBtn.textContent = '+ Manage fields';
+      manageBtn.addEventListener('click', () => this._enterEditRsvpStructural());
+      controls.appendChild(manageBtn);
+    }
+  }
+
+  // Walk every [data-field-label] in the RSVP section and propagate the
+  // current element's text to its siblings that share the same data-field-id.
+  // The summary <strong> has no data-field-id of its own (the parent <p> does),
+  // so we walk up to find the field id and then sync siblings within the same
+  // section.
+  //
+  // textContent (not innerText) — the radio/checkbox labels have CSS
+  // text-transform: uppercase, which makes innerText return the rendered
+  // uppercase text. We need the raw characters the admin typed.
+  _mirrorFieldLabel(srcEl) {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+    const parent = srcEl.closest('[data-field-id]');
+    const fieldId = parent?.dataset.fieldId;
+    if (!fieldId) return;
+    const text = srcEl.textContent;
+    sectionEl.querySelectorAll(`[data-field-id="${CSS.escape(fieldId)}"] [data-field-label]`).forEach(el => {
+      if (el !== srcEl && el.textContent !== text) el.textContent = text;
+    });
+    // Heading/paragraph have data-field-label ON the field-id element itself —
+    // they need the equality check separately so we don't write to srcEl.
+    const self = sectionEl.querySelector(`[data-field-id="${CSS.escape(fieldId)}"][data-field-label]`);
+    if (self && self !== srcEl && self.textContent !== text) self.textContent = text;
+  }
+
+  // Collect the rsvp_form array from the rendered DOM. Preserves every
+  // structural field (id, type, placeholder, showIf) from this._rsvpForm and
+  // overwrites only label + options[i] strings from the edited DOM. The
+  // summary card and the form share the same field id; we read from the form
+  // label (which always exists), falling back to the summary label if the
+  // form is hidden because the user has RSVP'd and the form-wrap is removed
+  // from view (it's `hidden`, not detached, so it's still in the DOM).
+  _collectRsvpFormInline() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return JSON.parse(JSON.stringify(this._rsvpForm || []));
+    return (this._rsvpForm || []).map(field => {
+      const idSel = CSS.escape(field.id);
+      const labelEl =
+        sectionEl.querySelector(`[data-field-id="${idSel}"][data-field-label]`) ||
+        sectionEl.querySelector(`[data-field-id="${idSel}"] [data-field-label]`);
+      const next = { ...field };
+      if (labelEl) next.label = labelEl.textContent.replace(/\r\n/g, '\n').trim();
+      if (Array.isArray(field.options)) {
+        next.options = field.options.map((opt, i) => {
+          const optEl = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
+          return optEl ? optEl.textContent.trim() : opt;
+        });
+      }
+      return next;
+    });
+  }
+
+  // Repaint summary + form labels/options from this._rsvpForm without
+  // rebuilding the section. Used on save (re-paint with persisted values)
+  // and cancel (re-paint with snapshot values).
+  _paintRsvpLabels() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+    (this._rsvpForm || []).forEach(field => {
+      const idSel = CSS.escape(field.id);
+      const self = sectionEl.querySelector(`[data-field-id="${idSel}"][data-field-label]`);
+      if (self) self.textContent = field.label || '';
+      sectionEl.querySelectorAll(`[data-field-id="${idSel}"] [data-field-label]`).forEach(el => {
+        el.textContent = field.label || '';
+      });
+      if (Array.isArray(field.options)) {
+        field.options.forEach((opt, i) => {
+          const optEl = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
+          if (optEl) optEl.textContent = opt;
+        });
+      }
+    });
+  }
+
+  // Tear down the inline-edit state without rebuilding the section.
+  _exitEditRsvpForm() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+    sectionEl.classList.remove('party-section--editing');
+    sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.remove('party-edit-btn--hidden');
+    const controls = sectionEl.querySelector('[data-controls="rsvp"]');
+    controls?.classList.add('party-edit-controls--hidden');
+    sectionEl.querySelectorAll('[data-field-label], [data-option-index]').forEach(el => {
+      el.contentEditable = 'false';
+    });
+    controls?.querySelector('[data-rsvp-manage-fields]')?.remove();
+    const statusEl = sectionEl.querySelector('[data-status="rsvp"]');
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  // ── RSVP form: structural editing (add/remove fields, show-if) ─────────────
+  //
+  // Triggered by the "+ Manage fields" button inside the inline edit controls.
+  // Replaces #rsvp-inner with the form-builder editor exactly as it used to
+  // when BREYTA was the entry point — this preserves the only path admins
+  // have to add/remove fields, change types, or wire up show-if conditions.
+  _enterEditRsvpStructural() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+
     const inner = sectionEl.querySelector('#rsvp-inner');
-    this._editSnapshots['rsvp'] = inner.innerHTML;
+    // Keep the inline snapshot intact if the admin clicked Manage fields
+    // mid-edit (so a subsequent Cancel still works). Only stash the inner
+    // HTML if we have not already snapshotted via _enterEditRsvpForm.
+    if (!Array.isArray(this._editSnapshots['rsvp'])) {
+      this._editSnapshots['rsvp'] = inner.innerHTML;
+    } else {
+      this._editSnapshots['rsvpStructuralInner'] = inner.innerHTML;
+    }
 
     sectionEl.classList.add('party-section--editing');
     sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.add('party-edit-btn--hidden');
@@ -1264,14 +1425,35 @@ export class PartyView {
   _cancelEdit(section) {
     if (section === 'rsvpMessage') { this._cancelEditRsvpMessage(); return; }
     if (section === 'rsvp') {
+      const snapshot = this._editSnapshots[section];
+      // Inline snapshot (the default — set by _enterEditRsvpForm): restore
+      // the form array from the deep clone. If the structural builder was
+      // also opened mid-session, _editSnapshots.rsvpStructuralInner exists
+      // but is irrelevant — re-rendering from the array covers both modes.
+      if (Array.isArray(snapshot)) {
+        this._rsvpForm = JSON.parse(JSON.stringify(snapshot));
+        delete this._editSnapshots.rsvpStructuralInner;
+        const sectionEl = this._getSectionEl('rsvp');
+        const rsvpEl = sectionEl || this._el.querySelector('.party-rsvp');
+        if (rsvpEl) {
+          rsvpEl.outerHTML = this._renderRsvp();
+          this._bindRsvp();
+          if (canEdit()) this._bindEditing();
+        }
+        return;
+      }
+      // Legacy structural-only path (snapshot is innerHTML string). Kept
+      // for safety in case _enterEditRsvpStructural ever runs as the
+      // entry point — it currently does not, but the fallback is cheap.
       const sectionEl = this._getSectionEl('rsvp');
       const inner     = sectionEl?.querySelector('#rsvp-inner');
-      if (inner && this._editSnapshots[section]) {
-        inner.innerHTML = this._editSnapshots[section];
+      if (inner && typeof snapshot === 'string') {
+        inner.innerHTML = snapshot;
       }
       sectionEl?.classList.remove('party-section--editing');
       sectionEl?.querySelector('[data-edit-section="rsvp"]')?.classList.remove('party-edit-btn--hidden');
       sectionEl?.querySelector('[data-controls="rsvp"]')?.classList.add('party-edit-controls--hidden');
+      sectionEl?.querySelector('[data-controls="rsvp"] [data-rsvp-manage-fields]')?.remove();
       this._bindRsvp();
       return;
     }
@@ -1345,8 +1527,47 @@ export class PartyView {
     }
 
     if (section === 'rsvp') {
-      const fields = this._collectRsvpForm();
-      payload.rsvp_form = JSON.stringify(fields);
+      // Inline mode (default) vs. structural mode (form-builder dialog opened
+      // via "+ Manage fields"). Detect by the presence of the builder element.
+      const isStructural = !!sectionEl.querySelector('#rsvp-builder');
+      const fields = isStructural ? this._collectRsvpForm() : this._collectRsvpFormInline();
+      const locale = window.__locale || 'en';
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch(`/api/v1/content/party_rsvp_form?locale=${encodeURIComponent(locale)}`, {
+          method:      'PUT',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify(fields),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Save failed');
+        }
+        const persisted = await res.json();
+        this._rsvpForm = Array.isArray(persisted) && persisted.length ? persisted : this._defaultRsvpForm();
+        // Mirror the new form into _partyInfo.rsvp_form so any other code
+        // reading it (email previews, admin stats) sees the latest shape.
+        if (this._partyInfo) this._partyInfo.rsvp_form = JSON.stringify(this._rsvpForm);
+
+        if (isStructural) {
+          // Structural edits may add/remove fields — re-render the whole
+          // section so summary, form, and builder state all match.
+          const rsvpSection = this._el.querySelector('.party-rsvp');
+          if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
+          this._bindRsvp();
+          if (canEdit()) this._bindEditing();
+        } else {
+          // Inline edits only changed labels/options — repaint in place so
+          // the user's answers (and any other section state) don't blink.
+          this._paintRsvpLabels();
+          this._exitEditRsvpForm();
+        }
+        showToast(t('form.success'), 'success');
+      } catch (err) {
+        if (statusEl) statusEl.textContent = err.message;
+      }
+      return;
     }
 
     try {
@@ -1365,19 +1586,6 @@ export class PartyView {
       // Update local data
       const updated = await res.json();
       this._partyInfo = updated;
-
-      // RSVP form changes: re-render the whole RSVP section
-      if (section === 'rsvp') {
-        const parsed = this._parseJSON(updated.rsvp_form, null);
-        this._rsvpForm = Array.isArray(parsed) && parsed.length ? parsed : this._defaultRsvpForm();
-
-        const rsvpSection = this._el.querySelector('.party-rsvp');
-        if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
-        this._bindRsvp();
-        if (canEdit()) this._bindEditing();
-        showToast(t('form.success'), 'success');
-        return;
-      }
 
       if (statusEl) {
         statusEl.textContent = t('form.success');

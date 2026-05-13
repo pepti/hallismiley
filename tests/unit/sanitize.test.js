@@ -192,6 +192,36 @@ describe('sanitizeBody — nested object recursion', () => {
   });
 });
 
+describe('sanitizeBody — top-level array body', () => {
+  // PUT /api/v1/content/party_rsvp_form sends the rsvp form definition as a
+  // bare JSON array. Before the array-aware branch, sanitizeObject coerced
+  // arrays into plain objects with numeric string keys and the row landed
+  // in the DB as { "0": {...}, "1": {...} } — breaking _loadAll on the SPA.
+  test('preserves array shape and sanitizes element string fields', () => {
+    const req = mockReq([
+      { id: 'attend_when', label: '<b>When</b>?', options: ['<i>Day</i>', 'Night'] },
+      { id: 'helping', label: 'Help out?' },
+    ]);
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(Array.isArray(req.body)).toBe(true);
+    expect(req.body[0].id).toBe('attend_when');
+    expect(req.body[0].label).toBe('When?');
+    expect(req.body[0].options).toEqual(['Day', 'Night']);
+    expect(req.body[1].label).toBe('Help out?');
+  });
+
+  test('top-level array of strings is sanitized in place', () => {
+    // sanitizeString strips tag syntax but keeps inner text — matching the
+    // existing "<b>Bold</b> Name" → "Bold Name" behaviour for object fields.
+    const req = mockReq(['<b>one</b>', 'two', '<script></script>three']);
+    const next = mockNext();
+    sanitizeBody(req, {}, next);
+    expect(Array.isArray(req.body)).toBe(true);
+    expect(req.body).toEqual(['one', 'two', 'three']);
+  });
+});
+
 describe('sanitizeBody — edge cases', () => {
   test('calls next() when body is null', () => {
     const req  = { body: null };
