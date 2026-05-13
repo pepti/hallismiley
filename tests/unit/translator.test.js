@@ -150,6 +150,38 @@ describe('server/services/translator', () => {
       expect(out.url).toBe('https://example.is');              // untouched
     });
 
+    test('keeps showIf.fieldId verbatim so dependent-field matching survives translation', async () => {
+      // party_rsvp_form fields can declare { showIf: { fieldId, value } } —
+      // fieldId is a structural reference to another field's id, NOT user
+      // copy. Translating "helping" → Icelandic would silently break the
+      // dependent-field logic in PartyView._showIfAttrs, so fieldId belongs
+      // to BLOCK_KEYS. (showIf.value is intentionally still translated so it
+      // matches the option string it references in the same locale.)
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      mockCreate.mockImplementation(async ({ messages }) => {
+        const input = JSON.parse(messages[0].content);
+        return { content: [{ type: 'text', text: JSON.stringify(input.map(s => `IS:${s}`)) }] };
+      });
+      const rsvpForm = [
+        { id: 'helping',           type: 'checkbox-group', label: 'Want to help out?',
+          options: ['Help with planning', 'Host an activity'] },
+        { id: 'activity_details',  type: 'textarea',       label: 'What activity would you host?',
+          placeholder: 'A short description',
+          showIf: { fieldId: 'helping', value: 'Host an activity' } },
+      ];
+      const out = await translator.translateTree(rsvpForm);
+      // fieldId stays in EN — otherwise the show-if reference goes dangling.
+      expect(out[1].showIf.fieldId).toBe('helping');
+      // value translates alongside the option string for in-locale matching.
+      expect(out[1].showIf.value).toBe('IS:Host an activity');
+      // Sanity: structural fields untouched, copy translated.
+      expect(out[0].id).toBe('helping');
+      expect(out[0].type).toBe('checkbox-group');
+      expect(out[0].label).toBe('IS:Want to help out?');
+      expect(out[0].options).toEqual(['IS:Help with planning', 'IS:Host an activity']);
+    });
+
     test('falls back to per-leaf calls when batched response length mismatches', async () => {
       process.env.TRANSLATE_ENABLED = 'true';
       process.env.ANTHROPIC_API_KEY = 'sk-x';

@@ -51,10 +51,24 @@ function sanitizeRichText(value) {
 }
 
 function sanitizeBody(req, res, next) {
-  if (req.body && typeof req.body === 'object') {
+  // Top-level arrays (e.g. PUT /api/v1/content/party_rsvp_form sends the
+  // form definition as a bare array) need to stay arrays — sanitizeObject
+  // would coerce them to plain objects with numeric string keys. Sanitize
+  // each element in place but preserve the array shape.
+  if (Array.isArray(req.body)) {
+    req.body = sanitizeArray(req.body);
+  } else if (req.body && typeof req.body === 'object') {
     req.body = sanitizeObject(req.body);
   }
   next();
+}
+
+function sanitizeArray(arr) {
+  return arr.map(v =>
+    typeof v === 'string'                 ? sanitizeString(v) :
+    Array.isArray(v)                      ? sanitizeArray(v)  :
+    (v !== null && typeof v === 'object') ? sanitizeObject(v) : v
+  );
 }
 
 function sanitizeObject(obj) {
@@ -64,10 +78,7 @@ function sanitizeObject(obj) {
       // Preserve rich HTML; only remove null bytes
       clean[key] = typeof val === 'string' ? sanitizeRichText(val) : val;
     } else if (Array.isArray(val)) {
-      clean[key] = val.map(v =>
-        typeof v === 'string'               ? sanitizeString(v) :
-        (v !== null && typeof v === 'object') ? sanitizeObject(v) : v
-      );
+      clean[key] = sanitizeArray(val);
     } else if (typeof val === 'string') {
       clean[key] = sanitizeString(val);
     } else if (val !== null && typeof val === 'object') {
