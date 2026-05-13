@@ -30,21 +30,13 @@ export class PartyView {
     this._rsvpCount     = 0;
   }
 
-  _isVerified() {
-    if (!isAuthenticated()) return false;
-    // Admins and moderators always have access, regardless of email verification
-    if (canEdit()) return true;
-    return !!getUser()?.email_verified;
-  }
-
-  // Gates RSVP + Activities. Admins/moderators bypass; everyone else needs a
-  // verified email AND the party_access flag (granted by redeeming an invite
-  // code or by an admin toggle in Manage Users).
+  // Gates RSVP + Activities. Admins/moderators bypass; everyone else needs the
+  // party_access flag (granted by redeeming an invite code or by an admin
+  // toggle in Manage Users).
   _hasPartyAccess() {
     if (!isAuthenticated()) return false;
     if (canEdit()) return true;
-    const u = getUser();
-    return !!(u?.email_verified && u?.party_access);
+    return !!getUser()?.party_access;
   }
 
   async render() {
@@ -83,7 +75,7 @@ export class PartyView {
     const parsed = this._parseJSON(this._partyInfo.rsvp_form, null);
     this._rsvpForm = Array.isArray(parsed) && parsed.length ? parsed : this._defaultRsvpForm();
 
-    // RSVP data requires party access (verified email + invite code redeemed, or admin)
+    // RSVP data requires party access (invite code redeemed, or admin)
     if (this._hasPartyAccess()) {
       try {
         const rsvpRes = await fetch('/api/v1/party/rsvp', { credentials: 'include' });
@@ -117,8 +109,7 @@ export class PartyView {
   _renderLockedSection(title, emoji, opts = {}) {
     const authed = isAuthenticated();
     const user   = getUser();
-    const emailOk = authed && (canEdit() || !!user?.email_verified);
-    const needsInviteCode = emailOk && !canEdit() && !user?.party_access;
+    const needsInviteCode = authed && !canEdit() && !user?.party_access;
 
     // Invited-code state: show the redemption form on the first locked section
     // (opts.primary !== false) and a "unlock above" hint on the second.
@@ -126,12 +117,9 @@ export class PartyView {
       return this._renderInviteCodeLocked(title, emoji, opts.primary !== false);
     }
 
-    const ctaText = authed
-      ? t('party.verifyToView')
-      : t('party.loginToView');
-    const ctaBtn = authed
-      ? ''
-      : `<button class="party-locked__signin-link" type="button">${t('nav.signIn')}</button>`;
+    // Remaining path: unauthenticated user — prompt them to sign in.
+    const ctaText = t('party.loginToView');
+    const ctaBtn  = `<button class="party-locked__signin-link" type="button">${t('nav.signIn')}</button>`;
 
     const slug = title.toLowerCase().replace(/\s+/g, '-');
     return `
