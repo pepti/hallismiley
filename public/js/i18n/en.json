@@ -533,7 +533,6 @@
   "party.backToParty": "Back to Party",
   "party.whenWhere": "When & Where",
   "party.loadError": "Failed to load party page. Please refresh.",
-  "party.verifyToView": "Verify your email to view this section",
   "party.loginToView": "Log in or sign up to view this section",
   "party.enterCodeAbove": "Enter the invite code above to unlock.",
   "party.gotInviteCode": "Got an invite code? Enter it to unlock RSVP and Activities.",
