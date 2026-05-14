@@ -579,6 +579,13 @@ export class PartyView {
   _renderActivities(activities) {
     const editor = canEdit();
 
+    // Section + subsection headings. Fall back to i18n keys when the admin has
+    // not yet saved a custom value, so existing rows (which predate this field)
+    // keep rendering the static translation.
+    const mainHeading    = activities.heading        ?? t('party.activities');
+    const daytimeHeading = activities.daytimeHeading ?? t('party.daytimeActivities');
+    const eveningHeading = activities.eveningHeading ?? t('party.eveningActivities');
+
     const renderCards = (list, group) => list.map((g, i) => {
       // Per-activity editable label. Default to "Rules:" (colon included —
       // the admin types the punctuation themselves so they can switch to
@@ -626,15 +633,15 @@ export class PartyView {
       <section class="party-section party-activities" aria-labelledby="activities-heading">
         ${editBtn}
         <div class="party-section__inner">
-          <h2 class="party-section__title" id="activities-heading">🎯 ${t('party.activities')}</h2>
+          <h2 class="party-section__title" id="activities-heading">🎯 <span data-activity-heading="main">${escHtml(mainHeading)}</span></h2>
 
-          <h3 class="party-activities__sub-heading">☀️ ${t('party.daytimeActivities')}</h3>
+          <h3 class="party-activities__sub-heading">☀️ <span data-activity-heading="daytime">${escHtml(daytimeHeading)}</span></h3>
           <div class="party-activities__grid" data-activities-grid="daytime">
             ${daytimeCards}
           </div>
           ${addBtn('daytime')}
 
-          <h3 class="party-activities__sub-heading party-activities__sub-heading--evening">🌙 ${t('party.eveningActivities')}</h3>
+          <h3 class="party-activities__sub-heading party-activities__sub-heading--evening">🌙 <span data-activity-heading="evening">${escHtml(eveningHeading)}</span></h3>
           <div class="party-activities__grid" data-activities-grid="evening">
             ${eveningCards}
           </div>
@@ -959,7 +966,7 @@ export class PartyView {
     const editableSelectors = {
       venue:      '[data-field], [data-detail]',
       schedule:   '[data-sched]',
-      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"], [data-activity-heading]',
     };
     sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
       el.contentEditable = 'true';
@@ -1403,7 +1410,7 @@ export class PartyView {
     const editableSelectors = {
       venue:      '[data-field], [data-detail]',
       schedule:   '[data-sched]',
-      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"], [data-activity-heading]',
     };
     sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
       el.contentEditable = 'false';
@@ -1526,7 +1533,15 @@ export class PartyView {
         });
         return items;
       };
-      payload.activities = JSON.stringify({ daytime: collect('daytime'), evening: collect('evening') });
+      const readHeading = (which) =>
+        sectionEl.querySelector(`[data-activity-heading="${which}"]`)?.innerText.trim() || '';
+      payload.activities = JSON.stringify({
+        heading:        readHeading('main'),
+        daytimeHeading: readHeading('daytime'),
+        eveningHeading: readHeading('evening'),
+        daytime:        collect('daytime'),
+        evening:        collect('evening'),
+      });
     }
 
     if (section === 'rsvp') {

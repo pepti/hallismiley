@@ -67,6 +67,9 @@ const DEFAULT_PARTY_INFO = {
     { time: '22:00', event: 'Venue Closes' },
   ]),
   activities: JSON.stringify({
+    heading:        'Activities',
+    daytimeHeading: 'Daytime Activities',
+    eveningHeading: 'Evening Activities',
     daytime: [
       { name: 'TBD', description: 'TBD', rulesLabel: 'Rules:', rules: 'TBD' },
     ],
