@@ -532,7 +532,11 @@
 }
 
 .party-activity-card__rules {
-  color: var(--text-muted);
+  /* --text-muted (#5B5A56) on the dark card was too low-contrast — bold
+     "Rules:" rendered thinner than the regular-weight value beside it and
+     looked even darker. Match the description row above so both halves of
+     "Rules: <value>" read at the same brightness. */
+  color: var(--text-secondary);
   font-size: 0.8125rem;
   border-top: 1px solid rgba(255,255,255,0.05);
   padding-top: var(--sp-2);
