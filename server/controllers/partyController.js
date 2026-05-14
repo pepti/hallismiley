@@ -14,6 +14,14 @@ const {
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
+// Keys whose content is the same across locales — stored once at
+// DEFAULT_LOCALE and returned on every locale read. An admin adds an
+// activity once and it shows on both /en/party and /is/party instead of
+// living only in whichever locale was active when they hit Save. Free-form
+// entries (instagram handles, URLs, host names) don't benefit from per-locale
+// editing the way structural copy (hero, RSVP labels) does.
+const LOCALE_NEUTRAL_INFO_KEYS = new Set(['activities']);
+
 // Default party info stored in site_content under key 'party_info'
 const DEFAULT_PARTY_INFO = {
   date: 'July 25, 2026',
@@ -678,16 +686,38 @@ const partyController = {
       // Prefer the request's locale; fall back to DEFAULT_LOCALE per key if missing.
       const locale = req.locale || DEFAULT_LOCALE;
       const { rows } = await db.query(
-        `SELECT DISTINCT ON (key) key, value FROM site_content
+        `SELECT DISTINCT ON (key) key, locale, value FROM site_content
           WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
             AND (locale = $1 OR locale = $2)
           ORDER BY key, (locale = $1) DESC`,
         [locale, DEFAULT_LOCALE]
       );
       const info = { ...DEFAULT_PARTY_INFO };
+      const neutralOverrides = new Set();
       for (const row of rows) {
         const k = row.key.replace(/^party_/, '');
+        // Locale-neutral keys must always come from DEFAULT_LOCALE so a stale
+        // per-locale row from before this key was made neutral can't shadow
+        // the canonical value. Skip non-default rows here and fetch them
+        // explicitly below.
+        if (LOCALE_NEUTRAL_INFO_KEYS.has(k) && row.locale !== DEFAULT_LOCALE) continue;
         info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
+        if (LOCALE_NEUTRAL_INFO_KEYS.has(k)) neutralOverrides.add(k);
+      }
+      // Backfill any locale-neutral key that the request-locale read skipped
+      // because only a non-default-locale row exists for it. (No default row
+      // means we keep the DEFAULT_PARTY_INFO seed value.)
+      const missingNeutral = [...LOCALE_NEUTRAL_INFO_KEYS].filter(k => !neutralOverrides.has(k));
+      if (missingNeutral.length > 0 && locale !== DEFAULT_LOCALE) {
+        const { rows: defRows } = await db.query(
+          `SELECT key, value FROM site_content
+            WHERE locale = $1 AND key = ANY($2::text[])`,
+          [DEFAULT_LOCALE, missingNeutral.map(k => `party_${k}`)]
+        );
+        for (const row of defRows) {
+          const k = row.key.replace(/^party_/, '');
+          info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
+        }
       }
       // Backward compat: migrate legacy flat games array → activities object
       if (info.games && !info.activities) {
@@ -800,10 +830,18 @@ const partyController = {
           }
         }
 
+        // Locale-neutral keys (see LOCALE_NEUTRAL_INFO_KEYS) always write to
+        // DEFAULT_LOCALE no matter which locale the admin is editing on, so a
+        // single Save populates both /en/party and /is/party. We also sweep
+        // any pre-existing non-default-locale row for that key so it can't
+        // shadow the canonical value on the request-locale read below.
+        const isLocaleNeutral = LOCALE_NEUTRAL_INFO_KEYS.has(key);
+        const targetLocale    = isLocaleNeutral ? DEFAULT_LOCALE : locale;
+
         // Capture the prior EN row BEFORE the upsert so the merge logic can
         // detect "EN leaf changed since last save" and overwrite stale IS
         // translations that no longer match the new EN value.
-        if (locale === DEFAULT_LOCALE) {
+        if (!isLocaleNeutral && locale === DEFAULT_LOCALE) {
           const prev = await db.query(
             `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
             [`party_${key}`, DEFAULT_LOCALE]
@@ -815,13 +853,20 @@ const partyController = {
           `INSERT INTO site_content (key, locale, value, updated_by) VALUES ($1, $2, $3::jsonb, $4)
            ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value,
              updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-          [`party_${key}`, locale, JSON.stringify(jsonb), req.user.id]
+          [`party_${key}`, targetLocale, JSON.stringify(jsonb), req.user.id]
         );
+
+        if (isLocaleNeutral) {
+          await db.query(
+            `DELETE FROM site_content WHERE key = $1 AND locale <> $2`,
+            [`party_${key}`, DEFAULT_LOCALE]
+          );
+        }
       }
 
       // Return the merged result (for the request's locale, falling back to default)
       const { rows } = await db.query(
-        `SELECT DISTINCT ON (key) key, value FROM site_content
+        `SELECT DISTINCT ON (key) key, locale, value FROM site_content
           WHERE key LIKE 'party_%' AND (locale = $1 OR locale = $2)
           ORDER BY key, (locale = $1) DESC`,
         [locale, DEFAULT_LOCALE]
@@ -829,6 +874,10 @@ const partyController = {
       const info = { ...DEFAULT_PARTY_INFO };
       for (const row of rows) {
         const k = row.key.replace(/^party_/, '');
+        // Locale-neutral keys only ever take DEFAULT_LOCALE — sweep above
+        // should have removed any stale per-locale row, but guard the read
+        // path too in case a legacy row survives.
+        if (LOCALE_NEUTRAL_INFO_KEYS.has(k) && row.locale !== DEFAULT_LOCALE) continue;
         info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
       }
       // Respond first — the IS auto-fill below runs in the background so the
@@ -844,6 +893,7 @@ const partyController = {
         for (const key of Object.keys(parsedByKey)) {
           const fullKey = `party_${key}`;
           if (SITE_CONTENT_TRANSLATE_SKIP.has(fullKey)) continue;
+          if (LOCALE_NEUTRAL_INFO_KEYS.has(key)) continue;
           const sourceEn = parsedByKey[key];
           if (sourceEn === null || sourceEn === undefined) continue;
           runAutoTranslateSideEffect(fullKey, sourceEn, previousEnByKey[key], req.user.id)

@@ -529,6 +529,96 @@ describe('POST /api/v1/party/cover-image', () => {
   });
 });
 
+// ── PATCH /api/v1/party/info { activities } — locale-neutral ─────────────────
+//
+// Activities are stored once at DEFAULT_LOCALE regardless of which locale the
+// admin was editing on, so /en/party and /is/party render the same entries
+// without forcing the admin to enter them twice.
+
+describe('PATCH /api/v1/party/info { activities } — locale-neutral', () => {
+  const sampleActivities = JSON.stringify({
+    daytime: [{ name: 'Face paint', description: 'https://example.com', rulesLabel: 'Rules:', rules: 'Drop in any time' }],
+    evening: [{ name: 'TBD', description: 'TBD', rulesLabel: 'Rules:', rules: 'TBD' }],
+  });
+
+  beforeEach(async () => {
+    await db.query(`DELETE FROM site_content WHERE key = 'party_activities'`);
+  });
+  afterAll(async () => {
+    await db.query(`DELETE FROM site_content WHERE key = 'party_activities'`);
+  });
+
+  test('saving on IS still writes to the EN (DEFAULT_LOCALE) row', async () => {
+    const res = await request(app)
+      .patch('/api/v1/party/info?locale=is')
+      .set('Cookie', adminCookie)
+      .send({ activities: sampleActivities });
+    expect(res.status).toBe(200);
+
+    const { rows } = await db.query(
+      `SELECT locale, value FROM site_content WHERE key = 'party_activities'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].locale).toBe('en');
+    expect(rows[0].value.daytime[0].name).toBe('Face paint');
+  });
+
+  test('both locale GETs return the same activities', async () => {
+    await request(app)
+      .patch('/api/v1/party/info?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ activities: sampleActivities });
+
+    const en = await request(app).get('/api/v1/party/info?locale=en');
+    const is = await request(app).get('/api/v1/party/info?locale=is');
+    // JSONB round-trip may reorder object keys; compare parsed shapes.
+    const expected = JSON.parse(sampleActivities);
+    expect(JSON.parse(en.body.activities)).toEqual(expected);
+    expect(JSON.parse(is.body.activities)).toEqual(expected);
+  });
+
+  test('save sweeps a pre-existing per-locale row', async () => {
+    // Simulate a legacy IS row left over from before activities became locale-neutral.
+    await db.query(
+      `INSERT INTO site_content (key, locale, value, updated_by)
+         VALUES ('party_activities', 'is', $1::jsonb, $2)`,
+      [JSON.stringify({ daytime: [{ name: 'stale-is' }], evening: [] }), adminId]
+    );
+
+    await request(app)
+      .patch('/api/v1/party/info?locale=en')
+      .set('Cookie', adminCookie)
+      .send({ activities: sampleActivities });
+
+    const { rows } = await db.query(
+      `SELECT locale FROM site_content WHERE key = 'party_activities' ORDER BY locale`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].locale).toBe('en');
+
+    // GET on IS now sees the canonical EN activities, not the stale row.
+    const is = await request(app).get('/api/v1/party/info?locale=is');
+    expect(JSON.parse(is.body.activities)).toEqual(JSON.parse(sampleActivities));
+  });
+
+  test('IS GET prefers a stranded IS-only row as a last resort', async () => {
+    // No EN row, only IS — getInfo should backfill with the IS row so a
+    // legacy install where activities only live on IS still renders something.
+    const stranded = { daytime: [{ name: 'IS-only' }], evening: [] };
+    await db.query(
+      `INSERT INTO site_content (key, locale, value, updated_by)
+         VALUES ('party_activities', 'is', $1::jsonb, $2)`,
+      [JSON.stringify(stranded), adminId]
+    );
+
+    const is = await request(app).get('/api/v1/party/info?locale=is');
+    // Stranded IS row is NOT promoted to neutral (the canonical seat is EN).
+    // Without an EN row, GET falls back to DEFAULT_PARTY_INFO.activities.
+    const parsed = JSON.parse(is.body.activities);
+    expect(parsed.daytime[0].name).toBe('TBD');
+  });
+});
+
 // ── PATCH /api/v1/party/info { rsvp_message } ────────────────────────────────
 
 describe('PATCH /api/v1/party/info { rsvp_message }', () => {
