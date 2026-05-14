@@ -29,7 +29,7 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES } = require('../config/i18n');
+const { DEFAULT_LOCALE, SUPPORTED_LOCALES, isPartyPath } = require('../config/i18n');
 
 const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
@@ -110,12 +110,22 @@ function extractDetail(route) {
   return null;
 }
 
-function extractLocale(pathname) {
-  const parts = (pathname || '/').split('/').filter(Boolean);
+function extractLocale(req) {
+  const pathname = req.path || '/';
+  const parts = pathname.split('/').filter(Boolean);
   if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) {
     return { locale: parts[0], rest: '/' + parts.slice(1).join('/') || '/' };
   }
-  return { locale: DEFAULT_LOCALE, rest: pathname || '/' };
+  // No URL locale prefix. For party paths, defer to the locale middleware's
+  // resolution (cookie → user-pref → party-default 'is' → Accept-Language)
+  // so an EN-cookie user doesn't see SSR render IS before the SPA flips to EN.
+  // Other unprefixed paths keep the historic DEFAULT_LOCALE fallback so SEO
+  // for /, /projects, etc. stays unchanged.
+  if (isPartyPath(pathname)) {
+    const resolved = req.locale && SUPPORTED_LOCALES.includes(req.locale) ? req.locale : null;
+    return { locale: resolved || DEFAULT_LOCALE, rest: pathname };
+  }
+  return { locale: DEFAULT_LOCALE, rest: pathname };
 }
 
 function esc(s) {
@@ -497,7 +507,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   if (!accept.includes('text/html') && accept !== '*/*' && accept !== '') return next();
   if (/\.[a-z0-9]{2,5}$/i.test(req.path)) return next();
 
-  const { locale, rest } = extractLocale(req.path);
+  const { locale, rest } = extractLocale(req);
   const route = (rest === '' ? '/' : rest).replace(/\/+$/, '') || '/';
 
   const detail = extractDetail(route);

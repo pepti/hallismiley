@@ -5,8 +5,9 @@
 //   2. X-Locale request header
 //   3. preferred_locale cookie
 //   4. Logged-in user's saved preferred_locale
-//   5. Accept-Language header (first supported language)
-//   6. DEFAULT_LOCALE
+//   5. Party-route default ('is' for /party, /party/admin, /api/v1/party/*)
+//   6. Accept-Language header (first supported language)
+//   7. DEFAULT_LOCALE
 //
 // Explicit per-request signals (query / header / cookie) win over the
 // account-level preference so that an admin whose users.preferred_locale='is'
@@ -14,8 +15,12 @@
 // preference overriding the URL they're actually on. The client mirrors the
 // active locale to the preferred_locale cookie (public/js/i18n/i18n.js), so
 // fresh sessions still inherit the account default via cookie + user pref.
+//
+// The party-route default sits between saved-preference signals and
+// Accept-Language so that visitors with no cookie / no saved pref land on
+// the birthday page in Icelandic, even if their browser advertises English.
 
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES } = require('../config/i18n');
+const { DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_DEFAULT_LOCALE, isPartyPath } = require('../config/i18n');
 
 function pickFromAcceptLanguage(header) {
   if (!header) return null;
@@ -42,6 +47,8 @@ function resolveLocale(req) {
   for (const c of candidates) {
     if (c && SUPPORTED_LOCALES.includes(c)) return c;
   }
+
+  if (isPartyPath(req.path)) return PARTY_DEFAULT_LOCALE;
 
   return pickFromAcceptLanguage(req.headers['accept-language']) || DEFAULT_LOCALE;
 }
