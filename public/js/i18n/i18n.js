@@ -36,12 +36,25 @@ export function getLocaleFromQuery() {
   return (lc && SUPPORTED_LOCALES.includes(lc)) ? lc : null;
 }
 
-/** Determine locale from ?locale= → localStorage → Accept-Language → default. */
+/** True for /party and /party/admin (with or without /en/ or /is/ prefix).
+ *  Mirrors server/config/i18n.js — kept in lockstep when either changes. */
+function isPartyPath(pathname) {
+  if (!pathname) return false;
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
+  const stripped = '/' + parts.join('/');
+  return stripped === '/party' || stripped === '/party/admin';
+}
+
+/** Determine locale from ?locale= → localStorage → party-route default →
+ *  Accept-Language → default. The party-route step lets first-time visitors
+ *  land on /party in Icelandic even when their browser language is English. */
 export function getPreferredLocale() {
   const fromQuery = getLocaleFromQuery();
   if (fromQuery) return fromQuery;
   const saved = localStorage.getItem('preferred_locale');
   if (saved && SUPPORTED_LOCALES.includes(saved)) return saved;
+  if (isPartyPath(window.location.pathname)) return 'is';
   for (const lang of (navigator.languages || [])) {
     const code = lang.split('-')[0].toLowerCase();
     if (SUPPORTED_LOCALES.includes(code)) return code;
