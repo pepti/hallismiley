@@ -871,6 +871,33 @@ button.party-admin__stat:focus-visible {
   background: rgba(255,255,255,0.02);
 }
 
+.party-admin__th--sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.party-admin__th--sortable:hover,
+.party-admin__th--sortable:focus-visible {
+  color: var(--text-primary);
+}
+
+.party-admin__th--sortable:focus-visible {
+  outline: 2px solid var(--gold, currentColor);
+  outline-offset: -2px;
+}
+
+.party-admin__sort-arrow {
+  display: inline-block;
+  width: 0.7em;
+  margin-left: 4px;
+  font-size: 0.7em;
+  opacity: 0;
+}
+
+.party-admin__th--active .party-admin__sort-arrow {
+  opacity: 1;
+}
+
 .party-admin__token {
   font-family: var(--font-mono);
   font-size: 0.7rem;
