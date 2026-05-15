@@ -1128,6 +1128,38 @@ button.party-admin__stat:focus-visible {
 
 .party-radio-group { flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
 
+/* ── RSVP radio option status pill (admin-only, inline edit mode) ────── */
+
+/* Hidden until the parent section enters inline-edit mode. Sits inside the
+ * <label> beside the option text, so visually it reads as part of the row.
+ * pointer-events: none until edit mode prevents accidental clicks toggling
+ * the radio when the admin is just reading the page. */
+.party-rsvp__option-status {
+  display: none;
+  margin-left: var(--sp-2);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 170, 110, 0.4);
+  background: var(--bg-elevated);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+.party-section--editing .party-rsvp__option-status {
+  display: inline-block;
+}
+.party-rsvp__option-status--going    { color: #4ade80; border-color: rgba(74, 222, 128, .4); }
+.party-rsvp__option-status--maybe    { color: #fbbf24; border-color: rgba(251, 191, 36, .4); }
+.party-rsvp__option-status--declined { color: #f87171; border-color: rgba(248, 113, 113, .4); }
+.party-rsvp__option-status:hover     { filter: brightness(1.2); }
+
+/* Structural editor: status dropdown sits next to the option label input. */
+.party-edit-list-item__status {
+  flex: 0 0 auto;
+  max-width: 140px;
+}
+
 /* ── RSVP admin editor (food options / questions) ───────────────────── */
 
 .party-edit-btn--inline {
