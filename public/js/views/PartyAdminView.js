@@ -55,6 +55,10 @@ export class PartyAdminView {
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
+    // Sort state is session-only — each fresh load starts on the default view.
+    this._guestSort = null;
+    this._rsvpSort  = null;
+
     this._el.innerHTML = this._renderAll();
     this._bind();
   }
@@ -80,6 +84,52 @@ export class PartyAdminView {
       </div>`;
   }
 
+  // ── Sort helpers (shared by Accepted+Pending and Total RSVPs tables) ──
+
+  // Sort rows by an accessor function. null / undefined / '' always sink to
+  // the bottom regardless of direction so empty cells don't crowd the top.
+  _sortRows(rows, accessor, dir, type = 'string') {
+    const mul = dir === 'desc' ? -1 : 1;
+    const cmpVals = (a, b) => {
+      if (type === 'number') {
+        const an = Number(a), bn = Number(b);
+        if (Number.isNaN(an) || Number.isNaN(bn)) return String(a).localeCompare(String(b));
+        return an - bn;
+      }
+      if (type === 'date')    return new Date(a) - new Date(b);
+      if (type === 'boolean') return (a ? 1 : 0) - (b ? 1 : 0);
+      return String(a).localeCompare(String(b));
+    };
+    return [...rows].sort((ra, rb) => {
+      const va = accessor(ra);
+      const vb = accessor(rb);
+      const aEmpty = va == null || va === '';
+      const bEmpty = vb == null || vb === '';
+      if (aEmpty && bEmpty) return 0;
+      if (aEmpty) return 1;
+      if (bEmpty) return -1;
+      return mul * cmpVals(va, vb);
+    });
+  }
+
+  // Render a sortable <th>. The arrow is always present so column widths
+  // don't jump as the user clicks around — opacity makes it visible only
+  // when this is the active sort column.
+  _sortableTh(field, type, label, currentSort) {
+    const isActive = currentSort?.field === field;
+    const arrow    = isActive && currentSort.dir === 'desc' ? '▼' : '▲';
+    const ariaSort = !isActive ? 'none' : (currentSort.dir === 'asc' ? 'ascending' : 'descending');
+    const cls      = 'party-admin__th--sortable' + (isActive ? ' party-admin__th--active' : '');
+    return `<th data-sort-field="${escHtml(field)}" data-sort-type="${escHtml(type)}" class="${cls}" aria-sort="${ariaSort}" tabindex="0">${label}<span class="party-admin__sort-arrow" aria-hidden="true">${arrow}</span></th>`;
+  }
+
+  // Click cycle: not-sorted → asc → desc → cleared (back to default).
+  _cycleSort(current, field) {
+    if (current?.field !== field) return { field, dir: 'asc' };
+    if (current.dir === 'asc')    return { field, dir: 'desc' };
+    return null;
+  }
+
   // Top section: everyone still in play — going, maybe, or hasn't replied.
   // Sort order: going → maybe → waiting so the most-committed guests bubble
   // up when scanning the list. Pills above the table show the breakdown and
@@ -88,13 +138,24 @@ export class PartyAdminView {
     const guests = (this._invitedGuests || []).filter(g => g.rsvp_status !== 'declined');
     const showRevoke = isAdmin();
 
-    const order = { going: 0, maybe: 1, waiting: 2 };
-    const byName = (a, b) =>
-      (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
-    const sorted = [...guests].sort((a, b) => {
-      const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
-      return d !== 0 ? d : byName(a, b);
-    });
+    // Default sort (no column clicked): status priority then alphabetical.
+    // User-applied column sort takes over when this._guestSort is set.
+    const sorted = this._guestSort
+      ? this._sortRows(
+          guests,
+          (g) => this._guestSortValue(g, this._guestSort.field),
+          this._guestSort.dir,
+          this._guestSortType(this._guestSort.field),
+        )
+      : (() => {
+          const order = { going: 0, maybe: 1, waiting: 2 };
+          const byName = (a, b) =>
+            (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
+          return [...guests].sort((a, b) => {
+            const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
+            return d !== 0 ? d : byName(a, b);
+          });
+        })();
 
     const counts = guests.reduce((acc, g) => {
       acc[g.rsvp_status] = (acc[g.rsvp_status] || 0) + 1;
@@ -127,11 +188,11 @@ export class PartyAdminView {
           <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.acceptedAndPending', { n: '' }).trim()}">
             <thead>
               <tr>
-                <th>${t('adminUsers.username')}</th>
-                <th>${t('adminUsers.email')}</th>
-                <th>${t('adminOrders.status')}</th>
-                <th>${t('party.admin.bringing')}</th>
-                <th>${t('party.admin.rsvpdAt')}</th>
+                ${this._sortableTh('username', 'string', t('adminUsers.username'), this._guestSort)}
+                ${this._sortableTh('email',    'string', t('adminUsers.email'),    this._guestSort)}
+                ${this._sortableTh('status',   'number', t('adminOrders.status'),  this._guestSort)}
+                ${this._sortableTh('bringing', 'string', t('party.admin.bringing'),this._guestSort)}
+                ${this._sortableTh('rsvpdAt',  'date',   t('party.admin.rsvpdAt'), this._guestSort)}
                 ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
               </tr>
             </thead>
@@ -187,6 +248,30 @@ export class PartyAdminView {
   _invitedGuestColSpan(showRevoke) {
     // Name, Email, Status, Bringing, RSVP'd at (+ Actions if admin)
     return showRevoke ? 6 : 5;
+  }
+
+  _guestSortValue(g, field) {
+    switch (field) {
+      case 'username': return g.display_name || g.username || '';
+      case 'email':    return g.email || '';
+      case 'status': {
+        // Same priority as the default sort: going first, then maybe, waiting.
+        const order = { going: 0, maybe: 1, waiting: 2 };
+        return order[g.rsvp_status] ?? 9;
+      }
+      case 'bringing': {
+        const b = this._bringingFor(g);
+        return b === '—' ? null : b;
+      }
+      case 'rsvpdAt':  return g.rsvp_updated_at;
+      default:         return null;
+    }
+  }
+
+  _guestSortType(field) {
+    if (field === 'status')  return 'number';
+    if (field === 'rsvpdAt') return 'date';
+    return 'string';
   }
 
   // Surface plus-one / family-member info from the RSVP form answers. The
@@ -507,7 +592,16 @@ export class PartyAdminView {
     const fields = this._dataFields();
     const colCount = 2 + fields.length; // Name + Email + one per field
 
-    const rows = this._rsvps.map(r => {
+    const sortedRsvps = this._rsvpSort
+      ? this._sortRows(
+          this._rsvps,
+          (r) => this._rsvpSortValue(r, this._rsvpSort.field),
+          this._rsvpSort.dir,
+          this._rsvpSortType(this._rsvpSort.field, fields),
+        )
+      : this._rsvps;
+
+    const rows = sortedRsvps.map(r => {
       const answers = r.answers || {};
       const fieldCells = fields.map(f => `<td>${this._formatAnswer(answers[f.id])}</td>`).join('');
       return `
@@ -518,16 +612,18 @@ export class PartyAdminView {
         </tr>`;
     }).join('') || `<tr><td colspan="${colCount}" class="party-empty">${t('party.admin.noRsvps')}</td></tr>`;
 
-    const fieldHeaders = fields.map(f => `<th>${escHtml(f.label || f.id)}</th>`).join('');
+    const fieldHeaders = fields.map(f =>
+      this._sortableTh(`field:${f.id}`, this._rsvpFieldType(f), escHtml(f.label || f.id), this._rsvpSort)
+    ).join('');
 
     return `
-      <section class="party-admin__section">
+      <section class="party-admin__section" id="party-admin-total-rsvps">
         <h2 class="party-admin__section-title">${t('party.admin.totalRsvps')}</h2>
         <div class="party-admin__table-wrap">
           <table class="party-admin__table" aria-label="${t('party.admin.totalRsvps')}">
             <thead>
               <tr>
-                <th>${t('adminUsers.username')}</th><th>${t('adminUsers.email')}</th>${fieldHeaders}
+                ${this._sortableTh('username', 'string', t('adminUsers.username'), this._rsvpSort)}${this._sortableTh('email', 'string', t('adminUsers.email'), this._rsvpSort)}${fieldHeaders}
               </tr>
             </thead>
             <tbody>
@@ -536,6 +632,37 @@ export class PartyAdminView {
           </table>
         </div>
       </section>`;
+  }
+
+  _rsvpFieldType(f) {
+    switch (f?.type) {
+      case 'number':   return 'number';
+      case 'date':     return 'date';
+      case 'checkbox': return 'boolean'; // single checkbox (not checkbox-group)
+      default:         return 'string';
+    }
+  }
+
+  _rsvpSortValue(r, field) {
+    if (field === 'username') return r.display_name || r.username || '';
+    if (field === 'email')    return r.email || '';
+    if (field.startsWith('field:')) {
+      const id = field.slice('field:'.length);
+      const v  = r.answers?.[id];
+      if (Array.isArray(v)) return v.length ? v.join(', ') : null;
+      return v;
+    }
+    return null;
+  }
+
+  _rsvpSortType(field, fields) {
+    if (field === 'username' || field === 'email') return 'string';
+    if (field.startsWith('field:')) {
+      const id = field.slice('field:'.length);
+      const f  = fields.find(ff => ff.id === id);
+      return this._rsvpFieldType(f);
+    }
+    return 'string';
   }
 
   _renderAnswerTallies() {
@@ -645,9 +772,70 @@ export class PartyAdminView {
   _bind() {
     this._bindInviteCodeForm();
     this._bindInvitedGuests();
+    this._bindGuestsSort();
     this._bindLogistics();
     this._bindStatCards();
     this._bindEmailGoing();
+    this._bindRsvpSort();
+  }
+
+  _bindGuestsSort() {
+    const thead = this._el.querySelector('#party-admin-accepted-pending thead');
+    if (!thead) return;
+    const handler = (e) => {
+      const th = e.target.closest('th[data-sort-field]');
+      if (!th || !thead.contains(th)) return;
+      if (e.type === 'keydown') {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+      }
+      this._guestSort = this._cycleSort(this._guestSort, th.dataset.sortField);
+      this._rerenderAcceptedPending();
+    };
+    thead.addEventListener('click', handler);
+    thead.addEventListener('keydown', handler);
+  }
+
+  _bindRsvpSort() {
+    const thead = this._el.querySelector('#party-admin-total-rsvps thead');
+    if (!thead) return;
+    const handler = (e) => {
+      const th = e.target.closest('th[data-sort-field]');
+      if (!th || !thead.contains(th)) return;
+      if (e.type === 'keydown') {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+      }
+      this._rsvpSort = this._cycleSort(this._rsvpSort, th.dataset.sortField);
+      this._rerenderRsvpTable();
+    };
+    thead.addEventListener('click', handler);
+    thead.addEventListener('keydown', handler);
+  }
+
+  // Re-render only the Accepted+Pending section in place — keeps state in
+  // other sections intact (open guest-detail rows, logistics drag state, etc).
+  _rerenderAcceptedPending() {
+    const old = this._el.querySelector('#party-admin-accepted-pending');
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderAcceptedAndPending();
+    const next = tmp.firstElementChild;
+    old.replaceWith(next);
+    this._bindInvitedGuests();
+    this._bindGuestsSort();
+    this._bindEmailGoing();
+  }
+
+  // Same pattern for the Total RSVPs table.
+  _rerenderRsvpTable() {
+    const old = this._el.querySelector('#party-admin-total-rsvps');
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderRsvpTable();
+    const next = tmp.firstElementChild;
+    old.replaceWith(next);
+    this._bindRsvpSort();
   }
 
   _bindEmailGoing() {
