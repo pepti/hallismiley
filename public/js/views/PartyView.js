@@ -19,6 +19,18 @@ const DEFAULT_PARTY_HERO_CONTENT = {
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+// RSVP options are either bare strings (legacy) or `{ label, status }`. The
+// status drives the admin Going/Maybe/Declined bucket; only radio-group fields
+// look at it. Anything other than 'maybe'/'declined' coerces to 'going' so
+// renderers and collectors never have to branch on undefined/unknown values.
+const RSVP_OPTION_STATUSES = ['going', 'maybe', 'declined'];
+function normalizeRsvpOption(opt) {
+  if (typeof opt === 'string') return { label: opt, status: 'going' };
+  const label  = typeof opt?.label === 'string' ? opt.label : '';
+  const status = RSVP_OPTION_STATUSES.includes(opt?.status) ? opt.status : 'going';
+  return { label, status };
+}
+
 export class PartyView {
   constructor() {
     this._el            = null;
@@ -410,7 +422,13 @@ export class PartyView {
       { id: 'heading',     type: 'heading',        label: '🎟  RSVP' },
       { id: 'intro',       type: 'paragraph',      label: "Let me know if you'll make it and how you'd like to join!" },
       { id: 'attend_when', type: 'radio-group',    label: 'When will you join?',
-        options: ['☀️ Daytime only (14:00–18:00)', '🌙 Evening only (18:00–22:00)', '🎉 Both — all day!', "Sorry, can't make it"] },
+        options: [
+          { label: '☀️ Daytime only (14:00–18:00)', status: 'going'    },
+          { label: '🌙 Evening only (18:00–22:00)', status: 'going'    },
+          { label: '🎉 Both — all day!',             status: 'going'    },
+          { label: '🤔 Maybe',                       status: 'maybe'    },
+          { label: "Sorry, can't make it",          status: 'declined' },
+        ] },
       { id: 'bringing',    type: 'checkbox-group', label: 'Bringing anyone with you?',
         options: ['Spouse / partner', 'Kids'] },
       { id: 'helping',     type: 'checkbox-group', label: 'Want to help out? (totally optional)',
@@ -502,6 +520,15 @@ export class PartyView {
       </section>`;
   }
 
+  // Label shown inside the admin-only status pill next to each radio option.
+  // Kept short so it doesn't crowd the form; the pill's aria-label spells it
+  // out for screen readers. Falls back to 'going' for unknown values.
+  _statusPillText(status) {
+    if (status === 'maybe')    return '🤔';
+    if (status === 'declined') return '❌';
+    return '✅';
+  }
+
   _renderField(field, answers) {
     const id  = `rsvp-f-${field.id}`;
     const ans = answers?.[field.id];
@@ -513,12 +540,15 @@ export class PartyView {
       case 'paragraph':
         return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}" data-field-label>${escHtml(field.label).replace(/\n/g, '<br>')}</p>`;
       case 'checkbox-group': {
-        const opts = (field.options || []).map((opt, i) => `
+        const opts = (field.options || []).map((opt, i) => {
+          const { label } = normalizeRsvpOption(opt);
+          return `
           <label class="party-checkbox">
-            <input type="checkbox" name="f_${escHtml(field.id)}" value="${escHtml(opt)}"
-                   ${Array.isArray(ans) && ans.includes(opt) ? 'checked' : ''} />
-            <span data-option-index="${i}">${escHtml(opt)}</span>
-          </label>`).join('');
+            <input type="checkbox" name="f_${escHtml(field.id)}" value="${escHtml(label)}"
+                   ${Array.isArray(ans) && ans.includes(label) ? 'checked' : ''} />
+            <span data-option-index="${i}">${escHtml(label)}</span>
+          </label>`;
+        }).join('');
         return `
           <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="checkbox-group"${this._showIfAttrs(field)}>
             <label class="party-label" data-field-label>${escHtml(field.label)}</label>
@@ -526,12 +556,26 @@ export class PartyView {
           </div>`;
       }
       case 'radio-group': {
-        const opts = (field.options || []).map((opt, i) => `
+        const editor = canEdit();
+        const opts = (field.options || []).map((opt, i) => {
+          const { label, status } = normalizeRsvpOption(opt);
+          // The status pill only renders for admins. It's hidden via CSS
+          // (party-rsvp__option-status--idle) until inline-edit mode adds
+          // the active class to the section, so non-editing admins don't
+          // see the pill cluttering the form.
+          const pill = editor
+            ? `<button type="button" class="party-rsvp__option-status party-rsvp__option-status--${escHtml(status)}"
+                       data-option-status="${escHtml(status)}" data-option-status-pill
+                       aria-label="Status: ${escHtml(status)}" tabindex="-1">${this._statusPillText(status)}</button>`
+            : '';
+          return `
           <label class="party-checkbox">
-            <input type="radio" name="f_${escHtml(field.id)}" value="${escHtml(opt)}"
-                   ${typeof ans === 'string' && ans === opt ? 'checked' : ''} />
-            <span data-option-index="${i}">${escHtml(opt)}</span>
-          </label>`).join('');
+            <input type="radio" name="f_${escHtml(field.id)}" value="${escHtml(label)}"
+                   ${typeof ans === 'string' && ans === label ? 'checked' : ''} />
+            <span data-option-index="${i}">${escHtml(label)}</span>
+            ${pill}
+          </label>`;
+        }).join('');
         return `
           <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="radio-group"${this._showIfAttrs(field)}>
             <label class="party-label" data-field-label>${escHtml(field.label)}</label>
@@ -1084,9 +1128,20 @@ export class PartyView {
       const next = { ...field };
       if (labelEl) next.label = labelEl.textContent.replace(/\r\n/g, '\n').trim();
       if (Array.isArray(field.options)) {
+        const isRadio = field.type === 'radio-group';
         next.options = field.options.map((opt, i) => {
-          const optEl = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
-          return optEl ? optEl.textContent.trim() : opt;
+          const norm = normalizeRsvpOption(opt);
+          const optEl   = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
+          const label   = optEl ? optEl.textContent.trim() : norm.label;
+          if (!isRadio) return label;
+          // The pill sits inside the same <label> as the option <span>; read
+          // its data-option-status (mutated by the cycle handler in
+          // _bindRsvp). Falls back to the stored status when no pill rendered.
+          const pill   = optEl?.closest('label')?.querySelector('[data-option-status-pill]');
+          const status = RSVP_OPTION_STATUSES.includes(pill?.dataset.optionStatus)
+            ? pill.dataset.optionStatus
+            : norm.status;
+          return { label, status };
         });
       }
       return next;
@@ -1107,9 +1162,22 @@ export class PartyView {
         el.textContent = field.label || '';
       });
       if (Array.isArray(field.options)) {
+        const isRadio = field.type === 'radio-group';
         field.options.forEach((opt, i) => {
+          const { label, status } = normalizeRsvpOption(opt);
           const optEl = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
-          if (optEl) optEl.textContent = opt;
+          if (optEl) optEl.textContent = label;
+          if (!isRadio) return;
+          // Sync the status pill so cancel restores the snapshot and save
+          // reflects the persisted shape, even when the admin tabbed back
+          // to inline-edit without leaving the section.
+          const pill = optEl?.closest('label')?.querySelector('[data-option-status-pill]');
+          if (pill) {
+            pill.dataset.optionStatus = status;
+            pill.className = `party-rsvp__option-status party-rsvp__option-status--${status}`;
+            pill.setAttribute('aria-label', `Status: ${status}`);
+            pill.textContent = this._statusPillText(status);
+          }
         });
       }
     });
@@ -1178,11 +1246,25 @@ export class PartyView {
 
   _renderFieldEditor(field) {
     const id = field.id || ('f' + Date.now() + Math.random().toString(36).slice(2, 6));
-    const optionsHtml = (field.options || []).map(opt => `
+    // Radio options gain a Going/Maybe/Declined status select so admins can
+    // drive the bucket on the /party/admin page without relying on label
+    // regexes. Checkbox groups never look at status, so their rows stay flat.
+    const isRadio = field.type === 'radio-group';
+    const optionsHtml = (field.options || []).map(opt => {
+      const { label, status } = normalizeRsvpOption(opt);
+      const statusSelect = isRadio ? `
+        <select class="lol-input party-edit-list-item__status" data-option-status aria-label="Option status">
+          <option value="going"   ${status === 'going'    ? 'selected' : ''}>✅ Going</option>
+          <option value="maybe"   ${status === 'maybe'    ? 'selected' : ''}>🤔 Maybe</option>
+          <option value="declined"${status === 'declined' ? 'selected' : ''}>❌ Declined</option>
+        </select>` : '';
+      return `
       <div class="party-edit-list-item" data-option-row>
-        <input class="lol-input" type="text" data-option-input value="${escHtml(opt)}" />
+        <input class="lol-input" type="text" data-option-input value="${escHtml(label)}" />
+        ${statusSelect}
         <button class="party-edit-row-delete" type="button" data-delete-option aria-label="Remove option" title="Remove">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     const typeLabels = {
       'heading':        'Heading',
@@ -1244,8 +1326,16 @@ export class PartyView {
         const row = document.createElement('div');
         row.className = 'party-edit-list-item';
         row.setAttribute('data-option-row', '');
+        const isRadio = block.dataset.fieldType === 'radio-group';
+        const statusSelect = isRadio ? `
+          <select class="lol-input party-edit-list-item__status" data-option-status aria-label="Option status">
+            <option value="going" selected>✅ Going</option>
+            <option value="maybe">🤔 Maybe</option>
+            <option value="declined">❌ Declined</option>
+          </select>` : '';
         row.innerHTML = `
           <input class="lol-input" type="text" data-option-input value="" placeholder="New option…" />
+          ${statusSelect}
           <button class="party-edit-row-delete" type="button" data-delete-option aria-label="Remove option" title="Remove">✕</button>`;
         row.querySelector('[data-delete-option]').addEventListener('click', () => row.remove());
         block.querySelector('[data-add-option]').before(row);
@@ -1284,10 +1374,19 @@ export class PartyView {
       const label = block.querySelector('[data-field-label]')?.value.trim() || '';
       const field = { id, type, label };
       if (type === 'checkbox-group' || type === 'radio-group') {
+        const isRadio = type === 'radio-group';
         const opts = [];
-        block.querySelectorAll('[data-option-input]').forEach(inp => {
-          const v = inp.value.trim();
-          if (v) opts.push(v);
+        // Iterate rows (not inputs) so each option's status select sits in
+        // the same DOM neighbourhood as its label. Radio rows save as
+        // { label, status }; checkbox rows stay as plain strings since the
+        // backend never looks at status on multi-select fields.
+        block.querySelectorAll('[data-option-row]').forEach(row => {
+          const v = row.querySelector('[data-option-input]')?.value.trim() || '';
+          if (!v) return;
+          if (!isRadio) { opts.push(v); return; }
+          const rawStatus = row.querySelector('[data-option-status]')?.value;
+          const status = RSVP_OPTION_STATUSES.includes(rawStatus) ? rawStatus : 'going';
+          opts.push({ label: v, status });
         });
         field.options = opts;
       }
@@ -1743,6 +1842,27 @@ export class PartyView {
     const cancelBtn = this._el.querySelector('#rsvp-cancel-btn');
     const formWrap  = this._el.querySelector('#rsvp-form-wrap');
     const form      = this._el.querySelector('#rsvp-form');
+
+    // Admin status pill on each radio option cycles going → maybe → declined.
+    // Only acts when the RSVP section is in inline-edit mode so a casual
+    // admin pageview doesn't accidentally retag an option. The visible label
+    // is updated together with the data attribute so _collectRsvpFormInline
+    // can read it back unchanged. preventDefault stops the click from
+    // bubbling into the wrapping <label> and toggling the radio.
+    this._el.querySelectorAll('[data-option-status-pill]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const section = btn.closest('.party-section');
+        if (!section?.classList.contains('party-section--editing')) return;
+        const cur  = btn.dataset.optionStatus;
+        const next = cur === 'going' ? 'maybe' : cur === 'maybe' ? 'declined' : 'going';
+        btn.dataset.optionStatus = next;
+        btn.className = `party-rsvp__option-status party-rsvp__option-status--${next}`;
+        btn.setAttribute('aria-label', `Status: ${next}`);
+        btn.textContent = this._statusPillText(next);
+      });
+    });
 
     editBtn?.addEventListener('click', () => {
       if (formWrap) formWrap.hidden = false;

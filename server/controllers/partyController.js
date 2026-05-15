@@ -145,14 +145,61 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
   ]);
 }
 
-/** Derive an RSVP status bucket from the free-text `attend_when` answer.
- *  Order matters — decline phrases are checked first so "I'm definitely not
- *  going maybe" classifies as declined rather than maybe. Patterns cover
- *  English + Icelandic so localized form choices land in the right bucket.
+const VALID_RSVP_STATUSES = new Set(['going', 'maybe', 'declined']);
+
+/** Build a Map<label, 'going'|'maybe'|'declined'> across every locale of the
+ *  current admin-edited RSVP form. The admin marks each radio option with a
+ *  status in the form editor; we use those declarations to bucket each guest
+ *  rather than guessing from the label text. Both EN and IS rows are folded
+ *  in because a user may have RSVP'd in one locale while the admin views the
+ *  other (the auto-translate flow keeps `status` constant per option pair,
+ *  since `status` is in the translator's BLOCK_KEYS).
+ *
+ *  Returns an empty Map when the form table is missing or unparseable —
+ *  callers always have the regex fallback in _deriveRsvpStatus for that.    */
+async function _loadRsvpStatusMap() {
+  const map = new Map();
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `SELECT value FROM site_content WHERE key = 'party_rsvp_form'`
+    ));
+  } catch (_err) {
+    return map;
+  }
+  for (const row of rows) {
+    const fields = row?.value;
+    if (!Array.isArray(fields)) continue;
+    for (const field of fields) {
+      if (field?.type !== 'radio-group' || !Array.isArray(field.options)) continue;
+      for (const opt of field.options) {
+        if (typeof opt === 'string') continue;             // legacy string options default to 'going'
+        const label  = typeof opt?.label === 'string' ? opt.label : null;
+        const status = VALID_RSVP_STATUSES.has(opt?.status) ? opt.status : null;
+        if (!label || !status) continue;
+        map.set(label, status);
+      }
+    }
+  }
+  return map;
+}
+
+/** Derive an RSVP status bucket from the user's answers.
+ *
+ *  Preferred path: look up `answers.attend_when` in the admin-curated map
+ *  (label → status) built by _loadRsvpStatusMap. Falls back to a regex over
+ *  the free-text answer when there's no match (legacy data, options removed
+ *  since RSVP, or no map provided in unit tests). The regex preserves the
+ *  original behaviour for pre-existing rows. Order matters in the fallback —
+ *  decline phrases are checked first so "I'm definitely not going maybe"
+ *  classifies as declined rather than maybe. Patterns cover English + Icelandic.
  *  Returns 'waiting' (no RSVP), 'declined', 'maybe', or 'going'.            */
-function _deriveRsvpStatus(answers) {
+function _deriveRsvpStatus(answers, optionLabelToStatus) {
   if (!answers) return 'waiting';
   const a = typeof answers.attend_when === 'string' ? answers.attend_when : '';
+  if (optionLabelToStatus && optionLabelToStatus.has(a)) {
+    return optionLabelToStatus.get(a);
+  }
   if (/can'?t|sorry|kemst ekki|afþakka|kem ekki/i.test(a)) return 'declined';
   if (/\bmaybe\b|kannski|óvíst/i.test(a))                  return 'maybe';
   return 'going';
@@ -264,26 +311,33 @@ const partyController = {
   // patterns cover English + Icelandic so localized forms classify correctly.
   async listInvitedGuests(req, res, next) {
     try {
-      const { rows } = await db.query(
-        `SELECT
-           u.id, u.username, u.display_name, u.email, u.avatar, u.role,
-           r.answers    AS rsvp_answers,
-           r.created_at AS rsvp_created_at,
-           r.updated_at AS rsvp_updated_at
-         FROM users u
-         LEFT JOIN party_rsvps r ON r.user_id = u.id
-         WHERE u.party_access = TRUE AND u.disabled = FALSE
-         ORDER BY COALESCE(u.display_name, u.username) ASC`
-      );
+      // Load the admin-curated label→status map alongside the guest list so
+      // we can bucket each guest by their selected option rather than by
+      // regex-matching the label. Both queries run in parallel — the map
+      // query touches a tiny table (one row per locale).
+      const [guestsRes, statusMap] = await Promise.all([
+        db.query(
+          `SELECT
+             u.id, u.username, u.display_name, u.email, u.avatar, u.role,
+             r.answers    AS rsvp_answers,
+             r.created_at AS rsvp_created_at,
+             r.updated_at AS rsvp_updated_at
+           FROM users u
+           LEFT JOIN party_rsvps r ON r.user_id = u.id
+           WHERE u.party_access = TRUE AND u.disabled = FALSE
+           ORDER BY COALESCE(u.display_name, u.username) ASC`
+        ),
+        _loadRsvpStatusMap(),
+      ]);
 
-      const shaped = rows.map(r => ({
+      const shaped = guestsRes.rows.map(r => ({
         id:              r.id,
         username:        r.username,
         display_name:    r.display_name,
         email:           r.email,
         avatar:          r.avatar,
         role:            r.role,
-        rsvp_status:     _deriveRsvpStatus(r.rsvp_answers),
+        rsvp_status:     _deriveRsvpStatus(r.rsvp_answers, statusMap),
         rsvp_answers:    r.rsvp_answers || null,
         rsvp_created_at: r.rsvp_created_at,
         rsvp_updated_at: r.rsvp_updated_at,
@@ -311,15 +365,18 @@ const partyController = {
       }
 
       const allowedStatuses = includeMaybe ? ['going', 'maybe'] : ['going'];
-      const { rows } = await db.query(
-        `SELECT u.id, u.email, u.display_name, u.username, r.answers AS rsvp_answers
-           FROM users u
-           LEFT JOIN party_rsvps r ON r.user_id = u.id
-          WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL`
-      );
+      const [guestsRes, statusMap] = await Promise.all([
+        db.query(
+          `SELECT u.id, u.email, u.display_name, u.username, r.answers AS rsvp_answers
+             FROM users u
+             LEFT JOIN party_rsvps r ON r.user_id = u.id
+            WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL`
+        ),
+        _loadRsvpStatusMap(),
+      ]);
 
-      const recipients = rows
-        .filter(r => allowedStatuses.includes(_deriveRsvpStatus(r.rsvp_answers)))
+      const recipients = guestsRes.rows
+        .filter(r => allowedStatuses.includes(_deriveRsvpStatus(r.rsvp_answers, statusMap)))
         .map(r => r.email)
         .filter(Boolean);
 
@@ -913,3 +970,4 @@ const partyController = {
 module.exports = partyController;
 module.exports._checkInviteAccess = _checkInviteAccess;
 module.exports._deriveRsvpStatus  = _deriveRsvpStatus;
+module.exports._loadRsvpStatusMap = _loadRsvpStatusMap;

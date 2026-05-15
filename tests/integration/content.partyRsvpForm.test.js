@@ -130,6 +130,48 @@ describe('PUT /api/v1/content/party_rsvp_form', () => {
     expect(isRow[2].showIf.fieldId).toBe('helping');
   });
 
+  // The fix for the maybe-classification bug stores radio options as
+  // `{ label, status }` objects. `status` lives in the translator's
+  // BLOCK_KEYS, so the auto-translate side effect must walk the tree,
+  // translate the `label` leaf, and leave the `status` value verbatim on
+  // both EN and IS rows. This guards the round-trip end-to-end.
+  test('PUT preserves per-option status field on EN and IS rows', async () => {
+    const ENObj = [
+      { id: 'attend_when', type: 'radio-group', label: 'When will you join?',
+        options: [
+          { label: 'Daytime',              status: 'going'    },
+          { label: 'Evening',              status: 'going'    },
+          { label: '🤔 Maybe',             status: 'maybe'    },
+          { label: "Sorry, can't make it", status: 'declined' },
+        ] },
+    ];
+    translateTree.mockResolvedValue([
+      { id: 'attend_when', type: 'radio-group', label: 'IS:When will you join?',
+        options: [
+          { label: 'IS:Daytime',              status: 'going'    },
+          { label: 'IS:Evening',              status: 'going'    },
+          { label: 'IS:🤔 Maybe',             status: 'maybe'    },
+          { label: "IS:Sorry, can't make it", status: 'declined' },
+        ] },
+    ]);
+
+    const res = await request(app)
+      .put('/api/v1/content/party_rsvp_form?locale=en')
+      .set('Cookie', adminCookie)
+      .send(ENObj);
+    expect(res.status).toBe(200);
+    expect(res.body[0].options[2]).toEqual({ label: '🤔 Maybe', status: 'maybe' });
+
+    const enRow = await readRow('en');
+    expect(enRow[0].options).toEqual(ENObj[0].options);
+    expect(enRow[0].options[3].status).toBe('declined');
+
+    const isRow = await waitForIs(r => Array.isArray(r) && r[0]?.options?.[2]?.label === 'IS:🤔 Maybe');
+    expect(isRow[0].options[0]).toEqual({ label: 'IS:Daytime',              status: 'going'    });
+    expect(isRow[0].options[2]).toEqual({ label: 'IS:🤔 Maybe',             status: 'maybe'    });
+    expect(isRow[0].options[3]).toEqual({ label: "IS:Sorry, can't make it", status: 'declined' });
+  });
+
   test('translateTree result is merged into existing IS — manual IS edits preserved when EN unchanged', async () => {
     // Admin previously hand-translated the IS row. Then edits only ONE EN
     // label and re-saves EN. The merge in mergeTranslatedTree should keep

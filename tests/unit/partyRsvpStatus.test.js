@@ -112,4 +112,54 @@ describe('_deriveRsvpStatus', () => {
       expect(_deriveRsvpStatus({ attend_when: '' })).toBe('going');
     });
   });
+
+  // The map argument carries admin-declared status per radio option, built
+  // from the per-locale party_rsvp_form site_content rows. When the user's
+  // answer matches an option's label, the declared status wins outright —
+  // this is the fix for the bug where renamed/translated Maybe options
+  // (e.g. "🤔 Maybe", "Ekki viss") fell through to 'going' because they
+  // didn't contain the keyword the regex looked for.
+  describe('with optionLabelToStatus map (admin-declared status)', () => {
+    test('map lookup wins over regex when label matches', () => {
+      // Even though the label literally contains "maybe", the admin marked
+      // this option as 'going' — respect the admin's declaration.
+      const map = new Map([['🤔 Maybe but actually going', 'going']]);
+      expect(_deriveRsvpStatus({ attend_when: '🤔 Maybe but actually going' }, map)).toBe('going');
+    });
+
+    test('map lookup classifies labels the regex would miss', () => {
+      // The original bug: "🤔 Maybe" with a non-word emoji prefix matches the
+      // regex, but other admin-chosen labels like "Hugsa málið" wouldn't.
+      const map = new Map([
+        ['🤔 Maybe',    'maybe'],
+        ['Hugsa málið', 'maybe'],
+        ['Might come',  'maybe'],
+      ]);
+      expect(_deriveRsvpStatus({ attend_when: '🤔 Maybe' },    map)).toBe('maybe');
+      expect(_deriveRsvpStatus({ attend_when: 'Hugsa málið' }, map)).toBe('maybe');
+      expect(_deriveRsvpStatus({ attend_when: 'Might come' },  map)).toBe('maybe');
+    });
+
+    test('map miss falls through to regex', () => {
+      // Empty map (or label not present in form): keep the legacy regex so
+      // pre-existing RSVPs that don't match the current form still classify.
+      const empty = new Map();
+      expect(_deriveRsvpStatus({ attend_when: 'kannski' }, empty)).toBe('maybe');
+      expect(_deriveRsvpStatus({ attend_when: "I can't make it" }, empty)).toBe('declined');
+      expect(_deriveRsvpStatus({ attend_when: 'see you Friday' }, empty)).toBe('going');
+    });
+
+    test('legacy string options (not in map) take the regex path', () => {
+      // _loadRsvpStatusMap skips string-shaped legacy options, so this is the
+      // "form was never re-saved with the new shape" case — admin sees the
+      // historical behaviour, no surprise regressions.
+      const map = new Map();
+      expect(_deriveRsvpStatus({ attend_when: '☀️ Daytime only (14:00–18:00)' }, map)).toBe('going');
+    });
+
+    test('null answers still wins over map lookup', () => {
+      const map = new Map([['anything', 'going']]);
+      expect(_deriveRsvpStatus(null, map)).toBe('waiting');
+    });
+  });
 });
