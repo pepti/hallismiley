@@ -1269,6 +1269,58 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
         WHERE key = 'contact_built_with' AND value::text LIKE '%Railway%'`,
     ],
   },
+  {
+    // Seed the admin-editable "halli.js" code-snippet box on /halli with its
+    // initial shape. The box was previously hardcoded inside HalliView._code();
+    // moving it into site_content lets admins edit every line and have the IS
+    // side auto-translate via runAutoTranslateSideEffect. `type: 'literal'`
+    // rows tell translator.collectLeaves to skip their `value` so code-shaped
+    // strings (like `() => true`) stay byte-identical across locales; the
+    // `filename` key is on translator.BLOCK_KEYS for the same reason.
+    //
+    // `jsonb_build_object(...) || value` puts the seed first so existing keys
+    // win the merge — re-running the migration after an admin has edited the
+    // snippet leaves those edits untouched. The `NOT value ? 'code_snippet_properties'`
+    // guard makes the whole statement a no-op on second run.
+    name: '044_halli_bio_code_snippet',
+    statements: [
+      // English
+      `UPDATE site_content
+          SET value = jsonb_build_object(
+                'code_snippet_filename', 'halli.js',
+                'code_snippet_comment',  '// Two disciplines, one craftsman',
+                'code_snippet_properties', $j$[
+                  {"id":"p_languages","key":"languages","type":"array","value":["JavaScript","Python","SQL"]},
+                  {"id":"p_tools","key":"tools","type":"array","value":["hand plane","chisel","vim"]},
+                  {"id":"p_philosophy","key":"philosophy","type":"string","value":"measure twice, ship once"},
+                  {"id":"p_home","key":"home","type":"string","value":"Iceland"},
+                  {"id":"p_craft","key":"craft","type":"literal","value":"() => true"}
+                ]$j$::jsonb
+              ) || value,
+              updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'en'
+          AND NOT value ? 'code_snippet_properties'`,
+
+      // Icelandic — hand-translated human-language values; filename, language
+      // names, and the literal `() => true` mirror the EN seed exactly so the
+      // background auto-translate side effect has nothing to overwrite.
+      `UPDATE site_content
+          SET value = jsonb_build_object(
+                'code_snippet_filename', 'halli.js',
+                'code_snippet_comment',  '// Tvær iðnir, einn smiður',
+                'code_snippet_properties', $j$[
+                  {"id":"p_languages","key":"languages","type":"array","value":["JavaScript","Python","SQL"]},
+                  {"id":"p_tools","key":"tools","type":"array","value":["handhefill","meitill","vim"]},
+                  {"id":"p_philosophy","key":"philosophy","type":"string","value":"mæla tvisvar, smíða einu sinni"},
+                  {"id":"p_home","key":"home","type":"string","value":"Ísland"},
+                  {"id":"p_craft","key":"craft","type":"literal","value":"() => true"}
+                ]$j$::jsonb
+              ) || value,
+              updated_at = NOW()
+        WHERE key = 'halli_bio' AND locale = 'is'
+          AND NOT value ? 'code_snippet_properties'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

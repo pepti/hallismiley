@@ -38,6 +38,7 @@ const BLOCK_KEYS = new Set([
   'github_url', 'twitter_url', 'linkedin_url',
   'brand_name', 'email', 'phone',
   'id', 'slug', 'key', 'locale', 'fieldId',
+  'filename', 'code_snippet_filename',
 ]);
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
@@ -201,8 +202,13 @@ function collectLeaves(node, pathAcc, depth, leaves) {
   }
 
   if (typeof node === 'object') {
+    // Sibling-peek: when an object declares `type: 'literal'` (code-snippet
+    // property rows whose value is raw code like `() => true`), leave the
+    // sibling `value` untouched so the translator never rewrites code.
+    const skipValue = node.type === 'literal';
     for (const key of Object.keys(node)) {
       if (BLOCK_KEYS.has(key)) continue;
+      if (skipValue && key === 'value') continue;
       const child = node[key];
       if (typeof child === 'string' && child.trim() !== '') {
         leaves.push({ path: pathAcc.concat(key), value: child });

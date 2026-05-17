@@ -209,6 +209,19 @@ const DEFAULT_CONTENT = {
   craft_image_url: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=1600&h=600&fit=crop&q=80',
   life_image_url:  'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1600&h=600&fit=crop&q=80',
 
+  // Code snippet box — fully dynamic. `properties[].type` is one of
+  // 'string' | 'array' | 'literal'; the translator skips `value` when the
+  // sibling `type === 'literal'` so code-shaped strings stay verbatim.
+  code_snippet_filename: 'halli.js',
+  code_snippet_comment:  '// Two disciplines, one craftsman',
+  code_snippet_properties: [
+    { id: 'p_languages',  key: 'languages',  type: 'array',   value: ['JavaScript', 'Python', 'SQL'] },
+    { id: 'p_tools',      key: 'tools',      type: 'array',   value: ['hand plane', 'chisel', 'vim'] },
+    { id: 'p_philosophy', key: 'philosophy', type: 'string',  value: 'measure twice, ship once' },
+    { id: 'p_home',       key: 'home',       type: 'string',  value: 'Iceland' },
+    { id: 'p_craft',      key: 'craft',      type: 'literal', value: '() => true' },
+  ],
+
 };
 
 // ── HalliView class ────────────────────────────────────────────────────────
@@ -361,22 +374,7 @@ export class HalliView {
             </p>
           </div>
           <div class="hb-reveal hb-reveal--right hb-d2">
-            <div class="hb-terminal" role="img" aria-label="Code sample">
-              <div class="hb-terminal__bar">
-                <span class="hb-terminal__dot"></span>
-                <span class="hb-terminal__dot"></span>
-                <span class="hb-terminal__dot"></span>
-                <span class="hb-terminal__title">halli.js</span>
-              </div>
-              <div class="hb-terminal__body"><span class="tc">// Two disciplines, one craftsman</span>
-<span class="tk">const</span> halli = {
-  languages: [<span class="ts">'JavaScript'</span>, <span class="ts">'Python'</span>, <span class="ts">'SQL'</span>],
-  tools: [<span class="ts">'hand plane'</span>, <span class="ts">'chisel'</span>, <span class="ts">'vim'</span>],
-  philosophy: <span class="ts">'measure twice, ship once'</span>,
-  home: <span class="ts">'Iceland'</span>,
-  <span class="tk">craft</span>: () =&gt; <span class="to">true</span>,
-};<span class="hb-cursor"></span></div>
-            </div>
+            ${this._codeTerminal()}
           </div>
         </div>
         ${this._skillGroups('code_skill_groups')}
@@ -603,9 +601,50 @@ export class HalliView {
         </article>`;
   }
 
+  // ── Code-snippet terminal box (admin-editable) ────────────────────────────
+  _codeTerminal() {
+    const filename = escHtml(this._c('code_snippet_filename'));
+    const comment  = escHtml(this._c('code_snippet_comment'));
+    const props    = (this._array('code_snippet_properties') || [])
+      .map(p => this._codePropRow(p)).join('');
+
+    return `
+            <div class="hb-terminal" role="img" aria-label="Code sample">
+              <div class="hb-terminal__bar">
+                <span class="hb-terminal__dot"></span>
+                <span class="hb-terminal__dot"></span>
+                <span class="hb-terminal__dot"></span>
+                <span class="hb-terminal__title" data-field="code_snippet_filename">${filename}</span>
+              </div>
+              <div class="hb-terminal__body"><span class="hb-terminal__comment" data-field="code_snippet_comment">${comment}</span>
+<span class="tk">const</span> halli = <span class="hb-punct">{</span><div class="hb-terminal__props" data-array="code_snippet_properties">${props}<button type="button" class="hb-array-add hb-array-add--code" data-array-ctrl="add" data-template="code-prop">+ Add property</button></div><span class="hb-punct">}</span><span class="hb-punct">;</span><span class="hb-cursor"></span></div>
+            </div>`;
+  }
+
+  _codePropRow(p = {}) {
+    const idAttr = p.id ? ` data-id="${escHtml(p.id)}"` : '';
+    const type   = (p.type === 'array' || p.type === 'literal') ? p.type : 'string';
+    return `<div class="hb-prop-line" data-row${idAttr}><span class="hb-prop-key" data-field="key">${escHtml(p.key ?? '')}</span><span class="hb-punct">:</span> <select class="hb-prop-type-select" data-field="type" aria-label="Property type"><option value="string"${type==='string'?' selected':''}>string</option><option value="array"${type==='array'?' selected':''}>array</option><option value="literal"${type==='literal'?' selected':''}>literal</option></select><span class="hb-prop-value-slot">${this._codePropValue(type, p.value)}</span><span class="hb-punct">,</span><button type="button" class="hb-array-remove hb-array-remove--code" data-array-ctrl="remove" aria-label="Remove property">×</button></div>`;
+  }
+
+  _codePropValue(type, value) {
+    if (type === 'array') {
+      const arr = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : []);
+      const items = arr.map(v => `<li>${escHtml(v)}</li>`).join('') || '<li></li>';
+      return `<span class="hb-punct">[</span><ul class="hb-prop-value-array" data-field="value" data-multiline>${items}</ul><span class="hb-punct">]</span>`;
+    }
+    if (type === 'literal') {
+      const v = typeof value === 'string' ? value : (Array.isArray(value) ? value.join(', ') : '');
+      return `<span class="hb-prop-value-literal" data-field="value">${escHtml(v)}</span>`;
+    }
+    const v = typeof value === 'string' ? value : (Array.isArray(value) ? value.join(', ') : '');
+    return `<span class="hb-punct">'</span><span class="hb-prop-value-string" data-field="value">${escHtml(v)}</span><span class="hb-punct">'</span>`;
+  }
+
   _rowTemplate(kind) {
     if (kind === 'skill-group') return this._skillGroupRow({ title: '', items: [''] });
     if (kind === 'experience')  return this._experienceRow({ title: '', meta: '', outcome: '' });
+    if (kind === 'code-prop')   return this._codePropRow({ key: 'newField', type: 'string', value: '' });
     return '';
   }
 
@@ -628,7 +667,9 @@ export class HalliView {
     // Flat fields outside any array
     view.querySelectorAll('[data-field]').forEach(el => {
       if (el.closest('[data-array]')) return;
-      updated[el.dataset.field] = el.innerText.trim();
+      updated[el.dataset.field] = el.tagName === 'SELECT'
+        ? el.value
+        : el.innerText.trim();
     });
 
     // Arrays
@@ -638,7 +679,9 @@ export class HalliView {
         const row = {};
         rowEl.querySelectorAll('[data-field]').forEach(fEl => {
           if (fEl.closest('[data-array]') !== container) return;
-          if (fEl.hasAttribute('data-multiline')) {
+          if (fEl.tagName === 'SELECT') {
+            row[fEl.dataset.field] = fEl.value;
+          } else if (fEl.hasAttribute('data-multiline')) {
             row[fEl.dataset.field] = fEl.innerText
               .split('\n').map(s => s.trim()).filter(Boolean);
           } else {
@@ -672,6 +715,41 @@ export class HalliView {
         btn.insertAdjacentHTML('beforebegin', html);
         const newRow = btn.previousElementSibling;
         newRow?.querySelectorAll('[data-field]').forEach(el => {
+          if (el.tagName === 'SELECT') return;
+          el.contentEditable = 'true';
+          el.spellcheck = true;
+        });
+      }
+    });
+
+    // Type selector swap — when a code-snippet property's type changes,
+    // rebuild just its value slot in place so the right editor (single span
+    // for string/literal, multiline <ul> for array) is on screen.
+    view.addEventListener('change', (e) => {
+      const sel = e.target.closest('select.hb-prop-type-select');
+      if (!sel || !view.contains(sel)) return;
+
+      const row  = sel.closest('[data-row]');
+      const slot = row?.querySelector('.hb-prop-value-slot');
+      if (!row || !slot) return;
+
+      // Capture the current value from the existing field so the swap is
+      // not destructive when the admin flips between types.
+      const oldField = slot.querySelector('[data-field="value"]');
+      let captured;
+      if (oldField?.hasAttribute('data-multiline')) {
+        captured = oldField.innerText.split('\n').map(s => s.trim()).filter(Boolean);
+      } else if (oldField) {
+        captured = oldField.innerText.trim();
+      } else {
+        captured = '';
+      }
+
+      slot.innerHTML = this._codePropValue(sel.value, captured);
+
+      if (view.classList.contains('halli-bio--editing')) {
+        slot.querySelectorAll('[data-field]').forEach(el => {
+          if (el.tagName === 'SELECT') return;
           el.contentEditable = 'true';
           el.spellcheck = true;
         });
