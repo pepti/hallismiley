@@ -294,6 +294,83 @@
 .hb-terminal__body .tn { color: #79c0ff; }
 .hb-terminal__body .to { color: #7ee787; }
 
+/* ── Terminal property rows (admin-editable code snippet) ─────────────────── */
+.hb-terminal__comment { display: block; color: #8b949e; }
+.hb-terminal__props { display: block; }
+.hb-prop-line {
+  display: block;
+  padding-left: 2ch;
+  white-space: pre;
+}
+.hb-prop-key   { color: #C8AA6E; }
+.hb-punct      { color: #e6edf3; }
+.hb-prop-value-string  { color: #a5d6ff; }
+.hb-prop-value-literal { color: #7ee787; }
+.hb-prop-value-array {
+  display: inline;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.hb-prop-value-array > li { display: inline; color: #a5d6ff; }
+.hb-prop-value-array > li::before { content: "'"; color: #e6edf3; }
+.hb-prop-value-array > li::after  { content: "', "; color: #e6edf3; }
+.hb-prop-value-array > li:last-child::after { content: "'"; color: #e6edf3; }
+
+/* Hide the type selector and the per-row × / add buttons outside edit mode
+   so the snippet still reads as plain code. */
+.hb-prop-type-select,
+.hb-array-remove--code,
+.hb-array-add--code { display: none; }
+
+.halli-bio--editing .hb-prop-type-select {
+  display: inline-block;
+  margin: 0 0.4rem;
+  font: inherit;
+  font-size: 0.85em;
+  background: #161b22;
+  color: var(--gold);
+  border: 1px dashed rgba(200, 170, 110, 0.4);
+  border-radius: 3px;
+  padding: 0 4px;
+  vertical-align: baseline;
+}
+.halli-bio--editing .hb-array-remove--code {
+  display: inline-block;
+  margin-left: 0.6rem;
+  background: transparent;
+  border: 1px solid rgba(255, 95, 87, 0.4);
+  color: #ff8a82;
+  cursor: pointer;
+  font-size: 0.85em;
+  line-height: 1;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.halli-bio--editing .hb-array-remove--code:hover {
+  background: rgba(255, 95, 87, 0.15);
+}
+.halli-bio--editing .hb-array-add--code {
+  display: block;
+  margin: 0.4rem 0 0.2rem 2ch;
+  background: transparent;
+  border: 1px dashed rgba(200, 170, 110, 0.4);
+  color: var(--gold);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85em;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.halli-bio--editing .hb-array-add--code:hover {
+  background: rgba(200, 170, 110, 0.1);
+}
+
+/* In edit mode, expand array items to their own lines so each <li> is
+   editable independently. Decorative quotes from ::before/::after stay. */
+.halli-bio--editing .hb-prop-value-array { display: inline-block; vertical-align: top; }
+.halli-bio--editing .hb-prop-value-array > li { display: list-item; margin-left: 2ch; }
+
 .hb-cursor {
   display: inline-block;
   width: 6px;
