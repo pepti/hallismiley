@@ -37,7 +37,8 @@ const PRODUCTS = [
   {
     slug: 'smiley-tshirt',
     name: 'Smiley T-Shirt',
-    category: 'apparel',
+    category: 'product',         // top-level taxonomy (migration 045)
+    subcategory: 'apparel',      // pre-redesign tag, kept for filter compat
     kind: 'tshirt',              // drives the SVG shape
     variant_axes: ['size', 'color'],
     description: `Heavyweight cotton tee with the Smiley mark on the chest. Pre-shrunk, cut true-to-size, built for long use.
@@ -62,7 +63,8 @@ Prices include 24% VAT.`,
   {
     slug: 'smiley-sweatpants',
     name: 'Smiley Sweatpants',
-    category: 'apparel',
+    category: 'product',
+    subcategory: 'apparel',
     kind: 'sweatpants',
     variant_axes: ['size', 'color'],
     description: `Heavyweight cotton-blend sweatpants with a discreet Smiley embroidery on the left leg. Elasticated waist, side pockets, tapered cuff.
@@ -280,9 +282,9 @@ async function upsertProduct(client, p) {
   const { rows } = await client.query(
     `INSERT INTO products (
        slug, name, description, price_isk, price_eur, stock, weight_grams,
-       shape, capacity_litres, category, variant_axes, active
+       shape, capacity_litres, category, subcategory, variant_axes, active
      )
-     VALUES ($1,$2,$3,$4,$5,0,$6,NULL,NULL,$7,$8::jsonb,TRUE)
+     VALUES ($1,$2,$3,$4,$5,0,$6,NULL,NULL,$7,$8,$9::jsonb,TRUE)
      ON CONFLICT (slug) DO UPDATE SET
        name = EXCLUDED.name,
        description = EXCLUDED.description,
@@ -292,6 +294,7 @@ async function upsertProduct(client, p) {
        shape = NULL,
        capacity_litres = NULL,
        category = EXCLUDED.category,
+       subcategory = EXCLUDED.subcategory,
        variant_axes = EXCLUDED.variant_axes,
        active = TRUE
      RETURNING id`,
@@ -299,6 +302,7 @@ async function upsertProduct(client, p) {
       p.slug, p.name, p.description, p.price_isk, p.price_eur,
       p.weight_grams || null,
       p.category,
+      p.subcategory || null,
       JSON.stringify(p.variant_axes),
     ]
   );

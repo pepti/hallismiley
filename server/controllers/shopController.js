@@ -8,12 +8,17 @@ const db = require('../config/database');
 const { SHIPPING_METHODS, getShippingPrice } = require('../config/shipping');
 const { isConfigured: stripeIsConfigured } = require('../config/stripe');
 const stripeService = require('../services/stripeService');
-const { sendOrderReceipt } = require('../services/emailService');
+const { sendOrderReceipt, sendBookingNotification } = require('../services/emailService');
 const { t }                = require('../i18n');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Top-level shop sections — kept in sync with the CHECK constraint on
+// products.category (migration 045_shop_sections). Listed here for the
+// public ?category= filter on GET /api/v1/shop/products.
+const VALID_LIST_CATEGORY = ['product', 'tech_service', 'carpentry_service'];
 
 function validateEmail(s) {
   return typeof s === 'string' && s.length <= 254 && EMAIL_RE.test(s);
@@ -78,9 +83,23 @@ const shopController = {
   },
 
   // GET /api/v1/shop/products — public list of active products (+ variants)
+  // Optional ?category= filter (shop redesign step 2). Whitelisted server-side
+  // so a malformed query can't reach the DB as a raw filter value.
   async listProducts(req, res, next) {
     try {
-      const products = await Product.findAll({ activeOnly: true, limit: 100, locale: req.locale });
+      const rawCategory = typeof req.query.category === 'string' ? req.query.category : null;
+      if (rawCategory && !VALID_LIST_CATEGORY.includes(rawCategory)) {
+        return res.status(400).json({
+          error: `category must be one of: ${VALID_LIST_CATEGORY.join(', ')}`,
+          code: 400,
+        });
+      }
+      const products = await Product.findAll({
+        activeOnly: true,
+        limit: 100,
+        locale: req.locale,
+        category: rawCategory,
+      });
       if (products.length === 0) return res.json({ products: [] });
       const productIds = products.map(p => p.id);
       const [images, variants] = await Promise.all([
@@ -234,7 +253,10 @@ const shopController = {
               code: 400,
             });
           }
-          if (product.stock < qty) {
+          // Bookable items (tech / carpentry services) skip stock — the
+          // post-checkout scheduling flow gates availability instead.
+          // Shop redesign step 5.
+          if (!product.is_bookable && product.stock < qty) {
             return res.status(409).json({ error: t(req.locale, 'errors.shop.notEnoughStock', { name: product.name }), code: 409 });
           }
           resolvedItems.push({
@@ -415,6 +437,13 @@ async function handleCheckoutCompleted(session) {
 
     const items = await Order.listItems(order.id);
     for (const it of items) {
+      // Bookable items (services) are availability-gated by the scheduling
+      // flow, not by row count — skip stock decrement so they don't fail
+      // against a stock=0 column. Variant-backed bookables (uncommon but
+      // representable) still go through the variant decrement path because
+      // the variant table owns its own stock semantics.
+      // Shop redesign step 5.
+      if (it.is_bookable && !it.product_variant_id) continue;
       // Variant-backed items decrement variant stock; legacy single-SKU
       // items fall back to product stock. Both use atomic WHERE stock >= qty
       // so a race-loser returns null and we abort the whole transaction.
@@ -454,7 +483,9 @@ async function handleCheckoutCompleted(session) {
     return;
   }
 
-  // Success path — send receipt (best-effort; don't fail the webhook on email errors)
+  // Success path — send receipt + (for service orders) an admin booking
+  // notification. Both are best-effort; failures log but never poison the
+  // webhook response. Shop redesign step 5.
   try {
     const items = await Order.listItems(order.id);
     const finalOrder = await Order.findById(order.id);
@@ -466,9 +497,39 @@ async function handleCheckoutCompleted(session) {
       );
       if (uRows[0]?.preferred_locale) locale = uRows[0].preferred_locale;
     }
-    await sendOrderReceipt(finalOrder, items, locale);
+    const bookableItems = items.filter(it => it.is_bookable);
+    const sends = [sendOrderReceipt(finalOrder, items, locale, { hasBookableItems: bookableItems.length > 0 })];
+
+    if (bookableItems.length > 0) {
+      // Admin recipients — same query shape used by the party notification
+      // flow (server/controllers/partyController.js). Verified-email admins
+      // only so we don't dispatch into the void.
+      const { rows: adminRows } = await db.query(
+        `SELECT email FROM users
+          WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE
+            AND email IS NOT NULL`
+      );
+      const adminEmails = adminRows.map(r => r.email).filter(Boolean);
+      if (adminEmails.length) {
+        sends.push(sendBookingNotification({
+          order: finalOrder,
+          bookableItems,
+          adminEmails,
+        }));
+      } else {
+        console.warn(`[stripeWebhook] No admin recipients for booking notification on ${finalOrder.order_number}`);
+      }
+    }
+
+    // allSettled — one bounced address mustn't block the other email.
+    const results = await Promise.allSettled(sends);
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        console.error(`[stripeWebhook] Email send rejected for ${order.order_number}:`, r.reason);
+      }
+    }
   } catch (emailErr) {
-    console.error(`[stripeWebhook] Receipt email failed for ${order.order_number}:`, emailErr);
+    console.error(`[stripeWebhook] Receipt email block failed for ${order.order_number}:`, emailErr);
   }
 }
 

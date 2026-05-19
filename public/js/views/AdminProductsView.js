@@ -242,6 +242,20 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
         <button type="button" class="admin-shop__modal-close" aria-label="${t('common.close')}">✕</button>
       </header>
       <form class="admin-shop__form" id="admin-product-form">
+        <div class="admin-shop__form-row">
+          <label>${t('adminProducts.categoryLabel')}
+            <select name="category" id="admin-product-category" required>
+              <option value="product"           ${(existing?.category || 'product') === 'product' ? 'selected' : ''}>${t('adminProducts.categoryProduct')}</option>
+              <option value="tech_service"      ${existing?.category === 'tech_service' ? 'selected' : ''}>${t('adminProducts.categoryTech')}</option>
+              <option value="carpentry_service" ${existing?.category === 'carpentry_service' ? 'selected' : ''}>${t('adminProducts.categoryCarpentry')}</option>
+            </select>
+          </label>
+          <label>${t('adminProducts.subcategoryLabel')}
+            <input type="text" name="subcategory" maxlength="60"
+                   value="${_esc(existing?.subcategory || '')}"
+                   placeholder="${t('adminProducts.subcategoryPlaceholder')}"/>
+          </label>
+        </div>
         <label>${t('adminProducts.name')}
           <input type="text" name="name" required maxlength="200" value="${_esc(existing?.name || '')}"/>
         </label>
@@ -273,6 +287,31 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
           </label>
         </div>
         <p class="admin-shop__hint">${t('adminProducts.priceHintShort')}</p>
+
+        <!-- Service-only fields. Hidden when category === 'product'; shown
+             for tech_service / carpentry_service. Wired up below. -->
+        <fieldset id="admin-product-service-fields"
+                  style="display:${(existing?.category && existing.category !== 'product') ? 'block' : 'none'}">
+          <legend>${t('adminProducts.serviceFieldsLegend')}</legend>
+          <div class="admin-shop__form-row">
+            <label>${t('adminProducts.durationMinutesLabel')}
+              <input type="number" name="duration_minutes" min="1" step="1"
+                     value="${existing?.duration_minutes ?? ''}"/>
+            </label>
+            <label>${t('adminProducts.deliveryFormatLabel')}
+              <select name="delivery_format">
+                <option value=""          ${!existing?.delivery_format ? 'selected' : ''}>—</option>
+                <option value="remote"    ${existing?.delivery_format === 'remote'    ? 'selected' : ''}>${t('adminProducts.deliveryRemote')}</option>
+                <option value="in_person" ${existing?.delivery_format === 'in_person' ? 'selected' : ''}>${t('adminProducts.deliveryInPerson')}</option>
+                <option value="hybrid"    ${existing?.delivery_format === 'hybrid'    ? 'selected' : ''}>${t('adminProducts.deliveryHybrid')}</option>
+              </select>
+            </label>
+            <label class="admin-shop__checkbox">
+              <input type="checkbox" name="is_bookable" ${existing?.is_bookable ? 'checked' : ''}/>
+              ${t('adminProducts.isBookableLabel')}
+            </label>
+          </div>
+        </fieldset>
 
         <!-- Icelandic translations — nullable siblings. Left blank ⇒ IS
              visitors see the English fallback. See migration 031. -->
@@ -328,6 +367,15 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
   const form    = modal.querySelector('#admin-product-form');
   const errorEl = modal.querySelector('#admin-product-error');
 
+  // Show service-only fieldset only when category is a service-y one.
+  const catSel = modal.querySelector('#admin-product-category');
+  const svcBlk = modal.querySelector('#admin-product-service-fields');
+  if (catSel && svcBlk) {
+    catSel.addEventListener('change', () => {
+      svcBlk.style.display = catSel.value === 'product' ? 'none' : 'block';
+    });
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorEl.textContent = '';
@@ -345,6 +393,12 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
       price_eur:      Number(fd.get('price_eur')),
       stock:          Number(fd.get('stock') || 0),
       active:         fd.get('active') === 'on',
+      // Shop redesign step 1 — language-neutral taxonomy + service fields.
+      category:         String(fd.get('category') || 'product'),
+      subcategory:      String(fd.get('subcategory') || '').trim() || null,
+      duration_minutes: fd.get('duration_minutes') ? Number(fd.get('duration_minutes')) : null,
+      delivery_format:  String(fd.get('delivery_format') || '') || null,
+      is_bookable:      fd.get('is_bookable') === 'on',
       // Server-side EN → IS auto-translation of empty IS fields on save.
       __autoTranslate: fd.get('__autoTranslate') !== null,
     };

@@ -194,10 +194,18 @@ class Order {
   }
 
   static async listItems(orderId) {
+    // LEFT JOIN products so callers can branch on is_bookable (shop redesign
+     // step 5 — services trigger a post-checkout scheduling flow). Snapshot
+     // columns on order_items remain the source of truth for name/price;
+     // the JOIN is non-authoritative — a deleted product just renders the
+     // booking flag as NULL, which we coerce to false at read time.
     const { rows } = await db.query(
-      `SELECT ${ITEM_COLUMNS} FROM order_items
-        WHERE order_id = $1
-        ORDER BY created_at ASC`,
+      `SELECT ${ITEM_COLUMNS.split(',').map(c => `oi.${c.trim()}`).join(', ')},
+              COALESCE(p.is_bookable, FALSE) AS is_bookable
+         FROM order_items oi
+    LEFT JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC`,
       [String(orderId)]
     );
     return rows;

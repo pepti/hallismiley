@@ -20,14 +20,39 @@ const DEFAULT_HERO = {
   empty_state: 'No products match your filters.',
 };
 
+// Shop-redesign step 2: section slug → DB `category` value.
+// `null` ⇒ no filter (the /shop landing shows every active row).
+const SECTION_TO_CATEGORY = {
+  products:  'product',
+  tech:      'tech_service',
+  carpentry: 'carpentry_service',
+};
+
+// Order matters — drives the tab bar order. 'all' maps to the umbrella /shop.
+const SECTION_TABS = ['all', 'products', 'tech', 'carpentry'];
+
 function _esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Landing-row definitions — drive both the row order on /shop and the
+// "See all →" links. Step 4: every row maps to a section sub-route, so the
+// landing is purely a discovery surface; deep browse happens on the section
+// pages with filters.
+const LANDING_ROWS = [
+  { section: 'products',  category: 'product' },
+  { section: 'tech',      category: 'tech_service' },
+  { section: 'carpentry', category: 'carpentry_service' },
+];
+
+// Cards rendered per row on the landing. More than this and the row stops
+// feeling "featured" — section pages handle the long tail.
+const LANDING_ROW_LIMIT = 4;
+
 export class ShopView {
-  constructor(_params, qs) {
+  constructor(params, qs) {
     this._view = null;
     this._products = [];
     this._filtered = [];
@@ -36,6 +61,11 @@ export class ShopView {
     this._filters = null;
     this._unsubCart = null;
     this._hero = { ...DEFAULT_HERO };
+    // params is either null (/shop landing) or { section: 'products' | 'tech' | 'carpentry' }.
+    this._section  = params?.section || null;
+    this._category = this._section ? (SECTION_TO_CATEGORY[this._section] || null) : null;
+    // Landing-mode state: per-section product lists fetched in parallel.
+    this._landingSections = Object.fromEntries(LANDING_ROWS.map(r => [r.section, []]));
   }
 
   async render() {
@@ -45,9 +75,60 @@ export class ShopView {
     // Fetch editable copy before first paint so the shell is complete.
     await this._loadHero();
 
+    // Shop redesign step 4 — the /shop landing is now a mixed-row discovery
+    // surface (no filters, no search bar, no flat grid). Section sub-routes
+    // keep the existing filterable grid layout.
+    const body = this._section ? this._sectionBodyHtml() : this._landingBodyHtml();
     this._view.innerHTML = `
       ${this._heroHtml()}
+      ${this._tabsHtml()}
+      ${body}
+    `;
 
+    // Admin/moderator-only inline edit controls — appended on both layouts so
+    // hero copy stays editable from the landing too.
+    this._initPageEdit(this._view);
+
+    if (this._section) {
+      // Section mode — flat grid + filters + currency toggle.
+      this._currencySelector = new CurrencySelector({ onChange: () => this._repaintGrid() });
+      this._view.querySelector('#shop-page-currency').appendChild(this._currencySelector.render());
+
+      this._filters = new ShopFilters({
+        initialState: this._state,
+        products: [],
+        section: this._section,
+        onChange: (next) => {
+          this._state = next;
+          this._syncHash();
+          this._repaintGrid();
+        },
+      });
+      this._view.querySelector('#shop-page-filters').appendChild(this._filters.render());
+      this._unsubCart = cart.subscribe(() => this._repaintGrid());
+      await this._loadProducts();
+    } else {
+      // Landing mode — re-paint rows when currency changes elsewhere so the
+      // per-card prices stay in sync. No filter/search controls.
+      this._unsubCart = cart.subscribe(() => this._paintLandingRows());
+      await this._loadLandingSections();
+    }
+
+    return this._view;
+  }
+
+  // Shop redesign step 4 — landing-mode body shell. The actual row content is
+  // painted async by _paintLandingRows after _loadLandingSections resolves.
+  _landingBodyHtml() {
+    return `
+      <div class="shop-landing" aria-live="polite">
+        <div class="shop-landing__loading">${t('form.loading')}</div>
+      </div>
+    `;
+  }
+
+  _sectionBodyHtml() {
+    return `
       <div class="shop-page__inner">
         <div class="shop-page__toolbar">
           <div id="shop-page-currency"></div>
@@ -62,40 +143,44 @@ export class ShopView {
         </div>
       </div>
     `;
-
-    this._currencySelector = new CurrencySelector({ onChange: () => this._repaintGrid() });
-    this._view.querySelector('#shop-page-currency').appendChild(this._currencySelector.render());
-
-    this._filters = new ShopFilters({
-      initialState: this._state,
-      products: [],
-      onChange: (next) => {
-        this._state = next;
-        this._syncHash();
-        this._repaintGrid();
-      },
-    });
-    this._view.querySelector('#shop-page-filters').appendChild(this._filters.render());
-
-    this._unsubCart = cart.subscribe(() => this._repaintGrid());
-
-    // Admin/moderator-only inline edit controls.
-    this._initPageEdit(this._view);
-
-    await this._loadProducts();
-    return this._view;
   }
 
   _heroHtml() {
     const h = this._hero;
+    // On section sub-routes the H1 reflects the section, not the shared
+    // shop_hero copy — admins still edit the hero for /shop (the "All" tab),
+    // and the section-specific title is i18n-driven so each route stays
+    // independently SEO-indexable. Eyebrow + subtitle still come from the
+    // hero block so the page keeps a cohesive feel across tabs.
+    const sectionTitle = this._section ? t(`shop.section.${this._section}.title`) : null;
+    const title = sectionTitle || h.title;
     return `
       <header class="shop-page__header" data-section="hero">
         <div class="shop-page__header-inner">
           <p class="shop-page__eyebrow" data-field="eyebrow">${_esc(h.eyebrow)}</p>
-          <h1 class="shop-page__title" data-field="title">${_esc(h.title)}</h1>
+          <h1 class="shop-page__title" data-field="title">${_esc(title)}</h1>
           <p class="shop-page__sub" data-field="subtitle">${_esc(h.subtitle)}</p>
         </div>
       </header>`;
+  }
+
+  _tabsHtml() {
+    // Persistent department tab bar — sits below the global nav and above
+    // the hero. Active tab gets the gold underline via .is-active.
+    const current = this._section || 'all';
+    const locale = (window.__locale || 'en');
+    const tabs = SECTION_TABS.map(slug => {
+      const href = slug === 'all' ? `/${locale}/shop` : `/${locale}/shop/${slug}`;
+      const label = t(`shop.tab.${slug}`);
+      const active = slug === current;
+      return `<a href="${href}" class="shop-page__tab${active ? ' is-active' : ''}"
+                 data-tab="${slug}"
+                 ${active ? 'aria-current="page"' : ''}>${_esc(label)}</a>`;
+    }).join('');
+    return `
+      <nav class="shop-page__tabs" aria-label="${_esc(t('shop.tabsAriaLabel'))}">
+        <div class="shop-page__tabs-inner">${tabs}</div>
+      </nav>`;
   }
 
   async _loadHero() {
@@ -122,7 +207,10 @@ export class ShopView {
 
   async _loadProducts() {
     try {
-      const res = await fetch('/api/v1/shop/products', { credentials: 'include' });
+      const url = this._category
+        ? `/api/v1/shop/products?category=${encodeURIComponent(this._category)}`
+        : '/api/v1/shop/products';
+      const res = await fetch(url, { credentials: 'include' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load products');
       this._products = data.products || [];
@@ -131,6 +219,65 @@ export class ShopView {
     } catch (err) {
       const grid = this._view.querySelector('#shop-grid');
       grid.innerHTML = `<p class="shop-page__error">Couldn't load products: ${err.message}</p>`;
+    }
+  }
+
+  // Shop redesign step 4 — landing-mode data load. Fires one request per row
+  // in parallel (each is an indexed category lookup, sub-millisecond on the
+  // DB side) so total latency tracks the slowest single fetch.
+  async _loadLandingSections() {
+    const wrap = this._view.querySelector('.shop-landing');
+    try {
+      const results = await Promise.all(LANDING_ROWS.map(async (row) => {
+        const res = await fetch(
+          `/api/v1/shop/products?category=${encodeURIComponent(row.category)}`,
+          { credentials: 'include' }
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Failed to load ${row.section}`);
+        }
+        const data = await res.json();
+        return [row.section, data.products || []];
+      }));
+      this._landingSections = Object.fromEntries(results);
+      this._paintLandingRows();
+    } catch (err) {
+      if (wrap) wrap.innerHTML = `<p class="shop-page__error">Couldn't load shop: ${_esc(err.message)}</p>`;
+    }
+  }
+
+  _paintLandingRows() {
+    const wrap = this._view?.querySelector('.shop-landing');
+    if (!wrap) return;
+    wrap.innerHTML = LANDING_ROWS.map(row => {
+      const products = (this._landingSections[row.section] || []).slice(0, LANDING_ROW_LIMIT);
+      const locale = (window.__locale || 'en');
+      const seeAllHref = `/${locale}/shop/${row.section}`;
+      const title    = t(`shop.landing.${row.section}.title`);
+      const seeLabel = t(`shop.landing.${row.section}.seeAll`);
+      const cards = products.length === 0
+        ? `<p class="shop-landing__empty">${_esc(t('shop.landing.empty'))}</p>`
+        : `<div class="shop-landing__row-cards" data-section="${row.section}"></div>`;
+      return `
+        <section class="shop-landing__row" data-section="${row.section}">
+          <header class="shop-landing__row-header">
+            <h2 class="shop-landing__row-title">${_esc(title)}</h2>
+            <a class="shop-landing__see-all" href="${seeAllHref}"
+               data-testid="shop-landing-see-all-${row.section}">${_esc(seeLabel)} →</a>
+          </header>
+          ${cards}
+        </section>`;
+    }).join('');
+
+    // Mount cards into each row container. Done in a second pass so the
+    // markup-only render (above) can ship the row chrome immediately while
+    // we hydrate the DOM nodes.
+    for (const row of LANDING_ROWS) {
+      const container = wrap.querySelector(`.shop-landing__row-cards[data-section="${row.section}"]`);
+      if (!container) continue;
+      const products = (this._landingSections[row.section] || []).slice(0, LANDING_ROW_LIMIT);
+      for (const p of products) container.appendChild(renderProductCard(p));
     }
   }
 
@@ -170,10 +317,16 @@ export class ShopView {
   }
 
   _syncHash() {
+    // Persist filter state in the querystring on the *current* section route
+    // so refreshes / shares keep both the tab and the active filters. The
+    // pathname already encodes the section ('/en/shop/tech'), so we only
+    // need to swap the search portion.
     const qs = stateToQs(this._state);
-    const newHash = qs ? `#/shop?${qs}` : '#/shop';
-    if (window.location.hash !== newHash) {
-      history.replaceState(null, '', newHash);
+    const base = window.location.pathname;
+    const next = qs ? `${base}?${qs}` : base;
+    const current = window.location.pathname + (window.location.search || '');
+    if (current !== next) {
+      history.replaceState(null, '', next + window.location.hash);
     }
   }
 
@@ -204,7 +357,12 @@ export class ShopView {
       addBtn.addEventListener('click', () => {
         openProductFormModal({
           existing: null,
-          onSaved: async () => { await this._loadProducts(); },
+          // Reload the right surface — section pages refresh their filtered
+          // grid, the /shop landing re-pulls every featured row.
+          onSaved: async () => {
+            if (this._section) await this._loadProducts();
+            else               await this._loadLandingSections();
+          },
         });
       });
     }
