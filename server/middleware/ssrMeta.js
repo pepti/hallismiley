@@ -51,41 +51,55 @@ if (process.env.NODE_ENV !== 'production') {
 // Route → static meta-tag overrides. Content-driven pages set a `contentKey`
 // which points at a site_content row whose JSON can supply `{meta_title,
 // meta_description}` fields (populated by admins via the CMS).
+//
+// /shop/products, /shop/tech, /shop/carpentry are department sub-routes
+// added in shop-redesign step 2. They share the shop_hero content key for
+// admin-editable copy fallback but have their own DEFAULT_META titles so
+// each section is independently SEO-indexable.
 const ROUTE_META = {
-  '/':         { key: 'home',     contentKey: 'home_skills' },
-  '/projects': { key: 'projects' },
-  '/halli':    { key: 'halli',    contentKey: 'halli_bio' },
-  '/about':    { key: 'halli',    contentKey: 'halli_bio' },
-  '/shop':     { key: 'shop',     contentKey: 'shop_hero' },
-  '/news':     { key: 'news' },
-  '/contact':  { key: 'contact',  contentKey: 'contact_hero' },
-  '/privacy':  { key: 'privacy' },
-  '/terms':    { key: 'terms' },
-  '/party':    { key: 'party' },
+  '/':                 { key: 'home',           contentKey: 'home_skills' },
+  '/projects':         { key: 'projects' },
+  '/halli':            { key: 'halli',          contentKey: 'halli_bio' },
+  '/about':            { key: 'halli',          contentKey: 'halli_bio' },
+  '/shop':             { key: 'shop',           contentKey: 'shop_hero' },
+  '/shop/products':    { key: 'shopProducts',   contentKey: 'shop_hero', section: 'shop' },
+  '/shop/tech':        { key: 'shopTech',       contentKey: 'shop_hero', section: 'shop', categoryFilter: 'tech_service' },
+  '/shop/carpentry':   { key: 'shopCarpentry',  contentKey: 'shop_hero', section: 'shop', categoryFilter: 'carpentry_service' },
+  '/news':             { key: 'news' },
+  '/contact':          { key: 'contact',        contentKey: 'contact_hero' },
+  '/privacy':          { key: 'privacy' },
+  '/terms':            { key: 'terms' },
+  '/party':            { key: 'party' },
 };
 
 const DEFAULT_META = {
   en: {
-    home:     { title: 'Halli Smiley — Icelandic Carpenter & Computer Scientist', description: 'Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing combined with full-stack web development.' },
-    projects: { title: 'Projects — Halli Smiley', description: 'Selected carpentry and software projects by Halli — hand-cut joinery, timber frames, custom web apps.' },
-    halli:    { title: 'About Halli — Where Wood Meets Code', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
-    shop:     { title: 'Shop — Halli Smiley', description: 'Apparel and goods from the workshop. Prices include 24% VAT, shipping from Iceland.' },
-    news:     { title: 'News — Halli Smiley', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
-    contact:  { title: 'Contact — Halli Smiley', description: 'Reach Halli about carpentry commissions, software work, or anything at the intersection of the two.' },
-    privacy:  { title: 'Privacy Policy — Halli Smiley' },
-    terms:    { title: 'Terms of Service — Halli Smiley' },
-    party:    { title: "Halli's 40th Birthday Party" },
+    home:           { title: 'Halli Smiley — Icelandic Carpenter & Computer Scientist', description: 'Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing combined with full-stack web development.' },
+    projects:       { title: 'Projects — Halli Smiley', description: 'Selected carpentry and software projects by Halli — hand-cut joinery, timber frames, custom web apps.' },
+    halli:          { title: 'About Halli — Where Wood Meets Code', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
+    shop:           { title: 'Shop — Halli Smiley', description: 'Apparel, goods, and services from the workshop. Prices include 24% VAT, shipping from Iceland.' },
+    shopProducts:   { title: 'Products — Halli Smiley Shop', description: 'Physical goods from the workshop: apparel and accessories. Prices include 24% VAT, shipping from Iceland.' },
+    shopTech:       { title: 'Tech Services — Work with Halli', description: 'Technical advisement, AI teaching sessions, and lectures by Halli. Book a session through the shop.' },
+    shopCarpentry:  { title: 'Carpentry Services — Work with Halli', description: 'Carpentry advisement and commissioned work — including TV wall artwork. Book a session through the shop.' },
+    news:           { title: 'News — Halli Smiley', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
+    contact:        { title: 'Contact — Halli Smiley', description: 'Reach Halli about carpentry commissions, software work, or anything at the intersection of the two.' },
+    privacy:        { title: 'Privacy Policy — Halli Smiley' },
+    terms:          { title: 'Terms of Service — Halli Smiley' },
+    party:          { title: "Halli's 40th Birthday Party" },
   },
   is: {
-    home:     { title: 'Halli Smiley — Íslenskur smiður & tölvunarfræðingur', description: 'Verkefnasafn Halla, íslensks smiðs og tölvunarfræðings. Tuttugu ára nákvæmni í smíði og grindarsmíði sem sameinast fullgildri vefforritun.' },
-    projects: { title: 'Verkefni — Halli Smiley', description: 'Valin smíða- og hugbúnaðarverkefni Halla — handskornar fellingar, burðargrindur, sérsmíðuð vefforrit.' },
-    halli:    { title: 'Um Halla — Þar sem viður mætir kóða', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
-    shop:     { title: 'Verslun — Halli Smiley', description: 'Fatnaður og varningur úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
-    news:     { title: 'Fréttir — Halli Smiley', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
-    contact:  { title: 'Samband — Halli Smiley', description: 'Hafðu samband við Halla um smíðaverkefni, hugbúnaðarverkefni eða eitthvað þar á milli.' },
-    privacy:  { title: 'Persónuverndarstefna — Halli Smiley' },
-    terms:    { title: 'Notkunarskilmálar — Halli Smiley' },
-    party:    { title: '40 ára afmæli Halla' },
+    home:           { title: 'Halli Smiley — Íslenskur smiður & tölvunarfræðingur', description: 'Verkefnasafn Halla, íslensks smiðs og tölvunarfræðings. Tuttugu ára nákvæmni í smíði og grindarsmíði sem sameinast fullgildri vefforritun.' },
+    projects:       { title: 'Verkefni — Halli Smiley', description: 'Valin smíða- og hugbúnaðarverkefni Halla — handskornar fellingar, burðargrindur, sérsmíðuð vefforrit.' },
+    halli:          { title: 'Um Halla — Þar sem viður mætir kóða', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
+    shop:           { title: 'Verslun — Halli Smiley', description: 'Fatnaður, varningur og þjónusta úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
+    shopProducts:   { title: 'Vörur — Verslun Halla Smiley', description: 'Áþreifanlegar vörur úr verkstæðinu: fatnaður og fylgihlutir. Verð með 24% VSK, sent frá Íslandi.' },
+    shopTech:       { title: 'Tækniþjónusta — Vinnuðu með Halla', description: 'Tækniráðgjöf, AI-kennsla og fyrirlestrar hjá Halla. Bókaðu tíma í gegnum verslunina.' },
+    shopCarpentry:  { title: 'Smíðaþjónusta — Vinnuðu með Halla', description: 'Smíðaráðgjöf og sérsmíði — þar á meðal sjónvarpsveggir. Bókaðu tíma í gegnum verslunina.' },
+    news:           { title: 'Fréttir — Halli Smiley', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
+    contact:        { title: 'Samband — Halli Smiley', description: 'Hafðu samband við Halla um smíðaverkefni, hugbúnaðarverkefni eða eitthvað þar á milli.' },
+    privacy:        { title: 'Persónuverndarstefna — Halli Smiley' },
+    terms:          { title: 'Notkunarskilmálar — Halli Smiley' },
+    party:          { title: '40 ára afmæli Halla' },
   },
 };
 
@@ -217,7 +231,7 @@ async function fetchDetailRow(detail) {
   return null;
 }
 
-async function fetchListRows(section, limit = 10) {
+async function fetchListRows(section, limit = 10, categoryFilter = null) {
   try {
     if (section === 'news') {
       const { rows } = await db.query(
@@ -231,6 +245,15 @@ async function fetchListRows(section, limit = 10) {
       return rows;
     }
     if (section === 'shop') {
+      // Shop-redesign sub-routes pass a categoryFilter so the crawler list
+      // for /shop/tech only shows tech_service rows, etc. The /shop landing
+      // (categoryFilter = null) keeps the old behavior of all active rows.
+      const params = [limit];
+      let extra = '';
+      if (categoryFilter) {
+        params.push(String(categoryFilter));
+        extra = ` AND p.category = $${params.length}`;
+      }
       const { rows } = await db.query(
         `SELECT p.slug, p.name, p.name_is, p.description, p.description_is,
                 p.price_isk, p.updated_at,
@@ -239,10 +262,10 @@ async function fetchListRows(section, limit = 10) {
                ORDER BY position ASC, created_at ASC
                   LIMIT 1) AS image_url
            FROM products p
-          WHERE p.active = TRUE
+          WHERE p.active = TRUE${extra}
           ORDER BY p.updated_at DESC
           LIMIT $1`,
-        [limit]
+        params
       );
       return rows;
     }
@@ -510,7 +533,11 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   const { locale, rest } = extractLocale(req);
   const route = (rest === '' ? '/' : rest).replace(/\/+$/, '') || '/';
 
-  const detail = extractDetail(route);
+  // Static + section routes take precedence over detail patterns so that
+  // /shop/products etc. don't accidentally match the /shop/:slug product
+  // regex (which would try to fetch a product with slug='products').
+  const staticMeta = ROUTE_META[route] || null;
+  const detail = staticMeta ? null : extractDetail(route);
 
   let title, description, ogImage;
   let schemas = [];
@@ -554,10 +581,14 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     }
   } else {
     // ── List / static page ──────────────────────────────────────────────
-    const meta = ROUTE_META[route] || null;
+    const meta = staticMeta;
     const key  = meta?.key;
     const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[key] || {};
-    const override = meta?.contentKey ? await fetchContentMeta(meta.contentKey, locale) : null;
+    // For shop section sub-routes we deliberately do NOT pull meta_title /
+    // meta_description from shop_hero — the shared hero copy applies to the
+    // landing only. Per-section pages get the DEFAULT_META titles so each
+    // route stays independently SEO-indexable.
+    const override = (meta?.contentKey && !meta.section) ? await fetchContentMeta(meta.contentKey, locale) : null;
 
     title       = override?.title       || defaults.title       || DEFAULT_META[DEFAULT_LOCALE].home.title;
     description = override?.description || defaults.description || DEFAULT_META[DEFAULT_LOCALE].home.description;
@@ -566,12 +597,17 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     // Breadcrumbs on any non-home page.
     if (route !== '/') {
       let section = null;
+      let detailName = null;
       if (route === '/projects' || route === '/news' || route === '/shop') {
         section = route.slice(1);
+      } else if (meta?.section) {
+        // Shop sub-route — breadcrumb is Home › Shop › <Section title>
+        section = meta.section;
+        detailName = title;
       }
       const bc = breadcrumbSchema({
         section,
-        detailName: section ? null : title,
+        detailName: detailName ?? (section ? null : title),
         localePath: route,
         locale,
       });
@@ -600,6 +636,10 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     const section = route.slice(1);
     const rows    = await fetchListRows(section, 10);
     if (rows.length) crawlerHtml = crawlerListHtml(section, rows, locale);
+  } else if (staticMeta?.section === 'shop' && staticMeta.categoryFilter) {
+    // Shop section sub-route — same crawler list shape as /shop but filtered.
+    const rows = await fetchListRows('shop', 10, staticMeta.categoryFilter);
+    if (rows.length) crawlerHtml = crawlerListHtml('shop', rows, locale);
   }
 
   let html = rewriteHead(loadTemplate(), {

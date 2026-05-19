@@ -1321,6 +1321,64 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
           AND NOT value ? 'code_snippet_properties'`,
     ],
   },
+  {
+    // Shop redesign step 1 — see docs/SHOP_REDESIGN.md.
+    //
+    // The existing products.category (from 024_product_variants) held
+    // apparel-style values like 'apparel', 'accessories', 'roof_box'. The
+    // redesign treats those as *subcategory* and uses `category` for the new
+    // top-level taxonomy: 'product' | 'tech_service' | 'carpentry_service'.
+    //
+    // So: rename the old column → subcategory, then add a fresh top-level
+    // category (NOT NULL DEFAULT 'product' backfills existing apparel rows
+    // correctly — they become category='product', subcategory='apparel').
+    //
+    // Service-only fields (duration_minutes, delivery_format, is_bookable)
+    // stay NULL/FALSE on physical products and drive the section-page filters
+    // and the booking follow-up flow in later build-order steps.
+    name: '045_shop_sections',
+    statements: [
+      // Idempotent rename: only if the old column exists and the new one
+      // doesn't. Re-running this migration is a no-op.
+      `DO $$ BEGIN
+         IF EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='products' AND column_name='category')
+            AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='products' AND column_name='subcategory')
+         THEN ALTER TABLE products RENAME COLUMN category TO subcategory;
+         END IF;
+       END $$`,
+
+      // The old idx_products_category was tied to the renamed column name;
+      // drop and recreate against the new column. The new top-level category
+      // index gets its own line below.
+      `DROP INDEX IF EXISTS idx_products_category`,
+      `CREATE INDEX IF NOT EXISTS idx_products_subcategory ON products (subcategory)`,
+
+      // New top-level category. NOT NULL DEFAULT backfills existing rows.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'product'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='products_category_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_category_check
+             CHECK (category IN ('product','tech_service','carpentry_service'));
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_products_category ON products (category)`,
+
+      // Service-only metadata. All nullable / default-false; physical
+      // products leave these unset.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS duration_minutes INTEGER
+         CHECK (duration_minutes IS NULL OR duration_minutes > 0)`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_format TEXT`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='products_delivery_format_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_delivery_format_check
+             CHECK (delivery_format IS NULL OR delivery_format IN ('remote','in_person','hybrid'));
+         END IF;
+       END $$`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS is_bookable BOOLEAN NOT NULL DEFAULT FALSE`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -57,4 +57,20 @@ describe('GET /sitemap.xml', () => {
   test('no references to the retired halliprojects.is domain', () => {
     expect(res.text).not.toMatch(/halliprojects\.is/);
   });
+
+  // Shop redesign step 2 — section sub-routes get their own entries so each
+  // is independently SEO-indexable, not subsumed by the umbrella /shop.
+  test('includes both locale variants of every shop section sub-route', () => {
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/products<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/products<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/tech<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/tech<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/carpentry<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/carpentry<\/loc>/);
+  });
+
+  test('shop section sub-routes carry matching hreflang alternates', () => {
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/shop\/tech"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/shop\/tech"/);
+  });
 });

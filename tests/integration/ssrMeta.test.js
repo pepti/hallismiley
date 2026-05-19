@@ -118,4 +118,36 @@ describe('SSR meta-injection — SPA catch-all', () => {
     const res = await request(app).get('/en/');
     expect(res.text).not.toMatch(/halliprojects\.is/);
   });
+
+  // ── Shop redesign step 2 — section sub-routes ───────────────────────────
+  // Each /shop/{products,tech,carpentry} route gets its own SSR title and
+  // breadcrumb so the sections are independently linkable + indexable. They
+  // must also NOT match the /shop/:slug product-detail pattern.
+
+  test('/en/shop/products renders the section-specific title', async () => {
+    const res = await request(app).get('/en/shop/products');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/<html lang="en"/);
+    expect(res.text).toMatch(/<title id="ssr-title">Products — Halli Smiley Shop<\/title>/);
+    expect(res.text).toMatch(/rel="canonical" href="[^"]*\/en\/shop\/products"/);
+  });
+
+  test('/en/shop/tech renders the tech-services title (NOT the product-detail fallback)', async () => {
+    const res = await request(app).get('/en/shop/tech');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/<title id="ssr-title">Tech Services — Work with Halli<\/title>/);
+  });
+
+  test('/is/shop/carpentry renders the Icelandic carpentry title', async () => {
+    const res = await request(app).get('/is/shop/carpentry');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/<html lang="is"/);
+    expect(res.text).toMatch(/<title id="ssr-title">Smíðaþjónusta — Vinnuðu með Halla<\/title>/);
+  });
+
+  test('shop section sub-routes emit a BreadcrumbList JSON-LD', async () => {
+    const res = await request(app).get('/en/shop/tech');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/<script type="application\/ld\+json">[^<]*"@type":"BreadcrumbList"/);
+  });
 });

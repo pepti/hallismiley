@@ -25,6 +25,16 @@
   "email.order.vatNote": "Verð er með 24% VSK.",
   "email.order.viewButton": "Skoða pöntun",
   "email.order.questions": "Einhverjar spurningar? Svaraðu þessum tölvupósti og við höfum samband.",
+  "email.order.bookingHeading": "Tímabókun",
+  "email.order.bookingBody": "Pöntunin þín inniheldur þjónustu. Halli hefur samband innan 24 klst. til að bóka tíma.",
+
+  "email.bookingNotification.subject": "Ný þjónustubókun — pöntun {orderNumber}",
+  "email.bookingNotification.heading": "Þjónustubókun barst",
+  "email.bookingNotification.body": "Pöntun <strong style=\"color:#c9a84c;\">{orderNumber}</strong> frá {customer} inniheldur þjónustulínur. Hafðu samband innan 24 klst. til að bóka tíma.",
+  "email.bookingNotification.totalLabel": "Heildarverð pöntunar",
+  "email.bookingNotification.button": "Opna pöntunarstjórn",
+  "email.bookingNotification.footer": "Þessi tilkynning er send einu sinni á hverja greiða pöntun með bókanlegum atriðum. Pantanir með birgðum eru ekki snertar.",
+  "email.bookingNotification.unknownCustomer": "Viðskiptavinur (enginn netfang skráð)",
 
   "email.rsvpNotification.subject.new": "Nýtt RSVP frá {name}",
   "email.rsvpNotification.subject.update": "RSVP uppfært: {name}",

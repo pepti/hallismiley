@@ -17,15 +17,22 @@ const APP_URL = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\
 
 // Static list pages — one entry per locale. The home page gets an extra
 // x-default entry because it's the locale-selection landing.
+//
+// /shop/{products,tech,carpentry} are department sub-routes from
+// shop-redesign step 2 — each gets its own SEO entry so search indexes
+// land users on the specific section instead of the umbrella /shop page.
 const STATIC_ROUTES = [
-  { path: '',          priority: '1.0', changefreq: 'monthly', includeXDefault: true  },
-  { path: '/projects', priority: '0.9', changefreq: 'weekly'                          },
-  { path: '/halli',    priority: '0.8', changefreq: 'monthly'                         },
-  { path: '/shop',     priority: '0.8', changefreq: 'weekly'                          },
-  { path: '/news',     priority: '0.7', changefreq: 'weekly'                          },
-  { path: '/contact',  priority: '0.6', changefreq: 'monthly'                         },
-  { path: '/privacy',  priority: '0.3', changefreq: 'yearly'                          },
-  { path: '/terms',    priority: '0.3', changefreq: 'yearly'                          },
+  { path: '',                 priority: '1.0', changefreq: 'monthly', includeXDefault: true  },
+  { path: '/projects',        priority: '0.9', changefreq: 'weekly'                          },
+  { path: '/halli',           priority: '0.8', changefreq: 'monthly'                         },
+  { path: '/shop',            priority: '0.8', changefreq: 'weekly'                          },
+  { path: '/shop/products',   priority: '0.8', changefreq: 'weekly'                          },
+  { path: '/shop/tech',       priority: '0.7', changefreq: 'weekly'                          },
+  { path: '/shop/carpentry',  priority: '0.7', changefreq: 'weekly'                          },
+  { path: '/news',            priority: '0.7', changefreq: 'weekly'                          },
+  { path: '/contact',         priority: '0.6', changefreq: 'monthly'                         },
+  { path: '/privacy',         priority: '0.3', changefreq: 'yearly'                          },
+  { path: '/terms',           priority: '0.3', changefreq: 'yearly'                          },
 ];
 
 // XML escaping — URLs can contain &, <, > via slugs in principle even
