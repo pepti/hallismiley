@@ -1,6 +1,6 @@
 // ProductCard — grid tile for the shop listing.
 import { formatMoney, getCurrency } from '../services/cart.js';
-import { t } from '../i18n/i18n.js';
+import { t, href } from '../i18n/i18n.js';
 
 // Shared across ProductCard + ProductView so "low" means the same everywhere.
 export const LOW_STOCK_THRESHOLD = 3;
@@ -37,7 +37,11 @@ export function renderProductCard(product) {
 
   const a = document.createElement('a');
   a.className = 'product-card';
-  a.href = `#/shop/${encodeURIComponent(product.slug)}`;
+  // Clean URL — the Router's click interceptor only catches `<a>` clicks whose
+  // href starts with '/'. The legacy `#/shop/<slug>` form just mutates the
+  // fragment and stagnates (migrateLegacyHash only runs once at boot), so
+  // navigation never fires when a user clicks a card after the SPA is live.
+  a.href = href(`/shop/${encodeURIComponent(product.slug)}`);
   a.setAttribute('data-testid', `product-card-${product.slug}`);
   a.innerHTML = `
     <div class="product-card__media">
