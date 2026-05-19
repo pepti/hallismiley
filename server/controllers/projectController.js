@@ -8,6 +8,7 @@ const { parseYouTubeId } = require('../utils/youtube');
 const { UPLOAD_ROOT }    = require('../config/paths');
 const { t }              = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
+const { submitLocalized }     = require('../services/indexNow');
 
 // Field pairs for EN → IS auto-translation on admin save.
 const PROJECT_TRANSLATE_PAIRS = [
@@ -89,7 +90,9 @@ const projectController = {
     try {
       // Auto-fill empty IS fields from their EN counterparts before create.
       await autoTranslateFields(req.body, PROJECT_TRANSLATE_PAIRS);
-      res.status(201).json(await Project.create(req.body));
+      const project = await Project.create(req.body);
+      submitLocalized(`/projects/${project.id}`);
+      res.status(201).json(project);
     } catch (err) { next(err); }
   },
 
@@ -101,6 +104,7 @@ const projectController = {
       await autoTranslateFields(req.body, PROJECT_TRANSLATE_PAIRS, { existingRow });
       const project = await Project.update(req.params.id, req.body);
       if (!project) return res.status(404).json({ error: t(req.locale, 'errors.project.projectNotFound'), code: 404 });
+      submitLocalized(`/projects/${project.id}`);
       res.json(project);
     } catch (err) { next(err); }
   },

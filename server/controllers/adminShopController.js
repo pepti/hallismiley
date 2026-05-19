@@ -8,6 +8,7 @@ const Order   = require('../models/Order');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
+const { submitLocalized }     = require('../services/indexNow');
 
 // EN → IS pairs for auto-translation on admin save.
 // Shop-redesign section fields (category, subcategory, duration_minutes,
@@ -163,6 +164,7 @@ const adminShopController = {
         is_bookable:      Boolean(is_bookable),
         active: active !== false,
       });
+      if (product.active) submitLocalized(`/shop/${product.slug}`);
       return res.status(201).json({ product });
     } catch (err) {
       if (err.code === '23505') { // unique_violation on slug
@@ -194,6 +196,14 @@ const adminShopController = {
 
       const product = await Product.update(req.params.id, req.body);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      // Notify IndexNow for active products. If the slug changed, hit the old
+      // one too so Bing drops the now-404 URL from its index.
+      if (product.active) {
+        submitLocalized(`/shop/${product.slug}`);
+        if (existingRow?.slug && existingRow.slug !== product.slug) {
+          submitLocalized(`/shop/${existingRow.slug}`);
+        }
+      }
       return res.json({ product });
     } catch (err) {
       if (err.code === '23505') {
@@ -207,6 +217,8 @@ const adminShopController = {
     try {
       const product = await Product.deactivate(req.params.id);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      // Ping IndexNow so Bing re-fetches and drops the now-inactive product.
+      submitLocalized(`/shop/${product.slug}`);
       return res.json({ product });
     } catch (err) { next(err); }
   },

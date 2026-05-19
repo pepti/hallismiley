@@ -182,6 +182,28 @@ async function fetchContentMeta(contentKey, locale) {
   }
 }
 
+// Like fetchContentMeta but returns the full `value` JSON, not just the
+// title/description meta fields. Used by crawlerHomeHtml() to pull the
+// hero/skills/stats payload that the SPA would otherwise render client-side.
+async function fetchContentFull(contentKey, locale) {
+  if (!contentKey) return null;
+  try {
+    const { rows } = await db.query(
+      `SELECT value FROM site_content
+        WHERE key = $1 AND locale = $2
+        UNION ALL
+       SELECT value FROM site_content
+        WHERE key = $1 AND locale = $3
+        LIMIT 1`,
+      [contentKey, locale, DEFAULT_LOCALE]
+    );
+    const v = rows[0]?.value;
+    return v && typeof v === 'object' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchDetailRow(detail) {
   try {
     if (detail.type === 'news') {
@@ -359,6 +381,24 @@ function productSchema(row, locale, canonical) {
   };
 }
 
+function websiteSchema() {
+  // Emitted only on the home page. The alternateName array binds branded
+  // search variants (one-word "Hallismiley", spaced "Halli Smiley") to the
+  // site so Bing's knowledge graph treats them as the same entity. The
+  // publisher reference resolves to the Person schema baked into
+  // public/index.html (same @id).
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id':  `${APP_URL}/#website`,
+    url:    APP_URL,
+    name:   'Halli Smiley',
+    alternateName: ['Hallismiley', 'Halli', 'halli smiley'],
+    inLanguage: ['en', 'is'],
+    publisher: { '@id': `${APP_URL}/#person` },
+  };
+}
+
 function creativeWorkSchema(row, locale, canonical) {
   return {
     '@context': 'https://schema.org',
@@ -448,6 +488,91 @@ function crawlerDetailHtml(type, row, locale) {
   return '';
 }
 
+// Crawler HTML for the home page. The SPA renders hero/skills/stats/news/projects
+// client-side, so without this Bingbot would index a near-empty <div id="app">.
+// We pull the same site_content rows the SPA would fetch and emit real H1/H2
+// + anchor links. Resilient: any sub-query that fails just returns null and
+// we fall back to hardcoded copy keyed off DEFAULT_META.
+async function crawlerHomeHtml(locale) {
+  let heroRow, skillsRow, statsRow, newsRows, projectRows;
+  try {
+    [heroRow, skillsRow, statsRow, newsRows, projectRows] = await Promise.all([
+      fetchContentFull('home_hero',   locale),
+      fetchContentFull('home_skills', locale),
+      fetchContentFull('home_stats',  locale),
+      fetchListRows('news', 3),
+      fetchListRows('projects', 3),
+    ]);
+  } catch {
+    return '';
+  }
+  const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE]).home;
+
+  // Hero — heading + tagline. Field names match what HomeView reads (heading,
+  // tagline, subheading). Fall back to the page-level meta defaults so the
+  // H1 is never empty.
+  const heroHeading = heroRow?.heading || heroRow?.title || defaults.title;
+  const heroTagline = heroRow?.tagline || heroRow?.subheading || heroRow?.description || defaults.description;
+  const parts = [];
+  parts.push(`<h1>${esc(heroHeading)}</h1>`);
+  if (heroTagline) parts.push(`<p>${esc(heroTagline)}</p>`);
+
+  // Skills — eyebrow + title + description + list of {label, value}.
+  if (skillsRow) {
+    const eyebrow     = skillsRow.eyebrow || '';
+    const skillsTitle = (skillsRow.title || '').replace(/\n/g, ' ');
+    const heading     = [eyebrow, skillsTitle].filter(Boolean).join(' ');
+    if (heading) parts.push(`<h2>${esc(heading)}</h2>`);
+    if (skillsRow.description) parts.push(`<p>${esc(stripHtml(skillsRow.description))}</p>`);
+    if (Array.isArray(skillsRow.items) && skillsRow.items.length) {
+      const li = skillsRow.items
+        .filter(i => i && (i.label || i.value))
+        .map(i => `<li><strong>${esc(i.label || '')}</strong> — ${esc(i.value || '')}</li>`)
+        .join('');
+      if (li) parts.push(`<ul>${li}</ul>`);
+    }
+  }
+
+  // Stats — array of {num, label}. Keep terse; H2 + list.
+  if (Array.isArray(statsRow) || (statsRow && Array.isArray(statsRow.items))) {
+    const items = Array.isArray(statsRow) ? statsRow : statsRow.items;
+    const li = items
+      .filter(s => s && (s.num || s.label))
+      .map(s => `<li><strong>${esc(s.num || '')}</strong> ${esc(s.label || '')}</li>`)
+      .join('');
+    if (li) {
+      const statsHeading = locale === 'is' ? 'Tölur' : 'By the numbers';
+      parts.push(`<h2>${esc(statsHeading)}</h2><ul>${li}</ul>`);
+    }
+  }
+
+  // Featured projects — top 3 with anchor links into /<locale>/projects/<id>.
+  if (Array.isArray(projectRows) && projectRows.length) {
+    const sectionHeading = locale === 'is' ? 'Valin verkefni' : 'Featured projects';
+    const li = projectRows.map(row => {
+      const title = pickLocale(row, 'title', 'title_is', locale);
+      const desc  = pickLocale(row, 'description', 'description_is', locale);
+      const href  = `/${locale}/projects/${row.id}`;
+      return `<li><a href="${esc(href)}"><h3>${esc(title)}</h3></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
+    }).join('');
+    parts.push(`<h2>${esc(sectionHeading)}</h2><ul>${li}</ul>`);
+  }
+
+  // Latest news — top 3, same shape.
+  if (Array.isArray(newsRows) && newsRows.length) {
+    const sectionHeading = locale === 'is' ? 'Nýjustu fréttir' : 'Latest news';
+    const li = newsRows.map(row => {
+      const title   = pickLocale(row, 'title', 'title_is', locale);
+      const summary = pickLocale(row, 'summary', 'summary_is', locale);
+      const href    = `/${locale}/news/${row.slug}`;
+      return `<li><a href="${esc(href)}"><h3>${esc(title)}</h3></a><p>${esc(summary)}</p></li>`;
+    }).join('');
+    parts.push(`<h2>${esc(sectionHeading)}</h2><ul>${li}</ul>`);
+  }
+
+  return parts.join('');
+}
+
 // ── HTML rewriting ───────────────────────────────────────────────────────────
 
 function replaceById(html, id, attrs, innerText) {
@@ -476,6 +601,24 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${esc(description)}" id="ssr-description" />`
   );
+  // Search-engine ownership verification — populated from env vars set in
+  // Azure App Service after the respective Webmaster Tools / Search Console
+  // accounts issue the token. Unset env vars leave the empty placeholder
+  // alone (harmless — Bing/Google ignore empty content).
+  const bingToken   = process.env.BING_VERIFICATION_TOKEN || '';
+  const googleToken = process.env.GOOGLE_VERIFICATION_TOKEN || '';
+  if (bingToken) {
+    html = html.replace(
+      /<meta\s+name="msvalidate\.01"[^>]*>/i,
+      `<meta name="msvalidate.01" content="${esc(bingToken)}" />`
+    );
+  }
+  if (googleToken) {
+    html = html.replace(
+      /<meta\s+name="google-site-verification"[^>]*>/i,
+      `<meta name="google-site-verification" content="${esc(googleToken)}" />`
+    );
+  }
   html = html.replace(
     /<meta\s+property="og:title"[^>]*>/i,
     `<meta property="og:title" content="${esc(title)}" />`
@@ -612,6 +755,11 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
         locale,
       });
       if (bc) schemas.push(bc);
+    } else {
+      // Home page — emit WebSite schema (alongside the baked Person schema
+      // in public/index.html). Binds brand-name variants for knowledge-graph
+      // matching on Bing/Google.
+      schemas.push(websiteSchema());
     }
   }
 
@@ -625,10 +773,12 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
 
   const jsonLdHtml = jsonLdScript(schemas);
 
-  // Crawler body content — lists (/news, /shop, /projects) and all
-  // detail pages. Static pages (home, halli, contact, privacy, terms)
-  // rely on the SPA; their content is small enough that Google's JS
-  // renderer handles it and social scrapers can read the <head> alone.
+  // Crawler body content — covers the home page, list pages, and detail
+  // pages. Bing and other non-JS crawlers index the initial HTML response,
+  // so anything the SPA would render client-side has to be mirrored here.
+  // Other static pages (halli, contact, privacy, terms) still rely on the
+  // SPA — their <head> meta plus JSON-LD give crawlers enough signal and
+  // the content there changes too rarely to be worth pre-rendering.
   let crawlerHtml = '';
   if (detail) {
     if (detailRow) crawlerHtml = crawlerDetailHtml(detail.type, detailRow, locale);
@@ -640,6 +790,14 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     // Shop section sub-route — same crawler list shape as /shop but filtered.
     const rows = await fetchListRows('shop', 10, staticMeta.categoryFilter);
     if (rows.length) crawlerHtml = crawlerListHtml('shop', rows, locale);
+  } else if (route === '/') {
+    try {
+      crawlerHtml = await crawlerHomeHtml(locale);
+    } catch {
+      // Silent fallback — homepage must still render even if every
+      // sub-query fails. Crawlers just lose the body hint for this request.
+      crawlerHtml = '';
+    }
   }
 
   let html = rewriteHead(loadTemplate(), {

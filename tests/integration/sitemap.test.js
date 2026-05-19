@@ -41,6 +41,8 @@ describe('GET /sitemap.xml', () => {
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/contact<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/halli<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/party<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/party<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/privacy<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/terms<\/loc>/);
   });
