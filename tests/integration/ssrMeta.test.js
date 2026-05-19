@@ -118,4 +118,84 @@ describe('SSR meta-injection — SPA catch-all', () => {
     const res = await request(app).get('/en/');
     expect(res.text).not.toMatch(/halliprojects\.is/);
   });
+
+  // ── Bing-focused SEO additions ─────────────────────────────────────────────
+
+  describe('search-engine verification tokens (Bing / Google)', () => {
+    afterEach(() => {
+      delete process.env.BING_VERIFICATION_TOKEN;
+      delete process.env.GOOGLE_VERIFICATION_TOKEN;
+    });
+
+    test('BING_VERIFICATION_TOKEN populates the msvalidate.01 meta tag', async () => {
+      process.env.BING_VERIFICATION_TOKEN = 'TEST-bing-token-1234';
+      const res = await request(app).get('/en/');
+      expect(res.text).toMatch(/<meta name="msvalidate\.01" content="TEST-bing-token-1234"/);
+    });
+
+    test('GOOGLE_VERIFICATION_TOKEN populates the google-site-verification meta tag', async () => {
+      process.env.GOOGLE_VERIFICATION_TOKEN = 'gv-test-token-5678';
+      const res = await request(app).get('/en/');
+      expect(res.text).toMatch(/<meta name="google-site-verification" content="gv-test-token-5678"/);
+    });
+
+    test('unset env vars leave the placeholder empty (no token leaks into HTML)', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.text).toMatch(/<meta name="msvalidate\.01" content=""/);
+      expect(res.text).toMatch(/<meta name="google-site-verification" content=""/);
+    });
+  });
+
+  describe('home page — WebSite schema + crawler content', () => {
+    test('emits a WebSite JSON-LD schema with brand-name alternates', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/<script type="application\/ld\+json">[^<]*"@type":"WebSite"/);
+      expect(res.text).toMatch(/"alternateName":\["Hallismiley","Halli","halli smiley"\]/);
+      // Publisher reference resolves to the baked Person schema's @id.
+      expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#person"\}/);
+    });
+
+    test('does not emit WebSite schema on non-home pages', async () => {
+      const res = await request(app).get('/en/halli');
+      expect(res.status).toBe(200);
+      expect(res.text).not.toMatch(/"@type":"WebSite"/);
+    });
+
+    test('injects a hidden crawler-content block with H1 and section H2s', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/<div id="crawler-content" hidden aria-hidden="true">/);
+      // H1 falls back to the home title when no site_content row exists.
+      expect(res.text).toMatch(/<div id="crawler-content"[^>]*><h1>[^<]+<\/h1>/);
+    });
+  });
+
+  describe('IndexNow key-file route', () => {
+    const ORIGINAL_KEY = process.env.INDEXNOW_KEY;
+    afterEach(() => {
+      if (ORIGINAL_KEY === undefined) delete process.env.INDEXNOW_KEY;
+      else process.env.INDEXNOW_KEY = ORIGINAL_KEY;
+    });
+
+    test('serves the key as text/plain when the URL matches INDEXNOW_KEY', async () => {
+      process.env.INDEXNOW_KEY = 'abc123def456ghi789';
+      const res = await request(app).get('/abc123def456ghi789.txt');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/plain/);
+      expect(res.text).toBe('abc123def456ghi789');
+    });
+
+    test('returns 404 (via static fall-through) when the key does not match', async () => {
+      process.env.INDEXNOW_KEY = 'abc123def456ghi789';
+      const res = await request(app).get('/wrongkey00000000.txt');
+      expect(res.status).toBe(404);
+    });
+
+    test('returns 404 when INDEXNOW_KEY is unset (dev/preview default)', async () => {
+      delete process.env.INDEXNOW_KEY;
+      const res = await request(app).get('/abc123def456ghi789.txt');
+      expect(res.status).toBe(404);
+    });
+  });
 });
