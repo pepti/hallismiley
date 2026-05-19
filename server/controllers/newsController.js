@@ -6,6 +6,7 @@ const { parseYouTubeId } = require('../utils/youtube');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
+const { submitLocalized }     = require('../services/indexNow');
 
 // Field pairs for EN → IS auto-translation on admin save. `cover_image_is`
 // is omitted deliberately: it is a URL/path, not translatable prose.
@@ -217,6 +218,10 @@ const newsController = {
          category, req.user.id, published, published_at]
       );
 
+      // Notify IndexNow when a newly-created article is already published.
+      // Drafts don't get a public URL yet, so skip until they're published.
+      if (rows[0].published) submitLocalized(`/news/${rows[0].slug}`);
+
       res.status(201).json(rows[0]);
     } catch (err) {
       if (err.code === '23505' && err.constraint === 'news_articles_slug_key') {
@@ -284,6 +289,16 @@ const newsController = {
          title_is, summary_is, body_is, cover_image_is,
          category, published, published_at, id]
       );
+
+      // Notify IndexNow on any published-article edit, including the
+      // draft → published flip. If the slug changed, hit the old one too
+      // so Bing drops it from its cache.
+      if (rows[0].published) {
+        submitLocalized(`/news/${rows[0].slug}`);
+        if (current.slug && current.slug !== rows[0].slug) {
+          submitLocalized(`/news/${current.slug}`);
+        }
+      }
 
       res.json(rows[0]);
     } catch (err) {
