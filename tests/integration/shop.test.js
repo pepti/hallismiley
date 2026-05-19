@@ -178,6 +178,81 @@ describe('Order.listItems — is_bookable flag (shop redesign step 5)', () => {
   });
 });
 
+// ─── Admin-side guards added during PR review ───────────────────────────────
+// Two should-fix items the review flagged: product slugs that collide with
+// the section sub-routes (so they'd be unreachable) must be rejected, and
+// the free-text subcategory column needs a server-side length cap to mirror
+// the admin form's maxlength="60". Both happen at the controller layer.
+
+describe('POST /api/v1/admin/shop/products — reserved slugs + subcategory length', () => {
+  // Reuse the existing admin session helper from the shared test harness so
+  // we don't duplicate role-setup machinery.
+  const helpers = require('../helpers');
+  let adminCookie;
+
+  beforeAll(async () => {
+    await helpers.cleanTables();
+    adminCookie = await helpers.getTestSessionCookie();
+  });
+
+  afterAll(async () => {
+    // Remove anything this block created so other suites aren't tripped up.
+    await db.query(`DELETE FROM products WHERE slug LIKE 'reserved-slug-test-%'`);
+  });
+
+  const baseBody = () => ({
+    name: 'Reserved Slug Test',
+    description: '',
+    price_isk: 1000,
+    price_eur: 700,
+    stock: 0,
+  });
+
+  for (const reserved of ['products', 'tech', 'carpentry']) {
+    test(`rejects slug='${reserved}' with a section-collision error`, async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/shop/products')
+        .set('Cookie', adminCookie)
+        .send({ ...baseBody(), slug: reserved });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/reserved for the \/shop\//);
+    });
+  }
+
+  test('accepts a normal slug (sanity check the reservation does not over-match)', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/shop/products')
+      .set('Cookie', adminCookie)
+      .send({ ...baseBody(), slug: 'reserved-slug-test-product' });
+    expect(res.status).toBe(201);
+  });
+
+  test('rejects subcategory longer than 60 characters', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/shop/products')
+      .set('Cookie', adminCookie)
+      .send({
+        ...baseBody(),
+        slug: 'reserved-slug-test-long-sub',
+        subcategory: 'x'.repeat(61),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/subcategory must be 60 characters or fewer/);
+  });
+
+  test('accepts subcategory at exactly 60 characters (boundary)', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/shop/products')
+      .set('Cookie', adminCookie)
+      .send({
+        ...baseBody(),
+        slug: 'reserved-slug-test-boundary',
+        subcategory: 'x'.repeat(60),
+      });
+    expect(res.status).toBe(201);
+  });
+});
+
 describe('sendBookingNotification — guard rails (shop redesign step 5)', () => {
   // Resend is unconfigured under jest env (no RESEND_API_KEY), so the function
   // logs and returns rather than dispatching mail. We assert it never throws

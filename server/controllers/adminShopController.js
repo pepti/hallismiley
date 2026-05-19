@@ -24,8 +24,20 @@ const PRODUCT_TRANSLATE_PAIRS = [
 const VALID_CATEGORY = ['product', 'tech_service', 'carpentry_service'];
 const VALID_DELIVERY = ['remote', 'in_person', 'hybrid'];
 
+// Slugs that collide with the section sub-routes added in step 2 — a product
+// with one of these slugs would be unreachable in the UI because the router
+// matches /shop/products etc. before the /shop/:slug detail pattern.
+const RESERVED_SHOP_SLUGS = new Set(['products', 'tech', 'carpentry']);
+
+// Server-side cap mirroring the admin form's maxlength="60" on the
+// subcategory input — keeps non-browser clients from POSTing kilobyte
+// blobs into a free-text column without a DB CHECK.
+const SUBCATEGORY_MAX_LEN = 60;
+
 function validateSlug(slug) {
-  return typeof slug === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
+  if (typeof slug !== 'string') return false;
+  if (RESERVED_SHOP_SLUGS.has(slug)) return false;
+  return /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
 }
 
 // Returns an error message if any section-redesign field is malformed,
@@ -44,6 +56,10 @@ function validateSectionFields(body) {
     if (!Number.isInteger(n) || n <= 0) {
       return 'duration_minutes must be a positive integer';
     }
+  }
+  if (body.subcategory != null && typeof body.subcategory === 'string' &&
+      body.subcategory.length > SUBCATEGORY_MAX_LEN) {
+    return `subcategory must be ${SUBCATEGORY_MAX_LEN} characters or fewer`;
   }
   return null;
 }
@@ -103,6 +119,12 @@ const adminShopController = {
         price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active,
         category, subcategory, duration_minutes, delivery_format, is_bookable,
       } = req.body;
+      if (typeof slug === 'string' && RESERVED_SHOP_SLUGS.has(slug)) {
+        return res.status(400).json({
+          error: `slug '${slug}' is reserved for the /shop/${slug} section page`,
+          code: 400,
+        });
+      }
       if (!validateSlug(slug)) {
         return res.status(400).json({ error: 'slug must be lowercase alphanumeric with hyphens (1-80 chars)', code: 400 });
       }
@@ -152,8 +174,16 @@ const adminShopController = {
 
   async updateProduct(req, res, next) {
     try {
-      if (req.body.slug !== undefined && !validateSlug(req.body.slug)) {
-        return res.status(400).json({ error: 'invalid slug', code: 400 });
+      if (req.body.slug !== undefined) {
+        if (typeof req.body.slug === 'string' && RESERVED_SHOP_SLUGS.has(req.body.slug)) {
+          return res.status(400).json({
+            error: `slug '${req.body.slug}' is reserved for the /shop/${req.body.slug} section page`,
+            code: 400,
+          });
+        }
+        if (!validateSlug(req.body.slug)) {
+          return res.status(400).json({ error: 'invalid slug', code: 400 });
+        }
       }
       const sectionErr = validateSectionFields(req.body);
       if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
