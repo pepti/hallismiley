@@ -11,6 +11,7 @@ const {
   SITE_CONTENT_TRANSLATE_SKIP,
   runAutoTranslateSideEffect,
 } = require('../services/siteContentTranslate');
+const { AnalyticsEvent } = require('../models/Analytics');
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -278,6 +279,11 @@ const partyController = {
       // the request on email failure.
       _sendRsvpEmails({ userId: req.user.id, answers, isUpdate })
         .catch(err => console.error(`[partyController] RSVP emails failed: ${err.message}`));
+
+      // Count only NEW RSVPs as conversions, not edits to an existing one.
+      if (!isUpdate) {
+        AnalyticsEvent.record({ event_type: 'party_rsvp', locale: req.locale }).catch(() => {});
+      }
     } catch (err) { next(err); }
   },
 

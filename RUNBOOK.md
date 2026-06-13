@@ -85,6 +85,39 @@ ALTER TABLE projects DROP COLUMN IF EXISTS some_column;
 
 ---
 
+## Container Registry Housekeeping
+
+A scheduled ACR task named `weekly-purge` (created 2026-06-10) lives in Azure —
+not in this repo — and prunes old images from `hallismileyacr` every Sunday at
+03:00 UTC. It keeps the 10 newest tags on the `hallismiley` repository
+(`latest` + recent commit SHAs) and deletes every tag older than 14 days beyond
+those, plus untagged manifests. The `ferdabox` repository is deliberately not
+touched. Without this task the registry grows ~340 MB per deploy forever — it
+had reached 38.5 GB (vs. 10 GB included in the Basic tier) before the first
+manual purge on 2026-06-10.
+
+```bash
+# Inspect the task / trigger a run now / pause it:
+az acr task show --registry hallismileyacr --name weekly-purge -o table
+az acr task run  --registry hallismileyacr --name weekly-purge
+az acr task update --registry hallismileyacr --name weekly-purge --status Disabled
+
+# Registry storage usage (the meter lags deletions by minutes–hours):
+az acr show-usage --name hallismileyacr -o table
+```
+
+> **Interaction with rollbacks:** if prod stays pinned to an image older than
+> the 10 newest tags for more than 14 days, the weekly purge will delete the
+> very tag prod points at, and the next container restart will fail to pull.
+> For any long-lived rollback, lock the tag (and unlock it once back on HEAD):
+
+```bash
+az acr repository update --name hallismileyacr \
+  --image hallismiley:<sha> --delete-enabled false --write-enabled false
+```
+
+---
+
 ## Seeding the Shop (`server/scripts/seed-shop.js`)
 
 The seeder's **default mode is prod-safe**: it upserts the defined clothing
@@ -124,6 +157,33 @@ container mounts at `/app/uploads`.
 - Destructive / reset behavior MUST be opt-in via an explicit flag.
 - The tool MUST print which mode it's in at startup so you see it before
   it does any work.
+
+---
+
+## Analytics (first-party, cookieless)
+
+Visitor analytics live in two tables — `page_views` (every page view) and
+`analytics_events` (conversions: contact submits, party RSVPs, shop checkouts).
+Visitors are counted via `visitor_token`, an irreversible SHA-256 of
+`(ip + user-agent + a daily in-memory salt)`. No cookies, no IP, no user-agent
+are stored. View the data at `/admin/analytics` (admin role required).
+
+**"Unique visitors" can over-count after a mid-day restart.** The salt lives
+only in process memory and regenerates whenever the container restarts (and at
+00:00 UTC). After a restart the same visitor gets a new token for the rest of
+that day, so they may be counted twice. This is an accepted trade-off of the
+cookieless design — total page views are unaffected; only same-day uniques.
+
+**Retention / pruning (manual).** There is no scheduler wired into the app, so
+the tables grow until pruned. `page_views` is the only one that grows quickly;
+`analytics_events` is tiny (conversions only) — keep it. To prune old views
+(e.g. older than ~13 months), run against the target DB:
+
+```bash
+psql "$DATABASE_URL" -c "DELETE FROM page_views WHERE created_at < NOW() - INTERVAL '400 days';"
+```
+
+For a low-traffic portfolio this is a once-a-year chore at most.
 
 ---
 

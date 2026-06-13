@@ -18,6 +18,8 @@ const newsRoutes     = require('./routes/newsRoutes');
 const partyRoutes    = require('./routes/partyRoutes');
 const shopRoutes     = require('./routes/shopRoutes');
 const adminShopRoutes = require('./routes/adminShopRoutes');
+const analyticsRoutes      = require('./routes/analyticsRoutes');
+const analyticsAdminRoutes = require('./routes/analyticsAdminRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -415,7 +417,9 @@ app.use('/auth',              authRoutes);
 app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
+app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

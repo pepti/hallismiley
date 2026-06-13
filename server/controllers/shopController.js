@@ -10,6 +10,7 @@ const { isConfigured: stripeIsConfigured } = require('../config/stripe');
 const stripeService = require('../services/stripeService');
 const { sendOrderReceipt } = require('../services/emailService');
 const { t }                = require('../i18n');
+const { AnalyticsEvent }   = require('../models/Analytics');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -454,7 +455,14 @@ async function handleCheckoutCompleted(session) {
     return;
   }
 
-  // Success path — send receipt (best-effort; don't fail the webhook on email errors)
+  // Success path — payment confirmed and stock committed.
+  // Fire-and-forget conversion event (no PII — currency + amount only).
+  AnalyticsEvent.record({
+    event_type: 'shop_checkout',
+    props: { currency: order.currency, total: order.total },
+  }).catch(() => {});
+
+  // Send receipt (best-effort; don't fail the webhook on email errors)
   try {
     const items = await Order.listItems(order.id);
     const finalOrder = await Order.findById(order.id);

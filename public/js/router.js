@@ -5,6 +5,7 @@ import { HalliView }          from './views/HalliView.js';
 import { ContactView }        from './views/ContactView.js';
 import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
+import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -32,6 +33,7 @@ import {
   loadLocale, getLocale, getPreferredLocale,
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
+import { trackPageView } from './services/usage.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -44,6 +46,7 @@ const ROUTES = [
   { pattern: '/about',           factory: ()  => new HalliView() },
   { pattern: '/contact',         factory: ()  => new ContactView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminAnalyticsView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
@@ -188,6 +191,10 @@ export class Router {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
+    if (path === '/admin/analytics' && (!isAuthenticated() || !isAdmin())) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
     if (path === '/profile' && !isAuthenticated()) {
       navigateReplace('/' + getLocale() + '/login');
       return;
@@ -220,5 +227,11 @@ export class Router {
     this.navBar.setActive(pattern || '/');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Anonymous page-view beacon. Placed after the commit point (past the
+    // stale-nav guard and the locale/admin redirects) so it fires exactly once
+    // per rendered view — covering pushState, replaceState, popstate, and the
+    // initial load (init() calls _navigate once).
+    trackPageView();
   }
 }

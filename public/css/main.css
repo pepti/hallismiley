@@ -12,6 +12,11 @@
 @import './news.css';
 @import './halli-bio.css';
 @import './shop.css';
+@import './analytics-admin.css';
+@import './theme-switcher.css';
+/* themes.css must stay LAST — its html[data-theme] rules out-specify and
+   override the component CSS above when an alternate theme is active. */
+@import './themes.css';
 
 body {
   font-family: var(--font-sans);
