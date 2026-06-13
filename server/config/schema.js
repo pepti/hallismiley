@@ -1381,6 +1381,18 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
     ],
   },
+  {
+    // Product inventory codes — SKU + barcode (EAN-13/UPC/GTIN/ISBN). Optional
+    // TEXT; sku is indexed for lookup. Surfaced in the admin product editor,
+    // with an optional native-camera barcode scanner that fills the field.
+    // Authoritative copy; human-reference duplicate in server/migrations/047_product_codes.sql.
+    name: '047_product_codes',
+    statements: [
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS sku     TEXT`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_products_sku ON products (sku)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

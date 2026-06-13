@@ -71,7 +71,7 @@ const adminShopController = {
       const {
         slug, name, description,
         name_is, description_is,
-        price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active,
+        price_isk, price_eur, stock, weight_grams, shape, capacity_litres, sku, barcode, active,
       } = req.body;
       if (!validateSlug(slug)) {
         return res.status(400).json({ error: 'slug must be lowercase alphanumeric with hyphens (1-80 chars)', code: 400 });
@@ -91,6 +91,12 @@ const adminShopController = {
       if (shape != null && !VALID_SHAPES.includes(shape)) {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.shapeEnum', { values: VALID_SHAPES.join(', ') }), code: 400 });
       }
+      if (sku != null && (typeof sku !== 'string' || sku.length > 100)) {
+        return res.status(400).json({ error: 'sku must be a string (max 100 chars)', code: 400 });
+      }
+      if (barcode != null && (typeof barcode !== 'string' || barcode.length > 64)) {
+        return res.status(400).json({ error: 'barcode must be a string (max 64 chars)', code: 400 });
+      }
       const product = await Product.create({
         slug, name,
         description:    description || '',
@@ -102,6 +108,8 @@ const adminShopController = {
         weight_grams: weight_grams != null ? Number(weight_grams) : null,
         shape: shape || null,
         capacity_litres: capacity_litres != null ? Number(capacity_litres) : null,
+        sku: sku || null,
+        barcode: barcode || null,
         active: active !== false,
       });
       return res.status(201).json({ product });

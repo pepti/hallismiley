@@ -2,6 +2,7 @@
 import { getCSRFToken, getCsrfHeaders } from '../utils/api.js';
 import * as cart from '../services/cart.js';
 import { t } from '../i18n/i18n.js';
+import { BarcodeScanner } from '../components/BarcodeScanner.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -272,6 +273,15 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
             ${t('adminProducts.active')}
           </label>
         </div>
+        <div class="admin-shop__form-row">
+          <label>${t('adminProducts.sku')}
+            <input type="text" name="sku" maxlength="100" value="${_esc(existing?.sku || '')}"/>
+          </label>
+          <label>${t('adminProducts.barcode')}
+            <input type="text" name="barcode" id="admin-product-barcode" maxlength="64" value="${_esc(existing?.barcode || '')}"/>
+          </label>
+          ${BarcodeScanner.isSupported() ? `<button type="button" class="admin-shop__link" id="admin-scan-barcode">${t('shop.scan.button')}</button>` : ''}
+        </div>
         <p class="admin-shop__hint">${t('adminProducts.priceHintShort')}</p>
 
         <!-- Icelandic translations — nullable siblings. Left blank ⇒ IS
@@ -325,6 +335,22 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
   modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
+  // Optional camera barcode scan → fills the barcode field (button only present
+  // when the native BarcodeDetector API is available; see BarcodeScanner).
+  const scanBtn = modal.querySelector('#admin-scan-barcode');
+  if (scanBtn) {
+    scanBtn.addEventListener('click', () => {
+      const scanner = new BarcodeScanner({
+        onDetect: (code) => {
+          const inp = modal.querySelector('#admin-product-barcode');
+          if (inp) inp.value = code;
+          scanner.close();
+        },
+      });
+      scanner.open();
+    });
+  }
+
   const form    = modal.querySelector('#admin-product-form');
   const errorEl = modal.querySelector('#admin-product-error');
 
@@ -350,6 +376,9 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     };
     const wg = fd.get('weight_grams');
     if (wg !== null && wg !== '') body.weight_grams = Number(wg);
+    // Inventory codes — empty ⇒ null (clears the column; keeps the sku index sparse).
+    body.sku     = String(fd.get('sku') || '').trim() || null;
+    body.barcode = String(fd.get('barcode') || '').trim() || null;
 
     try {
       const headers = await getCsrfHeaders();

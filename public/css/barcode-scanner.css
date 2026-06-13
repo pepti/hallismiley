@@ -1,0 +1,21 @@
+/* Full-screen camera overlay for the native BarcodeDetector scanner
+   (public/js/components/BarcodeScanner.js). Used by the admin product editor
+   to fill the barcode field, and available for any future scan entry point. */
+.bc-scan {
+  position: fixed; inset: 0; z-index: 1000;
+  background: #000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.bc-scan__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.bc-scan__frame {
+  position: relative; width: min(78vw, 420px); height: 160px;
+  border: 3px solid rgba(255, 255, 255, 0.9); border-radius: 12px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45);
+}
+.bc-scan__hint {
+  position: relative; margin: 18px 16px 0; text-align: center;
+  color: #fff; font-size: 0.95rem; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.bc-scan__close {
+  position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+}
