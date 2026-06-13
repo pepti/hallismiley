@@ -45,6 +45,16 @@ const checkoutLimiter = rateLimit({
   message: { error: 'Too many checkout attempts, please try again later.', code: 429 },
 });
 
+// Discount-code validation — public preview; rate-limited to deter code guessing.
+const discountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
+  message: { error: 'Too many attempts, please try again later.', code: 429 },
+});
+
 // ── Public read endpoints ────────────────────────────────────────────────────
 router.get('/config',             shopController.getConfig);
 router.get('/products',           shopController.listProducts);
@@ -60,5 +70,8 @@ router.post('/checkout',
   softAuth,
   csrfProtect,
   shopController.createCheckoutSession);
+
+// Discount-code preview (display-only; checkout re-validates server-side).
+router.post('/discounts/validate', discountLimiter, shopController.validateDiscount);
 
 module.exports = router;

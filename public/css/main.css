@@ -16,6 +16,7 @@
 @import './admin-general-settings.css';
 @import './barcode-scanner.css';
 @import './admin-collections.css';
+@import './admin-discounts.css';
 @import './theme-switcher.css';
 /* themes.css must stay LAST — its html[data-theme] rules out-specify and
    override the component CSS above when an alternate theme is active. */

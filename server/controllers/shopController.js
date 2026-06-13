@@ -11,6 +11,7 @@ const stripeService = require('../services/stripeService');
 const { sendOrderReceipt } = require('../services/emailService');
 const { t }                = require('../i18n');
 const { AnalyticsEvent }   = require('../models/Analytics');
+const { computeForCode }   = require('../services/discountEngine');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -379,6 +380,33 @@ const shopController = {
       // event processed. Return 200 so we don't flood retries, but log loud.
       return res.status(200).send('Processed with errors');
     }
+  },
+
+  // POST /api/v1/shop/discounts/validate  { code, subtotal, currency }
+  // Public preview: validates a code against a client-provided subtotal and
+  // returns the computed discount. Display-only — checkout must re-validate
+  // against the server-resolved subtotal before applying any charge reduction.
+  async validateDiscount(req, res, next) {
+    try {
+      const { code, subtotal } = req.body || {};
+      const currency = (req.body && req.body.currency === 'EUR') ? 'EUR' : 'ISK';
+      const r = await computeForCode({ code, subtotal, currency });
+      if (r.error) {
+        return res.status(r.error.status).json({
+          valid: false, reason: r.error.reason, error: r.error.message,
+          params: r.error.params || null, code: r.error.status,
+        });
+      }
+      return res.json({
+        valid: true,
+        code:       r.discount.code,
+        title:      r.discount.title,
+        value_type: r.discount.value_type,
+        value:      r.discount.value,
+        currency:   r.discount.currency,
+        amount:     r.amount,
+      });
+    } catch (err) { next(err); }
   },
 };
 

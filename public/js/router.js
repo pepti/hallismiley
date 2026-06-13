@@ -7,6 +7,7 @@ import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
 import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
 import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
+import { AdminDiscountsView }  from './views/AdminDiscountsView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -49,6 +50,7 @@ const ROUTES = [
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
   { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminAnalyticsView() : new HomeView() },
   { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminGeneralSettingsView() : new HomeView() },
+  { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminDiscountsView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
@@ -198,6 +200,10 @@ export class Router {
       return;
     }
     if (path === '/admin/general' && (!isAuthenticated() || !isAdmin())) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/admin/discounts' && (!isAuthenticated() || !isAdmin())) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }

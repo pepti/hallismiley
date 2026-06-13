@@ -1423,6 +1423,40 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE INDEX IF NOT EXISTS idx_product_collections_collection ON product_collections (collection_id)`,
     ],
   },
+  {
+    // Discount codes — B2C subset of the icelandicstore engine: code-based,
+    // order-level percentage/fixed discounts with min-subtotal, total usage
+    // limit, and a date window. (The store's automatic/product/free-shipping/
+    // buy-x-get-y types, collection/wholesale targeting, and per-customer
+    // redemptions are deliberately out of scope here.) orders gains a
+    // discount_code + discount_amount snapshot for when checkout records one.
+    // Authoritative copy; human-reference duplicate in server/migrations/049_discounts.sql.
+    name: '049_discounts',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS discounts (
+        id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        code          TEXT        NOT NULL,
+        title         TEXT        NOT NULL,
+        value_type    TEXT        NOT NULL CHECK (value_type IN ('percentage','fixed')),
+        value         INTEGER     NOT NULL CHECK (value >= 0),
+        currency      TEXT        NOT NULL DEFAULT 'ISK' CHECK (currency IN ('ISK','EUR')),
+        min_subtotal  INTEGER     CHECK (min_subtotal IS NULL OR min_subtotal >= 0),
+        usage_limit   INTEGER     CHECK (usage_limit IS NULL OR usage_limit >= 1),
+        used_count    INTEGER     NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+        enabled       BOOLEAN     NOT NULL DEFAULT TRUE,
+        starts_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ends_at       TIMESTAMPTZ,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_discounts_code_lower ON discounts (LOWER(code))`,
+      `DROP TRIGGER IF EXISTS trg_discounts_updated_at ON discounts`,
+      `CREATE TRIGGER trg_discounts_updated_at BEFORE UPDATE ON discounts
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code   TEXT`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
