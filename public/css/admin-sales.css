@@ -1,0 +1,22 @@
+/* Admin sales report (/admin/sales) — summary cards, orders-per-day chart,
+   top-products table. Built on shared tokens + the admin-table style. */
+.sales-page { max-width: 900px; }
+.sales-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.sales-ranges { display: flex; gap: 6px; }
+.sales-range {
+  padding: 6px 12px; font-size: 13px; cursor: pointer;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  color: var(--text-secondary); border-radius: var(--radius-md);
+}
+.sales-range.is-active { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-primary); }
+
+.sales-cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.sales-card {
+  flex: 1; min-width: 160px; padding: 16px;
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.sales-card__label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.sales-card__value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-top: 6px; }
+
+.sales-chart-wrap { position: relative; height: 240px; margin-bottom: 24px; }
+.sales-subtitle { font-size: 16px; margin: 0 0 12px; }

@@ -243,6 +243,9 @@ export class NavBar {
         </a>
         <a href="${navHref('/admin/discounts')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/discounts">
           ${t('nav.discounts')}
+        </a>
+        <a href="${navHref('/admin/sales')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/sales">
+          ${t('nav.sales')}
         </a>` : ''}
         <a href="${navHref('/orders')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/orders">
           ${t('nav.myOrders')}

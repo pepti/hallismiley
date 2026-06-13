@@ -202,6 +202,39 @@ class Order {
     );
     return rows;
   }
+
+  // Aggregate sales over the last `days` (paid orders only — paid_at set).
+  // Revenue is grouped by currency to avoid mixing ISK + EUR; byDay (order
+  // count) and topProducts (units sold) are currency-agnostic so they're always
+  // comparable. Backs the admin sales report.
+  static async salesReport({ days = 30 } = {}) {
+    const n = Math.min(365, Math.max(1, Math.floor(Number(days) || 30)));
+    const since = `NOW() - ($1 || ' days')::interval`;
+    const [sum, byDay, top] = await Promise.all([
+      db.query(
+        `SELECT currency, COUNT(*)::int AS orders, COALESCE(SUM(total),0)::bigint AS revenue
+           FROM orders WHERE paid_at IS NOT NULL AND paid_at >= ${since}
+          GROUP BY currency ORDER BY currency`,
+        [String(n)]
+      ),
+      db.query(
+        `SELECT to_char(date_trunc('day', paid_at), 'YYYY-MM-DD') AS date, COUNT(*)::int AS orders
+           FROM orders WHERE paid_at IS NOT NULL AND paid_at >= ${since}
+          GROUP BY 1 ORDER BY 1`,
+        [String(n)]
+      ),
+      db.query(
+        `SELECT oi.product_name_snapshot AS name, SUM(oi.quantity)::int AS qty
+           FROM order_items oi JOIN orders o ON o.id = oi.order_id
+          WHERE o.paid_at IS NOT NULL AND o.paid_at >= ${since}
+          GROUP BY 1 ORDER BY qty DESC LIMIT 10`,
+        [String(n)]
+      ),
+    ]);
+    const revenueByCurrency = sum.rows.map(r => ({ currency: r.currency, orders: r.orders, revenue: Number(r.revenue) }));
+    const orders = revenueByCurrency.reduce((s, r) => s + r.orders, 0);
+    return { days: n, orders, revenueByCurrency, byDay: byDay.rows, topProducts: top.rows };
+  }
 }
 
 // Stripe webhook idempotency — insert-only; unique PK short-circuits duplicates.

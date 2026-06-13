@@ -53,6 +53,9 @@ router.post('/collections',        csrfProtect,  adminShop.createCollection);
 router.patch('/collections/:id',   csrfProtect,  adminShop.updateCollection);
 router.put('/products/:id/collections', csrfProtect, adminShop.setProductCollections);
 
+// ── Reports ───────────────────────────────────────────────────────────────────
+router.get('/reports',            adminShop.salesReport);
+
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
 router.get('/orders/:id',         adminShop.getOrder);

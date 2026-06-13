@@ -301,6 +301,16 @@ const adminShopController = {
     } catch (err) { next(err); }
   },
 
+  // ── Reports ─────────────────────────────────────────────────────────────────
+
+  async salesReport(req, res, next) {
+    try {
+      const days = Number(req.query.days) || 30;
+      const report = await Order.salesReport({ days });
+      return res.json({ report });
+    } catch (err) { next(err); }
+  },
+
   // ── Collections ─────────────────────────────────────────────────────────────
 
   async listCollections(req, res, next) {
