@@ -3,6 +3,8 @@ import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
+import { ThemeSwitcher } from './components/ThemeSwitcher.js';
+import { initTheme } from './services/themePrefs.js';
 import {
   loadLocale, getLocaleFromHash, getPreferredLocale, t,
 } from './i18n/i18n.js';
@@ -23,6 +25,12 @@ await loadLocale(initialLocale);
 const navBar = new NavBar();
 const navEl  = navBar.render();
 document.body.insertBefore(navEl, document.getElementById('app'));
+
+// ── Floating theme switcher — mounted outside #app so it survives SPA nav ──
+// theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs
+// at runtime in case the boot script was blocked.
+initTheme();
+document.body.appendChild(new ThemeSwitcher().render());
 
 // ── 4. OAuth redirect landing — show toast for ?error ────────────────────────
 (function handleOAuthLanding() {

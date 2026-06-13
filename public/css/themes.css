@@ -1,0 +1,192 @@
+/* ── Site themes ─────────────────────────────────────────────────────────────
+   Five selectable alternate colour themes (picker:
+   public/js/components/ThemeSwitcher.js). `classic` is the site's existing
+   dark charcoal+gold look — the :root default in variables.css, with no
+   data-theme attribute. The attribute lives on <html>, set pre-paint by
+   /js/theme-boot.js and at runtime by services/themePrefs.js.
+
+   This site is dark by default and its component CSS is consistently
+   token-driven, so an alternate theme only has to REDEFINE the tokens below —
+   every tokenized component re-skins automatically. (Unlike the upstream store
+   this was ported from, there is no light baseline, so the light→dark fixes —
+   logo inversion, ink-flip hovers, admin status pills — are intentionally
+   omitted; they are not needed here.)
+
+   glacier / moss / lava / aurora are immersive COLOUR themes: a deep tinted
+   surface set + light text + a gradient backdrop + gradient primary buttons.
+   black-sand is a neutral dark with solid backgrounds. html[data-theme="x"]
+   (0,1,1) out-specifies :root (0,1,0); this file is imported last in main.css,
+   so no existing component CSS needs edits. */
+
+/* ── Glacier — deep fjord navy + ice blue ── */
+html[data-theme="glacier"] {
+  color-scheme: dark;
+  --bg-base:     #0B2138;
+  --bg-base-rgb: 11, 33, 56;
+  --bg-surface:  #102C49;
+  --bg-elevated: #16385A;
+  --bg-nav:      #0A1B2E;
+  --bg-nav-rgb:  10, 27, 46;
+  --bg-hover:    #18395B;
+  --border:       rgba(190, 218, 240, 0.18);
+  --border-dim:   rgba(190, 218, 240, 0.12);
+  --border-light: rgba(190, 218, 240, 0.07);
+  --gold:         #5FB4E8;
+  --gold-light:   #82C7F0;
+  --gold-dark:    rgba(95, 180, 232, 0.55);
+  --gold-glow:    rgba(95, 180, 232, 0.16);
+  --teal:         #5FB4E8;
+  --teal-dim:     rgba(95, 180, 232, 0.12);
+  --accent-amber:     #5FB4E8;
+  --accent-amber-dim: rgba(95, 180, 232, 0.12);
+  --accent-blue:      #5FB4E8;
+  --accent-blue-dim:  rgba(95, 180, 232, 0.12);
+  --text-primary:   #EAF3FB;
+  --text-secondary: rgba(234, 243, 251, 0.78);
+  --text-muted:     rgba(234, 243, 251, 0.55);
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --bg-gradient: radial-gradient(circle at 78% 10%, rgba(95, 180, 232, 0.18), transparent 46%),
+                 linear-gradient(160deg, #0F2C49 0%, #0A1A2D 55%, #0C2645 100%);
+  --accent-gradient: linear-gradient(135deg, #82C7F0 0%, #3E97D4 100%);
+}
+
+/* ── Moss — deep forest + mint ── */
+html[data-theme="moss"] {
+  color-scheme: dark;
+  --bg-base:     #0F2418;
+  --bg-base-rgb: 15, 36, 24;
+  --bg-surface:  #15311F;
+  --bg-elevated: #1B3C26;
+  --bg-nav:      #0C1E13;
+  --bg-nav-rgb:  12, 30, 19;
+  --bg-hover:    #1D4029;
+  --border:       rgba(198, 232, 206, 0.18);
+  --border-dim:   rgba(198, 232, 206, 0.12);
+  --border-light: rgba(198, 232, 206, 0.07);
+  --gold:         #6FD08E;
+  --gold-light:   #92E0AB;
+  --gold-dark:    rgba(111, 208, 142, 0.55);
+  --gold-glow:    rgba(111, 208, 142, 0.16);
+  --teal:         #6FD08E;
+  --teal-dim:     rgba(111, 208, 142, 0.12);
+  --accent-amber:     #6FD08E;
+  --accent-amber-dim: rgba(111, 208, 142, 0.12);
+  --accent-blue:      #6FD08E;
+  --accent-blue-dim:  rgba(111, 208, 142, 0.12);
+  --text-primary:   #EAF5EC;
+  --text-secondary: rgba(234, 245, 236, 0.78);
+  --text-muted:     rgba(234, 245, 236, 0.55);
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --bg-gradient: radial-gradient(circle at 76% 10%, rgba(111, 208, 142, 0.16), transparent 46%),
+                 linear-gradient(160deg, #143620 0%, #0C1D12 55%, #112A1A 100%);
+  --accent-gradient: linear-gradient(135deg, #92E0AB 0%, #4FB575 100%);
+}
+
+/* ── Lava — deep ember + molten orange ── */
+html[data-theme="lava"] {
+  color-scheme: dark;
+  --bg-base:     #221210;
+  --bg-base-rgb: 34, 18, 16;
+  --bg-surface:  #2E1815;
+  --bg-elevated: #3A201A;
+  --bg-nav:      #1C0F0C;
+  --bg-nav-rgb:  28, 15, 12;
+  --bg-hover:    #3D211A;
+  --border:       rgba(245, 215, 200, 0.18);
+  --border-dim:   rgba(245, 215, 200, 0.12);
+  --border-light: rgba(245, 215, 200, 0.07);
+  --gold:         #FF8347;
+  --gold-light:   #FF9E68;
+  --gold-dark:    rgba(255, 131, 71, 0.55);
+  --gold-glow:    rgba(255, 131, 71, 0.18);
+  --teal:         #FF8347;
+  --teal-dim:     rgba(255, 131, 71, 0.12);
+  --accent-amber:     #FF8347;
+  --accent-amber-dim: rgba(255, 131, 71, 0.12);
+  --accent-blue:      #FF8347;
+  --accent-blue-dim:  rgba(255, 131, 71, 0.12);
+  --text-primary:   #F8ECE5;
+  --text-secondary: rgba(248, 236, 229, 0.78);
+  --text-muted:     rgba(248, 236, 229, 0.55);
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --bg-gradient: radial-gradient(circle at 80% 8%, rgba(255, 100, 40, 0.22), transparent 48%),
+                 linear-gradient(160deg, #371810 0%, #1B0D0A 55%, #2B1310 100%);
+  --accent-gradient: linear-gradient(135deg, #FF9E68 0%, #E8521C 100%);
+}
+
+/* ── Aurora — deep indigo washed with northern-lights teal/violet ── */
+html[data-theme="aurora"] {
+  color-scheme: dark;
+  --bg-base:     #15112E;
+  --bg-base-rgb: 21, 17, 46;
+  --bg-surface:  #1E1740;
+  --bg-elevated: #271E50;
+  --bg-nav:      #120D27;
+  --bg-nav-rgb:  18, 13, 39;
+  --bg-hover:    #2A2056;
+  --border:       rgba(214, 204, 244, 0.18);
+  --border-dim:   rgba(214, 204, 244, 0.12);
+  --border-light: rgba(214, 204, 244, 0.07);
+  --gold:         #B79BF7;
+  --gold-light:   #CDB8FB;
+  --gold-dark:    rgba(183, 155, 247, 0.55);
+  --gold-glow:    rgba(183, 155, 247, 0.18);
+  --teal:         #B79BF7;
+  --teal-dim:     rgba(183, 155, 247, 0.12);
+  --accent-amber:     #B79BF7;
+  --accent-amber-dim: rgba(183, 155, 247, 0.12);
+  --accent-blue:      #B79BF7;
+  --accent-blue-dim:  rgba(183, 155, 247, 0.12);
+  --text-primary:   #EFEAF8;
+  --text-secondary: rgba(239, 234, 248, 0.78);
+  --text-muted:     rgba(239, 234, 248, 0.55);
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --bg-gradient: radial-gradient(circle at 72% 12%, rgba(120, 210, 170, 0.14), transparent 46%),
+                 linear-gradient(160deg, #201448 0%, #15102F 42%, #112A41 74%, #123E39 100%);
+  --accent-gradient: linear-gradient(135deg, #CDB8FB 0%, #8A63E0 100%);
+}
+
+/* ── Black sand — neutral dark (volcanic beach), solid backgrounds ── */
+html[data-theme="black-sand"] {
+  color-scheme: dark;
+  --bg-base:     #121212;
+  --bg-base-rgb: 18, 18, 18;
+  --bg-surface:  #1A1A1A;
+  --bg-elevated: #202020;
+  --bg-nav:      #161616;
+  --bg-nav-rgb:  22, 22, 22;
+  --bg-hover:    #242424;
+  --border:       rgba(237, 234, 228, 0.16);
+  --border-dim:   rgba(237, 234, 228, 0.10);
+  --border-light: rgba(237, 234, 228, 0.06);
+  --gold:         #E8C06A;
+  --gold-light:   #F0D08A;
+  --gold-dark:    rgba(232, 192, 106, 0.55);
+  --gold-glow:    rgba(232, 192, 106, 0.08);
+  --teal:         #E8C06A;
+  --teal-dim:     rgba(232, 192, 106, 0.10);
+  --accent-amber:     #E8C06A;
+  --accent-amber-dim: rgba(232, 192, 106, 0.10);
+  --accent-blue:      #E8C06A;
+  --accent-blue-dim:  rgba(232, 192, 106, 0.10);
+  --text-primary:   #EDEAE4;
+  --text-secondary: rgba(237, 234, 228, 0.78);
+  --text-muted:     rgba(237, 234, 228, 0.55);
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.65);
+}
+
+/* ── Immersive backdrop + gradient buttons (colour themes only) ───────────────
+   Only glacier/moss/lava/aurora define --bg-gradient + --accent-gradient.
+   classic (no attribute) keeps variables.css's --bg-tint; black-sand (no
+   gradient vars) falls back to its solid --bg-base. */
+html[data-theme] body {
+  background-image: var(--bg-gradient, none);
+  background-attachment: fixed;
+}
+html[data-theme] .btn--primary { background: var(--accent-gradient, var(--gold)); }
+html[data-theme] .btn--primary:hover { box-shadow: 0 0 24px var(--gold-glow); }
