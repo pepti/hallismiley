@@ -1362,6 +1362,25 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE INDEX IF NOT EXISTS idx_analytics_events_type_date ON analytics_events (event_type, event_date)`,
     ],
   },
+  {
+    // Key-value application settings (app_settings). One row per setting: a
+    // stable string key + a JSONB value. Backs the admin "General settings"
+    // page and is the intended home for feature flags later phases introduce.
+    // See server/models/Setting.js.
+    // Authoritative copy; human-reference duplicate in server/migrations/046_app_settings.sql.
+    name: '046_app_settings',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS app_settings (
+        key        TEXT        PRIMARY KEY,
+        value      JSONB       NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `DROP TRIGGER IF EXISTS trg_app_settings_updated_at ON app_settings`,
+      `CREATE TRIGGER trg_app_settings_updated_at
+         BEFORE UPDATE ON app_settings
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

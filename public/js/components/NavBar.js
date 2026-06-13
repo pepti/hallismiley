@@ -226,6 +226,9 @@ export class NavBar {
         </a>
         <a href="${navHref('/admin/analytics')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/analytics">
           ${t('nav.analytics')}
+        </a>
+        <a href="${navHref('/admin/general')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/general">
+          ${t('nav.settings')}
         </a>` : ''}
         ${canEdit() ? `
         <a href="${navHref('/party/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/party/admin">

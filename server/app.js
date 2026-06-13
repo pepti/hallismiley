@@ -20,6 +20,7 @@ const shopRoutes     = require('./routes/shopRoutes');
 const adminShopRoutes = require('./routes/adminShopRoutes');
 const analyticsRoutes      = require('./routes/analyticsRoutes');
 const analyticsAdminRoutes = require('./routes/analyticsAdminRoutes');
+const adminGeneralSettingsRoutes = require('./routes/adminGeneralSettingsRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -405,10 +406,10 @@ app.use(express.static(path.join(__dirname, '../public'), {
     if (filePath.endsWith('index.html')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
-    // In development, don't cache JS/CSS either — avoids stale ES modules
-    // when iterating on the frontend.
+    // In development, don't cache JS/CSS/JSON either — avoids stale ES modules
+    // and stale i18n locale files when iterating on the frontend.
     if (process.env.NODE_ENV !== 'production' &&
-        (filePath.endsWith('.js') || filePath.endsWith('.css'))) {
+        (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.json'))) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
   },
@@ -420,6 +421,7 @@ app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);
