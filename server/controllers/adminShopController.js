@@ -5,6 +5,7 @@ const path = require('path');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
+const Collection = require('../models/Collection');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
@@ -55,11 +56,12 @@ const adminShopController = {
     try {
       const product = await Product.findById(req.params.id);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
-      const [images, variants] = await Promise.all([
+      const [images, variants, collections] = await Promise.all([
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: false }),
+        Collection.listForProduct(product.id),
       ]);
-      return res.json({ product: { ...product, images, variants } });
+      return res.json({ product: { ...product, images, variants, collections } });
     } catch (err) { next(err); }
   },
 
@@ -133,6 +135,11 @@ const adminShopController = {
 
       const product = await Product.update(req.params.id, req.body);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      // Optional collection membership: a `collection_ids` array replaces the
+      // product's collections in one PATCH (the editor sends it on save).
+      if (Array.isArray(req.body.collection_ids)) {
+        await Collection.setForProduct(product.id, req.body.collection_ids);
+      }
       return res.json({ product });
     } catch (err) {
       if (err.code === '23505') {
@@ -291,6 +298,60 @@ const adminShopController = {
       const order = await Order.updateStatus(req.params.id, status);
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       return res.json({ order });
+    } catch (err) { next(err); }
+  },
+
+  // ── Collections ─────────────────────────────────────────────────────────────
+
+  async listCollections(req, res, next) {
+    try {
+      const collections = await Collection.findAll({ activeOnly: false });
+      return res.json({ collections });
+    } catch (err) { next(err); }
+  },
+
+  async createCollection(req, res, next) {
+    try {
+      const { slug, title, description, active } = req.body || {};
+      if (!validateSlug(slug)) {
+        return res.status(400).json({ error: 'slug must be lowercase alphanumeric with hyphens (1-80 chars)', code: 400 });
+      }
+      if (!title || typeof title !== 'string' || title.length > 200) {
+        return res.status(400).json({ error: 'title required (max 200 chars)', code: 400 });
+      }
+      const collection = await Collection.create({ slug, title, description: description || null, active: active !== false });
+      return res.status(201).json({ collection });
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.slugTaken'), code: 409 });
+      }
+      next(err);
+    }
+  },
+
+  async updateCollection(req, res, next) {
+    try {
+      if (req.body.slug !== undefined && !validateSlug(req.body.slug)) {
+        return res.status(400).json({ error: 'invalid slug', code: 400 });
+      }
+      const collection = await Collection.update(req.params.id, req.body || {});
+      if (!collection) return res.status(404).json({ error: 'collection not found', code: 404 });
+      return res.json({ collection });
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.slugTaken'), code: 409 });
+      }
+      next(err);
+    }
+  },
+
+  async setProductCollections(req, res, next) {
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      const ids = Array.isArray(req.body.collection_ids) ? req.body.collection_ids : [];
+      const collections = await Collection.setForProduct(product.id, ids);
+      return res.json({ collections });
     } catch (err) { next(err); }
   },
 };

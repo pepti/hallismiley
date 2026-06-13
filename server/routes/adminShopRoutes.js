@@ -47,6 +47,12 @@ router.post('/products/:id/variants',           csrfProtect, adminShop.createVar
 router.patch('/products/:id/variants/:variantId',  csrfProtect, adminShop.updateVariant);
 router.delete('/products/:id/variants/:variantId', csrfProtect, adminShop.deactivateVariant);
 
+// ── Collections ───────────────────────────────────────────────────────────────
+router.get('/collections',                      adminShop.listCollections);
+router.post('/collections',        csrfProtect,  adminShop.createCollection);
+router.patch('/collections/:id',   csrfProtect,  adminShop.updateCollection);
+router.put('/products/:id/collections', csrfProtect, adminShop.setProductCollections);
+
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
 router.get('/orders/:id',         adminShop.getOrder);

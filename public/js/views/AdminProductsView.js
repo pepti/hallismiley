@@ -326,6 +326,15 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
             ${(existing.variants || []).length} SKUs</span></h3>
           <p class="admin-shop__hint">${t('adminProducts.variantHint')}</p>
           <div id="admin-variant-table-wrap"></div>
+        </section>
+
+        <section class="admin-shop__collections">
+          <h3>${t('adminProducts.collections')}</h3>
+          <div class="admin-shop__coll-list" id="admin-product-collections"></div>
+          <div class="admin-shop__coll-new">
+            <input type="text" id="admin-new-collection" placeholder="${t('adminProducts.newCollectionPlaceholder')}" maxlength="200"/>
+            <button type="button" class="admin-shop__link" id="admin-add-collection">${t('adminProducts.addCollection')}</button>
+          </div>
         </section>` : ''}
     </div>
   `;
@@ -379,6 +388,11 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     // Inventory codes — empty ⇒ null (clears the column; keeps the sku index sparse).
     body.sku     = String(fd.get('sku') || '').trim() || null;
     body.barcode = String(fd.get('barcode') || '').trim() || null;
+    // Collection membership (edit mode only) — checked ids replace the set.
+    if (isEdit) {
+      body.collection_ids = [...modal.querySelectorAll('#admin-product-collections input[data-coll-id]')]
+        .filter(c => c.checked).map(c => c.dataset.collId);
+    }
 
     try {
       const headers = await getCsrfHeaders();
@@ -415,6 +429,56 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
 
     if (paintVariants) paintVariants(modal, existing);
     if (paintImages)   paintImages(modal, existing);
+
+    // Collections — checkboxes of all collections (checked = member), plus an
+    // inline "new collection" creator. Membership is sent as collection_ids on
+    // the product PATCH (see the submit handler above).
+    (async () => {
+      const wrap = modal.querySelector('#admin-product-collections');
+      if (!wrap) return;
+      let all = [];
+      try {
+        const res  = await fetch('/api/v1/admin/shop/collections', { credentials: 'include' });
+        const data = await res.json();
+        all = data.collections || [];
+      } catch { /* offline — section just shows empty */ }
+      const memberIds = new Set((existing.collections || []).map(c => c.id));
+      const render = () => {
+        wrap.innerHTML = all.length
+          ? all.map(c => `<label class="admin-shop__coll-item">
+              <input type="checkbox" data-coll-id="${_esc(c.id)}" ${memberIds.has(c.id) ? 'checked' : ''}/>
+              ${_esc(c.title)}${c.active ? '' : ' — ' + t('adminProducts.inactive')}
+            </label>`).join('')
+          : `<p class="admin-shop__hint">${t('adminProducts.noCollections')}</p>`;
+        wrap.querySelectorAll('input[data-coll-id]').forEach(box => {
+          box.addEventListener('change', () => {
+            if (box.checked) memberIds.add(box.dataset.collId);
+            else memberIds.delete(box.dataset.collId);
+          });
+        });
+      };
+      render();
+      modal.querySelector('#admin-add-collection')?.addEventListener('click', async () => {
+        const inp   = modal.querySelector('#admin-new-collection');
+        const title = (inp.value || '').trim();
+        if (!title) return;
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+        try {
+          const headers = await getCsrfHeaders();
+          const res  = await fetch('/api/v1/admin/shop/collections', {
+            method: 'POST', credentials: 'include', headers, body: JSON.stringify({ slug, title }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed to create collection');
+          all.push(data.collection);
+          memberIds.add(data.collection.id);
+          inp.value = '';
+          render();
+        } catch (err) {
+          errorEl.textContent = err.message;
+        }
+      });
+    })();
 
     modal.querySelector('#admin-product-image-input')?.addEventListener('change', async (e) => {
       const files = Array.from(e.target.files || []);
