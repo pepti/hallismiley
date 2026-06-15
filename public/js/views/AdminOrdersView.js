@@ -2,6 +2,7 @@
 import { getCSRFToken } from '../utils/api.js';
 import * as cart from '../services/cart.js';
 import { t } from '../i18n/i18n.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -45,7 +46,7 @@ export class AdminOrdersView {
       this._load();
     });
     await this._load();
-    return this._view;
+    return renderAdminShell({ activePath: '/admin/shop/orders', content: this._view });
   }
 
   async _load() {

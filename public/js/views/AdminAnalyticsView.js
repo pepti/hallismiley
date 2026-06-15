@@ -1,6 +1,7 @@
 import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t } from '../i18n/i18n.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 
 const RANGES  = [7, 30, 90];
 // Palette drawn from the site's design tokens (variables.css).
@@ -44,7 +45,7 @@ export class AdminAnalyticsView {
     } catch {
       el.innerHTML = `<div class="analytics-error"><p>${t('analytics.loadError')}</p></div>`;
     }
-    return el;
+    return renderAdminShell({ activePath: '/admin/analytics', content: el });
   }
 
   // Router calls this on navigation away — tear down chart instances so we

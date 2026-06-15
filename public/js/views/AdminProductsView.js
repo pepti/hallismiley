@@ -3,6 +3,7 @@ import { getCSRFToken, getCsrfHeaders } from '../utils/api.js';
 import * as cart from '../services/cart.js';
 import { t } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -29,7 +30,7 @@ export class AdminProductsView {
     this._view.querySelector('#admin-new-product').addEventListener('click', () => this._showForm());
 
     await this._load();
-    return this._view;
+    return renderAdminShell({ activePath: '/admin/shop/products', content: this._view });
   }
 
   async _load() {

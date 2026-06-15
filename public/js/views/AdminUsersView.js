@@ -4,6 +4,7 @@ import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
 import { t, href }       from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 
 const PAGE_SIZE = 20;
 
@@ -42,7 +43,7 @@ export class AdminUsersView {
 
     this._el = el;
     await this._load();
-    return el;
+    return renderAdminShell({ activePath: '/admin/users', content: el });
   }
 
   async _load() {

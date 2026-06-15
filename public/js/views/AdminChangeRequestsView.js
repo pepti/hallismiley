@@ -5,6 +5,7 @@ import { isAuthenticated, isAdmin, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 
 const FILTERS = ['all', 'open', 'resolved'];
@@ -40,7 +41,7 @@ export class AdminChangeRequestsView {
       this._load();
     }));
     await this._load();
-    return this._el;
+    return renderAdminShell({ activePath: '/admin/feedback', content: this._el });
   }
 
   async _load() {

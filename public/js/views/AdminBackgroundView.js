@@ -5,6 +5,7 @@ import { isAuthenticated, isAdmin, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 
 async function csrfHeaders(extra = {}) {
@@ -27,7 +28,7 @@ export class AdminBackgroundView {
       <p class="bg-sub">${t('adminBg.subtitle')}</p>
       <div id="bg-body"><div class="admin-loading">${t('form.loading')}</div></div>`;
     await this._load();
-    return this._el;
+    return renderAdminShell({ activePath: '/admin/background', content: this._el });
   }
 
   async _load() {

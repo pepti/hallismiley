@@ -22,6 +22,7 @@ import { getGeneralSettings, updateGeneralSettings } from '../services/adminGene
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 
 const SETTING_KEYS = [
@@ -55,7 +56,7 @@ export class AdminGeneralSettingsView {
     `;
     this._el = el;
     await this._load();
-    return el;
+    return renderAdminShell({ activePath: '/admin/general', content: el });
   }
 
   async _load() {

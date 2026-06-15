@@ -6,6 +6,7 @@ import { listDiscounts, createDiscount, updateDiscount } from '../services/admin
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import * as cart from '../services/cart.js';
 
@@ -28,7 +29,7 @@ export class AdminDiscountsView {
     `;
     this._el.querySelector('#disc-new').addEventListener('click', () => this._openForm());
     await this._load();
-    return this._el;
+    return renderAdminShell({ activePath: '/admin/discounts', content: this._el });
   }
 
   async _load() {

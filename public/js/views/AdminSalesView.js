@@ -6,6 +6,7 @@ import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 import * as cart from '../services/cart.js';
 
 const RANGES = [7, 30, 90];
@@ -35,7 +36,7 @@ export class AdminSalesView {
       this._load();
     }));
     await this._load();
-    return this._el;
+    return renderAdminShell({ activePath: '/admin/sales', content: this._el });
   }
 
   destroy() {
