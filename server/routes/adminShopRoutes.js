@@ -4,12 +4,18 @@ const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
 const { requireAuth }          = require('../auth/middleware');
-const { requireRole }          = require('../auth/roles');
+const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
 const { createProductUpload }  = require('../middleware/upload');
 
-// All admin shop routes require authentication + admin role
-router.use(requireAuth, requireRole('admin'));
+// Admin shop routes require auth; per-view access is gated by path below, so a
+// role can be granted (e.g.) orders-only without products. The product editor's
+// "assign collections" (PUT /products/:id/collections) sits under /products.
+router.use(requireAuth);
+router.use('/products',    requireView('products'));
+router.use('/collections', requireView('collections'));
+router.use('/reports',     requireView('sales'));
+router.use('/orders',      requireView('orders'));
 
 // ── Products ────────────────────────────────────────────────────────────────
 router.get('/products',           adminShop.listProducts);

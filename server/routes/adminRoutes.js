@@ -3,6 +3,7 @@ const router           = express.Router();
 const adminController  = require('../controllers/adminController');
 const { requireAuth }  = require('../auth/middleware');
 const { requireRole }  = require('../auth/roles');
+const { requireView }  = require('../auth/requireView');
 const { csrfProtect }  = require('../middleware/csrf');
 
 // All admin routes require authentication; most require admin role, but the
@@ -10,7 +11,7 @@ const { csrfProtect }  = require('../middleware/csrf');
 // see whether notifications are flowing when they view the Party Admin page.
 router.use(requireAuth);
 
-router.get('/users',                    requireRole('admin'),              adminController.listUsers);
+router.get('/users',                    requireView('users'),              adminController.listUsers);
 router.patch('/users/:id/role',         requireRole('admin'), csrfProtect, adminController.changeRole);
 router.patch('/users/:id/disable',      requireRole('admin'), csrfProtect, adminController.disableUser);
 router.patch('/users/:id/party-access', requireRole('admin'), csrfProtect, adminController.setPartyAccess);

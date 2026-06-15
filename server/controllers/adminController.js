@@ -3,8 +3,7 @@ const { query: dbQuery } = require('../config/database');
 const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
-
-const VALID_ROLES = ['admin', 'moderator', 'user'];
+const Role               = require('../models/Role');
 
 const adminController = {
   // GET /api/v1/admin/users?limit=20&offset=0
@@ -40,16 +39,28 @@ const adminController = {
       const { id } = req.params;
       const { role } = req.body;
 
-      if (!VALID_ROLES.includes(role)) {
-        return res.status(400).json({
-          error: t(req.locale, 'errors.admin.roleEnum', { values: VALID_ROLES.join(', ') }),
-          code: 400,
-        });
+      // Validate against the live roles table (dynamic roles).
+      const roleRow = await Role.findByName(role);
+      if (!roleRow) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.roleNotFound'), code: 400 });
       }
 
       // Prevent admin from demoting themselves
       if (id === req.user.id) {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
+      }
+
+      // Last-admin guard: never let the final admin be demoted away from 'admin'.
+      if (role !== 'admin') {
+        const { rows: tgt } = await dbQuery('SELECT role FROM users WHERE id = $1', [id]);
+        if (tgt.length && tgt[0].role === 'admin') {
+          const { rows: ac } = await dbQuery(
+            `SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND disabled = FALSE`
+          );
+          if (ac[0].n <= 1) {
+            return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
+          }
+        }
       }
 
       const { rows } = await dbQuery(

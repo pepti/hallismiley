@@ -4,6 +4,7 @@
 const crypto              = require('crypto');
 const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
+const Role                = require('../models/Role');
 const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 const securityLogger      = require('../observability/securityLogger');
@@ -115,6 +116,7 @@ const authController = {
           username:       user.username,
           email:          user.email,
           role:           user.role,
+          views:          await Role.getViewsForRole(user.role),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,
@@ -201,6 +203,7 @@ const authController = {
           username:       newUser.username,
           email:          newUser.email,
           role:           newUser.role,
+          views:          await Role.getViewsForRole(newUser.role),
           avatar:         newUser.avatar,
           display_name:   newUser.display_name,
           phone:          newUser.phone,
@@ -361,6 +364,7 @@ const authController = {
           username:       user.username,
           email:          user.email,
           role:           user.role,
+          views:          await Role.getViewsForRole(user.role),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,

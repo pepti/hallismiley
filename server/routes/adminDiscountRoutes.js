@@ -4,11 +4,11 @@ const router  = express.Router();
 
 const ctrl             = require('../controllers/adminDiscountController');
 const { requireAuth }  = require('../auth/middleware');
-const { requireRole }  = require('../auth/roles');
+const { requireView }  = require('../auth/requireView');
 const { csrfProtect }  = require('../middleware/csrf');
 const { sanitizeBody } = require('../middleware/sanitize');
 
-router.use(requireAuth, requireRole('admin'));
+router.use(requireAuth, requireView('discounts'));
 
 // Mounted at /api/v1/admin/discounts.
 router.get('/',        ctrl.list);

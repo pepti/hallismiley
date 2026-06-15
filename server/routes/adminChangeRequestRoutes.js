@@ -5,10 +5,10 @@ const router  = express.Router();
 
 const ctrl = require('../controllers/changeRequestController');
 const { requireAuth } = require('../auth/middleware');
-const { requireRole } = require('../auth/roles');
+const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
 
-router.use(requireAuth, requireRole('admin'));
+router.use(requireAuth, requireView('feedback'));
 
 router.get('/', ctrl.listBatches);
 router.patch('/items/:itemId/status', csrfProtect, ctrl.updateItemStatus);

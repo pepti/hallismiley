@@ -7,12 +7,12 @@ const multer  = require('multer');
 const router  = express.Router();
 
 const { requireAuth } = require('../auth/middleware');
-const { requireRole } = require('../auth/roles');
+const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
 const { createBackgroundUpload } = require('../middleware/upload');
 const ctrl = require('../controllers/adminBackgroundController');
 
-router.use(requireAuth, requireRole('admin'));
+router.use(requireAuth, requireView('background'));
 
 // Landing-page background config
 router.get('/landing',   ctrl.getLanding);
