@@ -1520,6 +1520,19 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE INDEX IF NOT EXISTS idx_cr_batches_submitted_at ON change_request_batches (submitted_at DESC)`,
     ],
   },
+  {
+    // Per-admin sidebar layout customization (admin "edit mode": rename items,
+    // drag-reorder within/across sections, create sections). One JSONB blob per
+    // admin user, shaped { v, sections:[{key,title,items:[id]}], labels }. The
+    // frontend reconciles it against the code-defined ADMIN_NAV at render, so
+    // routes/icons are never persisted (a moved item keeps working). NULL =
+    // default layout. Authoritative copy; human-reference duplicate in
+    // server/migrations/052_admin_nav_config.sql.
+    name: '052_admin_nav_config',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_nav_config JSONB`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
