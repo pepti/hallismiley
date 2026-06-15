@@ -33,6 +33,7 @@ import { CheckoutCancelView }    from './views/CheckoutCancelView.js';
 import { OrderHistoryView }      from './views/OrderHistoryView.js';
 import { AdminProductsView }     from './views/AdminProductsView.js';
 import { AdminOrdersView }       from './views/AdminOrdersView.js';
+import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
 import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
 import {
   SUPPORTED_LOCALES,
@@ -79,6 +80,7 @@ const ROUTES = [
   { pattern: '/orders',          factory: ()  => isAuthenticated() ? new OrderHistoryView() : new HomeView() },
   { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && isAdmin()) ? new AdminProductsView() : new HomeView() },
   { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && isAdmin()) ? new AdminOrdersView() : new HomeView() },
+  { pattern: '/admin/shop/orders/:id', factory: (p) => (isAuthenticated() && isAdmin()) ? new AdminOrderDetailView(p.id) : new HomeView() },
   { pattern: '/admin/shop/collections', factory: () => (isAuthenticated() && isAdmin()) ? new AdminCollectionsView() : new HomeView() },
 ];
 

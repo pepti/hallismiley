@@ -61,5 +61,6 @@ router.get('/orders',             adminShop.listOrders);
 router.get('/orders/:id',         adminShop.getOrder);
 router.get('/orders/:id/delivery-note', adminShop.deliveryNote);
 router.patch('/orders/:id/status', csrfProtect, adminShop.updateOrderStatus);
+router.patch('/orders/:id/tags',   csrfProtect, adminShop.updateOrderTags);
 
 module.exports = router;

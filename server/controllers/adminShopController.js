@@ -209,15 +209,24 @@ const adminShopController = {
 
   async listOrders(req, res, next) {
     try {
-      const status = req.query.status || null;
-      const orders = await Order.listAll({ status, limit: 200 });
-      return res.json({ orders });
+      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const filter = {
+        status:            status            ? String(status) : null,
+        paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
+        fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
+        q:                 q                 ? String(q) : null,
+      };
+      const [orders, total] = await Promise.all([
+        Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: 200 }),
+        Order.count(filter),
+      ]);
+      return res.json({ orders, total });
     } catch (err) { next(err); }
   },
 
   async getOrder(req, res, next) {
     try {
-      const order = await Order.findById(req.params.id);
+      const order = await Order.findDetailById(req.params.id);
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       const items = await Order.listItems(order.id);
       return res.json({ order, items });
@@ -289,15 +298,35 @@ const adminShopController = {
 
   async updateOrderStatus(req, res, next) {
     try {
-      const { status } = req.body;
-      const allowed = ['shipped', 'cancelled'];
-      if (!allowed.includes(status)) {
-        return res.status(400).json({
-          error: t(req.locale, 'errors.admin.statusEnum', { values: allowed.join(', ') }),
-          code: 400,
-        });
+      let { payment_status, fulfillment_status } = req.body || {};
+      // Back-compat: a legacy { status: 'shipped' | 'cancelled' } maps onto the
+      // new independent payment/fulfillment statuses.
+      const legacy = req.body?.status;
+      if (!payment_status && !fulfillment_status && legacy) {
+        if (legacy === 'shipped')        fulfillment_status = 'fulfilled';
+        else if (legacy === 'cancelled') payment_status = 'voided';
       }
-      const order = await Order.updateStatus(req.params.id, status);
+      if (!payment_status && !fulfillment_status) {
+        return res.status(400).json({ error: 'payment_status or fulfillment_status required', code: 400 });
+      }
+      const order = await Order.setOrderStatuses(req.params.id, { payment_status, fulfillment_status });
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      return res.json({ order });
+    } catch (err) {
+      if (String(err.message || '').startsWith('Invalid ')) {
+        return res.status(400).json({ error: err.message, code: 400 });
+      }
+      next(err);
+    }
+  },
+
+  async updateOrderTags(req, res, next) {
+    try {
+      const { tags } = req.body || {};
+      if (!Array.isArray(tags)) {
+        return res.status(400).json({ error: 'tags must be an array of strings', code: 400 });
+      }
+      const order = await Order.updateTags(req.params.id, tags);
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       return res.json({ order });
     } catch (err) { next(err); }
