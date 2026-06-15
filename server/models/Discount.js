@@ -2,7 +2,7 @@
 // Parameterised queries throughout (A03). Code-based, order-level discounts only.
 const db = require('../config/database');
 
-const COLUMNS = 'id, code, title, value_type, value, currency, min_subtotal, usage_limit, used_count, enabled, starts_at, ends_at, created_at, updated_at';
+const COLUMNS = 'id, code, title, method, type, value_type, value, currency, min_subtotal, usage_limit, used_count, enabled, starts_at, ends_at, created_at, updated_at';
 
 class Discount {
   static async findAll() {
@@ -24,18 +24,32 @@ class Discount {
     return rows[0] || null;
   }
 
+  // Live automatic (no-code) discounts for a currency — the engine computes the
+  // benefit of each and picks the best. Pre-filtered on enabled/window/limit.
+  static async findLiveAutomatic({ currency }) {
+    const { rows } = await db.query(
+      `SELECT ${COLUMNS} FROM discounts
+        WHERE method = 'automatic' AND enabled = TRUE AND currency = $1
+          AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
+          AND (usage_limit IS NULL OR used_count < usage_limit)
+        ORDER BY created_at DESC`,
+      [String(currency)]
+    );
+    return rows;
+  }
+
   static async create(data) {
     const {
-      code, title, value_type, value, currency = 'ISK',
+      code, title, method = 'code', type = 'order', value_type, value, currency = 'ISK',
       min_subtotal = null, usage_limit = null, enabled = true,
       starts_at = null, ends_at = null,
     } = data;
     const { rows } = await db.query(
-      `INSERT INTO discounts (code, title, value_type, value, currency, min_subtotal, usage_limit, enabled, starts_at, ends_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, NOW()), $10)
+      `INSERT INTO discounts (code, title, method, type, value_type, value, currency, min_subtotal, usage_limit, enabled, starts_at, ends_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, NOW()), $12)
        RETURNING ${COLUMNS}`,
       [
-        String(code), String(title || code), value_type, Number(value), currency,
+        String(code), String(title || code), method, type, value_type, Number(value), currency,
         min_subtotal == null || min_subtotal === '' ? null : Number(min_subtotal),
         usage_limit == null || usage_limit === '' ? null : Number(usage_limit),
         Boolean(enabled), starts_at || null, ends_at || null,
@@ -45,7 +59,7 @@ class Discount {
   }
 
   static async update(id, data) {
-    const allowed = ['code', 'title', 'value_type', 'value', 'currency', 'min_subtotal', 'usage_limit', 'enabled', 'starts_at', 'ends_at'];
+    const allowed = ['code', 'title', 'method', 'type', 'value_type', 'value', 'currency', 'min_subtotal', 'usage_limit', 'enabled', 'starts_at', 'ends_at'];
     const numeric = new Set(['value', 'min_subtotal', 'usage_limit']);
     const bool    = new Set(['enabled']);
     const nullableDate = new Set(['starts_at', 'ends_at']);

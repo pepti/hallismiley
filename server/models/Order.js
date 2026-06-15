@@ -67,6 +67,7 @@ class Order {
     shippingAddress = null,
     items,       // [{ productId, name, price, quantity }]
     shipping,    // integer minor units
+    appliedDiscount = null, // { discount, discountAmount, shippingDiscount } | null
   }) {
     if (!['ISK', 'EUR'].includes(currency)) {
       throw new Error(`Invalid currency: ${currency}`);
@@ -79,7 +80,11 @@ class Order {
     }
 
     const subtotal = items.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
-    const total    = subtotal + Number(shipping);
+    // Clamp the discount amounts so the order can never go negative.
+    const discountAmount   = Math.max(0, Math.min(Number(appliedDiscount?.discountAmount) || 0, subtotal));
+    const shippingDiscount = Math.max(0, Math.min(Number(appliedDiscount?.shippingDiscount) || 0, Number(shipping)));
+    const total = Math.max(0, subtotal - discountAmount + (Number(shipping) - shippingDiscount));
+    const disc  = appliedDiscount?.discount || null;
     const orderNumber = generateOrderNumber();
 
     const client = await db.pool.connect();
@@ -89,13 +94,17 @@ class Order {
       const { rows: orderRows } = await client.query(
         `INSERT INTO orders (
            order_number, user_id, guest_email, guest_name, currency,
-           subtotal, shipping, total, status, shipping_method, shipping_address
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10)
+           subtotal, shipping, total, status, shipping_method, shipping_address,
+           discount_code, discount_title, discount_amount, shipping_discount
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, $13, $14)
          RETURNING ${COLUMNS}`,
         [
           orderNumber, userId, guestEmail, guestName, currency,
           subtotal, Number(shipping), total, shippingMethod,
           shippingAddress ? JSON.stringify(shippingAddress) : null,
+          disc ? disc.code : null,
+          disc ? (disc.title || disc.code) : null,
+          discountAmount, shippingDiscount,
         ]
       );
       const order = orderRows[0];

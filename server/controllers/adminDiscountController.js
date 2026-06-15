@@ -4,6 +4,8 @@ const Discount = require('../models/Discount');
 
 const VALUE_TYPES = ['percentage', 'fixed'];
 const CURRENCIES  = ['ISK', 'EUR'];
+const METHODS     = ['code', 'automatic'];
+const TYPES       = ['order', 'free_shipping'];
 
 // Returns an array of validation messages (empty = valid). `partial` skips
 // required-field checks for fields not present (used by PATCH).
@@ -24,6 +26,8 @@ function validateBody(body, { partial = false } = {}) {
     if (!Number.isInteger(v) || v < 0) errors.push('value must be a non-negative integer');
     else if (body.value_type === 'percentage' && v > 100) errors.push('percentage value must be between 0 and 100');
   }
+  if (has('method') && !METHODS.includes(body.method)) errors.push('method must be "code" or "automatic"');
+  if (has('type')   && !TYPES.includes(body.type))     errors.push('type must be "order" or "free_shipping"');
   if (has('currency') && !CURRENCIES.includes(body.currency)) errors.push('currency must be ISK or EUR');
   if (has('min_subtotal') && body.min_subtotal !== null && body.min_subtotal !== '' && (!Number.isInteger(Number(body.min_subtotal)) || Number(body.min_subtotal) < 0)) {
     errors.push('min_subtotal must be a non-negative integer');

@@ -22,6 +22,8 @@ async function createCheckoutSession({
   shippingMethodLabel,
   orderId,
   orderNumber,
+  discountAmount = 0,   // total discount (order + shipping) in minor units
+  discountLabel = null,
 }) {
   const stripe = getStripe();
 
@@ -56,6 +58,19 @@ async function createCheckoutSession({
     });
   }
 
+  // Apply an order-level discount as a one-off Stripe coupon (amount_off in the
+  // session currency) so the hosted Checkout total matches the order total.
+  let discounts;
+  if (discountAmount > 0) {
+    const coupon = await stripe.coupons.create({
+      amount_off: Math.round(discountAmount),
+      currency:   currency.toLowerCase(),
+      duration:   'once',
+      name:       discountLabel || 'Discount',
+    });
+    discounts = [{ coupon: coupon.id }];
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     // automatic_payment_methods supersedes payment_method_types. Stripe
@@ -66,6 +81,7 @@ async function createCheckoutSession({
     automatic_payment_methods: { enabled: true },
     line_items,
     customer_email: customerEmail || undefined,
+    ...(discounts ? { discounts } : {}),
     success_url: `${APP_URL}/#/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:  `${APP_URL}/#/checkout/cancel?session_id={CHECKOUT_SESSION_ID}`,
     metadata: { orderId, orderNumber },

@@ -59,7 +59,9 @@ export class AdminDiscountsView {
           ${this._discounts.map(d => `
             <tr data-id="${escHtml(d.id)}">
               <td><code>${escHtml(d.code)}</code><div class="disc-title">${escHtml(d.title)}</div></td>
-              <td>${d.value_type === 'percentage' ? d.value + '%' : cart.formatMoney(d.value, d.currency)}</td>
+              <td>${d.type === 'free_shipping'
+                ? t('adminDiscounts.typeFreeShipping')
+                : (d.value_type === 'percentage' ? d.value + '%' : cart.formatMoney(d.value, d.currency))}${d.method === 'automatic' ? ` <span class="disc-title">(${t('adminDiscounts.auto')})</span>` : ''}</td>
               <td>${d.min_subtotal != null ? cart.formatMoney(d.min_subtotal, d.currency) : '—'}</td>
               <td>${d.used_count}${d.usage_limit != null ? ' / ' + d.usage_limit : ''}</td>
               <td>${d.enabled
@@ -93,20 +95,34 @@ export class AdminDiscountsView {
             <input type="text" name="title" maxlength="200" value="${escHtml(existing?.title || '')}"/>
           </label>
           <div class="admin-shop__form-row">
-            <label>${t('adminDiscounts.type')}
-              <select name="value_type">
-                <option value="percentage" ${existing?.value_type === 'percentage' ? 'selected' : ''}>${t('adminDiscounts.percentage')}</option>
-                <option value="fixed" ${existing?.value_type === 'fixed' ? 'selected' : ''}>${t('adminDiscounts.fixed')}</option>
+            <label>${t('adminDiscounts.method')}
+              <select name="method">
+                <option value="code" ${existing?.method !== 'automatic' ? 'selected' : ''}>${t('adminDiscounts.methodCode')}</option>
+                <option value="automatic" ${existing?.method === 'automatic' ? 'selected' : ''}>${t('adminDiscounts.methodAuto')}</option>
               </select>
             </label>
-            <label>${t('adminDiscounts.value')}
-              <input type="number" name="value" required min="0" step="1" value="${existing?.value ?? ''}"/>
+            <label>${t('adminDiscounts.discountType')}
+              <select name="type" id="disc-type">
+                <option value="order" ${existing?.type !== 'free_shipping' ? 'selected' : ''}>${t('adminDiscounts.typeOrder')}</option>
+                <option value="free_shipping" ${existing?.type === 'free_shipping' ? 'selected' : ''}>${t('adminDiscounts.typeFreeShipping')}</option>
+              </select>
             </label>
             <label>${t('adminDiscounts.currency')}
               <select name="currency">
                 <option value="ISK" ${existing?.currency !== 'EUR' ? 'selected' : ''}>ISK</option>
                 <option value="EUR" ${existing?.currency === 'EUR' ? 'selected' : ''}>EUR</option>
               </select>
+            </label>
+          </div>
+          <div class="admin-shop__form-row" id="disc-amount-row">
+            <label>${t('adminDiscounts.type')}
+              <select name="value_type">
+                <option value="percentage" ${existing?.value_type === 'percentage' ? 'selected' : ''}>${t('adminDiscounts.percentage')}</option>
+                <option value="fixed" ${existing?.value_type !== 'percentage' ? 'selected' : ''}>${t('adminDiscounts.fixed')}</option>
+              </select>
+            </label>
+            <label>${t('adminDiscounts.value')}
+              <input type="number" name="value" min="0" step="1" value="${existing?.value ?? ''}"/>
             </label>
           </div>
           <div class="admin-shop__form-row">
@@ -133,6 +149,13 @@ export class AdminDiscountsView {
       </div>`;
     document.body.appendChild(modal);
 
+    // Free-shipping discounts have no amount — hide the value row for that type.
+    const typeSel   = modal.querySelector('#disc-type');
+    const amountRow = modal.querySelector('#disc-amount-row');
+    const syncType  = () => { amountRow.style.display = typeSel.value === 'free_shipping' ? 'none' : ''; };
+    typeSel.addEventListener('change', syncType);
+    syncType();
+
     const close = () => modal.remove();
     modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
@@ -143,11 +166,14 @@ export class AdminDiscountsView {
       errorEl.textContent = '';
       const fd = new FormData(e.target);
       const code = String(fd.get('code') || '').trim();
+      const type = fd.get('type');
       const body = {
         code,
         title:        String(fd.get('title') || '').trim() || code,
+        method:       fd.get('method'),
+        type,
         value_type:   fd.get('value_type'),
-        value:        Number(fd.get('value')),
+        value:        type === 'free_shipping' ? 0 : Number(fd.get('value') || 0),
         currency:     fd.get('currency'),
         min_subtotal: fd.get('min_subtotal') === '' ? null : Number(fd.get('min_subtotal')),
         usage_limit:  fd.get('usage_limit')  === '' ? null : Number(fd.get('usage_limit')),

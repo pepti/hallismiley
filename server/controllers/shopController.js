@@ -12,7 +12,8 @@ const stripeService = require('../services/stripeService');
 const { sendOrderReceipt } = require('../services/emailService');
 const { t }                = require('../i18n');
 const { AnalyticsEvent }   = require('../models/Analytics');
-const { computeForCode }   = require('../services/discountEngine');
+const { computeForCode, computeForCheckout } = require('../services/discountEngine');
+const Discount             = require('../models/Discount');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -272,6 +273,19 @@ const shopController = {
 
       const shippingAmount = getShippingPrice(shippingMethod, currency);
 
+      // ── Resolve a discount (typed code, or the best live automatic one) ──
+      const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
+      const discountCode = typeof req.body?.discount_code === 'string' ? req.body.discount_code.trim() : '';
+      const applied = await computeForCheckout({ code: discountCode, subtotal, shippingAmount, currency });
+      // A bad code the customer typed is a hard error; automatic discovery is silent.
+      if (applied.error && discountCode) {
+        return res.status(applied.error.status).json({
+          error: applied.error.message, reason: applied.error.reason,
+          params: applied.error.params || null, code: applied.error.status,
+        });
+      }
+      const appliedDiscount = (!applied.error && applied.discount) ? applied : null;
+
       // ── Insert order (status=pending) in a transaction ────────────────
       const order = await Order.createWithItems({
         userId: user?.id || null,
@@ -282,11 +296,20 @@ const shopController = {
         shippingAddress: method.requiresAddress ? shippingAddress : null,
         items: resolvedItems,
         shipping: shippingAmount,
+        appliedDiscount,
       });
+
+      // Consume one use of the discount (atomic, guarded by usage_limit).
+      if (appliedDiscount) {
+        try { await Discount.incrementUsed(appliedDiscount.discount.id); } catch { /* non-fatal */ }
+      }
 
       // ── Create Stripe Checkout Session ────────────────────────────────
       // Line-item names already include the variant ("Smiley T-shirt — Black / M")
       // so the Stripe Checkout page and customer receipt show the right SKU.
+      const discountTotal = appliedDiscount
+        ? (Number(appliedDiscount.discountAmount) || 0) + (Number(appliedDiscount.shippingDiscount) || 0)
+        : 0;
       const session = await stripeService.createCheckoutSession({
         items: resolvedItems.map(it => ({
           productId: it.productId,
@@ -301,6 +324,8 @@ const shopController = {
         shippingMethodLabel: method.label,
         orderId: order.id,
         orderNumber: order.order_number,
+        discountAmount: discountTotal,
+        discountLabel: appliedDiscount ? (appliedDiscount.discount.title || appliedDiscount.discount.code) : null,
       });
 
       await Order.setStripeSession(order.id, session.id);
@@ -417,12 +442,14 @@ const shopController = {
       }
       return res.json({
         valid: true,
-        code:       r.discount.code,
-        title:      r.discount.title,
-        value_type: r.discount.value_type,
-        value:      r.discount.value,
-        currency:   r.discount.currency,
-        amount:     r.amount,
+        code:         r.discount.code,
+        title:        r.discount.title,
+        type:         r.discount.type,
+        value_type:   r.discount.value_type,
+        value:        r.discount.value,
+        currency:     r.discount.currency,
+        amount:       r.amount,
+        freeShipping: !!r.freeShipping,
       });
     } catch (err) { next(err); }
   },
