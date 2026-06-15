@@ -20,6 +20,7 @@
 @import './admin-sales.css';
 @import './admin-background.css';
 @import './admin-change-requests.css';
+@import './test-env.css';
 @import './theme-switcher.css';
 /* themes.css must stay LAST — its html[data-theme] rules out-specify and
    override the component CSS above when an alternate theme is active. */

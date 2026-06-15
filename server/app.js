@@ -155,6 +155,12 @@ app.post('/api/v1/shop/webhook',
   express.raw({ type: 'application/json', limit: '1mb' }),
   shopController.handleStripeWebhook);
 
+// Change-request submissions (non-prod) may carry an inline base64 screenshot,
+// so this path gets a larger JSON limit. Mounted BEFORE the global 100 kb
+// parser — once body-parser sets req._body the global parser short-circuits for
+// this path. The route is still 404 in production via requireTestEnv.
+app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
+
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());

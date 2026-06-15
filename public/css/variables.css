@@ -40,6 +40,11 @@
   --success: #4caf78;
   --error:   #e05c5c;
 
+  /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
+  --test-blue:     #2f6fed;
+  --test-blue-rgb: 47, 111, 237;
+  --test-glow:     0 0 0 2px rgba(47, 111, 237, 0.55), 0 0 16px 2px rgba(47, 111, 237, 0.45);
+
   /* Spacing scale */
   --sp-1:  4px;
   --sp-2:  8px;

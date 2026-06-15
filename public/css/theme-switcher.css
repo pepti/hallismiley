@@ -89,3 +89,67 @@
 .theme-switcher__swatch--dark {
   border: 2px solid #E8C06A;
 }
+
+/* Admin-only TEST-mode row (mounts the change-request widget). */
+.theme-switcher__test {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-dim);
+}
+.theme-switcher__test-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.theme-switcher__test-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.theme-switcher__test-note {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.theme-switcher__toggle {
+  flex: 0 0 auto;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.theme-switcher__toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  transition: left var(--transition);
+}
+.theme-switcher__toggle[aria-checked="true"] {
+  background: var(--test-blue);
+  border-color: var(--test-blue);
+}
+.theme-switcher__toggle[aria-checked="true"] .theme-switcher__toggle-knob {
+  left: 16px;
+  background: #FFFFFF;
+  border-color: #FFFFFF;
+}
+.theme-switcher__toggle:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}

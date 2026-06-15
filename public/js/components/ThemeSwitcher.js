@@ -1,19 +1,24 @@
-// Floating theme switcher — a discreet FAB (bottom-left) opening a small
-// popover with the six site themes (see themes.css). Mounted once from main.js,
-// outside #app, so it survives SPA navigation. The popover is rebuilt on every
-// open so labels always use the current locale.
+// Floating theme switcher — a discreet FAB (bottom-left, opposite the
+// change-request widget) opening a small popover with the six site themes
+// (see themes.css) and, for admins only, a per-browser TEST-mode switch that
+// overrides the server's app-env (see services/themePrefs.js).
 //
-// NOTE: the admin-only per-browser TEST-mode row (an APP_ENV override wired to
-// the in-app change-request widget) is added alongside that widget in a later
-// phase. This file intentionally ships theme selection only.
+// Mounted once from main.js, outside #app, so it survives SPA navigation.
+// The popover is rebuilt on every open so labels always use the current
+// locale and the TEST row tracks the current user's role.
 import { t } from '../i18n/i18n.js';
-import { THEMES, getTheme, setTheme } from '../services/themePrefs.js';
+import { isAdmin } from '../services/auth.js';
+import {
+  THEMES, getTheme, setTheme,
+  getServerEnv, getTestOverride, setTestOverride,
+} from '../services/themePrefs.js';
 
 const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.21-1.79 3-4 3h-2.5a2.5 2.5 0 0 0-1.9 4.13c.37.43.4 1.06.03 1.5-.4.47-1 .87-1.63.37Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="16" cy="9.5" r="1"/></svg>';
 
 // Swatch fills are hard-coded on purpose: each swatch advertises its own
-// theme regardless of which theme is currently active. The colour themes show
-// an accent→background gradient so the swatch previews their immersive look.
+// theme regardless of which theme is currently active. classic = this site's
+// existing dark charcoal default; the colour themes show an accent→background
+// gradient so the swatch previews their immersive look.
 const SWATCH_COLORS = {
   classic: '#202020',
   glacier: 'linear-gradient(135deg, #5FB4E8 0%, #0B2138 100%)',
@@ -38,6 +43,7 @@ export class ThemeSwitcher {
     this._onDocPointerDown = this._onDocPointerDown.bind(this);
     this._onDocKeydown = this._onDocKeydown.bind(this);
     this._onNav = this._onNav.bind(this);
+    this._onAuthChange = this._onAuthChange.bind(this);
   }
 
   render() {
@@ -52,9 +58,11 @@ export class ThemeSwitcher {
     this.fab.addEventListener('click', () => (this.open ? this._close() : this._open()));
     this._refreshFabLabel();
 
-    // Close on navigation (also sidesteps stale-locale labels).
+    // Close on navigation (also sidesteps stale-locale labels) and rebuild the
+    // open popover on login/logout so the admin-only TEST row tracks the user.
     window.addEventListener('spa:navigate', this._onNav);
     window.addEventListener('popstate', this._onNav);
+    window.addEventListener('authchange', this._onAuthChange);
     return this.root;
   }
 
@@ -98,6 +106,10 @@ export class ThemeSwitcher {
     this._close();
   }
 
+  _onAuthChange() {
+    if (this.open) this._renderPopover();
+  }
+
   _renderPopover() {
     const active = getTheme();
     const swatches = THEMES.map((id) => {
@@ -107,10 +119,24 @@ export class ThemeSwitcher {
         aria-label="${esc(name)}" title="${esc(name)}"></button>`;
     }).join('');
 
+    const testOn = (getTestOverride() ?? getServerEnv()) === 'test';
+    const testRow = isAdmin() ? `
+      <div class="theme-switcher__test">
+        <span class="theme-switcher__test-text">
+          <span class="theme-switcher__test-label">${esc(t('themeSwitcher.testMode'))}</span>
+          <span class="theme-switcher__test-note">${esc(t('themeSwitcher.testModeNote'))}</span>
+        </span>
+        <button type="button" class="theme-switcher__toggle" role="switch"
+          aria-checked="${testOn}" aria-label="${esc(t('themeSwitcher.testMode'))}">
+          <span class="theme-switcher__toggle-knob"></span>
+        </button>
+      </div>` : '';
+
     this.popover.setAttribute('aria-label', t('themeSwitcher.title'));
     this.popover.innerHTML = `
       <div class="theme-switcher__title">${esc(t('themeSwitcher.title'))}</div>
       <div class="theme-switcher__swatches">${swatches}</div>
+      ${testRow}
     `;
 
     this.popover.querySelectorAll('.theme-switcher__swatch').forEach((btn) => {
@@ -121,5 +147,31 @@ export class ThemeSwitcher {
           .forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
       });
     });
+
+    const toggle = this.popover.querySelector('.theme-switcher__toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const on = toggle.getAttribute('aria-checked') !== 'true';
+        toggle.setAttribute('aria-checked', String(on));
+        this._setTestMode(on);
+      });
+    }
+  }
+
+  // Per-browser TEST-mode flip: persist the override (absent = follow server),
+  // toggle the body class driving test-env.css, and mount/unmount the shared
+  // change-request widget instance. The dynamic import keeps the widget +
+  // html2canvas off the production bundle unless an admin toggles it on.
+  async _setTestMode(on) {
+    const want = on ? 'test' : 'production';
+    setTestOverride(want === getServerEnv() ? null : want);
+    document.body.classList.toggle('is-test-env', on);
+    const m = await import('./ChangeRequestWidget.js').catch((err) => {
+      console.error('[theme-switcher] change-request widget failed to load', err);
+      return null;
+    });
+    if (!m) return;
+    if (on) m.mountChangeRequestWidget();
+    else m.unmountChangeRequestWidget();
   }
 }

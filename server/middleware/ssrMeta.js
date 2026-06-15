@@ -453,6 +453,14 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${esc(description)}" id="ssr-description" />`
   );
+  // App environment for the client (drives the in-app feedback widget + TEST
+  // chrome). Explicit APP_ENV wins; otherwise any non-production NODE_ENV is
+  // treated as "test" so the widget is available in dev/staging, hidden in prod.
+  const appEnv = process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'test');
+  html = html.replace(
+    /<meta\s+name="app-env"[^>]*>/i,
+    `<meta name="app-env" content="${esc(appEnv)}" id="ssr-app-env" />`
+  );
   html = html.replace(
     /<meta\s+property="og:title"[^>]*>/i,
     `<meta property="og:title" content="${esc(title)}" />`
