@@ -2,6 +2,7 @@
 // Admin-only product/order management lives in adminShopController.js.
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const Collection = require('../models/Collection');
 const Order   = require('../models/Order');
 const { WebhookEvent } = require('../models/Order');
 const db = require('../config/database');
@@ -85,12 +86,14 @@ const shopController = {
       const products = await Product.findAll({ activeOnly: true, limit: 100, locale: req.locale });
       if (products.length === 0) return res.json({ products: [] });
       const productIds = products.map(p => p.id);
-      const [images, variants] = await Promise.all([
+      const [images, variants, collections] = await Promise.all([
         Product.listImagesForProducts(productIds),
         ProductVariant.listForProducts(productIds, { activeOnly: true }),
+        Collection.listForProducts(productIds),
       ]);
-      const imagesByProduct   = new Map();
-      const variantsByProduct = new Map();
+      const imagesByProduct     = new Map();
+      const variantsByProduct   = new Map();
+      const collectionsByProduct = new Map();
       for (const img of images) {
         const arr = imagesByProduct.get(img.product_id);
         if (arr) arr.push(img); else imagesByProduct.set(img.product_id, [img]);
@@ -99,10 +102,16 @@ const shopController = {
         const arr = variantsByProduct.get(v.product_id);
         if (arr) arr.push(v); else variantsByProduct.set(v.product_id, [v]);
       }
+      for (const c of collections) {
+        const entry = { id: c.id, slug: c.slug, title: c.title };
+        const arr = collectionsByProduct.get(c.product_id);
+        if (arr) arr.push(entry); else collectionsByProduct.set(c.product_id, [entry]);
+      }
       const withAll = products.map(p => ({
         ...p,
-        images:   imagesByProduct.get(p.id)   || [],
-        variants: variantsByProduct.get(p.id) || [],
+        images:      imagesByProduct.get(p.id)      || [],
+        variants:    variantsByProduct.get(p.id)    || [],
+        collections: collectionsByProduct.get(p.id) || [],
       }));
       return res.json({ products: withAll });
     } catch (err) { next(err); }
@@ -118,6 +127,15 @@ const shopController = {
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
       ]);
       return res.json({ product: { ...product, images, variants } });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/shop/collections — public list of active collections (for the
+  // shop's browse-by-collection filter chips).
+  async listCollections(req, res, next) {
+    try {
+      const collections = await Collection.findAll({ activeOnly: true });
+      return res.json({ collections });
     } catch (err) { next(err); }
   },
 

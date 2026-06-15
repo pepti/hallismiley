@@ -32,10 +32,11 @@ export const ADMIN_NAV = [
     { id: 'dashboard', route: '/admin',               labelKey: 'admin.nav.dashboard', icon: 'grid' },
   ] },
   { key: 'shop', group: 'admin.navGroup.shop', items: [
-    { id: 'products',  route: '/admin/shop/products', labelKey: 'admin.nav.products',  icon: 'tag' },
-    { id: 'orders',    route: '/admin/shop/orders',   labelKey: 'admin.nav.orders',    icon: 'receipt' },
-    { id: 'discounts', route: '/admin/discounts',     labelKey: 'admin.nav.discounts', icon: 'percent' },
-    { id: 'sales',     route: '/admin/sales',         labelKey: 'admin.nav.sales',     icon: 'chart' },
+    { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
+    { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
+    { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
+    { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
+    { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
   ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
@@ -53,6 +54,7 @@ const ICONS = {
   grid:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
   receipt:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12a1 1 0 0 1 1 1v18l-3-2-3 2-3-2-3 2V3a1 1 0 0 1 1-1Z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>',
   tag:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+  layers:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
   percent:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   chart:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><line x1="8" y1="17" x2="8" y2="12"/><line x1="13" y1="17" x2="13" y2="7"/><line x1="18" y1="17" x2="18" y2="10"/></svg>',
   activity:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',

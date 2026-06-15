@@ -58,6 +58,7 @@ const discountLimiter = rateLimit({
 // ── Public read endpoints ────────────────────────────────────────────────────
 router.get('/config',             shopController.getConfig);
 router.get('/products',           shopController.listProducts);
+router.get('/collections',        shopController.listCollections);
 router.get('/products/:slug',     shopController.getProduct);
 router.get('/orders/by-session/:sessionId', shopController.getOrderBySession);
 

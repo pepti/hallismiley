@@ -17,6 +17,7 @@ const CAPACITY_BUCKETS = [
 const DEFAULT_STATE = {
   q: '',
   shapes: [],        // array of shape ids
+  collections: [],   // array of collection slugs
   capacities: [],    // array of bucket ids
   priceMin: '',      // string to allow empty
   priceMax: '',
@@ -30,6 +31,7 @@ export function parseStateFromQs(qs) {
   const state = { ...DEFAULT_STATE };
   if (p.has('q'))      state.q = p.get('q');
   if (p.has('shapes')) state.shapes = p.get('shapes').split(',').filter(Boolean);
+  if (p.has('col'))    state.collections = p.get('col').split(',').filter(Boolean);
   if (p.has('cap'))    state.capacities = p.get('cap').split(',').filter(Boolean);
   if (p.has('min'))    state.priceMin = p.get('min');
   if (p.has('max'))    state.priceMax = p.get('max');
@@ -42,6 +44,7 @@ export function stateToQs(state) {
   const p = new URLSearchParams();
   if (state.q) p.set('q', state.q);
   if (state.shapes.length) p.set('shapes', state.shapes.join(','));
+  if (state.collections.length) p.set('col', state.collections.join(','));
   if (state.capacities.length) p.set('cap', state.capacities.join(','));
   if (state.priceMin) p.set('min', String(state.priceMin));
   if (state.priceMax) p.set('max', String(state.priceMax));
@@ -73,6 +76,11 @@ export function applyFilters(products, state, currency) {
       if (!p.capacity_litres) return false;
       return buckets.some(b => p.capacity_litres >= b.min && p.capacity_litres <= b.max);
     });
+  }
+
+  if (state.collections.length) {
+    const set = new Set(state.collections);
+    out = out.filter(p => Array.isArray(p.collections) && p.collections.some(c => set.has(c.slug)));
   }
 
   const priceField = currency === 'ISK' ? 'price_isk' : 'price_eur';
@@ -124,11 +132,13 @@ export class ShopFilters {
     // between product categories (roof boxes → apparel → …).
     this._hasShape    = products.some(p => p.shape != null);
     this._hasCapacity = products.some(p => p.capacity_litres != null);
+    this._collections = _distinctCollections(products);
   }
 
   setProducts(products) {
     this._hasShape    = products.some(p => p.shape != null);
     this._hasCapacity = products.some(p => p.capacity_litres != null);
+    this._collections = _distinctCollections(products);
     this._paint();
   }
 
@@ -159,6 +169,7 @@ export class ShopFilters {
   _activeFilterCount() {
     const s = this._state;
     return (s.shapes.length ? 1 : 0) +
+           (s.collections.length ? 1 : 0) +
            (s.capacities.length ? 1 : 0) +
            ((s.priceMin || s.priceMax) ? 1 : 0) +
            (s.inStockOnly ? 1 : 0);
@@ -218,6 +229,17 @@ export class ShopFilters {
           ${CAPACITY_BUCKETS.map(b => `
             <button type="button" class="shop-filters__chip ${s.capacities.includes(b.id) ? 'active' : ''}"
                     data-cap="${b.id}" data-testid="cap-${b.id}">${t('filters.capacity.' + b.id)}</button>
+          `).join('')}
+        </div>
+      </div>` : ''}
+
+      ${this._collections.length ? `
+      <div class="shop-filters__row">
+        <span class="shop-filters__row-label">${t('filters.collection')}</span>
+        <div class="shop-filters__chips" role="group" aria-label="${t('filters.filterByCollection')}">
+          ${this._collections.map(c => `
+            <button type="button" class="shop-filters__chip ${s.collections.includes(c.slug) ? 'active' : ''}"
+                    data-collection="${_esc(c.slug)}" data-testid="col-${_esc(c.slug)}">${_esc(c.title)}</button>
           `).join('')}
         </div>
       </div>` : ''}
@@ -299,6 +321,17 @@ export class ShopFilters {
       });
     });
 
+    // Collection chips
+    root.querySelectorAll('[data-collection]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.collection;
+        const next = this._state.collections.includes(id)
+          ? this._state.collections.filter(x => x !== id)
+          : [...this._state.collections, id];
+        this.setState({ collections: next });
+      });
+    });
+
     // Price min/max — commit on change (fires on blur / Enter) so typing doesn't
     // cause per-keystroke repaint/focus-loss. setState triggers a repaint so the
     // Reset button shows up immediately when a price filter becomes active.
@@ -328,6 +361,18 @@ export class ShopFilters {
     if (this._unsubCart) this._unsubCart();
     clearTimeout(this._searchDebounce);
   }
+}
+
+// Distinct collections present across the current product set (for filter chips).
+function _distinctCollections(products) {
+  const map = new Map();
+  for (const p of products) {
+    if (!Array.isArray(p.collections)) continue;
+    for (const c of p.collections) {
+      if (c && c.slug && !map.has(c.slug)) map.set(c.slug, { slug: c.slug, title: c.title });
+    }
+  }
+  return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
 }
 
 function _esc(s) {
