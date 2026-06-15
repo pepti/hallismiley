@@ -5,7 +5,7 @@
 
 const multer = require('multer');
 const fs     = require('fs');
-const { newsUploadDir, projectUploadDir, productUploadDir } = require('../config/paths');
+const { newsUploadDir, projectUploadDir, productUploadDir, backgroundUploadDir } = require('../config/paths');
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -146,4 +146,41 @@ function createProductUpload(productId) {
   });
 }
 
-module.exports = { createProjectUpload, createNewsUpload, createProductUpload, MIME_TO_EXT, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };
+/**
+ * Returns a configured multer upload instance for home-background media
+ * (images + videos). Destination: `UPLOAD_ROOT/backgrounds/`.
+ */
+function createBackgroundUpload() {
+  const destDir = backgroundUploadDir();
+
+  const storage = multer.diskStorage({
+    destination(req, file, cb) {
+      fs.mkdirSync(destDir, { recursive: true });
+      cb(null, destDir);
+    },
+    filename(req, file, cb) {
+      const ext  = MIME_TO_EXT[file.mimetype] || '.bin';
+      const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+      cb(null, name);
+    },
+  });
+
+  const fileFilter = (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      const err = new Error('Only images (jpg, png, webp) and videos (mp4, webm) are allowed');
+      err.code = 'INVALID_TYPE';
+      cb(err);
+    }
+  };
+
+  return multer({ storage, fileFilter, limits: { fileSize: MAX_VIDEO_SIZE } });
+}
+
+// Map an accepted MIME type to the background_media.media_type enum.
+function mediaTypeForMime(mime) {
+  return ALLOWED_VIDEO_TYPES.includes(mime) ? 'video' : 'image';
+}
+
+module.exports = { createProjectUpload, createNewsUpload, createProductUpload, createBackgroundUpload, mediaTypeForMime, MIME_TO_EXT, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };

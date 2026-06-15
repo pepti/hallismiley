@@ -1457,6 +1457,28 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0)`,
     ],
   },
+  {
+    // Background media library — a flat global library of images/videos the
+    // admin can pick the home-hero background from. (The upstream store also
+    // had named sections for a tiled mosaic; dropped here — this site's hero is
+    // a single video/photo, so no sections/mosaic.) The active landing choice
+    // lives in site_content key 'landing_background' { mode, photo_url,
+    // veil_percent } with mode video|photo|plain (video = current default).
+    // Authoritative copy; human-reference duplicate in server/migrations/050_background_media.sql.
+    name: '050_background_media',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS background_media (
+        id          SERIAL      PRIMARY KEY,
+        file_path   TEXT        NOT NULL,
+        media_type  TEXT        NOT NULL DEFAULT 'image' CHECK (media_type IN ('image','video')),
+        caption     TEXT,
+        caption_is  TEXT,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_background_media_sort ON background_media (sort_order, id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

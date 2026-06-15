@@ -28,4 +28,5 @@ module.exports = {
   userAvatarDir() { return path.join(UPLOAD_ROOT, 'avatars'); },
   productUploadDir(productId) { return path.join(UPLOAD_ROOT, 'products', String(productId)); },
   contentUploadDir() { return path.join(UPLOAD_ROOT, 'content'); },
+  backgroundUploadDir() { return path.join(UPLOAD_ROOT, 'backgrounds'); },
 };
