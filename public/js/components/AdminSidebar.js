@@ -18,7 +18,7 @@
 // and links can't break.
 
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
-import { isAdmin } from '../services/auth.js';
+import { isAdmin, canSeeView } from '../services/auth.js';
 import { showToast } from './Toast.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
@@ -46,6 +46,7 @@ export const ADMIN_NAV = [
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
     { id: 'users',   route: '/admin/users',   labelKey: 'admin.nav.users',   icon: 'shield' },
+    { id: 'roles',   route: '/admin/roles',   labelKey: 'admin.nav.roles',   icon: 'key' },
   ] },
 ];
 
@@ -62,6 +63,7 @@ const ICONS = {
   inbox:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>',
   gear:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
   shield:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>',
+  key:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10.5 12.5 8-8"/><path d="m15 6 2.5 2.5"/><path d="m18 3 2.5 2.5"/></svg>',
 };
 
 // Pencil (edit toggle) + grip (drag handle). The grip is filled dots, distinct
@@ -106,7 +108,7 @@ function reconcile(saved) {
   const sections = base.sections.map(s => {
     const items = [];
     for (const id of (s.items || [])) {
-      if (BY_ID.has(id) && !seen.has(id)) { seen.add(id); items.push(id); }
+      if (BY_ID.has(id) && canSeeView(id) && !seen.has(id)) { seen.add(id); items.push(id); }
     }
     return { key: String(s.key), title: (s.title == null ? null : String(s.title)), items };
   });
@@ -126,6 +128,7 @@ function reconcile(saved) {
   });
   for (const id of BY_ID.keys()) {
     if (seen.has(id)) continue;
+    if (!canSeeView(id)) continue; // RBAC: never surface a view the role can't access
     const target = sections.find(s => s.key === GROUP_OF.get(id)) || sections[0];
     if (target) { target.items.push(id); seen.add(id); }
   }
@@ -290,8 +293,13 @@ export function renderAdminShell({ activePath, content } = {}) {
     // While editing we keep the working copy; otherwise re-read the latest
     // persisted layout (so a hydrate or another view's change is reflected).
     if (!editing) working = reconcile(loadNavLayout());
+    // Outside edit mode, hide sections the role has no items in (e.g. a
+    // shop-only role won't see an empty "Settings" header). In edit mode (admin
+    // only) keep empties so they remain drop targets.
     navEl.innerHTML = editControlsHtml(editing)
-      + working.sections.map(s => sectionHtml(s, activeId, working.labels, editing)).join('');
+      + working.sections
+          .filter(s => editing || s.items.length)
+          .map(s => sectionHtml(s, activeId, working.labels, editing)).join('');
   }
 
   function persist() { saveNavLayout(working); }

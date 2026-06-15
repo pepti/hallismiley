@@ -21,7 +21,7 @@ import { ProfileView }        from './views/ProfileView.js';
 import { VerifyEmailView }    from './views/VerifyEmailView.js';
 import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
-import { isAuthenticated, isAdmin, canEdit } from './services/auth.js';
+import { isAuthenticated, isAdmin, canEdit, canSeeView } from './services/auth.js';
 import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
 import { ShopView }              from './views/ShopView.js';
@@ -35,6 +35,7 @@ import { AdminProductsView }     from './views/AdminProductsView.js';
 import { AdminOrdersView }       from './views/AdminOrdersView.js';
 import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
 import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
+import { AdminRolesView }        from './views/AdminRolesView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale,
@@ -52,13 +53,14 @@ const ROUTES = [
   { pattern: '/halli',           factory: ()  => new HalliView() },
   { pattern: '/about',           factory: ()  => new HalliView() },
   { pattern: '/contact',         factory: ()  => new ContactView() },
-  { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
-  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminAnalyticsView() : new HomeView() },
-  { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminGeneralSettingsView() : new HomeView() },
-  { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminDiscountsView() : new HomeView() },
-  { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminSalesView() : new HomeView() },
-  { pattern: '/admin/background', factory: () => (isAuthenticated() && isAdmin()) ? new AdminBackgroundView() : new HomeView() },
-  { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminChangeRequestsView() : new HomeView() },
+  { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && canSeeView('users')) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
+  { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
+  { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && canSeeView('discounts')) ? new AdminDiscountsView() : new HomeView() },
+  { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && canSeeView('sales')) ? new AdminSalesView() : new HomeView() },
+  { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
+  { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
+  { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
@@ -78,10 +80,10 @@ const ROUTES = [
   { pattern: '/checkout/cancel',  factory: ()  => new CheckoutCancelView() },
   { pattern: '/checkout',        factory: ()  => new CheckoutView() },
   { pattern: '/orders',          factory: ()  => isAuthenticated() ? new OrderHistoryView() : new HomeView() },
-  { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && isAdmin()) ? new AdminProductsView() : new HomeView() },
-  { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && isAdmin()) ? new AdminOrdersView() : new HomeView() },
-  { pattern: '/admin/shop/orders/:id', factory: (p) => (isAuthenticated() && isAdmin()) ? new AdminOrderDetailView(p.id) : new HomeView() },
-  { pattern: '/admin/shop/collections', factory: () => (isAuthenticated() && isAdmin()) ? new AdminCollectionsView() : new HomeView() },
+  { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && canSeeView('products')) ? new AdminProductsView() : new HomeView() },
+  { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && canSeeView('orders')) ? new AdminOrdersView() : new HomeView() },
+  { pattern: '/admin/shop/orders/:id', factory: (p) => (isAuthenticated() && canSeeView('orders')) ? new AdminOrderDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/shop/collections', factory: () => (isAuthenticated() && canSeeView('collections')) ? new AdminCollectionsView() : new HomeView() },
 ];
 
 // ── Path parsing (locale-aware) ───────────────────────────────────────────────
@@ -201,31 +203,22 @@ export class Router {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
-    if (path === '/admin/users' && (!isAuthenticated() || !isAdmin())) {
+    // Per-view admin guards (the server enforces these too; this is just the
+    // early client-side redirect). Each admin view maps to a role view-id.
+    const VIEW_BY_PATH = {
+      '/admin/users':      'users',
+      '/admin/analytics':  'analytics',
+      '/admin/general':    'general',
+      '/admin/discounts':  'discounts',
+      '/admin/sales':      'sales',
+      '/admin/background': 'background',
+      '/admin/feedback':   'feedback',
+    };
+    if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
-    if (path === '/admin/analytics' && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
-    }
-    if (path === '/admin/general' && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
-    }
-    if (path === '/admin/discounts' && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
-    }
-    if (path === '/admin/sales' && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
-    }
-    if (path === '/admin/background' && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
-    }
-    if (path === '/admin/feedback' && (!isAuthenticated() || !isAdmin())) {
+    if (path === '/admin/roles' && (!isAuthenticated() || !isAdmin())) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
@@ -237,9 +230,15 @@ export class Router {
       navigateReplace('/' + getLocale() + '/login');
       return;
     }
-    if (path.startsWith('/admin/shop') && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
+    if (path.startsWith('/admin/shop')) {
+      const v = path.startsWith('/admin/shop/products')    ? 'products'
+              : path.startsWith('/admin/shop/collections') ? 'collections'
+              : path.startsWith('/admin/shop/orders')      ? 'orders'
+              : null;
+      if (!isAuthenticated() || (v && !canSeeView(v))) {
+        navigateReplace('/' + getLocale() + '/');
+        return;
+      }
     }
 
     const { factory, params, pattern } = matchRoute(path);

@@ -1,4 +1,4 @@
-import { isAuthenticated, isAdmin, canEdit, getUser, logout, updateProfile } from '../services/auth.js';
+import { isAuthenticated, canEdit, getUser, logout, updateProfile, hasAnyAdminView } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
@@ -217,41 +217,13 @@ export class NavBar {
         <a href="${navHref('/profile')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/profile">
           ${t('nav.profile')}
         </a>
-        ${isAdmin() ? `
+        ${hasAnyAdminView() ? `
         <a href="${navHref('/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin">
-          ${t('nav.manageProjects')}
-        </a>
-        <a href="${navHref('/admin/users')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/users">
-          ${t('nav.manageUsers')}
-        </a>
-        <a href="${navHref('/admin/analytics')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/analytics">
-          ${t('nav.analytics')}
-        </a>
-        <a href="${navHref('/admin/general')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/general">
-          ${t('nav.settings')}
-        </a>
-        <a href="${navHref('/admin/background')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/background">
-          ${t('nav.background')}
-        </a>
-        <a href="${navHref('/admin/feedback')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/feedback">
-          ${t('nav.feedback')}
+          ${t('nav.admin')}
         </a>` : ''}
         ${canEdit() ? `
         <a href="${navHref('/party/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/party/admin">
           ${t('nav.partyAdmin')}
-        </a>` : ''}
-        ${isAdmin() ? `
-        <a href="${navHref('/admin/shop/products')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/shop/products">
-          ${t('nav.manageProducts')}
-        </a>
-        <a href="${navHref('/admin/shop/orders')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/shop/orders">
-          ${t('nav.manageOrders')}
-        </a>
-        <a href="${navHref('/admin/discounts')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/discounts">
-          ${t('nav.discounts')}
-        </a>
-        <a href="${navHref('/admin/sales')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin/sales">
-          ${t('nav.sales')}
         </a>` : ''}
         <a href="${navHref('/orders')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/orders">
           ${t('nav.myOrders')}
