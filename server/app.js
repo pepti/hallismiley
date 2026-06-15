@@ -23,6 +23,8 @@ const analyticsAdminRoutes = require('./routes/analyticsAdminRoutes');
 const adminGeneralSettingsRoutes = require('./routes/adminGeneralSettingsRoutes');
 const adminDiscountRoutes = require('./routes/adminDiscountRoutes');
 const adminBackgroundRoutes = require('./routes/adminBackgroundRoutes');
+const changeRequestRoutes = require('./routes/changeRequestRoutes');
+const adminChangeRequestRoutes = require('./routes/adminChangeRequestRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -421,11 +423,13 @@ app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
+app.use('/api/v1/change-requests', changeRequestRoutes);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/discounts', adminDiscountRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/background', adminBackgroundRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/change-requests', adminChangeRequestRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

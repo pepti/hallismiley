@@ -29,4 +29,5 @@ module.exports = {
   productUploadDir(productId) { return path.join(UPLOAD_ROOT, 'products', String(productId)); },
   contentUploadDir() { return path.join(UPLOAD_ROOT, 'content'); },
   backgroundUploadDir() { return path.join(UPLOAD_ROOT, 'backgrounds'); },
+  changeRequestUploadDir() { return path.join(UPLOAD_ROOT, 'change-requests'); },
 };
