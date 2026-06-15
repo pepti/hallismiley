@@ -6,6 +6,8 @@ const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
+const Setting = require('../models/Setting');
+const { streamDeliveryNote } = require('../services/pdfService');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
@@ -308,6 +310,19 @@ const adminShopController = {
       const days = Number(req.query.days) || 30;
       const report = await Order.salesReport({ days });
       return res.json({ report });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/shop/orders/:id/delivery-note → streams an A4 PDF.
+  async deliveryNote(req, res, next) {
+    try {
+      const order = await Order.findById(req.params.id);
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      const [items, store] = await Promise.all([
+        Order.listItems(order.id),
+        Setting.getGeneralSettings(),
+      ]);
+      return streamDeliveryNote({ res, order, items, store });
     } catch (err) { next(err); }
   },
 

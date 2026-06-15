@@ -84,6 +84,7 @@ export class AdminOrdersView {
               <td><span class="admin-shop__status admin-shop__status--${_esc(o.status)}">${_esc(o.status)}</span></td>
               <td>${cart.formatMoney(o.total, o.currency)}</td>
               <td>
+                <a class="admin-shop__link" href="/api/v1/admin/shop/orders/${_esc(o.id)}/delivery-note" target="_blank" rel="noopener">${t('adminOrders.deliveryNote')}</a>
                 ${o.status === 'paid' ? `<button type="button" class="admin-shop__link" data-action="ship" data-id="${_esc(o.id)}">${t('adminOrders.markShipped')}</button>` : ''}
                 ${(o.status === 'pending' || o.status === 'paid') ? `<button type="button" class="admin-shop__link" data-action="cancel" data-id="${_esc(o.id)}">${t('admin.cancel')}</button>` : ''}
               </td>

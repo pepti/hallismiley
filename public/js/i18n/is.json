@@ -94,6 +94,7 @@
   "adminSales.units": "Seldar einingar",
   "adminSales.ordersPerDay": "Pantanir á dag",
   "adminSales.noData": "Engin sala á þessu tímabili.",
+  "adminOrders.deliveryNote": "Fylgiseðill",
   "nav.analytics": "Tölfræði",
   "analytics.title": "Tölfræði",
   "analytics.range7": "7 dagar",

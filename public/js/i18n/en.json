@@ -94,6 +94,7 @@
   "adminSales.units": "Units sold",
   "adminSales.ordersPerDay": "Orders per day",
   "adminSales.noData": "No sales in this period.",
+  "adminOrders.deliveryNote": "Delivery note",
   "nav.analytics": "Analytics",
   "analytics.title": "Analytics",
   "analytics.range7": "7 days",

@@ -59,6 +59,7 @@ router.get('/reports',            adminShop.salesReport);
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
 router.get('/orders/:id',         adminShop.getOrder);
+router.get('/orders/:id/delivery-note', adminShop.deliveryNote);
 router.patch('/orders/:id/status', csrfProtect, adminShop.updateOrderStatus);
 
 module.exports = router;
