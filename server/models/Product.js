@@ -4,7 +4,7 @@ const db = require('../config/database');
 
 // Admin-facing column list: surfaces both locales' raw fields so the CMS
 // editor can render EN + IS inputs side-by-side.
-const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, sku, barcode, active, created_at, updated_at';
+const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, active, created_at, updated_at';
 const IMG_COLUMNS = 'id, product_id, url, position, alt_text, created_at';
 
 // Public-facing column list: COALESCE the IS sibling columns into the primary
@@ -15,22 +15,33 @@ function publicCols(locale) {
             COALESCE(name_is,        name)        AS name,
             COALESCE(description_is, description) AS description,
             price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
-            category, variant_axes, sku, barcode, active, created_at, updated_at`;
+            category, subcategory, duration_minutes, delivery_format, is_bookable,
+            variant_axes, sku, barcode, active, created_at, updated_at`;
   }
-  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, sku, barcode, active, created_at, updated_at';
+  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, active, created_at, updated_at';
 }
 
 class Product {
   // ── READ ──────────────────────────────────────────────────────────────────
 
-  static async findAll({ activeOnly = true, limit = 100, offset = 0, locale = null } = {}) {
-    const where = activeOnly ? 'WHERE active = TRUE' : '';
+  static async findAll({ activeOnly = true, limit = 100, offset = 0, locale = null, category = null } = {}) {
     const cols  = locale ? publicCols(locale) : COLUMNS;
+    // Build WHERE incrementally so the `category` filter is optional and the
+    // generated SQL is identical to the old shape when it's not used.
+    const conds  = [];
+    const params = [];
+    if (activeOnly) conds.push('active = TRUE');
+    if (category != null) {
+      params.push(String(category));
+      conds.push(`category = $${params.length}`);
+    }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    params.push(Number(limit), Number(offset));
     const { rows } = await db.query(
       `SELECT ${cols} FROM products ${where}
        ORDER BY created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [Number(limit), Number(offset)]
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
     );
     return rows;
   }
@@ -76,14 +87,20 @@ class Product {
       price_isk, price_eur,
       stock = 0, weight_grams = null,
       shape = null, capacity_litres = null,
-      category = null, variant_axes = [],
+      // Shop redesign: new top-level category defaults to 'product' to match
+      // the DB default. Subcategory holds the pre-redesign apparel-style tag.
+      category = 'product', subcategory = null,
+      duration_minutes = null, delivery_format = null, is_bookable = false,
+      variant_axes = [],
       sku = null, barcode = null,
       active = true,
     } = data;
     const { rows } = await db.query(
       `INSERT INTO products (slug, name, description, name_is, description_is,
-                             price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, variant_axes, sku, barcode, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16)
+                             price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
+                             category, subcategory, duration_minutes, delivery_format, is_bookable,
+                             variant_axes, sku, barcode, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20)
        RETURNING ${COLUMNS}`,
       [
         String(slug), String(name), String(description),
@@ -94,7 +111,12 @@ class Product {
         weight_grams === null || weight_grams === undefined ? null : Number(weight_grams),
         shape || null,
         capacity_litres === null || capacity_litres === undefined ? null : Number(capacity_litres),
-        category || null,
+        category || 'product',
+        subcategory || null,
+        duration_minutes === null || duration_minutes === undefined || duration_minutes === ''
+          ? null : Number(duration_minutes),
+        delivery_format || null,
+        Boolean(is_bookable),
         typeof variant_axes === 'string' ? variant_axes : JSON.stringify(variant_axes || []),
         sku || null,
         barcode || null,
@@ -105,9 +127,9 @@ class Product {
   }
 
   static async update(id, data) {
-    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'variant_axes', 'sku', 'barcode', 'active'];
-    const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres']);
-    const bool    = new Set(['active']);
+    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'active'];
+    const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres', 'duration_minutes']);
+    const bool    = new Set(['active', 'is_bookable']);
     const jsonField = new Set(['variant_axes']);
 
     const sets   = [];
@@ -116,7 +138,9 @@ class Product {
     for (const field of allowed) {
       if (data[field] === undefined) continue;
       let v = data[field];
-      if (numeric.has(field)) v = v === null ? null : Number(v);
+      // Empty-string → null for numeric fields so callers can clear an
+      // optional integer without tripping a CHECK constraint via Number('') = 0.
+      if (numeric.has(field)) v = (v === null || v === '') ? null : Number(v);
       if (bool.has(field))    v = Boolean(v);
       // Mirror Project.js: empty-string IS fields clear the translation back
       // to null, which lets COALESCE(name_is, name) fall back to EN on read.

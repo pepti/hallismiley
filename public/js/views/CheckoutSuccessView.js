@@ -91,6 +91,18 @@ export class CheckoutSuccessView {
     // product_name_snapshot is already "Smiley T-shirt — Black / M" (shopController
     // calls buildLineName() when writing order_items), so no extra formatting.
 
+    // Shop redesign step 5 — if any item is a bookable service, surface the
+    // "Halli will reach out within 24h" scheduling promise above the totals.
+    // is_bookable is sourced from Order.listItems (LEFT JOIN to products),
+    // so older orders without the column read FALSE and skip this block.
+    const hasBookable = (items || []).some(it => it.is_bookable);
+    const bookingHtml = hasBookable ? `
+      <div class="shop-success__booking">
+        <p class="shop-success__booking-heading">${t('checkout.bookingNotice.heading')}</p>
+        <p class="shop-success__booking-body">${t('checkout.bookingNotice.body')}</p>
+      </div>
+    ` : '';
+
     this._view.querySelector('#shop-success-status').textContent = t('checkout.paymentConfirmed');
     this._view.querySelector('#shop-success-body').innerHTML = `
       <div class="shop-success__card">
@@ -98,6 +110,7 @@ export class CheckoutSuccessView {
           ${t('orders.order')} <strong>${_esc(order.order_number)}</strong>
         </p>
         <ul class="shop-success__items">${itemsHtml}</ul>
+        ${bookingHtml}
         <div class="shop-success__total-row">
           <span>${t('cart.subtotal')}</span><span>${fmt(order.subtotal)}</span>
         </div>

@@ -10,10 +10,11 @@
   <meta name="robots" content="index, follow" />
   <meta name="author" content="Halli" />
 
-  <!-- Search engine ownership verification — replace content="" with the real
-       values from Google Search Console and Bing Webmaster Tools.
-       Leaving blank is fine; these tags just need to be present when you
-       verify the property. -->
+  <!-- Search engine ownership verification — populated by server SSR from the
+       GOOGLE_VERIFICATION_TOKEN and BING_VERIFICATION_TOKEN env vars (see
+       server/middleware/ssrMeta.js). Set the env vars in Azure App Service
+       after claiming the property in Search Console / Bing Webmaster Tools.
+       Empty content is harmless — the tags only matter once a token lands. -->
   <meta name="google-site-verification" content="" />
   <meta name="msvalidate.01" content="" />
   <!-- Canonical + hreflang are filled in per-request by the server SSR
@@ -65,11 +66,14 @@
   <!-- Stylesheet -->
   <link rel="stylesheet" href="/css/main.css" />
 
-  <!-- JSON-LD Structured Data -->
+  <!-- JSON-LD Structured Data. The @id matches the publisher reference in
+       the WebSite schema emitted server-side on the homepage so search
+       engines can stitch Person + WebSite into one knowledge-graph entity. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "Person",
+    "@id": "https://www.hallismiley.is/#person",
     "name": "Halli",
     "url": "https://www.hallismiley.is",
     "description": "Icelandic carpenter and computer scientist with twenty years of precision joinery and timber framing, combined with full-stack web development in Node.js and PostgreSQL.",

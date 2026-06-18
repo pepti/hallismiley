@@ -184,7 +184,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-async function sendOrderReceipt(order, items, locale = 'en') {
+async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems = false } = {}) {
   const to = order.guest_email || order.user_email;
   if (!to) {
     console.warn(`[EmailService] No recipient for order ${order.order_number} receipt`);
@@ -192,6 +192,25 @@ async function sendOrderReceipt(order, items, locale = 'en') {
   }
 
   const orderUrl = `${APP_URL}/#/checkout/success?session_id=${encodeURIComponent(order.stripe_session_id || '')}`;
+
+  // Shop redesign step 5 — surface the scheduling promise inline in the
+  // receipt when any item is bookable (tech / carpentry service). The
+  // shipping line still renders normally so customers see what they're
+  // owed for any physical items in the same order.
+  const bookingBlockHtml = hasBookableItems ? `
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #2a2a2a;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 4px;font-size:12px;color:#c9a84c;letter-spacing:1.5px;text-transform:uppercase;">
+            ${t(locale, 'email.order.bookingHeading')}
+          </p>
+          <p style="margin:0;font-size:14px;color:#e0e0e0;line-height:1.6;">
+            ${t(locale, 'email.order.bookingBody')}
+          </p>
+        </td>
+      </tr>
+    </table>` : '';
 
   const itemsHtml = items.map(it => `
     <tr>
@@ -243,6 +262,7 @@ async function sendOrderReceipt(order, items, locale = 'en') {
     <p style="margin:0 0 16px;font-size:12px;color:#555;">
       ${t(locale, 'email.order.vatNote')}
     </p>
+    ${bookingBlockHtml}
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
         <td style="background-color:#c9a84c;border-radius:8px;">
@@ -262,6 +282,81 @@ async function sendOrderReceipt(order, items, locale = 'en') {
   const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Order receipt sent: order=${order.order_number} id=${data.id}`);
+}
+
+// ── Booking notification to admins (shop redesign step 5) ───────────────────
+// Fires when a paid order contains at least one is_bookable item. Halli (and
+// any other admin recipients) get an itemised list of the service line items
+// plus the order/contact details needed to follow up. Always English — the
+// admin audience is small and locale-mixed; the customer-facing receipt
+// localises separately.
+
+async function sendBookingNotification({ order, bookableItems, adminEmails }) {
+  if (!adminEmails || adminEmails.length === 0) return;
+  if (!bookableItems || bookableItems.length === 0) return;
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — booking notification skipped (order=${order.order_number}, items=${bookableItems.length})`);
+    return;
+  }
+
+  const locale = 'en';
+  const subject = t(locale, 'email.bookingNotification.subject', { orderNumber: order.order_number });
+
+  const customerLine = order.guest_email
+    ? `${escapeHtml(order.guest_name || order.guest_email)} &lt;${escapeHtml(order.guest_email)}&gt;`
+    : escapeHtml(order.user_email || t(locale, 'email.bookingNotification.unknownCustomer'));
+
+  const itemRowsHtml = bookableItems.map(it => `
+    <tr>
+      <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">
+        ${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}
+      </td>
+      <td style="padding:8px 0;color:#aaa;font-size:14px;text-align:right;">
+        ${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}
+      </td>
+    </tr>
+  `).join('');
+
+  const adminUrl = `${APP_URL}/#/admin/shop/orders`;
+  const heading  = t(locale, 'email.bookingNotification.heading');
+  const bodyText = t(locale, 'email.bookingNotification.body', {
+    orderNumber: escapeHtml(order.order_number),
+    customer:    customerLine,
+  });
+
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      ${bodyText}
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;border-bottom:1px solid #222;">
+      ${itemRowsHtml}
+    </table>
+    <p style="margin:0 0 24px;font-size:13px;color:#888;line-height:1.6;">
+      ${t(locale, 'email.bookingNotification.totalLabel')}:
+      <strong style="color:#c9a84c;">${formatMoney(order.total, order.currency, locale)}</strong>
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${adminUrl}"
+             style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            ${t(locale, 'email.bookingNotification.button')}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+      ${t(locale, 'email.bookingNotification.footer')}
+    </p>
+  `, locale);
+
+  const { data, error } = await getClient().emails.send({
+    from: FROM, to: adminEmails, subject, html,
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Booking notification sent: order=${order.order_number} items=${bookableItems.length} recipients=${adminEmails.length} id=${data.id}`);
 }
 
 // ── RSVP notification to admins ───────────────────────────────────────────────
@@ -515,4 +610,4 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   return { sent, failed };
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, emailHealthCheck, isConfigured };
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, emailHealthCheck, isConfigured };

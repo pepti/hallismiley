@@ -72,7 +72,11 @@ const ROUTES = [
   { pattern: '/terms',           factory: ()  => new TermsView() },
   { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && canEdit()) ? new PartyAdminView() : new PartyView() },
   { pattern: '/party',           factory: ()  => new PartyView() },
-  // Shop + checkout
+  // Shop + checkout. Section sub-routes (shop-redesign step 2) must precede
+  // the generic /shop/:slug pattern so they're not matched as product slugs.
+  { pattern: '/shop/products',   factory: (_, qs) => new ShopView({ section: 'products' },  qs) },
+  { pattern: '/shop/tech',       factory: (_, qs) => new ShopView({ section: 'tech' },      qs) },
+  { pattern: '/shop/carpentry',  factory: (_, qs) => new ShopView({ section: 'carpentry' }, qs) },
   { pattern: '/shop/:slug',      factory: (p) => new ProductView(p.slug) },
   { pattern: '/shop',            factory: (_, qs) => new ShopView(null, qs) },
   { pattern: '/cart',            factory: ()  => new CartView() },

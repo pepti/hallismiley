@@ -1322,13 +1322,71 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
+    // Shop redesign step 1 — see docs/SHOP_REDESIGN.md.
+    //
+    // The existing products.category (from 024_product_variants) held
+    // apparel-style values like 'apparel', 'accessories', 'roof_box'. The
+    // redesign treats those as *subcategory* and uses `category` for the new
+    // top-level taxonomy: 'product' | 'tech_service' | 'carpentry_service'.
+    //
+    // So: rename the old column → subcategory, then add a fresh top-level
+    // category (NOT NULL DEFAULT 'product' backfills existing apparel rows
+    // correctly — they become category='product', subcategory='apparel').
+    //
+    // Service-only fields (duration_minutes, delivery_format, is_bookable)
+    // stay NULL/FALSE on physical products and drive the section-page filters
+    // and the booking follow-up flow in later build-order steps.
+    name: '045_shop_sections',
+    statements: [
+      // Idempotent rename: only if the old column exists and the new one
+      // doesn't. Re-running this migration is a no-op.
+      `DO $$ BEGIN
+         IF EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='products' AND column_name='category')
+            AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='products' AND column_name='subcategory')
+         THEN ALTER TABLE products RENAME COLUMN category TO subcategory;
+         END IF;
+       END $$`,
+
+      // The old idx_products_category was tied to the renamed column name;
+      // drop and recreate against the new column. The new top-level category
+      // index gets its own line below.
+      `DROP INDEX IF EXISTS idx_products_category`,
+      `CREATE INDEX IF NOT EXISTS idx_products_subcategory ON products (subcategory)`,
+
+      // New top-level category. NOT NULL DEFAULT backfills existing rows.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'product'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='products_category_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_category_check
+             CHECK (category IN ('product','tech_service','carpentry_service'));
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_products_category ON products (category)`,
+
+      // Service-only metadata. All nullable / default-false; physical
+      // products leave these unset.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS duration_minutes INTEGER
+         CHECK (duration_minutes IS NULL OR duration_minutes > 0)`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_format TEXT`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='products_delivery_format_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_delivery_format_check
+             CHECK (delivery_format IS NULL OR delivery_format IN ('remote','in_person','hybrid'));
+         END IF;
+       END $$`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS is_bookable BOOLEAN NOT NULL DEFAULT FALSE`,
+    ],
+  },
+  {
     // First-party cookieless web analytics.
     // page_views      = high-volume columnar table we aggregate over.
     // analytics_events = low-volume, extensible conversion table (event_type + JSONB props).
     // NO raw PII at rest: visitor_token is an irreversible daily hash of
     // (ip + user-agent + a rotating in-memory salt). See server/services/analyticsSalt.js.
-    // Authoritative copy; human-reference duplicate in server/migrations/045_analytics.sql.
-    name: '045_analytics',
+    // Authoritative copy; human-reference duplicate in server/migrations/046_analytics.sql.
+    name: '046_analytics',
     statements: [
       `CREATE TABLE IF NOT EXISTS page_views (
         id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1367,8 +1425,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // stable string key + a JSONB value. Backs the admin "General settings"
     // page and is the intended home for feature flags later phases introduce.
     // See server/models/Setting.js.
-    // Authoritative copy; human-reference duplicate in server/migrations/046_app_settings.sql.
-    name: '046_app_settings',
+    // Authoritative copy; human-reference duplicate in server/migrations/047_app_settings.sql.
+    name: '047_app_settings',
     statements: [
       `CREATE TABLE IF NOT EXISTS app_settings (
         key        TEXT        PRIMARY KEY,
@@ -1385,8 +1443,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // Product inventory codes — SKU + barcode (EAN-13/UPC/GTIN/ISBN). Optional
     // TEXT; sku is indexed for lookup. Surfaced in the admin product editor,
     // with an optional native-camera barcode scanner that fills the field.
-    // Authoritative copy; human-reference duplicate in server/migrations/047_product_codes.sql.
-    name: '047_product_codes',
+    // Authoritative copy; human-reference duplicate in server/migrations/048_product_codes.sql.
+    name: '048_product_codes',
     statements: [
       `ALTER TABLE products ADD COLUMN IF NOT EXISTS sku     TEXT`,
       `ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode TEXT`,
@@ -1397,8 +1455,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // Product collections — admin-managed groups of products (distinct from the
     // free-text `category`). Used for grouping/filtering and for discount
     // targeting (phase 4.1). product_collections is the many-to-many join.
-    // Authoritative copy; human-reference duplicate in server/migrations/048_collections.sql.
-    name: '048_collections',
+    // Authoritative copy; human-reference duplicate in server/migrations/049_collections.sql.
+    name: '049_collections',
     statements: [
       `CREATE TABLE IF NOT EXISTS collections (
         id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1430,8 +1488,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // buy-x-get-y types, collection/wholesale targeting, and per-customer
     // redemptions are deliberately out of scope here.) orders gains a
     // discount_code + discount_amount snapshot for when checkout records one.
-    // Authoritative copy; human-reference duplicate in server/migrations/049_discounts.sql.
-    name: '049_discounts',
+    // Authoritative copy; human-reference duplicate in server/migrations/050_discounts.sql.
+    name: '050_discounts',
     statements: [
       `CREATE TABLE IF NOT EXISTS discounts (
         id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1464,8 +1522,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // a single video/photo, so no sections/mosaic.) The active landing choice
     // lives in site_content key 'landing_background' { mode, photo_url,
     // veil_percent } with mode video|photo|plain (video = current default).
-    // Authoritative copy; human-reference duplicate in server/migrations/050_background_media.sql.
-    name: '050_background_media',
+    // Authoritative copy; human-reference duplicate in server/migrations/051_background_media.sql.
+    name: '051_background_media',
     statements: [
       `CREATE TABLE IF NOT EXISTS background_media (
         id          SERIAL      PRIMARY KEY,
@@ -1483,8 +1541,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // In-app change-request (feedback) tool — non-production only. One testing
     // session submits a batch of items → admin inbox. Parent batch + child
     // items; per-item open/resolved status. Authoritative copy; human-reference
-    // duplicate in server/migrations/051_change_requests.sql.
-    name: '051_change_requests',
+    // duplicate in server/migrations/052_change_requests.sql.
+    name: '052_change_requests',
     statements: [
       `CREATE TABLE IF NOT EXISTS change_request_batches (
         id                TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1527,8 +1585,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // frontend reconciles it against the code-defined ADMIN_NAV at render, so
     // routes/icons are never persisted (a moved item keeps working). NULL =
     // default layout. Authoritative copy; human-reference duplicate in
-    // server/migrations/052_admin_nav_config.sql.
-    name: '052_admin_nav_config',
+    // server/migrations/053_admin_nav_config.sql.
+    name: '053_admin_nav_config',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_nav_config JSONB`,
     ],
@@ -1538,8 +1596,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // statuses (Shopify-style), plus order tags. The legacy `status` column is
     // kept and derived from the two so existing code/reports keep working.
     // Authoritative copy; human-reference duplicate in
-    // server/migrations/053_order_payment_fulfillment_tags.sql.
-    name: '053_order_payment_fulfillment_tags',
+    // server/migrations/054_order_payment_fulfillment_tags.sql.
+    name: '054_order_payment_fulfillment_tags',
     statements: [
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status     TEXT NOT NULL DEFAULT 'pending'`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_status TEXT NOT NULL DEFAULT 'unfulfilled'`,
@@ -1576,8 +1634,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // from 049; add the title + shipping_discount). B2C scope — no product/
     // collection targeting or buy-X-get-Y (intentionally out of scope).
     // Authoritative copy; human-reference duplicate in
-    // server/migrations/054_discount_types.sql.
-    name: '054_discount_types',
+    // server/migrations/055_discount_types.sql.
+    name: '055_discount_types',
     statements: [
       `ALTER TABLE discounts ADD COLUMN IF NOT EXISTS method TEXT NOT NULL DEFAULT 'code'`,
       `ALTER TABLE discounts ADD COLUMN IF NOT EXISTS type   TEXT NOT NULL DEFAULT 'order'`,
@@ -1605,8 +1663,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // roles are seeded BEFORE the FK is added / the old CHECK dropped. Each
     // statement is idempotent (the runner applies them without a per-migration
     // transaction). Authoritative copy; human-reference duplicate in
-    // server/migrations/055_dynamic_roles.sql.
-    name: '055_dynamic_roles',
+    // server/migrations/056_dynamic_roles.sql.
+    name: '056_dynamic_roles',
     statements: [
       `CREATE TABLE IF NOT EXISTS roles (
         name        TEXT        PRIMARY KEY,

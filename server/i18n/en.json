@@ -25,6 +25,16 @@
   "email.order.vatNote": "Price includes 24% VAT (VSK).",
   "email.order.viewButton": "View Order",
   "email.order.questions": "Questions? Reply to this email and we'll get back to you.",
+  "email.order.bookingHeading": "Scheduling",
+  "email.order.bookingBody": "Your order includes a service. Halli will reach out within 24 hours to schedule.",
+
+  "email.bookingNotification.subject": "New service booking — order {orderNumber}",
+  "email.bookingNotification.heading": "A service booking came in",
+  "email.bookingNotification.body": "Order <strong style=\"color:#c9a84c;\">{orderNumber}</strong> from {customer} contains service line items. Reach out within 24h to schedule.",
+  "email.bookingNotification.totalLabel": "Order total",
+  "email.bookingNotification.button": "Open Order Admin",
+  "email.bookingNotification.footer": "This notification fires once per paid order with bookable items. Stock-tracked items are unaffected.",
+  "email.bookingNotification.unknownCustomer": "Customer (no email on file)",
 
   "email.rsvpNotification.subject.new": "New RSVP from {name}",
   "email.rsvpNotification.subject.update": "RSVP updated: {name}",

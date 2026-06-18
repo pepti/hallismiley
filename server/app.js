@@ -404,6 +404,21 @@ app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  u
 // any stale public/sitemap.xml file and reflects live DB state.
 app.use('/', sitemapRoutes);
 
+// IndexNow key-file endpoint — Bing fetches `/<INDEXNOW_KEY>.txt` to verify
+// ownership before accepting our IndexNow API submissions. Serve it from an
+// env var rather than dropping a file on disk so key rotation is a one-line
+// app-settings change and survives container redeploys with no fs writes.
+// The route is constrained to the IndexNow key character set (hex + dash,
+// 8-128 chars) so it can't be coerced into serving arbitrary paths.
+app.get('/:key([A-Za-z0-9-]{8,128}).txt', (req, res, next) => {
+  const expected = process.env.INDEXNOW_KEY;
+  if (!expected) return next();
+  if (req.params.key !== expected) return next();
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(expected);
+});
+
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',

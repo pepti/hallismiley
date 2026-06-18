@@ -16,6 +16,19 @@ const {
   SITE_CONTENT_TRANSLATE_SKIP,
   runAutoTranslateSideEffect,
 } = require('../services/siteContentTranslate');
+const { submitLocalized } = require('../services/indexNow');
+
+// site_content keys → indexable URL path. Editing any of these warrants an
+// IndexNow ping so Bing re-crawls the page that surfaces the new copy.
+const CONTENT_KEY_TO_PATH = {
+  home_hero:        '/',
+  home_skills:      '/',
+  home_stats:       '/',
+  home_discipline:  '/',
+  halli_bio:        '/halli',
+  shop_hero:        '/shop',
+  contact_hero:     '/contact',
+};
 
 // ── Image upload: store under UPLOAD_ROOT/content/ ──────────────────────────
 // In dev that resolves to public/assets/content/ (committed tree); in prod it's
@@ -122,6 +135,12 @@ async function putContent(req, res, next) {
     // Send the EN response immediately. The background translation below
     // continues in the same Node process; it does not affect the response.
     res.json(rows[0].value);
+
+    // IndexNow ping for content keys tied to a known indexable page. Skipped
+    // silently when INDEXNOW_KEY is unset or when the key doesn't map to a
+    // public route (e.g. internal admin labels, footer copy, etc.).
+    const indexablePath = CONTENT_KEY_TO_PATH[key];
+    if (indexablePath) submitLocalized(indexablePath);
 
     // Run the translator side effect only when saving EN content AND the
     // feature flag / opt-in allow it. Captures the body locally because

@@ -36,6 +36,135 @@
   margin: 0 auto;
   padding: 48px 24px 80px;
 }
+
+/* Department tabs — sit below the global nav, persistent across all four
+   shop routes. Active tab uses the existing gold accent as an underline.
+   Shop-redesign step 2. */
+.shop-page__tabs {
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--bg-nav, transparent);
+}
+.shop-page__tabs-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.shop-page__tabs-inner::-webkit-scrollbar { display: none; }
+.shop-page__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 16px 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+.shop-page__tab:hover { color: var(--text-primary, #fff); }
+.shop-page__tab.is-active {
+  color: var(--gold-light, var(--gold));
+}
+/* Gold underline on the active tab — matches the existing nav accent. */
+.shop-page__tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--gold);
+}
+@media (max-width: 640px) {
+  .shop-page__tabs-inner { gap: 16px; padding: 0 16px; }
+  .shop-page__tab { padding: 14px 2px; font-size: 13px; }
+}
+
+/* ── Landing — mixed featured rows (shop redesign step 4) ──────────────── */
+.shop-landing {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+.shop-landing__loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 48px 0;
+}
+.shop-landing__row {
+  margin-bottom: 56px;
+}
+.shop-landing__row:last-child { margin-bottom: 0; }
+
+.shop-landing__row-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  padding-bottom: 8px;
+}
+.shop-landing__row-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--gold-light);
+  margin: 0;
+}
+.shop-landing__see-all {
+  color: var(--gold);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+.shop-landing__see-all:hover { color: var(--gold-light); }
+
+/* Desktop: 4-up grid. Mobile: horizontal scroller. */
+.shop-landing__row-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+@media (max-width: 900px) {
+  .shop-landing__row-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  /* Below 640px the grid collapses to a horizontal scroller so the row
+     stays "featured-feeling" instead of becoming a long vertical column. */
+  .shop-landing__row-cards {
+    display: flex;
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 -16px;       /* edge-to-edge bleed */
+    padding: 0 16px 8px;   /* visual breathing room + scrollbar */
+    gap: 12px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .shop-landing__row-cards > .product-card {
+    flex: 0 0 75%;
+    scroll-snap-align: start;
+  }
+}
+
+.shop-landing__empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 16px 0;
+  margin: 0;
+}
 .shop-page__header {
   text-align: center;
   margin-bottom: 32px;
@@ -783,6 +912,30 @@
   margin-top: 8px; color: var(--gold); font-weight: 700;
 }
 .shop-success__vat-note { font-size: 12px; color: var(--text-muted); margin: 8px 0 16px; }
+
+/* Booking notice on the success page (shop redesign step 5). Subtle gold
+   left border so it reads as informational without competing with the
+   primary "thank you" headline. */
+.shop-success__booking {
+  margin: 12px 0 16px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--gold);
+  background: rgba(201, 168, 76, 0.06);
+  border-radius: 0 4px 4px 0;
+}
+.shop-success__booking-heading {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--gold);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.shop-success__booking-body {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
 .shop-success__back, .shop-cancel__btn, .shop-cancel__link {
   color: var(--gold); text-decoration: none; display: inline-block; margin: 8px;
 }

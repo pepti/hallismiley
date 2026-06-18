@@ -365,8 +365,13 @@ export class NavBar {
   }
 
   setActive(route) {
+    // Exact match for top-level nav, plus prefix match for sub-routes so
+    // /shop/products keeps the "Shop" link highlighted. Use a slash boundary
+    // (`route.startsWith(data + '/')`) so '/shopping' wouldn't match '/shop'.
     document.querySelectorAll('.lol-nav__link[data-route]').forEach(a => {
-      a.classList.toggle('active', a.dataset.route === route);
+      const data = a.dataset.route;
+      const active = data === route || (data !== '/' && route && route.startsWith(data + '/'));
+      a.classList.toggle('active', !!active);
     });
   }
 }

@@ -11,15 +11,61 @@ const { streamDeliveryNote } = require('../services/pdfService');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
+const { submitLocalized }     = require('../services/indexNow');
 
 // EN → IS pairs for auto-translation on admin save.
+// Shop-redesign section fields (category, subcategory, duration_minutes,
+// delivery_format, is_bookable) are language-neutral and deliberately
+// excluded — subcategory holds slug-like tags ('apparel', 'tv-wall'), and the
+// rest are enums / numbers / booleans.
 const PRODUCT_TRANSLATE_PAIRS = [
   ['name',        'name_is',        'plain'],
   ['description', 'description_is', 'markdown'],
 ];
 
+// Shop redesign step 1 — top-level taxonomy + service-only field enums.
+// Kept in sync with the CHECK constraints in migration 045_shop_sections.
+const VALID_CATEGORY = ['product', 'tech_service', 'carpentry_service'];
+const VALID_DELIVERY = ['remote', 'in_person', 'hybrid'];
+
+// Slugs that collide with the section sub-routes added in step 2 — a product
+// with one of these slugs would be unreachable in the UI because the router
+// matches /shop/products etc. before the /shop/:slug detail pattern.
+const RESERVED_SHOP_SLUGS = new Set(['products', 'tech', 'carpentry']);
+
+// Server-side cap mirroring the admin form's maxlength="60" on the
+// subcategory input — keeps non-browser clients from POSTing kilobyte
+// blobs into a free-text column without a DB CHECK.
+const SUBCATEGORY_MAX_LEN = 60;
+
 function validateSlug(slug) {
-  return typeof slug === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
+  if (typeof slug !== 'string') return false;
+  if (RESERVED_SHOP_SLUGS.has(slug)) return false;
+  return /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
+}
+
+// Returns an error message if any section-redesign field is malformed,
+// otherwise null. Shared between create + update so both endpoints reject
+// the same payloads with the same error shape.
+function validateSectionFields(body) {
+  if (body.category != null && body.category !== '' && !VALID_CATEGORY.includes(body.category)) {
+    return `category must be one of: ${VALID_CATEGORY.join(', ')}`;
+  }
+  if (body.delivery_format != null && body.delivery_format !== '' &&
+      !VALID_DELIVERY.includes(body.delivery_format)) {
+    return `delivery_format must be one of: ${VALID_DELIVERY.join(', ')}`;
+  }
+  if (body.duration_minutes != null && body.duration_minutes !== '') {
+    const n = Number(body.duration_minutes);
+    if (!Number.isInteger(n) || n <= 0) {
+      return 'duration_minutes must be a positive integer';
+    }
+  }
+  if (body.subcategory != null && typeof body.subcategory === 'string' &&
+      body.subcategory.length > SUBCATEGORY_MAX_LEN) {
+    return `subcategory must be ${SUBCATEGORY_MAX_LEN} characters or fewer`;
+  }
+  return null;
 }
 
 const adminShopController = {
@@ -75,8 +121,16 @@ const adminShopController = {
       const {
         slug, name, description,
         name_is, description_is,
-        price_isk, price_eur, stock, weight_grams, shape, capacity_litres, sku, barcode, active,
+        price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active,
+        sku, barcode,
+        category, subcategory, duration_minutes, delivery_format, is_bookable,
       } = req.body;
+      if (typeof slug === 'string' && RESERVED_SHOP_SLUGS.has(slug)) {
+        return res.status(400).json({
+          error: `slug '${slug}' is reserved for the /shop/${slug} section page`,
+          code: 400,
+        });
+      }
       if (!validateSlug(slug)) {
         return res.status(400).json({ error: 'slug must be lowercase alphanumeric with hyphens (1-80 chars)', code: 400 });
       }
@@ -101,6 +155,8 @@ const adminShopController = {
       if (barcode != null && (typeof barcode !== 'string' || barcode.length > 64)) {
         return res.status(400).json({ error: 'barcode must be a string (max 64 chars)', code: 400 });
       }
+      const sectionErr = validateSectionFields(req.body);
+      if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
       const product = await Product.create({
         slug, name,
         description:    description || '',
@@ -114,8 +170,14 @@ const adminShopController = {
         capacity_litres: capacity_litres != null ? Number(capacity_litres) : null,
         sku: sku || null,
         barcode: barcode || null,
+        category:         category || 'product',
+        subcategory:      subcategory || null,
+        duration_minutes: duration_minutes != null && duration_minutes !== '' ? Number(duration_minutes) : null,
+        delivery_format:  delivery_format || null,
+        is_bookable:      Boolean(is_bookable),
         active: active !== false,
       });
+      if (product.active) submitLocalized(`/shop/${product.slug}`);
       return res.status(201).json({ product });
     } catch (err) {
       if (err.code === '23505') { // unique_violation on slug
@@ -127,9 +189,19 @@ const adminShopController = {
 
   async updateProduct(req, res, next) {
     try {
-      if (req.body.slug !== undefined && !validateSlug(req.body.slug)) {
-        return res.status(400).json({ error: 'invalid slug', code: 400 });
+      if (req.body.slug !== undefined) {
+        if (typeof req.body.slug === 'string' && RESERVED_SHOP_SLUGS.has(req.body.slug)) {
+          return res.status(400).json({
+            error: `slug '${req.body.slug}' is reserved for the /shop/${req.body.slug} section page`,
+            code: 400,
+          });
+        }
+        if (!validateSlug(req.body.slug)) {
+          return res.status(400).json({ error: 'invalid slug', code: 400 });
+        }
       }
+      const sectionErr = validateSectionFields(req.body);
+      if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
       // Look up current product so auto-translate won't overwrite manual IS
       // edits when the payload only changes EN fields.
       const existingRow = await Product.findById(req.params.id);
@@ -141,6 +213,14 @@ const adminShopController = {
       // product's collections in one PATCH (the editor sends it on save).
       if (Array.isArray(req.body.collection_ids)) {
         await Collection.setForProduct(product.id, req.body.collection_ids);
+      }
+      // Notify IndexNow for active products. If the slug changed, hit the old
+      // one too so Bing drops the now-404 URL from its index.
+      if (product.active) {
+        submitLocalized(`/shop/${product.slug}`);
+        if (existingRow?.slug && existingRow.slug !== product.slug) {
+          submitLocalized(`/shop/${existingRow.slug}`);
+        }
       }
       return res.json({ product });
     } catch (err) {
@@ -155,6 +235,8 @@ const adminShopController = {
     try {
       const product = await Product.deactivate(req.params.id);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      // Ping IndexNow so Bing re-fetches and drops the now-inactive product.
+      submitLocalized(`/shop/${product.slug}`);
       return res.json({ product });
     } catch (err) { next(err); }
   },
