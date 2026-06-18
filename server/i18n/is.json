@@ -216,7 +216,6 @@
   "errors.project.invalidPosition": "position verður að vera \"above_gallery\" eða \"below_gallery\"",
   "errors.project.mediaIdRequired": "media_id er nauðsynlegt",
 
-  "errors.admin.roleEnum": "Hlutverk verður að vera eitt af: {values}",
   "errors.admin.cannotChangeOwnRole": "Ekki er hægt að breyta eigin hlutverki",
   "errors.admin.cannotDisableSelf": "Ekki er hægt að loka eigin aðgangi",
   "errors.admin.cannotDeleteSelf": "Ekki er hægt að eyða eigin aðgangi",

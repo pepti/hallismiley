@@ -216,7 +216,6 @@
   "errors.project.invalidPosition": "position must be \"above_gallery\" or \"below_gallery\"",
   "errors.project.mediaIdRequired": "media_id is required",
 
-  "errors.admin.roleEnum": "role must be one of: {values}",
   "errors.admin.cannotChangeOwnRole": "Cannot change your own role",
   "errors.admin.cannotDisableSelf": "Cannot disable your own account",
   "errors.admin.cannotDeleteSelf": "Cannot delete your own account",

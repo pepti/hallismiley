@@ -8,6 +8,9 @@ const { ALL } = require('../auth/adminViews');
 
 const COLUMNS = 'name, description, view_access, is_system, created_at, updated_at';
 
+// In-process cache (per Node instance). Writes call invalidateCache(), but on a
+// multi-instance deploy each process keeps its own map, so a grant change on one
+// instance propagates to the others within TTL_MS. Fine at this app's scale.
 const _cache  = new Map(); // name -> { views: string[], exp: epoch-ms }
 const TTL_MS  = 30_000;
 
