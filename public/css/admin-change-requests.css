@@ -1,0 +1,27 @@
+/* Admin feedback inbox (/admin/feedback) — batches + items from the in-app
+   change-request tool. Built on shared tokens. */
+.cr-page { max-width: 900px; }
+.cr-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.cr-sub  { color: var(--text-muted); font-size: 14px; margin: 4px 0 0; }
+.cr-filters { display: flex; gap: 6px; }
+.cr-filter {
+  padding: 6px 12px; font-size: 13px; cursor: pointer;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  color: var(--text-secondary); border-radius: var(--radius-md);
+}
+.cr-filter.is-active { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-primary); }
+
+.cr-batch { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 16px; }
+.cr-batch__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-dim); flex-wrap: wrap; }
+.cr-batch__meta { font-size: 12px; color: var(--text-muted); }
+
+.cr-item { padding: 10px 0; border-top: 1px solid var(--border-dim); }
+.cr-item:first-of-type { border-top: 0; }
+.cr-item__note { font-size: 14px; color: var(--text-primary); }
+.cr-item__meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.cr-item__meta code { font-size: 12px; }
+.cr-item__actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+
+.cr-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.cr-badge--open     { background: rgba(180, 140, 0, 0.25); color: #f0c868; }
+.cr-badge--resolved { background: rgba(76, 175, 120, 0.20); color: var(--success); }

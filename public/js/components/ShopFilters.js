@@ -37,15 +37,16 @@ const DELIVERY_FORMATS = ['remote', 'in_person', 'hybrid'];
 // `tech` and `carpentry` swap stock for the service-specific axes and skip
 // shape/capacity entirely since services never carry those.
 const FILTER_CONFIG = {
-  all:       { shape: 'auto', capacity: 'auto', price: true, stock: true,  duration: false, format: false, subcategory: false },
-  products:  { shape: false,  capacity: false,  price: true, stock: true,  duration: false, format: false, subcategory: 'auto' },
-  tech:      { shape: false,  capacity: false,  price: true, stock: false, duration: true,  format: true,  subcategory: false },
-  carpentry: { shape: false,  capacity: false,  price: true, stock: false, duration: false, format: true,  subcategory: 'auto' },
+  all:       { shape: 'auto', capacity: 'auto', collection: 'auto', price: true, stock: true,  duration: false, format: false, subcategory: false },
+  products:  { shape: false,  capacity: false,  collection: 'auto', price: true, stock: true,  duration: false, format: false, subcategory: 'auto' },
+  tech:      { shape: false,  capacity: false,  collection: false,  price: true, stock: false, duration: true,  format: true,  subcategory: false },
+  carpentry: { shape: false,  capacity: false,  collection: false,  price: true, stock: false, duration: false, format: true,  subcategory: 'auto' },
 };
 
 const DEFAULT_STATE = {
   q: '',
   shapes: [],        // array of shape ids
+  collections: [],   // array of collection slugs
   capacities: [],    // array of bucket ids
   durations: [],     // array of DURATION_BUCKETS ids — services only
   formats: [],       // array of DELIVERY_FORMATS — services only
@@ -62,6 +63,7 @@ export function parseStateFromQs(qs) {
   const state = { ...DEFAULT_STATE };
   if (p.has('q'))      state.q = p.get('q');
   if (p.has('shapes')) state.shapes = p.get('shapes').split(',').filter(Boolean);
+  if (p.has('col'))    state.collections = p.get('col').split(',').filter(Boolean);
   if (p.has('cap'))    state.capacities = p.get('cap').split(',').filter(Boolean);
   // Shop redesign step 3 — service axes.
   if (p.has('dur'))    state.durations = p.get('dur').split(',').filter(Boolean);
@@ -78,6 +80,7 @@ export function stateToQs(state) {
   const p = new URLSearchParams();
   if (state.q) p.set('q', state.q);
   if (state.shapes && state.shapes.length) p.set('shapes', state.shapes.join(','));
+  if (state.collections && state.collections.length) p.set('col', state.collections.join(','));
   if (state.capacities && state.capacities.length) p.set('cap', state.capacities.join(','));
   if (state.durations && state.durations.length) p.set('dur', state.durations.join(','));
   if (state.formats && state.formats.length) p.set('fmt', state.formats.join(','));
@@ -112,6 +115,11 @@ export function applyFilters(products, state, currency) {
       if (!p.capacity_litres) return false;
       return buckets.some(b => p.capacity_litres >= b.min && p.capacity_litres <= b.max);
     });
+  }
+
+  if (state.collections && state.collections.length) {
+    const set = new Set(state.collections);
+    out = out.filter(p => Array.isArray(p.collections) && p.collections.some(c => set.has(c.slug)));
   }
 
   // Shop redesign step 3 — service axes.
@@ -193,6 +201,7 @@ export class ShopFilters {
   _scanProducts(products) {
     this._hasShape    = products.some(p => p.shape != null);
     this._hasCapacity = products.some(p => p.capacity_litres != null);
+    this._collections = _distinctCollections(products);
     // Surface every distinct non-null subcategory as a chip on sections that
     // ask for it. Sorted alphabetically so the chip order is stable.
     const subs = new Set();
@@ -232,6 +241,7 @@ export class ShopFilters {
   _activeFilterCount() {
     const s = this._state;
     return ((s.shapes        && s.shapes.length)        ? 1 : 0) +
+           ((s.collections   && s.collections.length)   ? 1 : 0) +
            ((s.capacities    && s.capacities.length)    ? 1 : 0) +
            ((s.durations     && s.durations.length)     ? 1 : 0) +
            ((s.formats       && s.formats.length)       ? 1 : 0) +
@@ -268,6 +278,7 @@ export class ShopFilters {
     // a flat block of conditionals rather than a tree of nested ternaries.
     const showShape       = this._shows('shape',       () => this._hasShape);
     const showCapacity    = this._shows('capacity',    () => this._hasCapacity);
+    const showCollection  = this._shows('collection',  () => this._collections.length > 0);
     const showDuration    = this._shows('duration',    () => true);
     const showFormat      = this._shows('format',      () => true);
     const showSubcategory = this._shows('subcategory', () => this._availableSubcategories.length > 0);
@@ -314,6 +325,17 @@ export class ShopFilters {
           ${CAPACITY_BUCKETS.map(b => `
             <button type="button" class="shop-filters__chip ${s.capacities.includes(b.id) ? 'active' : ''}"
                     data-cap="${b.id}" data-testid="cap-${b.id}">${t('filters.capacity.' + b.id)}</button>
+          `).join('')}
+        </div>
+      </div>` : ''}
+
+      ${showCollection ? `
+      <div class="shop-filters__row">
+        <span class="shop-filters__row-label">${t('filters.collection')}</span>
+        <div class="shop-filters__chips" role="group" aria-label="${t('filters.filterByCollection')}">
+          ${this._collections.map(c => `
+            <button type="button" class="shop-filters__chip ${s.collections.includes(c.slug) ? 'active' : ''}"
+                    data-collection="${_esc(c.slug)}" data-testid="col-${_esc(c.slug)}">${_esc(c.title)}</button>
           `).join('')}
         </div>
       </div>` : ''}
@@ -430,6 +452,17 @@ export class ShopFilters {
       });
     });
 
+    // Collection chips
+    root.querySelectorAll('[data-collection]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.collection;
+        const next = this._state.collections.includes(id)
+          ? this._state.collections.filter(x => x !== id)
+          : [...this._state.collections, id];
+        this.setState({ collections: next });
+      });
+    });
+
     // Shop redesign step 3 — service-axis chips. Same toggle pattern as
     // shape/capacity so multi-select state stays consistent.
     root.querySelectorAll('[data-duration]').forEach(btn => {
@@ -491,6 +524,18 @@ export class ShopFilters {
     if (this._unsubCart) this._unsubCart();
     clearTimeout(this._searchDebounce);
   }
+}
+
+// Distinct collections present across the current product set (for filter chips).
+function _distinctCollections(products) {
+  const map = new Map();
+  for (const p of products) {
+    if (!Array.isArray(p.collections)) continue;
+    for (const c of p.collections) {
+      if (c && c.slug && !map.has(c.slug)) map.set(c.slug, { slug: c.slug, title: c.title });
+    }
+  }
+  return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
 }
 
 function _esc(s) {

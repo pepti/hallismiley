@@ -2,6 +2,7 @@
 // Admin-only product/order management lives in adminShopController.js.
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const Collection = require('../models/Collection');
 const Order   = require('../models/Order');
 const { WebhookEvent } = require('../models/Order');
 const db = require('../config/database');
@@ -10,6 +11,9 @@ const { isConfigured: stripeIsConfigured } = require('../config/stripe');
 const stripeService = require('../services/stripeService');
 const { sendOrderReceipt, sendBookingNotification } = require('../services/emailService');
 const { t }                = require('../i18n');
+const { AnalyticsEvent }   = require('../models/Analytics');
+const { computeForCode, computeForCheckout } = require('../services/discountEngine');
+const Discount             = require('../models/Discount');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -102,12 +106,14 @@ const shopController = {
       });
       if (products.length === 0) return res.json({ products: [] });
       const productIds = products.map(p => p.id);
-      const [images, variants] = await Promise.all([
+      const [images, variants, collections] = await Promise.all([
         Product.listImagesForProducts(productIds),
         ProductVariant.listForProducts(productIds, { activeOnly: true }),
+        Collection.listForProducts(productIds),
       ]);
-      const imagesByProduct   = new Map();
-      const variantsByProduct = new Map();
+      const imagesByProduct     = new Map();
+      const variantsByProduct   = new Map();
+      const collectionsByProduct = new Map();
       for (const img of images) {
         const arr = imagesByProduct.get(img.product_id);
         if (arr) arr.push(img); else imagesByProduct.set(img.product_id, [img]);
@@ -116,10 +122,16 @@ const shopController = {
         const arr = variantsByProduct.get(v.product_id);
         if (arr) arr.push(v); else variantsByProduct.set(v.product_id, [v]);
       }
+      for (const c of collections) {
+        const entry = { id: c.id, slug: c.slug, title: c.title };
+        const arr = collectionsByProduct.get(c.product_id);
+        if (arr) arr.push(entry); else collectionsByProduct.set(c.product_id, [entry]);
+      }
       const withAll = products.map(p => ({
         ...p,
-        images:   imagesByProduct.get(p.id)   || [],
-        variants: variantsByProduct.get(p.id) || [],
+        images:      imagesByProduct.get(p.id)      || [],
+        variants:    variantsByProduct.get(p.id)    || [],
+        collections: collectionsByProduct.get(p.id) || [],
       }));
       return res.json({ products: withAll });
     } catch (err) { next(err); }
@@ -135,6 +147,15 @@ const shopController = {
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
       ]);
       return res.json({ product: { ...product, images, variants } });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/shop/collections — public list of active collections (for the
+  // shop's browse-by-collection filter chips).
+  async listCollections(req, res, next) {
+    try {
+      const collections = await Collection.findAll({ activeOnly: true });
+      return res.json({ collections });
     } catch (err) { next(err); }
   },
 
@@ -274,6 +295,19 @@ const shopController = {
 
       const shippingAmount = getShippingPrice(shippingMethod, currency);
 
+      // ── Resolve a discount (typed code, or the best live automatic one) ──
+      const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
+      const discountCode = typeof req.body?.discount_code === 'string' ? req.body.discount_code.trim() : '';
+      const applied = await computeForCheckout({ code: discountCode, subtotal, shippingAmount, currency });
+      // A bad code the customer typed is a hard error; automatic discovery is silent.
+      if (applied.error && discountCode) {
+        return res.status(applied.error.status).json({
+          error: applied.error.message, reason: applied.error.reason,
+          params: applied.error.params || null, code: applied.error.status,
+        });
+      }
+      const appliedDiscount = (!applied.error && applied.discount) ? applied : null;
+
       // ── Insert order (status=pending) in a transaction ────────────────
       const order = await Order.createWithItems({
         userId: user?.id || null,
@@ -284,11 +318,20 @@ const shopController = {
         shippingAddress: method.requiresAddress ? shippingAddress : null,
         items: resolvedItems,
         shipping: shippingAmount,
+        appliedDiscount,
       });
+
+      // Consume one use of the discount (atomic, guarded by usage_limit).
+      if (appliedDiscount) {
+        try { await Discount.incrementUsed(appliedDiscount.discount.id); } catch { /* non-fatal */ }
+      }
 
       // ── Create Stripe Checkout Session ────────────────────────────────
       // Line-item names already include the variant ("Smiley T-shirt — Black / M")
       // so the Stripe Checkout page and customer receipt show the right SKU.
+      const discountTotal = appliedDiscount
+        ? (Number(appliedDiscount.discountAmount) || 0) + (Number(appliedDiscount.shippingDiscount) || 0)
+        : 0;
       const session = await stripeService.createCheckoutSession({
         items: resolvedItems.map(it => ({
           productId: it.productId,
@@ -303,6 +346,8 @@ const shopController = {
         shippingMethodLabel: method.label,
         orderId: order.id,
         orderNumber: order.order_number,
+        discountAmount: discountTotal,
+        discountLabel: appliedDiscount ? (appliedDiscount.discount.title || appliedDiscount.discount.code) : null,
       });
 
       await Order.setStripeSession(order.id, session.id);
@@ -401,6 +446,35 @@ const shopController = {
       return res.status(200).send('Processed with errors');
     }
   },
+
+  // POST /api/v1/shop/discounts/validate  { code, subtotal, currency }
+  // Public preview: validates a code against a client-provided subtotal and
+  // returns the computed discount. Display-only — checkout must re-validate
+  // against the server-resolved subtotal before applying any charge reduction.
+  async validateDiscount(req, res, next) {
+    try {
+      const { code, subtotal } = req.body || {};
+      const currency = (req.body && req.body.currency === 'EUR') ? 'EUR' : 'ISK';
+      const r = await computeForCode({ code, subtotal, currency });
+      if (r.error) {
+        return res.status(r.error.status).json({
+          valid: false, reason: r.error.reason, error: r.error.message,
+          params: r.error.params || null, code: r.error.status,
+        });
+      }
+      return res.json({
+        valid: true,
+        code:         r.discount.code,
+        title:        r.discount.title,
+        type:         r.discount.type,
+        value_type:   r.discount.value_type,
+        value:        r.discount.value,
+        currency:     r.discount.currency,
+        amount:       r.amount,
+        freeShipping: !!r.freeShipping,
+      });
+    } catch (err) { next(err); }
+  },
 };
 
 // ── Webhook handlers ────────────────────────────────────────────────────────
@@ -483,9 +557,15 @@ async function handleCheckoutCompleted(session) {
     return;
   }
 
-  // Success path — send receipt + (for service orders) an admin booking
-  // notification. Both are best-effort; failures log but never poison the
-  // webhook response. Shop redesign step 5.
+  // Success path — payment confirmed and stock committed.
+  // Fire-and-forget conversion event (no PII — currency + amount only).
+  AnalyticsEvent.record({
+    event_type: 'shop_checkout',
+    props: { currency: order.currency, total: order.total },
+  }).catch(() => {});
+
+  // Send receipt + (for service orders) an admin booking notification. Both are
+  // best-effort; failures log but never poison the webhook response.
   try {
     const items = await Order.listItems(order.id);
     const finalOrder = await Order.findById(order.id);

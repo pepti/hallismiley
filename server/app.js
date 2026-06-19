@@ -18,6 +18,15 @@ const newsRoutes     = require('./routes/newsRoutes');
 const partyRoutes    = require('./routes/partyRoutes');
 const shopRoutes     = require('./routes/shopRoutes');
 const adminShopRoutes = require('./routes/adminShopRoutes');
+const analyticsRoutes      = require('./routes/analyticsRoutes');
+const analyticsAdminRoutes = require('./routes/analyticsAdminRoutes');
+const adminGeneralSettingsRoutes = require('./routes/adminGeneralSettingsRoutes');
+const adminDiscountRoutes = require('./routes/adminDiscountRoutes');
+const adminBackgroundRoutes = require('./routes/adminBackgroundRoutes');
+const changeRequestRoutes = require('./routes/changeRequestRoutes');
+const adminChangeRequestRoutes = require('./routes/adminChangeRequestRoutes');
+const adminNavRoutes = require('./routes/adminNavRoutes');
+const adminRolesRoutes = require('./routes/adminRolesRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -147,6 +156,12 @@ app.use(hpp());
 app.post('/api/v1/shop/webhook',
   express.raw({ type: 'application/json', limit: '1mb' }),
   shopController.handleStripeWebhook);
+
+// Change-request submissions (non-prod) may carry an inline base64 screenshot,
+// so this path gets a larger JSON limit. Mounted BEFORE the global 100 kb
+// parser — once body-parser sets req._body the global parser short-circuits for
+// this path. The route is still 404 in production via requireTestEnv.
+app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
 app.use(express.json({ limit: '100kb' }));
@@ -418,10 +433,10 @@ app.use(express.static(path.join(__dirname, '../public'), {
     if (filePath.endsWith('index.html')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
-    // In development, don't cache JS/CSS either — avoids stale ES modules
-    // when iterating on the frontend.
+    // In development, don't cache JS/CSS/JSON either — avoids stale ES modules
+    // and stale i18n locale files when iterating on the frontend.
     if (process.env.NODE_ENV !== 'production' &&
-        (filePath.endsWith('.js') || filePath.endsWith('.css'))) {
+        (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.json'))) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
   },
@@ -430,7 +445,16 @@ app.use('/auth',              authRoutes);
 app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
+app.use('/api/v1/analytics',  analyticsRoutes);
+app.use('/api/v1/change-requests', changeRequestRoutes);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/discounts', adminDiscountRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/background', adminBackgroundRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/change-requests', adminChangeRequestRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

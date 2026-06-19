@@ -3,6 +3,7 @@
 // to forward submissions to your inbox.
 const { randomUUID } = require('crypto');
 const { t }          = require('../i18n');
+const { AnalyticsEvent } = require('../models/Analytics');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -45,6 +46,14 @@ async function submit(req, res, next) {
     console.log(`[Contact] Submission received: id=${submissionId} topic=${normalizedTopic || 'none'}`);
 
     res.status(200).json({ message: t(req.locale, 'errors.contact.messageReceivedFull') });
+
+    // Fire-and-forget conversion event (no PII — topic only). Reached only on
+    // the success path, so honeypot/validation failures are never counted.
+    AnalyticsEvent.record({
+      event_type: 'contact_submit',
+      locale: req.locale,
+      props: { topic: normalizedTopic || 'none' },
+    }).catch(() => {});
   } catch (err) {
     next(err);
   }

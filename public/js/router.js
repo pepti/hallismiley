@@ -5,6 +5,12 @@ import { HalliView }          from './views/HalliView.js';
 import { ContactView }        from './views/ContactView.js';
 import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
+import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
+import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
+import { AdminDiscountsView }  from './views/AdminDiscountsView.js';
+import { AdminSalesView }      from './views/AdminSalesView.js';
+import { AdminBackgroundView } from './views/AdminBackgroundView.js';
+import { AdminChangeRequestsView } from './views/AdminChangeRequestsView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -15,7 +21,7 @@ import { ProfileView }        from './views/ProfileView.js';
 import { VerifyEmailView }    from './views/VerifyEmailView.js';
 import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
-import { isAuthenticated, isAdmin, canEdit } from './services/auth.js';
+import { isAuthenticated, isAdmin, canEdit, canSeeView } from './services/auth.js';
 import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
 import { ShopView }              from './views/ShopView.js';
@@ -27,11 +33,15 @@ import { CheckoutCancelView }    from './views/CheckoutCancelView.js';
 import { OrderHistoryView }      from './views/OrderHistoryView.js';
 import { AdminProductsView }     from './views/AdminProductsView.js';
 import { AdminOrdersView }       from './views/AdminOrdersView.js';
+import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
+import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
+import { AdminRolesView }        from './views/AdminRolesView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale,
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
+import { trackPageView } from './services/usage.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -43,7 +53,14 @@ const ROUTES = [
   { pattern: '/halli',           factory: ()  => new HalliView() },
   { pattern: '/about',           factory: ()  => new HalliView() },
   { pattern: '/contact',         factory: ()  => new ContactView() },
-  { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && canSeeView('users')) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
+  { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
+  { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && canSeeView('discounts')) ? new AdminDiscountsView() : new HomeView() },
+  { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && canSeeView('sales')) ? new AdminSalesView() : new HomeView() },
+  { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
+  { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
+  { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
@@ -67,8 +84,10 @@ const ROUTES = [
   { pattern: '/checkout/cancel',  factory: ()  => new CheckoutCancelView() },
   { pattern: '/checkout',        factory: ()  => new CheckoutView() },
   { pattern: '/orders',          factory: ()  => isAuthenticated() ? new OrderHistoryView() : new HomeView() },
-  { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && isAdmin()) ? new AdminProductsView() : new HomeView() },
-  { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && isAdmin()) ? new AdminOrdersView() : new HomeView() },
+  { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && canSeeView('products')) ? new AdminProductsView() : new HomeView() },
+  { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && canSeeView('orders')) ? new AdminOrdersView() : new HomeView() },
+  { pattern: '/admin/shop/orders/:id', factory: (p) => (isAuthenticated() && canSeeView('orders')) ? new AdminOrderDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/shop/collections', factory: () => (isAuthenticated() && canSeeView('collections')) ? new AdminCollectionsView() : new HomeView() },
 ];
 
 // ── Path parsing (locale-aware) ───────────────────────────────────────────────
@@ -188,7 +207,22 @@ export class Router {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
-    if (path === '/admin/users' && (!isAuthenticated() || !isAdmin())) {
+    // Per-view admin guards (the server enforces these too; this is just the
+    // early client-side redirect). Each admin view maps to a role view-id.
+    const VIEW_BY_PATH = {
+      '/admin/users':      'users',
+      '/admin/analytics':  'analytics',
+      '/admin/general':    'general',
+      '/admin/discounts':  'discounts',
+      '/admin/sales':      'sales',
+      '/admin/background': 'background',
+      '/admin/feedback':   'feedback',
+    };
+    if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/admin/roles' && (!isAuthenticated() || !isAdmin())) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
@@ -200,9 +234,15 @@ export class Router {
       navigateReplace('/' + getLocale() + '/login');
       return;
     }
-    if (path.startsWith('/admin/shop') && (!isAuthenticated() || !isAdmin())) {
-      navigateReplace('/' + getLocale() + '/');
-      return;
+    if (path.startsWith('/admin/shop')) {
+      const v = path.startsWith('/admin/shop/products')    ? 'products'
+              : path.startsWith('/admin/shop/collections') ? 'collections'
+              : path.startsWith('/admin/shop/orders')      ? 'orders'
+              : null;
+      if (!isAuthenticated() || (v && !canSeeView(v))) {
+        navigateReplace('/' + getLocale() + '/');
+        return;
+      }
     }
 
     const { factory, params, pattern } = matchRoute(path);
@@ -224,5 +264,11 @@ export class Router {
     this.navBar.setActive(pattern || '/');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Anonymous page-view beacon. Placed after the commit point (past the
+    // stale-nav guard and the locale/admin redirects) so it fires exactly once
+    // per rendered view — covering pushState, replaceState, popstate, and the
+    // initial load (init() calls _navigate once).
+    trackPageView();
   }
 }

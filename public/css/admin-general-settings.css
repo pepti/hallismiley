@@ -1,0 +1,76 @@
+/* Admin "General" settings page (/admin/general). Self-contained (cards / rows /
+   input / select / readonly / order-ID preview / savebar) but built on the
+   shared design tokens from variables.css. The gs- prefix keeps the settings
+   page from sharing class state with other admin pages. */
+
+.gs-page { max-width: 820px; }
+
+.gs-head { margin-bottom: var(--sp-4, 16px); }
+.gs-sub  { margin: 4px 0 0; color: var(--text-muted); font-size: 14px; }
+
+/* Section card. */
+.gs-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); margin-bottom: 18px; overflow: hidden;
+}
+.gs-card__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border-dim);
+}
+.gs-card__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.gs-card__body { padding: 4px 18px 8px; }
+
+.gs-badge {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--bg-elevated); color: var(--text-muted);
+}
+
+/* A label/help + control row. */
+.gs-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding: 14px 0; border-top: 1px solid var(--border-dim);
+}
+.gs-row:first-child { border-top: 0; }
+.gs-row__main  { min-width: 0; }
+.gs-row__title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.gs-row__help  { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.gs-row__side  { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-top: 2px; }
+
+/* Text/email input (the real store-identity + order-ID controls). */
+.gs-input {
+  min-width: 260px; max-width: 60vw; padding: 7px 10px; font-size: 13px;
+  color: var(--text-primary); background: var(--bg-base);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.gs-input:focus { outline: none; border-color: var(--accent-blue, #2f6fed); }
+
+/* Enum dropdown (time zone, unit system, weight unit). */
+.gs-select {
+  min-width: 220px; max-width: 60vw; padding: 7px 10px; font-size: 13px;
+  color: var(--text-primary); background: var(--bg-base);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.gs-select:focus { outline: none; border-color: var(--accent-blue, #2f6fed); }
+
+/* Read-only value (currency display). */
+.gs-readonly { font-size: 13px; color: var(--text-secondary); }
+
+/* Order-ID example line. */
+.gs-preview {
+  margin: 4px 0 12px; font-size: 13px; color: var(--text-muted);
+}
+
+/* Sticky save bar (appears only when there are unsaved changes). */
+.gs-savebar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 24px; padding: 12px 16px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
+}
+.gs-savebar[hidden] { display: none; }
+.gs-savebar__msg { font-size: 13px; color: var(--text-secondary); }
+.gs-savebar__actions { display: flex; gap: 8px; }

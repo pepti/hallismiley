@@ -3,6 +3,8 @@ import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
+import { ThemeSwitcher } from './components/ThemeSwitcher.js';
+import { initTheme, getTestOverride, getDemoMode, getServerEnv } from './services/themePrefs.js';
 import {
   loadLocale, getLocaleFromHash, getPreferredLocale, t,
 } from './i18n/i18n.js';
@@ -23,6 +25,24 @@ await loadLocale(initialLocale);
 const navBar = new NavBar();
 const navEl  = navBar.render();
 document.body.insertBefore(navEl, document.getElementById('app'));
+
+// ── Floating theme switcher — mounted outside #app so it survives SPA nav ──
+// theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs
+// at runtime in case the boot script was blocked.
+initTheme();
+document.body.appendChild(new ThemeSwitcher().render());
+
+// ── Test-environment affordances (non-prod): the in-app feedback widget ──────
+// IS_TEST = the per-browser override, else the server's <meta name="app-env">.
+// Lazy-import so the widget + html2canvas never load on the production bundle.
+const IS_TEST = (getTestOverride() ?? getServerEnv()) === 'test';
+if (IS_TEST) {
+  document.body.classList.add('is-test-env');
+  if (getDemoMode()) document.body.classList.add('is-demo-mode');
+  import('./components/ChangeRequestWidget.js')
+    .then((m) => m.mountChangeRequestWidget())
+    .catch((err) => console.error('[test-env] change-request widget failed to load', err));
+}
 
 // ── 4. OAuth redirect landing — show toast for ?error ────────────────────────
 (function handleOAuthLanding() {

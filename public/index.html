@@ -30,6 +30,10 @@
   <meta name="geo.region" content="IS" />
   <meta name="geo.placename" content="Iceland" />
 
+  <!-- App environment (test|production) — stamped per-request by ssrMeta;
+       the in-app feedback widget + TEST chrome appear only when this is "test". -->
+  <meta name="app-env" content="production" id="ssr-app-env" />
+
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="en_IS" />
@@ -53,6 +57,11 @@
 
   <!-- PWA manifest -->
   <link rel="manifest" href="/manifest.json" />
+
+  <!-- Pre-paint theme application — must run before first paint to avoid a
+       flash of the default theme. Classic blocking script, same-origin so it
+       passes the helmet CSP script-src 'self'. See public/js/theme-boot.js. -->
+  <script src="/js/theme-boot.js"></script>
 
   <!-- Stylesheet -->
   <link rel="stylesheet" href="/css/main.css" />

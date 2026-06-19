@@ -56,11 +56,26 @@ jobs:
       - name: Log in to ACR
         run: az acr login --name hallismileyacr
 
+      # The default docker driver can't export a build cache; the
+      # docker-container driver can, which is what makes cache-to below work.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHA layer cache so unchanged layers (notably the ~200 MB `npm ci`
+      # node_modules layer) are reused across deploys instead of rebuilt and
+      # pushed to ACR as brand-new blobs every time. mode=max caches the deps
+      # stage too, not just the final image. provenance:false keeps the pushed
+      # artifact a plain single-arch manifest — the default (an OCI index with
+      # an attestation child) would change what the weekly ACR purge sees and
+      # what App Service pulls.
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             hallismileyacr.azurecr.io/hallismiley:latest
             hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}

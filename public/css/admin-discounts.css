@@ -1,0 +1,13 @@
+/* Admin discounts page (/admin/discounts) — list + create/edit. Reuses the
+   shared admin-table + admin-shop__modal styles; only the page-specific bits
+   live here. */
+.disc-page { max-width: 900px; }
+.disc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.disc-table code { font-size: 13px; }
+.disc-title { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.disc-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+}
+.disc-badge--active { background: rgba(76, 175, 120, 0.18); color: var(--success); }
+.disc-badge--off    { background: var(--bg-elevated); color: var(--text-muted); }

@@ -17,6 +17,13 @@ export function isAdmin()         { return _user?.role === 'admin'; }
 // (party page, news, projects) where moderators have full edit/delete rights.
 export function canEdit()         { return _user?.role === 'admin' || _user?.role === 'moderator'; }
 
+// ── Admin view access (RBAC) ────────────────────────────────────────────────
+// The session payload carries the resolved admin-view id list ('*' = all).
+// These gate the admin sidebar + router for UX; the server enforces them too.
+export function getViews()        { return _user?.views || []; }
+export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
+export function hasAnyAdminView() { return getViews().length > 0; }
+
 // Merge a partial update into the cached user (e.g. after flipping party_access
 // via invite-code redemption). Dispatches authchange so listeners re-render.
 export function updateCachedUser(partial) {

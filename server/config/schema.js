@@ -1379,6 +1379,323 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `ALTER TABLE products ADD COLUMN IF NOT EXISTS is_bookable BOOLEAN NOT NULL DEFAULT FALSE`,
     ],
   },
+  {
+    // First-party cookieless web analytics.
+    // page_views      = high-volume columnar table we aggregate over.
+    // analytics_events = low-volume, extensible conversion table (event_type + JSONB props).
+    // NO raw PII at rest: visitor_token is an irreversible daily hash of
+    // (ip + user-agent + a rotating in-memory salt). See server/services/analyticsSalt.js.
+    // Authoritative copy; human-reference duplicate in server/migrations/046_analytics.sql.
+    name: '046_analytics',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS page_views (
+        id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        path          TEXT        NOT NULL,
+        referrer_host TEXT,
+        device        TEXT        NOT NULL DEFAULT 'unknown'
+                                  CHECK (device IN ('mobile','tablet','desktop','bot','unknown')),
+        browser       TEXT        NOT NULL DEFAULT 'unknown',
+        os            TEXT        NOT NULL DEFAULT 'unknown',
+        locale        TEXT        NOT NULL DEFAULT 'unknown'
+                                  CHECK (locale IN ('en','is','unknown')),
+        visitor_token TEXT        NOT NULL,
+        view_date     DATE        NOT NULL DEFAULT CURRENT_DATE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_page_views_view_date     ON page_views (view_date)`,
+      `CREATE INDEX IF NOT EXISTS idx_page_views_path          ON page_views (path)`,
+      `CREATE INDEX IF NOT EXISTS idx_page_views_visitor_date  ON page_views (view_date, visitor_token)`,
+      `CREATE INDEX IF NOT EXISTS idx_page_views_referrer_host ON page_views (referrer_host) WHERE referrer_host IS NOT NULL`,
+
+      `CREATE TABLE IF NOT EXISTS analytics_events (
+        id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        event_type    TEXT        NOT NULL
+                                  CHECK (event_type IN ('contact_submit','party_rsvp','shop_checkout')),
+        path          TEXT,
+        locale        TEXT,
+        props         JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        event_date    DATE        NOT NULL DEFAULT CURRENT_DATE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_analytics_events_type_date ON analytics_events (event_type, event_date)`,
+    ],
+  },
+  {
+    // Key-value application settings (app_settings). One row per setting: a
+    // stable string key + a JSONB value. Backs the admin "General settings"
+    // page and is the intended home for feature flags later phases introduce.
+    // See server/models/Setting.js.
+    // Authoritative copy; human-reference duplicate in server/migrations/047_app_settings.sql.
+    name: '047_app_settings',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS app_settings (
+        key        TEXT        PRIMARY KEY,
+        value      JSONB       NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `DROP TRIGGER IF EXISTS trg_app_settings_updated_at ON app_settings`,
+      `CREATE TRIGGER trg_app_settings_updated_at
+         BEFORE UPDATE ON app_settings
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
+  {
+    // Product inventory codes — SKU + barcode (EAN-13/UPC/GTIN/ISBN). Optional
+    // TEXT; sku is indexed for lookup. Surfaced in the admin product editor,
+    // with an optional native-camera barcode scanner that fills the field.
+    // Authoritative copy; human-reference duplicate in server/migrations/048_product_codes.sql.
+    name: '048_product_codes',
+    statements: [
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS sku     TEXT`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_products_sku ON products (sku)`,
+    ],
+  },
+  {
+    // Product collections — admin-managed groups of products (distinct from the
+    // free-text `category`). Used for grouping/filtering and for discount
+    // targeting (phase 4.1). product_collections is the many-to-many join.
+    // Authoritative copy; human-reference duplicate in server/migrations/049_collections.sql.
+    name: '049_collections',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS collections (
+        id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        slug        TEXT NOT NULL UNIQUE,
+        title       TEXT NOT NULL,
+        description TEXT,
+        active      BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_collections_slug   ON collections (slug)`,
+      `CREATE INDEX IF NOT EXISTS idx_collections_active ON collections (active) WHERE active = TRUE`,
+      `DROP TRIGGER IF EXISTS trg_collections_updated_at ON collections`,
+      `CREATE TRIGGER trg_collections_updated_at BEFORE UPDATE ON collections
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS product_collections (
+        product_id    TEXT NOT NULL REFERENCES products(id)    ON DELETE CASCADE,
+        collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (product_id, collection_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_product_collections_collection ON product_collections (collection_id)`,
+    ],
+  },
+  {
+    // Discount codes — B2C subset of the icelandicstore engine: code-based,
+    // order-level percentage/fixed discounts with min-subtotal, total usage
+    // limit, and a date window. (The store's automatic/product/free-shipping/
+    // buy-x-get-y types, collection/wholesale targeting, and per-customer
+    // redemptions are deliberately out of scope here.) orders gains a
+    // discount_code + discount_amount snapshot for when checkout records one.
+    // Authoritative copy; human-reference duplicate in server/migrations/050_discounts.sql.
+    name: '050_discounts',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS discounts (
+        id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        code          TEXT        NOT NULL,
+        title         TEXT        NOT NULL,
+        value_type    TEXT        NOT NULL CHECK (value_type IN ('percentage','fixed')),
+        value         INTEGER     NOT NULL CHECK (value >= 0),
+        currency      TEXT        NOT NULL DEFAULT 'ISK' CHECK (currency IN ('ISK','EUR')),
+        min_subtotal  INTEGER     CHECK (min_subtotal IS NULL OR min_subtotal >= 0),
+        usage_limit   INTEGER     CHECK (usage_limit IS NULL OR usage_limit >= 1),
+        used_count    INTEGER     NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+        enabled       BOOLEAN     NOT NULL DEFAULT TRUE,
+        starts_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ends_at       TIMESTAMPTZ,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_discounts_code_lower ON discounts (LOWER(code))`,
+      `DROP TRIGGER IF EXISTS trg_discounts_updated_at ON discounts`,
+      `CREATE TRIGGER trg_discounts_updated_at BEFORE UPDATE ON discounts
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code   TEXT`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0)`,
+    ],
+  },
+  {
+    // Background media library — a flat global library of images/videos the
+    // admin can pick the home-hero background from. (The upstream store also
+    // had named sections for a tiled mosaic; dropped here — this site's hero is
+    // a single video/photo, so no sections/mosaic.) The active landing choice
+    // lives in site_content key 'landing_background' { mode, photo_url,
+    // veil_percent } with mode video|photo|plain (video = current default).
+    // Authoritative copy; human-reference duplicate in server/migrations/051_background_media.sql.
+    name: '051_background_media',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS background_media (
+        id          SERIAL      PRIMARY KEY,
+        file_path   TEXT        NOT NULL,
+        media_type  TEXT        NOT NULL DEFAULT 'image' CHECK (media_type IN ('image','video')),
+        caption     TEXT,
+        caption_is  TEXT,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_background_media_sort ON background_media (sort_order, id)`,
+    ],
+  },
+  {
+    // In-app change-request (feedback) tool — non-production only. One testing
+    // session submits a batch of items → admin inbox. Parent batch + child
+    // items; per-item open/resolved status. Authoritative copy; human-reference
+    // duplicate in server/migrations/052_change_requests.sql.
+    name: '052_change_requests',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS change_request_batches (
+        id                TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        submitter_user_id TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        submitter_email   TEXT,
+        user_agent        TEXT,
+        item_count        INTEGER     NOT NULL DEFAULT 0,
+        submitted_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `DROP TRIGGER IF EXISTS trg_cr_batches_updated_at ON change_request_batches`,
+      `CREATE TRIGGER trg_cr_batches_updated_at BEFORE UPDATE ON change_request_batches
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS change_requests (
+        id               TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        batch_id         TEXT        NOT NULL REFERENCES change_request_batches(id) ON DELETE CASCADE,
+        page_url         TEXT        NOT NULL,
+        page_label       TEXT,
+        element_selector TEXT,
+        element_label    TEXT,
+        note             TEXT        NOT NULL,
+        screenshot_path  TEXT,
+        status           TEXT        NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved')),
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `DROP TRIGGER IF EXISTS trg_cr_updated_at ON change_requests`,
+      `CREATE TRIGGER trg_cr_updated_at BEFORE UPDATE ON change_requests
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE INDEX IF NOT EXISTS idx_cr_batch_id ON change_requests (batch_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_cr_status   ON change_requests (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_cr_batches_submitted_at ON change_request_batches (submitted_at DESC)`,
+    ],
+  },
+  {
+    // Per-admin sidebar layout customization (admin "edit mode": rename items,
+    // drag-reorder within/across sections, create sections). One JSONB blob per
+    // admin user, shaped { v, sections:[{key,title,items:[id]}], labels }. The
+    // frontend reconciles it against the code-defined ADMIN_NAV at render, so
+    // routes/icons are never persisted (a moved item keeps working). NULL =
+    // default layout. Authoritative copy; human-reference duplicate in
+    // server/migrations/053_admin_nav_config.sql.
+    name: '053_admin_nav_config',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_nav_config JSONB`,
+    ],
+  },
+  {
+    // Split the single order `status` into independent payment + fulfillment
+    // statuses (Shopify-style), plus order tags. The legacy `status` column is
+    // kept and derived from the two so existing code/reports keep working.
+    // Authoritative copy; human-reference duplicate in
+    // server/migrations/054_order_payment_fulfillment_tags.sql.
+    name: '054_order_payment_fulfillment_tags',
+    statements: [
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status     TEXT NOT NULL DEFAULT 'pending'`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_status TEXT NOT NULL DEFAULT 'unfulfilled'`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at       TIMESTAMPTZ`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS tags               JSONB NOT NULL DEFAULT '[]'::jsonb`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_payment_status_check') THEN
+           ALTER TABLE orders ADD CONSTRAINT orders_payment_status_check
+             CHECK (payment_status IN ('pending','paid','refunded','partially_refunded','voided'));
+         END IF;
+       END $$`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_fulfillment_status_check') THEN
+           ALTER TABLE orders ADD CONSTRAINT orders_fulfillment_status_check
+             CHECK (fulfillment_status IN ('unfulfilled','fulfilled','partial','delivered'));
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_payment_status     ON orders (payment_status)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_fulfillment_status ON orders (fulfillment_status)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_tags               ON orders USING GIN (tags)`,
+      // Backfill from the legacy status (guarded so it only touches rows still at
+      // the default 'pending' — so re-running never clobbers admin-set values).
+      `UPDATE orders SET payment_status = 'paid'   WHERE status = 'paid'     AND payment_status = 'pending'`,
+      `UPDATE orders SET payment_status = 'paid', fulfillment_status = 'fulfilled'
+         WHERE status = 'shipped' AND payment_status = 'pending'`,
+      `UPDATE orders SET payment_status = 'refunded' WHERE status = 'refunded' AND payment_status = 'pending'`,
+      `UPDATE orders SET payment_status = 'voided'   WHERE status IN ('cancelled','failed') AND payment_status = 'pending'`,
+    ],
+  },
+  {
+    // Extend discounts with a `method` (code vs automatic/no-code) and a `type`
+    // (order amount vs free shipping), and add the order-side discount snapshot
+    // columns the checkout records (discount_code/discount_amount already exist
+    // from 049; add the title + shipping_discount). B2C scope — no product/
+    // collection targeting or buy-X-get-Y (intentionally out of scope).
+    // Authoritative copy; human-reference duplicate in
+    // server/migrations/055_discount_types.sql.
+    name: '055_discount_types',
+    statements: [
+      `ALTER TABLE discounts ADD COLUMN IF NOT EXISTS method TEXT NOT NULL DEFAULT 'code'`,
+      `ALTER TABLE discounts ADD COLUMN IF NOT EXISTS type   TEXT NOT NULL DEFAULT 'order'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'discounts_method_check') THEN
+           ALTER TABLE discounts ADD CONSTRAINT discounts_method_check CHECK (method IN ('code','automatic'));
+         END IF;
+       END $$`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'discounts_type_check') THEN
+           ALTER TABLE discounts ADD CONSTRAINT discounts_type_check CHECK (type IN ('order','free_shipping'));
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_discounts_automatic ON discounts (enabled) WHERE method = 'automatic'`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_title    TEXT`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_discount INTEGER NOT NULL DEFAULT 0 CHECK (shipping_discount >= 0)`,
+    ],
+  },
+  {
+    // Dynamic roles: a `roles` table becomes the source of truth for role names +
+    // which admin views each role may access. users.role becomes a FK on
+    // roles.name (no data backfill — the column already holds the name). admin
+    // gets view_access ['*'] (all views, incl. future ones); the resolver also
+    // hard-shortcuts role='admin' so admins can never be locked out. Built-in
+    // roles are seeded BEFORE the FK is added / the old CHECK dropped. Each
+    // statement is idempotent (the runner applies them without a per-migration
+    // transaction). Authoritative copy; human-reference duplicate in
+    // server/migrations/056_dynamic_roles.sql.
+    name: '056_dynamic_roles',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS roles (
+        name        TEXT        PRIMARY KEY,
+        description TEXT        NOT NULL DEFAULT '',
+        view_access JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        is_system   BOOLEAN     NOT NULL DEFAULT FALSE,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `DROP TRIGGER IF EXISTS trg_roles_updated_at ON roles`,
+      `CREATE TRIGGER trg_roles_updated_at BEFORE UPDATE ON roles
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      // Seed built-in roles BEFORE the FK / CHECK changes. admin = all views.
+      `INSERT INTO roles (name, description, view_access, is_system) VALUES
+         ('admin',     'Full access to every admin view',   '["*"]'::jsonb, TRUE),
+         ('moderator', 'Content & party management',        '[]'::jsonb,    TRUE),
+         ('user',      'Standard account (no admin views)', '[]'::jsonb,    TRUE)
+       ON CONFLICT (name) DO NOTHING`,
+      // Defensive: coerce any unknown role value so the FK can be added.
+      `UPDATE users SET role = 'user' WHERE role NOT IN (SELECT name FROM roles)`,
+      // Replace the fixed-enum CHECK with the FK to roles(name).
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`,
+      `ALTER TABLE users ALTER COLUMN role SET DEFAULT 'user'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_fkey') THEN
+           ALTER TABLE users ADD CONSTRAINT users_role_fkey
+             FOREIGN KEY (role) REFERENCES roles(name) ON UPDATE CASCADE ON DELETE RESTRICT;
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

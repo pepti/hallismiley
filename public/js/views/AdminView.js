@@ -5,6 +5,7 @@ import { isAuthenticated } from '../services/auth.js';
 import { escHtml }         from '../utils/escHtml.js';
 import { t, href }         from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
 
 export class AdminView {
   async render() {
@@ -35,7 +36,7 @@ export class AdminView {
     el.querySelector('#add-project-btn').addEventListener('click', () => form.open());
 
     await this._load(el, form);
-    return el;
+    return renderAdminShell({ activePath: '/admin', content: el });
   }
 
   async _reload(el) {

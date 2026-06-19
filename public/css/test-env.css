@@ -1,0 +1,267 @@
+/* ── TEST environment affordances ─────────────────────────────────────────────
+   Every rule is scoped to body.is-test-env, which main.js adds only when the
+   app reports a non-prod app-env. In production this file is completely inert.
+   Signals "you are in TEST" with a blue glow on the top nav + the footer, plus
+   styling for the floating change-request widget. */
+
+/* Blue glow on the top nav and bottom footer. */
+body.is-test-env .lol-nav {
+  box-shadow: var(--test-glow);
+  border-bottom: 2px solid var(--test-blue);
+}
+body.is-test-env .lol-footer {
+  box-shadow: var(--test-glow);
+  border-top: 2px solid var(--test-blue);
+}
+
+/* Gentle pulse so the glow reads as "active environment", not a static border.
+   Suppressed for users who prefer reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  body.is-test-env .lol-nav {
+    animation: testEnvPulse 3s ease-in-out infinite;
+  }
+  @keyframes testEnvPulse {
+    0%, 100% { box-shadow: var(--test-glow); }
+    50%      { box-shadow: 0 0 0 2px rgba(var(--test-blue-rgb), 0.7), 0 0 22px 4px rgba(var(--test-blue-rgb), 0.55); }
+  }
+}
+
+/* "TEST" pill the widget injects into the nav. */
+body.is-test-env .test-env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--test-blue);
+  border-radius: 999px;
+  user-select: none;
+}
+
+/* ── Change-request widget ───────────────────────────────────────────────────
+   Mounted on document.body, outside #app, so it survives SPA navigation.
+   #cr-widget is the bottom-right anchor: a flex row holding the demo toggle +
+   the launcher. The .cr-panel below is position:fixed (out of flow), so it
+   stays pinned to the viewport regardless of this flex context. */
+#cr-widget {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Launcher button. */
+#cr-widget .cr-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font: 600 14px/1 var(--font-sans);
+  color: #fff;
+  background: var(--test-blue);
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(var(--test-blue-rgb), 0.45);
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+/* Discreet round toggle that enters/exits demo mode, sitting left of the launcher. */
+#cr-widget .cr-demo-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition), color var(--transition);
+}
+#cr-widget .cr-demo-toggle:hover,
+#cr-widget .cr-demo-toggle:focus-visible { opacity: 1; color: var(--text-primary); }
+#cr-widget .cr-demo-toggle:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+#cr-widget .cr-fab:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(var(--test-blue-rgb), 0.55); }
+#cr-widget .cr-fab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--test-blue);
+  background: #fff;
+  border-radius: 999px;
+}
+#cr-widget .cr-fab__count:empty,
+#cr-widget .cr-fab__count[data-count="0"] { display: none; }
+
+/* Slide-over panel. */
+#cr-widget .cr-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  width: min(380px, calc(100vw - 40px));
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--test-blue);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+#cr-widget .cr-panel[hidden] { display: none; }
+#cr-widget .cr-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-dim);
+}
+#cr-widget .cr-panel__title { margin: 0; font: 700 15px/1.2 var(--font-sans); }
+#cr-widget .cr-panel__close {
+  background: none; border: none; cursor: pointer;
+  font-size: 20px; line-height: 1; color: var(--text-muted); padding: 4px;
+}
+#cr-widget .cr-panel__body { padding: 16px; overflow-y: auto; }
+#cr-widget .cr-panel__foot {
+  display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border-dim);
+}
+
+#cr-widget .cr-hint { margin: 0 0 12px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+#cr-widget label.cr-label { display: block; margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+#cr-widget .cr-field { margin-bottom: 12px; }
+#cr-widget .cr-input,
+#cr-widget textarea.cr-input {
+  width: 100%;
+  padding: 8px 10px;
+  font: 400 14px/1.4 var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+}
+#cr-widget textarea.cr-input { min-height: 84px; resize: vertical; }
+#cr-widget .cr-target {
+  font: 500 12px/1.4 var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  word-break: break-all;
+}
+#cr-widget .cr-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+
+/* Buttons. */
+#cr-widget .cr-btn {
+  padding: 9px 14px;
+  font: 600 14px/1 var(--font-sans);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+#cr-widget .cr-btn:hover { background: var(--bg-hover); }
+#cr-widget .cr-btn--primary { background: var(--test-blue); border-color: var(--test-blue); color: #fff; }
+#cr-widget .cr-btn--primary:hover { filter: brightness(1.05); }
+#cr-widget .cr-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+#cr-widget .cr-btn--ghost { border-color: transparent; background: transparent; color: var(--text-secondary); }
+#cr-widget .cr-btn--block { flex: 1; }
+
+/* Basket list. */
+#cr-widget .cr-list { list-style: none; margin: 0; padding: 0; }
+#cr-widget .cr-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+#cr-widget .cr-item__page { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--test-blue); }
+#cr-widget .cr-item__el { font: 500 12px/1.4 var(--font-mono); color: var(--text-muted); margin: 2px 0; word-break: break-all; }
+#cr-widget .cr-item__note { font-size: 13px; color: var(--text-primary); margin: 4px 0 0; white-space: pre-wrap; }
+#cr-widget .cr-item__actions { margin-top: 6px; display: flex; gap: 12px; }
+#cr-widget .cr-item__actions button { background: none; border: none; padding: 0; font-size: 12px; color: var(--test-blue); cursor: pointer; }
+#cr-widget .cr-item__shot { font-size: 11px; color: var(--success); }
+#cr-widget .cr-empty { font-size: 13px; color: var(--text-muted); text-align: center; padding: 16px 0; }
+
+/* Element-pick mode — crosshair + live outline of the hovered element. */
+body.is-test-env.cr-picking,
+body.is-test-env.cr-picking * { cursor: crosshair !important; }
+#cr-pick-outline {
+  position: fixed;
+  z-index: 239;
+  pointer-events: none;
+  border: 2px solid var(--test-blue);
+  background: rgba(var(--test-blue-rgb), 0.12);
+  border-radius: 2px;
+  display: none;
+}
+#cr-pick-banner {
+  position: fixed;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  z-index: 241;
+  padding: 8px 16px;
+  font: 600 13px/1 var(--font-sans);
+  color: #fff;
+  background: var(--test-blue);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 16px rgba(var(--test-blue-rgb), 0.5);
+}
+
+/* ── Demo mode ────────────────────────────────────────────────────────────────
+   body.is-demo-mode layers on top of is-test-env for live presentations: it
+   strips the loud TEST chrome (badge + nav/footer glow) and collapses the
+   change-request launcher to a thin, low-key line that toggles the mode back
+   off. Inert unless is-test-env is also set. */
+body.is-test-env.is-demo-mode .test-env-badge { display: none; }
+
+body.is-test-env.is-demo-mode .lol-nav {
+  box-shadow: none;
+  border-bottom: 1px solid var(--border-dim);
+  animation: none; /* cancels the testEnvPulse keyframes */
+}
+body.is-test-env.is-demo-mode .lol-footer {
+  box-shadow: none;
+  border-top: 1px solid var(--border-dim);
+}
+
+body.is-test-env.is-demo-mode #cr-widget .cr-fab { display: none; }
+
+/* Launcher collapsed to a thin line. */
+body.is-test-env.is-demo-mode #cr-widget .cr-demo-toggle {
+  width: 56px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  opacity: 0.4;
+}
+body.is-test-env.is-demo-mode #cr-widget .cr-demo-toggle::before {
+  content: "";
+  width: 48px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+body.is-test-env.is-demo-mode #cr-widget .cr-demo-toggle > svg { display: none; }
+body.is-test-env.is-demo-mode #cr-widget .cr-demo-toggle:hover,
+body.is-test-env.is-demo-mode #cr-widget .cr-demo-toggle:focus-visible { opacity: 1; }

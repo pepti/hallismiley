@@ -114,6 +114,7 @@ export class HomeView {
     this._statsContent = null;  // stats — loaded from API in render()
     this._discipline = null;    // discipline (projects categories) — loaded from API
     this._heroContent = null;   // hero — loaded from API in render()
+    this._landingBg = null;     // landing background config — video (default) | photo | plain
     this._newsArticles = [];
   }
 
@@ -123,6 +124,7 @@ export class HomeView {
       this._loadStats(),
       this._loadDiscipline(),
       this._loadHero(),
+      this._loadLandingBg(),
       this._loadNews(),
     ]);
 
@@ -207,16 +209,40 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
+  // ── Load landing background config (admin-configurable; video is default) ──
+  async _loadLandingBg() {
+    try {
+      const res = await fetch('/api/v1/content/landing_background?locale=en');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') { this._landingBg = data; return; }
+      }
+    } catch { /* network error — fall through to video default */ }
+    this._landingBg = { mode: 'video', photo_url: null, veil_percent: 100 };
+  }
+
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
   _hero() {
-    const h = this._heroContent || DEFAULT_HERO_CONTENT.en;
-    return `
-    <section class="lol-hero" aria-label="Introduction">
-      <video class="lol-hero__bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+    const h  = this._heroContent || DEFAULT_HERO_CONTENT.en;
+    const bg = this._landingBg || { mode: 'video', photo_url: null, veil_percent: 100 };
+    const veil = Math.max(0, Math.min(100, Number.isFinite(bg.veil_percent) ? bg.veil_percent : 100));
+    // Background: video (default) | photo (a library image) | plain. The photo
+    // layer uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
+    // matches the real <video>.
+    let bgEl = '';
+    if (bg.mode === 'photo' && bg.photo_url) {
+      bgEl = `<div class="lol-hero__photobg" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${escHtml(bg.photo_url)}')" aria-hidden="true"></div>`;
+    } else if (bg.mode !== 'plain') {
+      bgEl = `<video class="lol-hero__bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
         <!-- TODO (production): move this video to a CDN to avoid serving large assets through Node.js -->
         <source src="/assets/videos/waterfall-bk-v1.mp4" type="video/mp4">
-      </video>
-      <div class="lol-hero__overlay" aria-hidden="true"></div>
+      </video>`;
+    }
+    const overlay = bg.mode === 'plain' ? '' : `<div class="lol-hero__overlay" aria-hidden="true" style="opacity:${veil / 100}"></div>`;
+    return `
+    <section class="lol-hero" aria-label="Introduction">
+      ${bgEl}
+      ${overlay}
 
       <div class="lol-hero__content">
         <h1 class="lol-hero__title">

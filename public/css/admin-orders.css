@@ -1,0 +1,80 @@
+/* Admin orders — list badges/tags + the order-detail layout.
+   All values from variables.css tokens (tracks the active theme). */
+
+/* ── Status badges (payment + fulfillment) ─────────────────────────────────── */
+.ord-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  background: var(--bg-elevated); color: var(--text-muted);
+}
+.ord-badge--pay-paid               { background: rgba(76, 175, 120, .18); color: var(--success); }
+.ord-badge--pay-refunded,
+.ord-badge--pay-partially_refunded { background: var(--gold-glow); color: var(--gold); }
+.ord-badge--pay-voided             { background: rgba(224, 92, 92, .16); color: var(--error); }
+.ord-badge--ful-fulfilled,
+.ord-badge--ful-delivered          { background: rgba(76, 175, 120, .18); color: var(--success); }
+.ord-badge--ful-partial            { background: var(--gold-glow); color: var(--gold); }
+
+/* ── List search + header controls ─────────────────────────────────────────── */
+.admin-shop__header-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.admin-shop__search {
+  padding: 6px 10px; font-size: 14px; min-width: 200px;
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+
+/* ── Tags ──────────────────────────────────────────────────────────────────── */
+.ord-tag {
+  display: inline-flex; align-items: center; gap: 4px; margin: 2px;
+  padding: 2px 8px; border-radius: 999px; font-size: 12px;
+  background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-dim);
+}
+.ord-tag--ro { font-size: 11px; }
+.ord-tag__x {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 14px; line-height: 1; padding: 0;
+}
+.ord-tag__x:hover { color: var(--error); }
+
+/* ── Order detail ──────────────────────────────────────────────────────────── */
+.ord-detail__back { margin: 0 0 8px; }
+.ord-detail__back a { color: var(--text-muted); text-decoration: none; font-weight: 600; }
+.ord-detail__back a:hover { color: var(--text-primary); }
+.ord-detail__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.ord-detail__date { color: var(--text-muted); margin: 4px 0 0; font-size: 14px; }
+.ord-detail__badges { display: flex; gap: 8px; }
+.ord-detail__grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start;
+}
+@media (max-width: 760px) { .ord-detail__grid { grid-template-columns: 1fr; } }
+.ord-detail__card {
+  background: var(--bg-surface); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px;
+}
+.ord-detail__card h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted); margin: 0 0 12px;
+}
+.ord-detail__card h2:not(:first-child) { margin-top: 16px; }
+.ord-detail__items { width: 100%; }
+.ord-detail__totals { margin: 12px 0 0; }
+.ord-detail__totals > div { display: flex; justify-content: space-between; padding: 4px 0; }
+.ord-detail__totals dt { color: var(--text-secondary); margin: 0; }
+.ord-detail__totals dd { margin: 0; }
+.ord-detail__grand {
+  border-top: 1px solid var(--border-dim); margin-top: 6px; padding-top: 8px; font-weight: 700;
+}
+.ord-detail__grand dt, .ord-detail__grand dd { color: var(--text-primary); }
+.ord-detail__pdf { color: var(--gold); font-weight: 600; font-size: 14px; }
+.ord-detail__muted { color: var(--text-muted); font-size: 13px; }
+.ord-detail__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.ord-detail__tags { margin-bottom: 8px; }
+.ord-detail__tag-form { display: flex; gap: 6px; }
+.ord-detail__tag-form input {
+  flex: 1; min-width: 0; padding: 6px 8px; font-size: 13px;
+  background: var(--bg-base); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}

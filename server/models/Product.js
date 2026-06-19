@@ -4,7 +4,7 @@ const db = require('../config/database');
 
 // Admin-facing column list: surfaces both locales' raw fields so the CMS
 // editor can render EN + IS inputs side-by-side.
-const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, active, created_at, updated_at';
+const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, active, created_at, updated_at';
 const IMG_COLUMNS = 'id, product_id, url, position, alt_text, created_at';
 
 // Public-facing column list: COALESCE the IS sibling columns into the primary
@@ -16,9 +16,9 @@ function publicCols(locale) {
             COALESCE(description_is, description) AS description,
             price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
             category, subcategory, duration_minutes, delivery_format, is_bookable,
-            variant_axes, active, created_at, updated_at`;
+            variant_axes, sku, barcode, active, created_at, updated_at`;
   }
-  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, active, created_at, updated_at';
+  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, active, created_at, updated_at';
 }
 
 class Product {
@@ -92,14 +92,15 @@ class Product {
       category = 'product', subcategory = null,
       duration_minutes = null, delivery_format = null, is_bookable = false,
       variant_axes = [],
+      sku = null, barcode = null,
       active = true,
     } = data;
     const { rows } = await db.query(
       `INSERT INTO products (slug, name, description, name_is, description_is,
                              price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
                              category, subcategory, duration_minutes, delivery_format, is_bookable,
-                             variant_axes, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18)
+                             variant_axes, sku, barcode, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20)
        RETURNING ${COLUMNS}`,
       [
         String(slug), String(name), String(description),
@@ -117,6 +118,8 @@ class Product {
         delivery_format || null,
         Boolean(is_bookable),
         typeof variant_axes === 'string' ? variant_axes : JSON.stringify(variant_axes || []),
+        sku || null,
+        barcode || null,
         Boolean(active),
       ]
     );
@@ -124,7 +127,7 @@ class Product {
   }
 
   static async update(id, data) {
-    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'active'];
+    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'active'];
     const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres', 'duration_minutes']);
     const bool    = new Set(['active', 'is_bookable']);
     const jsonField = new Set(['variant_axes']);
@@ -142,6 +145,10 @@ class Product {
       // Mirror Project.js: empty-string IS fields clear the translation back
       // to null, which lets COALESCE(name_is, name) fall back to EN on read.
       if ((field === 'name_is' || field === 'description_is') && typeof v === 'string' && v.trim() === '') {
+        v = null;
+      }
+      // Empty SKU / barcode clear back to NULL (keeps the sku index sparse).
+      if ((field === 'sku' || field === 'barcode') && typeof v === 'string' && v.trim() === '') {
         v = null;
       }
       if (jsonField.has(field)) {

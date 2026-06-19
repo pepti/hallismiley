@@ -4,12 +4,18 @@ const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
 const { requireAuth }          = require('../auth/middleware');
-const { requireRole }          = require('../auth/roles');
+const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
 const { createProductUpload }  = require('../middleware/upload');
 
-// All admin shop routes require authentication + admin role
-router.use(requireAuth, requireRole('admin'));
+// Admin shop routes require auth; per-view access is gated by path below, so a
+// role can be granted (e.g.) orders-only without products. The product editor's
+// "assign collections" (PUT /products/:id/collections) sits under /products.
+router.use(requireAuth);
+router.use('/products',    requireView('products'));
+router.use('/collections', requireView('collections'));
+router.use('/reports',     requireView('sales'));
+router.use('/orders',      requireView('orders'));
 
 // ── Products ────────────────────────────────────────────────────────────────
 router.get('/products',           adminShop.listProducts);
@@ -47,9 +53,20 @@ router.post('/products/:id/variants',           csrfProtect, adminShop.createVar
 router.patch('/products/:id/variants/:variantId',  csrfProtect, adminShop.updateVariant);
 router.delete('/products/:id/variants/:variantId', csrfProtect, adminShop.deactivateVariant);
 
+// ── Collections ───────────────────────────────────────────────────────────────
+router.get('/collections',                      adminShop.listCollections);
+router.post('/collections',        csrfProtect,  adminShop.createCollection);
+router.patch('/collections/:id',   csrfProtect,  adminShop.updateCollection);
+router.put('/products/:id/collections', csrfProtect, adminShop.setProductCollections);
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+router.get('/reports',            adminShop.salesReport);
+
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
 router.get('/orders/:id',         adminShop.getOrder);
+router.get('/orders/:id/delivery-note', adminShop.deliveryNote);
 router.patch('/orders/:id/status', csrfProtect, adminShop.updateOrderStatus);
+router.patch('/orders/:id/tags',   csrfProtect, adminShop.updateOrderTags);
 
 module.exports = router;

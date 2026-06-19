@@ -4,6 +4,8 @@ import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
 import { t, href }       from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { renderAdminShell } from '../components/AdminSidebar.js';
+import { listRoles } from '../services/adminRoles.js';
 
 const PAGE_SIZE = 20;
 
@@ -16,6 +18,7 @@ export class AdminUsersView {
   constructor() {
     this._page  = 1;
     this._total = 0;
+    this._roles = [];
   }
 
   async render() {
@@ -42,21 +45,36 @@ export class AdminUsersView {
 
     this._el = el;
     await this._load();
-    return el;
+    return renderAdminShell({ activePath: '/admin/users', content: el });
   }
 
   async _load() {
     const wrap = this._el.querySelector('#users-table-wrap');
     wrap.innerHTML = `<div class="admin-loading">${t('form.loading')}</div>`;
     try {
-      const data  = await adminGetUsers({ page: this._page, limit: PAGE_SIZE });
+      const [data, rolesData] = await Promise.all([
+        adminGetUsers({ page: this._page, limit: PAGE_SIZE }),
+        listRoles().catch(() => ({ roles: [] })),
+      ]);
       const users = Array.isArray(data) ? data : (data.users || []);
+      this._roles = rolesData.roles || [];
       this._total = data.total || users.length;
       this._renderTable(users);
       this._renderPagination();
     } catch (err) {
       wrap.innerHTML = `<p class="admin-error">${t('form.error')}: ${escHtml(err.message)}</p>`;
     }
+  }
+
+  // Role <option>s from the live roles table (falls back to the built-ins if the
+  // roles API failed to load). The user's current role stays selected.
+  _roleOptions(current) {
+    const roles = this._roles.length ? this._roles : [{ name: 'user' }, { name: 'moderator' }, { name: 'admin' }];
+    const known = roles.some(r => r.name === current);
+    const list  = known ? roles : [...roles, { name: current }];
+    return list.map(r =>
+      `<option value="${escHtml(r.name)}" ${current === r.name ? 'selected' : ''}>${escHtml(r.name)}</option>`
+    ).join('');
   }
 
   _renderTable(users) {
@@ -97,9 +115,7 @@ export class AdminUsersView {
               <td class="user-email">${escHtml(u.email)}</td>
               <td>
                 <select class="form-input form-input--sm role-select" data-user-id="${escHtml(String(u.id))}" data-action="role">
-                  <option value="user"      ${u.role === 'user'      ? 'selected' : ''}>${t('adminUsers.setRole')} — user</option>
-                  <option value="moderator" ${u.role === 'moderator' ? 'selected' : ''}>moderator</option>
-                  <option value="admin"     ${u.role === 'admin'     ? 'selected' : ''}>admin</option>
+                  ${this._roleOptions(u.role)}
                 </select>
               </td>
               <td>

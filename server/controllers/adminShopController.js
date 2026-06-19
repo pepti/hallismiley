@@ -5,6 +5,9 @@ const path = require('path');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
+const Collection = require('../models/Collection');
+const Setting = require('../models/Setting');
+const { streamDeliveryNote } = require('../services/pdfService');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
@@ -101,11 +104,12 @@ const adminShopController = {
     try {
       const product = await Product.findById(req.params.id);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
-      const [images, variants] = await Promise.all([
+      const [images, variants, collections] = await Promise.all([
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: false }),
+        Collection.listForProduct(product.id),
       ]);
-      return res.json({ product: { ...product, images, variants } });
+      return res.json({ product: { ...product, images, variants, collections } });
     } catch (err) { next(err); }
   },
 
@@ -118,6 +122,7 @@ const adminShopController = {
         slug, name, description,
         name_is, description_is,
         price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active,
+        sku, barcode,
         category, subcategory, duration_minutes, delivery_format, is_bookable,
       } = req.body;
       if (typeof slug === 'string' && RESERVED_SHOP_SLUGS.has(slug)) {
@@ -144,6 +149,12 @@ const adminShopController = {
       if (shape != null && !VALID_SHAPES.includes(shape)) {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.shapeEnum', { values: VALID_SHAPES.join(', ') }), code: 400 });
       }
+      if (sku != null && (typeof sku !== 'string' || sku.length > 100)) {
+        return res.status(400).json({ error: 'sku must be a string (max 100 chars)', code: 400 });
+      }
+      if (barcode != null && (typeof barcode !== 'string' || barcode.length > 64)) {
+        return res.status(400).json({ error: 'barcode must be a string (max 64 chars)', code: 400 });
+      }
       const sectionErr = validateSectionFields(req.body);
       if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
       const product = await Product.create({
@@ -157,6 +168,8 @@ const adminShopController = {
         weight_grams: weight_grams != null ? Number(weight_grams) : null,
         shape: shape || null,
         capacity_litres: capacity_litres != null ? Number(capacity_litres) : null,
+        sku: sku || null,
+        barcode: barcode || null,
         category:         category || 'product',
         subcategory:      subcategory || null,
         duration_minutes: duration_minutes != null && duration_minutes !== '' ? Number(duration_minutes) : null,
@@ -196,6 +209,11 @@ const adminShopController = {
 
       const product = await Product.update(req.params.id, req.body);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      // Optional collection membership: a `collection_ids` array replaces the
+      // product's collections in one PATCH (the editor sends it on save).
+      if (Array.isArray(req.body.collection_ids)) {
+        await Collection.setForProduct(product.id, req.body.collection_ids);
+      }
       // Notify IndexNow for active products. If the slug changed, hit the old
       // one too so Bing drops the now-404 URL from its index.
       if (product.active) {
@@ -273,15 +291,24 @@ const adminShopController = {
 
   async listOrders(req, res, next) {
     try {
-      const status = req.query.status || null;
-      const orders = await Order.listAll({ status, limit: 200 });
-      return res.json({ orders });
+      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const filter = {
+        status:            status            ? String(status) : null,
+        paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
+        fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
+        q:                 q                 ? String(q) : null,
+      };
+      const [orders, total] = await Promise.all([
+        Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: 200 }),
+        Order.count(filter),
+      ]);
+      return res.json({ orders, total });
     } catch (err) { next(err); }
   },
 
   async getOrder(req, res, next) {
     try {
-      const order = await Order.findById(req.params.id);
+      const order = await Order.findDetailById(req.params.id);
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       const items = await Order.listItems(order.id);
       return res.json({ order, items });
@@ -353,17 +380,114 @@ const adminShopController = {
 
   async updateOrderStatus(req, res, next) {
     try {
-      const { status } = req.body;
-      const allowed = ['shipped', 'cancelled'];
-      if (!allowed.includes(status)) {
-        return res.status(400).json({
-          error: t(req.locale, 'errors.admin.statusEnum', { values: allowed.join(', ') }),
-          code: 400,
-        });
+      let { payment_status, fulfillment_status } = req.body || {};
+      // Back-compat: a legacy { status: 'shipped' | 'cancelled' } maps onto the
+      // new independent payment/fulfillment statuses.
+      const legacy = req.body?.status;
+      if (!payment_status && !fulfillment_status && legacy) {
+        if (legacy === 'shipped')        fulfillment_status = 'fulfilled';
+        else if (legacy === 'cancelled') payment_status = 'voided';
       }
-      const order = await Order.updateStatus(req.params.id, status);
+      if (!payment_status && !fulfillment_status) {
+        return res.status(400).json({ error: 'payment_status or fulfillment_status required', code: 400 });
+      }
+      const order = await Order.setOrderStatuses(req.params.id, { payment_status, fulfillment_status });
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       return res.json({ order });
+    } catch (err) {
+      if (String(err.message || '').startsWith('Invalid ')) {
+        return res.status(400).json({ error: err.message, code: 400 });
+      }
+      next(err);
+    }
+  },
+
+  async updateOrderTags(req, res, next) {
+    try {
+      const { tags } = req.body || {};
+      if (!Array.isArray(tags)) {
+        return res.status(400).json({ error: 'tags must be an array of strings', code: 400 });
+      }
+      const order = await Order.updateTags(req.params.id, tags);
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      return res.json({ order });
+    } catch (err) { next(err); }
+  },
+
+  // ── Reports ─────────────────────────────────────────────────────────────────
+
+  async salesReport(req, res, next) {
+    try {
+      const days = Number(req.query.days) || 30;
+      const report = await Order.salesReport({ days });
+      return res.json({ report });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/shop/orders/:id/delivery-note → streams an A4 PDF.
+  async deliveryNote(req, res, next) {
+    try {
+      const order = await Order.findById(req.params.id);
+      if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      const [items, store] = await Promise.all([
+        Order.listItems(order.id),
+        Setting.getGeneralSettings(),
+      ]);
+      return streamDeliveryNote({ res, order, items, store });
+    } catch (err) { next(err); }
+  },
+
+  // ── Collections ─────────────────────────────────────────────────────────────
+
+  async listCollections(req, res, next) {
+    try {
+      const collections = await Collection.findAll({ activeOnly: false });
+      return res.json({ collections });
+    } catch (err) { next(err); }
+  },
+
+  async createCollection(req, res, next) {
+    try {
+      const { slug, title, description, active } = req.body || {};
+      if (!validateSlug(slug)) {
+        return res.status(400).json({ error: 'slug must be lowercase alphanumeric with hyphens (1-80 chars)', code: 400 });
+      }
+      if (!title || typeof title !== 'string' || title.length > 200) {
+        return res.status(400).json({ error: 'title required (max 200 chars)', code: 400 });
+      }
+      const collection = await Collection.create({ slug, title, description: description || null, active: active !== false });
+      return res.status(201).json({ collection });
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.slugTaken'), code: 409 });
+      }
+      next(err);
+    }
+  },
+
+  async updateCollection(req, res, next) {
+    try {
+      if (req.body.slug !== undefined && !validateSlug(req.body.slug)) {
+        return res.status(400).json({ error: 'invalid slug', code: 400 });
+      }
+      const collection = await Collection.update(req.params.id, req.body || {});
+      if (!collection) return res.status(404).json({ error: 'collection not found', code: 404 });
+      return res.json({ collection });
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.slugTaken'), code: 409 });
+      }
+      next(err);
+    }
+  },
+
+  async setProductCollections(req, res, next) {
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      const ids = Array.isArray(req.body.collection_ids) ? req.body.collection_ids : [];
+      const collections = await Collection.setForProduct(product.id, ids);
+      return res.json({ collections });
     } catch (err) { next(err); }
   },
 };
