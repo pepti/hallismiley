@@ -1696,6 +1696,23 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        END $$`,
     ],
   },
+  {
+    // Warehouse BIN code per product / variant. A bin is a short shelf code like
+    // 'A-001'; the BIN System board (admin view 'bins') derives zones (the letter
+    // prefix) and the per-zone numeric grid from assigned bins — there is no
+    // separate bins registry. Variant bin overrides product bin via COALESCE
+    // (mirrors how sku/barcode already work). Indexed for the board's
+    // GROUP BY zone + per-bin lookup. Pattern ported from the sibling
+    // icelandicstore repo (its 064_product_bin). Authoritative copy;
+    // human-reference duplicate in server/migrations/057_product_bin.sql.
+    name: '057_product_bin',
+    statements: [
+      `ALTER TABLE products         ADD COLUMN IF NOT EXISTS bin TEXT`,
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS bin TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_products_bin         ON products (bin)`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_bin ON product_variants (bin)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

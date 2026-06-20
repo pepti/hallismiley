@@ -2,7 +2,7 @@
 // Parameterised queries throughout.
 const db = require('../config/database');
 
-const COLUMNS = 'id, product_id, sku, attributes, price_isk, price_eur, stock, active, created_at, updated_at';
+const COLUMNS = 'id, product_id, sku, attributes, price_isk, price_eur, stock, bin, active, created_at, updated_at';
 
 class ProductVariant {
   // ── READ ──────────────────────────────────────────────────────────────────
@@ -65,18 +65,18 @@ class ProductVariant {
     const {
       product_id, sku, attributes,
       price_isk = null, price_eur = null,
-      stock = 0, active = true,
+      stock = 0, bin = null, active = true,
     } = data;
     const { rows } = await db.query(
-      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, active)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, bin, active)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
        RETURNING ${COLUMNS}`,
       [
         String(product_id), String(sku),
         typeof attributes === 'string' ? attributes : JSON.stringify(attributes),
         price_isk === null || price_isk === undefined ? null : Number(price_isk),
         price_eur === null || price_eur === undefined ? null : Number(price_eur),
-        Number(stock), Boolean(active),
+        Number(stock), bin || null, Boolean(active),
       ]
     );
     return rows[0];
@@ -111,7 +111,7 @@ class ProductVariant {
   }
 
   static async update(id, data) {
-    const allowed = ['sku', 'price_isk', 'price_eur', 'stock', 'active'];
+    const allowed = ['sku', 'price_isk', 'price_eur', 'stock', 'bin', 'active'];
     const numeric = new Set(['price_isk', 'price_eur', 'stock']);
     const bool    = new Set(['active']);
 
@@ -122,6 +122,8 @@ class ProductVariant {
       let v = data[f];
       if (numeric.has(f)) v = v === null ? null : Number(v);
       if (bool.has(f))    v = Boolean(v);
+      // Empty bin clears back to NULL (keeps the variant bin index sparse).
+      if (f === 'bin' && typeof v === 'string' && v.trim() === '') v = null;
       params.push(v);
       sets.push(`${f} = $${params.length}`);
     }
