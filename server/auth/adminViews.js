@@ -7,7 +7,7 @@ const ALL = '*';
 
 // Every admin sidebar nav item id (the canSeeView visibility contract).
 const ADMIN_VIEW_IDS = [
-  'dashboard', 'products', 'orders', 'collections', 'discounts', 'sales',
+  'dashboard', 'products', 'orders', 'collections', 'bins', 'discounts', 'sales',
   'analytics', 'background', 'feedback', 'general', 'users', 'roles',
 ];
 

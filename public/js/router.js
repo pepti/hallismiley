@@ -36,6 +36,7 @@ import { AdminOrdersView }       from './views/AdminOrdersView.js';
 import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
 import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
 import { AdminRolesView }        from './views/AdminRolesView.js';
+import { AdminBinsView }         from './views/AdminBinsView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale,
@@ -60,6 +61,7 @@ const ROUTES = [
   { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && canSeeView('sales')) ? new AdminSalesView() : new HomeView() },
   { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
   { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
+  { pattern: '/admin/bins',      factory: ()  => (isAuthenticated() && canSeeView('bins')) ? new AdminBinsView() : new HomeView() },
   { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
@@ -217,6 +219,7 @@ export class Router {
       '/admin/sales':      'sales',
       '/admin/background': 'background',
       '/admin/feedback':   'feedback',
+      '/admin/bins':       'bins',
     };
     if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
       navigateReplace('/' + getLocale() + '/');

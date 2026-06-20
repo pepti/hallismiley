@@ -4,7 +4,7 @@ const db = require('../config/database');
 
 // Admin-facing column list: surfaces both locales' raw fields so the CMS
 // editor can render EN + IS inputs side-by-side.
-const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, active, created_at, updated_at';
+const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, bin, active, created_at, updated_at';
 const IMG_COLUMNS = 'id, product_id, url, position, alt_text, created_at';
 
 // Public-facing column list: COALESCE the IS sibling columns into the primary
@@ -16,9 +16,9 @@ function publicCols(locale) {
             COALESCE(description_is, description) AS description,
             price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
             category, subcategory, duration_minutes, delivery_format, is_bookable,
-            variant_axes, sku, barcode, active, created_at, updated_at`;
+            variant_axes, sku, barcode, bin, active, created_at, updated_at`;
   }
-  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, active, created_at, updated_at';
+  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, bin, active, created_at, updated_at';
 }
 
 class Product {
@@ -78,6 +78,69 @@ class Product {
     return rows;
   }
 
+  // Resolve a scanned SKU / barcode to a single product or variant, variant-first
+  // (a scanned variant code resolves to that exact variant with its OWN
+  // stock/bin). Returns a lean camelCase shape (display-ready) or null on no
+  // match. Stock/bin are read server-side; never trust a client snapshot. Ported
+  // from the sibling icelandicstore Product.resolveByCode, trimmed of the
+  // pack_qty/cost_isk columns HalliProjects' schema doesn't have. Note: variants
+  // here carry sku + bin but NO barcode of their own, so barcode is the parent
+  // product's and a scanned barcode resolves at step 2.
+  static async resolveByCode(code) {
+    const c = String(code == null ? '' : code).trim();
+    if (!c) return null;
+
+    // 1) A variant whose own sku matches wins (variant precedence).
+    const { rows: v } = await db.query(
+      `SELECT v.id AS variant_id, v.product_id, p.name, p.slug,
+              COALESCE(v.sku, p.sku)             AS sku,
+              COALESCE(v.bin, p.bin)             AS bin,
+              p.barcode                          AS barcode,
+              COALESCE(v.price_isk, p.price_isk) AS price_isk,
+              COALESCE(v.price_eur, p.price_eur) AS price_eur,
+              v.stock, v.attributes,
+              (p.active AND v.active) AS active
+         FROM product_variants v
+         JOIN products p ON p.id = v.product_id
+        WHERE v.sku = $1
+        LIMIT 1`,
+      [c]
+    );
+    if (v[0]) return Product._scanShape(v[0], v[0].variant_id, v[0].attributes);
+
+    // 2) Otherwise a product-level sku/barcode match (single-SKU products).
+    const { rows: p } = await db.query(
+      `SELECT id AS product_id, slug, name, sku, bin, barcode,
+              price_isk, price_eur, stock, active
+         FROM products
+        WHERE sku = $1 OR barcode = $1
+        LIMIT 1`,
+      [c]
+    );
+    if (p[0]) return Product._scanShape(p[0], null, null);
+
+    return null;
+  }
+
+  // Normalise a scan row (variant or product) into the camelCase shape the BIN
+  // System surfaces consume. Integer money/stock.
+  static _scanShape(r, variantId, attributes) {
+    return {
+      productId:  r.product_id,
+      variantId:  variantId || null,
+      slug:       r.slug || null,
+      name:       r.name,
+      sku:        r.sku || null,
+      bin:        r.bin || null,
+      barcode:    r.barcode || null,
+      priceIsk:   r.price_isk == null ? null : Number(r.price_isk),
+      priceEur:   r.price_eur == null ? null : Number(r.price_eur),
+      stock:      r.stock == null ? null : Number(r.stock),
+      active:     Boolean(r.active),
+      attributes: attributes || null,
+    };
+  }
+
   // ── WRITE ─────────────────────────────────────────────────────────────────
 
   static async create(data) {
@@ -92,15 +155,15 @@ class Product {
       category = 'product', subcategory = null,
       duration_minutes = null, delivery_format = null, is_bookable = false,
       variant_axes = [],
-      sku = null, barcode = null,
+      sku = null, barcode = null, bin = null,
       active = true,
     } = data;
     const { rows } = await db.query(
       `INSERT INTO products (slug, name, description, name_is, description_is,
                              price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
                              category, subcategory, duration_minutes, delivery_format, is_bookable,
-                             variant_axes, sku, barcode, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20)
+                             variant_axes, sku, barcode, bin, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20, $21)
        RETURNING ${COLUMNS}`,
       [
         String(slug), String(name), String(description),
@@ -120,6 +183,7 @@ class Product {
         typeof variant_axes === 'string' ? variant_axes : JSON.stringify(variant_axes || []),
         sku || null,
         barcode || null,
+        bin || null,
         Boolean(active),
       ]
     );
@@ -127,7 +191,7 @@ class Product {
   }
 
   static async update(id, data) {
-    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'active'];
+    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'bin', 'active'];
     const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres', 'duration_minutes']);
     const bool    = new Set(['active', 'is_bookable']);
     const jsonField = new Set(['variant_axes']);
@@ -147,8 +211,8 @@ class Product {
       if ((field === 'name_is' || field === 'description_is') && typeof v === 'string' && v.trim() === '') {
         v = null;
       }
-      // Empty SKU / barcode clear back to NULL (keeps the sku index sparse).
-      if ((field === 'sku' || field === 'barcode') && typeof v === 'string' && v.trim() === '') {
+      // Empty SKU / barcode / bin clear back to NULL (keeps the indexes sparse).
+      if ((field === 'sku' || field === 'barcode' || field === 'bin') && typeof v === 'string' && v.trim() === '') {
         v = null;
       }
       if (jsonField.has(field)) {
