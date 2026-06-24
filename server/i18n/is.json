@@ -244,6 +244,7 @@
   "errors.admin.imageNotFound": "Mynd fannst ekki",
   "errors.admin.orderNotFound": "Pöntun fannst ekki",
   "errors.admin.bulkIdsInvalid": "Veldu að minnsta kosti eina pöntun til að prenta",
+  "errors.admin.emailInvalid": "Gilt netfang er nauðsynlegt",
   "errors.admin.importRowsRequired": "Línur til innflutnings vantar",
   "errors.admin.importTooManyRows": "Of margar línur í einum innflutningi",
   "errors.admin.variantAttrsTaken": "Útgáfa með þessum eiginleikum (eða SKU) er þegar til",

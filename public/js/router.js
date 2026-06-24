@@ -37,6 +37,7 @@ import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
 import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
 import { AdminRolesView }        from './views/AdminRolesView.js';
 import { AdminBinsView }         from './views/AdminBinsView.js';
+import { AdminCustomersView }    from './views/AdminCustomersView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale,
@@ -90,6 +91,7 @@ const ROUTES = [
   { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && canSeeView('orders')) ? new AdminOrdersView() : new HomeView() },
   { pattern: '/admin/shop/orders/:id', factory: (p) => (isAuthenticated() && canSeeView('orders')) ? new AdminOrderDetailView(p.id) : new HomeView() },
   { pattern: '/admin/shop/collections', factory: () => (isAuthenticated() && canSeeView('collections')) ? new AdminCollectionsView() : new HomeView() },
+  { pattern: '/admin/customers',     factory: () => (isAuthenticated() && canSeeView('customers')) ? new AdminCustomersView() : new HomeView() },
 ];
 
 // ── Path parsing (locale-aware) ───────────────────────────────────────────────
@@ -220,6 +222,7 @@ export class Router {
       '/admin/background': 'background',
       '/admin/feedback':   'feedback',
       '/admin/bins':       'bins',
+      '/admin/customers':  'customers',
     };
     if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
       navigateReplace('/' + getLocale() + '/');

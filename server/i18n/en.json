@@ -244,6 +244,7 @@
   "errors.admin.imageNotFound": "Image not found",
   "errors.admin.orderNotFound": "Order not found",
   "errors.admin.bulkIdsInvalid": "Select at least one order to print",
+  "errors.admin.emailInvalid": "A valid email address is required",
   "errors.admin.importRowsRequired": "Import rows are required",
   "errors.admin.importTooManyRows": "Too many rows in a single import",
   "errors.admin.variantAttrsTaken": "A variant with those attributes (or that SKU) already exists",
