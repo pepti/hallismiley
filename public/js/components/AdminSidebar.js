@@ -72,6 +72,10 @@ const ICONS = {
 // from the stroke-based nav ICONS above.
 const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const GRIP   = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
+// Chevron (section collapse, rotates via CSS) + eye/eye-off (hide toggle in edit mode).
+const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+const EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
 // ── Index, built once from the static ADMIN_NAV ───────────────────────────────
 function buildIndex() {
@@ -97,6 +101,20 @@ function escHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Keep only known, de-duplicated string keys/ids from a saved flag array
+// (collapsed / hidden). Mirrors the label-pruning so the blob stays self-cleaning
+// when a section or item disappears from the code ADMIN_NAV.
+function cleanFlagList(raw, valid) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const v of raw) {
+    const s = String(v);
+    if (valid.has(s) && !seen.has(s)) { seen.add(s); out.push(s); }
+  }
+  return out;
 }
 
 // Reconcile a saved layout against the code ADMIN_NAV: drop dead/duplicate ids,
@@ -139,7 +157,14 @@ function reconcile(saved) {
   for (const [id, val] of Object.entries(raw)) {
     if (BY_ID.has(id) && typeof val === 'string' && val !== '') labels[id] = val;
   }
-  return { v: 1, sections, labels };
+  // Per-admin personalization flags: collapsed/hidden sections (by key) + hidden
+  // lines (by id). Pruned to what still exists so moved/deleted bits don't linger.
+  const sectionKeys = new Set(sections.map(s => s.key));
+  const itemIds = new Set(BY_ID.keys());
+  const collapsed = cleanFlagList(saved && saved.collapsed, sectionKeys);
+  const hiddenSections = cleanFlagList(saved && saved.hiddenSections, sectionKeys);
+  const hiddenItems = cleanFlagList(saved && saved.hiddenItems, itemIds);
+  return { v: 1, sections, labels, collapsed, hiddenSections, hiddenItems };
 }
 
 // Section title: custom sections carry an explicit string; default sections show
@@ -181,18 +206,21 @@ function pickActiveId(path) {
   return best;
 }
 
-function itemHtml(item, activeId, labels, editing) {
+function itemHtml(item, activeId, labels, editing, opts = {}) {
   if (!item) return '';
   const icon = `<span class="admin-sidebar__item-icon" aria-hidden="true">${ICONS[item.icon] || ''}</span>`;
   const labelText = itemLabel(item, labels);
   if (editing) {
+    const hidden = !!(opts.hiddenItems && opts.hiddenItems.includes(item.id));
     const soonBadge = item.soon ? `<span class="admin-sidebar__soon-badge">${t('admin.soon')}</span>` : '';
     const drag = escHtml(t('admin.navEdit.dragHandle'));
-    return `<div class="admin-sidebar__item admin-sidebar__item--editing" data-item-id="${escHtml(item.id)}">`
+    const hideLabel = escHtml(t(hidden ? 'admin.navEdit.show' : 'admin.navEdit.hide'));
+    return `<div class="admin-sidebar__item admin-sidebar__item--editing${hidden ? ' admin-sidebar__item--hidden' : ''}" data-item-id="${escHtml(item.id)}">`
       + `<span class="admin-sidebar__drag-handle" data-drag-handle draggable="true" aria-label="${drag}" title="${drag}">${GRIP}</span>`
       + icon
       + `<span class="admin-sidebar__item-label" data-item-label contenteditable="true" spellcheck="false">${escHtml(labelText)}</span>`
       + soonBadge
+      + `<button type="button" class="admin-sidebar__hide-toggle" data-item-hide="${escHtml(item.id)}" aria-pressed="${hidden ? 'true' : 'false'}" aria-label="${hideLabel}" title="${hideLabel}">${hidden ? EYE_OFF : EYE}</button>`
       + `</div>`;
   }
   const label = `<span class="admin-sidebar__item-label">${escHtml(labelText)}</span>`;
@@ -203,26 +231,50 @@ function itemHtml(item, activeId, labels, editing) {
   return `<a class="admin-sidebar__item${active ? ' is-active' : ''}" href="${href(item.route)}" data-route="${item.route}"${active ? ' aria-current="page"' : ''}>${icon}${label}</a>`;
 }
 
-function sectionHtml(section, activeId, labels, editing) {
+function sectionHtml(section, activeId, labels, editing, opts = {}) {
   const titleText = sectionTitle(section);
-  const itemsHtml = section.items.map(id => itemHtml(BY_ID.get(id), activeId, labels, editing)).join('');
   if (!editing) {
-    return `<div class="admin-sidebar__group">`
-      + `<p class="admin-sidebar__group-title">${escHtml(titleText)}</p>`
-      + itemsHtml
+    const isActiveSection = section.key === opts.activeSectionKey;
+    // A hidden section drops out of the everyday nav — unless it holds the page
+    // you're on, so the current location is never orphaned from the menu.
+    if (opts.hiddenSections && opts.hiddenSections.includes(section.key) && !isActiveSection) return '';
+    // Same rule per line: hidden items vanish, but the active one always shows.
+    const visibleIds = section.items.filter(id =>
+      id === activeId || !(opts.hiddenItems && opts.hiddenItems.includes(id)));
+    const itemsHtml = visibleIds.map(id => itemHtml(BY_ID.get(id), activeId, labels, editing, opts)).join('');
+    // Collapse is an admin convenience; moderators keep a plain, always-open nav.
+    if (!opts.canEdit) {
+      return `<div class="admin-sidebar__group">`
+        + `<p class="admin-sidebar__group-title">${escHtml(titleText)}</p>`
+        + itemsHtml
+        + `</div>`;
+    }
+    const collapsed = !!(opts.collapsed && opts.collapsed.includes(section.key)) && !isActiveSection;
+    const cLabel = escHtml(t(collapsed ? 'admin.navEdit.expand' : 'admin.navEdit.collapse'));
+    return `<div class="admin-sidebar__group${collapsed ? ' is-collapsed' : ''}">`
+      + `<button type="button" class="admin-sidebar__group-toggle" data-section-toggle="${escHtml(section.key)}" aria-expanded="${collapsed ? 'false' : 'true'}" aria-label="${cLabel}" title="${cLabel}">`
+      +   `<span class="admin-sidebar__group-title">${escHtml(titleText)}</span>`
+      +   `<span class="admin-sidebar__group-chevron" aria-hidden="true">${CHEVRON}</span>`
+      + `</button>`
+      + `<div class="admin-sidebar__group-items">${itemsHtml}</div>`
       + `</div>`;
   }
+  const itemsHtml = section.items.map(id => itemHtml(BY_ID.get(id), activeId, labels, editing, opts)).join('');
   const isCustom = !GROUP_TITLE_KEY[section.key];
+  const hiddenSec = !!(opts.hiddenSections && opts.hiddenSections.includes(section.key));
   const delLabel = escHtml(t('admin.navEdit.deleteSection'));
   const del = isCustom
     ? `<button type="button" class="admin-sidebar__section-delete" data-section-delete aria-label="${delLabel}" title="${delLabel}">×</button>`
     : '';
+  const hideLabel = escHtml(t(hiddenSec ? 'admin.navEdit.show' : 'admin.navEdit.hide'));
+  const hide = `<button type="button" class="admin-sidebar__hide-toggle" data-section-hide="${escHtml(section.key)}" aria-pressed="${hiddenSec ? 'true' : 'false'}" aria-label="${hideLabel}" title="${hideLabel}">${hiddenSec ? EYE_OFF : EYE}</button>`;
   const empty = section.items.length ? '' : ' admin-sidebar__group--empty';
   const drag = escHtml(t('admin.navEdit.dragHandle'));
-  return `<div class="admin-sidebar__group admin-sidebar__group--editing${empty}" data-section-key="${escHtml(section.key)}">`
+  return `<div class="admin-sidebar__group admin-sidebar__group--editing${hiddenSec ? ' admin-sidebar__group--hidden' : ''}${empty}" data-section-key="${escHtml(section.key)}">`
     + `<div class="admin-sidebar__group-head">`
     + `<span class="admin-sidebar__section-handle" data-section-handle draggable="true" aria-label="${drag}" title="${drag}">${GRIP}</span>`
     + `<p class="admin-sidebar__group-title" data-section-title contenteditable="true" spellcheck="false">${escHtml(titleText)}</p>`
+    + hide
     + del
     + `</div>`
     + `<div class="admin-sidebar__group-items" data-section-items>${itemsHtml}</div>`
@@ -295,16 +347,59 @@ export function renderAdminShell({ activePath, content } = {}) {
     // While editing we keep the working copy; otherwise re-read the latest
     // persisted layout (so a hydrate or another view's change is reflected).
     if (!editing) working = reconcile(loadNavLayout());
+    // The section that owns the current page is always shown (and expanded), so a
+    // collapsed/hidden group never hides where you are.
+    const activeHome = working.sections.find(s => s.items.includes(activeId));
+    const opts = {
+      canEdit,
+      activeSectionKey: activeHome ? activeHome.key : null,
+      collapsed: working.collapsed,
+      hiddenSections: working.hiddenSections,
+      hiddenItems: working.hiddenItems,
+    };
     // Outside edit mode, hide sections the role has no items in (e.g. a
     // shop-only role won't see an empty "Settings" header). In edit mode (admin
     // only) keep empties so they remain drop targets.
     navEl.innerHTML = editControlsHtml(editing)
       + working.sections
           .filter(s => editing || s.items.length)
-          .map(s => sectionHtml(s, activeId, working.labels, editing)).join('');
+          .map(s => sectionHtml(s, activeId, working.labels, editing, opts)).join('');
   }
 
   function persist() { saveNavLayout(working); }
+
+  // ── collapse / hide (per-admin personalization stored in the snapshot) ────────
+  function toggleIn(arr, val) {
+    const i = arr.indexOf(val);
+    if (i === -1) arr.push(val); else arr.splice(i, 1);
+  }
+  // Collapse toggles in place (no re-render → no flicker); the saved flag drives
+  // the next mount. The active section always renders open, so we never collapse
+  // the group you're currently inside out from under you on the next render.
+  function toggleCollapse(btn) {
+    const key = btn.dataset.sectionToggle;
+    if (!key) return;
+    toggleIn(working.collapsed, key);
+    persist();
+    const collapsed = working.collapsed.includes(key);
+    btn.closest('.admin-sidebar__group')?.classList.toggle('is-collapsed', collapsed);
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    const label = t(collapsed ? 'admin.navEdit.expand' : 'admin.navEdit.collapse');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  }
+  function toggleHiddenItem(id) {
+    if (!id || !BY_ID.has(id)) return;
+    toggleIn(working.hiddenItems, id);
+    persist();
+    renderNav();
+  }
+  function toggleHiddenSection(key) {
+    if (!key) return;
+    toggleIn(working.hiddenSections, key);
+    persist();
+    renderNav();
+  }
 
   // ── inline rename ───────────────────────────────────────────────────────────
   // Normalises the edited text into the model and back into the element (no full
@@ -445,9 +540,16 @@ export function renderAdminShell({ activePath, content } = {}) {
   navEl.addEventListener('click', (e) => {
     const a = e.target.closest('a[data-route]');
     if (a) { aside.classList.remove('is-open'); return; } // let the router navigate
+    // Collapse/expand a section — a view-mode (non-editing) affordance for admins.
+    const collapseBtn = e.target.closest('[data-section-toggle]');
+    if (collapseBtn) { toggleCollapse(collapseBtn); return; }
     if (!editing) return;
     if (e.target.closest('[data-nav-add-section]')) { addSection(); return; }
     if (e.target.closest('[data-nav-reset]'))       { resetLayout(); return; }
+    const itemHide = e.target.closest('[data-item-hide]');
+    if (itemHide) { toggleHiddenItem(itemHide.dataset.itemHide); return; }
+    const secHide = e.target.closest('[data-section-hide]');
+    if (secHide) { toggleHiddenSection(secHide.dataset.sectionHide); return; }
     const del = e.target.closest('[data-section-delete]');
     if (del) { deleteSection(del.closest('[data-section-key]')?.dataset.sectionKey); }
   });

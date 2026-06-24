@@ -33,6 +33,14 @@ function isValidLayout(layout) {
       if (typeof v !== 'string' || v.length > 80) return false;
     }
   }
+  // Optional personalization flags (collapsed/hidden sections + hidden lines).
+  // Absent = default; the frontend reconciles meaning, so we just bound them.
+  for (const f of ['collapsed', 'hiddenSections', 'hiddenItems']) {
+    const a = layout[f];
+    if (a == null) continue;
+    if (!Array.isArray(a) || a.length > 100) return false;
+    if (!a.every(s => typeof s === 'string' && s.length <= 64)) return false;
+  }
   return true;
 }
 
