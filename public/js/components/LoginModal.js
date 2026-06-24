@@ -27,11 +27,6 @@ export class LoginModal {
           <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
           <span>${t('login.continueWithGoogle')}</span>
         </a>
-        <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook${rtParam}"
-           data-testid="login-facebook">
-          <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
-          <span>${t('login.continueWithFacebook')}</span>
-        </a>
         <div class="login-modal__divider"><span>${t('login.orSignInWithEmail')}</span></div>
 
         <form class="login-form" novalidate data-testid="login-form">
@@ -86,9 +81,7 @@ export class LoginModal {
   _refreshOAuthReturnTo() {
     const rtParam = `?returnTo=${encodeURIComponent(window.location.pathname)}`;
     const g = this._overlay.querySelector('[data-testid="login-google"]');
-    const f = this._overlay.querySelector('[data-testid="login-facebook"]');
     if (g) g.href = `/auth/google${rtParam}`;
-    if (f) f.href = `/auth/facebook${rtParam}`;
   }
 
   close() {

@@ -65,11 +65,6 @@ export class SignupView {
             <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
             <span>${t('signup.continueWithGoogle')}</span>
           </a>
-          <a class="btn btn--outline btn--full btn--facebook" href="/auth/facebook${rtParam}"
-             data-testid="signup-facebook">
-            <img src="/assets/icons/facebook.svg" alt="" aria-hidden="true" class="btn__icon"/>
-            <span>${t('signup.continueWithFacebook')}</span>
-          </a>
           <div class="login-modal__divider signup-divider"><span>${t('signup.orEmail')}</span></div>
 
           <form class="signup-form" id="signup-form" novalidate data-testid="signup-form">
