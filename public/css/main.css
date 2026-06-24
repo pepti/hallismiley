@@ -19,6 +19,8 @@
 @import './admin-discounts.css';
 @import './admin-sales.css';
 @import './admin-orders.css';
+@import './admin-products.css';
+@import './admin-roles.css';
 @import './admin-background.css';
 @import './admin-change-requests.css';
 @import './admin-bins.css';

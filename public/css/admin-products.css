@@ -1,0 +1,69 @@
+/* Admin Products — inline detail panel. Clicking a product name expands a
+   read-only summary row below it (pricing, inventory, codes, per-variant table),
+   distinct from the Edit modal. Accordion: one open at a time. */
+
+.prod-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0;
+  font: inherit;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.prod-name:hover { color: var(--gold); }
+.prod-name__chevron {
+  display: inline-block;
+  font-size: 0.7em;
+  color: var(--text-muted);
+  transition: transform var(--transition);
+}
+.prod-name[aria-expanded="true"] .prod-name__chevron { transform: rotate(90deg); }
+
+.prod-detail-row > td { padding: 0; background: var(--bg-surface); }
+.prod-detail {
+  padding: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.prod-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+}
+.prod-detail__field dt {
+  margin: 0 0 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.prod-detail__field dd { margin: 0; color: var(--text-primary); }
+
+.prod-detail__variants {
+  width: 100%;
+  margin: 0 0 var(--sp-3);
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.prod-detail__variants th,
+.prod-detail__variants td {
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.prod-detail__variants th {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.prod-detail__actions {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+}

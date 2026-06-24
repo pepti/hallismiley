@@ -5,6 +5,8 @@ import { fetchOrders, paymentBadge, fulfillmentBadge } from '../services/adminOr
 import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
+import { showToast } from '../components/Toast.js';
+import { downloadCsv } from '../utils/downloadCsv.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -17,6 +19,15 @@ function _formatDate(iso) {
   return new Date(iso).toLocaleString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+}
+
+// Plain-text status label: looks up "<prefix><value>" and falls back to the raw
+// value when no translation exists (t() returns the key on a miss).
+function _statusLabel(prefix, v, fallback) {
+  const val = String(v || fallback);
+  const key = prefix + val;
+  const label = t(key);
+  return label === key ? val : label;
 }
 
 export class AdminOrdersView {
@@ -39,6 +50,7 @@ export class AdminOrdersView {
               <option value="ful:unfulfilled">${t('orderFulfillment.unfulfilled')}</option>
               <option value="ful:fulfilled">${t('orderFulfillment.fulfilled')}</option>
             </select>
+            <button type="button" id="admin-orders-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
           </div>
         </header>
         <div id="admin-orders-body"><p>${t('form.loading')}</p></div>
@@ -54,6 +66,7 @@ export class AdminOrdersView {
       const v = e.target.value;
       this._searchDebounce = setTimeout(() => { this._q = v; this._load(); }, 250);
     });
+    this._view.querySelector('#admin-orders-export').addEventListener('click', () => this._exportCsv());
     await this._load();
     return renderAdminShell({ activePath: '/admin/shop/orders', content: this._view });
   }
@@ -104,6 +117,37 @@ export class AdminOrdersView {
         </tbody>
       </table>
     `;
+  }
+
+  // ── CSV export ──────────────────────────────────────────────────────────────
+  // Exports the orders currently loaded for the active search + filter. The
+  // /orders endpoint caps the list at 200 rows, so very large result sets are
+  // truncated to that ceiling (the search/filter narrows it in practice).
+  _exportCsv() {
+    const btn = this._view.querySelector('#admin-orders-export');
+    if (btn) btn.disabled = true;
+    try {
+      const header = [
+        t('orders.order'), t('orders.date'), t('adminOrders.customer'), t('orders.total'),
+        t('adminOrders.payment'), t('adminOrders.fulfillment'), t('adminOrders.items'), t('adminOrders.tags'),
+      ];
+      const rows = this._orders.map(o => [
+        o.order_number,
+        _formatDate(o.created_at),
+        o.user_email || o.guest_email || o.guest_name || '',
+        Number(o.total) || 0,
+        _statusLabel('orderPayment.', o.payment_status, 'pending'),
+        _statusLabel('orderFulfillment.', o.fulfillment_status, 'unfulfilled'),
+        Number(o.item_count) || 0,
+        Array.isArray(o.tags) ? o.tags.join('; ') : '',
+      ]);
+      const today = new Date().toISOString().slice(0, 10);
+      downloadCsv(`orders-${today}.csv`, header, rows);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   destroy() { clearTimeout(this._searchDebounce); }

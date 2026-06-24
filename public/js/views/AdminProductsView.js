@@ -1,7 +1,7 @@
 // AdminProductsView — admin CRUD for products. Route: #/admin/shop/products
 import { getCSRFToken, getCsrfHeaders } from '../utils/api.js';
 import * as cart from '../services/cart.js';
-import { t } from '../i18n/i18n.js';
+import { t, href } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 
@@ -12,7 +12,7 @@ function _esc(s) {
 }
 
 export class AdminProductsView {
-  constructor() { this._view = null; this._products = []; }
+  constructor() { this._view = null; this._products = []; this._detailCache = new Map(); }
 
   async render() {
     this._view = document.createElement('div');
@@ -65,7 +65,7 @@ export class AdminProductsView {
               <td>${p.images?.[0]?.url
                 ? `<img class="admin-shop__thumb" src="${_esc(p.images[0].url)}" alt=""/>`
                 : '<span class="admin-shop__thumb admin-shop__thumb--placeholder"></span>'}</td>
-              <td>${_esc(p.name)}</td>
+              <td><button type="button" class="prod-name" data-toggle="${_esc(p.id)}" aria-expanded="false"><span class="prod-name__chevron" aria-hidden="true">▸</span>${_esc(p.name)}</button></td>
               <td><code>${_esc(p.slug)}</code></td>
               <td>${cart.formatMoney(p.price_isk, 'ISK')}</td>
               <td>${cart.formatMoney(p.price_eur, 'EUR')}</td>
@@ -74,7 +74,8 @@ export class AdminProductsView {
               <td>
                 <button type="button" class="admin-shop__link" data-action="edit" data-id="${_esc(p.id)}">${t('admin.edit')}</button>
               </td>
-            </tr>`).join('')}
+            </tr>
+            <tr class="prod-detail-row" data-detail-for="${_esc(p.id)}" hidden><td colspan="8"><div class="prod-detail" data-detail-panel></div></td></tr>`).join('')}
         </tbody>
       </table>
     `;
@@ -84,6 +85,87 @@ export class AdminProductsView {
         if (p) this._showForm(p);
       });
     });
+    body.querySelectorAll('.prod-name[data-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => this._toggleDetail(btn.dataset.toggle, btn));
+    });
+  }
+
+  // ── Inline detail panel (click a product name) ────────────────────────────────
+  // Accordion: one panel open at a time. Distinct from the Edit modal — this is a
+  // read-only summary (pricing, inventory, codes, per-variant table). Fetches the
+  // full product once (cached per view) via the existing single-product GET.
+  async _toggleDetail(id, btn) {
+    const row = this._view.querySelector(`.prod-detail-row[data-detail-for="${id}"]`);
+    if (!row) return;
+    const wasOpen = !row.hidden;
+    // Close every panel + reset every chevron (accordion).
+    this._view.querySelectorAll('.prod-detail-row').forEach(r => { r.hidden = true; });
+    this._view.querySelectorAll('.prod-name[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    if (wasOpen) return; // it was open → this click closes it
+    btn.setAttribute('aria-expanded', 'true');
+    row.hidden = false;
+    const panel = row.querySelector('[data-detail-panel]');
+    let product = this._detailCache.get(id);
+    if (!product) {
+      panel.innerHTML = `<p class="admin-shop__hint">${t('form.loading')}</p>`;
+      try {
+        const res  = await fetch(`/api/v1/admin/shop/products/${id}`, { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load product');
+        product = data.product;
+        this._detailCache.set(id, product);
+      } catch (err) {
+        panel.innerHTML = `<p class="admin-shop__error">${_esc(err.message)}</p>`;
+        return;
+      }
+    }
+    panel.innerHTML = this._detailPanelHtml(product);
+    panel.querySelector('[data-action="edit"]')?.addEventListener('click', () => this._showForm(product));
+  }
+
+  _detailPanelHtml(p) {
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    const inventory = variants.length
+      ? variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+      : (Number(p.stock) || 0);
+    const fmtDate = (iso) => iso
+      ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '—';
+    const field = (label, val) => `<div class="prod-detail__field"><dt>${label}</dt><dd>${val}</dd></div>`;
+    const axes = Array.isArray(p.variant_axes) ? p.variant_axes : [];
+    const variantTable = variants.length ? `
+      <table class="prod-detail__variants">
+        <thead><tr>
+          ${axes.map(a => `<th>${_esc(a.charAt(0).toUpperCase() + a.slice(1))}</th>`).join('')}
+          <th>SKU</th><th>${t('adminProducts.detailBin')}</th><th>${t('adminProducts.stock')}</th><th>${t('adminProducts.priceISK')}</th>
+        </tr></thead>
+        <tbody>
+          ${variants.map(v => `<tr>
+            ${axes.map(a => `<td>${_esc(v.attributes?.[a] ?? '—')}</td>`).join('')}
+            <td><code>${_esc(v.sku || '—')}</code></td>
+            <td>${_esc(v.bin || '—')}</td>
+            <td>${Number(v.stock) || 0}</td>
+            <td>${cart.formatMoney(v.price_isk ?? p.price_isk, 'ISK')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '';
+    return `
+      <dl class="prod-detail__grid">
+        ${field(t('adminProducts.detailPrice'), `${cart.formatMoney(p.price_isk, 'ISK')} · ${cart.formatMoney(p.price_eur, 'EUR')}`)}
+        ${field(t('adminProducts.detailStock'), String(inventory))}
+        ${field(t('adminProducts.detailSku'), _esc(p.sku || '—'))}
+        ${field(t('adminProducts.detailBin'), _esc(p.bin || '—'))}
+        ${field(t('adminProducts.detailBarcode'), _esc(p.barcode || '—'))}
+        ${field(t('adminProducts.detailType'), _esc(p.category || '—'))}
+        ${field(t('adminProducts.active'), p.active ? '✓' : '—')}
+        ${field(t('adminProducts.detailUpdated'), fmtDate(p.updated_at))}
+      </dl>
+      ${variantTable}
+      <div class="prod-detail__actions">
+        <a class="admin-shop__link" href="${href('/shop/' + p.slug)}" data-route="/shop/${_esc(p.slug)}">${t('adminProducts.viewInStore')}</a>
+        <button type="button" class="admin-shop__link" data-action="edit">${t('admin.edit')}</button>
+      </div>
+    `;
   }
 
   _showForm(existing = null) {
