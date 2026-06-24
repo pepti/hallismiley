@@ -67,3 +67,12 @@
   gap: var(--sp-4);
   align-items: center;
 }
+
+/* ── CSV export / import ───────────────────────────────────────────────────── */
+.admin-shop__header-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.prod-import { display: flex; flex-direction: column; gap: var(--sp-3); }
+.prod-import__summary {
+  margin: var(--sp-2) 0 0;
+  font-weight: 600;
+  color: var(--text-secondary);
+}

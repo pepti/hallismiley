@@ -164,6 +164,11 @@ app.post('/api/v1/shop/webhook',
 // this path. The route is still 404 in production via requireTestEnv.
 app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
 
+// Product CSV import posts the whole catalogue as JSON rows, so this path gets a
+// larger JSON limit. Mounted BEFORE the global 100 kb parser (same pattern as
+// change-requests above); still admin-gated downstream by the shop routes.
+app.use('/api/v1/admin/shop/products/import', express.json({ limit: '4mb' }));
+
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());

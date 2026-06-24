@@ -4,6 +4,8 @@ import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
+import { parseProductsCsv } from '../utils/productCsv.js';
+import { adminExportProductsUrl, adminPreviewProductImport, adminApplyProductImport } from '../services/adminProducts.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -21,13 +23,19 @@ export class AdminProductsView {
       <div class="admin-shop__inner">
         <header class="admin-shop__header">
           <h1>${t('adminProducts.title')}</h1>
-          <button type="button" id="admin-new-product" class="admin-shop__primary-btn">${t('adminProducts.newProduct')}</button>
+          <div class="admin-shop__header-actions">
+            <button type="button" id="admin-products-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
+            <button type="button" id="admin-products-import" class="admin-shop__primary-btn">${t('adminProducts.import')}</button>
+            <button type="button" id="admin-new-product" class="admin-shop__primary-btn">${t('adminProducts.newProduct')}</button>
+          </div>
         </header>
         <p class="admin-shop__hint">${t('adminProducts.priceHint')}</p>
         <div id="admin-shop-body"><p>${t('form.loading')}</p></div>
       </div>
     `;
     this._view.querySelector('#admin-new-product').addEventListener('click', () => this._showForm());
+    this._view.querySelector('#admin-products-export').addEventListener('click', () => this._exportCsv());
+    this._view.querySelector('#admin-products-import').addEventListener('click', () => this._openImportModal());
 
     await this._load();
     return renderAdminShell({ activePath: '/admin/shop/products', content: this._view });
@@ -298,6 +306,91 @@ export class AdminProductsView {
       });
       const activeBox = row.querySelector('input[data-field=active]');
       activeBox?.addEventListener('change', () => commit(row, 'active', activeBox.checked));
+    });
+  }
+
+  // ── CSV export / import ───────────────────────────────────────────────────────
+  _exportCsv() {
+    const a = document.createElement('a');
+    a.href = adminExportProductsUrl();
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  _openImportModal() {
+    const modal = document.createElement('div');
+    modal.className = 'admin-shop__modal';
+    modal.innerHTML = `
+      <div class="admin-shop__modal-card">
+        <header>
+          <h2>${t('adminProducts.importTitle')}</h2>
+          <button type="button" class="admin-shop__modal-close" aria-label="${t('common.close')}">✕</button>
+        </header>
+        <div class="prod-import">
+          <p class="admin-shop__hint">${t('adminProducts.importIntro')}</p>
+          <label class="admin-shop__upload-btn">
+            <input type="file" accept=".csv,text/csv" id="prod-import-file"/>
+            ${t('adminProducts.importChooseFile')}
+          </label>
+          <p class="admin-shop__error" id="prod-import-error" role="alert"></p>
+          <div id="prod-import-preview"></div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+    const errorEl   = modal.querySelector('#prod-import-error');
+    const previewEl = modal.querySelector('#prod-import-preview');
+
+    modal.querySelector('#prod-import-file').addEventListener('change', async (e) => {
+      errorEl.textContent = '';
+      previewEl.innerHTML = '';
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      let text;
+      try { text = await file.text(); } catch { errorEl.textContent = t('adminProducts.importParseError'); return; }
+      const { rows, hasSku } = parseProductsCsv(text);
+      if (!hasSku)      { errorEl.textContent = t('adminProducts.importNoSkuCol'); return; }
+      if (!rows.length) { errorEl.textContent = t('adminProducts.importNoRows');   return; }
+      previewEl.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.importPreviewing')}</p>`;
+      try {
+        const { counts } = await adminPreviewProductImport(rows);
+        this._renderImportPreview(previewEl, counts, rows, close);
+      } catch (err) {
+        previewEl.innerHTML = '';
+        errorEl.textContent = err.message;
+      }
+    });
+  }
+
+  _renderImportPreview(previewEl, counts, rows, close) {
+    const label = (k) => `${counts[k] || 0} ${t('adminProducts.importStatus' + k.charAt(0).toUpperCase() + k.slice(1))}`;
+    const canApply = (counts.update || 0) > 0;
+    previewEl.innerHTML = `
+      <p class="prod-import__summary">${['update', 'nochange', 'unmatched', 'error'].map(label).join(' · ')}</p>
+      <div class="admin-shop__form-actions">
+        <button type="button" class="admin-shop__primary-btn" id="prod-import-apply" ${canApply ? '' : 'disabled'}>${t('adminProducts.importApply')}</button>
+      </div>
+      <p class="admin-shop__hint" id="prod-import-status" aria-live="polite"></p>`;
+    const statusEl = previewEl.querySelector('#prod-import-status');
+    previewEl.querySelector('#prod-import-apply')?.addEventListener('click', async () => {
+      const btn = previewEl.querySelector('#prod-import-apply');
+      btn.disabled = true;
+      statusEl.textContent = t('adminProducts.importApplying');
+      try {
+        const res = await adminApplyProductImport(rows);
+        statusEl.textContent = t('adminProducts.importDone', { n: res.updated });
+        this._detailCache.clear(); // detail panels are stale after bulk edits
+        await this._load();
+        setTimeout(close, 1200);
+      } catch (err) {
+        statusEl.textContent = err.message;
+        btn.disabled = false;
+      }
     });
   }
 
