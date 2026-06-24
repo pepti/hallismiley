@@ -229,6 +229,7 @@
   "auth.signIn": "Innskrá",
   "auth.signUp": "Nýskrá",
   "auth.signOut": "Útskrá",
+  "auth.sessionExpired": "Innskráningin rann út — vinsamlegast skráðu þig inn aftur.",
   "auth.continueWithGoogle": "Halda áfram með Google",
   "auth.continueWithFacebook": "Halda áfram með Facebook",
   "auth.orSignUpWithEmail": "eða nýskrá með tölvupósti",

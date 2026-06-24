@@ -279,6 +279,12 @@ describe('GET /auth/session', () => {
     expect(res.status).toBe(200);
     expect(res.body.authenticated).toBe(false);
   });
+
+  test('sends Cache-Control: no-store so the SPA never paints from a stale session', async () => {
+    const res = await request(app).get('/auth/session');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
 });
 
 // ── POST /auth/signup ─────────────────────────────────────────────────────────

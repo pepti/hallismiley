@@ -32,6 +32,16 @@ export function updateCachedUser(partial) {
   _dispatch();
 }
 
+// Drop the cached session WITHOUT a network call — used by the global 401 guard
+// when the server reports the session is gone (expired, or the auth_session
+// cookie was dropped when the browser closed). Mirrors logout()'s local effect
+// so the UI flips to logged-out and route guards fire.
+export function clearSession() {
+  _user = null;
+  _csrfToken = null;
+  _dispatch();
+}
+
 // ── CSRF ──────────────────────────────────────────────────────────────────────
 
 export async function getCSRFToken() {
@@ -81,7 +91,7 @@ export async function logout() {
 
 export async function tryRestoreSession() {
   try {
-    const res  = await fetch('/auth/session', { credentials: 'include' });
+    const res  = await fetch('/auth/session', { credentials: 'include', cache: 'no-store' });
     const data = await res.json();
     if (data.authenticated) {
       _user = data.user;

@@ -342,6 +342,10 @@ const authController = {
   // GET /auth/session — returns current session/user info
   async session(req, res, next) {
     try {
+      // Session state must never be cached: a stale "authenticated" response
+      // would let the SPA paint admin chrome after the session is gone (e.g. the
+      // browser closed on a computer restart), then every API call 401s.
+      res.setHeader('Cache-Control', 'no-store');
       const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
       if (!sessionId) {
         return res.json({ authenticated: false });

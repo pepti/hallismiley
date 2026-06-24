@@ -229,6 +229,7 @@
   "auth.signIn": "Sign In",
   "auth.signUp": "Sign Up",
   "auth.signOut": "Sign Out",
+  "auth.sessionExpired": "Your session expired — please sign in again.",
   "auth.continueWithGoogle": "Continue with Google",
   "auth.continueWithFacebook": "Continue with Facebook",
   "auth.orSignUpWithEmail": "or sign up with email",
