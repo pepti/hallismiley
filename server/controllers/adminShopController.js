@@ -7,7 +7,7 @@ const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
-const { streamDeliveryNote } = require('../services/pdfService');
+const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdfService');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
@@ -434,6 +434,30 @@ const adminShopController = {
         Setting.getGeneralSettings(),
       ]);
       return streamDeliveryNote({ res, order, items, store });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/shop/orders/bulk/delivery-notes.pdf?ids=1,2,3
+  // → one combined PDF, a page per order, so a batch prints in a single job.
+  async getBulkDeliveryNotes(req, res, next) {
+    try {
+      const ids = String(req.query.ids || '')
+        .split(',').map(s => s.trim()).filter(Boolean).slice(0, 100);
+      if (!ids.length) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkIdsInvalid'), code: 400 });
+      }
+      const store  = await Setting.getGeneralSettings();
+      const found  = await Promise.all(ids.map(async (id) => {
+        const order = await Order.findById(id);
+        if (!order) return null;
+        const items = await Order.listItems(order.id);
+        return { order, items };
+      }));
+      const orders = found.filter(Boolean);
+      if (!orders.length) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      }
+      return streamBulkDeliveryNotes({ res, orders, store });
     } catch (err) { next(err); }
   },
 

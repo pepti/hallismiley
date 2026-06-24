@@ -64,6 +64,8 @@ router.get('/reports',            adminShop.salesReport);
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
+// Literal route before /orders/:id so "bulk" isn't captured as an order id.
+router.get('/orders/bulk/delivery-notes.pdf', adminShop.getBulkDeliveryNotes);
 router.get('/orders/:id',         adminShop.getOrder);
 router.get('/orders/:id/delivery-note', adminShop.deliveryNote);
 router.patch('/orders/:id/status', csrfProtect, adminShop.updateOrderStatus);

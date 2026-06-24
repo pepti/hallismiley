@@ -243,6 +243,7 @@
   "errors.admin.slugAlreadyTaken": "Slug already taken",
   "errors.admin.imageNotFound": "Image not found",
   "errors.admin.orderNotFound": "Order not found",
+  "errors.admin.bulkIdsInvalid": "Select at least one order to print",
   "errors.admin.variantAttrsTaken": "A variant with those attributes (or that SKU) already exists",
   "errors.admin.variantNotFound": "Variant not found",
   "errors.admin.skuTaken": "SKU already in use",
