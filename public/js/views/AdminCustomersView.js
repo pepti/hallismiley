@@ -13,40 +13,22 @@ import {
   adminListCustomers, adminCreateCustomer,
   adminPreviewCustomerImport, adminApplyCustomerImport,
 } from '../services/adminCustomers.js';
-
-// Minimal RFC-4180-ish line splitter (double-quote escaping).
-function splitLine(line) {
-  const out = [];
-  let cur = '', inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i += 1; } else inQuotes = false; }
-      else cur += ch;
-    } else if (ch === '"') inQuotes = true;
-    else if (ch === ',') { out.push(cur); cur = ''; }
-    else cur += ch;
-  }
-  out.push(cur);
-  return out;
-}
+import { parseCsvRecords } from '../utils/csv.js';
 
 // Parse an Email/Name/Phone CSV → [{ email, display_name, phone }]. Tolerant of
 // either English or Icelandic header names; rows without an email are dropped.
 function parseCustomerCsv(text) {
-  let raw = String(text || '');
-  if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
-  const lines = raw.split(/\r?\n/).filter(l => l.trim() !== '');
-  if (!lines.length) return [];
-  const header = splitLine(lines[0]).map(h => h.trim().toLowerCase());
+  const records = parseCsvRecords(text);
+  if (!records.length) return [];
+  const header = records[0].map(h => h.trim().toLowerCase());
   const find = (names) => header.findIndex(h => names.includes(h));
   const ei = find(['email', 'e-mail', 'netfang']);
   const ni = find(['name', 'display name', 'nafn']);
   const pi = find(['phone', 'phone number', 'sími', 'simi']);
   if (ei < 0) return [];
   const out = [];
-  for (let i = 1; i < lines.length; i += 1) {
-    const c = splitLine(lines[i]);
+  for (let i = 1; i < records.length; i += 1) {
+    const c = records[i];
     const email = String(c[ei] != null ? c[ei] : '').trim();
     if (!email) continue;
     out.push({

@@ -90,7 +90,10 @@ function normalizeImportRow(row) {
   for (const f of ['price_isk', 'price_eur', 'stock']) {
     if (row[f] == null || row[f] === '') continue;
     const n = Number(row[f]);
-    if (!Number.isFinite(n) || n < 0) return { error: 'invalidValue' };
+    // Prices must be > 0 (DB CHECK); stock may be 0. Flag up front so preview
+    // classifies a bad value as an error rather than failing opaquely on UPDATE.
+    const invalid = !Number.isFinite(n) || (f === 'stock' ? n < 0 : n <= 0);
+    if (invalid) return { error: 'invalidValue' };
     out[f] = f === 'stock' ? Math.trunc(n) : n;
   }
   if (row.bin != null && String(row.bin).trim() !== '') out.bin = String(row.bin).trim();

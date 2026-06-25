@@ -12,6 +12,12 @@ function makeToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// A username UNIQUE violation (as opposed to an email one) — lets create/bulkCreate
+// retry username derivation on a race without misreporting it as an email conflict.
+function isUsernameConflict(err) {
+  return !!err && err.code === '23505' && /username/i.test(err.constraint || '');
+}
+
 // A unique username derived from the email local-part, with a numeric suffix on
 // collision (the users table has a UNIQUE username constraint).
 async function deriveUsername(email) {
@@ -71,20 +77,32 @@ const Customer = {
   },
 
   // Create one passwordless customer. Returns { user, resetToken }.
+  // deriveUsername does a SELECT-then-INSERT, so a concurrent signup/import that
+  // derives the same base can win the username UNIQUE race — re-derive and retry
+  // on that specific conflict (an email conflict is pre-checked by the caller and
+  // bubbles up unchanged).
   async create({ email, display_name = null, phone = null }) {
     const lowered    = String(email).toLowerCase().trim();
-    const username   = await deriveUsername(lowered);
     const resetToken = makeToken();
     const expires    = new Date(Date.now() + INVITE_TTL_MS);
-    const { rows } = await dbQuery(
-      `INSERT INTO users
-         (username, email, password_hash, role, display_name, phone,
-          email_verified, password_reset_token, password_reset_expires)
-       VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, $5, $6)
-       RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
-      [username, lowered, display_name, phone, resetToken, expires]
-    );
-    return { user: rows[0], resetToken };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const username = await deriveUsername(lowered);
+      try {
+        const { rows } = await dbQuery(
+          `INSERT INTO users
+             (username, email, password_hash, role, display_name, phone,
+              email_verified, password_reset_token, password_reset_expires)
+           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, $5, $6)
+           RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
+          [username, lowered, display_name, phone, resetToken, expires]
+        );
+        return { user: rows[0], resetToken };
+      } catch (err) {
+        if (isUsernameConflict(err)) continue; // lost the username race — re-derive
+        throw err;                             // email conflict / anything else bubbles
+      }
+    }
+    throw new Error('Could not allocate a unique username');
   },
 
   // Bulk-create only NEW customers (passwordless, role 'user'); existing emails
@@ -92,17 +110,27 @@ const Customer = {
   async bulkCreate(rows) {
     let created = 0;
     for (const r of rows) {
-      const lowered  = String(r.email).toLowerCase().trim();
+      const lowered = String(r.email).toLowerCase().trim();
       if (!lowered) continue;
-      const username = await deriveUsername(lowered);
-      const { rowCount } = await dbQuery(
-        `INSERT INTO users
-           (username, email, password_hash, role, display_name, phone, email_verified)
-         VALUES ($1, $2, NULL, 'user', $3, $4, FALSE)
-         ON CONFLICT (email) DO NOTHING`,
-        [username, lowered, r.display_name || null, r.phone || null]
-      );
-      created += rowCount;
+      // Retry the row on a username race so one clash never aborts the batch;
+      // email dups are silently skipped by ON CONFLICT.
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const username = await deriveUsername(lowered);
+        try {
+          const { rowCount } = await dbQuery(
+            `INSERT INTO users
+               (username, email, password_hash, role, display_name, phone, email_verified)
+             VALUES ($1, $2, NULL, 'user', $3, $4, FALSE)
+             ON CONFLICT (email) DO NOTHING`,
+            [username, lowered, r.display_name || null, r.phone || null]
+          );
+          created += rowCount;
+          break;
+        } catch (err) {
+          if (isUsernameConflict(err)) continue;
+          throw err;
+        }
+      }
     }
     return created;
   },

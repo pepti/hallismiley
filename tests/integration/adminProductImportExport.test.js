@@ -65,6 +65,13 @@ describe('POST /products/import/preview', () => {
     expect(res.body.counts).toMatchObject({ update: 1, nochange: 1, unmatched: 1, error: 1 });
   });
 
+  test('treats price 0 as invalid (DB CHECK price > 0)', async () => {
+    const res = await request(app).post(PREVIEW).set('Cookie', adminCookie)
+      .send({ rows: [{ sku: 'CSV-P1', price_isk: '0' }] });
+    expect(res.status).toBe(200);
+    expect(res.body.counts).toMatchObject({ error: 1, update: 0 });
+  });
+
   test('400 without a rows array', async () => {
     expect((await request(app).post(PREVIEW).set('Cookie', adminCookie).send({})).status).toBe(400);
   });

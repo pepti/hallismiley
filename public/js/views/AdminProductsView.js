@@ -170,7 +170,7 @@ export class AdminProductsView {
       </dl>
       ${variantTable}
       <div class="prod-detail__actions">
-        <a class="admin-shop__link" href="${href('/shop/' + p.slug)}" data-route="/shop/${_esc(p.slug)}">${t('adminProducts.viewInStore')}</a>
+        <a class="admin-shop__link" href="${_esc(href('/shop/' + p.slug))}" data-route="/shop/${_esc(p.slug)}">${t('adminProducts.viewInStore')}</a>
         <button type="button" class="admin-shop__link" data-action="edit">${t('admin.edit')}</button>
       </div>
     `;
