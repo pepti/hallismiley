@@ -16,6 +16,13 @@ export async function fetchOrders(params = {}) {
   return data; // { orders, total }
 }
 
+// Combined delivery-note PDF URL for a set of order ids (opened in a new tab so
+// the whole batch prints in one job).
+export function bulkDeliveryNotesUrl(ids) {
+  const list = (ids || []).map(encodeURIComponent).join(',');
+  return `/api/v1/admin/shop/orders/bulk/delivery-notes.pdf?ids=${list}`;
+}
+
 export async function fetchOrder(id) {
   const res  = await fetch('/api/v1/admin/shop/orders/' + id, { credentials: 'include' });
   const data = await res.json();

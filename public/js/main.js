@@ -3,6 +3,7 @@ import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
+import { installSessionGuard } from './services/sessionGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { initTheme, getTestOverride, getDemoMode, getServerEnv } from './services/themePrefs.js';
 import {
@@ -12,6 +13,7 @@ import {
 // Install the fetch wrapper before any awaits so every subsequent fetch —
 // including the one tryRestoreSession() may issue — is covered.
 installRateLimitGuard();
+installSessionGuard();
 
 // ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();

@@ -7,11 +7,12 @@ const ProductVariant = require('../models/ProductVariant');
 const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
-const { streamDeliveryNote } = require('../services/pdfService');
+const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdfService');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
 const { submitLocalized }     = require('../services/indexNow');
+const logger                  = require('../logger');
 
 // EN → IS pairs for auto-translation on admin save.
 // Shop-redesign section fields (category, subcategory, duration_minutes,
@@ -42,6 +43,97 @@ function validateSlug(slug) {
   if (typeof slug !== 'string') return false;
   if (RESERVED_SHOP_SLUGS.has(slug)) return false;
   return /^[a-z0-9](?:[a-z0-9-]{0,80}[a-z0-9])?$/.test(slug);
+}
+
+// ── Products CSV export/import ───────────────────────────────────────────────
+// One canonical header. SKU is the import match key; BIN/Price/Stock/Active are
+// importable; Name/Variant/Barcode are export-only context (never written).
+const PRODUCT_CSV_HEADER = ['SKU', 'Name', 'Variant', 'Barcode', 'BIN', 'Price ISK', 'Price EUR', 'Stock', 'Active'];
+// Fields a CSV row may change — the same set for products and variants (both
+// models' update() accept all of these). Stock is written DIRECTLY: HalliProjects
+// has no inventory-adjustments audit table, so there's nothing to stay consistent
+// with (revisit if an audited stock-adjust feature is ever ported).
+const PRODUCT_IMPORT_FIELDS = ['bin', 'price_isk', 'price_eur', 'stock', 'active'];
+const MAX_IMPORT_ROWS = 5000;
+
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function formatVariantAttrs(attrs) {
+  if (!attrs || typeof attrs !== 'object') return '';
+  return Object.entries(attrs).map(([k, val]) => `${k}: ${val}`).join(', ');
+}
+
+// Map a listForExport() row → the 9 CSV cells. Variant rows carry the variant's
+// own sku/bin/money (blank = inherits the product), product rows the product's.
+function productExportCells(r) {
+  const isVariant = r.variant_id != null;
+  const val = (v) => (v == null ? '' : v);
+  return [
+    isVariant ? val(r.variant_sku) : val(r.product_sku),
+    val(r.name),
+    isVariant ? formatVariantAttrs(r.attributes) : '',
+    val(r.barcode),
+    isVariant ? val(r.variant_bin) : val(r.product_bin),
+    isVariant ? val(r.variant_price_isk) : val(r.product_price_isk),
+    isVariant ? val(r.variant_price_eur) : val(r.product_price_eur),
+    isVariant ? val(r.variant_stock) : val(r.product_stock),
+    (isVariant ? r.variant_active : r.product_active) ? 'true' : 'false',
+  ];
+}
+
+// Normalise one client-parsed import row → { values } or { error: 'invalidValue' }.
+function normalizeImportRow(row) {
+  const out = {};
+  for (const f of ['price_isk', 'price_eur', 'stock']) {
+    if (row[f] == null || row[f] === '') continue;
+    const n = Number(row[f]);
+    // Prices must be > 0 (DB CHECK); stock may be 0. Flag up front so preview
+    // classifies a bad value as an error rather than failing opaquely on UPDATE.
+    const invalid = !Number.isFinite(n) || (f === 'stock' ? n < 0 : n <= 0);
+    if (invalid) return { error: 'invalidValue' };
+    out[f] = f === 'stock' ? Math.trunc(n) : n;
+  }
+  if (row.bin != null && String(row.bin).trim() !== '') out.bin = String(row.bin).trim();
+  if (row.active != null && String(row.active).trim() !== '') {
+    const s = String(row.active).trim().toLowerCase();
+    if (['true', '1', 'yes', 'active'].includes(s)) out.active = true;
+    else if (['false', '0', 'no', 'inactive'].includes(s)) out.active = false;
+    else return { error: 'invalidValue' };
+  }
+  return { values: out };
+}
+
+// Diff normalised values against the current DB row → only changed fields.
+function importChanges(values, current) {
+  const changes = {};
+  for (const f of PRODUCT_IMPORT_FIELDS) {
+    if (!(f in values)) continue;
+    if (f === 'bin') { if ((current.bin || '') !== values.bin) changes.bin = values.bin; }
+    else if (f === 'active') { if (Boolean(current.active) !== values.active) changes.active = values.active; }
+    else { const cur = current[f] == null ? null : Number(current[f]); if (cur !== values[f]) changes[f] = values[f]; }
+  }
+  return changes;
+}
+
+// Classify every import row against the DB (shared by preview + apply), variant-first.
+async function classifyImportRows(rows) {
+  const skus  = rows.map(r => String(r.sku || '').trim()).filter(Boolean);
+  const bySku = await Product.findForImport(skus);
+  return rows.map((r) => {
+    const sku = String(r.sku || '').trim();
+    if (!sku) return { sku: '', status: 'error', reason: 'noSku' };
+    const match = bySku.get(sku);
+    if (!match) return { sku, status: 'unmatched' };
+    const norm = normalizeImportRow(r);
+    if (norm.error) return { sku, status: 'error', reason: norm.error, kind: match.kind };
+    const changes = importChanges(norm.values, match.current);
+    if (!Object.keys(changes).length) return { sku, status: 'nochange', kind: match.kind };
+    const target = match.kind === 'variant' ? { variantId: match.variantId } : { productId: match.productId };
+    return { sku, status: 'update', kind: match.kind, changes, target };
+  });
 }
 
 // Returns an error message if any section-redesign field is malformed,
@@ -434,6 +526,88 @@ const adminShopController = {
         Setting.getGeneralSettings(),
       ]);
       return streamDeliveryNote({ res, order, items, store });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/shop/orders/bulk/delivery-notes.pdf?ids=1,2,3
+  // → one combined PDF, a page per order, so a batch prints in a single job.
+  async getBulkDeliveryNotes(req, res, next) {
+    try {
+      const ids = String(req.query.ids || '')
+        .split(',').map(s => s.trim()).filter(Boolean).slice(0, 100);
+      if (!ids.length) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkIdsInvalid'), code: 400 });
+      }
+      const store  = await Setting.getGeneralSettings();
+      const found  = await Promise.all(ids.map(async (id) => {
+        const order = await Order.findById(id);
+        if (!order) return null;
+        const items = await Order.listItems(order.id);
+        return { order, items };
+      }));
+      const orders = found.filter(Boolean);
+      if (!orders.length) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      }
+      return streamBulkDeliveryNotes({ res, orders, store });
+    } catch (err) { next(err); }
+  },
+
+  // ── Products CSV ──────────────────────────────────────────────────────────────
+
+  // GET /api/v1/admin/shop/products/export.csv → full catalogue, one row per unit.
+  async exportProducts(req, res, next) {
+    try {
+      const rows  = await Product.listForExport();
+      const lines = [PRODUCT_CSV_HEADER, ...rows.map(productExportCells)]
+        .map(cells => cells.map(csvCell).join(',')).join('\r\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition',
+        `attachment; filename="products-${new Date().toISOString().slice(0, 10)}.csv"`);
+      return res.send(String.fromCharCode(0xFEFF) + lines);
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/shop/products/import/preview → classify rows (read-only).
+  async previewProductImport(req, res, next) {
+    try {
+      const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
+      if (!rows) return res.status(400).json({ error: t(req.locale, 'errors.admin.importRowsRequired'), code: 400 });
+      if (rows.length > MAX_IMPORT_ROWS) return res.status(400).json({ error: t(req.locale, 'errors.admin.importTooManyRows'), code: 400 });
+      const classified = await classifyImportRows(rows);
+      const counts = { update: 0, nochange: 0, unmatched: 0, error: 0 };
+      for (const c of classified) counts[c.status] = (counts[c.status] || 0) + 1;
+      return res.json({
+        counts,
+        rows: classified.map(c => ({
+          sku: c.sku, status: c.status, kind: c.kind || null,
+          reason: c.reason || null, changes: c.changes ? Object.keys(c.changes) : null,
+        })),
+      });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/shop/products/import/apply → apply updates, existing rows
+  // only (never create/delete). Stock is written directly (no audit table here).
+  async applyProductImport(req, res, next) {
+    try {
+      const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
+      if (!rows) return res.status(400).json({ error: t(req.locale, 'errors.admin.importRowsRequired'), code: 400 });
+      if (rows.length > MAX_IMPORT_ROWS) return res.status(400).json({ error: t(req.locale, 'errors.admin.importTooManyRows'), code: 400 });
+      const classified = await classifyImportRows(rows);
+      let updated = 0, skipped = 0, failed = 0;
+      for (const c of classified) {
+        if (c.status !== 'update') { skipped += 1; continue; }
+        try {
+          if (c.kind === 'variant') await ProductVariant.update(c.target.variantId, c.changes);
+          else await Product.update(c.target.productId, c.changes);
+          updated += 1;
+        } catch (err) {
+          failed += 1;
+          logger.warn({ err, sku: c.sku }, 'product CSV import: row update failed');
+        }
+      }
+      return res.json({ updated, skipped, failed, total: rows.length });
     } catch (err) { next(err); }
   },
 

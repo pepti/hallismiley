@@ -320,6 +320,57 @@ class Product {
     }
     return Product.listImages(productId);
   }
+
+  // ── CSV export / import ─────────────────────────────────────────────────────
+
+  // One row per sellable unit for the admin catalogue CSV: a row per variant for
+  // variant products, else a single product row. Variant money/bin are the
+  // variant's OWN values (null = inherits the product), so the export round-trips
+  // back through findForImport without flattening inheritance.
+  static async listForExport() {
+    const { rows } = await db.query(
+      `SELECT p.id AS product_id, p.slug, p.name, p.sku AS product_sku, p.barcode,
+              p.bin AS product_bin, p.price_isk AS product_price_isk,
+              p.price_eur AS product_price_eur, p.stock AS product_stock,
+              p.active AS product_active,
+              v.id AS variant_id, v.sku AS variant_sku, v.attributes,
+              v.bin AS variant_bin, v.price_isk AS variant_price_isk,
+              v.price_eur AS variant_price_eur, v.stock AS variant_stock,
+              v.active AS variant_active
+         FROM products p
+         LEFT JOIN product_variants v ON v.product_id = p.id
+        ORDER BY lower(p.name), v.sku ASC NULLS FIRST`
+    );
+    return rows;
+  }
+
+  // Resolve a batch of SKUs for import, variant-first (a SKU that matches a
+  // variant updates that variant, not the parent product). Returns a Map
+  // sku → { kind, productId|variantId, current } where `current` carries the
+  // updatable fields so the caller can diff "no change" vs "update".
+  static async findForImport(skus) {
+    const list = [...new Set((skus || []).map(s => String(s)).filter(Boolean))];
+    const bySku = new Map();
+    if (!list.length) return bySku;
+    const { rows: prows } = await db.query(
+      `SELECT id AS product_id, sku, bin, price_isk, price_eur, stock, active
+         FROM products WHERE sku = ANY($1::text[])`,
+      [list]
+    );
+    const { rows: vrows } = await db.query(
+      `SELECT id AS variant_id, product_id, sku, bin, price_isk, price_eur, stock, active
+         FROM product_variants WHERE sku = ANY($1::text[])`,
+      [list]
+    );
+    // Products first, then variants override the same sku (variant precedence).
+    for (const r of prows) {
+      bySku.set(r.sku, { kind: 'product', productId: r.product_id, current: r });
+    }
+    for (const r of vrows) {
+      bySku.set(r.sku, { kind: 'variant', variantId: r.variant_id, productId: r.product_id, current: r });
+    }
+    return bySku;
+  }
 }
 
 module.exports = Product;

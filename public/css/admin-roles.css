@@ -1,0 +1,88 @@
+/* Admin Roles — collapsible permission-group cards. Each role is a <details>
+   card; the body groups its view-access the same way as the sidebar nav. */
+
+.role-cards { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.role-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--role-accent, var(--text-muted));
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.role-card__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  list-style: none;
+}
+.role-card__summary::-webkit-details-marker { display: none; }
+.role-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0a0a0a;
+  background: var(--role-accent, var(--text-muted));
+  border-radius: 50%;
+}
+.role-card__name { font-weight: 600; }
+.role-card__badge {
+  padding: 1px 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.role-card__chips { display: none; gap: 4px; flex-wrap: wrap; }
+.role-card__count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+@media (min-width: 720px) {
+  .role-card__chips { display: flex; }
+}
+
+.role-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.role-chip--all { color: var(--gold); }
+.role-chip--more { color: var(--text-muted); }
+
+.role-card__body {
+  padding: 0 var(--sp-4) var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.role-card__desc { margin: var(--sp-3) 0; color: var(--text-secondary); }
+.role-card__group { margin: var(--sp-3) 0 0; }
+.role-card__group-title,
+.role-views__group-title {
+  margin: 0 0 var(--sp-1);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.role-card__group-views { display: flex; gap: 4px; flex-wrap: wrap; }
+.role-card__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
+
+/* Grouped checkboxes inside the create/edit modal. */
+.role-views__group { margin: 0 0 var(--sp-3); }

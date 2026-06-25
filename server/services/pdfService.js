@@ -34,24 +34,14 @@ function shipToLines(order) {
 }
 
 /**
- * Stream an A4 delivery note (no prices) into an HTTP response.
- * @param {object} opts
- * @param {import('http').ServerResponse} opts.res
- * @param {object} opts.order  Order.findById row (with shipping_address JSON)
- * @param {Array}  opts.items  order_items rows
- * @param {object} opts.store  Setting.getGeneralSettings()
+ * Draw ONE delivery note onto the current page of `doc`. The caller owns the
+ * document lifecycle: a fresh PDFDocument for a single note, or one doc with a
+ * doc.addPage() before each subsequent note for a combined bulk PDF, then a
+ * single doc.end().
  */
-function streamDeliveryNote({ res, order, items, store }) {
+function drawDeliveryNote(doc, { order, items, store }) {
   items = (items || []).slice().sort((a, b) =>
     String(a.product_name_snapshot || '').localeCompare(String(b.product_name_snapshot || '')));
-
-  const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader(
-    'Content-Disposition',
-    `inline; filename="delivery-note-${String(order.order_number).replace(/[^\w.-]/g, '_')}.pdf"`
-  );
-  doc.pipe(res);
 
   const pageW  = doc.page.width;
   const innerW = pageW - MARGIN * 2;
@@ -131,8 +121,46 @@ function streamDeliveryNote({ res, order, items, store }) {
   doc.text('Received by / Móttekið af', MARGIN, footY + 4, { width: half });
   doc.moveTo(pageW - MARGIN - half, footY).lineTo(pageW - MARGIN, footY).strokeColor(RULE).lineWidth(0.7).stroke();
   doc.text('Date / Dagsetning', pageW - MARGIN - half, footY + 4, { width: half });
+}
 
+/**
+ * Stream a single-order A4 delivery note (no prices) into an HTTP response.
+ * @param {object} opts
+ * @param {import('http').ServerResponse} opts.res
+ * @param {object} opts.order  Order.findById row (with shipping_address JSON)
+ * @param {Array}  opts.items  order_items rows
+ * @param {object} opts.store  Setting.getGeneralSettings()
+ */
+function streamDeliveryNote({ res, order, items, store }) {
+  const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `inline; filename="delivery-note-${String(order.order_number).replace(/[^\w.-]/g, '_')}.pdf"`
+  );
+  doc.pipe(res);
+  drawDeliveryNote(doc, { order, items, store });
   doc.end();
 }
 
-module.exports = { streamDeliveryNote };
+/**
+ * Stream a single combined PDF with one delivery note per order, page-break
+ * separated, so a whole batch prints in one job.
+ * @param {object} opts
+ * @param {import('http').ServerResponse} opts.res
+ * @param {Array<{order: object, items: Array}>} opts.orders
+ * @param {object} opts.store  Setting.getGeneralSettings()
+ */
+function streamBulkDeliveryNotes({ res, orders, store }) {
+  const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="delivery-notes.pdf"');
+  doc.pipe(res);
+  orders.forEach((entry, i) => {
+    if (i > 0) doc.addPage();
+    drawDeliveryNote(doc, { order: entry.order, items: entry.items, store });
+  });
+  doc.end();
+}
+
+module.exports = { streamDeliveryNote, streamBulkDeliveryNotes };

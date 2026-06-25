@@ -19,6 +19,11 @@ router.use('/orders',      requireView('orders'));
 
 // ── Products ────────────────────────────────────────────────────────────────
 router.get('/products',           adminShop.listProducts);
+// CSV round-trip — literal paths before /products/:id so they aren't read as ids.
+// Preview is read-only (no CSRF); apply mutates (CSRF). Both inherit requireView.
+router.get('/products/export.csv',      adminShop.exportProducts);
+router.post('/products/import/preview', adminShop.previewProductImport);
+router.post('/products/import/apply',   csrfProtect, adminShop.applyProductImport);
 router.get('/products/:id',       adminShop.getProduct);
 router.post('/products',          csrfProtect, adminShop.createProduct);
 router.patch('/products/:id',     csrfProtect, adminShop.updateProduct);
@@ -64,6 +69,8 @@ router.get('/reports',            adminShop.salesReport);
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
+// Literal route before /orders/:id so "bulk" isn't captured as an order id.
+router.get('/orders/bulk/delivery-notes.pdf', adminShop.getBulkDeliveryNotes);
 router.get('/orders/:id',         adminShop.getOrder);
 router.get('/orders/:id/delivery-note', adminShop.deliveryNote);
 router.patch('/orders/:id/status', csrfProtect, adminShop.updateOrderStatus);

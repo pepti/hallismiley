@@ -15,6 +15,15 @@
 .ord-badge--ful-delivered          { background: rgba(76, 175, 120, .18); color: var(--success); }
 .ord-badge--ful-partial            { background: var(--gold-glow); color: var(--gold); }
 
+/* ── Bulk select + print ───────────────────────────────────────────────────── */
+.admin-orders__check { width: 32px; text-align: center; }
+.admin-orders__bulkbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 12px; padding: 8px 12px;
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.admin-orders__bulkbar[hidden] { display: none; }
+
 /* ── List search + header controls ─────────────────────────────────────────── */
 .admin-shop__header-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .admin-shop__search {

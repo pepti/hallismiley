@@ -28,6 +28,7 @@ const adminChangeRequestRoutes = require('./routes/adminChangeRequestRoutes');
 const adminNavRoutes = require('./routes/adminNavRoutes');
 const adminRolesRoutes = require('./routes/adminRolesRoutes');
 const adminBinsRoutes = require('./routes/adminBinsRoutes');
+const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -163,6 +164,11 @@ app.post('/api/v1/shop/webhook',
 // parser — once body-parser sets req._body the global parser short-circuits for
 // this path. The route is still 404 in production via requireTestEnv.
 app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
+
+// Product CSV import posts the whole catalogue as JSON rows, so this path gets a
+// larger JSON limit. Mounted BEFORE the global 100 kb parser (same pattern as
+// change-requests above); still admin-gated downstream by the shop routes.
+app.use('/api/v1/admin/shop/products/import', express.json({ limit: '4mb' }));
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
 app.use(express.json({ limit: '100kb' }));
@@ -463,6 +469,7 @@ app.use('/api/v1/admin/change-requests', adminChangeRequestRoutes); // must come
 app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

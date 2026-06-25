@@ -1,0 +1,3 @@
+/* Admin Customers — the view reuses the shared .admin-shop chrome (table, modal,
+   form, header actions, search). Only customer-specific tweaks live here. */
+.admin-shop__inner .admin-shop__header-controls { margin-bottom: var(--sp-3); }

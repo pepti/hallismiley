@@ -94,3 +94,88 @@ jobs:
       # unavailability per deploy until we move to a tier with slots.
       - name: Force restart to activate new image
         run: az webapp restart --resource-group hallismiley-rg --name hallismiley-app
+
+  # ── Failsafe: email halli@hallismiley.is when merged code does NOT go live ──
+  # Two distinct "merged but not live" causes are covered:
+  #   1. CI went red on main  → the deploy job above is SKIPPED (fail-closed).
+  #   2. the deploy job RAN but errored (ACR/build/webapp/restart).
+  # Both email via Resend (the app's provider). They no-op cleanly if the
+  # RESEND_API_KEY secret isn't set, and run independently of `deploy` so an
+  # alert can never block or break a deploy.
+
+  alert-ci-blocked:
+    name: Alert — CI red on main (deploy skipped)
+    runs-on: ubuntu-latest
+    # Fires only when CI completed on main WITHOUT success — i.e. the exact
+    # moment the deploy is being skipped. A manual workflow_dispatch never
+    # reaches this branch.
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' }}
+    steps:
+      - name: Email deploy-blocked alert (Resend)
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          CI_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_URL: ${{ github.event.workflow_run.html_url }}
+          CI_TITLE: ${{ github.event.workflow_run.display_title }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "RESEND_API_KEY not set — skipping deploy-blocked alert."; exit 0
+          fi
+          SHORT_SHA="${CI_SHA:0:9}"
+          # jq builds the JSON so any character in the commit title/url is safely escaped.
+          jq -n \
+            --arg subj "⚠️ hallismiley — merged code did NOT deploy (CI ${CI_CONCLUSION} on main)" \
+            --arg concl "$CI_CONCLUSION" \
+            --arg sha "$SHORT_SHA" \
+            --arg title "$CI_TITLE" \
+            --arg url "$CI_URL" \
+            '{
+               from: "Hallismiley Deploy <noreply@hallismiley.is>",
+               to: ["halli@hallismiley.is"],
+               subject: $subj,
+               html: ("<h2>⚠️ Merged code did NOT deploy</h2>"
+                 + "<p>CI finished <strong>" + $concl + "</strong> on <code>main</code> for commit <code>" + $sha + "</code> — " + $title + ".</p>"
+                 + "<p>The Azure deploy is gated on green CI, so it was <strong>skipped</strong>. The merged code is <strong>not live</strong>. Fix CI and it will auto-deploy, or run the “Deploy to Azure” workflow manually.</p>"
+                 + "<p><a href=\"" + $url + "\">View the CI run →</a></p>")
+             }' \
+            | curl -sS --fail-with-body -X POST https://api.resend.com/emails \
+                -H "Authorization: Bearer $RESEND_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d @-
+          echo "Deploy-blocked alert emailed to halli@hallismiley.is."
+
+  alert-deploy-failed:
+    name: Alert — Azure deploy failed
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    # Only when the deploy job actually RAN and failed (not when it was skipped
+    # because CI was red — that case is covered by alert-ci-blocked above).
+    if: ${{ needs.deploy.result == 'failure' }}
+    steps:
+      - name: Email deploy-failed alert (Resend)
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "RESEND_API_KEY not set — skipping deploy-failed alert."; exit 0
+          fi
+          SHORT_SHA="${DEPLOY_SHA:0:9}"
+          jq -n \
+            --arg sha "$SHORT_SHA" \
+            --arg url "$RUN_URL" \
+            '{
+               from: "Hallismiley Deploy <noreply@hallismiley.is>",
+               to: ["halli@hallismiley.is"],
+               subject: "⚠️ hallismiley — Azure deploy FAILED",
+               html: ("<h2>⚠️ Azure deploy failed</h2>"
+                 + "<p>The deploy job for <code>main</code> (commit <code>" + $sha + "</code>) errored, so the merged code is <strong>not live</strong> on Azure.</p>"
+                 + "<p><a href=\"" + $url + "\">View the deploy run →</a></p>")
+             }' \
+            | curl -sS --fail-with-body -X POST https://api.resend.com/emails \
+                -H "Authorization: Bearer $RESEND_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d @-
+          echo "Deploy-failed alert emailed to halli@hallismiley.is."
