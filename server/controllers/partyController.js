@@ -217,6 +217,48 @@ async function _checkInviteAccess(email) {
   return rows.length > 0;
 }
 
+// Logistics categories — the three grouped tables on the planner page. Stored
+// in party_logistics_items.category and mirrored by a CHECK constraint (058).
+const LOGISTICS_CATEGORIES = ['food', 'drinks', 'other'];
+
+// ── To-do list validation helpers ─────────────────────────────────────────────
+const TODO_MAX_ASSIGNEES = 25;
+
+// Normalize an optional due date to a 'YYYY-MM-DD' string or null. Accepts the
+// bare ISO date that <input type="date"> submits and rejects anything else
+// (including impossible dates like 2026-02-31 that Date would silently roll).
+function _normalizeDueDate(v) {
+  if (v == null || v === '') return { ok: true, value: null };
+  if (typeof v !== 'string') return { ok: false };
+  const s = v.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { ok: false };
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return { ok: false };
+  return { ok: true, value: s };
+}
+
+// Normalize an assignees value to a deduped array of trimmed name strings.
+// Accepts an array of strings; each ≤ 100 chars; caps the list length. Mirrors
+// the free-text philosophy of logistics.assigned_to (non-guests allowed).
+function _normalizeAssignees(v) {
+  if (v == null) return { ok: true, value: [] };
+  if (!Array.isArray(v)) return { ok: false };
+  const out = [];
+  const seen = new Set();
+  for (const item of v) {
+    if (typeof item !== 'string') return { ok: false };
+    const name = item.trim();
+    if (!name) continue;
+    if (name.length > 100) return { ok: false, tooLong: true };
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  if (out.length > TODO_MAX_ASSIGNEES) return { ok: false, tooMany: true };
+  return { ok: true, value: out };
+}
+
 // ── Invite management (admin only) ────────────────────────────────────────────
 
 const partyController = {
@@ -424,7 +466,7 @@ const partyController = {
   async listLogistics(_req, res, next) {
     try {
       const { rows } = await db.query(
-        `SELECT id, name, quantity, assigned_to, bought, at_venue,
+        `SELECT id, name, quantity, assigned_to, category, bought, at_venue,
                 sort_order, created_by, created_at, updated_at
            FROM party_logistics_items
           ORDER BY sort_order ASC, id ASC`
@@ -435,7 +477,7 @@ const partyController = {
 
   async addLogisticsItem(req, res, next) {
     try {
-      const { name, quantity = null, assigned_to = null } = req.body || {};
+      const { name, quantity = null, assigned_to = null, category = 'other' } = req.body || {};
       if (typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameRequired'), code: 400 });
       }
@@ -448,17 +490,20 @@ const partyController = {
       if (assigned_to != null && (typeof assigned_to !== 'string' || assigned_to.length > 100)) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsAssignedTooLong', { n: 100 }), code: 400 });
       }
+      if (!LOGISTICS_CATEGORIES.includes(category)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCategoryInvalid'), code: 400 });
+      }
 
       const { rows } = await db.query(
-        `INSERT INTO party_logistics_items (name, quantity, assigned_to, sort_order, created_by)
+        `INSERT INTO party_logistics_items (name, quantity, assigned_to, category, sort_order, created_by)
          VALUES (
-           $1, $2, $3,
+           $1, $2, $3, $4,
            COALESCE((SELECT MAX(sort_order) FROM party_logistics_items), 0) + 1,
-           $4
+           $5
          )
-         RETURNING id, name, quantity, assigned_to, bought, at_venue,
+         RETURNING id, name, quantity, assigned_to, category, bought, at_venue,
                    sort_order, created_by, created_at, updated_at`,
-        [name.trim(), quantity ? quantity.trim() : null, assigned_to ? assigned_to.trim() : null, req.user.id]
+        [name.trim(), quantity ? quantity.trim() : null, assigned_to ? assigned_to.trim() : null, category, req.user.id]
       );
       res.status(201).json(rows[0]);
     } catch (err) { next(err); }
@@ -467,7 +512,7 @@ const partyController = {
   async updateLogisticsItem(req, res, next) {
     try {
       const id = req.params.id;
-      const allowed = ['name', 'quantity', 'assigned_to', 'bought', 'at_venue'];
+      const allowed = ['name', 'quantity', 'assigned_to', 'category', 'bought', 'at_venue'];
       const sets = [];
       const values = [];
       let idx = 1;
@@ -496,6 +541,10 @@ const partyController = {
             }
             v = v.trim() || null;
           }
+        } else if (key === 'category') {
+          if (!LOGISTICS_CATEGORIES.includes(v)) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCategoryInvalid'), code: 400 });
+          }
         } else if (key === 'bought' || key === 'at_venue') {
           if (typeof v !== 'boolean') {
             return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeBoolean', { name: key }), code: 400 });
@@ -515,7 +564,7 @@ const partyController = {
         `UPDATE party_logistics_items
             SET ${sets.join(', ')}, updated_at = NOW()
           WHERE id = $${idx}
-          RETURNING id, name, quantity, assigned_to, bought, at_venue,
+          RETURNING id, name, quantity, assigned_to, category, bought, at_venue,
                     sort_order, created_by, created_at, updated_at`,
         values
       );
@@ -575,6 +624,310 @@ const partyController = {
       await db.query(
         `UPDATE party_logistics_items SET at_venue = TRUE, updated_at = NOW() WHERE at_venue = FALSE`
       );
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // ── To-do list (admin/moderator) ─────────────────────────────────────────────
+  // A collaborative planning checklist. Each TODO has free-form notes plus an
+  // optional due date + assignees, and breaks down into subtasks that carry
+  // their own due date + assignees. Assignees are stored as a JSONB array of
+  // name strings (see _normalizeAssignees); due dates are returned as plain
+  // 'YYYY-MM-DD' strings via to_char so the <input type="date"> round-trips.
+
+  async listTodos(_req, res, next) {
+    try {
+      const { rows: todos } = await db.query(
+        `SELECT id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                assignees, sort_order, created_by, created_at, updated_at
+           FROM party_todos
+          ORDER BY sort_order ASC, id ASC`
+      );
+      const { rows: subs } = await db.query(
+        `SELECT id, todo_id, title, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                assignees, sort_order, created_at, updated_at
+           FROM party_todo_subtasks
+          ORDER BY todo_id ASC, sort_order ASC, id ASC`
+      );
+      const byTodo = new Map();
+      for (const s of subs) {
+        if (!byTodo.has(s.todo_id)) byTodo.set(s.todo_id, []);
+        byTodo.get(s.todo_id).push(s);
+      }
+      res.json(todos.map(todo => ({ ...todo, subtasks: byTodo.get(todo.id) || [] })));
+    } catch (err) { next(err); }
+  },
+
+  async addTodo(req, res, next) {
+    try {
+      const { title, notes = null, due_date = null, assignees = [] } = req.body || {};
+      if (typeof title !== 'string' || title.trim().length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleRequired'), code: 400 });
+      }
+      if (title.length > 200) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleTooLong', { n: 200 }), code: 400 });
+      }
+      if (notes != null && (typeof notes !== 'string' || notes.length > 2000)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoNotesTooLong', { n: 2000 }), code: 400 });
+      }
+      const due = _normalizeDueDate(due_date);
+      if (!due.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoDueDateInvalid'), code: 400 });
+      const asg = _normalizeAssignees(assignees);
+      if (!asg.ok) {
+        const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
+        return res.status(400).json({ error: t(req.locale, key, { n: TODO_MAX_ASSIGNEES }), code: 400 });
+      }
+
+      const { rows } = await db.query(
+        `INSERT INTO party_todos (title, notes, due_date, assignees, sort_order, created_by)
+         VALUES (
+           $1, $2, $3, $4::jsonb,
+           COALESCE((SELECT MAX(sort_order) FROM party_todos), 0) + 1,
+           $5
+         )
+         RETURNING id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                   assignees, sort_order, created_by, created_at, updated_at`,
+        [title.trim(), notes ? notes.trim() : null, due.value, JSON.stringify(asg.value), req.user.id]
+      );
+      res.status(201).json({ ...rows[0], subtasks: [] });
+    } catch (err) { next(err); }
+  },
+
+  async updateTodo(req, res, next) {
+    try {
+      const body = req.body || {};
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      if (Object.prototype.hasOwnProperty.call(body, 'title')) {
+        const v = body.title;
+        if (typeof v !== 'string' || v.trim().length === 0) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleRequired'), code: 400 });
+        }
+        if (v.length > 200) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleTooLong', { n: 200 }), code: 400 });
+        }
+        sets.push(`title = $${idx++}`); values.push(v.trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'notes')) {
+        const v = body.notes;
+        if (v != null && (typeof v !== 'string' || v.length > 2000)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.todoNotesTooLong', { n: 2000 }), code: 400 });
+        }
+        sets.push(`notes = $${idx++}`); values.push(v ? v.trim() : null);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'done')) {
+        if (typeof body.done !== 'boolean') {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeBoolean', { name: 'done' }), code: 400 });
+        }
+        sets.push(`done = $${idx++}`); values.push(body.done);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'due_date')) {
+        const due = _normalizeDueDate(body.due_date);
+        if (!due.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoDueDateInvalid'), code: 400 });
+        sets.push(`due_date = $${idx++}`); values.push(due.value);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'assignees')) {
+        const asg = _normalizeAssignees(body.assignees);
+        if (!asg.ok) {
+          const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
+          return res.status(400).json({ error: t(req.locale, key, { n: TODO_MAX_ASSIGNEES }), code: 400 });
+        }
+        sets.push(`assignees = $${idx++}::jsonb`); values.push(JSON.stringify(asg.value));
+      }
+
+      if (sets.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoNoFields'), code: 400 });
+      }
+
+      values.push(req.params.id);
+      const { rows } = await db.query(
+        `UPDATE party_todos SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE id = $${idx}
+          RETURNING id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                    assignees, sort_order, created_by, created_at, updated_at`,
+        values
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.todoNotFound'), code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async deleteTodo(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `DELETE FROM party_todos WHERE id = $1 RETURNING id`,
+        [req.params.id]
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.todoNotFound'), code: 404 });
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // Reorder top-level TODOs. Body { ids: [...] }; sequential sort_order 1..N
+  // written in a single transaction (mirrors reorderLogistics).
+  async reorderTodos(req, res, next) {
+    try {
+      const { ids } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsRequired'), code: 400 });
+      }
+      if (!ids.every(n => Number.isInteger(n))) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsIntegers'), code: 400 });
+      }
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (let i = 0; i < ids.length; i++) {
+          await client.query(
+            `UPDATE party_todos SET sort_order = $1, updated_at = NOW() WHERE id = $2`,
+            [i + 1, ids[i]]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  async addSubtask(req, res, next) {
+    try {
+      const todoId = req.params.id;
+      const { title, due_date = null, assignees = [] } = req.body || {};
+      if (typeof title !== 'string' || title.trim().length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleRequired'), code: 400 });
+      }
+      if (title.length > 200) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleTooLong', { n: 200 }), code: 400 });
+      }
+      const due = _normalizeDueDate(due_date);
+      if (!due.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoDueDateInvalid'), code: 400 });
+      const asg = _normalizeAssignees(assignees);
+      if (!asg.ok) {
+        const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
+        return res.status(400).json({ error: t(req.locale, key, { n: TODO_MAX_ASSIGNEES }), code: 400 });
+      }
+
+      const parent = await db.query(`SELECT 1 FROM party_todos WHERE id = $1`, [todoId]);
+      if (!parent.rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.todoNotFound'), code: 404 });
+
+      const { rows } = await db.query(
+        `INSERT INTO party_todo_subtasks (todo_id, title, due_date, assignees, sort_order)
+         VALUES (
+           $1, $2, $3, $4::jsonb,
+           COALESCE((SELECT MAX(sort_order) FROM party_todo_subtasks WHERE todo_id = $1), 0) + 1
+         )
+         RETURNING id, todo_id, title, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                   assignees, sort_order, created_at, updated_at`,
+        [todoId, title.trim(), due.value, JSON.stringify(asg.value)]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async updateSubtask(req, res, next) {
+    try {
+      const { todoId, id } = req.params;
+      const body = req.body || {};
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      if (Object.prototype.hasOwnProperty.call(body, 'title')) {
+        const v = body.title;
+        if (typeof v !== 'string' || v.trim().length === 0) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleRequired'), code: 400 });
+        }
+        if (v.length > 200) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleTooLong', { n: 200 }), code: 400 });
+        }
+        sets.push(`title = $${idx++}`); values.push(v.trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'done')) {
+        if (typeof body.done !== 'boolean') {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeBoolean', { name: 'done' }), code: 400 });
+        }
+        sets.push(`done = $${idx++}`); values.push(body.done);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'due_date')) {
+        const due = _normalizeDueDate(body.due_date);
+        if (!due.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoDueDateInvalid'), code: 400 });
+        sets.push(`due_date = $${idx++}`); values.push(due.value);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'assignees')) {
+        const asg = _normalizeAssignees(body.assignees);
+        if (!asg.ok) {
+          const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
+          return res.status(400).json({ error: t(req.locale, key, { n: TODO_MAX_ASSIGNEES }), code: 400 });
+        }
+        sets.push(`assignees = $${idx++}::jsonb`); values.push(JSON.stringify(asg.value));
+      }
+
+      if (sets.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.todoNoFields'), code: 400 });
+      }
+
+      values.push(id);
+      values.push(todoId);
+      const { rows } = await db.query(
+        `UPDATE party_todo_subtasks SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE id = $${idx++} AND todo_id = $${idx}
+          RETURNING id, todo_id, title, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                    assignees, sort_order, created_at, updated_at`,
+        values
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.subtaskNotFound'), code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async deleteSubtask(req, res, next) {
+    try {
+      const { todoId, id } = req.params;
+      const { rows } = await db.query(
+        `DELETE FROM party_todo_subtasks WHERE id = $1 AND todo_id = $2 RETURNING id`,
+        [id, todoId]
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.subtaskNotFound'), code: 404 });
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // Reorder subtasks within one TODO. Body { ids: [...] }; scoped by todo_id so
+  // a stray id from another TODO can't be reordered through this endpoint.
+  async reorderSubtasks(req, res, next) {
+    try {
+      const todoId = req.params.id;
+      const { ids } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsRequired'), code: 400 });
+      }
+      if (!ids.every(n => Number.isInteger(n))) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsIntegers'), code: 400 });
+      }
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (let i = 0; i < ids.length; i++) {
+          await client.query(
+            `UPDATE party_todo_subtasks SET sort_order = $1, updated_at = NOW()
+              WHERE id = $2 AND todo_id = $3`,
+            [i + 1, ids[i], todoId]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
       res.status(204).send();
     } catch (err) { next(err); }
   },
