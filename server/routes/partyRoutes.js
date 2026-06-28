@@ -111,6 +111,7 @@ router.post('/request-access',
 // the URL (the owner is logged out when clicking from email, so no double-submit
 // CSRF). GET renders the confirm page; POST performs the approve/decline.
 router.get('/approval/:token',
+  approvalActionLimiter,
   partyController.getApprovalRequest);
 
 router.post('/approval/:token',

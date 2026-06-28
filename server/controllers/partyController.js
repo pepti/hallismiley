@@ -273,8 +273,11 @@ const partyController = {
       );
       const existing = rows[0] || null;
 
-      // Already a guest (or an approved account with access) — nothing to do.
-      if (existing && (existing.party_access || existing.approval_status === 'approved')) {
+      // Already has access — nothing to do. A previously-approved guest whose
+      // access was later revoked (approval_status stays 'approved' but
+      // party_access is FALSE), or a general account that simply doesn't have
+      // access yet, falls through below and can (re)request.
+      if (existing && existing.party_access) {
         return res.json({ status: 'already_member' });
       }
 
@@ -325,7 +328,7 @@ const partyController = {
         return emailService.sendPartyRequestNotification({
           request: { name, email }, adminEmails, approveUrl,
         });
-      }).catch(err => console.error(`[partyController] request-access notification failed: ${err.message}`));
+      }).catch(err => logger.error({ err }, 'party request-access notification failed'));
     } catch (err) { next(err); }
   },
 
@@ -387,7 +390,7 @@ const partyController = {
           name:   result.user.display_name,
           token:  result.magicToken,
           locale: result.user.preferred_locale || 'en',
-        }).catch(err => console.error(`[partyController] party invite email failed: ${err.message}`));
+        }).catch(err => logger.error({ err }, 'party invite email failed (approval)'));
       }
     } catch (err) { next(err); }
   },
@@ -457,7 +460,7 @@ const partyController = {
 
       Promise.allSettled(sends.map(s => emailService.sendPartyInviteEmail(s))).then(results => {
         const failed = results.filter(r => r.status === 'rejected').length;
-        if (failed) console.error(`[partyController] owner-invite: ${failed}/${sends.length} invite emails failed`);
+        if (failed) logger.error({ failed, total: sends.length }, 'owner-invite: some invite emails failed');
       });
     } catch (err) { next(err); }
   },

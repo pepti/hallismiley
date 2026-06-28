@@ -969,6 +969,27 @@ describe('Party access requests', () => {
       expect(res.body).toEqual({ status: 'already_member' });
     });
 
+    test('a previously-approved guest whose access was revoked can re-request', async () => {
+      // A Manage-Users revoke sets party_access=FALSE but leaves
+      // approval_status='approved'. They must still be able to ask again.
+      const guest = await createTestPendingGuest({ email: 'revoked@test.com', username: 'revokedguest' });
+      await db.query(
+        `UPDATE users SET approval_status = 'approved', party_access = FALSE WHERE id = $1`,
+        [guest.id]
+      );
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Revoked', email: 'revoked@test.com' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'pending' });
+
+      const { rows } = await db.query(
+        'SELECT approval_status, approval_action_token_hash FROM users WHERE id = $1', [guest.id]
+      );
+      expect(rows[0].approval_status).toBe('pending');
+      expect(rows[0].approval_action_token_hash).toBeTruthy();
+    });
+
     test('missing email returns 400', async () => {
       const res = await request(app)
         .post('/api/v1/party/request-access')

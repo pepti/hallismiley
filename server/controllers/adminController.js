@@ -4,6 +4,7 @@ const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
 const Role               = require('../models/Role');
+const logger             = require('../logger');
 const { approveGuest, declineGuest } = require('../services/partyApproval');
 
 const adminController = {
@@ -125,7 +126,7 @@ const adminController = {
         name:   result.user.display_name,
         token:  result.magicToken,
         locale: result.user.preferred_locale || 'en',
-      }).catch(err => console.error(`[adminController] party invite email failed: ${err.message}`));
+      }).catch(err => logger.error({ err }, 'party invite email failed (admin approve)'));
     } catch (err) { next(err); }
   },
 
