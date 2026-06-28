@@ -266,6 +266,8 @@
   "errors.admin.cannotDeleteSystemRole": "Ekki er hægt að eyða innbyggðum hlutverkum",
   "errors.admin.roleInUse": "Færðu notendur með þetta hlutverk yfir á annað áður en því er eytt",
   "errors.admin.lastAdmin": "Það verður að vera að minnsta kosti einn stjórnandi",
+  "errors.admin.alreadyMember": "Þessi notandi hefur þegar þetta hlutverk",
+  "errors.admin.userIdRequired": "userId er nauðsynlegt",
   "errors.admin.userNotFound": "Notandi fannst ekki",
   "errors.admin.shapeEnum": "shape verður að vera eitt af: {values}",
   "errors.admin.slugTaken": "Vara með þessari slóð er þegar til",

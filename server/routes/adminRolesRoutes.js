@@ -14,6 +14,11 @@ router.use(requireAuth, requireRole('admin'));
 
 // Mounted at /api/v1/admin/roles.
 router.get('/',         ctrl.list);
+// Membership / "Members" board. /members must precede the /:name routes so it is
+// never captured as a role name.
+router.get('/members',                  ctrl.listMembers);
+router.post('/:name/members',           csrfProtect, sanitizeBody, ctrl.addMember);
+router.delete('/:name/members/:userId', csrfProtect, ctrl.removeMember);
 router.post('/',        csrfProtect, sanitizeBody, ctrl.create);
 router.patch('/:name',  csrfProtect, sanitizeBody, ctrl.update);
 router.delete('/:name', csrfProtect, ctrl.remove);

@@ -4,6 +4,7 @@ const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
 const Role               = require('../models/Role');
+const UserRole           = require('../models/UserRole');
 const logger             = require('../logger');
 const { approveGuest, declineGuest } = require('../services/partyApproval');
 
@@ -79,16 +80,13 @@ const adminController = {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
       }
 
-      // Last-admin guard: never let the final admin be demoted away from 'admin'.
+      // Last-admin guard: never let the final admin lose the 'admin' role.
+      // Multi-role: measured by membership (UserRole.adminCount), since the
+      // dropdown replaces the user's whole set (below) and would strip admin.
       if (role !== 'admin') {
-        const { rows: tgt } = await dbQuery('SELECT role FROM users WHERE id = $1', [id]);
-        if (tgt.length && tgt[0].role === 'admin') {
-          const { rows: ac } = await dbQuery(
-            `SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND disabled = FALSE`
-          );
-          if (ac[0].n <= 1) {
-            return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
-          }
+        const targetRoles = await UserRole.listForUser(id);
+        if (targetRoles.includes('admin') && (await UserRole.adminCount()) <= 1) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
         }
       }
 
@@ -101,6 +99,13 @@ const adminController = {
       if (rows.length === 0) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
+
+      // The Users-page dropdown sets the user's role to EXACTLY this one: the
+      // AFTER UPDATE trigger adds the new role as a membership, and we drop any
+      // others so the dropdown stays single-role (the Members tab manages multi-
+      // role). Clear the cached set so the next request resolves fresh.
+      await dbQuery('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
+      UserRole.invalidateUser(id);
 
       return res.json(rows[0]);
     } catch (err) { next(err); }
@@ -224,7 +229,7 @@ const adminController = {
 
       const { rows: adminRows } = await dbQuery(
         `SELECT email, email_verified FROM users
-          WHERE role = 'admin' AND disabled = FALSE
+          WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin') AND disabled = FALSE
           ORDER BY email`
       );
 
@@ -263,6 +268,10 @@ const adminController = {
       if (rows.length === 0) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
+
+      // The row (and its user_roles via ON DELETE CASCADE) is gone — drop the
+      // cached role set so a recreated id can't read a stale entry.
+      UserRole.invalidateUser(id);
 
       return res.status(204).send();
     } catch (err) { next(err); }

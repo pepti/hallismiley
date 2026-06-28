@@ -586,7 +586,8 @@ async function handleCheckoutCompleted(session) {
       // only so we don't dispatch into the void.
       const { rows: adminRows } = await db.query(
         `SELECT email FROM users
-          WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE
+          WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin')
+            AND email_verified = TRUE AND disabled = FALSE
             AND email IS NOT NULL`
       );
       const adminEmails = adminRows.map(r => r.email).filter(Boolean);

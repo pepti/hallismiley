@@ -84,6 +84,20 @@ class Role {
     return views;
   }
 
+  // Resolve the UNION of allowed view-ids across a set of role names (multi-role).
+  // admin anywhere in the set => ['*'] (every view), short-circuiting the lookups.
+  static async getViewsForRoles(names) {
+    const list = Array.isArray(names) ? names : [];
+    if (list.includes('admin')) return [ALL];
+    const set = new Set();
+    for (const name of list) {
+      const views = await Role.getViewsForRole(name);
+      if (views.includes(ALL)) return [ALL]; // defensive — only admin yields ALL
+      for (const v of views) set.add(v);
+    }
+    return [...set];
+  }
+
   static invalidateCache() { _cache.clear(); }
 }
 

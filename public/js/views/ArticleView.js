@@ -3,7 +3,7 @@
 // Renders full article with cover image, author byline, rich body HTML,
 // share button, media gallery, and admin edit/delete controls.
 
-import { getUser } from '../services/auth.js';
+import { canEdit } from '../services/auth.js';
 import { getCsrfHeaders }           from '../utils/api.js';
 import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
@@ -121,8 +121,7 @@ export class ArticleView {
     this._view.innerHTML = `<div class="article-page__loading">${t('form.loading')}</div>`;
 
     try {
-      const user = getUser();
-      const isEditor = user && ['admin', 'moderator'].includes(user.role);
+      const isEditor = canEdit();
 
       // Pin the request locale to the URL path's locale via ?locale=. Without
       // it the server falls back to the preferred_locale cookie, which lags

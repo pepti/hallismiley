@@ -3,6 +3,8 @@
 // a meta-permission and is NEVER gated by requireView, to prevent a custom role
 // from granting itself more access (privilege escalation).
 const Role = require('../models/Role');
+const UserRole = require('../models/UserRole');
+const { query: dbQuery } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
 const { t } = require('../i18n');
 
@@ -87,6 +89,92 @@ const adminRolesController = {
         }
         throw err;
       }
+      return res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/roles/members — every role with its members (multi-role).
+  // Powers the admin "Members" board. Roles with no members still appear (empty),
+  // so the board always renders a column per role.
+  async listMembers(req, res, next) {
+    try {
+      const [roles, byRole] = await Promise.all([Role.findAll(), UserRole.membersByRole()]);
+      const out = roles.map(r => ({
+        name:        r.name,
+        description: r.description,
+        is_system:   r.is_system,
+        view_access: r.view_access,
+        members:     byRole.get(r.name) || [],
+      }));
+      return res.json({ roles: out });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/roles/:name/members  { userId } — grant a role (membership).
+  async addMember(req, res, next) {
+    try {
+      const { name } = req.params;
+      const userId = String(req.body?.userId || '').trim();
+      if (!userId) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.userIdRequired'), code: 400 });
+      }
+      const role = await Role.findByName(name);
+      if (!role) return res.status(404).json({ error: t(req.locale, 'errors.admin.roleNotFound'), code: 404 });
+
+      const { rows: u } = await dbQuery('SELECT id FROM users WHERE id = $1', [userId]);
+      if (!u.length) return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+
+      const added = await UserRole.add(userId, name, req.user.id);
+      if (!added) {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.alreadyMember'), code: 409 });
+      }
+      return res.status(201).json({ ok: true });
+    } catch (err) {
+      if (err.code === '23503') { // user/role vanished mid-request
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      next(err);
+    }
+  },
+
+  // DELETE /api/v1/admin/roles/:name/members/:userId — revoke a role (membership).
+  // Guards: never strip the last admin; never let an admin drop their own admin
+  // role (self-lockout). If the removed role was the user's primary (users.role),
+  // repoint the primary to their highest-precedence remaining role (floor 'user').
+  async removeMember(req, res, next) {
+    try {
+      const { name, userId } = req.params;
+
+      if (userId === req.user.id && name === 'admin') {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
+      }
+
+      if (name === 'admin') {
+        const targetRoles = await UserRole.listForUser(userId);
+        if (targetRoles.includes('admin') && (await UserRole.adminCount()) <= 1) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
+        }
+      }
+
+      const removed = await UserRole.remove(userId, name);
+      if (!removed) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+
+      // Repoint the primary if we just removed it (restore the 'user' floor first
+      // if no memberships remain). The AFTER UPDATE trigger re-affirms the new
+      // primary's membership; pickPrimary + invalidate keep state coherent.
+      const { rows: u } = await dbQuery('SELECT role FROM users WHERE id = $1', [userId]);
+      if (u.length && u[0].role === name) {
+        let remaining = await UserRole.listForUser(userId);
+        if (!remaining.length) {
+          await UserRole.add(userId, 'user', req.user.id);
+          remaining = ['user'];
+        }
+        await dbQuery('UPDATE users SET role = $1 WHERE id = $2', [UserRole.pickPrimary(remaining), userId]);
+        UserRole.invalidateUser(userId);
+      }
+
       return res.status(204).send();
     } catch (err) { next(err); }
   },

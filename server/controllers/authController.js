@@ -5,6 +5,7 @@ const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { makeToken, hashToken } = require('../auth/tokens');
 const Role                = require('../models/Role');
+const UserRole            = require('../models/UserRole');
 const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 const securityLogger      = require('../observability/securityLogger');
@@ -17,6 +18,16 @@ const MAX_ATTEMPTS  = 5;
 const LOCKOUT_MS    = 15 * 60 * 1000; // 15 minutes
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RESET_TTL_MS  =      60 * 60 * 1000; // 1 hour
+
+// Multi-role identity fields for a session payload: the denormalized primary role,
+// the full role SET (user_roles), and the UNION of admin views across that set.
+// Floors to the primary if the set is somehow empty, so the client always gets a
+// coherent role list.
+async function roleFields(userId, primaryRole) {
+  const roles = await UserRole.listForUser(userId);
+  const set   = roles.length ? roles : [primaryRole];
+  return { role: primaryRole, roles: set, views: await Role.getViewsForRoles(set) };
+}
 
 const authController = {
   // POST /auth/login  { username, password }
@@ -120,8 +131,7 @@ const authController = {
           id:             user.id,
           username:       user.username,
           email:          user.email,
-          role:           user.role,
-          views:          await Role.getViewsForRole(user.role),
+          ...(await roleFields(user.id, user.role)),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,
@@ -192,8 +202,7 @@ const authController = {
           id:              user.id,
           username:        user.username,
           email:           user.email,
-          role:            user.role,
-          views:           await Role.getViewsForRole(user.role),
+          ...(await roleFields(user.id, user.role)),
           avatar:          user.avatar,
           display_name:    user.display_name,
           phone:           user.phone,
@@ -280,8 +289,7 @@ const authController = {
           id:             newUser.id,
           username:       newUser.username,
           email:          newUser.email,
-          role:           newUser.role,
-          views:          await Role.getViewsForRole(newUser.role),
+          ...(await roleFields(newUser.id, newUser.role)),
           avatar:         newUser.avatar,
           display_name:   newUser.display_name,
           phone:          newUser.phone,
@@ -446,8 +454,7 @@ const authController = {
           id:             user.id,
           username:       user.username,
           email:          user.email,
-          role:           user.role,
-          views:          await Role.getViewsForRole(user.role),
+          ...(await roleFields(user.id, user.role)),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,

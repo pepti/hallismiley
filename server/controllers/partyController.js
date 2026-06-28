@@ -125,7 +125,7 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
     ),
     db.query(
       `SELECT email FROM users
-        WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE`
+        WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin') AND email_verified = TRUE AND disabled = FALSE`
     ),
     db.query(
       `SELECT value FROM site_content WHERE key = 'party_rsvp_form'
@@ -377,7 +377,7 @@ const partyController = {
       const approveUrl = `${APP_URL}/en/party/approve?token=${actionToken}`;
       db.query(
         `SELECT email FROM users
-          WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE`
+          WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin') AND email_verified = TRUE AND disabled = FALSE`
       ).then(adminsRes => {
         const recipients = _partyNotifyRecipients(adminsRes.rows.map(r => r.email));
         return emailService.sendPartyRequestNotification({
@@ -1221,7 +1221,7 @@ const partyController = {
       );
       if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.entryNotFound'), code: 404 });
 
-      const isEditor = req.user.role === 'admin' || req.user.role === 'moderator';
+      const isEditor = (req.user.roles || [req.user.role]).some(r => r === 'admin' || r === 'moderator');
       if (rows[0].user_id !== req.user.id && !isEditor) {
         return res.status(403).json({ error: t(req.locale, 'errors.party.forbidden'), code: 403 });
       }
@@ -1281,7 +1281,7 @@ const partyController = {
       );
       if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.photoNotFound'), code: 404 });
 
-      const isEditor = req.user.role === 'admin' || req.user.role === 'moderator';
+      const isEditor = (req.user.roles || [req.user.role]).some(r => r === 'admin' || r === 'moderator');
       if (rows[0].user_id !== req.user.id && !isEditor) {
         return res.status(403).json({ error: t(req.locale, 'errors.party.forbidden'), code: 403 });
       }
