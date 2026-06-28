@@ -1,4 +1,4 @@
-import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser, adminDeleteUser } from '../services/auth.js';
+import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser, adminDeleteUser, adminApproveUser } from '../services/auth.js';
 import { showToast }     from '../components/Toast.js';
 import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
@@ -122,6 +122,10 @@ export class AdminUsersView {
                 ${u.email_verified
                   ? `<span class="verified-badge">✓ ${t('adminUsers.verified')}</span>`
                   : `<span class="unverified-badge">✗ ${t('adminUsers.unverified')}</span>`}
+                ${u.approval_status === 'pending'
+                  ? `<span class="approval-badge approval-badge--pending">${t('adminUsers.pending')}</span>` : ''}
+                ${u.approval_status === 'declined'
+                  ? `<span class="approval-badge approval-badge--declined">${t('adminUsers.declined')}</span>` : ''}
               </td>
               <td>
                 <label class="toggle-label" title="${u.disabled ? t('adminUsers.enable') : t('adminUsers.disable')}">
@@ -142,6 +146,13 @@ export class AdminUsersView {
               <td class="user-joined">${formatDate(u.created_at)}</td>
               <td class="admin-table__actions">
                 <span class="user-id-badge">#${escHtml(String(u.id))}</span>
+                ${u.approval_status === 'pending' ? `
+                <button class="btn btn--sm btn--primary approve-user-btn"
+                        data-user-id="${escHtml(String(u.id))}" data-approve-action="approve"
+                        title="${t('adminUsers.approve')}">${t('adminUsers.approve')}</button>
+                <button class="btn btn--sm btn--ghost approve-user-btn"
+                        data-user-id="${escHtml(String(u.id))}" data-approve-action="decline"
+                        title="${t('adminUsers.decline')}">${t('adminUsers.decline')}</button>` : ''}
                 ${u.role !== 'admin' ? `
                 <button class="btn btn--sm btn--danger delete-user-btn"
                         data-user-id="${escHtml(String(u.id))}"
@@ -169,6 +180,24 @@ export class AdminUsersView {
     wrap.querySelectorAll('.delete-user-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onDeleteUser(btn));
     });
+
+    wrap.querySelectorAll('.approve-user-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onApproveUser(btn));
+    });
+  }
+
+  async _onApproveUser(btn) {
+    const userId = btn.dataset.userId;
+    const action = btn.dataset.approveAction === 'decline' ? 'decline' : 'approve';
+    btn.disabled = true;
+    try {
+      await adminApproveUser(userId, action);
+      showToast(t('form.success'), 'success');
+      await this._load(); // refresh so the row reflects the new status
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+    }
   }
 
   async _onTogglePartyAccess(checkbox) {

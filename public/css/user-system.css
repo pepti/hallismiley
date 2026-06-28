@@ -389,6 +389,18 @@
   color: var(--text-muted); letter-spacing: 0.08em;
   font-family: var(--font-sans);
 }
+/* Party access-request status (pending / declined approval). */
+.approval-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+}
+.approval-badge--pending  { color: #1a1a1a; background: #c9a84c; }
+.approval-badge--declined { color: #fff;    background: var(--danger, #b23b3b); }
 
 /* Profile sections */
 .profile-section {

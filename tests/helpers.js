@@ -103,6 +103,30 @@ async function createTestRegularUser() {
 }
 
 /**
+ * Inserts a passwordless party guest awaiting approval (approval_status =
+ * 'pending', party_access = FALSE, no password). The DB generates the id so
+ * callers can create several distinct guests in one test by overriding the
+ * email + username. Returns { id, email, username, display_name }.
+ */
+async function createTestPendingGuest(overrides = {}) {
+  const spec = {
+    email:        'pending@test.com',
+    username:     'pendingguest',
+    display_name: 'Pending Guest',
+    ...overrides,
+  };
+  const { rows } = await db.query(
+    `INSERT INTO users
+       (email, username, password_hash, role, email_verified,
+        party_access, approval_status, display_name, requested_at)
+     VALUES ($1, $2, NULL, 'user', FALSE, FALSE, 'pending', $3, NOW())
+     RETURNING id`,
+    [spec.email, spec.username, spec.display_name]
+  );
+  return { id: rows[0].id, ...spec };
+}
+
+/**
  * Creates the test admin user (if no userId is given) and a session row for
  * the resulting user. Returns the full `Cookie: auth_session=<id>` string
  * ready for supertest.
@@ -174,6 +198,7 @@ module.exports = {
   createTestAdminUser,
   createTestModeratorUser,
   createTestRegularUser,
+  createTestPendingGuest,
   getTestSessionCookie,
   cleanTables,
   validProject,

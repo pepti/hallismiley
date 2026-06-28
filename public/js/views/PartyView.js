@@ -1,4 +1,4 @@
-import { isAuthenticated, getUser, isAdmin, canEdit, updateCachedUser, getCSRFToken } from '../services/auth.js';
+import { isAuthenticated, getUser, isAdmin, canEdit, getCSRFToken } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
@@ -40,11 +40,12 @@ export class PartyView {
     this._partyHero     = null;
     this._rsvp          = null;
     this._rsvpCount     = 0;
+    this._requestSubmitted = false;
   }
 
   // Gates RSVP + Activities. Admins/moderators bypass; everyone else needs the
-  // party_access flag (granted by redeeming an invite code or by an admin
-  // toggle in Manage Users).
+  // party_access flag (granted when the owner approves their request, sends them
+  // an invite, or toggles access in Manage Users).
   _hasPartyAccess() {
     if (!isAuthenticated()) return false;
     if (canEdit()) return true;
@@ -119,55 +120,64 @@ export class PartyView {
   // ── Locked section overlay ─────────────────────────────────────────────────
 
   _renderLockedSection(title, emoji, opts = {}) {
-    const authed = isAuthenticated();
-    const user   = getUser();
-    const needsInviteCode = authed && !canEdit() && !user?.party_access;
-
-    // Invited-code state: show the redemption form on the first locked section
-    // (opts.primary !== false) and a "unlock above" hint on the second.
-    if (needsInviteCode) {
-      return this._renderInviteCodeLocked(title, emoji, opts.primary !== false);
-    }
-
-    // Remaining path: unauthenticated user — prompt them to sign in.
-    const ctaText = t('party.loginToView');
-    const ctaBtn  = `<button class="party-locked__signin-link" type="button">${t('nav.signIn')}</button>`;
-
-    const slug = title.toLowerCase().replace(/\s+/g, '-');
-    return `
-      <section class="party-section party-locked" aria-labelledby="locked-${slug}">
-        <div class="party-section__inner">
-          <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
-          <div class="party-locked__ribbon" role="note">
-            <span class="party-locked__rule" aria-hidden="true"></span>
-            <span class="party-locked__ornament" aria-hidden="true">✦</span>
-            <span class="party-locked__rule" aria-hidden="true"></span>
-          </div>
-          <p class="party-locked__text">
-            ${ctaText}${ctaBtn ? ` — ${ctaBtn}` : ''}
-          </p>
-          <div class="party-locked__ribbon" aria-hidden="true">
-            <span class="party-locked__rule"></span>
-            <span class="party-locked__ornament">✦</span>
-            <span class="party-locked__rule"></span>
-          </div>
-        </div>
-      </section>`;
+    // Anyone without access (logged in or not) gets the request-to-join flow.
+    // Editors always have access, so they never reach a locked section. The
+    // primary section (RSVP) shows the form / status; the secondary section
+    // (Activities) shows a short hint pointing back up to it.
+    return this._renderRequestLocked(title, emoji, opts.primary !== false);
   }
 
-  _renderInviteCodeLocked(title, emoji, primary) {
-    const slug = title.toLowerCase().replace(/\s+/g, '-');
+  _renderRequestLocked(title, emoji, primary) {
+    const slug    = title.toLowerCase().replace(/\s+/g, '-');
+    const user    = getUser();
+    const pending = isAuthenticated() && user?.approval_status === 'pending';
+
+    // Secondary section: a hint pointing at the form in the primary section.
     if (!primary) {
-      return `
-        <section class="party-section party-locked" aria-labelledby="locked-${slug}">
-          <div class="party-section__inner">
-            <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
-            <p class="party-locked__text">${t('party.enterCodeAbove')}</p>
-          </div>
-        </section>`;
+      return this._lockedShell(slug, title, emoji,
+        `<p class="party-locked__text">${t('party.requestAbove')}</p>`);
     }
+
+    // Already requested this visit, or awaiting a decision server-side.
+    if (this._requestSubmitted || pending) {
+      return this._lockedShell(slug, title, emoji,
+        `<p class="party-locked__text">${t('party.awaitingApproval')}</p>`,
+        'party-locked--invite');
+    }
+
+    // The request-to-join form. Pre-fill name/email for a logged-in guest who
+    // doesn't yet have access; offer a sign-in link to unauthenticated visitors
+    // who already set a password.
+    const nameVal  = escHtml(user?.display_name || user?.username || '');
+    const emailVal = escHtml(user?.email || '');
+    const signIn   = isAuthenticated() ? '' : `
+      <p class="party-locked__hint">${t('party.alreadyInvited')}
+        <button class="party-locked__signin-link" type="button">${t('nav.signIn')}</button>
+      </p>`;
+
+    return this._lockedShell(slug, title, emoji, `
+      <p class="party-locked__text">${t('party.requestIntro')}</p>
+      <form class="party-request-form" id="party-request-form" novalidate>
+        <input type="text" name="name" id="party-request-name"
+               class="lol-input party-request-form__input"
+               placeholder="${t('party.requestNameLabel')}"
+               maxlength="100" autocomplete="name" required
+               value="${nameVal}" aria-label="${t('party.requestNameLabel')}" />
+        <input type="email" name="email" id="party-request-email"
+               class="lol-input party-request-form__input"
+               placeholder="${t('party.requestEmailLabel')}"
+               maxlength="200" autocomplete="email" required
+               value="${emailVal}" aria-label="${t('party.requestEmailLabel')}" />
+        <button type="submit" class="lol-btn lol-btn--primary party-request-form__submit">${t('party.requestSubmit')}</button>
+      </form>
+      ${signIn}`,
+      'party-locked--invite');
+  }
+
+  // Shared ornamental shell for the locked RSVP / Activities sections.
+  _lockedShell(slug, title, emoji, innerHtml, extraClass = '') {
     return `
-      <section class="party-section party-locked party-locked--invite" aria-labelledby="locked-${slug}">
+      <section class="party-section party-locked ${extraClass}" aria-labelledby="locked-${slug}">
         <div class="party-section__inner">
           <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
           <div class="party-locked__ribbon" role="note">
@@ -175,15 +185,7 @@ export class PartyView {
             <span class="party-locked__ornament" aria-hidden="true">✦</span>
             <span class="party-locked__rule" aria-hidden="true"></span>
           </div>
-          <p class="party-locked__text">${t('party.gotInviteCode')}</p>
-          <form class="party-invite-form" id="party-invite-form" novalidate>
-            <input type="text" name="code" id="party-invite-code-input"
-                   class="lol-input party-invite-form__input"
-                   placeholder="${t('party.inviteCode')}"
-                   maxlength="100" autocomplete="off" required
-                   aria-label="${t('party.inviteCode')}" />
-            <button type="submit" class="lol-btn lol-btn--primary party-invite-form__submit">${t('party.submitCode')}</button>
-          </form>
+          ${innerHtml}
           <div class="party-locked__ribbon" aria-hidden="true">
             <span class="party-locked__rule"></span>
             <span class="party-locked__ornament">✦</span>
@@ -701,7 +703,7 @@ export class PartyView {
   _bindAll() {
     if (this._hasPartyAccess()) this._bindRsvp();
     this._bindVenueLightbox();
-    this._bindInviteCodeForm();
+    this._bindRequestForm();
     if (canEdit()) this._bindEditing();
 
     // Sign-in links on locked sections
@@ -712,46 +714,46 @@ export class PartyView {
     });
   }
 
-  _bindInviteCodeForm() {
-    const form  = this._el.querySelector('#party-invite-form');
+  _bindRequestForm() {
+    const form = this._el.querySelector('#party-request-form');
     if (!form) return;
-    const input = form.querySelector('#party-invite-code-input');
-    const btn   = form.querySelector('.party-invite-form__submit');
+    const nameInput  = form.querySelector('#party-request-name');
+    const emailInput = form.querySelector('#party-request-email');
+    const btn        = form.querySelector('.party-request-form__submit');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const code = (input?.value || '').trim();
-      if (!code) {
-        showToast(t('party.enterCodeFirst'), 'error');
-        input?.focus();
-        return;
-      }
+      const name  = (nameInput?.value  || '').trim();
+      const email = (emailInput?.value || '').trim();
+      if (!name)  { showToast(t('party.requestNameRequired'),  'error'); nameInput?.focus();  return; }
+      if (!email) { showToast(t('party.requestEmailRequired'), 'error'); emailInput?.focus(); return; }
 
       btn.disabled = true;
-      btn.textContent = t('party.unlocking');
+      btn.textContent = t('party.requestSending');
       try {
         const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/redeem-invite-code', {
+        const res = await fetch('/api/v1/party/request-access', {
           method:      'POST',
           credentials: 'include',
           headers,
-          body:        JSON.stringify({ code }),
+          body:        JSON.stringify({ name, email }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Unable to redeem code');
+        if (!res.ok) throw new Error(data.error || 'Request failed');
 
-        if (data.user) updateCachedUser(data.user);
-        showToast(t('party.youreIn'), 'success');
-
-        // Re-fetch RSVP data now that we have access, then re-render the hub.
-        await this._loadAll();
+        // Flip to the "awaiting approval" panel and re-render.
+        this._requestSubmitted = true;
+        showToast(
+          data.status === 'already_member' ? t('party.requestExistingMember') : t('party.requestSubmitted'),
+          'success'
+        );
         this._el.innerHTML = this._renderHub();
         this._bindAll();
         this._startCountdown();
       } catch (err) {
         showToast(err.message, 'error');
         btn.disabled = false;
-        btn.textContent = t('party.submitCode');
+        btn.textContent = t('party.requestSubmit');
       }
     });
   }

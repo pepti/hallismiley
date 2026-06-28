@@ -24,8 +24,8 @@ export function getViews()        { return _user?.views || []; }
 export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
 export function hasAnyAdminView() { return getViews().length > 0; }
 
-// Merge a partial update into the cached user (e.g. after flipping party_access
-// via invite-code redemption). Dispatches authchange so listeners re-render.
+// Merge a partial update into the cached user (e.g. after a profile change).
+// Dispatches authchange so listeners re-render.
 export function updateCachedUser(partial) {
   if (!_user) return;
   _user = { ..._user, ...partial };
@@ -75,6 +75,23 @@ export async function login(username, password) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Login failed');
+  _user = data.user;
+  _csrfToken = null; // refresh CSRF after login
+  _dispatch();
+  return data;
+}
+
+// Magic-link login for party guests. Consumes a non-expiring token from the
+// invite email and mints a normal Lucia session, exactly like login().
+export async function partyMagicLogin(token) {
+  const res  = await fetch('/auth/party-magic-login', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify({ token }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Sign-in failed');
   _user = data.user;
   _csrfToken = null; // refresh CSRF after login
   _dispatch();
@@ -308,6 +325,21 @@ export async function adminUpdateUser(userId, updates) {
     credentials: 'include',
     headers,
     body:        JSON.stringify(updates),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Update failed');
+  return data;
+}
+
+// Approve / decline a pending party guest. On approve the server emails the
+// guest their magic link; both return the updated user row.
+export async function adminApproveUser(userId, action = 'approve') {
+  const sub     = action === 'decline' ? 'decline' : 'approve';
+  const headers = await _csrfHeaders();
+  const res = await fetch(`/api/v1/admin/users/${userId}/${sub}`, {
+    method:      'PATCH',
+    credentials: 'include',
+    headers,
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Update failed');

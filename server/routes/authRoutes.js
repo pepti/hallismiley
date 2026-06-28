@@ -49,8 +49,19 @@ const resetLimiter = rateLimit({
   message: { error: 'Too many password reset requests, please try again in an hour.', code: 429 },
 });
 
+// Magic-link login: 10 attempts per 15 min per IP. Defence-in-depth on top of
+// the unguessable 256-bit token (looked up by sha256 hash).
+const magicLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skip: isTest,
+  message: { error: 'Too many sign-in attempts, try again later.', code: 429 },
+});
+
 // ── Existing auth ─────────────────────────────────────────────────────────────
 router.post('/login',  authLimiter,              authController.login);
+// Magic-link login — CSRF-exempt like login/signup (mints a session; no token yet).
+router.post('/party-magic-login', magicLoginLimiter, authController.partyMagicLogin);
 // csrfProtect on logout: the client already fetches a fresh CSRF token before
 // calling this endpoint (see public/js/services/auth.js → logout()).
 router.post('/logout', csrfProtect,              authController.logout);

@@ -4,6 +4,7 @@ const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
 const Role               = require('../models/Role');
+const { approveGuest, declineGuest } = require('../services/partyApproval');
 
 const adminController = {
   // GET /api/v1/admin/users?limit=20&offset=0
@@ -15,7 +16,7 @@ const adminController = {
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
-                party_access, created_at, last_login_at
+                party_access, approval_status, requested_at, created_at, last_login_at
          FROM users
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`,
@@ -85,15 +86,64 @@ const adminController = {
       if (typeof party_access !== 'boolean') {
         return res.status(400).json({ error: 'party_access must be a boolean', code: 400 });
       }
+      // Revoking access also nulls the magic-login token so a forwarded invite
+      // link can't silently re-grant entry.
       const { rows } = await dbQuery(
-        `UPDATE users SET party_access = $1 WHERE id = $2
-         RETURNING id, username, email, party_access`,
+        `UPDATE users
+            SET party_access = $1,
+                magic_login_token_hash = CASE WHEN $1 = FALSE THEN NULL ELSE magic_login_token_hash END
+          WHERE id = $2
+          RETURNING id, username, email, party_access`,
         [party_access, id]
       );
       if (rows.length === 0) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
       return res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/admin/users/:id/approve — approve a pending party guest, grant
+  // access, and email them their magic link (fire-and-forget).
+  async approveUser(req, res, next) {
+    try {
+      const { id } = req.params;
+      const result = await approveGuest(id, { approvedBy: req.user.id });
+      if (!result) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      res.json({
+        id:              result.user.id,
+        username:        result.user.username,
+        email:           result.user.email,
+        party_access:    result.user.party_access,
+        approval_status: result.user.approval_status,
+      });
+
+      emailService.sendPartyInviteEmail({
+        to:     result.user.email,
+        name:   result.user.display_name,
+        token:  result.magicToken,
+        locale: result.user.preferred_locale || 'en',
+      }).catch(err => console.error(`[adminController] party invite email failed: ${err.message}`));
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/admin/users/:id/decline — decline a pending party guest.
+  async declineUser(req, res, next) {
+    try {
+      const { id } = req.params;
+      const user = await declineGuest(id, { approvedBy: req.user.id });
+      if (!user) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      return res.json({
+        id:              user.id,
+        username:        user.username,
+        email:           user.email,
+        party_access:    user.party_access,
+        approval_status: user.approval_status,
+      });
     } catch (err) { next(err); }
   },
 

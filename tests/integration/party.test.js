@@ -5,9 +5,11 @@ const {
   createTestAdminUser,
   createTestRegularUser,
   createTestModeratorUser,
+  createTestPendingGuest,
   getTestSessionCookie,
   cleanTables,
 } = require('../helpers');
+const { hashToken } = require('../../server/auth/tokens');
 
 let adminId, adminCookie;
 let userId, userCookie;
@@ -931,6 +933,224 @@ describe('Old invite endpoints return 410 Gone', () => {
       .delete('/api/v1/party/invites/1')
       .set('Cookie', adminCookie);
     expect(res.status).toBe(410);
+  });
+});
+
+// ── Access requests → approval → magic-link ──────────────────────────────────
+
+describe('Party access requests', () => {
+  describe('POST /api/v1/party/request-access', () => {
+    test('new email creates a passwordless pending guest', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'New Guest', email: 'newguest@example.com' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'pending' });
+
+      const { rows } = await db.query(
+        `SELECT password_hash, party_access, approval_status, username,
+                requested_at, approval_action_token_hash
+           FROM users WHERE LOWER(email) = 'newguest@example.com'`
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].password_hash).toBeNull();
+      expect(rows[0].party_access).toBe(false);
+      expect(rows[0].approval_status).toBe('pending');
+      expect(rows[0].username).toBeTruthy();
+      expect(rows[0].approval_action_token_hash).toBeTruthy();
+    });
+
+    test('existing member returns already_member (no enumeration)', async () => {
+      // admin@test.com has party_access = TRUE (set in beforeEach)
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Admin', email: 'admin@test.com' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'already_member' });
+    });
+
+    test('missing email returns 400', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'No Email' });
+      expect(res.status).toBe(400);
+    });
+
+    test('invalid email returns 400', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Bad', email: 'not-an-email' });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/v1/party/owner-invite', () => {
+    test('admin pre-approves emails and issues magic tokens', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/owner-invite')
+        .set('Cookie', adminCookie)
+        .send({ invites: [{ email: 'invitee@example.com', name: 'Invitee' }] });
+      expect(res.status).toBe(200);
+      expect(res.body.invited).toBe(1);
+
+      const { rows } = await db.query(
+        `SELECT party_access, approval_status, magic_login_token_hash, password_hash
+           FROM users WHERE LOWER(email) = 'invitee@example.com'`
+      );
+      expect(rows[0].party_access).toBe(true);
+      expect(rows[0].approval_status).toBe('approved');
+      expect(rows[0].magic_login_token_hash).toBeTruthy();
+      expect(rows[0].password_hash).toBeNull();
+    });
+
+    test('non-admin is forbidden', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/owner-invite')
+        .set('Cookie', userCookie)
+        .send({ invites: [{ email: 'x@example.com' }] });
+      expect(res.status).toBe(403);
+    });
+
+    test('empty invites returns 400', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/owner-invite')
+        .set('Cookie', adminCookie)
+        .send({ invites: [] });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('PATCH /api/v1/admin/users/:id/approve|decline', () => {
+    test('admin approves a pending guest', async () => {
+      const guest = await createTestPendingGuest();
+      const res = await request(app)
+        .patch(`/api/v1/admin/users/${guest.id}/approve`)
+        .set('Cookie', adminCookie);
+      expect(res.status).toBe(200);
+      expect(res.body.approval_status).toBe('approved');
+      expect(res.body.party_access).toBe(true);
+
+      const { rows } = await db.query(
+        'SELECT magic_login_token_hash, party_access FROM users WHERE id = $1', [guest.id]
+      );
+      expect(rows[0].magic_login_token_hash).toBeTruthy();
+      expect(rows[0].party_access).toBe(true);
+    });
+
+    test('admin declines a pending guest', async () => {
+      const guest = await createTestPendingGuest();
+      const res = await request(app)
+        .patch(`/api/v1/admin/users/${guest.id}/decline`)
+        .set('Cookie', adminCookie);
+      expect(res.status).toBe(200);
+      expect(res.body.approval_status).toBe('declined');
+      expect(res.body.party_access).toBe(false);
+    });
+
+    test('non-admin cannot approve', async () => {
+      const guest = await createTestPendingGuest();
+      const res = await request(app)
+        .patch(`/api/v1/admin/users/${guest.id}/approve`)
+        .set('Cookie', userCookie);
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('Approval token endpoints (one-click email)', () => {
+    async function seedActionToken(token, overrides) {
+      const guest = await createTestPendingGuest(overrides);
+      await db.query(
+        `UPDATE users SET approval_action_token_hash = $1,
+                          approval_action_expires = NOW() + interval '1 hour'
+          WHERE id = $2`,
+        [hashToken(token), guest.id]
+      );
+      return guest;
+    }
+
+    test('GET returns request details for a valid token', async () => {
+      const guest = await seedActionToken('tok-valid-1');
+      const res = await request(app).get('/api/v1/party/approval/tok-valid-1');
+      expect(res.status).toBe(200);
+      expect(res.body.valid).toBe(true);
+      expect(res.body.email).toBe(guest.email);
+    });
+
+    test('GET returns { valid:false } for an unknown token', async () => {
+      const res = await request(app).get('/api/v1/party/approval/no-such-token');
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ valid: false });
+    });
+
+    test('POST approve grants access, issues a magic token, and consumes the action token', async () => {
+      const guest = await seedActionToken('tok-approve-1');
+      const res = await request(app)
+        .post('/api/v1/party/approval/tok-approve-1')
+        .send({ action: 'approve' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'approved' });
+
+      const { rows } = await db.query(
+        `SELECT approval_status, party_access, magic_login_token_hash, approval_action_token_hash
+           FROM users WHERE id = $1`, [guest.id]
+      );
+      expect(rows[0].approval_status).toBe('approved');
+      expect(rows[0].party_access).toBe(true);
+      expect(rows[0].magic_login_token_hash).toBeTruthy();
+      expect(rows[0].approval_action_token_hash).toBeNull();
+
+      // Replay of the now-consumed token fails.
+      const replay = await request(app)
+        .post('/api/v1/party/approval/tok-approve-1')
+        .send({ action: 'approve' });
+      expect(replay.status).toBe(404);
+    });
+  });
+
+  describe('POST /auth/party-magic-login', () => {
+    test('valid magic token signs the guest in and verifies their email', async () => {
+      const guest = await createTestPendingGuest({ email: 'magic@test.com', username: 'magicguest' });
+      const token = 'magic-token-xyz';
+      await db.query(
+        `UPDATE users SET magic_login_token_hash = $1, approval_status = 'approved', party_access = TRUE
+          WHERE id = $2`,
+        [hashToken(token), guest.id]
+      );
+      const res = await request(app).post('/auth/party-magic-login').send({ token });
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe('magic@test.com');
+      expect(res.body.user.party_access).toBe(true);
+      expect(res.headers['set-cookie']).toBeDefined();
+
+      const { rows } = await db.query('SELECT email_verified FROM users WHERE id = $1', [guest.id]);
+      expect(rows[0].email_verified).toBe(true);
+    });
+
+    test('unknown token returns 400', async () => {
+      const res = await request(app).post('/auth/party-magic-login').send({ token: 'does-not-exist' });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('Login approval gate', () => {
+    test('a pending guest cannot log in even with a valid password', async () => {
+      const { Scrypt } = require('oslo/password');
+      const guest = await createTestPendingGuest({ email: 'gate@test.com', username: 'gateguest' });
+      const hash  = await new Scrypt().hash('Password123');
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, guest.id]);
+
+      const res = await request(app)
+        .post('/auth/login')
+        .send({ username: 'gate@test.com', password: 'Password123' });
+      expect(res.status).toBe(403);
+    });
+
+    test('an approved user (default) logs in normally', async () => {
+      const res = await request(app)
+        .post('/auth/login')
+        .send({ username: 'user@test.com', password: process.env.ADMIN_PASSWORD });
+      expect(res.status).toBe(200);
+    });
   });
 });
 

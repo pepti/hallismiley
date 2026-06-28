@@ -201,6 +201,29 @@ function validateSignup(req, res, next) {
   next();
 }
 
+// POST /api/v1/party/request-access  { name, email }
+// Lightweight guest sign-up: name + email only (no password / username). The
+// controller auto-generates a username and creates a passwordless pending account.
+function validatePartyRequest(req, res, next) {
+  const { name, email } = req.body || {};
+  const errors = [];
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    errors.push({ key: 'validation.name.required' });
+  } else if (name.trim().length > 100) {
+    errors.push({ key: 'validation.displayName.maxLength', params: { n: 100 } });
+  }
+
+  if (!email || typeof email !== 'string') {
+    errors.push({ key: 'validation.email.required' });
+  } else if (!EMAIL_RE.test(email.trim())) {
+    errors.push({ key: 'validation.email.invalid' });
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
 // PATCH /api/v1/users/me
 function validateProfileUpdate(req, res, next) {
   const { display_name, phone, avatar } = req.body;
@@ -600,6 +623,7 @@ module.exports = {
   validateProject,
   validateQuery,
   validateSignup,
+  validatePartyRequest,
   validateResetPassword,
   validateProfileUpdate,
   validatePasswordChange,

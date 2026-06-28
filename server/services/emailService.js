@@ -610,4 +610,105 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   return { sent, failed };
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, emailHealthCheck, isConfigured };
+// ── Party access request notification to admins ───────────────────────────────
+// Fires when someone submits the "request to join" form on the party page.
+// Always English — admin audience, like the RSVP/booking notifications. The
+// primary button opens the one-click approval confirm page (approveUrl); a
+// secondary link points at the full party admin.
+
+async function sendPartyRequestNotification({ request, adminEmails, approveUrl }) {
+  if (!adminEmails || adminEmails.length === 0) return;
+  if (!isConfigured()) {
+    console.log('[EmailService] Resend not configured — party request notification skipped');
+    return;
+  }
+
+  const locale   = 'en';
+  const name     = request.name || request.email;
+  const subject  = t(locale, 'email.partyRequest.subject', { name });
+  const adminUrl = `${APP_URL}/en/party/admin`;
+
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyRequest.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      ${t(locale, 'email.partyRequest.body')}
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;border-bottom:1px solid #222;">
+      <tr>
+        <td style="padding:10px 0;color:#666;font-size:13px;width:120px;">${t(locale, 'email.partyRequest.nameLabel')}</td>
+        <td style="padding:10px 0;color:#e0e0e0;font-size:14px;">${escapeHtml(request.name || '—')}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;color:#666;font-size:13px;border-top:1px solid #1a1a1a;">${t(locale, 'email.partyRequest.emailLabel')}</td>
+        <td style="padding:10px 0;color:#e0e0e0;font-size:14px;border-top:1px solid #1a1a1a;">${escapeHtml(request.email)}</td>
+      </tr>
+    </table>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${approveUrl}"
+             style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            ${t(locale, 'email.partyRequest.button')}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+      ${t(locale, 'email.partyRequest.manage')}<br/>
+      <a href="${adminUrl}" style="color:#c9a84c;">${adminUrl}</a>
+    </p>
+  `, locale);
+
+  const { data, error } = await getClient().emails.send({ from: FROM, to: adminEmails, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Party request notification sent: recipients=${adminEmails.length} id=${data.id}`);
+}
+
+// ── Party invite (magic link) to the guest ────────────────────────────────────
+// Sent on approval (request flow, admin approval, or owner-initiated invite).
+// The link carries a NON-EXPIRING magic-login token — never log it. Localised to
+// the guest's preferred locale; mentions the optional password route.
+
+async function sendPartyInviteEmail({ to, name, token, locale = 'en' }) {
+  const link = `${APP_URL}/${encodeURIComponent(locale)}/party/login?token=${token}&locale=${encodeURIComponent(locale)}`;
+
+  if (!isConfigured()) {
+    // Do NOT log the token or full link — it is credential-equivalent.
+    console.log('[EmailService] Resend not configured — party invite email skipped (retrieve magic token from DB)');
+    return;
+  }
+
+  const displayName = (name && name.trim()) || t(locale, 'email.partyInvite.fallbackName');
+  const subject = t(locale, 'email.partyInvite.subject');
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyInvite.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      ${t(locale, 'email.partyInvite.body', { name: escapeHtml(displayName) })}
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${link}"
+             style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            ${t(locale, 'email.partyInvite.button')}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 24px;font-size:13px;color:#555;line-height:1.6;">
+      ${t(locale, 'email.partyInvite.fallback')}<br/>
+      <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
+    </p>
+    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+      ${t(locale, 'email.partyInvite.passwordNote')}
+    </p>
+  `, locale);
+
+  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Party invite email sent: id=${data.id}`);
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, emailHealthCheck, isConfigured };

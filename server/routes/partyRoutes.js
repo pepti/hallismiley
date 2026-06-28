@@ -9,17 +9,26 @@ const { _checkInviteAccess }       = require('../controllers/partyController');
 const { requireAuth }              = require('../auth/middleware');
 const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
+const { validatePartyRequest }     = require('../middleware/validate');
 const { partyUploadDir }           = require('../config/paths');
 const { MIME_TO_EXT }              = require('../middleware/upload');
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
-// Redeem invite code: 5 attempts/hr/IP — deters brute-force code guessing.
-const inviteRedeemLimiter = rateLimit({
+// Public "request to join" form: 5 submissions/hr/IP — deters spam sign-ups.
+const requestAccessLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
   skip: isTest,
-  message: { error: 'Too many attempts. Try again in an hour.', code: 429 },
+  message: { error: 'Too many requests. Try again in an hour.', code: 429 },
+});
+
+// One-click approval action (public, token-guarded): 20/hr/IP.
+const approvalActionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  skip: isTest,
+  message: { error: 'Too many attempts. Try again later.', code: 429 },
 });
 
 // Bulk email to guests: 10 sends/hr/IP — defense in depth against a
@@ -91,14 +100,22 @@ router.get('/access',
   requireAuth,
   partyController.checkAccess);
 
-// ── Invite code — redeem (any authed user) / read (admin/moderator only) ─────
-router.post('/redeem-invite-code',
-  requireAuth, inviteRedeemLimiter, csrfProtect,
-  partyController.redeemInviteCode);
+// ── Access requests (public) + approval ──────────────────────────────────────
+// Someone with only the party URL asks to join with name + email. CSRF-guarded
+// (the SPA fetches /api/v1/csrf-token first; anonymous identity falls back to IP).
+router.post('/request-access',
+  requestAccessLimiter, csrfProtect, validatePartyRequest,
+  partyController.requestAccess);
 
-router.get('/invite-code',
-  requireAuth, requireRole('admin', 'moderator'),
-  partyController.getInviteCode);
+// One-click email approval — public, guarded by the single-use action token in
+// the URL (the owner is logged out when clicking from email, so no double-submit
+// CSRF). GET renders the confirm page; POST performs the approve/decline.
+router.get('/approval/:token',
+  partyController.getApprovalRequest);
+
+router.post('/approval/:token',
+  approvalActionLimiter,
+  partyController.actOnApproval);
 
 // ── Party info (public — no auth required) ───────────────────────────────────
 router.get('/info',
@@ -147,6 +164,17 @@ router.get('/invited-guests',
 router.post('/email-going',
   requireAuth, requireRole('admin'), emailBlastLimiter, csrfProtect,
   partyController.emailGoingGuests);
+
+// Owner-initiated invites — paste emails you already have; each becomes a
+// pre-approved guest and gets a magic-link invite immediately.
+router.post('/owner-invite',
+  requireAuth, requireRole('admin'), emailBlastLimiter, csrfProtect,
+  partyController.ownerInvite);
+
+// Guests awaiting approval — backs the admin pending-requests list.
+router.get('/pending-requests',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listPendingRequests);
 
 // ── Logistics (admin/moderator) ───────────────────────────────────────────────
 router.get('/logistics',

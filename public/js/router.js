@@ -24,6 +24,8 @@ import { ResetPasswordView }  from './views/ResetPasswordView.js';
 import { isAuthenticated, isAdmin, canEdit, canSeeView } from './services/auth.js';
 import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
+import { PartyMagicLoginView } from './views/PartyMagicLoginView.js';
+import { PartyApproveView }    from './views/PartyApproveView.js';
 import { ShopView }              from './views/ShopView.js';
 import { ProductView }           from './views/ProductView.js';
 import { CartView }              from './views/CartView.js';
@@ -74,6 +76,8 @@ const ROUTES = [
   { pattern: '/privacy',         factory: ()  => new PrivacyView() },
   { pattern: '/terms',           factory: ()  => new TermsView() },
   { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && canEdit()) ? new PartyAdminView() : new PartyView() },
+  { pattern: '/party/login',     factory: (_, qs) => new PartyMagicLoginView(qs) },
+  { pattern: '/party/approve',   factory: (_, qs) => new PartyApproveView(qs) },
   { pattern: '/party',           factory: ()  => new PartyView() },
   // Shop + checkout. Section sub-routes (shop-redesign step 2) must precede
   // the generic /shop/:slug pattern so they're not matched as product slugs.

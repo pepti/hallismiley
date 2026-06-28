@@ -1,4 +1,4 @@
-import { isAuthenticated, isAdmin, canEdit, adminUpdateUser } from '../services/auth.js';
+import { isAuthenticated, isAdmin, canEdit, adminUpdateUser, adminApproveUser } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
@@ -32,23 +32,23 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, inviteRes, healthRes, guestsRes, logisticsRes] = await Promise.all([
-      fetch('/api/v1/party/rsvps',          { credentials: 'include' }),
-      fetch('/api/v1/party/info',           { credentials: 'include' }),
-      fetch('/api/v1/party/invite-code',    { credentials: 'include' }),
-      fetch('/api/v1/admin/email-health',   { credentials: 'include' }),
-      fetch('/api/v1/party/invited-guests', { credentials: 'include' }),
-      fetch('/api/v1/party/logistics',      { credentials: 'include' }),
+    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes] = await Promise.all([
+      fetch('/api/v1/party/rsvps',            { credentials: 'include' }),
+      fetch('/api/v1/party/info',             { credentials: 'include' }),
+      fetch('/api/v1/party/pending-requests', { credentials: 'include' }),
+      fetch('/api/v1/admin/email-health',     { credentials: 'include' }),
+      fetch('/api/v1/party/invited-guests',   { credentials: 'include' }),
+      fetch('/api/v1/party/logistics',        { credentials: 'include' }),
     ]);
     const rsvps     = await rsvpsRes.json();
     const info      = await infoRes.json();
-    const invite    = inviteRes.ok ? await inviteRes.json() : { code: '' };
+    const pending   = pendingRes.ok ? await pendingRes.json() : [];
     const health    = healthRes.ok ? await healthRes.json() : null;
     const guests    = guestsRes.ok ? await guestsRes.json() : [];
     const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
 
-    this._rsvps         = Array.isArray(rsvps) ? rsvps : [];
-    this._inviteCode    = invite.code || '';
+    this._rsvps           = Array.isArray(rsvps) ? rsvps : [];
+    this._pendingRequests = Array.isArray(pending) ? pending : [];
     this._emailHealth   = health;
     this._invitedGuests = Array.isArray(guests) ? guests : [];
     this._logistics     = Array.isArray(logistics) ? logistics : [];
@@ -72,10 +72,11 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
+        ${this._renderPendingRequests()}
         ${this._renderAcceptedAndPending()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
-        ${this._renderInviteCodeSection()}
+        ${this._renderOwnerInviteSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
         ${this._renderHelpersList()}
@@ -495,18 +496,46 @@ export class PartyAdminView {
       </span>`;
   }
 
-  _renderInviteCodeSection() {
+  // Pending "request to join" submissions awaiting the owner's decision. Hidden
+  // when there are none. Distinct from the RSVP "pending" bucket above — these
+  // guests don't have access yet.
+  _renderPendingRequests() {
+    const pending = this._pendingRequests || [];
+    if (!pending.length) return '';
+    const rows = pending.map(p => `
+      <li class="party-admin__pending-row" data-pending-id="${escHtml(p.id)}">
+        <div class="party-admin__pending-info">
+          <span class="party-admin__pending-name">${escHtml(p.display_name || p.username || '—')}</span>
+          <span class="party-admin__pending-email">${escHtml(p.email)}</span>
+        </div>
+        <div class="party-admin__pending-actions">
+          <button type="button" class="lol-btn lol-btn--primary" data-approve="${escHtml(p.id)}">${t('party.admin.approve')}</button>
+          <button type="button" class="lol-btn lol-btn--ghost" data-decline="${escHtml(p.id)}">${t('party.admin.decline')}</button>
+        </div>
+      </li>`).join('');
+    return `
+      <section class="party-admin__section party-admin__pending">
+        <h2 class="party-admin__section-title">${t('party.admin.pendingRequests', { n: pending.length })}</h2>
+        <ul class="party-admin__pending-list">${rows}</ul>
+      </section>`;
+  }
+
+  // Owner-initiated invites: paste emails you already have (one per line, or
+  // "Name <email>"); each becomes a pre-approved guest and gets a magic-link
+  // invite immediately.
+  _renderOwnerInviteSection() {
     return `
       <section class="party-admin__section party-admin__invite">
-        <h2 class="party-admin__section-title">${t('party.inviteCode')}</h2>
-        <p class="party-admin__invite-help">${t('party.admin.inviteHelp')}</p>
-        <form class="party-admin__invite-form" id="party-admin-invite-form">
-          <input type="text" id="party-admin-invite-input" class="lol-input"
-                 value="${escHtml(this._inviteCode)}" maxlength="100" autocomplete="off"
-                 aria-label="${t('party.inviteCode')}" />
-          <button type="submit" class="lol-btn lol-btn--primary">${t('form.save')}</button>
-          <button type="button" class="lol-btn lol-btn--ghost" id="party-admin-invite-copy">${t('party.admin.copy')}</button>
-          <span class="party-admin__invite-status" id="party-admin-invite-status" aria-live="polite"></span>
+        <h2 class="party-admin__section-title">${t('party.admin.ownerInviteTitle')}</h2>
+        <p class="party-admin__invite-help">${t('party.admin.ownerInviteHelp')}</p>
+        <form class="party-admin__invite-form" id="party-admin-owner-invite-form">
+          <textarea id="party-admin-owner-invite-input" class="lol-input" rows="4"
+                    placeholder="${escHtml(t('party.admin.ownerInvitePlaceholder'))}"
+                    aria-label="${t('party.admin.ownerInviteTitle')}"></textarea>
+          <div class="party-admin__invite-actions">
+            <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.ownerInviteSend')}</button>
+            <span class="party-admin__invite-status" id="party-admin-owner-invite-status" aria-live="polite"></span>
+          </div>
         </form>
       </section>`;
   }
@@ -770,7 +799,8 @@ export class PartyAdminView {
   }
 
   _bind() {
-    this._bindInviteCodeForm();
+    this._bindOwnerInvite();
+    this._bindPendingRequests();
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindLogistics();
@@ -1322,7 +1352,7 @@ export class PartyAdminView {
   }
 
   // Re-render only the logistics section in place — keeps state in other
-  // sections (expanded guest details, invite-code input value) intact.
+  // sections (expanded guest details, owner-invite textarea) intact.
   _rerenderLogistics() {
     const old = this._el.querySelector('#party-admin-logistics');
     if (!old) return;
@@ -1374,50 +1404,75 @@ export class PartyAdminView {
     });
   }
 
-  _bindInviteCodeForm() {
-    const form   = this._el.querySelector('#party-admin-invite-form');
+  // Parse the owner-invite textarea: one entry per line, "email" or "Name <email>".
+  _parseInviteLines(raw) {
+    return String(raw)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const m = line.match(/^(.*?)<([^>]+)>$/);
+        if (m) return { name: m[1].trim(), email: m[2].trim() };
+        return { email: line };
+      });
+  }
+
+  _bindOwnerInvite() {
+    const form = this._el.querySelector('#party-admin-owner-invite-form');
     if (!form) return;
-    const input  = form.querySelector('#party-admin-invite-input');
-    const status = form.querySelector('#party-admin-invite-status');
-    const copyBtn = form.querySelector('#party-admin-invite-copy');
+    const input  = form.querySelector('#party-admin-owner-invite-input');
+    const status = form.querySelector('#party-admin-owner-invite-status');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const code = (input?.value || '').trim();
-      if (!code) {
-        status.textContent = t('party.admin.enterCode');
+      const invites = this._parseInviteLines(input?.value || '');
+      if (!invites.length) {
+        status.textContent = t('party.admin.ownerInviteEmpty');
         return;
       }
       status.textContent = t('form.saving');
       try {
         const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/info', {
-          method:      'PATCH',
+        const res = await fetch('/api/v1/party/owner-invite', {
+          method:      'POST',
           credentials: 'include',
           headers,
-          body:        JSON.stringify({ invite_code: code }),
+          body:        JSON.stringify({ invites }),
         });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || 'Save failed');
-        }
-        this._inviteCode = code;
-        status.textContent = t('form.success');
-        setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+        status.textContent = '';
+        showToast(t('party.admin.inviteSent', { n: data.invited ?? invites.length }), 'success');
+        if (input) input.value = '';
       } catch (err) {
         status.textContent = err.message;
       }
     });
+  }
 
-    copyBtn?.addEventListener('click', async () => {
-      const code = (input?.value || '').trim();
-      if (!code) return;
-      try {
-        await navigator.clipboard.writeText(code);
-        showToast(t('party.admin.codeCopied'), 'success');
-      } catch {
-        showToast(t('party.admin.copyFailed'), 'error');
-      }
+  _bindPendingRequests() {
+    const section = this._el.querySelector('.party-admin__pending');
+    if (!section) return;
+    section.querySelectorAll('[data-approve]').forEach(btn => {
+      btn.addEventListener('click', () => this._actOnPending(btn.dataset.approve, 'approve'));
     });
+    section.querySelectorAll('[data-decline]').forEach(btn => {
+      btn.addEventListener('click', () => this._actOnPending(btn.dataset.decline, 'decline'));
+    });
+  }
+
+  async _actOnPending(id, action) {
+    const row = this._el.querySelector(`[data-pending-id="${CSS.escape(String(id))}"]`);
+    row?.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      await adminApproveUser(id, action);
+      showToast(action === 'approve' ? t('party.admin.approvedGuest') : t('party.admin.declinedGuest'), 'success');
+      // Reload so the approved guest moves into the accepted list and the
+      // pending section updates (or disappears when empty).
+      await this._loadAndRender();
+    } catch (err) {
+      showToast(err.message, 'error');
+      row?.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    }
   }
 }

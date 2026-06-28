@@ -29,6 +29,7 @@ const lucia = new Lucia(adapter, {
       email_verified:   attributes.email_verified,
       disabled:         attributes.disabled,
       party_access:     attributes.party_access,
+      approval_status:  attributes.approval_status,
       preferred_locale: attributes.preferred_locale,
     };
   },

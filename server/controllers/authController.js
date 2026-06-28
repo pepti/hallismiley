@@ -1,9 +1,9 @@
 // Session-based auth using Lucia v3.
 // Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
 // Account lockout: 5 failures → 15-min lock.
-const crypto              = require('crypto');
 const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
+const { makeToken, hashToken } = require('../auth/tokens');
 const Role                = require('../models/Role');
 const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
@@ -17,11 +17,6 @@ const MAX_ATTEMPTS  = 5;
 const LOCKOUT_MS    = 15 * 60 * 1000; // 15 minutes
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RESET_TTL_MS  =      60 * 60 * 1000; // 1 hour
-
-/** Generate a cryptographically-random hex token (64 chars). */
-function makeToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
 
 const authController = {
   // POST /auth/login  { username, password }
@@ -42,7 +37,7 @@ const authController = {
                 failed_login_attempts, locked_until,
                 disabled, disabled_reason,
                 avatar, display_name, phone,
-                email_verified, party_access
+                email_verified, party_access, approval_status
          FROM users
          WHERE LOWER(username) = LOWER($1)
             OR LOWER(email)    = LOWER($1)
@@ -96,6 +91,16 @@ const authController = {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
 
+      // Block party guests who haven't been approved yet. approval_status
+      // defaults to 'approved', so existing users and the normal signup flow
+      // pass straight through — only pending/declined party requests are gated.
+      if (user.approval_status === 'pending') {
+        return res.status(403).json({ error: t(req.locale, 'errors.party.approvalPending'), code: 403 });
+      }
+      if (user.approval_status === 'declined') {
+        return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
+      }
+
       // Successful login — reset counters, create session
       await dbQuery(
         'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
@@ -122,6 +127,79 @@ const authController = {
           phone:          user.phone,
           email_verified: user.email_verified,
           party_access:   user.party_access,
+          approval_status: user.approval_status,
+        },
+      });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/party-magic-login  { token }
+  // Consumes a guest's non-expiring magic-login token and mints a Lucia session.
+  // The token is stored hashed, so we look it up by its sha256. Clicking the link
+  // proves control of the inbox, so we also confirm email verification + grant
+  // access here. The token is NOT cleared — it's reusable by design (the owner
+  // chose permanent links). CSRF-exempt because it mints a session, exactly like
+  // login/signup (see middleware/csrf.js). Revoke by nulling the hash.
+  async partyMagicLogin(req, res, next) {
+    try {
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.tokenRequired'), code: 400 });
+      }
+
+      const { rows } = await dbQuery(
+        `SELECT id, username, email, role, avatar, display_name, phone,
+                disabled, approval_status
+         FROM users
+         WHERE magic_login_token_hash = $1
+         LIMIT 1`,
+        [hashToken(token)]
+      );
+      const user = rows[0] ?? null;
+
+      if (!user) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.invalidMagicLink'), code: 400 });
+      }
+      if (user.disabled) {
+        return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
+      }
+      if (user.approval_status === 'declined') {
+        return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
+      }
+
+      await dbQuery(
+        `UPDATE users
+            SET email_verified        = TRUE,
+                approval_status       = 'approved',
+                party_access          = TRUE,
+                failed_login_attempts = 0,
+                locked_until          = NULL,
+                last_login_at         = NOW()
+          WHERE id = $1`,
+        [user.id]
+      );
+
+      const session = await lucia.createSession(user.id, {
+        ip_address: req.ip ?? null,
+        user_agent: req.headers['user-agent'] ?? null,
+      });
+      res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
+
+      securityLogger.loginSuccess(req.ip, user.username, user.id);
+
+      return res.json({
+        user: {
+          id:              user.id,
+          username:        user.username,
+          email:           user.email,
+          role:            user.role,
+          views:           await Role.getViewsForRole(user.role),
+          avatar:          user.avatar,
+          display_name:    user.display_name,
+          phone:           user.phone,
+          email_verified:  true,
+          party_access:    true,
+          approval_status: 'approved',
         },
       });
     } catch (err) { next(err); }
@@ -167,7 +245,7 @@ const authController = {
             email_verify_token, email_verify_expires)
          VALUES ($1, $2, $3, 'user', $4, $5, $6, FALSE, $7, $8)
          RETURNING id, username, email, role, avatar, display_name, phone,
-                   email_verified, party_access`,
+                   email_verified, party_access, approval_status`,
         [
           username,
           email.toLowerCase(),
@@ -209,6 +287,7 @@ const authController = {
           phone:          newUser.phone,
           email_verified: newUser.email_verified,
           party_access:   newUser.party_access,
+          approval_status: newUser.approval_status,
         },
       });
     } catch (err) { next(err); }
@@ -374,6 +453,7 @@ const authController = {
           phone:          user.phone,
           email_verified: user.email_verified,
           party_access:   user.party_access,
+          approval_status: user.approval_status,
         },
       });
     } catch (err) { next(err); }
