@@ -23,6 +23,20 @@ const APPROVAL_ACTION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
 // Email shape check for owner-entered invite addresses (mirrors validate.js).
 const PARTY_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Recipients for the owner "new request" notification. Always includes the
+// configured owner address (default halli@hallismiley.is) so the notification
+// reaches Halli even when no admin account happens to be email-verified, PLUS
+// every verified + enabled admin account. Deduped and lower-cased.
+function _partyNotifyRecipients(adminEmails) {
+  const owner = (process.env.PARTY_NOTIFY_EMAIL || 'halli@hallismiley.is').trim();
+  return [...new Set(
+    [owner, ...(adminEmails || [])]
+      .filter(Boolean)
+      .map(e => String(e).trim().toLowerCase())
+      .filter(Boolean)
+  )];
+}
+
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
 // Keys whose content is the same across locales — stored once at
@@ -365,10 +379,9 @@ const partyController = {
         `SELECT email FROM users
           WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE`
       ).then(adminsRes => {
-        const adminEmails = adminsRes.rows.map(r => r.email).filter(Boolean);
-        if (!adminEmails.length) return;
+        const recipients = _partyNotifyRecipients(adminsRes.rows.map(r => r.email));
         return emailService.sendPartyRequestNotification({
-          request: { name, email }, adminEmails, approveUrl,
+          request: { name, email }, adminEmails: recipients, approveUrl,
         });
       }).catch(err => logger.error({ err }, 'party request-access notification failed'));
     } catch (err) { next(err); }
@@ -1518,3 +1531,4 @@ module.exports = partyController;
 module.exports._checkInviteAccess = _checkInviteAccess;
 module.exports._deriveRsvpStatus  = _deriveRsvpStatus;
 module.exports._loadRsvpStatusMap = _loadRsvpStatusMap;
+module.exports._partyNotifyRecipients = _partyNotifyRecipients;
