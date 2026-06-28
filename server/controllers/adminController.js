@@ -8,23 +8,50 @@ const logger             = require('../logger');
 const { approveGuest, declineGuest } = require('../services/partyApproval');
 
 const adminController = {
-  // GET /api/v1/admin/users?limit=20&offset=0
+  // GET /api/v1/admin/users?limit=20&offset=0&sort=username&order=asc&q=foo
   async listUsers(req, res, next) {
     try {
       const limit  = Math.min(Math.max(Number(req.query.limit)  || 20, 1), 100);
       const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+      // Whitelist sortable columns → SQL (column names can't be parameterized).
+      // LOWER() gives a case-insensitive sort on the text columns.
+      const SORTS = {
+        username:   'LOWER(username)',
+        email:      'LOWER(email)',
+        role:       'role',
+        verified:   'email_verified',
+        status:     'disabled',
+        party:      'party_access',
+        created_at: 'created_at',
+      };
+      const sortCol = SORTS[req.query.sort] || 'created_at';
+      const dir     = String(req.query.order).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+      // Optional search filter (parameterized). The SAME WHERE drives both the
+      // rows query and the count query, or pagination's total wouldn't match
+      // the filtered set.
+      const q = String(req.query.q || '').trim(); // String() guards array params (?q=a&q=b)
+      const whereSql = q
+        ? 'WHERE (username ILIKE $1 OR email ILIKE $1 OR display_name ILIKE $1)'
+        : '';
+      const term = q ? [`%${q}%`] : []; // $1 when present
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, approval_status, requested_at, created_at, last_login_at
          FROM users
-         ORDER BY created_at DESC
-         LIMIT $1 OFFSET $2`,
-        [limit, offset]
+         ${whereSql}
+         ORDER BY ${sortCol} ${dir}, id DESC
+         LIMIT $${term.length + 1} OFFSET $${term.length + 2}`,
+        [...term, limit, offset]
       );
 
-      const { rows: countRows } = await dbQuery('SELECT COUNT(*)::int AS total FROM users');
+      const { rows: countRows } = await dbQuery(
+        `SELECT COUNT(*)::int AS total FROM users ${whereSql}`,
+        term
+      );
 
       return res.json({
         users: rows,

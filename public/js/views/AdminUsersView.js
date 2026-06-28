@@ -19,6 +19,8 @@ export class AdminUsersView {
     this._page  = 1;
     this._total = 0;
     this._roles = [];
+    this._sort  = { field: 'created_at', dir: 'desc' }; // matches the default server order
+    this._q     = '';
   }
 
   async render() {
@@ -37,6 +39,12 @@ export class AdminUsersView {
         </div>
         <a href="${href('/admin')}" class="btn btn--outline" data-route="/admin">← ${t('admin.projects')}</a>
       </div>
+      <div class="admin-toolbar">
+        <input type="search" id="users-search" class="form-input admin-search"
+               placeholder="${t('adminUsers.searchPlaceholder')}"
+               aria-label="${t('adminUsers.searchPlaceholder')}"
+               autocomplete="off" value="${escHtml(this._q)}" />
+      </div>
       <div class="admin-table-wrap" id="users-table-wrap">
         <div class="admin-loading">${t('form.loading')}</div>
       </div>
@@ -44,6 +52,7 @@ export class AdminUsersView {
     `;
 
     this._el = el;
+    this._bindSearch();
     await this._load();
     return renderAdminShell({ activePath: '/admin/users', content: el });
   }
@@ -53,7 +62,13 @@ export class AdminUsersView {
     wrap.innerHTML = `<div class="admin-loading">${t('form.loading')}</div>`;
     try {
       const [data, rolesData] = await Promise.all([
-        adminGetUsers({ page: this._page, limit: PAGE_SIZE }),
+        adminGetUsers({
+          offset: (this._page - 1) * PAGE_SIZE,
+          limit:  PAGE_SIZE,
+          sort:   this._sort.field,
+          order:  this._sort.dir,
+          ...(this._q ? { q: this._q } : {}),
+        }),
         listRoles().catch(() => ({ roles: [] })),
       ]);
       const users = Array.isArray(data) ? data : (data.users || []);
@@ -93,13 +108,13 @@ export class AdminUsersView {
       <table class="admin-table admin-users-table">
         <thead>
           <tr>
-            <th>${t('adminUsers.username')}</th>
-            <th>${t('adminUsers.email')}</th>
-            <th>${t('adminUsers.role')}</th>
-            <th>${t('adminUsers.verified')}</th>
-            <th>${t('adminUsers.status')}</th>
-            <th>Party</th>
-            <th>${t('orders.date')}</th>
+            ${this._sortableTh('username',   t('adminUsers.username'))}
+            ${this._sortableTh('email',      t('adminUsers.email'))}
+            ${this._sortableTh('role',       t('adminUsers.role'))}
+            ${this._sortableTh('verified',   t('adminUsers.verified'))}
+            ${this._sortableTh('status',     t('adminUsers.status'))}
+            ${this._sortableTh('party',      t('adminUsers.party'))}
+            ${this._sortableTh('created_at', t('orders.date'))}
             <th class="admin-table__actions-col">${t('adminUsers.actions')}</th>
           </tr>
         </thead>
@@ -183,6 +198,65 @@ export class AdminUsersView {
 
     wrap.querySelectorAll('.approve-user-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onApproveUser(btn));
+    });
+
+    this._bindSort();
+  }
+
+  // Render a sortable <th>. The arrow is always present (opacity hidden until
+  // active) so column widths don't jump as the user clicks around.
+  _sortableTh(field, label) {
+    const isActive = this._sort.field === field;
+    const arrow    = isActive && this._sort.dir === 'desc' ? '▼' : '▲';
+    const ariaSort = !isActive ? 'none' : (this._sort.dir === 'asc' ? 'ascending' : 'descending');
+    const cls      = 'sortable' + (isActive ? ' is-active' : '');
+    return `<th data-sort-field="${escHtml(field)}" class="${cls}" aria-sort="${ariaSort}" tabindex="0">${escHtml(label)}<span class="admin-table__sort-arrow" aria-hidden="true">${arrow}</span></th>`;
+  }
+
+  // Click cycle on a column: new column → asc, same column toggles asc ↔ desc.
+  // Two-state (no "clear") so the default Date column can also be inverted to
+  // ascending instead of being stuck on its initial desc.
+  _cycleSort(field) {
+    if (this._sort.field !== field) return { field, dir: 'asc' };
+    return { field, dir: this._sort.dir === 'asc' ? 'desc' : 'asc' };
+  }
+
+  // Delegated sort handler on the table head. Sorting is server-side, so a
+  // click resets to page 1 and re-fetches the whole (re-ordered) list.
+  _bindSort() {
+    const thead = this._el.querySelector('.admin-users-table thead');
+    if (!thead) return;
+    const handler = (e) => {
+      const th = e.target.closest('th[data-sort-field]');
+      if (!th || !thead.contains(th)) return;
+      if (e.type === 'keydown') {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+      }
+      this._sort = this._cycleSort(th.dataset.sortField);
+      this._page = 1;
+      this._load();
+    };
+    thead.addEventListener('click', handler);
+    thead.addEventListener('keydown', handler);
+  }
+
+  // Debounced search: one request after the user pauses typing, not per
+  // keystroke. The input lives in the persistent shell so it keeps focus
+  // across the table re-render.
+  _bindSearch() {
+    const input = this._el.querySelector('#users-search');
+    if (!input) return;
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const next = input.value.trim();
+        if (next === this._q) return;
+        this._q    = next;
+        this._page = 1;
+        this._load();
+      }, 250);
     });
   }
 

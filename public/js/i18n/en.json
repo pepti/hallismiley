@@ -1138,6 +1138,8 @@
   "adminUsers.unverified": "Unverified",
   "adminUsers.active": "Active",
   "adminUsers.disabled": "Disabled",
+  "adminUsers.party": "Party",
+  "adminUsers.searchPlaceholder": "Search by name or email…",
 
   "lightbox.previous": "Previous image",
   "lightbox.next": "Next image",

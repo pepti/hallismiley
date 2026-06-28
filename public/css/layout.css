@@ -270,6 +270,18 @@
 .admin-loading { color: var(--text-muted); padding: var(--sp-6); text-align: center; }
 .admin-error   { color: var(--error); padding: var(--sp-4); }
 
+/* Sortable column headers (reusable across admin tables). */
+.admin-table th.sortable { cursor: pointer; user-select: none; }
+.admin-table th.sortable:hover,
+.admin-table th.sortable:focus-visible { color: var(--text-primary); }
+.admin-table th.sortable:focus-visible { outline: 2px solid var(--gold, currentColor); outline-offset: -2px; }
+.admin-table__sort-arrow { display: inline-block; width: 0.7em; margin-left: 4px; font-size: 0.7em; opacity: 0; }
+.admin-table th.is-active .admin-table__sort-arrow { opacity: 1; }
+
+/* Admin list toolbar (search, filters). */
+.admin-toolbar { margin-bottom: var(--sp-4); }
+.admin-search  { max-width: 320px; }
+
 /* ── Legal pages (Privacy, Terms) ── */
 .legal-page { max-width: 760px; margin: 0 auto; }
 .legal-article { padding: var(--sp-8) var(--sp-6); }

@@ -1138,6 +1138,8 @@
   "adminUsers.unverified": "Óstaðfest",
   "adminUsers.active": "Virkt",
   "adminUsers.disabled": "Óvirkt",
+  "adminUsers.party": "Veisla",
+  "adminUsers.searchPlaceholder": "Leita eftir nafni eða tölvupósti…",
 
   "lightbox.previous": "Fyrri mynd",
   "lightbox.next": "Næsta mynd",
