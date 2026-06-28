@@ -1714,6 +1714,69 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
+    // Logistics items now group into three tables on the planner page — Food,
+    // Drinks, and Everything-else. A single `category` column drives the
+    // grouping; existing rows default to 'other' so live data is preserved.
+    // sort_order stays global (see 042) — each category table renders its own
+    // filtered, sort_order-ordered slice, so cross-category sort_order
+    // collisions are harmless. The CHECK keeps the column to the three known
+    // values; guarded by a pg_constraint lookup so a re-run is a no-op.
+    name: '058_party_logistics_category',
+    statements: [
+      `ALTER TABLE party_logistics_items
+         ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'other'`,
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'party_logistics_category_chk'
+         ) THEN
+           ALTER TABLE party_logistics_items
+             ADD CONSTRAINT party_logistics_category_chk
+             CHECK (category IN ('food','drinks','other'));
+         END IF;
+       END $$`,
+    ],
+  },
+  {
+    // Collaborative to-do list for the planning team (admin/moderator). A TODO
+    // carries free-form notes plus an optional due date and a set of assignees,
+    // and breaks down into subtasks that each carry their own due date and
+    // assignees. `assignees` is a JSONB array of plain name strings — the same
+    // free-text philosophy as logistics.assigned_to (so non-guests like a
+    // caterer can be credited); the admin UI suggests known guests without
+    // constraining to them. Subtasks cascade-delete with their parent TODO.
+    name: '059_party_todos',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_todos (
+        id          SERIAL      PRIMARY KEY,
+        title       TEXT        NOT NULL,
+        notes       TEXT,
+        done        BOOLEAN     NOT NULL DEFAULT FALSE,
+        due_date    DATE,
+        assignees   JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        created_by  TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_todos_sort
+         ON party_todos (sort_order, id)`,
+      `CREATE TABLE IF NOT EXISTS party_todo_subtasks (
+        id          SERIAL      PRIMARY KEY,
+        todo_id     INTEGER     NOT NULL REFERENCES party_todos(id) ON DELETE CASCADE,
+        title       TEXT        NOT NULL,
+        done        BOOLEAN     NOT NULL DEFAULT FALSE,
+        due_date    DATE,
+        assignees   JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_todo_subtasks_todo
+         ON party_todo_subtasks (todo_id, sort_order, id)`,
+    ],
+  },
+  {
     // Party access overhaul: the shared invite code (026) is retired in favour of
     // an email-request -> owner-approval -> magic-link flow. approval_status
     // defaults to 'approved' so every existing row and the normal /signup path are
@@ -1723,7 +1786,7 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // nulling the hash. The approval-action token backs the one-click email approve
     // link (single-use, short-lived). password_hash is already nullable (020), so
     // pending guests are created with no password.
-    name: '058_party_access_requests',
+    name: '060_party_access_requests',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'`,
       `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_approval_status_check`,

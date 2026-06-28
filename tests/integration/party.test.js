@@ -1461,3 +1461,256 @@ describe('Logistics endpoints', () => {
     expect(user.status).toBe(403);
   });
 });
+
+// ── Logistics categories (058) ────────────────────────────────────────────────
+
+describe('Logistics categories', () => {
+  test('POST defaults category to "other" when omitted', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Napkins' });
+    expect(res.status).toBe(201);
+    expect(res.body.category).toBe('other');
+  });
+
+  test('POST accepts each valid category', async () => {
+    for (const category of ['food', 'drinks', 'other']) {
+      const res = await request(app)
+        .post('/api/v1/party/logistics')
+        .set('Cookie', adminCookie)
+        .send({ name: `Item ${category}`, category });
+      expect(res.status).toBe(201);
+      expect(res.body.category).toBe(category);
+    }
+  });
+
+  test('POST rejects an invalid category', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Bad', category: 'snacks' });
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH moves an item between categories', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Beer', category: 'other' });
+    const moved = await request(app)
+      .patch(`/api/v1/party/logistics/${created.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ category: 'drinks' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.category).toBe('drinks');
+  });
+
+  test('PATCH rejects an invalid category', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Cake' });
+    const res = await request(app)
+      .patch(`/api/v1/party/logistics/${created.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ category: 'desserts' });
+    expect(res.status).toBe(400);
+  });
+
+  test('GET returns the category field', async () => {
+    await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'Wine', category: 'drinks' });
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    expect(list.body[0]).toHaveProperty('category', 'drinks');
+  });
+});
+
+// ── To-do list (059) ──────────────────────────────────────────────────────────
+
+describe('To-do list endpoints', () => {
+  test('GET /api/v1/party/todos — unauthenticated returns 401', async () => {
+    const res = await request(app).get('/api/v1/party/todos');
+    expect(res.status).toBe(401);
+  });
+
+  test('GET /api/v1/party/todos — non-admin returns 403', async () => {
+    const res = await request(app)
+      .get('/api/v1/party/todos')
+      .set('Cookie', userCookie);
+    expect(res.status).toBe(403);
+  });
+
+  test('admin: create todo with notes, due date, assignees; subtasks []', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/todos')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Book band', notes: 'ask about deposit', due_date: '2026-07-01', assignees: ['Halli', 'Bjarni'] });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      title: 'Book band', notes: 'ask about deposit', done: false, due_date: '2026-07-01',
+    });
+    expect(res.body.assignees).toEqual(['Halli', 'Bjarni']);
+    expect(res.body.subtasks).toEqual([]);
+  });
+
+  test('moderator can also create / delete todos', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const created = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', modCookie).send({ title: 'Mod todo' });
+    expect(created.status).toBe(201);
+    const del = await request(app).delete(`/api/v1/party/todos/${created.body.id}`)
+      .set('Cookie', modCookie);
+    expect(del.status).toBe(204);
+  });
+
+  test('POST rejects missing and over-long title', async () => {
+    const r1 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({});
+    expect(r1.status).toBe(400);
+    const r2 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'x'.repeat(201) });
+    expect(r2.status).toBe(400);
+  });
+
+  test('POST rejects an invalid due date', async () => {
+    const res = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T', due_date: '2026-02-31' });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST rejects non-array / non-string / too many assignees', async () => {
+    const r1 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T', assignees: 'Halli' });
+    expect(r1.status).toBe(400);
+    const r2 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T', assignees: [1, 2] });
+    expect(r2.status).toBe(400);
+    const r3 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T', assignees: Array.from({ length: 26 }, (_, i) => `P${i}`) });
+    expect(r3.status).toBe(400);
+  });
+
+  test('assignees are trimmed and de-duplicated', async () => {
+    const res = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T', assignees: ['  Halli  ', 'Halli', 'Bjarni'] });
+    expect(res.status).toBe(201);
+    expect(res.body.assignees).toEqual(['Halli', 'Bjarni']);
+  });
+
+  test('PATCH updates a single field; clearing due_date to null works', async () => {
+    const created = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T', due_date: '2026-07-01' });
+    const id = created.body.id;
+
+    const done = await request(app).patch(`/api/v1/party/todos/${id}`)
+      .set('Cookie', adminCookie).send({ done: true });
+    expect(done.status).toBe(200);
+    expect(done.body.done).toBe(true);
+    expect(done.body.due_date).toBe('2026-07-01');
+
+    const cleared = await request(app).patch(`/api/v1/party/todos/${id}`)
+      .set('Cookie', adminCookie).send({ due_date: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.due_date).toBeNull();
+  });
+
+  test('PATCH returns 404 for a non-existent todo', async () => {
+    const res = await request(app).patch('/api/v1/party/todos/999999')
+      .set('Cookie', adminCookie).send({ done: true });
+    expect(res.status).toBe(404);
+  });
+
+  test('subtask CRUD + cascade delete with parent', async () => {
+    const todo = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'Parent' });
+    const todoId = todo.body.id;
+
+    const sub = await request(app)
+      .post(`/api/v1/party/todos/${todoId}/subtasks`)
+      .set('Cookie', adminCookie)
+      .send({ title: 'Call venue', due_date: '2026-06-15', assignees: ['Sigga'] });
+    expect(sub.status).toBe(201);
+    expect(sub.body).toMatchObject({ title: 'Call venue', done: false, due_date: '2026-06-15', todo_id: todoId });
+    expect(sub.body.assignees).toEqual(['Sigga']);
+    const subId = sub.body.id;
+
+    // Nested under its todo in the list response
+    const list = await request(app).get('/api/v1/party/todos').set('Cookie', adminCookie);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].subtasks).toHaveLength(1);
+    expect(list.body[0].subtasks[0].id).toBe(subId);
+
+    const upd = await request(app)
+      .patch(`/api/v1/party/todos/${todoId}/subtasks/${subId}`)
+      .set('Cookie', adminCookie).send({ done: true });
+    expect(upd.status).toBe(200);
+    expect(upd.body.done).toBe(true);
+
+    // Deleting the parent cascades to subtasks
+    const del = await request(app).delete(`/api/v1/party/todos/${todoId}`)
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const orphan = await db.query('SELECT COUNT(*)::int AS n FROM party_todo_subtasks');
+    expect(orphan.rows[0].n).toBe(0);
+  });
+
+  test('addSubtask returns 404 for a non-existent todo', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/todos/999999/subtasks')
+      .set('Cookie', adminCookie).send({ title: 'orphan' });
+    expect(res.status).toBe(404);
+  });
+
+  test('updateSubtask is scoped to its todo (wrong todo → 404)', async () => {
+    const t1 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T1' });
+    const t2 = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'T2' });
+    const sub = await request(app).post(`/api/v1/party/todos/${t1.body.id}/subtasks`)
+      .set('Cookie', adminCookie).send({ title: 'S' });
+
+    const res = await request(app)
+      .patch(`/api/v1/party/todos/${t2.body.id}/subtasks/${sub.body.id}`)
+      .set('Cookie', adminCookie).send({ done: true });
+    expect(res.status).toBe(404);
+  });
+
+  test('POST /todos/reorder applies sequential sort_order', async () => {
+    const a = await request(app).post('/api/v1/party/todos').set('Cookie', adminCookie).send({ title: 'A' });
+    const b = await request(app).post('/api/v1/party/todos').set('Cookie', adminCookie).send({ title: 'B' });
+    const c = await request(app).post('/api/v1/party/todos').set('Cookie', adminCookie).send({ title: 'C' });
+
+    const reorder = await request(app).post('/api/v1/party/todos/reorder')
+      .set('Cookie', adminCookie).send({ ids: [c.body.id, a.body.id, b.body.id] });
+    expect(reorder.status).toBe(204);
+
+    const list = await request(app).get('/api/v1/party/todos').set('Cookie', adminCookie);
+    expect(list.body.map(td => td.title)).toEqual(['C', 'A', 'B']);
+    expect(list.body.map(td => td.sort_order)).toEqual([1, 2, 3]);
+  });
+
+  test('POST /todos/:id/subtasks/reorder orders within the todo', async () => {
+    const todo = await request(app).post('/api/v1/party/todos').set('Cookie', adminCookie).send({ title: 'P' });
+    const s1 = await request(app).post(`/api/v1/party/todos/${todo.body.id}/subtasks`).set('Cookie', adminCookie).send({ title: 'S1' });
+    const s2 = await request(app).post(`/api/v1/party/todos/${todo.body.id}/subtasks`).set('Cookie', adminCookie).send({ title: 'S2' });
+
+    const reorder = await request(app).post(`/api/v1/party/todos/${todo.body.id}/subtasks/reorder`)
+      .set('Cookie', adminCookie).send({ ids: [s2.body.id, s1.body.id] });
+    expect(reorder.status).toBe(204);
+
+    const list = await request(app).get('/api/v1/party/todos').set('Cookie', adminCookie);
+    expect(list.body[0].subtasks.map(s => s.title)).toEqual(['S2', 'S1']);
+  });
+
+  test('writes require admin/moderator', async () => {
+    const anon = await request(app).post('/api/v1/party/todos').send({ title: 'X' });
+    expect(anon.status).toBe(401);
+    const user = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', userCookie).send({ title: 'X' });
+    expect(user.status).toBe(403);
+  });
+});

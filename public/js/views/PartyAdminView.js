@@ -32,13 +32,14 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes] = await Promise.all([
+    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, todosRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',            { credentials: 'include' }),
       fetch('/api/v1/party/info',             { credentials: 'include' }),
       fetch('/api/v1/party/pending-requests', { credentials: 'include' }),
       fetch('/api/v1/admin/email-health',     { credentials: 'include' }),
       fetch('/api/v1/party/invited-guests',   { credentials: 'include' }),
       fetch('/api/v1/party/logistics',        { credentials: 'include' }),
+      fetch('/api/v1/party/todos',            { credentials: 'include' }),
     ]);
     const rsvps     = await rsvpsRes.json();
     const info      = await infoRes.json();
@@ -46,12 +47,15 @@ export class PartyAdminView {
     const health    = healthRes.ok ? await healthRes.json() : null;
     const guests    = guestsRes.ok ? await guestsRes.json() : [];
     const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
+    const todos     = todosRes.ok ? await todosRes.json() : [];
 
     this._rsvps           = Array.isArray(rsvps) ? rsvps : [];
     this._pendingRequests = Array.isArray(pending) ? pending : [];
     this._emailHealth   = health;
     this._invitedGuests = Array.isArray(guests) ? guests : [];
     this._logistics     = Array.isArray(logistics) ? logistics : [];
+    this._todos         = Array.isArray(todos) ? todos : [];
+    this._peopleNames   = this._collectPeopleNames();
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
@@ -76,6 +80,7 @@ export class PartyAdminView {
         ${this._renderAcceptedAndPending()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
+        ${this._renderTodoSection()}
         ${this._renderOwnerInviteSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
@@ -342,23 +347,21 @@ export class PartyAdminView {
       </tr>`;
   }
 
+  // The three logistics tables. Internal keys must match the DB CHECK
+  // constraint (058) and the controller's LOGISTICS_CATEGORIES.
+  _logisticsCategories() {
+    return [
+      { key: 'food',   label: t('party.admin.logisticsCatFood'),   icon: '🍽️' },
+      { key: 'drinks', label: t('party.admin.logisticsCatDrinks'), icon: '🥤' },
+      { key: 'other',  label: t('party.admin.logisticsCatOther'),  icon: '📦' },
+    ];
+  }
+
   _renderLogistics() {
     const all = this._logistics || [];
     const total    = all.length;
     const bought   = all.filter(i => i.bought).length;
     const atVenue  = all.filter(i => i.at_venue).length;
-
-    // Hide-bought is session-only (lives on `this`, not localStorage). Filters
-    // the table; the summary pills always reflect true totals.
-    const visible = this._hideBought ? all.filter(i => !i.bought) : all;
-
-    const emptyMsg = (this._hideBought && all.length > 0 && visible.length === 0)
-      ? t('party.admin.logisticsAllBoughtEmpty')
-      : t('party.admin.logisticsNoItems');
-
-    const rows = visible.length
-      ? visible.map(i => this._renderLogisticsRow(i)).join('')
-      : `<tr><td colspan="7" class="party-empty">${emptyMsg}</td></tr>`;
 
     return `
       <section class="party-admin__section" id="party-admin-logistics">
@@ -382,26 +385,53 @@ export class PartyAdminView {
             ${t('party.admin.logisticsAllAtVenue')}
           </button>
         </div>
-        <form class="party-admin__logistics-add" id="party-admin-logistics-form">
-          <input type="text" id="party-admin-logistics-name" class="lol-input"
+        ${this._logisticsCategories().map(c => this._renderLogisticsCategory(c)).join('')}
+      </section>`;
+  }
+
+  // One category = one heading + add-form + table. Items are filtered to this
+  // category and ordered by sort_order (then id) so the slice renders stably
+  // even though sort_order is global across all three tables.
+  _renderLogisticsCategory(cat) {
+    const all = (this._logistics || []).filter(i => (i.category || 'other') === cat.key);
+    const sorted = [...all].sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id));
+
+    // Hide-bought is session-only (lives on `this`, not localStorage). Filters
+    // the table; the summary pills always reflect true totals.
+    const visible = this._hideBought ? sorted.filter(i => !i.bought) : sorted;
+
+    const emptyMsg = (this._hideBought && all.length > 0 && visible.length === 0)
+      ? t('party.admin.logisticsAllBoughtEmpty')
+      : t('party.admin.logisticsNoItems');
+
+    const rows = visible.length
+      ? visible.map(i => this._renderLogisticsRow(i)).join('')
+      : `<tr><td colspan="7" class="party-empty">${emptyMsg}</td></tr>`;
+
+    return `
+      <div class="party-admin__logistics-group">
+        <h3 class="party-admin__logistics-cat-title">
+          ${cat.icon} ${escHtml(cat.label)}
+          <span class="party-admin__logistics-cat-count">${all.length}</span>
+        </h3>
+        <form class="party-admin__logistics-add" data-logistics-add="${escHtml(cat.key)}" novalidate>
+          <input type="text" class="lol-input party-admin__logistics-add-name"
                  placeholder="${escHtml(t('party.admin.logisticsNamePh'))}"
-                 maxlength="200" required
+                 maxlength="200"
                  aria-label="${t('party.admin.logisticsItem')}" />
-          <input type="text" id="party-admin-logistics-qty"
-                 class="lol-input party-admin__logistics-qty"
+          <input type="text" class="lol-input party-admin__logistics-qty party-admin__logistics-add-qty"
                  placeholder="${escHtml(t('party.admin.logisticsQtyPh'))}"
                  maxlength="100"
                  aria-label="${t('party.admin.logisticsQty')}" />
-          <input type="text" id="party-admin-logistics-assigned"
-                 class="lol-input party-admin__logistics-assigned"
+          <input type="text" class="lol-input party-admin__logistics-assigned party-admin__logistics-add-assigned"
                  placeholder="${escHtml(t('party.admin.logisticsAssignedPh'))}"
                  maxlength="100"
                  aria-label="${t('party.admin.logisticsAssignedTo')}" />
           <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.logisticsAdd')}</button>
-          <span class="party-admin__logistics-status" id="party-admin-logistics-status" aria-live="polite"></span>
+          <span class="party-admin__logistics-status" data-logistics-status="${escHtml(cat.key)}" aria-live="polite"></span>
         </form>
         <div class="party-admin__table-wrap">
-          <table class="party-admin__table" aria-label="${t('party.admin.logistics')}">
+          <table class="party-admin__table" aria-label="${escHtml(cat.label)}">
             <thead>
               <tr>
                 <th aria-label="${t('party.admin.logisticsReorderHandle')}"></th>
@@ -413,12 +443,12 @@ export class PartyAdminView {
                 <th aria-label="Actions"></th>
               </tr>
             </thead>
-            <tbody id="party-admin-logistics-rows">
+            <tbody class="party-admin__logistics-tbody" data-logistics-category="${escHtml(cat.key)}">
               ${rows}
             </tbody>
           </table>
         </div>
-      </section>`;
+      </div>`;
   }
 
   _renderLogisticsRow(item) {
@@ -432,7 +462,7 @@ export class PartyAdminView {
     ].filter(Boolean).join(' ');
 
     return `
-      <tr data-logistics-row="${escHtml(id)}" class="${rowClasses}" draggable="true">
+      <tr data-logistics-row="${escHtml(id)}" data-category="${escHtml(item.category || 'other')}" class="${rowClasses}" draggable="true">
         <td class="party-admin__logistics-handle"
             title="${t('party.admin.logisticsReorderHandle')}"
             aria-label="${t('party.admin.logisticsReorderHandle')}">⋮⋮</td>
@@ -804,6 +834,7 @@ export class PartyAdminView {
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindLogistics();
+    this._bindTodos();
     this._bindStatCards();
     this._bindEmailGoing();
     this._bindRsvpSort();
@@ -1037,44 +1068,45 @@ export class PartyAdminView {
     const section = this._el.querySelector('#party-admin-logistics');
     if (!section) return;
 
-    const form    = section.querySelector('#party-admin-logistics-form');
-    const status  = section.querySelector('#party-admin-logistics-status');
-    const nameEl  = section.querySelector('#party-admin-logistics-name');
-    const qtyEl   = section.querySelector('#party-admin-logistics-qty');
-    const toEl    = section.querySelector('#party-admin-logistics-assigned');
-
-    // Add item
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = (nameEl?.value || '').trim();
-      if (!name) return;
-      status.textContent = t('form.saving');
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/logistics', {
-          method:      'POST',
-          credentials: 'include',
-          headers,
-          body: JSON.stringify({
-            name,
-            quantity:    (qtyEl?.value || '').trim() || null,
-            assigned_to: (toEl?.value  || '').trim() || null,
-          }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || t('party.admin.logisticsAddFailed'));
+    // Add item — one form per category, tagged with data-logistics-add. On
+    // success we re-render (which detaches the old input refs) then refocus the
+    // same category's name input so the planner can keep typing.
+    section.querySelectorAll('form[data-logistics-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const category = form.dataset.logisticsAdd;
+        const nameEl   = form.querySelector('.party-admin__logistics-add-name');
+        const qtyEl    = form.querySelector('.party-admin__logistics-add-qty');
+        const toEl     = form.querySelector('.party-admin__logistics-add-assigned');
+        const status   = form.querySelector('[data-logistics-status]');
+        const name = (nameEl?.value || '').trim();
+        if (!name) { nameEl?.focus(); return; }
+        if (status) status.textContent = t('form.saving');
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch('/api/v1/party/logistics', {
+            method:      'POST',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({
+              name,
+              quantity:    (qtyEl?.value || '').trim() || null,
+              assigned_to: (toEl?.value  || '').trim() || null,
+              category,
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsAddFailed'));
+          }
+          const item = await res.json();
+          this._logistics = [...(this._logistics || []), item];
+          this._rerenderLogistics();
+          this._el.querySelector(`form[data-logistics-add="${category}"] .party-admin__logistics-add-name`)?.focus();
+        } catch (err) {
+          if (status) status.textContent = err.message || t('party.admin.logisticsAddFailed');
         }
-        const item = await res.json();
-        this._logistics = [...(this._logistics || []), item];
-        // _rerenderLogistics replaces the section, so old input refs are
-        // detached. Re-render first, then re-query for focus so the planner
-        // can keep typing the next item without clicking.
-        this._rerenderLogistics();
-        this._el.querySelector('#party-admin-logistics-name')?.focus();
-      } catch (err) {
-        status.textContent = err.message || t('party.admin.logisticsAddFailed');
-      }
+      });
     });
 
     // Toggle bought / at_venue — optimistic, revert on failure
@@ -1240,18 +1272,21 @@ export class PartyAdminView {
       }
       next = next.nextElementSibling;
     }
-    // No more rows — jump to the add-item name input.
-    const addInput = this._el.querySelector('#party-admin-logistics-name');
+    // No more rows in this category — jump to that category's add-item input.
+    const cat = currentInput.closest('tbody[data-logistics-category]')?.dataset.logisticsCategory;
+    const addInput = cat
+      ? this._el.querySelector(`form[data-logistics-add="${cat}"] .party-admin__logistics-add-name`)
+      : null;
     addInput?.focus();
   }
 
   _bindLogisticsDrag(section) {
-    const tbody = section.querySelector('#party-admin-logistics-rows');
-    if (!tbody) return;
+    const tbodies = section.querySelectorAll('tbody[data-logistics-category]');
+    if (!tbodies.length) return;
     let draggedId = null;
 
     const clearDropMarkers = () => {
-      tbody.querySelectorAll(
+      section.querySelectorAll(
         '.party-admin__logistics-row--drop-above, .party-admin__logistics-row--drop-below'
       ).forEach(r => r.classList.remove(
         'party-admin__logistics-row--drop-above',
@@ -1259,96 +1294,137 @@ export class PartyAdminView {
       ));
     };
 
-    tbody.addEventListener('dragstart', (e) => {
-      // Block drag from anything other than the handle so users can still
-      // select text inside cell inputs without accidentally starting a drag.
-      const handle = e.target.closest?.('.party-admin__logistics-handle');
-      if (!handle) {
-        e.preventDefault();
-        return;
-      }
-      const row = handle.closest('tr[data-logistics-row]');
-      if (!row) { e.preventDefault(); return; }
-      draggedId = row.dataset.logisticsRow;
-      e.dataTransfer.effectAllowed = 'move';
-      // Firefox requires data to be set for drag to begin.
-      try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
-      row.classList.add('party-admin__logistics-row--dragging');
-    });
+    tbodies.forEach(tbody => {
+      tbody.addEventListener('dragstart', (e) => {
+        // Block drag from anything other than the handle so users can still
+        // select text inside cell inputs without accidentally starting a drag.
+        const handle = e.target.closest?.('.party-admin__logistics-handle');
+        if (!handle) { e.preventDefault(); return; }
+        const row = handle.closest('tr[data-logistics-row]');
+        if (!row) { e.preventDefault(); return; }
+        draggedId = row.dataset.logisticsRow;
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox requires data to be set for drag to begin.
+        try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
+        row.classList.add('party-admin__logistics-row--dragging');
+      });
 
-    tbody.addEventListener('dragend', (e) => {
-      const row = e.target.closest?.('tr[data-logistics-row]');
-      row?.classList.remove('party-admin__logistics-row--dragging');
-      clearDropMarkers();
-      draggedId = null;
-    });
-
-    tbody.addEventListener('dragover', (e) => {
-      if (!draggedId) return;
-      const row = e.target.closest('tr[data-logistics-row]');
-      if (!row || row.dataset.logisticsRow === draggedId) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-
-      const rect    = row.getBoundingClientRect();
-      const isAbove = (e.clientY - rect.top) < (rect.height / 2);
-      clearDropMarkers();
-      row.classList.add(isAbove
-        ? 'party-admin__logistics-row--drop-above'
-        : 'party-admin__logistics-row--drop-below');
-    });
-
-    tbody.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      if (!draggedId) return;
-      const row = e.target.closest('tr[data-logistics-row]');
-      if (!row || row.dataset.logisticsRow === draggedId) {
+      tbody.addEventListener('dragend', (e) => {
+        const row = e.target.closest?.('tr[data-logistics-row]');
+        row?.classList.remove('party-admin__logistics-row--dragging');
         clearDropMarkers();
-        return;
+        draggedId = null;
+      });
+
+      // preventDefault unconditionally (when dragging) so a row can also be
+      // dropped onto an empty category table, not just onto a sibling row.
+      tbody.addEventListener('dragover', (e) => {
+        if (!draggedId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropMarkers();
+        const row = e.target.closest('tr[data-logistics-row]');
+        if (row && row.dataset.logisticsRow !== draggedId) {
+          const rect    = row.getBoundingClientRect();
+          const isAbove = (e.clientY - rect.top) < (rect.height / 2);
+          row.classList.add(isAbove
+            ? 'party-admin__logistics-row--drop-above'
+            : 'party-admin__logistics-row--drop-below');
+        }
+      });
+
+      tbody.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        if (!draggedId) return;
+        const destCat = tbody.dataset.logisticsCategory;
+        const row     = e.target.closest('tr[data-logistics-row]');
+        const isAbove = !!row?.classList.contains('party-admin__logistics-row--drop-above');
+        const targetId = (row && row.dataset.logisticsRow !== draggedId) ? row.dataset.logisticsRow : null;
+        const moved = draggedId;
+        clearDropMarkers();
+        draggedId = null;
+        await this._moveLogistics(moved, destCat, targetId, isAbove);
+      });
+    });
+  }
+
+  // Move/reorder a logistics item. Builds the destination category's id order
+  // with the dragged item inserted at the drop point, optimistically updates
+  // local state, then (if the category changed) PATCHes the category before
+  // reordering. Reorder writes sort_order 1..N over just the destination ids;
+  // that's safe because each table only renders its own category's slice.
+  async _moveLogistics(draggedId, destCat, targetId, isAbove) {
+    const items   = this._logistics || [];
+    const dragged = items.find(i => String(i.id) === String(draggedId));
+    if (!dragged) return;
+
+    const destItems = items
+      .filter(i => (i.category || 'other') === destCat && String(i.id) !== String(draggedId))
+      .sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id));
+
+    let insertAt = destItems.length; // default: append (e.g. dropped on an empty table)
+    if (targetId != null) {
+      const targetIdx = destItems.findIndex(i => String(i.id) === String(targetId));
+      if (targetIdx >= 0) insertAt = isAbove ? targetIdx : targetIdx + 1;
+    }
+
+    const orderedDest = [
+      ...destItems.slice(0, insertAt),
+      dragged,
+      ...destItems.slice(insertAt),
+    ];
+    const ids = orderedDest.map(i => i.id);
+    const movedCategory = (dragged.category || 'other') !== destCat;
+
+    // No-op: dropped back into the same category at the same position.
+    if (!movedCategory) {
+      const origDest = items
+        .filter(i => (i.category || 'other') === destCat)
+        .sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id))
+        .map(i => i.id);
+      if (JSON.stringify(origDest) === JSON.stringify(ids)) return;
+    }
+
+    const previous = this._logistics;
+    this._logistics = items.map(i => {
+      const pos = ids.indexOf(i.id);
+      if (String(i.id) === String(draggedId)) {
+        return { ...i, category: destCat, sort_order: (pos >= 0 ? pos + 1 : i.sort_order) };
       }
+      if (pos >= 0) return { ...i, sort_order: pos + 1 };
+      return i;
+    });
+    this._rerenderLogistics();
 
-      const targetId = row.dataset.logisticsRow;
-      const isAbove  = row.classList.contains('party-admin__logistics-row--drop-above');
-      clearDropMarkers();
-
-      const items   = this._logistics || [];
-      const dragged = items.find(i => String(i.id) === String(draggedId));
-      if (!dragged) return;
-
-      const without    = items.filter(i => String(i.id) !== String(draggedId));
-      const targetIdx  = without.findIndex(i => String(i.id) === String(targetId));
-      if (targetIdx < 0) return;
-      const insertAt   = isAbove ? targetIdx : targetIdx + 1;
-      const reordered  = [
-        ...without.slice(0, insertAt),
-        dragged,
-        ...without.slice(insertAt),
-      ];
-      const ids = reordered.map(i => i.id);
-
-      // Optimistic local reorder.
-      const previous = this._logistics;
-      this._logistics = reordered.map((i, idx) => ({ ...i, sort_order: idx + 1 }));
-      this._rerenderLogistics();
-
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/logistics/reorder', {
-          method:      'POST',
+    try {
+      const headers = await getCsrfHeaders();
+      if (movedCategory) {
+        const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(draggedId)}`, {
+          method:      'PATCH',
           credentials: 'include',
           headers,
-          body: JSON.stringify({ ids }),
+          body: JSON.stringify({ category: destCat }),
         });
-        if (!res.ok && res.status !== 204) {
+        if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || t('party.admin.logisticsReorderFailed'));
         }
-      } catch (err) {
-        this._logistics = previous;
-        this._rerenderLogistics();
-        showToast(err.message || t('party.admin.logisticsReorderFailed'), 'error');
       }
-    });
+      const res2 = await fetch('/api/v1/party/logistics/reorder', {
+        method:      'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ ids }),
+      });
+      if (!res2.ok && res2.status !== 204) {
+        const data = await res2.json().catch(() => ({}));
+        throw new Error(data.error || t('party.admin.logisticsReorderFailed'));
+      }
+    } catch (err) {
+      this._logistics = previous;
+      this._rerenderLogistics();
+      showToast(err.message || t('party.admin.logisticsReorderFailed'), 'error');
+    }
   }
 
   // Re-render only the logistics section in place — keeps state in other
@@ -1361,6 +1437,512 @@ export class PartyAdminView {
     const next = tmp.firstElementChild;
     old.replaceWith(next);
     this._bindLogistics();
+  }
+
+  // ── To-do list ─────────────────────────────────────────────────────────────
+  // A collaborative checklist for the planning team. Each TODO has notes, an
+  // optional due date + assignees, and breaks down into subtasks that carry
+  // their own due date + assignees. Assignee names are suggested from the guest
+  // list (a <datalist>) but free text is accepted too.
+
+  // Unique, sorted suggestion list for the assignee datalist — built from
+  // invited guests, RSVPs, and any names already assigned.
+  _collectPeopleNames() {
+    const names = new Set();
+    const add = (n) => { const v = (n || '').trim(); if (v) names.add(v); };
+    for (const g of (this._invitedGuests || [])) add(g.display_name || g.username);
+    for (const r of (this._rsvps || []))         add(r.display_name || r.username);
+    for (const td of (this._todos || [])) {
+      (td.assignees || []).forEach(add);
+      (td.subtasks  || []).forEach(s => (s.assignees || []).forEach(add));
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }
+
+  _renderTodoSection() {
+    const todos = this._todos || [];
+    const cards = todos.length
+      ? todos.map(td => this._renderTodoCard(td)).join('')
+      : `<p class="party-empty">${t('party.admin.todoEmpty')}</p>`;
+
+    return `
+      <section class="party-admin__section" id="party-admin-todos">
+        <h2 class="party-admin__section-title">✅ ${t('party.admin.todoTitle')}</h2>
+        <p class="party-admin__logistics-help">${t('party.admin.todoHelp')}</p>
+
+        <datalist id="party-admin-people">
+          ${(this._peopleNames || []).map(n => `<option value="${escHtml(n)}"></option>`).join('')}
+        </datalist>
+
+        <form class="party-admin__todo-add" id="party-admin-todo-add" novalidate>
+          <input type="text" class="lol-input party-admin__todo-add-input"
+                 placeholder="${escHtml(t('party.admin.todoAddPh'))}"
+                 maxlength="200"
+                 aria-label="${t('party.admin.todoTitleLabel')}" />
+          <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.todoAdd')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-todo-add-status" aria-live="polite"></span>
+        </form>
+
+        <div class="party-admin__todo-list" id="party-admin-todo-list">
+          ${cards}
+        </div>
+      </section>`;
+  }
+
+  _renderTodoCard(todo) {
+    const id   = String(todo.id);
+    const subs = todo.subtasks || [];
+    const doneCount = subs.filter(s => s.done).length;
+    const progress = subs.length
+      ? `<span class="party-admin__todo-progress">${t('party.admin.todoProgress', { done: doneCount, total: subs.length })}</span>`
+      : '';
+    const subRows = subs.map(s => this._renderSubtaskRow(todo.id, s)).join('');
+
+    return `
+      <div class="party-admin__todo-card ${todo.done ? 'party-admin__todo-card--done' : ''}"
+           data-todo-card="${escHtml(id)}" draggable="true">
+        <div class="party-admin__todo-head">
+          <span class="party-admin__todo-handle" title="${t('party.admin.todoReorderHandle')}"
+                aria-label="${t('party.admin.todoReorderHandle')}">⋮⋮</span>
+          <input type="checkbox" class="party-admin__todo-done" data-todo-done="${escHtml(id)}"
+                 ${todo.done ? 'checked' : ''} aria-label="${t('party.admin.todoMarkDone')}" />
+          <input type="text" class="party-admin__todo-title-input"
+                 data-todo-field="title" data-todo-id="${escHtml(id)}"
+                 value="${escHtml(todo.title || '')}" maxlength="200"
+                 aria-label="${t('party.admin.todoTitleLabel')}" />
+          <span class="party-admin__todo-meta">
+            ${progress}
+            <label class="party-admin__todo-due">
+              <span>${t('party.admin.todoDue')}</span>
+              <input type="date" class="party-admin__todo-due-input"
+                     data-todo-field="due_date" data-todo-id="${escHtml(id)}"
+                     value="${escHtml(todo.due_date || '')}" />
+            </label>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                    data-todo-delete="${escHtml(id)}" data-todo-name="${escHtml(todo.title || '')}">
+              ${t('party.admin.todoDelete')}
+            </button>
+          </span>
+        </div>
+
+        ${this._renderAssigneeControl('todo', todo.id, null, todo.assignees)}
+
+        <textarea class="party-admin__todo-notes" data-todo-field="notes" data-todo-id="${escHtml(id)}"
+                  placeholder="${escHtml(t('party.admin.todoNotesPh'))}"
+                  maxlength="2000" rows="2">${escHtml(todo.notes || '')}</textarea>
+
+        <div class="party-admin__subtasks">
+          ${subRows}
+        </div>
+
+        <form class="party-admin__subtask-add" data-subtask-add="${escHtml(id)}" novalidate>
+          <input type="text" class="lol-input party-admin__subtask-add-input"
+                 placeholder="${escHtml(t('party.admin.subtaskAddPh'))}" maxlength="200"
+                 aria-label="${t('party.admin.subtaskTitleLabel')}" />
+          <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.subtaskAdd')}</button>
+        </form>
+      </div>`;
+  }
+
+  _renderSubtaskRow(todoId, s) {
+    const id = String(s.id);
+    const tid = String(todoId);
+    return `
+      <div class="party-admin__subtask ${s.done ? 'party-admin__subtask--done' : ''}"
+           data-subtask-row="${escHtml(id)}" data-todo="${escHtml(tid)}">
+        <input type="checkbox" class="party-admin__subtask-done"
+               data-subtask-done="${escHtml(id)}" data-todo="${escHtml(tid)}"
+               ${s.done ? 'checked' : ''} aria-label="${t('party.admin.todoMarkDone')}" />
+        <input type="text" class="party-admin__subtask-title-input"
+               data-subtask-field="title" data-subtask-id="${escHtml(id)}" data-todo="${escHtml(tid)}"
+               value="${escHtml(s.title || '')}" maxlength="200"
+               aria-label="${t('party.admin.subtaskTitleLabel')}" />
+        <label class="party-admin__todo-due">
+          <span>${t('party.admin.todoDue')}</span>
+          <input type="date" class="party-admin__subtask-due-input"
+                 data-subtask-field="due_date" data-subtask-id="${escHtml(id)}" data-todo="${escHtml(tid)}"
+                 value="${escHtml(s.due_date || '')}" />
+        </label>
+        ${this._renderAssigneeControl('subtask', todoId, s.id, s.assignees)}
+        <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                data-subtask-delete="${escHtml(id)}" data-todo="${escHtml(tid)}">
+          ${t('party.admin.subtaskDelete')}
+        </button>
+      </div>`;
+  }
+
+  // Assignee chip control, reused for both TODOs and subtasks. The container's
+  // data-* attributes tell the delegated handlers which entity to PATCH.
+  _renderAssigneeControl(scope, todoId, subtaskId, assignees) {
+    const attrs = scope === 'subtask'
+      ? `data-assignee-scope="subtask" data-todo-id="${escHtml(String(todoId))}" data-subtask-id="${escHtml(String(subtaskId))}"`
+      : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
+    const chips = (assignees || []).map(n => `
+        <span class="party-admin__chip">${escHtml(n)}<button type="button" class="party-admin__chip-remove" data-chip-remove="${escHtml(n)}" aria-label="${t('party.admin.todoRemoveAssignee')}">×</button></span>`).join('');
+    return `
+        <div class="party-admin__assignees" ${attrs}>
+          <span class="party-admin__assignees-label">${t('party.admin.todoAssignedTo')}</span>
+          <div class="party-admin__chips">${chips}</div>
+          <input type="text" class="lol-input party-admin__assignee-input" list="party-admin-people"
+                 placeholder="${escHtml(t('party.admin.todoAssigneePh'))}" maxlength="100"
+                 aria-label="${t('party.admin.todoAssigneePh')}" />
+        </div>`;
+  }
+
+  _bindTodos() {
+    const section = this._el.querySelector('#party-admin-todos');
+    if (!section) return;
+
+    // Add a top-level TODO.
+    const addForm = section.querySelector('#party-admin-todo-add');
+    addForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input  = addForm.querySelector('.party-admin__todo-add-input');
+      const status = section.querySelector('#party-admin-todo-add-status');
+      const title  = (input?.value || '').trim();
+      if (!title) { input?.focus(); return; }
+      if (status) status.textContent = t('form.saving');
+      try {
+        const created = await this._todoApi('POST', '/api/v1/party/todos', { title });
+        this._todos = [...(this._todos || []), created];
+        this._rerenderTodos();
+        this._el.querySelector('#party-admin-todo-add .party-admin__todo-add-input')?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.todoSaveFailed');
+      }
+    });
+
+    // Add a subtask — one form per card.
+    section.querySelectorAll('form[data-subtask-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const todoId = form.dataset.subtaskAdd;
+        const input  = form.querySelector('.party-admin__subtask-add-input');
+        const title  = (input?.value || '').trim();
+        if (!title) { input?.focus(); return; }
+        try {
+          const created = await this._todoApi('POST', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks`, { title });
+          this._todos = (this._todos || []).map(td =>
+            String(td.id) === String(todoId)
+              ? { ...td, subtasks: [...(td.subtasks || []), created] }
+              : td);
+          this._rerenderTodos();
+          this._el.querySelector(`form[data-subtask-add="${todoId}"] .party-admin__subtask-add-input`)?.focus();
+        } catch (err) {
+          showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+        }
+      });
+    });
+
+    // Delegated change: done toggles + inline text/date edits (fire on blur) +
+    // assignee input (fires on blur after typing a name).
+    section.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.matches?.('[data-todo-done]'))             return void this._toggleTodoDone(el);
+      if (el.matches?.('[data-subtask-done]'))          return void this._toggleSubtaskDone(el);
+      if (el.matches?.('[data-todo-field]'))            return void this._saveTodoText(el);
+      if (el.matches?.('[data-subtask-field]'))         return void this._saveSubtaskText(el);
+      if (el.matches?.('.party-admin__assignee-input')) return void this._addAssignee(el);
+    });
+
+    // Delegated click: deletes + chip removes.
+    section.addEventListener('click', (e) => {
+      const tdel = e.target.closest?.('[data-todo-delete]');
+      if (tdel) return void this._deleteTodo(tdel);
+      const sdel = e.target.closest?.('[data-subtask-delete]');
+      if (sdel) return void this._deleteSubtask(sdel);
+      const chip = e.target.closest?.('[data-chip-remove]');
+      if (chip) return void this._removeAssignee(chip);
+    });
+
+    // Enter in the assignee input adds a chip (the control isn't a <form>).
+    section.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const asg = e.target.closest?.('.party-admin__assignee-input');
+      if (asg) { e.preventDefault(); this._addAssignee(asg); }
+    });
+
+    this._bindTodoDrag(section);
+  }
+
+  // Thin fetch wrapper for the todos API. Returns parsed JSON, or null on 204,
+  // and throws a localized Error on failure.
+  async _todoApi(method, url, body) {
+    const headers = await getCsrfHeaders();
+    const opts = { method, credentials: 'include', headers };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    if (res.status === 204) return null;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || t('party.admin.todoSaveFailed'));
+    }
+    return res.json();
+  }
+
+  _patchTodoLocal(todoId, patch, rerender) {
+    this._todos = (this._todos || []).map(td =>
+      String(td.id) === String(todoId) ? { ...td, ...patch } : td);
+    if (rerender) this._rerenderTodos();
+  }
+
+  _patchSubtaskLocal(todoId, subId, patch, rerender) {
+    this._todos = (this._todos || []).map(td => {
+      if (String(td.id) !== String(todoId)) return td;
+      return { ...td, subtasks: (td.subtasks || []).map(s =>
+        String(s.id) === String(subId) ? { ...s, ...patch } : s) };
+    });
+    if (rerender) this._rerenderTodos();
+  }
+
+  // Inline title/notes/due_date edit on a TODO. Mirrors _saveLogisticsCell:
+  // no-op when unchanged, reverts on failure. Title is required.
+  async _saveTodoText(input) {
+    const field = input.dataset.todoField;       // title | notes | due_date
+    const id    = input.dataset.todoId;
+    let value;
+    if (field === 'due_date') {
+      value = input.value || null;
+    } else {
+      value = input.value.trim();
+      if (field === 'title' && value === '') {
+        input.value = input.dataset.lastSaved ?? input.defaultValue;
+        return;
+      }
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    const cur = value === null ? '' : value;
+    if (cur === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = cur;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(id)}`, { [field]: value });
+      this._patchTodoLocal(id, { [field]: updated[field] }, false);
+      if (field === 'title') {
+        const del = input.closest('[data-todo-card]')?.querySelector('[data-todo-delete]');
+        if (del) del.dataset.todoName = value;
+      }
+    } catch (err) {
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+    }
+  }
+
+  async _saveSubtaskText(input) {
+    const field  = input.dataset.subtaskField;   // title | due_date
+    const id     = input.dataset.subtaskId;
+    const todoId = input.dataset.todo;
+    let value;
+    if (field === 'due_date') {
+      value = input.value || null;
+    } else {
+      value = input.value.trim();
+      if (field === 'title' && value === '') {
+        input.value = input.dataset.lastSaved ?? input.defaultValue;
+        return;
+      }
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    const cur = value === null ? '' : value;
+    if (cur === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = cur;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(id)}`, { [field]: value });
+      this._patchSubtaskLocal(todoId, id, { [field]: updated[field] }, false);
+    } catch (err) {
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+    }
+  }
+
+  async _toggleTodoDone(cb) {
+    const id = cb.dataset.todoDone;
+    const next = cb.checked;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(id)}`, { done: next });
+      this._patchTodoLocal(id, { done: updated.done }, true);
+    } catch (err) {
+      cb.checked = !next;
+      showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+    }
+  }
+
+  async _toggleSubtaskDone(cb) {
+    const id = cb.dataset.subtaskDone;
+    const todoId = cb.dataset.todo;
+    const next = cb.checked;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(id)}`, { done: next });
+      this._patchSubtaskLocal(todoId, id, { done: updated.done }, true);
+    } catch (err) {
+      cb.checked = !next;
+      showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+    }
+  }
+
+  async _deleteTodo(btn) {
+    const id   = btn.dataset.todoDelete;
+    const name = btn.dataset.todoName || '';
+    if (!confirm(t('party.admin.todoConfirmDelete', { name }))) return;
+    btn.disabled = true;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/todos/${encodeURIComponent(id)}`);
+      this._todos = (this._todos || []).filter(td => String(td.id) !== String(id));
+      this._rerenderTodos();
+    } catch (err) {
+      showToast(err.message || t('party.admin.todoDeleteFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  async _deleteSubtask(btn) {
+    const id     = btn.dataset.subtaskDelete;
+    const todoId = btn.dataset.todo;
+    btn.disabled = true;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(id)}`);
+      this._todos = (this._todos || []).map(td =>
+        String(td.id) === String(todoId)
+          ? { ...td, subtasks: (td.subtasks || []).filter(s => String(s.id) !== String(id)) }
+          : td);
+      this._rerenderTodos();
+    } catch (err) {
+      showToast(err.message || t('party.admin.todoDeleteFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  _assigneeContext(container) {
+    const scope     = container.dataset.assigneeScope;
+    const todoId    = container.dataset.todoId;
+    const subtaskId = container.dataset.subtaskId;
+    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
+    let current = [];
+    if (scope === 'subtask') {
+      const s = td?.subtasks?.find(x => String(x.id) === String(subtaskId));
+      current = s?.assignees || [];
+    } else {
+      current = td?.assignees || [];
+    }
+    return { scope, todoId, subtaskId, current: [...current] };
+  }
+
+  async _addAssignee(input) {
+    const container = input.closest('.party-admin__assignees');
+    if (!container) return;
+    const name = (input.value || '').trim();
+    if (!name) return;
+    const { scope, todoId, subtaskId, current } = this._assigneeContext(container);
+    if (current.some(n => n.toLowerCase() === name.toLowerCase())) { input.value = ''; return; }
+    await this._saveAssignees(scope, todoId, subtaskId, [...current, name]);
+  }
+
+  async _removeAssignee(btn) {
+    const container = btn.closest('.party-admin__assignees');
+    if (!container) return;
+    const { scope, todoId, subtaskId, current } = this._assigneeContext(container);
+    await this._saveAssignees(scope, todoId, subtaskId, current.filter(n => n !== btn.dataset.chipRemove));
+  }
+
+  async _saveAssignees(scope, todoId, subtaskId, assignees) {
+    try {
+      if (scope === 'subtask') {
+        const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(subtaskId)}`, { assignees });
+        this._patchSubtaskLocal(todoId, subtaskId, { assignees: updated.assignees }, false);
+      } else {
+        const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}`, { assignees });
+        this._patchTodoLocal(todoId, { assignees: updated.assignees }, false);
+      }
+      this._peopleNames = this._collectPeopleNames();
+      this._rerenderTodos();
+    } catch (err) {
+      showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+    }
+  }
+
+  // Drag-to-reorder top-level TODO cards (mirrors the logistics handle drag).
+  _bindTodoDrag(section) {
+    const list = section.querySelector('#party-admin-todo-list');
+    if (!list) return;
+    let draggedId = null;
+
+    const clearMarks = () => {
+      list.querySelectorAll('.party-admin__todo-card--drop-above, .party-admin__todo-card--drop-below')
+        .forEach(c => c.classList.remove('party-admin__todo-card--drop-above', 'party-admin__todo-card--drop-below'));
+    };
+
+    list.addEventListener('dragstart', (e) => {
+      const handle = e.target.closest?.('.party-admin__todo-handle');
+      if (!handle) { e.preventDefault(); return; }
+      const card = handle.closest('[data-todo-card]');
+      if (!card) { e.preventDefault(); return; }
+      draggedId = card.dataset.todoCard;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
+      card.classList.add('party-admin__todo-card--dragging');
+    });
+
+    list.addEventListener('dragend', (e) => {
+      e.target.closest?.('[data-todo-card]')?.classList.remove('party-admin__todo-card--dragging');
+      clearMarks();
+      draggedId = null;
+    });
+
+    list.addEventListener('dragover', (e) => {
+      if (!draggedId) return;
+      const card = e.target.closest('[data-todo-card]');
+      if (!card || card.dataset.todoCard === draggedId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isAbove = (e.clientY - rect.top) < (rect.height / 2);
+      clearMarks();
+      card.classList.add(isAbove ? 'party-admin__todo-card--drop-above' : 'party-admin__todo-card--drop-below');
+    });
+
+    list.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      if (!draggedId) return;
+      const card = e.target.closest('[data-todo-card]');
+      if (!card || card.dataset.todoCard === draggedId) { clearMarks(); return; }
+      const targetId = card.dataset.todoCard;
+      const isAbove  = card.classList.contains('party-admin__todo-card--drop-above');
+      clearMarks();
+      const moved = draggedId;
+      draggedId = null;
+
+      const todos   = this._todos || [];
+      const dragged = todos.find(td => String(td.id) === String(moved));
+      if (!dragged) return;
+      const without = todos.filter(td => String(td.id) !== String(moved));
+      const idx     = without.findIndex(td => String(td.id) === String(targetId));
+      if (idx < 0) return;
+      const insertAt  = isAbove ? idx : idx + 1;
+      const reordered = [...without.slice(0, insertAt), dragged, ...without.slice(insertAt)];
+      const ids = reordered.map(td => td.id);
+
+      const previous = this._todos;
+      this._todos = reordered;
+      this._rerenderTodos();
+      try {
+        await this._todoApi('POST', '/api/v1/party/todos/reorder', { ids });
+      } catch (err) {
+        this._todos = previous;
+        this._rerenderTodos();
+        showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
+      }
+    });
+  }
+
+  _rerenderTodos() {
+    const old = this._el.querySelector('#party-admin-todos');
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderTodoSection();
+    const next = tmp.firstElementChild;
+    old.replaceWith(next);
+    this._bindTodos();
   }
 
   _bindInvitedGuests() {

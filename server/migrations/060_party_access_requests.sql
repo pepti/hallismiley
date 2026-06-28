@@ -1,4 +1,4 @@
--- Migration: 058_party_access_requests
+-- Migration: 060_party_access_requests
 -- Party access overhaul: the shared invite code (026) is retired in favour of an
 -- email-request -> owner-approval -> magic-link flow. approval_status defaults to
 -- 'approved' so every existing row and the normal /signup path are unaffected; only
