@@ -266,6 +266,8 @@
   "errors.admin.cannotDeleteSystemRole": "Built-in roles can't be deleted",
   "errors.admin.roleInUse": "Reassign the users with this role before deleting it",
   "errors.admin.lastAdmin": "There must be at least one admin",
+  "errors.admin.alreadyMember": "That user already has this role",
+  "errors.admin.userIdRequired": "userId is required",
   "errors.admin.userNotFound": "User not found",
   "errors.admin.shapeEnum": "shape must be one of: {values}",
   "errors.admin.slugTaken": "A product with that slug already exists",

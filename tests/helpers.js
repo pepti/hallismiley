@@ -1,6 +1,7 @@
 const crypto    = require('crypto');
 const db        = require('../server/config/database');
 const { lucia } = require('../server/auth/lucia');
+const UserRole  = require('../server/models/UserRole');
 const { Scrypt } = require('oslo/password');
 
 const scrypt = new Scrypt();
@@ -167,6 +168,10 @@ async function cleanTables() {
   await db.query(
     'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
   );
+  // user_roles is cleared via the users CASCADE above; also drop the in-process
+  // per-user role cache so a fresh DB starts with a fresh cache (tests mutate
+  // users.role directly, bypassing the model's own invalidation).
+  UserRole.invalidateAll();
 }
 
 /** A minimal valid project body for POST requests. */

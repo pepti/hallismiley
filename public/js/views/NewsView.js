@@ -2,7 +2,7 @@
 // Route: #/news
 // Shows all published articles in a grid with pagination and category filter.
 
-import { getUser }        from '../services/auth.js';
+import { canEdit }        from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { getCSRFToken }   from '../services/auth.js';
 import { t, href }        from '../i18n/i18n.js';
@@ -73,8 +73,8 @@ export class NewsView {
   }
 
   _adminNewBtn() {
-    const user = getUser();
-    if (!user || !['admin', 'moderator'].includes(user.role)) return '';
+    // Editor = admin OR moderator, via any of the user's roles (multi-role).
+    if (!canEdit()) return '';
     return `
       <button class="news-admin-btn news-admin-btn--new" id="news-new-btn">
         + ${t('news.newArticle')}

@@ -199,6 +199,7 @@
 }
 .toast--success { border-left: 3px solid var(--success); }
 .toast--error   { border-left: 3px solid var(--error); }
+.toast--info    { border-left: 3px solid var(--gold); }
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(12px); }
   to   { opacity: 1; transform: translateX(0); }

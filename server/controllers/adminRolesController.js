@@ -3,6 +3,8 @@
 // a meta-permission and is NEVER gated by requireView, to prevent a custom role
 // from granting itself more access (privilege escalation).
 const Role = require('../models/Role');
+const UserRole = require('../models/UserRole');
+const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
 const { t } = require('../i18n');
 
@@ -88,6 +90,123 @@ const adminRolesController = {
         throw err;
       }
       return res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/roles/members — every role with its members (multi-role).
+  // Powers the admin "Members" board. Roles with no members still appear (empty),
+  // so the board always renders a column per role.
+  async listMembers(req, res, next) {
+    try {
+      const [roles, byRole] = await Promise.all([Role.findAll(), UserRole.membersByRole()]);
+      const out = roles.map(r => ({
+        name:        r.name,
+        description: r.description,
+        is_system:   r.is_system,
+        view_access: r.view_access,
+        members:     byRole.get(r.name) || [],
+      }));
+      return res.json({ roles: out });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/roles/:name/members  { userId } — grant a role (membership).
+  async addMember(req, res, next) {
+    try {
+      const { name } = req.params;
+      const userId = String(req.body?.userId || '').trim();
+      if (!userId) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.userIdRequired'), code: 400 });
+      }
+      const role = await Role.findByName(name);
+      if (!role) return res.status(404).json({ error: t(req.locale, 'errors.admin.roleNotFound'), code: 404 });
+
+      const { rows: u } = await dbQuery('SELECT id FROM users WHERE id = $1', [userId]);
+      if (!u.length) return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+
+      const added = await UserRole.add(userId, name, req.user.id);
+      if (!added) {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.alreadyMember'), code: 409 });
+      }
+      return res.status(201).json({ ok: true });
+    } catch (err) {
+      if (err.code === '23503') { // user/role vanished mid-request
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      next(err);
+    }
+  },
+
+  // DELETE /api/v1/admin/roles/:name/members/:userId — revoke a role (membership).
+  // Guards: never strip the last admin; never let an admin drop their own admin
+  // role (self-lockout). If the removed role was the user's primary (users.role),
+  // repoint the primary to their highest-precedence remaining role (floor 'user').
+  async removeMember(req, res, next) {
+    try {
+      const { name, userId } = req.params;
+
+      if (userId === req.user.id && name === 'admin') {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
+      }
+
+      // Guard + delete + primary-repoint in ONE transaction with a row lock on
+      // the admin set, so two concurrent removals can't both pass the last-admin
+      // check and leave zero admins, and the repoint can't be left half-applied.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        if (name === 'admin') {
+          const { rows: admins } = await client.query(
+            `SELECT ur.user_id
+               FROM user_roles ur JOIN users u ON u.id = ur.user_id
+              WHERE ur.role_name = 'admin' AND u.disabled = FALSE
+              FOR UPDATE`
+          );
+          const adminIds = admins.map(r => r.user_id);
+          if (adminIds.includes(userId) && adminIds.length <= 1) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
+          }
+        }
+
+        const { rowCount } = await client.query(
+          'DELETE FROM user_roles WHERE user_id = $1 AND role_name = $2',
+          [userId, name]
+        );
+        if (!rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+        }
+
+        // If we removed the user's primary role, repoint it to the highest-
+        // precedence remaining role, restoring the 'user' floor if none remain.
+        const { rows: u } = await client.query('SELECT role FROM users WHERE id = $1', [userId]);
+        if (u.length && u[0].role === name) {
+          const { rows: rem } = await client.query(
+            'SELECT role_name FROM user_roles WHERE user_id = $1', [userId]
+          );
+          let remaining = rem.map(r => r.role_name);
+          if (!remaining.length) {
+            await client.query(
+              `INSERT INTO user_roles (user_id, role_name, granted_by)
+               VALUES ($1, 'user', $2) ON CONFLICT DO NOTHING`,
+              [userId, req.user.id]
+            );
+            remaining = ['user'];
+          }
+          await client.query('UPDATE users SET role = $1 WHERE id = $2', [UserRole.pickPrimary(remaining), userId]);
+        }
+
+        await client.query('COMMIT');
+        UserRole.invalidateUser(userId);
+        return res.status(204).send();
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (err) { next(err); }
   },
 };

@@ -1,9 +1,10 @@
 // Admin user-management endpoints.  All routes require role='admin'.
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery, pool } = require('../config/database');
 const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
 const Role               = require('../models/Role');
+const UserRole           = require('../models/UserRole');
 const logger             = require('../logger');
 const { approveGuest, declineGuest } = require('../services/partyApproval');
 
@@ -79,30 +80,53 @@ const adminController = {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
       }
 
-      // Last-admin guard: never let the final admin be demoted away from 'admin'.
-      if (role !== 'admin') {
-        const { rows: tgt } = await dbQuery('SELECT role FROM users WHERE id = $1', [id]);
-        if (tgt.length && tgt[0].role === 'admin') {
-          const { rows: ac } = await dbQuery(
-            `SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND disabled = FALSE`
+      // The dropdown sets the user's role to EXACTLY this one. Do the last-admin
+      // guard + mutation in ONE transaction with a row lock on the admin set, so
+      // two concurrent demotions can't both pass the check and leave zero admins,
+      // and the role swap (UPDATE primary → trigger adds membership → DELETE the
+      // rest) can never be left half-applied.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        if (role !== 'admin') {
+          // Lock the live admin membership rows; concurrent demotions serialize
+          // here. Fresh read (not the per-user cache) — see UserRole cache notes.
+          const { rows: admins } = await client.query(
+            `SELECT ur.user_id
+               FROM user_roles ur JOIN users u ON u.id = ur.user_id
+              WHERE ur.role_name = 'admin' AND u.disabled = FALSE
+              FOR UPDATE`
           );
-          if (ac[0].n <= 1) {
+          const adminIds = admins.map(r => r.user_id);
+          if (adminIds.includes(id) && adminIds.length <= 1) {
+            await client.query('ROLLBACK');
             return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
           }
         }
+
+        const { rows } = await client.query(
+          `UPDATE users SET role = $1 WHERE id = $2
+           RETURNING id, username, email, role`,
+          [role, id]
+        );
+        if (rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+        }
+
+        // Trigger added the new role membership; drop the others so the dropdown
+        // stays single-role (the Members tab manages multi-role).
+        await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
+        await client.query('COMMIT');
+        UserRole.invalidateUser(id); // clear the cached set after the commit
+        return res.json(rows[0]);
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
-
-      const { rows } = await dbQuery(
-        `UPDATE users SET role = $1 WHERE id = $2
-         RETURNING id, username, email, role`,
-        [role, id]
-      );
-
-      if (rows.length === 0) {
-        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
-      }
-
-      return res.json(rows[0]);
     } catch (err) { next(err); }
   },
 
@@ -224,7 +248,7 @@ const adminController = {
 
       const { rows: adminRows } = await dbQuery(
         `SELECT email, email_verified FROM users
-          WHERE role = 'admin' AND disabled = FALSE
+          WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin') AND disabled = FALSE
           ORDER BY email`
       );
 
@@ -263,6 +287,10 @@ const adminController = {
       if (rows.length === 0) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
+
+      // The row (and its user_roles via ON DELETE CASCADE) is gone — drop the
+      // cached role set so a recreated id can't read a stale entry.
+      UserRole.invalidateUser(id);
 
       return res.status(204).send();
     } catch (err) { next(err); }

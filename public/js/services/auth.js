@@ -11,11 +11,14 @@ function _dispatch() {
 
 export function getUser()         { return _user; }
 export function isAuthenticated() { return !!_user; }
-export function hasRole(role)     { return _user?.role === role; }
-export function isAdmin()         { return _user?.role === 'admin'; }
+// Multi-role: a user holds a SET of roles (user.roles); fall back to the single
+// primary (user.role) for safety / older session payloads.
+export function getRoles()        { return _user?.roles || (_user?.role ? [_user.role] : []); }
+export function hasRole(role)     { return getRoles().includes(role); }
+export function isAdmin()         { return getRoles().includes('admin'); }
 // Editor = admin or moderator. Used to gate edit-mode UI for site content
 // (party page, news, projects) where moderators have full edit/delete rights.
-export function canEdit()         { return _user?.role === 'admin' || _user?.role === 'moderator'; }
+export function canEdit()         { return getRoles().some(r => r === 'admin' || r === 'moderator'); }
 
 // ── Admin view access (RBAC) ────────────────────────────────────────────────
 // The session payload carries the resolved admin-view id list ('*' = all).

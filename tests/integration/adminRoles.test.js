@@ -169,3 +169,100 @@ describe('requireView enforcement', () => {
     expect(res.body.user.views).toEqual(['*']);
   });
 });
+
+// ── Members board: multi-role membership ─────────────────────────────────────
+
+describe('roles members (multi-role)', () => {
+  test('GET /members lists every role with its members + primary flag', async () => {
+    const res = await request(app).get('/api/v1/admin/roles/members').set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    const byName = Object.fromEntries(res.body.roles.map(r => [r.name, r]));
+    expect(Object.keys(byName)).toEqual(expect.arrayContaining(['admin', 'moderator', 'user']));
+    // The migration trigger mirrors each user's primary role into user_roles.
+    expect(byName.admin.members.map(m => m.id)).toContain(adminId);
+    expect(byName.user.members.map(m => m.id)).toContain(userId);
+    expect(byName.admin.members.find(m => m.id === adminId).is_primary).toBe(true);
+  });
+
+  test('non-admin cannot reach the member endpoints — 403 / 401', async () => {
+    const c = await getTestSessionCookie(modId);
+    expect((await request(app).get('/api/v1/admin/roles/members').set('Cookie', c)).status).toBe(403);
+    expect((await request(app).post('/api/v1/admin/roles/user/members').set('Cookie', c).send({ userId })).status).toBe(403);
+    expect((await request(app).get('/api/v1/admin/roles/members')).status).toBe(401);
+  });
+
+  test('add → user gains a 2nd role; effective views are the union', async () => {
+    await request(app).post('/api/v1/admin/roles')
+      .set('Cookie', adminCookie).send({ name: 'shopkeeper', view_access: ['products'] });
+    const add = await request(app).post('/api/v1/admin/roles/shopkeeper/members')
+      .set('Cookie', adminCookie).send({ userId });
+    expect(add.status).toBe(201);
+
+    const c = await getTestSessionCookie(userId);
+    const sess = await request(app).get('/auth/session').set('Cookie', c);
+    expect(sess.body.user.roles).toEqual(expect.arrayContaining(['user', 'shopkeeper']));
+    expect(sess.body.user.views).toEqual(['products']); // 'user' contributes none
+    expect((await request(app).get('/api/v1/admin/shop/products').set('Cookie', c)).status).toBe(200);
+    expect((await request(app).get('/api/v1/admin/shop/collections').set('Cookie', c)).status).toBe(403);
+  });
+
+  test('adding a role the user already holds → 409', async () => {
+    const res = await request(app).post('/api/v1/admin/roles/user/members')
+      .set('Cookie', adminCookie).send({ userId });
+    expect(res.status).toBe(409);
+  });
+
+  test('adding to a missing user → 404; missing userId → 400', async () => {
+    expect((await request(app).post('/api/v1/admin/roles/user/members')
+      .set('Cookie', adminCookie).send({ userId: 'no-such-id' })).status).toBe(404);
+    expect((await request(app).post('/api/v1/admin/roles/user/members')
+      .set('Cookie', adminCookie).send({})).status).toBe(400);
+  });
+
+  test('union: a user with an admin membership passes requireRole(admin)', async () => {
+    await request(app).post('/api/v1/admin/roles/admin/members')
+      .set('Cookie', adminCookie).send({ userId });
+    const c = await getTestSessionCookie(userId);
+    // /api/v1/admin/roles is hard requireRole('admin') — only reachable as admin.
+    expect((await request(app).get('/api/v1/admin/roles').set('Cookie', c)).status).toBe(200);
+  });
+
+  test('remove a non-primary membership → 204 and it is gone', async () => {
+    await request(app).post('/api/v1/admin/roles')
+      .set('Cookie', adminCookie).send({ name: 'shopkeeper', view_access: ['products'] });
+    await request(app).post('/api/v1/admin/roles/shopkeeper/members')
+      .set('Cookie', adminCookie).send({ userId });
+    const del = await request(app).delete(`/api/v1/admin/roles/shopkeeper/members/${userId}`)
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const { rows } = await db.query(
+      'SELECT 1 FROM user_roles WHERE user_id = $1 AND role_name = $2', [userId, 'shopkeeper']);
+    expect(rows.length).toBe(0);
+  });
+
+  test('removing the primary role repoints users.role to a remaining role', async () => {
+    await request(app).post('/api/v1/admin/roles/moderator/members')
+      .set('Cookie', adminCookie).send({ userId });
+    const del = await request(app).delete(`/api/v1/admin/roles/user/members/${userId}`)
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const { rows } = await db.query('SELECT role FROM users WHERE id = $1', [userId]);
+    expect(rows[0].role).toBe('moderator');
+  });
+
+  test('an admin cannot strip their own admin role (self-lockout) — 400', async () => {
+    const res = await request(app).delete(`/api/v1/admin/roles/admin/members/${adminId}`)
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(400);
+  });
+
+  test('removing one of two admins is allowed; the demoted user loses admin', async () => {
+    await request(app).post('/api/v1/admin/roles/admin/members')
+      .set('Cookie', adminCookie).send({ userId: modId });
+    const del = await request(app).delete(`/api/v1/admin/roles/admin/members/${modId}`)
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const c = await getTestSessionCookie(modId);
+    expect((await request(app).get('/api/v1/admin/roles').set('Cookie', c)).status).toBe(403);
+  });
+});
