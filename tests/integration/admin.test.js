@@ -47,6 +47,45 @@ describe('GET /api/v1/admin/users', () => {
     expect(res.body.total).toBe(3);
   });
 
+  test('paging does not repeat rows across pages', async () => {
+    const p1 = await request(app)
+      .get('/api/v1/admin/users?limit=2&offset=0')
+      .set('Cookie', adminCookie);
+    const p2 = await request(app)
+      .get('/api/v1/admin/users?limit=2&offset=2')
+      .set('Cookie', adminCookie);
+
+    expect(p1.status).toBe(200);
+    expect(p2.status).toBe(200);
+    const ids1 = p1.body.users.map(u => u.id);
+    const ids2 = p2.body.users.map(u => u.id);
+    expect(ids1).toHaveLength(2);
+    expect(ids2).toHaveLength(1); // 3 users total → last page holds the remainder
+    expect(ids1.some(id => ids2.includes(id))).toBe(false); // pages are disjoint
+  });
+
+  test('sort=username&order=asc returns case-insensitive ascending usernames', async () => {
+    const res = await request(app)
+      .get('/api/v1/admin/users?sort=username&order=asc')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    const names  = res.body.users.map(u => u.username);
+    const sorted = [...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    expect(names).toEqual(sorted);
+  });
+
+  test('q filters by username/email and total reflects the filtered set', async () => {
+    const res = await request(app)
+      .get('/api/v1/admin/users?q=testmod')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.users).toHaveLength(1);
+    expect(res.body.users[0].username).toBe('testmoderator');
+    expect(res.body.total).toBe(1);
+  });
+
   test('moderator cannot access admin users list — 403', async () => {
     const modCookie = await getTestSessionCookie(modId);
     const res = await request(app)
