@@ -175,6 +175,45 @@ router.delete('/logistics/:id',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.deleteLogisticsItem);
 
+// ── To-do list (admin/moderator) ──────────────────────────────────────────────
+router.get('/todos',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listTodos);
+
+router.post('/todos',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addTodo);
+
+// Specific actions MUST precede /:id, else Express matches "reorder" as an id.
+router.post('/todos/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.reorderTodos);
+
+router.patch('/todos/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updateTodo);
+
+router.delete('/todos/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deleteTodo);
+
+// Subtasks — nested under a TODO. reorder before the :id route, same reason.
+router.post('/todos/:id/subtasks/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.reorderSubtasks);
+
+router.post('/todos/:id/subtasks',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addSubtask);
+
+router.patch('/todos/:todoId/subtasks/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updateSubtask);
+
+router.delete('/todos/:todoId/subtasks/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deleteSubtask);
+
 // ── Guestbook ─────────────────────────────────────────────────────────────────
 router.post('/guestbook',
   requireAuth, requirePartyAccess, csrfProtect,
