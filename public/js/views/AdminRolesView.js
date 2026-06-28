@@ -42,6 +42,8 @@ export class AdminRolesView {
     this._searchResults = [];            // add-panel search hits
     this._filter = '';                   // client-side board filter text
     this._dragUserId = null;
+    this._searchSeq = 0;                 // guards against out-of-order search responses
+    this._persisting = false;            // ignore overlapping assigns during a reconcile
   }
 
   async render() {
@@ -382,12 +384,16 @@ export class AdminRolesView {
     if (!box) return;
     const term = q.trim();
     if (!term) { this._searchResults = []; box.innerHTML = ''; return; }
+    const seq = ++this._searchSeq; // a newer search supersedes this one
     try {
-      this._searchResults = await searchUsers(term);
-      box.innerHTML = this._searchResults.length
-        ? this._searchResults.map(u => this._searchChip(u)).join('')
+      const results = await searchUsers(term);
+      if (seq !== this._searchSeq) return; // stale response — discard
+      this._searchResults = results;
+      box.innerHTML = results.length
+        ? results.map(u => this._searchChip(u)).join('')
         : `<p class="role-search__empty">${t('adminRoles.searchNoResults')}</p>`;
     } catch (err) {
+      if (seq !== this._searchSeq) return;
       box.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>`;
     }
   }
@@ -429,7 +435,11 @@ export class AdminRolesView {
 
   // Optimistically apply `mutate`, persist via `api`, then reconcile from the
   // server (primary-repoint + counts). Rolls back to the snapshot on failure.
+  // Ignores overlapping calls while a reconcile is in flight so a second drop
+  // can't snapshot a half-updated board (the reconcile converges either way).
   async _persist(mutate, api, successMsg) {
+    if (this._persisting) return;
+    this._persisting = true;
     const snapshot = JSON.parse(JSON.stringify(this._members));
     mutate();
     this._renderBoard();
@@ -443,6 +453,8 @@ export class AdminRolesView {
       this._members = snapshot;
       this._renderBoard();
       showToast(err.message, 'error');
+    } finally {
+      this._persisting = false;
     }
   }
 

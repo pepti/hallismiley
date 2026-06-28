@@ -4,7 +4,7 @@
 // from granting itself more access (privilege escalation).
 const Role = require('../models/Role');
 const UserRole = require('../models/UserRole');
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
 const { t } = require('../i18n');
 
@@ -149,33 +149,64 @@ const adminRolesController = {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
       }
 
-      if (name === 'admin') {
-        const targetRoles = await UserRole.listForUser(userId);
-        if (targetRoles.includes('admin') && (await UserRole.adminCount()) <= 1) {
-          return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
-        }
-      }
+      // Guard + delete + primary-repoint in ONE transaction with a row lock on
+      // the admin set, so two concurrent removals can't both pass the last-admin
+      // check and leave zero admins, and the repoint can't be left half-applied.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      const removed = await UserRole.remove(userId, name);
-      if (!removed) {
-        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
-      }
-
-      // Repoint the primary if we just removed it (restore the 'user' floor first
-      // if no memberships remain). The AFTER UPDATE trigger re-affirms the new
-      // primary's membership; pickPrimary + invalidate keep state coherent.
-      const { rows: u } = await dbQuery('SELECT role FROM users WHERE id = $1', [userId]);
-      if (u.length && u[0].role === name) {
-        let remaining = await UserRole.listForUser(userId);
-        if (!remaining.length) {
-          await UserRole.add(userId, 'user', req.user.id);
-          remaining = ['user'];
+        if (name === 'admin') {
+          const { rows: admins } = await client.query(
+            `SELECT ur.user_id
+               FROM user_roles ur JOIN users u ON u.id = ur.user_id
+              WHERE ur.role_name = 'admin' AND u.disabled = FALSE
+              FOR UPDATE`
+          );
+          const adminIds = admins.map(r => r.user_id);
+          if (adminIds.includes(userId) && adminIds.length <= 1) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
+          }
         }
-        await dbQuery('UPDATE users SET role = $1 WHERE id = $2', [UserRole.pickPrimary(remaining), userId]);
+
+        const { rowCount } = await client.query(
+          'DELETE FROM user_roles WHERE user_id = $1 AND role_name = $2',
+          [userId, name]
+        );
+        if (!rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+        }
+
+        // If we removed the user's primary role, repoint it to the highest-
+        // precedence remaining role, restoring the 'user' floor if none remain.
+        const { rows: u } = await client.query('SELECT role FROM users WHERE id = $1', [userId]);
+        if (u.length && u[0].role === name) {
+          const { rows: rem } = await client.query(
+            'SELECT role_name FROM user_roles WHERE user_id = $1', [userId]
+          );
+          let remaining = rem.map(r => r.role_name);
+          if (!remaining.length) {
+            await client.query(
+              `INSERT INTO user_roles (user_id, role_name, granted_by)
+               VALUES ($1, 'user', $2) ON CONFLICT DO NOTHING`,
+              [userId, req.user.id]
+            );
+            remaining = ['user'];
+          }
+          await client.query('UPDATE users SET role = $1 WHERE id = $2', [UserRole.pickPrimary(remaining), userId]);
+        }
+
+        await client.query('COMMIT');
         UserRole.invalidateUser(userId);
+        return res.status(204).send();
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
-
-      return res.status(204).send();
     } catch (err) { next(err); }
   },
 };

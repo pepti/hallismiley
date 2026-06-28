@@ -1,5 +1,5 @@
 // Admin user-management endpoints.  All routes require role='admin'.
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery, pool } = require('../config/database');
 const { lucia }          = require('../auth/lucia');
 const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
@@ -80,34 +80,53 @@ const adminController = {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotChangeOwnRole'), code: 400 });
       }
 
-      // Last-admin guard: never let the final admin lose the 'admin' role.
-      // Multi-role: measured by membership (UserRole.adminCount), since the
-      // dropdown replaces the user's whole set (below) and would strip admin.
-      if (role !== 'admin') {
-        const targetRoles = await UserRole.listForUser(id);
-        if (targetRoles.includes('admin') && (await UserRole.adminCount()) <= 1) {
-          return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
+      // The dropdown sets the user's role to EXACTLY this one. Do the last-admin
+      // guard + mutation in ONE transaction with a row lock on the admin set, so
+      // two concurrent demotions can't both pass the check and leave zero admins,
+      // and the role swap (UPDATE primary → trigger adds membership → DELETE the
+      // rest) can never be left half-applied.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        if (role !== 'admin') {
+          // Lock the live admin membership rows; concurrent demotions serialize
+          // here. Fresh read (not the per-user cache) — see UserRole cache notes.
+          const { rows: admins } = await client.query(
+            `SELECT ur.user_id
+               FROM user_roles ur JOIN users u ON u.id = ur.user_id
+              WHERE ur.role_name = 'admin' AND u.disabled = FALSE
+              FOR UPDATE`
+          );
+          const adminIds = admins.map(r => r.user_id);
+          if (adminIds.includes(id) && adminIds.length <= 1) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: t(req.locale, 'errors.admin.lastAdmin'), code: 400 });
+          }
         }
+
+        const { rows } = await client.query(
+          `UPDATE users SET role = $1 WHERE id = $2
+           RETURNING id, username, email, role`,
+          [role, id]
+        );
+        if (rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+        }
+
+        // Trigger added the new role membership; drop the others so the dropdown
+        // stays single-role (the Members tab manages multi-role).
+        await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
+        await client.query('COMMIT');
+        UserRole.invalidateUser(id); // clear the cached set after the commit
+        return res.json(rows[0]);
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
-
-      const { rows } = await dbQuery(
-        `UPDATE users SET role = $1 WHERE id = $2
-         RETURNING id, username, email, role`,
-        [role, id]
-      );
-
-      if (rows.length === 0) {
-        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
-      }
-
-      // The Users-page dropdown sets the user's role to EXACTLY this one: the
-      // AFTER UPDATE trigger adds the new role as a membership, and we drop any
-      // others so the dropdown stays single-role (the Members tab manages multi-
-      // role). Clear the cached set so the next request resolves fresh.
-      await dbQuery('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
-      UserRole.invalidateUser(id);
-
-      return res.json(rows[0]);
     } catch (err) { next(err); }
   },
 

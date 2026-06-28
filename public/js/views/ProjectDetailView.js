@@ -1,7 +1,7 @@
 import { projectApi } from '../api/projectApi.js';
 import { escHtml }    from '../utils/escHtml.js';
 import { Lightbox }   from '../components/Lightbox.js';
-import { getUser }    from '../services/auth.js';
+import { canEdit }    from '../services/auth.js';
 import { t, href }    from '../i18n/i18n.js';
 
 const CATEGORY_HERO = {
@@ -71,18 +71,18 @@ export class ProjectDetailView {
     if (this._actionsAbort) this._actionsAbort.abort();
     this._actionsAbort = new AbortController();
 
-    const user      = getUser();
-    const canEdit   = !!(user && (user.role === 'admin' || user.role === 'moderator'));
-    const canDelete = canEdit;
+    // Editor = admin OR moderator, via any of the user's roles (multi-role).
+    const editor    = canEdit();
+    const canDelete = editor;
 
     this._view.innerHTML = this._editMode
       ? this._buildEditPage(this._project, canDelete)
-      : this._buildPage(this._project, canEdit);
+      : this._buildPage(this._project, editor);
 
     if (!this._editMode) {
       this._attachGallery(this._view);
     }
-    this._attachEventHandlers(this._view, canEdit, canDelete, this._actionsAbort.signal);
+    this._attachEventHandlers(this._view, editor, canDelete, this._actionsAbort.signal);
   }
 
   // Group _media by section_id. Returns an array of buckets in render order:
