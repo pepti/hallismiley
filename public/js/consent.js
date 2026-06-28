@@ -81,28 +81,35 @@
     banner.setAttribute('role', 'dialog');
     banner.setAttribute('aria-modal', 'false');
     banner.setAttribute('aria-label', 'Cookie consent');
+    // Compact card pinned to the bottom-right corner (was a full-width bottom
+    // bar). Stacks the message above the Accept/Decline buttons. Shown on every
+    // page until the visitor chooses.
     banner.style.cssText = [
       'position:fixed',
-      'bottom:0',
-      'left:0',
-      'right:0',
+      'bottom:1.25rem',
+      'right:1.25rem',
+      'left:auto',
       'z-index:9999',
+      'width:320px',
+      'max-width:calc(100vw - 2rem)',
+      'box-sizing:border-box',
       'background:#1a1a1a',
       'color:#e8e8e0',
-      'padding:1rem 1.5rem',
+      'padding:1rem 1.15rem',
       'display:flex',
-      'align-items:center',
-      'justify-content:space-between',
-      'gap:1rem',
-      'flex-wrap:wrap',
-      'border-top:1px solid #333',
+      'flex-direction:column',
+      'align-items:stretch',
+      'gap:0.85rem',
+      'border:1px solid #333',
+      'border-radius:10px',
+      'box-shadow:0 10px 34px rgba(0,0,0,0.5)',
       'font-family:sans-serif',
-      'font-size:0.875rem',
+      'font-size:0.82rem',
       'line-height:1.5'
     ].join(';');
 
     var text = document.createElement('p');
-    text.style.cssText = 'margin:0;flex:1 1 300px';
+    text.style.cssText = 'margin:0';
     // Build the privacy link as an element so we can compute the locale-
     // prefixed href at click time and route through the SPA — a static
     // '#/privacy' no longer works since the router moved to clean URLs.
@@ -124,7 +131,7 @@
     text.appendChild(document.createTextNode('. Do you consent to analytics cookies?'));
 
     var actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:0.5rem;flex-shrink:0';
+    actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end';
 
     var acceptBtn = document.createElement('button');
     acceptBtn.textContent = 'Accept';

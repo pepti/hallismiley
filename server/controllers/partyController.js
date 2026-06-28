@@ -12,6 +12,16 @@ const {
   runAutoTranslateSideEffect,
 } = require('../services/siteContentTranslate');
 const { AnalyticsEvent } = require('../models/Analytics');
+const { makeToken, hashToken, generateGuestUsername } = require('../auth/tokens');
+const { approveGuest, declineGuest } = require('../services/partyApproval');
+
+// Base URL for links embedded in emails (mirrors emailService).
+const APP_URL = process.env.APP_URL || 'https://www.hallismiley.is';
+// One-click email-approval token lifetime. Short by design — the owner acts soon
+// after the request; the magic link issued on approval is the long-lived one.
+const APPROVAL_ACTION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
+// Email shape check for owner-entered invite addresses (mirrors validate.js).
+const PARTY_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -284,6 +294,230 @@ const partyController = {
     try {
       const hasAccess = await _checkInviteAccess(req.user.email);
       res.json({ hasAccess });
+    } catch (err) { next(err); }
+  },
+
+  // ── Access requests + approval (invite-code replacement) ──────────────────────
+
+  // POST /api/v1/party/request-access  { name, email }
+  // PUBLIC. Someone with only the party URL asks to join. Creates (or re-flags) a
+  // pending guest, stores a single-use approval-action token, and emails the owner
+  // a one-click approve link. Always responds with a generic status so the endpoint
+  // can't be used to enumerate which emails already have accounts.
+  async requestAccess(req, res, next) {
+    try {
+      const name  = String(req.body.name  || '').trim().slice(0, 100);
+      const email = String(req.body.email || '').trim().toLowerCase();
+
+      const { rows } = await db.query(
+        `SELECT id, party_access, approval_status FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+        [email]
+      );
+      const existing = rows[0] || null;
+
+      // Already has access — nothing to do. A previously-approved guest whose
+      // access was later revoked (approval_status stays 'approved' but
+      // party_access is FALSE), or a general account that simply doesn't have
+      // access yet, falls through below and can (re)request.
+      if (existing && existing.party_access) {
+        return res.json({ status: 'already_member' });
+      }
+
+      // Single-use approval-action token for the owner's one-click email link.
+      const actionToken = makeToken();
+      const actionHash  = hashToken(actionToken);
+      const actionExp   = new Date(Date.now() + APPROVAL_ACTION_TTL_MS);
+
+      if (existing) {
+        // Existing account without access (or a prior pending/declined request):
+        // (re)flag as pending and refresh the action token + requested_at.
+        await db.query(
+          `UPDATE users
+              SET approval_status            = 'pending',
+                  requested_at               = NOW(),
+                  display_name               = COALESCE(NULLIF(display_name, ''), $2),
+                  approval_action_token_hash = $3,
+                  approval_action_expires    = $4
+            WHERE id = $1`,
+          [existing.id, name || null, actionHash, actionExp]
+        );
+      } else {
+        // Brand-new guest: a passwordless pending account with an auto-generated
+        // username (username is UNIQUE NOT NULL).
+        const username = await generateGuestUsername(email, name);
+        await db.query(
+          `INSERT INTO users
+             (username, email, password_hash, role, display_name,
+              email_verified, party_access, approval_status, requested_at,
+              approval_action_token_hash, approval_action_expires)
+           VALUES ($1, $2, NULL, 'user', $3, FALSE, FALSE, 'pending', NOW(), $4, $5)`,
+          [username, email, name || null, actionHash, actionExp]
+        );
+      }
+
+      // Generic response — never reveal whether the email already existed.
+      res.json({ status: 'pending' });
+
+      // Notify the owner (fire-and-forget). The link opens the SPA confirm page,
+      // which GETs the request details then POSTs the approve/decline action.
+      const approveUrl = `${APP_URL}/en/party/approve?token=${actionToken}`;
+      db.query(
+        `SELECT email FROM users
+          WHERE role = 'admin' AND email_verified = TRUE AND disabled = FALSE`
+      ).then(adminsRes => {
+        const adminEmails = adminsRes.rows.map(r => r.email).filter(Boolean);
+        if (!adminEmails.length) return;
+        return emailService.sendPartyRequestNotification({
+          request: { name, email }, adminEmails, approveUrl,
+        });
+      }).catch(err => logger.error({ err }, 'party request-access notification failed'));
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/party/approval/:token — PUBLIC, read-only.
+  // Backs the owner's one-click approval confirm page. Returns the pending
+  // request's details when the single-use, time-limited token is valid; a generic
+  // { valid:false } otherwise. Read-only, so safe against link prefetching.
+  async getApprovalRequest(req, res, next) {
+    try {
+      const token = String(req.params.token || '');
+      if (!token) return res.json({ valid: false });
+      const { rows } = await db.query(
+        `SELECT display_name, email, approval_status, approval_action_expires
+           FROM users WHERE approval_action_token_hash = $1 LIMIT 1`,
+        [hashToken(token)]
+      );
+      const r = rows[0];
+      if (!r || !r.approval_action_expires || new Date(r.approval_action_expires) < new Date()) {
+        return res.json({ valid: false });
+      }
+      res.json({ valid: true, name: r.display_name || '', email: r.email, status: r.approval_status });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/party/approval/:token  { action: 'approve' | 'decline' }
+  // PUBLIC but guarded by the unguessable single-use token — the owner is logged
+  // out when clicking from the email, so double-submit CSRF can't apply; the token
+  // IS the auth. approveGuest/declineGuest clear the token, so a replay 404s. On
+  // approve, email the guest their magic link (fire-and-forget).
+  async actOnApproval(req, res, next) {
+    try {
+      const token  = String(req.params.token || '');
+      const action = req.body?.action;
+      if (action !== 'approve' && action !== 'decline') {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.invalidAction'), code: 400 });
+      }
+
+      const { rows } = await db.query(
+        `SELECT id, approval_action_expires FROM users
+          WHERE approval_action_token_hash = $1 LIMIT 1`,
+        [hashToken(token)]
+      );
+      const target = rows[0];
+      if (!target || !target.approval_action_expires || new Date(target.approval_action_expires) < new Date()) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.approvalTokenInvalid'), code: 404 });
+      }
+
+      if (action === 'decline') {
+        await declineGuest(target.id, { approvedBy: null });
+        return res.json({ status: 'declined' });
+      }
+
+      const result = await approveGuest(target.id, { approvedBy: null });
+      res.json({ status: 'approved' });
+
+      if (result) {
+        emailService.sendPartyInviteEmail({
+          to:     result.user.email,
+          name:   result.user.display_name,
+          token:  result.magicToken,
+          locale: result.user.preferred_locale || 'en',
+        }).catch(err => logger.error({ err }, 'party invite email failed (approval)'));
+      }
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/party/owner-invite  { invites: [{ email, name? }] }
+  // Admin-only. Pre-approves the given emails (creating passwordless accounts as
+  // needed) and emails each a magic link immediately — the owner vouches for
+  // people they already have. Reuses approveGuest so existing accounts also get
+  // access + a fresh magic token. Responds with the count; emails fan out in the
+  // background so a slow Resend call never blocks the admin UI.
+  async ownerInvite(req, res, next) {
+    try {
+      const list = req.body?.invites;
+      if (!Array.isArray(list) || list.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.invitesRequired'), code: 400 });
+      }
+      if (list.length > 100) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.invitesTooMany', { n: 100 }), code: 400 });
+      }
+
+      // Validate + normalize the whole batch first; reject on a bad email so the
+      // admin sees the problem rather than silent drops.
+      const entries = [];
+      for (const item of list) {
+        const email = String(item?.email || '').trim().toLowerCase();
+        const name  = String(item?.name  || '').trim().slice(0, 100);
+        if (!PARTY_EMAIL_RE.test(email)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.inviteEmailInvalid', { email }), code: 400 });
+        }
+        entries.push({ email, name });
+      }
+
+      // De-dupe by email within the batch.
+      const seen = new Set();
+      const unique = entries.filter(e => (seen.has(e.email) ? false : (seen.add(e.email), true)));
+
+      const sends = [];
+      for (const { email, name } of unique) {
+        const ex = await db.query(`SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email]);
+        let userId;
+        if (ex.rows[0]) {
+          userId = ex.rows[0].id;
+        } else {
+          const username = await generateGuestUsername(email, name);
+          const ins = await db.query(
+            `INSERT INTO users
+               (username, email, password_hash, role, display_name,
+                email_verified, party_access, approval_status)
+             VALUES ($1, $2, NULL, 'user', $3, FALSE, FALSE, 'pending')
+             RETURNING id`,
+            [username, email, name || null]
+          );
+          userId = ins.rows[0].id;
+        }
+        const result = await approveGuest(userId, { approvedBy: req.user.id });
+        if (result) {
+          sends.push({
+            to:     result.user.email,
+            name:   result.user.display_name || name,
+            token:  result.magicToken,
+            locale: result.user.preferred_locale || 'en',
+          });
+        }
+      }
+
+      res.json({ invited: sends.length });
+
+      Promise.allSettled(sends.map(s => emailService.sendPartyInviteEmail(s))).then(results => {
+        const failed = results.filter(r => r.status === 'rejected').length;
+        if (failed) logger.error({ failed, total: sends.length }, 'owner-invite: some invite emails failed');
+      });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/party/pending-requests — admin/moderator only.
+  // Guests who asked to join and are awaiting a decision.
+  async listPendingRequests(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, username, display_name, email, avatar, requested_at
+           FROM users
+          WHERE approval_status = 'pending' AND disabled = FALSE
+          ORDER BY requested_at ASC NULLS LAST`
+      );
+      res.json(rows);
     } catch (err) { next(err); }
   },
 
@@ -1151,55 +1385,9 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
-  // GET /api/v1/party/invite-code — admin/moderator only. Returns the current
-  // shared invite code so it can be displayed + rotated from Party Admin UI.
-  async getInviteCode(req, res, next) {
-    try {
-      const { rows } = await db.query(
-        `SELECT value FROM site_content WHERE key = 'party_invite_code' LIMIT 1`
-      );
-      const raw = rows[0]?.value;
-      const code = typeof raw === 'string' ? raw : (raw == null ? '' : String(raw));
-      res.json({ code });
-    } catch (err) { next(err); }
-  },
-
-  // POST /api/v1/party/redeem-invite-code  { code }
-  // Any authenticated user. If the code matches site_content.party_invite_code
-  // (case-insensitive, trimmed), flip the user's party_access flag and return
-  // the updated user shape. Rate-limited upstream to deter brute force.
-  async redeemInviteCode(req, res, next) {
-    try {
-      const { code } = req.body || {};
-      if (typeof code !== 'string' || !code.trim()) {
-        return res.status(400).json({ error: t(req.locale, 'errors.party.codeRequired'), code: 400 });
-      }
-
-      const { rows } = await db.query(
-        `SELECT value FROM site_content WHERE key = 'party_invite_code' LIMIT 1`
-      );
-      const raw = rows[0]?.value;
-      const expected = typeof raw === 'string' ? raw : '';
-      if (!expected) {
-        return res.status(503).json({ error: t(req.locale, 'errors.party.inviteCodeNotConfigured'), code: 503 });
-      }
-
-      if (code.trim().toLowerCase() !== expected.trim().toLowerCase()) {
-        return res.status(403).json({ error: t(req.locale, 'errors.party.codeMismatch'), code: 403 });
-      }
-
-      const { rows: uRows } = await db.query(
-        `UPDATE users SET party_access = TRUE WHERE id = $1
-         RETURNING id, username, email, role, avatar, display_name, phone, email_verified, party_access`,
-        [req.user.id]
-      );
-      res.json({ user: uRows[0] });
-    } catch (err) { next(err); }
-  },
-
   async updateInfo(req, res, next) {
     try {
-      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'invite_code', 'cover_image', 'rsvp_message'];
+      const allowed = ['venue_name', 'venue_address', 'venue_link', 'venue_maps_link', 'venue_rating', 'venue_details', 'schedule', 'activities', 'food_options', 'rsvp_questions', 'rsvp_form', 'cover_image', 'rsvp_message'];
       const updates = req.body;
 
       if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {

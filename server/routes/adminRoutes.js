@@ -15,6 +15,8 @@ router.get('/users',                    requireView('users'),              admin
 router.patch('/users/:id/role',         requireRole('admin'), csrfProtect, adminController.changeRole);
 router.patch('/users/:id/disable',      requireRole('admin'), csrfProtect, adminController.disableUser);
 router.patch('/users/:id/party-access', requireRole('admin'), csrfProtect, adminController.setPartyAccess);
+router.patch('/users/:id/approve',      requireRole('admin'), csrfProtect, adminController.approveUser);
+router.patch('/users/:id/decline',      requireRole('admin'), csrfProtect, adminController.declineUser);
 router.delete('/users/:id',             requireRole('admin'), csrfProtect, adminController.deleteUser);
 
 router.get('/email-health',             requireRole('admin', 'moderator'), adminController.getEmailHealth);
