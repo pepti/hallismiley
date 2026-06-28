@@ -4,7 +4,9 @@ const { Resend } = require('resend');
 const { t }      = require('../i18n');
 
 const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
-const FROM_ADDR = process.env.EMAIL_FROM || 'noreply@hallismiley.is';
+// Send from the real owner mailbox (a verified Google Workspace address) rather
+// than a noreply@ alias, so mail actually delivers. Override with EMAIL_FROM.
+const FROM_ADDR = process.env.EMAIL_FROM || 'halli@hallismiley.is';
 const FROM      = `Halli Smiley <${FROM_ADDR}>`;
 
 function isConfigured() {
