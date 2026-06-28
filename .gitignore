@@ -21,6 +21,9 @@ data/
 .claude/
 .claude.zip
 
+# Codex CLI local tooling (hooks reference local .claude/ scripts)
+.codex/
+
 # Logs
 logs/
 *.log
