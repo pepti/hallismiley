@@ -213,11 +213,12 @@ export class AdminUsersView {
     return `<th data-sort-field="${escHtml(field)}" class="${cls}" aria-sort="${ariaSort}" tabindex="0">${escHtml(label)}<span class="admin-table__sort-arrow" aria-hidden="true">${arrow}</span></th>`;
   }
 
-  // Click cycle on a column: asc → desc → back to the default (created_at desc).
+  // Click cycle on a column: new column → asc, same column toggles asc ↔ desc.
+  // Two-state (no "clear") so the default Date column can also be inverted to
+  // ascending instead of being stuck on its initial desc.
   _cycleSort(field) {
     if (this._sort.field !== field) return { field, dir: 'asc' };
-    if (this._sort.dir === 'asc')   return { field, dir: 'desc' };
-    return { field: 'created_at', dir: 'desc' };
+    return { field, dir: this._sort.dir === 'asc' ? 'desc' : 'asc' };
   }
 
   // Delegated sort handler on the table head. Sorting is server-side, so a
