@@ -151,6 +151,41 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.text).toMatch(/<script type="application\/ld\+json">[^<]*"@type":"BreadcrumbList"/);
   });
 
+  // ── Party page — invite-friendly link previews ─────────────────────────────
+  // A shared /party link must NOT inherit the generic home-page bio as its
+  // og:description (that "about me" text is embarrassing on party invites).
+  // The route gets its own party description + the cover photo as og:image.
+
+  describe('party page — link-preview meta', () => {
+    test('/is/party sets the Icelandic party description, not the site bio', async () => {
+      const res = await request(app).get('/is/party');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/<html lang="is"/);
+      expect(res.text).toContain('Þér er boðið í 40 ára afmæli Halla');
+      // Must not leak the generic portfolio bio into the party preview.
+      expect(res.text).not.toContain('Verkefnasafn Halla');
+    });
+
+    test('/en/party sets the English party description, not the site bio', async () => {
+      const res = await request(app).get('/en/party');
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("You're invited to Halli's 40th birthday");
+      expect(res.text).not.toContain('Portfolio of Halli');
+    });
+
+    test('/is/party keeps its party title', async () => {
+      const res = await request(app).get('/is/party');
+      expect(res.text).toMatch(/<title id="ssr-title">40 ára afmæli Halla<\/title>/);
+    });
+
+    test('party page emits an absolute og:image URL', async () => {
+      const res = await request(app).get('/en/party');
+      // Either the uploaded cover (/assets/party/…) or the default og-image —
+      // both are absolute URLs on the canonical host.
+      expect(res.text).toMatch(/property="og:image" content="https:\/\/www\.hallismiley\.is\/[^"]+"/);
+    });
+  });
+
   // ── Bing-focused SEO additions ─────────────────────────────────────────────
 
   describe('search-engine verification tokens (Bing / Google)', () => {
