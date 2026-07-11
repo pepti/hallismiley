@@ -306,33 +306,47 @@
   padding: 0;
   margin: 0;
   position: relative;
+  /* Column geometry lives here so the timeline line, the dot column and the
+     grid columns all derive from the same numbers and can never drift apart.
+     Overridden in the mobile media query. */
+  --tl-time-w: 88px;
+  --tl-dot-col: 20px;
+  --tl-gap: var(--sp-3);
 }
 
 .party-timeline::before {
   content: '';
   position: absolute;
-  left: 80px;
+  /* Sits exactly on the centre of the dot column (see --tl-* above). */
+  left: calc(var(--tl-time-w) + var(--tl-gap) + var(--tl-dot-col) / 2);
   top: 0;
   bottom: 0;
   width: 2px;
+  transform: translateX(-1px);
   background: linear-gradient(to bottom, var(--gold), transparent);
   opacity: 0.3;
 }
 
 .party-timeline__item {
   display: grid;
-  grid-template-columns: 80px 20px 1fr;
-  align-items: center;
-  gap: var(--sp-3);
+  /* 4th (auto) column absorbs the admin delete button without disturbing the
+     time/dot/event layout; it collapses to 0 width in the public view. */
+  grid-template-columns: var(--tl-time-w) var(--tl-dot-col) minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--tl-gap);
   padding: var(--sp-3) 0;
 }
 
 .party-timeline__time {
   font-family: var(--font-display);
   font-size: 0.875rem;
+  line-height: 1.5;
   color: var(--gold);
   text-align: right;
   padding-right: var(--sp-2);
+  /* Long time ranges wrap inside their fixed column instead of shoving the
+     dot/event columns sideways. */
+  overflow-wrap: anywhere;
 }
 
 .party-timeline__dot {
@@ -343,11 +357,23 @@
   border: 2px solid var(--bg-base);
   box-shadow: 0 0 6px rgba(200, 170, 110, 0.5);
   justify-self: center;
+  flex-shrink: 0;
+  /* Nudge down so the dot centres on the first line of text (line-height 1.5)
+     rather than on the middle of a multi-line event. */
+  margin-top: 0.34rem;
 }
 
 .party-timeline__event {
   color: var(--text-primary);
   font-size: 0.9375rem;
+  line-height: 1.5;
+  /* min-width:0 lets the 1fr column shrink so long unbroken strings wrap
+     instead of forcing the whole row to overflow. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* The schedule editor saves contenteditable line breaks as \n (innerText) —
+     render them instead of collapsing, matching .party-rsvp__message. */
+  white-space: pre-line;
 }
 
 /* ── RSVP ──────────────────────────────────────────────────────────────────── */
@@ -940,12 +966,12 @@ button.party-admin__stat:focus-visible {
 /* ── Responsive tweaks ─────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {
-  .party-timeline::before {
-    left: 60px;
-  }
-  .party-timeline__item {
-    grid-template-columns: 60px 16px 1fr;
-    gap: var(--sp-2);
+  .party-timeline {
+    /* Narrower time column + tighter gap on phones; the line and grid follow
+       these automatically via the calc()s above. */
+    --tl-time-w: 60px;
+    --tl-dot-col: 16px;
+    --tl-gap: var(--sp-2);
   }
   .party-timeline__time {
     font-size: 0.75rem;
@@ -1126,7 +1152,11 @@ button.party-admin__stat:focus-visible {
 .party-edit-add:hover { background: rgba(200,155,60,.3); }
 .party-edit-add--hidden { display: none; }
 
-.party-timeline__item { display: flex; align-items: center; }
+/* Keep the delete button on the first text line of a multi-line event.
+   (The item layout itself is the grid defined in the Timeline section above —
+   do NOT switch this to flex; that collapses the fixed time/dot columns and
+   the dots stop aligning with the timeline line.) */
+.party-timeline__item .party-edit-row-delete { margin-top: 0.15rem; }
 
 /* ── Checkbox groups (food options, custom questions) ───────────────── */
 
