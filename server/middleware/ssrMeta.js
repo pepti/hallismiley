@@ -85,7 +85,7 @@ const DEFAULT_META = {
     contact:        { title: 'Contact — Halli Smiley', description: 'Reach Halli about carpentry commissions, software work, or anything at the intersection of the two.' },
     privacy:        { title: 'Privacy Policy — Halli Smiley' },
     terms:          { title: 'Terms of Service — Halli Smiley' },
-    party:          { title: "Halli's 40th Birthday Party" },
+    party:          { title: "Halli's 40th Birthday Party", description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
   },
   is: {
     home:           { title: 'Halli Smiley — Íslenskur smiður & tölvunarfræðingur', description: 'Verkefnasafn Halla, íslensks smiðs og tölvunarfræðings. Tuttugu ára nákvæmni í smíði og grindarsmíði sem sameinast fullgildri vefforritun.' },
@@ -99,7 +99,7 @@ const DEFAULT_META = {
     contact:        { title: 'Samband — Halli Smiley', description: 'Hafðu samband við Halla um smíðaverkefni, hugbúnaðarverkefni eða eitthvað þar á milli.' },
     privacy:        { title: 'Persónuverndarstefna — Halli Smiley' },
     terms:          { title: 'Notkunarskilmálar — Halli Smiley' },
-    party:          { title: '40 ára afmæli Halla' },
+    party:          { title: '40 ára afmæli Halla', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
   },
 };
 
@@ -177,6 +177,26 @@ async function fetchContentMeta(contentKey, locale) {
     const v = rows[0]?.value;
     if (!v || typeof v !== 'object') return null;
     return { title: v.meta_title, description: v.meta_description };
+  } catch {
+    return null;
+  }
+}
+
+// Party link previews use the admin-uploaded cover photo as og:image so a
+// shared /party link shows the party hero, not the generic site card. The
+// cover path lives in a locale-neutral `party_cover_image` site_content row
+// (written by partyController.uploadCoverImage) as a JSON string like
+// `/assets/party/foo.jpg`. Returns an absolute URL, or null if unset.
+async function fetchPartyOgImage() {
+  try {
+    const { rows } = await db.query(
+      `SELECT value FROM site_content
+        WHERE key = 'party_cover_image' AND locale = $1
+        LIMIT 1`,
+      [DEFAULT_LOCALE]
+    );
+    const v = rows[0]?.value;
+    return typeof v === 'string' && v ? absUrl(v) : null;
   } catch {
     return null;
   }
@@ -744,6 +764,13 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     title       = override?.title       || defaults.title       || DEFAULT_META[DEFAULT_LOCALE].home.title;
     description = override?.description || defaults.description || DEFAULT_META[DEFAULT_LOCALE].home.description;
     ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
+
+    // Party links share the admin-uploaded cover photo instead of the generic
+    // site card. Falls back to OG_IMAGE_PATH above when no cover is uploaded.
+    if (key === 'party') {
+      const partyOg = await fetchPartyOgImage();
+      if (partyOg) ogImage = partyOg;
+    }
 
     // Breadcrumbs on any non-home page.
     if (route !== '/') {
