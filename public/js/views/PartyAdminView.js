@@ -77,7 +77,6 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
-        ${this._renderPendingRequests()}
         ${this._renderAcceptedAndPending()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
@@ -87,6 +86,7 @@ export class PartyAdminView {
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
         ${this._renderHelpersList()}
+        ${this._renderPendingRequests()}
         ${this._renderRsvpTable()}
         ${this._renderGuestListExport()}
       </div>`;
@@ -170,16 +170,6 @@ export class PartyAdminView {
       return acc;
     }, {});
 
-    // Companion pills count going + maybe guests only — waiting guests
-    // haven't answered the form, and declined guests are filtered out above.
-    const companions = guests.reduce((acc, g) => {
-      if (g.rsvp_status !== 'going' && g.rsvp_status !== 'maybe') return acc;
-      const f = this._companionFlags(g);
-      if (f.spouse) acc.spouse += 1;
-      if (f.kids) acc.kids += 1;
-      return acc;
-    }, { spouse: 0, kids: 0 });
-
     const colSpan = this._invitedGuestColSpan(showRevoke);
     const rows = sorted.length
       ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
@@ -195,13 +185,9 @@ export class PartyAdminView {
       <section class="party-admin__section" id="party-admin-accepted-pending">
         <h2 class="party-admin__section-title">${t('party.admin.acceptedAndPending', { n: guests.length })}</h2>
         <div class="party-admin__invited-toolbar">
-          <p class="party-admin__invited-summary">
-            <span class="party-admin__pill party-admin__pill--going">✅ ${t('party.admin.statusGoing')}: ${counts.going || 0}</span>
-            <span class="party-admin__pill party-admin__pill--spouse">💑 ${t('party.admin.pillSpouses')}: ${companions.spouse}</span>
-            <span class="party-admin__pill party-admin__pill--kids">🧒 ${t('party.admin.pillKids')}: ${companions.kids}</span>
-            <span class="party-admin__pill party-admin__pill--maybe">🤔 ${t('party.admin.statusMaybe')}: ${counts.maybe || 0}</span>
-            <span class="party-admin__pill party-admin__pill--waiting">⏳ ${t('party.admin.statusPending')}: ${counts.waiting || 0}</span>
-          </p>
+          <div class="party-admin__invited-summary">
+            ${this._summaryGroups(guests).map(grp => this._renderSummaryPill(grp)).join('')}
+          </div>
           ${emailBtn}
         </div>
         <div class="party-admin__table-wrap">
@@ -334,6 +320,54 @@ export class PartyAdminView {
       }
     }
     return flags;
+  }
+
+  // The five clickable summary pills above the guest table. Each carries the
+  // actual list of guests it counts, so clicking the pill can reveal their
+  // names. Companion pills (spouse/kids) count going + maybe guests only —
+  // waiting guests haven't answered the form, declined guests are filtered out.
+  _summaryGroups(guests) {
+    const answered = guests.filter(g => g.rsvp_status === 'going' || g.rsvp_status === 'maybe');
+    return [
+      { key: 'going',   cls: 'going',   icon: '✅', label: t('party.admin.statusGoing'),
+        list: guests.filter(g => g.rsvp_status === 'going') },
+      { key: 'spouse',  cls: 'spouse',  icon: '💑', label: t('party.admin.pillSpouses'),
+        list: answered.filter(g => this._companionFlags(g).spouse) },
+      { key: 'kids',    cls: 'kids',    icon: '🧒', label: t('party.admin.pillKids'),
+        list: answered.filter(g => this._companionFlags(g).kids) },
+      { key: 'maybe',   cls: 'maybe',   icon: '🤔', label: t('party.admin.statusMaybe'),
+        list: guests.filter(g => g.rsvp_status === 'maybe') },
+      { key: 'waiting', cls: 'waiting', icon: '⏳', label: t('party.admin.statusPending'),
+        list: guests.filter(g => g.rsvp_status === 'waiting') },
+    ];
+  }
+
+  // One summary pill: a button showing icon + label + count, with a dropdown
+  // listing the names in that category. Empty groups render a disabled pill
+  // (nothing to drop down). Names sorted alphabetically.
+  _renderSummaryPill(grp) {
+    const n = grp.list.length;
+    const names = grp.list
+      .map(g => g.display_name || g.username || '—')
+      .sort((a, b) => a.localeCompare(b));
+    const dropdown = n
+      ? `<div class="party-admin__pill-dropdown" data-pill-dropdown="${escHtml(grp.key)}" role="menu" hidden>
+           <ul class="party-admin__pill-names">
+             ${names.map(nm => `<li role="menuitem">${escHtml(nm)}</li>`).join('')}
+           </ul>
+         </div>`
+      : '';
+    return `
+      <span class="party-admin__pill-wrap">
+        <button type="button"
+                class="party-admin__pill party-admin__pill--${grp.cls} party-admin__pill--btn"
+                data-pill-group="${escHtml(grp.key)}"
+                aria-haspopup="true" aria-expanded="false"
+                ${n ? '' : 'disabled'}>
+          ${grp.icon} ${escHtml(grp.label)}: ${n}
+        </button>
+        ${dropdown}
+      </span>`;
   }
 
   _renderInvitedGuestRow(g, showRevoke) {
@@ -2260,6 +2294,8 @@ export class PartyAdminView {
   }
 
   _bindInvitedGuests() {
+    this._bindPillDropdowns();
+
     // Row click → toggle detail expansion. Ignores clicks on buttons within
     // the row so Revoke doesn't also open the details.
     this._el.querySelectorAll('[data-expand-guest]').forEach(row => {
@@ -2298,6 +2334,63 @@ export class PartyAdminView {
         }
       });
     });
+  }
+
+  // Wire the clickable summary pills. Each pill button toggles its own name
+  // dropdown; opening one closes the others. The per-button click handlers are
+  // (re)attached on every section re-render, while the document-level
+  // outside-click / Escape closers are attached once per view instance (guard
+  // flag) so re-renders don't stack duplicate global listeners.
+  _bindPillDropdowns() {
+    const section = this._el.querySelector('#party-admin-accepted-pending');
+    if (!section) return;
+
+    const openDropdowns = () =>
+      section.querySelectorAll('[data-pill-dropdown]:not([hidden])');
+    const closeAll = () => {
+      openDropdowns().forEach(d => { d.hidden = true; });
+      section.querySelectorAll('[data-pill-group]')
+        .forEach(b => b.setAttribute('aria-expanded', 'false'));
+    };
+
+    section.querySelectorAll('[data-pill-group]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't trip the document outside-click closer
+        const key = btn.dataset.pillGroup;
+        const dd = section.querySelector(`[data-pill-dropdown="${CSS.escape(key)}"]`);
+        if (!dd) return;
+        const willOpen = dd.hidden;
+        closeAll();
+        if (willOpen) {
+          dd.hidden = false;
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+
+    // Attach the global closers only once per view instance.
+    if (!this._pillGlobalClosersBound) {
+      this._pillGlobalClosersBound = true;
+      const closeOpen = () => {
+        this._el
+          .querySelectorAll('#party-admin-accepted-pending [data-pill-dropdown]:not([hidden])')
+          .forEach(d => {
+            d.hidden = true;
+            d.closest('.party-admin__pill-wrap')
+              ?.querySelector('[data-pill-group]')
+              ?.setAttribute('aria-expanded', 'false');
+          });
+      };
+      // A click anywhere except inside an open dropdown closes it. Pill buttons
+      // stopPropagation, so their own clicks never reach here.
+      document.addEventListener('click', (e) => {
+        if (e.target.closest?.('.party-admin__pill-dropdown')) return;
+        closeOpen();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeOpen();
+      });
+    }
   }
 
   // Parse the owner-invite textarea: one entry per line, "email" or "Name <email>".

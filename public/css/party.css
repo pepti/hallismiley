@@ -1701,6 +1701,63 @@ button.party-admin__stat:focus-visible {
   border-color: rgba(186, 104, 200, 0.3);
 }
 
+/* Clickable summary pills: a button styled as a pill, revealing a dropdown of
+   the guest names in that category. */
+.party-admin__pill-wrap {
+  position: relative;
+  display: inline-block;
+}
+.party-admin__pill--btn {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+.party-admin__pill--btn:hover:not(:disabled) {
+  filter: brightness(1.18);
+}
+.party-admin__pill--btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.party-admin__pill--btn[aria-expanded="true"] {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+.party-admin__pill-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: max(100%, 160px);
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.35rem;
+  background: var(--bg-surface, #1c1c1e);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.party-admin__pill-names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.party-admin__pill-names li {
+  padding: 0.3rem 0.55rem;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary, #eee);
+  white-space: nowrap;
+}
+.party-admin__pill-names li:hover {
+  background: rgba(200, 170, 110, 0.1);
+}
+
 .party-admin__status {
   display: inline-block;
   font-weight: 600;
