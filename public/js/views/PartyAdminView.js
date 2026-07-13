@@ -2,6 +2,7 @@ import { isAuthenticated, isAdmin, canEdit, adminUpdateUser, adminApproveUser } 
 import { getCsrfHeaders } from '../utils/api.js';
 import { showToast }    from '../components/Toast.js';
 import { escHtml }      from '../utils/escHtml.js';
+import { formatMoney }  from '../utils/format.js';
 import { t, href } from '../i18n/i18n.js';
 import { PartyAdminStatModal } from '../components/PartyAdminStatModal.js';
 
@@ -81,6 +82,7 @@ export class PartyAdminView {
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
         ${this._renderTodoSection()}
+        ${this._renderCostSection()}
         ${this._renderOwnerInviteSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
@@ -382,6 +384,26 @@ export class PartyAdminView {
       </tr>`;
   }
 
+  // Line cost of a logistics item — null (not 0) when qty or price is
+  // missing, so incomplete rows can be surfaced instead of silently counted.
+  _lineCost(item) {
+    if (item.quantity == null || item.unit_price == null) return null;
+    return Math.round(Number(item.quantity) * Number(item.unit_price));
+  }
+
+  _fmtIsk(n) { return formatMoney(n, 'ISK'); }
+
+  // Subtotal + count of unpriced rows for one logistics category.
+  _categorySubtotal(catKey) {
+    const items = (this._logistics || []).filter(i => (i.category || 'other') === catKey);
+    let sum = 0, missing = 0;
+    for (const i of items) {
+      const c = this._lineCost(i);
+      if (c == null) missing++; else sum += c;
+    }
+    return { sum, missing, count: items.length };
+  }
+
   // The three logistics tables. Internal keys must match the DB CHECK
   // constraint (058) and the controller's LOGISTICS_CATEGORIES.
   _logisticsCategories() {
@@ -441,7 +463,17 @@ export class PartyAdminView {
 
     const rows = visible.length
       ? visible.map(i => this._renderLogisticsRow(i)).join('')
-      : `<tr><td colspan="7" class="party-empty">${emptyMsg}</td></tr>`;
+      : `<tr><td colspan="9" class="party-empty">${emptyMsg}</td></tr>`;
+
+    const sub = this._categorySubtotal(cat.key);
+    const subtotalFoot = all.length ? `
+            <tfoot>
+              <tr class="party-admin__logistics-subtotal-row">
+                <td colspan="4" data-logistics-subtotal-note="${escHtml(cat.key)}">${sub.missing > 0 ? `<span class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: sub.missing })}</span>` : ''}</td>
+                <td class="party-admin__logistics-line-cost" data-logistics-subtotal="${escHtml(cat.key)}">${t('party.admin.logisticsSubtotal', { v: this._fmtIsk(sub.sum) })}</td>
+                <td colspan="4"></td>
+              </tr>
+            </tfoot>` : '';
 
     return `
       <div class="party-admin__logistics-group">
@@ -454,10 +486,12 @@ export class PartyAdminView {
                  placeholder="${escHtml(t('party.admin.logisticsNamePh'))}"
                  maxlength="200"
                  aria-label="${t('party.admin.logisticsItem')}" />
-          <input type="text" class="lol-input party-admin__logistics-qty party-admin__logistics-add-qty"
+          <input type="number" min="0" step="any" class="lol-input party-admin__logistics-qty party-admin__logistics-add-qty"
                  placeholder="${escHtml(t('party.admin.logisticsQtyPh'))}"
-                 maxlength="100"
                  aria-label="${t('party.admin.logisticsQty')}" />
+          <input type="number" min="0" step="1" class="lol-input party-admin__logistics-add-price"
+                 placeholder="${escHtml(t('party.admin.logisticsPricePh'))}"
+                 aria-label="${t('party.admin.logisticsPrice')}" />
           <input type="text" class="lol-input party-admin__logistics-assigned party-admin__logistics-add-assigned"
                  placeholder="${escHtml(t('party.admin.logisticsAssignedPh'))}"
                  maxlength="100"
@@ -472,6 +506,8 @@ export class PartyAdminView {
                 <th aria-label="${t('party.admin.logisticsReorderHandle')}"></th>
                 <th>${t('party.admin.logisticsItem')}</th>
                 <th>${t('party.admin.logisticsQty')}</th>
+                <th>${t('party.admin.logisticsPrice')}</th>
+                <th>${t('party.admin.logisticsLineCost')}</th>
                 <th>${t('party.admin.logisticsAssignedTo')}</th>
                 <th>${t('party.admin.logisticsBought')}</th>
                 <th>${t('party.admin.logisticsAtVenue')}</th>
@@ -480,7 +516,7 @@ export class PartyAdminView {
             </thead>
             <tbody class="party-admin__logistics-tbody" data-logistics-category="${escHtml(cat.key)}">
               ${rows}
-            </tbody>
+            </tbody>${subtotalFoot}
           </table>
         </div>
       </div>`;
@@ -489,7 +525,10 @@ export class PartyAdminView {
   _renderLogisticsRow(item) {
     const id   = String(item.id);
     const name = escHtml(item.name || '');
-    const qty  = escHtml(item.quantity || '');
+    const qty  = item.quantity == null ? '' : escHtml(String(item.quantity));
+    const note = escHtml(item.quantity_note || '');
+    const price = item.unit_price == null ? '' : escHtml(String(item.unit_price));
+    const cost  = this._lineCost(item);
     const to   = escHtml(item.assigned_to || '');
     const rowClasses = [
       item.bought   ? 'party-admin__logistics-row--bought'   : '',
@@ -507,12 +546,23 @@ export class PartyAdminView {
                  value="${name}" maxlength="200" required
                  aria-label="${t('party.admin.logisticsItem')}" />
         </td>
-        <td>
-          <input type="text" class="party-admin__logistics-cell-input"
+        <td class="party-admin__logistics-qty-cell">
+          <input type="number" min="0" step="any" class="party-admin__logistics-cell-input party-admin__logistics-qty-input"
                  data-logistics-id="${escHtml(id)}" data-field="quantity"
-                 value="${qty}" maxlength="100" placeholder="—"
+                 value="${qty}" placeholder="—"
                  aria-label="${t('party.admin.logisticsQty')}" />
+          <input type="text" class="party-admin__logistics-cell-input party-admin__logistics-unit-input"
+                 data-logistics-id="${escHtml(id)}" data-field="quantity_note"
+                 value="${note}" maxlength="100" placeholder="${escHtml(t('party.admin.logisticsUnitPh'))}"
+                 aria-label="${t('party.admin.logisticsUnit')}" />
         </td>
+        <td>
+          <input type="number" min="0" step="1" class="party-admin__logistics-cell-input party-admin__logistics-price-input"
+                 data-logistics-id="${escHtml(id)}" data-field="unit_price"
+                 value="${price}" placeholder="—"
+                 aria-label="${t('party.admin.logisticsPrice')}" />
+        </td>
+        <td class="party-admin__logistics-line-cost" data-line-cost="${escHtml(id)}">${cost == null ? '—' : this._fmtIsk(cost)}</td>
         <td>
           <input type="text" class="party-admin__logistics-cell-input"
                  data-logistics-id="${escHtml(id)}" data-field="assigned_to"
@@ -640,7 +690,7 @@ export class PartyAdminView {
         const dataAttrs = match.opt
           ? `data-stat-key="field:${escHtml(attendField.id)}:${escHtml(match.opt)}" data-stat-field="${escHtml(attendField.id)}" data-stat-value="${escHtml(match.opt)}" data-stat-multi="false"`
           : `data-stat-key="empty"`;
-        const cls = 'party-admin__stat' + (modifierClass ? ' ' + modifierClass : '');
+        const cls = 'party-admin__stat party-admin__stat--sm' + (modifierClass ? ' ' + modifierClass : '');
         return `
         <button type="button" class="${cls}" ${dataAttrs}>
           <span class="party-admin__stat-num">${match.count}</span>
@@ -662,13 +712,13 @@ export class PartyAdminView {
     return `
       <section class="party-admin__section">
         <h2 class="party-admin__section-title">${t('party.admin.stats')}</h2>
-        <div class="party-admin__stats">
-          <button type="button" class="party-admin__stat" data-stat-key="all">
+        <div class="party-admin__stats party-admin__stats--compact">
+          <button type="button" class="party-admin__stat party-admin__stat--sm" data-stat-key="all">
             <span class="party-admin__stat-num">${rsvps.length}</span>
             <span class="party-admin__stat-label">${t('party.admin.rsvpsSubmitted')}</span>
           </button>
           ${breakdownCards}
-          <button type="button" class="party-admin__stat party-admin__stat--gold" data-stat-key="headcount">
+          <button type="button" class="party-admin__stat party-admin__stat--sm party-admin__stat--gold" data-stat-key="headcount">
             <span class="party-admin__stat-num">${headcount}</span>
             <span class="party-admin__stat-label">${t('party.admin.totalHeadcount')}</span>
           </button>
@@ -717,19 +767,23 @@ export class PartyAdminView {
 
     return `
       <section class="party-admin__section" id="party-admin-total-rsvps">
-        <h2 class="party-admin__section-title">${t('party.admin.totalRsvps')}</h2>
-        <div class="party-admin__table-wrap">
-          <table class="party-admin__table" aria-label="${t('party.admin.totalRsvps')}">
-            <thead>
-              <tr>
-                ${this._sortableTh('username', 'string', t('adminUsers.username'), this._rsvpSort)}${this._sortableTh('email', 'string', t('adminUsers.email'), this._rsvpSort)}${fieldHeaders}
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </div>
+        <details class="party-admin__declined-details">
+          <summary class="party-admin__declined-summary">
+            <span class="party-admin__pill">📋 ${t('party.admin.totalRsvpsSummary', { n: this._rsvps.length })}</span>
+          </summary>
+          <div class="party-admin__table-wrap party-admin__declined-table-wrap">
+            <table class="party-admin__table" aria-label="${t('party.admin.totalRsvps')}">
+              <thead>
+                <tr>
+                  ${this._sortableTh('username', 'string', t('adminUsers.username'), this._rsvpSort)}${this._sortableTh('email', 'string', t('adminUsers.email'), this._rsvpSort)}${fieldHeaders}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </section>`;
   }
 
@@ -771,7 +825,7 @@ export class PartyAdminView {
     );
     if (!groups.length) return '';
 
-    return groups.map(g => {
+    const groupBlocks = groups.map(g => {
       const tally = {};
       (g.options || []).forEach(opt => { tally[opt] = 0; });
       this._rsvps.forEach(r => {
@@ -784,7 +838,7 @@ export class PartyAdminView {
       });
       const multi = g.type === 'checkbox-group';
       const items = Object.entries(tally).map(([name, count]) => `
-        <button type="button" class="party-admin__stat"
+        <button type="button" class="party-admin__stat party-admin__stat--sm"
                 data-stat-key="field:${escHtml(g.id)}:${escHtml(name)}"
                 data-stat-field="${escHtml(g.id)}"
                 data-stat-value="${escHtml(name)}"
@@ -794,11 +848,17 @@ export class PartyAdminView {
           <span class="party-admin__stat-label">${escHtml(name)}</span>
         </button>`).join('');
       return `
-        <section class="party-admin__section">
-          <h2 class="party-admin__section-title">${escHtml(g.label || 'Tally')}</h2>
-          <div class="party-admin__stats">${items}</div>
-        </section>`;
+        <div class="party-admin__tally-group">
+          <h3 class="party-admin__tally-title">${escHtml(g.label || 'Tally')}</h3>
+          <div class="party-admin__stats party-admin__stats--compact">${items}</div>
+        </div>`;
     }).join('');
+
+    return `
+      <section class="party-admin__section">
+        <h2 class="party-admin__section-title">${t('party.admin.answerTallies')}</h2>
+        ${groupBlocks}
+      </section>`;
   }
 
   _renderHelpersList() {
@@ -928,13 +988,18 @@ export class PartyAdminView {
     this._bindEmailGoing();
   }
 
-  // Same pattern for the Total RSVPs table.
+  // Same pattern for the Total RSVPs table. The section re-renders on every
+  // sort-header click, so the <details> open state must be carried over —
+  // otherwise sorting would collapse the table the user is looking at.
   _rerenderRsvpTable() {
     const old = this._el.querySelector('#party-admin-total-rsvps');
     if (!old) return;
+    const wasOpen = old.querySelector('details')?.open ?? false;
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderRsvpTable();
     const next = tmp.firstElementChild;
+    const details = next.querySelector('details');
+    if (details) details.open = wasOpen;
     old.replaceWith(next);
     this._bindRsvpSort();
   }
@@ -1117,6 +1182,7 @@ export class PartyAdminView {
         const category = form.dataset.logisticsAdd;
         const nameEl   = form.querySelector('.party-admin__logistics-add-name');
         const qtyEl    = form.querySelector('.party-admin__logistics-add-qty');
+        const priceEl  = form.querySelector('.party-admin__logistics-add-price');
         const toEl     = form.querySelector('.party-admin__logistics-add-assigned');
         const status   = form.querySelector('[data-logistics-status]');
         const name = (nameEl?.value || '').trim();
@@ -1130,8 +1196,9 @@ export class PartyAdminView {
             headers,
             body: JSON.stringify({
               name,
-              quantity:    (qtyEl?.value || '').trim() || null,
-              assigned_to: (toEl?.value  || '').trim() || null,
+              quantity:    (qtyEl?.value   || '').trim() === '' ? null : Number(qtyEl.value),
+              unit_price:  (priceEl?.value || '').trim() === '' ? null : Math.round(Number(priceEl.value)),
+              assigned_to: (toEl?.value    || '').trim() || null,
               category,
             }),
           });
@@ -1209,7 +1276,7 @@ export class PartyAdminView {
     // Inline cell editing — auto-save on blur (the 'change' event on text
     // inputs fires on blur). Enter saves and jumps to the next row's name
     // input (or the add-item name input if there is no next row).
-    section.querySelectorAll('input[type="text"][data-logistics-id]').forEach(input => {
+    section.querySelectorAll('input.party-admin__logistics-cell-input[data-logistics-id]').forEach(input => {
       input.addEventListener('change', () => this._saveLogisticsCell(input));
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -1258,18 +1325,31 @@ export class PartyAdminView {
     this._bindLogisticsDrag(section);
   }
 
-  // Save a single text-cell edit. No-op if the value is unchanged. On
-  // failure (empty name, network error, etc.) reverts the input value.
+  // Save a single cell edit. No-op if the value is unchanged. On failure
+  // (empty name, network error, etc.) reverts the input value. Quantity and
+  // unit_price are numeric — sent as numbers (or null when cleared); on
+  // success the row's line-cost cell, the category subtotal, and the Cost
+  // overview section are updated in place so focus is never lost.
   async _saveLogisticsCell(input) {
+    const field   = input.dataset.field;
+    const numeric = field === 'quantity' || field === 'unit_price';
     const value = input.value.trim();
     const last  = input.dataset.lastSaved !== undefined
       ? input.dataset.lastSaved
       : (input.defaultValue ?? '');
     if (value === last) return;
+    if (numeric && value !== '' && !Number.isFinite(Number(value))) {
+      input.value = last;
+      return;
+    }
 
-    const id    = input.dataset.logisticsId;
-    const field = input.dataset.field;
+    const id = input.dataset.logisticsId;
     input.dataset.lastSaved = value;
+    const body = value === ''
+      ? null
+      : (field === 'unit_price' ? Math.round(Number(value))
+        : field === 'quantity' ? Number(value)
+        : value);
 
     try {
       const headers = await getCsrfHeaders();
@@ -1277,7 +1357,7 @@ export class PartyAdminView {
         method:      'PATCH',
         credentials: 'include',
         headers,
-        body: JSON.stringify({ [field]: value === '' ? null : value }),
+        body: JSON.stringify({ [field]: body }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1293,10 +1373,35 @@ export class PartyAdminView {
         const del = row?.querySelector('[data-logistics-delete]');
         if (del) del.dataset.logisticsName = value;
       }
+      if (numeric) {
+        const costCell = input.closest('tr')?.querySelector('[data-line-cost]');
+        if (costCell) {
+          const c = this._lineCost(updated);
+          costCell.textContent = c == null ? '—' : this._fmtIsk(c);
+        }
+        this._updateLogisticsSubtotal(updated.category || 'other');
+        this._rerenderCosts();
+      } else if (field === 'quantity_note' || field === 'name') {
+        this._rerenderCosts();
+      }
     } catch (err) {
       input.value = last;
       input.dataset.lastSaved = last;
       showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+    }
+  }
+
+  // In-place refresh of one category's tfoot subtotal (called after an inline
+  // numeric edit — a full re-render would blur the input mid-typing flow).
+  _updateLogisticsSubtotal(catKey) {
+    const sub  = this._categorySubtotal(catKey);
+    const cell = this._el.querySelector(`[data-logistics-subtotal="${CSS.escape(catKey)}"]`);
+    if (cell) cell.textContent = t('party.admin.logisticsSubtotal', { v: this._fmtIsk(sub.sum) });
+    const noteCell = this._el.querySelector(`[data-logistics-subtotal-note="${CSS.escape(catKey)}"]`);
+    if (noteCell) {
+      noteCell.innerHTML = sub.missing > 0
+        ? `<span class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: sub.missing })}</span>`
+        : '';
     }
   }
 
@@ -1477,6 +1582,90 @@ export class PartyAdminView {
     const next = tmp.firstElementChild;
     old.replaceWith(next);
     this._bindLogistics();
+    this._rerenderCosts();
+  }
+
+  // ── Cost overview ────────────────────────────────────────────────────────────
+  // Aggregates every priced logistics item and todo into per-group breakdowns
+  // and a grand total, so the final bill is never a surprise. Unpriced items
+  // count as 0 but are surfaced via the "{n} without a price" hint.
+
+  // The four cost groups: one per logistics category + a pseudo-group for
+  // todos (client-side only — never written to logistics).
+  _costGroups() {
+    const groups = this._logisticsCategories().map(c => ({
+      key: c.key, icon: c.icon, label: c.label,
+      items: (this._logistics || [])
+        .filter(i => (i.category || 'other') === c.key)
+        .map(i => ({
+          name: i.name || '',
+          detail: i.quantity != null && i.unit_price != null
+            ? `${i.quantity}${i.quantity_note ? ` ${i.quantity_note}` : ''} × ${this._fmtIsk(i.unit_price)}`
+            : (i.quantity_note || ''),
+          cost: this._lineCost(i),
+        })),
+    }));
+    groups.push({
+      key: 'todos', icon: '✅', label: t('party.admin.costGroupTodos'),
+      items: (this._todos || []).map(td => ({ name: td.title || '', detail: '', cost: td.cost ?? null })),
+    });
+    return groups;
+  }
+
+  _renderCostSection() {
+    const groups = this._costGroups();
+    const groupSum = (g) => g.items.reduce((s, x) => s + (x.cost ?? 0), 0);
+    const grand = groups.reduce((s, g) => s + groupSum(g), 0);
+    const anyPriced = groups.some(g => g.items.some(x => x.cost != null));
+
+    const tile = (num, label, extraCls = '') => `
+          <div class="party-admin__stat party-admin__stat--sm${extraCls ? ' ' + extraCls : ''}">
+            <span class="party-admin__stat-num">${num}</span>
+            <span class="party-admin__stat-label">${label}</span>
+          </div>`;
+
+    const groupCards = groups.map(g => {
+      const missing = g.items.filter(x => x.cost == null).length;
+      const sorted = [...g.items].sort((a, b) => {
+        if (a.cost == null && b.cost == null) return 0;
+        if (a.cost == null) return 1;
+        if (b.cost == null) return -1;
+        return b.cost - a.cost;
+      });
+      const rows = sorted.map(x => `
+            <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
+              <span>${escHtml(x.name)}${x.detail ? ` <small>${escHtml(x.detail)}</small>` : ''}</span>
+              <span>${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>
+            </li>`).join('');
+      return `
+        <div class="party-admin__cost-group">
+          <h3>${g.icon} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span></h3>
+          ${g.items.length ? `<ol class="party-admin__cost-list">${rows}</ol>` : `<p class="party-empty">${t('party.admin.logisticsNoItems')}</p>`}
+          ${missing > 0 ? `<p class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: missing })}</p>` : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      <section class="party-admin__section" id="party-admin-costs">
+        <h2 class="party-admin__section-title">💰 ${t('party.admin.costTitle')}</h2>
+        <p class="party-admin__logistics-help">${t('party.admin.costHelp')}</p>
+        ${anyPriced ? `
+        <div class="party-admin__stats party-admin__stats--compact">
+          ${tile(this._fmtIsk(grand), t('party.admin.costGrandTotal'), 'party-admin__stat--gold')}
+          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${g.icon} ${escHtml(g.label)}`)).join('')}
+        </div>
+        <div class="party-admin__cost-groups">${groupCards}</div>`
+        : `<p class="party-empty">${t('party.admin.costEmpty')}</p>`}
+      </section>`;
+  }
+
+  // Replace-in-place; the section is static (no handlers), so nothing to bind.
+  _rerenderCosts() {
+    const old = this._el.querySelector('#party-admin-costs');
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderCostSection();
+    old.replaceWith(tmp.firstElementChild);
   }
 
   // ── To-do list ─────────────────────────────────────────────────────────────
@@ -1551,7 +1740,13 @@ export class PartyAdminView {
                  value="${escHtml(todo.title || '')}" maxlength="200"
                  aria-label="${t('party.admin.todoTitleLabel')}" />
           <span class="party-admin__todo-meta">
-            ${progress}
+            <label class="party-admin__todo-cost">
+              <span>${t('party.admin.todoCost')}</span>
+              <input type="number" min="0" step="1"
+                     data-todo-field="cost" data-todo-id="${escHtml(id)}"
+                     value="${todo.cost ?? ''}" placeholder="—"
+                     aria-label="${t('party.admin.todoCost')}" />
+            </label>
             <label class="party-admin__todo-due">
               <span>${t('party.admin.todoDue')}</span>
               <input type="date" class="party-admin__todo-due-input"
@@ -1567,20 +1762,24 @@ export class PartyAdminView {
 
         ${this._renderAssigneeControl('todo', todo.id, null, todo.assignees)}
 
-        <textarea class="party-admin__todo-notes" data-todo-field="notes" data-todo-id="${escHtml(id)}"
-                  placeholder="${escHtml(t('party.admin.todoNotesPh'))}"
-                  maxlength="2000" rows="2">${escHtml(todo.notes || '')}</textarea>
+        <details class="party-admin__todo-more" data-todo-more="${escHtml(id)}">
+          <summary class="party-admin__todo-more-summary">${t('party.admin.todoDetails')} ${progress}</summary>
 
-        <div class="party-admin__subtasks">
-          ${subRows}
-        </div>
+          <textarea class="party-admin__todo-notes" data-todo-field="notes" data-todo-id="${escHtml(id)}"
+                    placeholder="${escHtml(t('party.admin.todoNotesPh'))}"
+                    maxlength="2000" rows="2">${escHtml(todo.notes || '')}</textarea>
 
-        <form class="party-admin__subtask-add" data-subtask-add="${escHtml(id)}" novalidate>
-          <input type="text" class="lol-input party-admin__subtask-add-input"
-                 placeholder="${escHtml(t('party.admin.subtaskAddPh'))}" maxlength="200"
-                 aria-label="${t('party.admin.subtaskTitleLabel')}" />
-          <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.subtaskAdd')}</button>
-        </form>
+          <div class="party-admin__subtasks">
+            ${subRows}
+          </div>
+
+          <form class="party-admin__subtask-add" data-subtask-add="${escHtml(id)}" novalidate>
+            <input type="text" class="lol-input party-admin__subtask-add-input"
+                   placeholder="${escHtml(t('party.admin.subtaskAddPh'))}" maxlength="200"
+                   aria-label="${t('party.admin.subtaskTitleLabel')}" />
+            <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.subtaskAdd')}</button>
+          </form>
+        </details>
       </div>`;
   }
 
@@ -1735,14 +1934,21 @@ export class PartyAdminView {
     if (rerender) this._rerenderTodos();
   }
 
-  // Inline title/notes/due_date edit on a TODO. Mirrors _saveLogisticsCell:
+  // Inline title/notes/due_date/cost edit on a TODO. Mirrors _saveLogisticsCell:
   // no-op when unchanged, reverts on failure. Title is required.
   async _saveTodoText(input) {
-    const field = input.dataset.todoField;       // title | notes | due_date
+    const field = input.dataset.todoField;       // title | notes | due_date | cost
     const id    = input.dataset.todoId;
     let value;
     if (field === 'due_date') {
       value = input.value || null;
+    } else if (field === 'cost') {
+      const raw = input.value.trim();
+      if (raw !== '' && !Number.isFinite(Number(raw))) {
+        input.value = input.dataset.lastSaved ?? '';
+        return;
+      }
+      value = raw === '' ? null : Math.round(Number(raw));
     } else {
       value = input.value.trim();
       if (field === 'title' && value === '') {
@@ -1751,7 +1957,7 @@ export class PartyAdminView {
       }
     }
     const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
-    const cur = value === null ? '' : value;
+    const cur = value == null ? '' : String(value);
     if (cur === (lastRaw ?? '')) return;
     input.dataset.lastSaved = cur;
     try {
@@ -1761,6 +1967,7 @@ export class PartyAdminView {
         const del = input.closest('[data-todo-card]')?.querySelector('[data-todo-delete]');
         if (del) del.dataset.todoName = value;
       }
+      if (field === 'cost' || field === 'title') this._rerenderCosts();
     } catch (err) {
       input.value = lastRaw ?? '';
       input.dataset.lastSaved = lastRaw ?? '';
@@ -1978,11 +2185,21 @@ export class PartyAdminView {
   _rerenderTodos() {
     const old = this._el.querySelector('#party-admin-todos');
     if (!old) return;
+    // Preserve which cards have their notes/subtasks panel open — a full
+    // re-render happens on every mutation, and losing the open state would
+    // slam a panel shut right as the user adds a subtask inside it.
+    const openIds = new Set(
+      [...old.querySelectorAll('details[data-todo-more][open]')].map(d => d.dataset.todoMore)
+    );
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderTodoSection();
     const next = tmp.firstElementChild;
+    next.querySelectorAll('details[data-todo-more]').forEach(d => {
+      if (openIds.has(d.dataset.todoMore)) d.open = true;
+    });
     old.replaceWith(next);
     this._bindTodos();
+    this._rerenderCosts();
   }
 
   _bindInvitedGuests() {

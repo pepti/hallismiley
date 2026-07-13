@@ -1874,6 +1874,57 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
           AND (requested_at IS NOT NULL OR magic_login_token_created_at IS NOT NULL)`,
     ],
   },
+  {
+    // Cost tracking for the party planner. Logistics rows get a numeric
+    // quantity + integer unit_price (whole ISK, matching the shop's
+    // whole-krónur convention) so a line cost (qty × price) can be computed;
+    // todos get an optional integer cost. quantity was free text ("2 kassar",
+    // "6-pack"); the leading number is parsed into the numeric column and any
+    // remaining text is preserved in quantity_note so no data is lost. The
+    // conversion DO block only runs while quantity is still text, so a re-run
+    // — and a fresh install where 042 just created it as TEXT — is handled
+    // (mirrors the 058 guard style). Note the POSIX character classes: '\\s'
+    // in a JS template literal reaches SQL as 's', so [[:space:]]/[0-9] are
+    // required. Human-reference duplicate in
+    // server/migrations/063_party_costs.sql.
+    name: '063_party_costs',
+    statements: [
+      `ALTER TABLE party_logistics_items ADD COLUMN IF NOT EXISTS quantity_note TEXT`,
+      `ALTER TABLE party_logistics_items ADD COLUMN IF NOT EXISTS unit_price INTEGER`,
+      `ALTER TABLE party_todos ADD COLUMN IF NOT EXISTS cost INTEGER`,
+      `DO $$
+       BEGIN
+         IF EXISTS (
+           SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'party_logistics_items'
+              AND column_name = 'quantity' AND data_type = 'text'
+         ) THEN
+           UPDATE party_logistics_items
+              SET quantity_note = NULLIF(btrim(regexp_replace(btrim(quantity), '^[0-9]+([.,][0-9]+)?[[:space:]]*', '')), '')
+            WHERE quantity IS NOT NULL
+              AND quantity_note IS NULL;
+           ALTER TABLE party_logistics_items
+             ALTER COLUMN quantity TYPE NUMERIC(12,2)
+             USING NULLIF(replace(substring(btrim(quantity) from '^([0-9]+(?:[.,][0-9]+)?)'), ',', '.'), '')::numeric;
+         END IF;
+       END $$`,
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'party_logistics_qty_nonneg_chk') THEN
+           ALTER TABLE party_logistics_items
+             ADD CONSTRAINT party_logistics_qty_nonneg_chk CHECK (quantity IS NULL OR quantity >= 0);
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'party_logistics_price_nonneg_chk') THEN
+           ALTER TABLE party_logistics_items
+             ADD CONSTRAINT party_logistics_price_nonneg_chk CHECK (unit_price IS NULL OR unit_price >= 0);
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'party_todos_cost_nonneg_chk') THEN
+           ALTER TABLE party_todos
+             ADD CONSTRAINT party_todos_cost_nonneg_chk CHECK (cost IS NULL OR cost >= 0);
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

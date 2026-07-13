@@ -190,6 +190,27 @@ function _normalizeDueDate(v) {
   return { ok: true, value: s };
 }
 
+// ── Cost validation helpers (063) ─────────────────────────────────────────────
+// Sanity ceiling for quantities and ISK amounts — generous for a party budget
+// while rejecting nonsense that would overflow the display.
+const MAX_ISK = 100_000_000;
+
+// Logistics quantity: null/'' clears; otherwise a finite number ≥ 0 (decimals
+// allowed — "2.5 kg" is a real quantity).
+function _normalizeQuantity(v) {
+  if (v == null || v === '') return { ok: true, value: null };
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > MAX_ISK) return { ok: false };
+  return { ok: true, value: v };
+}
+
+// Whole-ISK amount (logistics unit_price, todo cost): null/'' clears;
+// otherwise an integer ≥ 0 — ISK has no subunit.
+function _normalizeIskAmount(v) {
+  if (v == null || v === '') return { ok: true, value: null };
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > MAX_ISK) return { ok: false };
+  return { ok: true, value: v };
+}
+
 // Normalize an assignees value to a deduped array of trimmed name strings.
 // Accepts an array of strings; each ≤ 100 chars; caps the list length. Mirrors
 // the free-text philosophy of logistics.assigned_to (non-guests allowed).
@@ -697,7 +718,8 @@ const partyController = {
   async listLogistics(_req, res, next) {
     try {
       const { rows } = await db.query(
-        `SELECT id, name, quantity, assigned_to, category, bought, at_venue,
+        `SELECT id, name, quantity::float8 AS quantity, quantity_note, unit_price,
+                assigned_to, category, bought, at_venue,
                 sort_order, created_by, created_at, updated_at
            FROM party_logistics_items
           ORDER BY sort_order ASC, id ASC`
@@ -708,15 +730,26 @@ const partyController = {
 
   async addLogisticsItem(req, res, next) {
     try {
-      const { name, quantity = null, assigned_to = null, category = 'other' } = req.body || {};
+      const {
+        name, quantity = null, quantity_note = null, unit_price = null,
+        assigned_to = null, category = 'other',
+      } = req.body || {};
       if (typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameRequired'), code: 400 });
       }
       if (name.length > 200) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameTooLong', { n: 200 }), code: 400 });
       }
-      if (quantity != null && (typeof quantity !== 'string' || quantity.length > 100)) {
-        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsQtyTooLong', { n: 100 }), code: 400 });
+      const qty = _normalizeQuantity(quantity);
+      if (!qty.ok) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsQtyInvalid'), code: 400 });
+      }
+      if (quantity_note != null && (typeof quantity_note !== 'string' || quantity_note.length > 100)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsUnitTooLong', { n: 100 }), code: 400 });
+      }
+      const price = _normalizeIskAmount(unit_price);
+      if (!price.ok) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsPriceInvalid'), code: 400 });
       }
       if (assigned_to != null && (typeof assigned_to !== 'string' || assigned_to.length > 100)) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsAssignedTooLong', { n: 100 }), code: 400 });
@@ -726,15 +759,17 @@ const partyController = {
       }
 
       const { rows } = await db.query(
-        `INSERT INTO party_logistics_items (name, quantity, assigned_to, category, sort_order, created_by)
+        `INSERT INTO party_logistics_items (name, quantity, quantity_note, unit_price, assigned_to, category, sort_order, created_by)
          VALUES (
-           $1, $2, $3, $4,
+           $1, $2, $3, $4, $5, $6,
            COALESCE((SELECT MAX(sort_order) FROM party_logistics_items), 0) + 1,
-           $5
+           $7
          )
-         RETURNING id, name, quantity, assigned_to, category, bought, at_venue,
+         RETURNING id, name, quantity::float8 AS quantity, quantity_note, unit_price,
+                   assigned_to, category, bought, at_venue,
                    sort_order, created_by, created_at, updated_at`,
-        [name.trim(), quantity ? quantity.trim() : null, assigned_to ? assigned_to.trim() : null, category, req.user.id]
+        [name.trim(), qty.value, quantity_note ? quantity_note.trim() || null : null, price.value,
+         assigned_to ? assigned_to.trim() : null, category, req.user.id]
       );
       res.status(201).json(rows[0]);
     } catch (err) { next(err); }
@@ -743,7 +778,7 @@ const partyController = {
   async updateLogisticsItem(req, res, next) {
     try {
       const id = req.params.id;
-      const allowed = ['name', 'quantity', 'assigned_to', 'category', 'bought', 'at_venue'];
+      const allowed = ['name', 'quantity', 'quantity_note', 'unit_price', 'assigned_to', 'category', 'bought', 'at_venue'];
       const sets = [];
       const values = [];
       let idx = 1;
@@ -760,14 +795,26 @@ const partyController = {
             return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNameTooLong', { n: 200 }), code: 400 });
           }
           v = v.trim();
-        } else if (key === 'quantity' || key === 'assigned_to') {
+        } else if (key === 'quantity') {
+          const qty = _normalizeQuantity(v);
+          if (!qty.ok) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsQtyInvalid'), code: 400 });
+          }
+          v = qty.value;
+        } else if (key === 'unit_price') {
+          const price = _normalizeIskAmount(v);
+          if (!price.ok) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsPriceInvalid'), code: 400 });
+          }
+          v = price.value;
+        } else if (key === 'quantity_note' || key === 'assigned_to') {
           if (v != null && typeof v !== 'string') {
             return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeString', { name: key }), code: 400 });
           }
           if (typeof v === 'string') {
             const max = 100;
             if (v.length > max) {
-              const errKey = key === 'quantity' ? 'errors.party.logisticsQtyTooLong' : 'errors.party.logisticsAssignedTooLong';
+              const errKey = key === 'quantity_note' ? 'errors.party.logisticsUnitTooLong' : 'errors.party.logisticsAssignedTooLong';
               return res.status(400).json({ error: t(req.locale, errKey, { n: max }), code: 400 });
             }
             v = v.trim() || null;
@@ -795,7 +842,8 @@ const partyController = {
         `UPDATE party_logistics_items
             SET ${sets.join(', ')}, updated_at = NOW()
           WHERE id = $${idx}
-          RETURNING id, name, quantity, assigned_to, category, bought, at_venue,
+          RETURNING id, name, quantity::float8 AS quantity, quantity_note, unit_price,
+                    assigned_to, category, bought, at_venue,
                     sort_order, created_by, created_at, updated_at`,
         values
       );
@@ -870,7 +918,7 @@ const partyController = {
     try {
       const { rows: todos } = await db.query(
         `SELECT id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
-                assignees, sort_order, created_by, created_at, updated_at
+                cost, assignees, sort_order, created_by, created_at, updated_at
            FROM party_todos
           ORDER BY sort_order ASC, id ASC`
       );
@@ -891,7 +939,7 @@ const partyController = {
 
   async addTodo(req, res, next) {
     try {
-      const { title, notes = null, due_date = null, assignees = [] } = req.body || {};
+      const { title, notes = null, due_date = null, cost = null, assignees = [] } = req.body || {};
       if (typeof title !== 'string' || title.trim().length === 0) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.todoTitleRequired'), code: 400 });
       }
@@ -903,6 +951,8 @@ const partyController = {
       }
       const due = _normalizeDueDate(due_date);
       if (!due.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoDueDateInvalid'), code: 400 });
+      const costVal = _normalizeIskAmount(cost);
+      if (!costVal.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoCostInvalid'), code: 400 });
       const asg = _normalizeAssignees(assignees);
       if (!asg.ok) {
         const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
@@ -910,15 +960,15 @@ const partyController = {
       }
 
       const { rows } = await db.query(
-        `INSERT INTO party_todos (title, notes, due_date, assignees, sort_order, created_by)
+        `INSERT INTO party_todos (title, notes, due_date, cost, assignees, sort_order, created_by)
          VALUES (
-           $1, $2, $3, $4::jsonb,
+           $1, $2, $3, $4, $5::jsonb,
            COALESCE((SELECT MAX(sort_order) FROM party_todos), 0) + 1,
-           $5
+           $6
          )
          RETURNING id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
-                   assignees, sort_order, created_by, created_at, updated_at`,
-        [title.trim(), notes ? notes.trim() : null, due.value, JSON.stringify(asg.value), req.user.id]
+                   cost, assignees, sort_order, created_by, created_at, updated_at`,
+        [title.trim(), notes ? notes.trim() : null, due.value, costVal.value, JSON.stringify(asg.value), req.user.id]
       );
       res.status(201).json({ ...rows[0], subtasks: [] });
     } catch (err) { next(err); }
@@ -967,6 +1017,11 @@ const partyController = {
         }
         sets.push(`assignees = $${idx++}::jsonb`); values.push(JSON.stringify(asg.value));
       }
+      if (Object.prototype.hasOwnProperty.call(body, 'cost')) {
+        const costVal = _normalizeIskAmount(body.cost);
+        if (!costVal.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.todoCostInvalid'), code: 400 });
+        sets.push(`cost = $${idx++}`); values.push(costVal.value);
+      }
 
       if (sets.length === 0) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.todoNoFields'), code: 400 });
@@ -977,7 +1032,7 @@ const partyController = {
         `UPDATE party_todos SET ${sets.join(', ')}, updated_at = NOW()
           WHERE id = $${idx}
           RETURNING id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
-                    assignees, sort_order, created_by, created_at, updated_at`,
+                    cost, assignees, sort_order, created_by, created_at, updated_at`,
         values
       );
       if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.todoNotFound'), code: 404 });

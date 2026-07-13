@@ -987,6 +987,12 @@ button.party-admin__stat:focus-visible {
   .party-admin__stat {
     min-width: unset;
   }
+  /* Compact pills stay inline and wrap on phones — the column layout above
+     was designed for the old full-size cards. */
+  .party-admin__stats--compact {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Inline Editing (admin) ─────────────────────────────────────────────── */
@@ -2160,3 +2166,136 @@ button.party-admin__stat:focus-visible {
 .party-admin__todo-card--dragging { opacity: 0.4; }
 .party-admin__todo-card--drop-above { border-top: 2px solid var(--gold); }
 .party-admin__todo-card--drop-below { border-bottom: 2px solid var(--gold); }
+
+/* ── Costs & compaction (063) ─────────────────────────────────────────────── */
+
+/* Compact stat variant — inline pills instead of big tiles. Used by the
+ * Stats row, the answer tallies, and the Cost overview summary. */
+.party-admin__stats--compact { gap: var(--sp-2); }
+.party-admin__stat--sm {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5ch;
+  padding: 0.3rem 0.75rem;
+  min-width: 0;
+  text-align: left;
+}
+.party-admin__stat--sm .party-admin__stat-num {
+  display: inline;
+  font-size: 1.05rem;
+  margin-bottom: 0;
+}
+.party-admin__stat--sm .party-admin__stat-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8rem;
+}
+.party-admin__tally-group { margin-top: var(--sp-3); }
+.party-admin__tally-title {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0 0 var(--sp-2) 0;
+}
+
+/* Logistics cost columns. */
+.party-admin__logistics-qty-cell { white-space: nowrap; }
+.party-admin__logistics-qty-input   { width: 4.5rem; }
+.party-admin__logistics-unit-input  { width: 5.5rem; font-size: 0.8rem; color: var(--text-secondary); }
+.party-admin__logistics-price-input { width: 6rem; text-align: right; }
+.party-admin__logistics-line-cost   { text-align: right; white-space: nowrap; color: var(--gold); }
+.party-admin__logistics-add .party-admin__logistics-add-price { flex: 0 1 110px; }
+.party-admin__logistics-subtotal-row td {
+  border-top: 1px solid rgba(200, 170, 110, 0.25);
+  font-weight: 600;
+}
+
+/* To-do grid (desktop) + per-card cost input + collapsed details panel. */
+@media (min-width: 720px) {
+  .party-admin__todo-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    align-items: start;
+  }
+}
+.party-admin__todo-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__todo-cost input {
+  width: 6rem;
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  text-align: right;
+}
+.party-admin__todo-more { margin-top: var(--sp-2); }
+.party-admin__todo-more-summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  list-style: none;
+}
+.party-admin__todo-more-summary::-webkit-details-marker { display: none; }
+.party-admin__todo-more-summary::before {
+  content: '▸';
+  transition: transform 150ms ease;
+}
+.party-admin__todo-more[open] > .party-admin__todo-more-summary::before {
+  transform: rotate(90deg);
+}
+
+/* Cost overview section. */
+.party-admin__cost-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.party-admin__cost-group {
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 8px;
+  padding: var(--sp-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.party-admin__cost-group h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 0.95rem;
+  margin: 0 0 var(--sp-2) 0;
+}
+.party-admin__cost-group h3 span { color: var(--gold); white-space: nowrap; }
+.party-admin__cost-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.party-admin__cost-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 0.85rem;
+}
+.party-admin__cost-item small { color: var(--text-muted); }
+.party-admin__cost-item span:last-child { white-space: nowrap; color: var(--gold); }
+.party-admin__cost-item--unpriced,
+.party-admin__cost-item--unpriced span:last-child { color: var(--text-muted); }
+.party-admin__cost-missing {
+  font-size: 0.78rem;
+  color: #e5a973;
+  margin: var(--sp-2) 0 0 0;
+}
