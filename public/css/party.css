@@ -329,9 +329,10 @@
 
 .party-timeline__item {
   display: grid;
-  /* 4th (auto) column absorbs the admin delete button without disturbing the
-     time/dot/event layout; it collapses to 0 width in the public view. */
-  grid-template-columns: var(--tl-time-w) var(--tl-dot-col) minmax(0, 1fr) auto;
+  /* 4th + 5th (auto) columns absorb the admin insert + delete buttons without
+     disturbing the time/dot/event layout; they collapse to 0 width in the
+     public view. */
+  grid-template-columns: var(--tl-time-w) var(--tl-dot-col) minmax(0, 1fr) auto auto;
   align-items: start;
   column-gap: var(--tl-gap);
   padding: var(--sp-3) 0;
@@ -1110,6 +1111,22 @@ button.party-admin__stat:focus-visible {
 .party-edit-row-delete:hover { background: rgba(220,50,50,.4); }
 .party-edit-row-delete--hidden { display: none; }
 
+.party-edit-row-insert {
+  background: rgba(200,155,60,.15);
+  border: 1px solid rgba(200,155,60,.5);
+  color: #C89B3C;
+  border-radius: 50%;
+  width: 24px; height: 24px;
+  font-size: .9rem; line-height: 1;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: .5rem;
+  transition: background 200ms ease;
+  flex-shrink: 0;
+}
+.party-edit-row-insert:hover { background: rgba(200,155,60,.35); }
+.party-edit-row-insert--hidden { display: none; }
+
 /* Inline-variant edit affordances (used by the RSVP message paragraph). */
 .party-edit-btn--inline {
   position: absolute;
@@ -1156,7 +1173,8 @@ button.party-admin__stat:focus-visible {
    (The item layout itself is the grid defined in the Timeline section above —
    do NOT switch this to flex; that collapses the fixed time/dot columns and
    the dots stop aligning with the timeline line.) */
-.party-timeline__item .party-edit-row-delete { margin-top: 0.15rem; }
+.party-timeline__item .party-edit-row-delete,
+.party-timeline__item .party-edit-row-insert { margin-top: 0.15rem; }
 
 /* ── Checkbox groups (food options, custom questions) ───────────────── */
 
