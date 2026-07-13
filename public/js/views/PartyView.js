@@ -395,6 +395,7 @@ export class PartyView {
         <div class="party-timeline__time" data-sched="time">${escHtml(item.time)}</div>
         <div class="party-timeline__dot" aria-hidden="true"></div>
         <div class="party-timeline__event" data-sched="event">${escHtml(item.event)}</div>
+        ${editor ? `<button class="party-edit-row-insert party-edit-row-insert--hidden" data-insert-schedule="${i}" aria-label="Insert event above" title="Insert event above">＋</button>` : ''}
         ${editor ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-schedule="${i}" aria-label="Remove this event" title="Remove">✕</button>` : ''}
       </li>`).join('');
 
@@ -1031,6 +1032,7 @@ export class PartyView {
     // Show add/delete buttons for schedule
     if (section === 'schedule') {
       sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.remove('party-edit-row-delete--hidden'));
+      sectionEl.querySelectorAll('.party-edit-row-insert').forEach(b => b.classList.remove('party-edit-row-insert--hidden'));
       sectionEl.querySelector('[data-add-schedule]')?.classList.remove('party-edit-add--hidden');
       this._bindScheduleAddDelete(sectionEl);
     }
@@ -1725,6 +1727,33 @@ export class PartyView {
     }
   }
 
+  // Build a blank, edit-ready schedule <li> (time/event fields + insert/delete
+  // buttons). Buttons are created already-visible since rows are only added
+  // while the section is in edit mode.
+  _makeScheduleRow() {
+    const li = document.createElement('li');
+    li.className = 'party-timeline__item';
+    // Give it the ordering attribute up front so the save collector and
+    // _reindexSchedule (which select on [data-schedule-index]) see it; the
+    // real value is assigned by _reindexSchedule right after insertion.
+    li.dataset.scheduleIndex = '0';
+    li.innerHTML = `
+      <div class="party-timeline__time" data-sched="time" contenteditable="true" spellcheck="true">00:00</div>
+      <div class="party-timeline__dot" aria-hidden="true"></div>
+      <div class="party-timeline__event" data-sched="event" contenteditable="true" spellcheck="true">New event</div>
+      <button class="party-edit-row-insert" data-insert-schedule aria-label="Insert event above" title="Insert event above">＋</button>
+      <button class="party-edit-row-delete" data-delete-schedule aria-label="Remove this event" title="Remove">✕</button>`;
+    return li;
+  }
+
+  // Re-number data-schedule-index across all rows. Cosmetic — save reads DOM
+  // order, not the index value — but keeps the attribute honest after edits.
+  _reindexSchedule(sectionEl) {
+    sectionEl.querySelectorAll('[data-schedule-index]').forEach((li, i) => {
+      li.dataset.scheduleIndex = i;
+    });
+  }
+
   _bindScheduleAddDelete(sectionEl) {
     // Delete buttons
     sectionEl.querySelectorAll('[data-delete-schedule]').forEach(btn => {
@@ -1732,14 +1761,26 @@ export class PartyView {
       btn.replaceWith(newBtn);
       newBtn.addEventListener('click', () => {
         newBtn.closest('[data-schedule-index]')?.remove();
-        // Re-index remaining items
-        sectionEl.querySelectorAll('[data-schedule-index]').forEach((li, i) => {
-          li.dataset.scheduleIndex = i;
-        });
+        this._reindexSchedule(sectionEl);
       });
     });
 
-    // Add button
+    // Insert-above buttons
+    sectionEl.querySelectorAll('[data-insert-schedule]').forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        const targetLi = newBtn.closest('[data-schedule-index]');
+        if (!targetLi) return;
+        const li = this._makeScheduleRow();
+        targetLi.before(li);
+        this._reindexSchedule(sectionEl);
+        this._bindScheduleAddDelete(sectionEl);
+        li.querySelector('[data-sched="time"]')?.focus();
+      });
+    });
+
+    // Add button (appends at the bottom)
     const addBtn = sectionEl.querySelector('[data-add-schedule]');
     if (addBtn) {
       const newAdd = addBtn.cloneNode(true);
@@ -1747,16 +1788,9 @@ export class PartyView {
       newAdd.addEventListener('click', () => {
         const timeline = sectionEl.querySelector('.party-timeline');
         if (!timeline) return;
-        const count = timeline.querySelectorAll('[data-schedule-index]').length;
-        const li = document.createElement('li');
-        li.className = 'party-timeline__item';
-        li.dataset.scheduleIndex = count;
-        li.innerHTML = `
-          <div class="party-timeline__time" data-sched="time" contenteditable="true" spellcheck="true">00:00</div>
-          <div class="party-timeline__dot" aria-hidden="true"></div>
-          <div class="party-timeline__event" data-sched="event" contenteditable="true" spellcheck="true">New event</div>
-          <button class="party-edit-row-delete" data-delete-schedule="${count}" aria-label="Remove this event" title="Remove">✕</button>`;
+        const li = this._makeScheduleRow();
         timeline.appendChild(li);
+        this._reindexSchedule(sectionEl);
         this._bindScheduleAddDelete(sectionEl);
         li.querySelector('[data-sched="time"]')?.focus();
       });
