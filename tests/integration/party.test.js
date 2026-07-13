@@ -1385,10 +1385,10 @@ describe('Logistics endpoints', () => {
     const createRes = await request(app)
       .post('/api/v1/party/logistics')
       .set('Cookie', adminCookie)
-      .send({ name: 'Cups', quantity: '100', assigned_to: 'Bjarni' });
+      .send({ name: 'Cups', quantity: 100, assigned_to: 'Bjarni' });
     expect(createRes.status).toBe(201);
     expect(createRes.body).toMatchObject({
-      name: 'Cups', quantity: '100', assigned_to: 'Bjarni',
+      name: 'Cups', quantity: 100, assigned_to: 'Bjarni',
       bought: false, at_venue: false,
     });
     const id = createRes.body.id;
@@ -1537,7 +1537,7 @@ describe('Logistics endpoints', () => {
     const created = await request(app)
       .post('/api/v1/party/logistics')
       .set('Cookie', adminCookie)
-      .send({ name: 'Original', quantity: '50', assigned_to: 'Mom' });
+      .send({ name: 'Original', quantity: 50, assigned_to: 'Mom' });
     const id = created.body.id;
     const initialSortOrder = created.body.sort_order;
 
@@ -1547,7 +1547,7 @@ describe('Logistics endpoints', () => {
       .send({ name: 'Renamed' });
     expect(renamed.status).toBe(200);
     expect(renamed.body.name).toBe('Renamed');
-    expect(renamed.body.quantity).toBe('50');
+    expect(renamed.body.quantity).toBe(50);
     expect(renamed.body.assigned_to).toBe('Mom');
     expect(renamed.body.bought).toBe(false);
     expect(renamed.body.at_venue).toBe(false);
@@ -1902,5 +1902,286 @@ describe('To-do list endpoints', () => {
     const user = await request(app).post('/api/v1/party/todos')
       .set('Cookie', userCookie).send({ title: 'X' });
     expect(user.status).toBe(403);
+  });
+});
+
+// ── Party costs (063) ─────────────────────────────────────────────────────────
+
+describe('Logistics costs (063)', () => {
+  test('POST accepts numeric quantity, quantity_note and unit_price', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Beer', quantity: 2.5, quantity_note: 'kassar', unit_price: 450 });
+    expect(res.status).toBe(201);
+    // quantity must arrive as a JSON number (guards the ::float8 cast — pg
+    // returns NUMERIC as a string without it).
+    expect(res.body.quantity).toBe(2.5);
+    expect(typeof res.body.quantity).toBe('number');
+    expect(res.body.quantity_note).toBe('kassar');
+    expect(res.body.unit_price).toBe(450);
+  });
+
+  test('POST rejects invalid quantity and unit_price', async () => {
+    const cases = [
+      { quantity: 'abc' },
+      { quantity: -1 },
+      { unit_price: 12.5 },
+      { unit_price: -5 },
+      { unit_price: '450' },
+    ];
+    for (const extra of cases) {
+      const res = await request(app)
+        .post('/api/v1/party/logistics')
+        .set('Cookie', adminCookie)
+        .send({ name: 'Bad', ...extra });
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 400 });
+      expect(typeof res.body.error).toBe('string');
+    }
+  });
+
+  test('POST rejects quantity_note over 100 chars', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Bad', quantity_note: 'x'.repeat(101) });
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH round-trips and clears each cost field', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Cups' });
+    const id = created.body.id;
+
+    const p1 = await request(app).patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie).send({ quantity: 24 });
+    expect(p1.status).toBe(200);
+    expect(p1.body.quantity).toBe(24);
+
+    const p2 = await request(app).patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie).send({ unit_price: 450 });
+    expect(p2.status).toBe(200);
+    expect(p2.body.unit_price).toBe(450);
+    expect(p2.body.quantity).toBe(24); // untouched by the price PATCH
+
+    const p3 = await request(app).patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie).send({ quantity_note: 'stk' });
+    expect(p3.status).toBe(200);
+    expect(p3.body.quantity_note).toBe('stk');
+
+    const cleared = await request(app).patch(`/api/v1/party/logistics/${id}`)
+      .set('Cookie', adminCookie).send({ quantity: null, unit_price: null, quantity_note: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.quantity).toBeNull();
+    expect(cleared.body.unit_price).toBeNull();
+    expect(cleared.body.quantity_note).toBeNull();
+  });
+
+  test('PATCH rejects a non-numeric quantity', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Ice' });
+    const res = await request(app).patch(`/api/v1/party/logistics/${created.body.id}`)
+      .set('Cookie', adminCookie).send({ quantity: 'two' });
+    expect(res.status).toBe(400);
+  });
+
+  test('GET returns the cost fields; moderator can set them', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+
+    const created = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', modCookie)
+      .send({ name: 'Glasses', quantity: 100, unit_price: 25 });
+    expect(created.status).toBe(201);
+
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', modCookie);
+    expect(list.status).toBe(200);
+    expect(list.body[0]).toMatchObject({ quantity: 100, unit_price: 25, quantity_note: null });
+  });
+});
+
+describe('To-do costs (063)', () => {
+  test('POST accepts a whole-ISK cost and GET returns it', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/todos')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Book DJ', cost: 12000 });
+    expect(created.status).toBe(201);
+    expect(created.body.cost).toBe(12000);
+
+    const list = await request(app)
+      .get('/api/v1/party/todos')
+      .set('Cookie', adminCookie);
+    expect(list.body[0].cost).toBe(12000);
+  });
+
+  test('PATCH updates and clears cost', async () => {
+    const created = await request(app)
+      .post('/api/v1/party/todos')
+      .set('Cookie', adminCookie)
+      .send({ title: 'Cake' });
+    const id = created.body.id;
+
+    const set = await request(app).patch(`/api/v1/party/todos/${id}`)
+      .set('Cookie', adminCookie).send({ cost: 3500 });
+    expect(set.status).toBe(200);
+    expect(set.body.cost).toBe(3500);
+
+    const cleared = await request(app).patch(`/api/v1/party/todos/${id}`)
+      .set('Cookie', adminCookie).send({ cost: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.cost).toBeNull();
+  });
+
+  test('POST and PATCH reject invalid costs', async () => {
+    for (const cost of [-1, 1.5, '3500']) {
+      const res = await request(app).post('/api/v1/party/todos')
+        .set('Cookie', adminCookie).send({ title: 'Bad', cost });
+      expect(res.status).toBe(400);
+    }
+    const created = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'OK' });
+    for (const cost of [-1, 1.5, '3500']) {
+      const res = await request(app).patch(`/api/v1/party/todos/${created.body.id}`)
+        .set('Cookie', adminCookie).send({ cost });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('subtasks have no cost — PATCH with only cost is rejected', async () => {
+    const todo = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'Parent' });
+    const sub = await request(app).post(`/api/v1/party/todos/${todo.body.id}/subtasks`)
+      .set('Cookie', adminCookie).send({ title: 'Child' });
+    expect(sub.status).toBe(201);
+
+    const res = await request(app)
+      .patch(`/api/v1/party/todos/${todo.body.id}/subtasks/${sub.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ cost: 100 });
+    expect(res.status).toBe(400);
+  });
+
+  test('moderator can set todo costs', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const created = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', modCookie).send({ title: 'Mod cost', cost: 900 });
+    expect(created.status).toBe(201);
+    expect(created.body.cost).toBe(900);
+  });
+});
+
+// ── Migration 063: legacy TEXT quantity conversion ────────────────────────────
+// globalSetup runs migrations against an EMPTY database, so the conversion
+// logic never sees legacy data in a normal test run. This suite reverts the
+// table to its pre-063 shape (quantity TEXT, no quantity_note), seeds the
+// kinds of free text real planners typed, then re-executes the actual 063
+// statements from schema.js and asserts every conversion rule — including the
+// two failure modes that would otherwise only surface in prod at container
+// startup (numeric overflow aborting the migration, and Icelandic thousands
+// separators being misread as decimals).
+
+describe('Migration 063 quantity conversion (legacy data)', () => {
+  const { migrations } = require('../../server/config/schema');
+  const m063 = migrations.find(m => m.name === '063_party_costs');
+
+  async function revertToPre063() {
+    await db.query(`ALTER TABLE party_logistics_items DROP CONSTRAINT IF EXISTS party_logistics_qty_nonneg_chk`);
+    await db.query(`ALTER TABLE party_logistics_items ALTER COLUMN quantity TYPE TEXT USING quantity::text`);
+    await db.query(`ALTER TABLE party_logistics_items DROP COLUMN IF EXISTS quantity_note`);
+  }
+
+  async function runMigration063() {
+    for (const statement of m063.statements) {
+      await db.query(statement);
+    }
+  }
+
+  test('converts every legacy pattern without data loss and without aborting', async () => {
+    expect(m063).toBeDefined();
+    await revertToPre063();
+
+    const legacy = [
+      ['simple int',        '100'],
+      ['leading + note',    '2 kassar'],
+      ['dash note',         '6-pack'],
+      ['comma decimal',     '2,5 kg'],
+      ['dot decimal',       '2.5'],
+      ['is thousands dot',  '1.234 stk'],
+      ['is thousands space','1 000'],
+      ['pure text',         'handfylli'],
+      ['11-digit overflow', '12345678901'],
+      ['huge + note',       '99999999999999 stk'],
+      ['ambiguous comma',   '1,2345'],
+      ['empty string',      ''],
+      ['null qty',          null],
+    ];
+    for (const [name, qty] of legacy) {
+      await db.query(
+        `INSERT INTO party_logistics_items (name, quantity, category) VALUES ($1, $2, 'other')`,
+        [name, qty]
+      );
+    }
+
+    // Must not throw — an abort here means every prod deploy fails at startup.
+    await runMigration063();
+
+    const { rows } = await db.query(
+      `SELECT name, quantity::float8 AS quantity, quantity_note
+         FROM party_logistics_items ORDER BY id`
+    );
+    const byName = Object.fromEntries(rows.map(r => [r.name, r]));
+
+    expect(byName['simple int']).toMatchObject({ quantity: 100, quantity_note: null });
+    expect(byName['leading + note']).toMatchObject({ quantity: 2, quantity_note: 'kassar' });
+    expect(byName['dash note']).toMatchObject({ quantity: 6, quantity_note: '-pack' });
+    expect(byName['comma decimal']).toMatchObject({ quantity: 2.5, quantity_note: 'kg' });
+    expect(byName['dot decimal']).toMatchObject({ quantity: 2.5, quantity_note: null });
+    // Icelandic thousands separators parse as thousands, not decimals.
+    expect(byName['is thousands dot']).toMatchObject({ quantity: 1234, quantity_note: 'stk' });
+    expect(byName['is thousands space']).toMatchObject({ quantity: 1000, quantity_note: null });
+    // Anything unparseable/ambiguous/oversized: quantity NULL, FULL text kept.
+    expect(byName['pure text']).toMatchObject({ quantity: null, quantity_note: 'handfylli' });
+    expect(byName['11-digit overflow']).toMatchObject({ quantity: null, quantity_note: '12345678901' });
+    expect(byName['huge + note']).toMatchObject({ quantity: null, quantity_note: '99999999999999 stk' });
+    expect(byName['ambiguous comma']).toMatchObject({ quantity: null, quantity_note: '1,2345' });
+    expect(byName['empty string']).toMatchObject({ quantity: null, quantity_note: null });
+    expect(byName['null qty']).toMatchObject({ quantity: null, quantity_note: null });
+
+    // Column ends up numeric and the CHECK constraint is back.
+    const col = await db.query(
+      `SELECT data_type FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'party_logistics_items'
+          AND column_name = 'quantity'`
+    );
+    expect(col.rows[0].data_type).toBe('numeric');
+    const chk = await db.query(
+      `SELECT 1 FROM pg_constraint
+        WHERE conname = 'party_logistics_qty_nonneg_chk'
+          AND conrelid = 'public.party_logistics_items'::regclass`
+    );
+    expect(chk.rows).toHaveLength(1);
+  });
+
+  test('re-running the migration on an already-converted table is a no-op', async () => {
+    await db.query(
+      `INSERT INTO party_logistics_items (name, quantity, quantity_note, unit_price, category)
+       VALUES ('Converted', 2, 'kassar', 450, 'other')`
+    );
+    await runMigration063(); // guard sees NUMERIC quantity → skips conversion
+    const { rows } = await db.query(
+      `SELECT quantity::float8 AS quantity, quantity_note, unit_price
+         FROM party_logistics_items WHERE name = 'Converted'`
+    );
+    expect(rows[0]).toMatchObject({ quantity: 2, quantity_note: 'kassar', unit_price: 450 });
   });
 });
