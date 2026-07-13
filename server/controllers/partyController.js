@@ -13,7 +13,8 @@ const {
 } = require('../services/siteContentTranslate');
 const { AnalyticsEvent } = require('../models/Analytics');
 const { makeToken, hashToken, generateGuestUsername } = require('../auth/tokens');
-const { approveGuest, declineGuest } = require('../services/partyApproval');
+const { approveGuest, declineGuest, grantInstantAccess, sendWelcome } = require('../services/partyApproval');
+const { DEFAULT_PARTY_INFO, LOCALE_NEUTRAL_INFO_KEYS, readPartyInfo } = require('../services/partyInfo');
 
 // Base URL for links embedded in emails (mirrors emailService).
 const APP_URL = process.env.APP_URL || 'https://www.hallismiley.is';
@@ -39,70 +40,9 @@ function _partyNotifyRecipients(adminEmails) {
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
-// Keys whose content is the same across locales — stored once at
-// DEFAULT_LOCALE and returned on every locale read. An admin adds an
-// activity once and it shows on both /en/party and /is/party instead of
-// living only in whichever locale was active when they hit Save. Free-form
-// entries (instagram handles, URLs, host names) don't benefit from per-locale
-// editing the way structural copy (hero, RSVP labels) does.
-const LOCALE_NEUTRAL_INFO_KEYS = new Set(['activities']);
-
-// Default party info stored in site_content under key 'party_info'
-const DEFAULT_PARTY_INFO = {
-  date: 'July 25, 2026',
-  rsvp_message: '',
-  cover_image: '',
-  venue_name: 'Mýrarkot og SPA',
-  venue_address: 'Lambhagavegi 23, 113 Reykjavík',
-  venue_link: 'https://www.salir.is/index.php/is/skoda/1169',
-  venue_maps_link: 'https://www.google.com/maps/search/Mýrarkot+Lambhagavegi+23+Reykjavik',
-  venue_rating: '4.3/5 on Google (20 reviews)',
-  venue_details: JSON.stringify({
-    hall: [
-      'Banquet hall seats 40 at 6 long tables, romantic atmosphere with Bluetooth speaker',
-      'Small kitchen inside, two large outdoor grills + fridge',
-      'Guests bring own food, drinks, and tableware',
-      '15 min drive from downtown Reykjavík, near Bauhaus by Úlfarsfell',
-      'Hall rental: 100,000 ISK (including cleaning)',
-      'Venue closes at 22:00',
-    ],
-    spa: [
-      'Sauna (barrel-shaped, heated stones)',
-      '2 hot tubs (7 tons each)',
-      'Cold plunge pool',
-      'Outdoor shower',
-      'Covered veranda with tables/chairs for 20',
-      'New changing rooms with 7 showers',
-      'Towels, hairdryers, shampoo, shoes included',
-      'Max 20 per group, 4-hour sessions — 100,000 ISK',
-      'Sheltered veranda surrounded by trees, great for northern lights viewing',
-    ],
-  }),
-  schedule: JSON.stringify([
-    { time: '14:00', event: 'Doors Open & Welcome Drinks' },
-    { time: '14:30', event: 'SPA Session (Group 1) / Outdoor Games' },
-    { time: '15:30', event: 'SPA Session (Group 2) / Lawn Games' },
-    { time: '16:30', event: 'BBQ Grill Starts' },
-    { time: '17:30', event: 'Dinner at the Long Tables' },
-    { time: '18:30', event: 'Speeches & Toasts' },
-    { time: '19:00', event: 'Birthday Cake' },
-    { time: '19:30', event: 'Party Games' },
-    { time: '20:30', event: 'Music & Dancing' },
-    { time: '21:30', event: 'Last Round & Farewells' },
-    { time: '22:00', event: 'Venue Closes' },
-  ]),
-  activities: JSON.stringify({
-    heading:        'Activities',
-    daytimeHeading: 'Daytime Activities',
-    eveningHeading: 'Evening Activities',
-    daytime: [
-      { name: 'TBD', description: 'TBD', rulesLabel: 'Rules:', rules: 'TBD' },
-    ],
-    evening: [
-      { name: 'TBD', description: 'TBD', rulesLabel: 'Rules:', rules: 'TBD' },
-    ],
-  }),
-};
+// DEFAULT_PARTY_INFO / LOCALE_NEUTRAL_INFO_KEYS / readPartyInfo moved to
+// services/partyInfo.js so the welcome email (services/partyApproval.js) can
+// pull live schedule/venue/activities without a circular require.
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -118,9 +58,9 @@ function _tryUnlink(filePath) {
 }
 
 async function _sendRsvpEmails({ userId, answers, isUpdate }) {
-  const [userRes, adminsRes, formRes, infoRes] = await Promise.all([
+  const [userRes, adminsRes, formRes, partyInfo] = await Promise.all([
     db.query(
-      'SELECT id, username, display_name, email FROM users WHERE id = $1',
+      'SELECT id, username, display_name, email, preferred_locale FROM users WHERE id = $1',
       [userId]
     ),
     db.query(
@@ -132,12 +72,7 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
         ORDER BY (locale = $1) DESC LIMIT 1`,
       [DEFAULT_LOCALE]
     ),
-    db.query(
-      `SELECT DISTINCT ON (key) key, value FROM site_content
-        WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
-        ORDER BY key, (locale = $1) DESC`,
-      [DEFAULT_LOCALE]
-    ),
+    readPartyInfo(DEFAULT_LOCALE),
   ]);
 
   const user = userRes.rows[0];
@@ -148,12 +83,6 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
   if (Array.isArray(rawForm)) rsvpForm = rawForm;
   else if (typeof rawForm === 'string') {
     try { rsvpForm = JSON.parse(rawForm); } catch { /* ignore */ }
-  }
-
-  const partyInfo = { ...DEFAULT_PARTY_INFO };
-  for (const row of infoRes.rows) {
-    const k = row.key.replace(/^party_/, '');
-    partyInfo[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
   }
 
   const adminEmails = adminsRes.rows.map(r => r.email).filter(Boolean);
@@ -314,37 +243,55 @@ const partyController = {
   // ── Access requests + approval (invite-code replacement) ──────────────────────
 
   // POST /api/v1/party/request-access  { name, email }
-  // PUBLIC. Someone with only the party URL asks to join. Creates (or re-flags) a
-  // pending guest, stores a single-use approval-action token, and emails the owner
-  // a one-click approve link. Always responds with a generic status so the endpoint
-  // can't be used to enumerate which emails already have accounts.
+  // PUBLIC. Someone with only the party URL signs up. The default path grants
+  // access IMMEDIATELY: the account is created/approved and the non-expiring
+  // magic sign-in link is emailed right away — clicking it is inherent proof of
+  // inbox control, so no session is ever minted from this POST (if the typed
+  // email belonged to someone else's existing account, auto-login would be an
+  // account takeover). The owner is notified and can later send the party-info
+  // email via the one-click link or the admin queue, or remove the guest.
+  //
+  // Guests the owner previously declined or revoked do NOT get auto-access —
+  // they fall back to the old pending/manual-review flow, otherwise "Remove"
+  // would be meaningless (they could re-admit themselves with the same form).
+  // Always responds with a generic status so the endpoint can't be used to
+  // enumerate which emails already have accounts.
   async requestAccess(req, res, next) {
     try {
       const name  = String(req.body.name  || '').trim().slice(0, 100);
       const email = String(req.body.email || '').trim().toLowerCase();
 
       const { rows } = await db.query(
-        `SELECT id, party_access, approval_status FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+        `SELECT id, party_access, approval_status, magic_login_token_created_at,
+                preferred_locale
+           FROM users WHERE LOWER(email) = $1 LIMIT 1`,
         [email]
       );
       const existing = rows[0] || null;
 
-      // Already has access — nothing to do. A previously-approved guest whose
-      // access was later revoked (approval_status stays 'approved' but
-      // party_access is FALSE), or a general account that simply doesn't have
-      // access yet, falls through below and can (re)request.
+      // Already has access — nothing to do.
       if (existing && existing.party_access) {
         return res.json({ status: 'already_member' });
       }
 
-      // Single-use approval-action token for the owner's one-click email link.
+      // Single-use approval-action token for the owner's one-click email link
+      // (which now sends the party-info email; for the manual path below it
+      // still gates access).
       const actionToken = makeToken();
       const actionHash  = hashToken(actionToken);
       const actionExp   = new Date(Date.now() + APPROVAL_ACTION_TTL_MS);
 
-      if (existing) {
-        // Existing account without access (or a prior pending/declined request):
-        // (re)flag as pending and refresh the action token + requested_at.
+      // Manual-review path: the owner declined them, or they once held a magic
+      // link and access was later revoked (revoke nulls only the token HASH —
+      // adminController/declineGuest keep magic_login_token_created_at as the
+      // evidence this rule relies on; keep it that way).
+      const requiresReview = existing && (
+        existing.approval_status === 'declined' ||
+        (existing.magic_login_token_created_at != null && !existing.party_access)
+      );
+
+      let invite = null; // { to, name, token, locale } when auto-granted
+      if (requiresReview) {
         await db.query(
           `UPDATE users
               SET approval_status            = 'pending',
@@ -355,26 +302,55 @@ const partyController = {
             WHERE id = $1`,
           [existing.id, name || null, actionHash, actionExp]
         );
+      } else if (existing) {
+        // Existing account with no party history — grant instantly.
+        const result = await grantInstantAccess(existing.id, {
+          name: name || null, actionTokenHash: actionHash, actionExpires: actionExp,
+        });
+        if (result) {
+          invite = {
+            to:     result.user.email,
+            name:   result.user.display_name,
+            token:  result.magicToken,
+            locale: result.user.preferred_locale || 'is',
+          };
+        }
       } else {
-        // Brand-new guest: a passwordless pending account with an auto-generated
-        // username (username is UNIQUE NOT NULL).
-        const username = await generateGuestUsername(email, name);
+        // Brand-new guest: a passwordless, pre-approved account with an
+        // auto-generated username (username is UNIQUE NOT NULL) and a magic
+        // login token issued up front. preferred_locale comes from the request
+        // — on party routes that's the guest's explicit choice or the party
+        // default 'is' (see middleware/locale.js).
+        const username   = await generateGuestUsername(email, name);
+        const magicToken = makeToken();
+        const locale     = req.locale || 'is';
         await db.query(
           `INSERT INTO users
-             (username, email, password_hash, role, display_name,
-              email_verified, party_access, approval_status, requested_at,
+             (username, email, password_hash, role, display_name, preferred_locale,
+              email_verified, party_access, approval_status, requested_at, approved_at,
+              magic_login_token_hash, magic_login_token_created_at,
               approval_action_token_hash, approval_action_expires)
-           VALUES ($1, $2, NULL, 'user', $3, FALSE, FALSE, 'pending', NOW(), $4, $5)`,
-          [username, email, name || null, actionHash, actionExp]
+           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, TRUE, 'approved', NOW(), NOW(),
+                   $5, NOW(), $6, $7)`,
+          [username, email, name || null, locale, hashToken(magicToken), actionHash, actionExp]
         );
+        invite = { to: email, name: name || null, token: magicToken, locale };
       }
 
-      // Generic response — never reveal whether the email already existed.
+      // Generic response — never reveal whether the email already existed or
+      // which path was taken.
       res.json({ status: 'pending' });
 
+      // Magic sign-in link to the guest (fire-and-forget).
+      if (invite) {
+        emailService.sendPartyInviteEmail(invite)
+          .catch(err => logger.error({ err }, 'party invite email failed (request-access)'));
+      }
+
       // Notify the owner (fire-and-forget). The link opens the SPA confirm page,
-      // which GETs the request details then POSTs the approve/decline action.
-      const approveUrl = `${APP_URL}/en/party/approve?token=${actionToken}`;
+      // which GETs the request details then POSTs the approve action — now
+      // "send the party info email" for auto-granted guests.
+      const approveUrl = `${APP_URL}/is/party/approve?token=${actionToken}`;
       db.query(
         `SELECT email FROM users
           WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin') AND email_verified = TRUE AND disabled = FALSE`
@@ -382,6 +358,7 @@ const partyController = {
         const recipients = _partyNotifyRecipients(adminsRes.rows.map(r => r.email));
         return emailService.sendPartyRequestNotification({
           request: { name, email }, adminEmails: recipients, approveUrl,
+          granted: !requiresReview,
         });
       }).catch(err => logger.error({ err }, 'party request-access notification failed'));
     } catch (err) { next(err); }
@@ -396,7 +373,8 @@ const partyController = {
       const token = String(req.params.token || '');
       if (!token) return res.json({ valid: false });
       const { rows } = await db.query(
-        `SELECT display_name, email, approval_status, approval_action_expires
+        `SELECT display_name, email, approval_status, approval_action_expires,
+                party_access, welcome_email_sent_at
            FROM users WHERE approval_action_token_hash = $1 LIMIT 1`,
         [hashToken(token)]
       );
@@ -404,15 +382,19 @@ const partyController = {
       if (!r || !r.approval_action_expires || new Date(r.approval_action_expires) < new Date()) {
         return res.json({ valid: false });
       }
-      res.json({ valid: true, name: r.display_name || '', email: r.email, status: r.approval_status });
+      res.json({
+        valid: true, name: r.display_name || '', email: r.email, status: r.approval_status,
+        party_access: r.party_access, welcome_email_sent_at: r.welcome_email_sent_at,
+      });
     } catch (err) { next(err); }
   },
 
   // POST /api/v1/party/approval/:token  { action: 'approve' | 'decline' }
   // PUBLIC but guarded by the unguessable single-use token — the owner is logged
   // out when clicking from the email, so double-submit CSRF can't apply; the token
-  // IS the auth. approveGuest/declineGuest clear the token, so a replay 404s. On
-  // approve, email the guest their magic link (fire-and-forget).
+  // IS the auth. 'approve' now means "send the party-info email" (sendWelcome —
+  // which also re-grants access first for manual-review guests); 'decline'
+  // removes the guest. Both clear the token, so a replay 404s.
   async actOnApproval(req, res, next) {
     try {
       const token  = String(req.params.token || '');
@@ -436,17 +418,8 @@ const partyController = {
         return res.json({ status: 'declined' });
       }
 
-      const result = await approveGuest(target.id, { approvedBy: null });
+      await sendWelcome(target.id, { sentBy: null });
       res.json({ status: 'approved' });
-
-      if (result) {
-        emailService.sendPartyInviteEmail({
-          to:     result.user.email,
-          name:   result.user.display_name,
-          token:  result.magicToken,
-          locale: result.user.preferred_locale || 'en',
-        }).catch(err => logger.error({ err }, 'party invite email failed (approval)'));
-      }
     } catch (err) { next(err); }
   },
 
@@ -506,7 +479,7 @@ const partyController = {
             to:     result.user.email,
             name:   result.user.display_name || name,
             token:  result.magicToken,
-            locale: result.user.preferred_locale || 'en',
+            locale: result.user.preferred_locale || 'is',
           });
         }
       }
@@ -521,13 +494,21 @@ const partyController = {
   },
 
   // GET /api/v1/party/pending-requests — admin/moderator only.
-  // Guests who asked to join and are awaiting a decision.
+  // The owner's "send the party info email" queue: auto-granted guests who
+  // haven't received the welcome email yet (the magic-token guard keeps
+  // admins/owner — party_access but no magic link — out of the list), plus
+  // manual-review re-requests (declined/revoked guests) still awaiting a
+  // decision.
   async listPendingRequests(req, res, next) {
     try {
       const { rows } = await db.query(
-        `SELECT id, username, display_name, email, avatar, requested_at
+        `SELECT id, username, display_name, email, avatar, requested_at,
+                party_access, approval_status, welcome_email_sent_at
            FROM users
-          WHERE approval_status = 'pending' AND disabled = FALSE
+          WHERE disabled = FALSE
+            AND ((party_access = TRUE AND welcome_email_sent_at IS NULL
+                  AND magic_login_token_created_at IS NOT NULL)
+                 OR approval_status = 'pending')
           ORDER BY requested_at ASC NULLS LAST`
       );
       res.json(rows);
@@ -662,7 +643,8 @@ const partyController = {
       const allowedStatuses = includeMaybe ? ['going', 'maybe'] : ['going'];
       const [guestsRes, statusMap] = await Promise.all([
         db.query(
-          `SELECT u.id, u.email, u.display_name, u.username, r.answers AS rsvp_answers
+          `SELECT u.id, u.email, u.display_name, u.username, u.preferred_locale,
+                  r.answers AS rsvp_answers
              FROM users u
              LEFT JOIN party_rsvps r ON r.user_id = u.id
             WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL`
@@ -672,8 +654,8 @@ const partyController = {
 
       const recipients = guestsRes.rows
         .filter(r => allowedStatuses.includes(_deriveRsvpStatus(r.rsvp_answers, statusMap)))
-        .map(r => r.email)
-        .filter(Boolean);
+        .filter(r => r.email)
+        .map(r => ({ email: r.email, locale: r.preferred_locale || 'is' }));
 
       // Respond first; email send happens in the background.
       res.json({ sent: recipients.length });
@@ -681,17 +663,7 @@ const partyController = {
       if (recipients.length === 0) return;
 
       // Pull party info for the venue/date block at the bottom of the email.
-      const infoRes = await db.query(
-        `SELECT DISTINCT ON (key) key, value FROM site_content
-          WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
-          ORDER BY key, (locale = $1) DESC`,
-        [DEFAULT_LOCALE]
-      );
-      const partyInfo = { ...DEFAULT_PARTY_INFO };
-      for (const row of infoRes.rows) {
-        const k = row.key.replace(/^party_/, '');
-        partyInfo[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
-      }
+      const partyInfo = await readPartyInfo(DEFAULT_LOCALE);
 
       // One Resend call per recipient (see emailService.sendPartyAnnouncement)
       // so guests can't see each other's addresses. Partial failures are
@@ -1349,51 +1321,10 @@ const partyController = {
 
   async getInfo(req, res, next) {
     try {
-      // Prefer the request's locale; fall back to DEFAULT_LOCALE per key if missing.
-      const locale = req.locale || DEFAULT_LOCALE;
-      const { rows } = await db.query(
-        `SELECT DISTINCT ON (key) key, locale, value FROM site_content
-          WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
-            AND (locale = $1 OR locale = $2)
-          ORDER BY key, (locale = $1) DESC`,
-        [locale, DEFAULT_LOCALE]
-      );
-      const info = { ...DEFAULT_PARTY_INFO };
-      const neutralOverrides = new Set();
-      for (const row of rows) {
-        const k = row.key.replace(/^party_/, '');
-        // Locale-neutral keys must always come from DEFAULT_LOCALE so a stale
-        // per-locale row from before this key was made neutral can't shadow
-        // the canonical value. Skip non-default rows here and fetch them
-        // explicitly below.
-        if (LOCALE_NEUTRAL_INFO_KEYS.has(k) && row.locale !== DEFAULT_LOCALE) continue;
-        info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
-        if (LOCALE_NEUTRAL_INFO_KEYS.has(k)) neutralOverrides.add(k);
-      }
-      // Backfill any locale-neutral key that the request-locale read skipped
-      // because only a non-default-locale row exists for it. (No default row
-      // means we keep the DEFAULT_PARTY_INFO seed value.)
-      const missingNeutral = [...LOCALE_NEUTRAL_INFO_KEYS].filter(k => !neutralOverrides.has(k));
-      if (missingNeutral.length > 0 && locale !== DEFAULT_LOCALE) {
-        const { rows: defRows } = await db.query(
-          `SELECT key, value FROM site_content
-            WHERE locale = $1 AND key = ANY($2::text[])`,
-          [DEFAULT_LOCALE, missingNeutral.map(k => `party_${k}`)]
-        );
-        for (const row of defRows) {
-          const k = row.key.replace(/^party_/, '');
-          info[k] = typeof row.value === 'object' ? JSON.stringify(row.value) : row.value;
-        }
-      }
-      // Backward compat: migrate legacy flat games array → activities object
-      if (info.games && !info.activities) {
-        const games = typeof info.games === 'string' ? JSON.parse(info.games) : info.games;
-        if (Array.isArray(games)) {
-          const half = Math.ceil(games.length / 2);
-          info.activities = JSON.stringify({ daytime: games.slice(0, half), evening: games.slice(half) });
-        }
-      }
-      delete info.games;
+      // Prefer the request's locale; fall back to DEFAULT_LOCALE per key if
+      // missing. Shared logic lives in services/partyInfo.js (the welcome
+      // email renders from the same read).
+      const info = await readPartyInfo(req.locale || DEFAULT_LOCALE);
       res.json(info);
     } catch (err) { next(err); }
   },

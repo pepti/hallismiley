@@ -28,13 +28,22 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.headers.location).toBe('/en/');
   });
 
-  test('preferred_locale cookie beats Accept-Language on root redirect', async () => {
+  test('locale_choice cookie beats Accept-Language on root redirect', async () => {
+    const res = await request(app)
+      .get('/')
+      .set('Cookie', 'locale_choice=is')
+      .set('Accept-Language', 'en-US');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/is/');
+  });
+
+  test('legacy preferred_locale cookie is ignored (polluted by the old fallback bug)', async () => {
     const res = await request(app)
       .get('/')
       .set('Cookie', 'preferred_locale=is')
       .set('Accept-Language', 'en-US');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe('/en/');
   });
 
   test('GET /en/ renders index.html with EN meta tags', async () => {

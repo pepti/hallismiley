@@ -362,7 +362,8 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
 }
 
 // ── RSVP notification to admins ───────────────────────────────────────────────
-// Admin notification emails are always sent in English (admins may not all speak Icelandic).
+// Party admin notifications are sent in Icelandic — the owner (and the party's
+// admin audience) is Icelandic-first.
 
 async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEmails }) {
   if (!adminEmails || adminEmails.length === 0) return;
@@ -371,7 +372,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     return;
   }
 
-  const locale = 'en';
+  const locale = 'is';
   const name   = user.display_name || user.username || user.email;
   const subject = isUpdate
     ? t(locale, 'email.rsvpNotification.subject.update', { name })
@@ -443,7 +444,9 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
     return;
   }
 
-  const locale = user.preferred_locale || 'en';
+  // Party guests default to Icelandic; an explicit switch to English (stored
+  // on the account) is respected.
+  const locale = user.preferred_locale || 'is';
   const name   = user.display_name || user.username || 'there';
 
   const subject = t(locale, isUpdate ? 'email.rsvpConfirmation.subject.update' : 'email.rsvpConfirmation.subject.new');
@@ -524,9 +527,12 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
 // way each guest only sees their own address in the To: header. Resend's
 // default rate limit is 100 req/sec, well above any plausible guest list.
 // Body is the host's free-form message (optional); falls back to the i18n
-// default copy. Always sent in English: the host writes the message himself
-// in one language. Returns { sent, failed } so the caller can report partial
-// failures (e.g. a single bounce shouldn't blank the whole result).
+// default copy. Recipients are { email, locale } — the host's free-form
+// subject/body go out as-typed to everyone, but the surrounding chrome
+// (heading, when-and-where labels, button, default intro/signoff) localizes
+// per guest (Icelandic by default). Returns { sent, failed } so the caller can
+// report partial failures (e.g. a single bounce shouldn't blank the whole
+// result).
 
 async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   if (!Array.isArray(recipients) || recipients.length === 0) return { sent: 0, failed: 0 };
@@ -534,16 +540,6 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
     console.log(`[EmailService] Resend not configured — party announcement skipped (recipients=${recipients.length})`);
     return { sent: 0, failed: 0 };
   }
-
-  const locale       = 'en';
-  const finalSubject = (subject && subject.trim()) || t(locale, 'email.partyAnnouncement.subject');
-  const introText    = (body && body.trim())    || t(locale, 'email.partyAnnouncement.intro');
-  const signoffText  = t(locale, 'email.partyAnnouncement.signoff');
-
-  // Render the host's body as plain text with line breaks preserved. Escape
-  // first, then turn newlines into <br/> so a literal "<br/>" in the body
-  // stays escaped.
-  const bodyHtml = escapeHtml(introText).replace(/\n/g, '<br/>');
 
   const info         = partyInfo || {};
   const venueName    = escapeHtml(info.venue_name    || '');
@@ -554,11 +550,22 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
           ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address)}`
           : '');
 
-  const partyUrl  = `${APP_URL}/#/party`;
-  const heading   = t(locale, 'email.partyAnnouncement.heading');
+  const partyUrl = `${APP_URL}/#/party`;
 
-  // Body is identical per recipient (no personalization yet), so render once.
-  const html = emailShell(finalSubject, `
+  // The body is identical per recipient within a locale, so render once per
+  // distinct locale (two entries at most: en/is).
+  const rendered = new Map(); // locale -> { subject, html }
+  function renderFor(locale) {
+    if (rendered.has(locale)) return rendered.get(locale);
+    const finalSubject = (subject && subject.trim()) || t(locale, 'email.partyAnnouncement.subject');
+    const introText    = (body && body.trim())    || t(locale, 'email.partyAnnouncement.intro');
+    const signoffText  = t(locale, 'email.partyAnnouncement.signoff');
+    // Render the host's body as plain text with line breaks preserved. Escape
+    // first, then turn newlines into <br/> so a literal "<br/>" in the body
+    // stays escaped.
+    const bodyHtml = escapeHtml(introText).replace(/\n/g, '<br/>');
+    const heading  = t(locale, 'email.partyAnnouncement.heading');
+    const html = emailShell(finalSubject, `
     <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#cccccc;line-height:1.6;">
       ${bodyHtml}
@@ -589,12 +596,21 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
       ${escapeHtml(signoffText)}
     </p>
   `, locale);
+    const entry = { subject: finalSubject, html };
+    rendered.set(locale, entry);
+    return entry;
+  }
 
   // Fan out one-by-one so no recipient sees another's address. Use
-  // allSettled so one bounce doesn't abort the rest of the send.
+  // allSettled so one bounce doesn't abort the rest of the send. Accepts
+  // legacy plain-string recipients (treated as Icelandic default).
   const client = getClient();
   const results = await Promise.allSettled(
-    recipients.map(to => client.emails.send({ from: FROM, to, subject: finalSubject, html }))
+    recipients.map(r => {
+      const to = typeof r === 'string' ? r : r.email;
+      const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
+      return client.emails.send({ from: FROM, to, subject: finalSubject, html });
+    })
   );
 
   let sent = 0, failed = 0;
@@ -612,28 +628,31 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   return { sent, failed };
 }
 
-// ── Party access request notification to admins ───────────────────────────────
-// Fires when someone submits the "request to join" form on the party page.
-// Always English — admin audience, like the RSVP/booking notifications. The
-// primary button opens the one-click approval confirm page (approveUrl); a
-// secondary link points at the full party admin.
+// ── Party sign-up notification to admins ──────────────────────────────────────
+// Fires when someone submits the sign-up form on the party page. Sent in
+// Icelandic (the owner is the audience). The default path auto-grants access,
+// so the primary button now means "send the party-info email" (one-click
+// confirm page at approveUrl); `granted: false` marks the manual-review
+// variant (a previously declined/revoked guest re-requesting), where the same
+// button still gates access. A secondary link points at the full party admin.
 
-async function sendPartyRequestNotification({ request, adminEmails, approveUrl }) {
+async function sendPartyRequestNotification({ request, adminEmails, approveUrl, granted = true }) {
   if (!adminEmails || adminEmails.length === 0) return;
   if (!isConfigured()) {
     console.log('[EmailService] Resend not configured — party request notification skipped');
     return;
   }
 
-  const locale   = 'en';
+  const locale   = 'is';
   const name     = request.name || request.email;
   const subject  = t(locale, 'email.partyRequest.subject', { name });
-  const adminUrl = `${APP_URL}/en/party/admin`;
+  const adminUrl = `${APP_URL}/is/party/admin`;
+  const bodyKey  = granted ? 'email.partyRequest.body' : 'email.partyRequest.bodyManual';
 
   const html = emailShell(subject, `
     <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyRequest.heading'))}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
-      ${t(locale, 'email.partyRequest.body')}
+      ${t(locale, bodyKey)}
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;border-bottom:1px solid #222;">
       <tr>
@@ -672,7 +691,7 @@ async function sendPartyRequestNotification({ request, adminEmails, approveUrl }
 // The link carries a NON-EXPIRING magic-login token — never log it. Localised to
 // the guest's preferred locale; mentions the optional password route.
 
-async function sendPartyInviteEmail({ to, name, token, locale = 'en' }) {
+async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
   const link = `${APP_URL}/${encodeURIComponent(locale)}/party/login?token=${token}&locale=${encodeURIComponent(locale)}`;
 
   if (!isConfigured()) {
@@ -713,4 +732,180 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'en' }) {
   console.log(`[EmailService] Party invite email sent: id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, emailHealthCheck, isConfigured };
+// ── Party welcome / info email to the guest ───────────────────────────────────
+// Sent when the owner "approves" a guest (one-click email link or the admin
+// queue) — the party-info package: schedule, venue, activities, good-to-know.
+// Renders from the LIVE party info (services/partyInfo.readPartyInfo) at send
+// time, so the owner edits content on the party page and simply re-sends.
+// Structured sections (schedule/venue_details/activities) arrive as JSON
+// strings; each section is skipped when its data is missing or unparseable so
+// a half-filled party page still yields a clean email.
+
+function _parseJson(value) {
+  if (value == null) return null;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+// Escape first, then preserve intentional line breaks — party-page content
+// (schedule entries, activity descriptions) uses \n inside a single entry.
+function _escapeMultiline(value) {
+  return escapeHtml(String(value)).replace(/\n/g, '<br/>');
+}
+
+async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
+  if (!user?.email) return;
+  if (!isConfigured()) {
+    console.log(`[EmailService] Resend not configured — party welcome email skipped (user=${user.id})`);
+    return;
+  }
+
+  const info = partyInfo || {};
+  const name = (user.display_name && user.display_name.trim())
+    || user.username
+    || t(locale, 'email.partyInvite.fallbackName');
+
+  const subject  = t(locale, 'email.partyWelcome.subject');
+  const partyUrl = `${APP_URL}/${encodeURIComponent(locale)}/party`;
+
+  // ── When & where card (same visual language as the RSVP confirmation) ──
+  const venueName    = escapeHtml(info.venue_name    || '');
+  const venueAddress = escapeHtml(info.venue_address || '');
+  const partyDate    = escapeHtml(info.date          || '');
+  const mapsLink     = info.venue_maps_link
+    || (info.venue_address
+          ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address)}`
+          : '');
+  const whenWhereHtml = `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
+          ${partyDate    ? `<p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>` : ''}
+          ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
+          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
+        </td>
+      </tr>
+    </table>`;
+
+  // ── Schedule timeline ──
+  const schedule = _parseJson(info.schedule);
+  let scheduleHtml = '';
+  if (Array.isArray(schedule) && schedule.length > 0) {
+    const rows = schedule
+      .filter(s => s && (s.time || s.event))
+      .map(s => `
+      <tr>
+        <td style="padding:8px 16px 8px 0;color:#c9a84c;font-size:14px;font-weight:600;white-space:nowrap;vertical-align:top;width:60px;">${escapeHtml(String(s.time || ''))}</td>
+        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;line-height:1.5;">${_escapeMultiline(s.event || '')}</td>
+      </tr>`).join('');
+    if (rows) {
+      scheduleHtml = `
+    <h3 style="margin:0 0 12px;font-size:17px;color:#c9a84c;">${escapeHtml(t(locale, 'email.partyWelcome.scheduleHeading'))}</h3>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;border-bottom:1px solid #222;">
+      ${rows}
+    </table>`;
+    }
+  }
+
+  // ── Venue details (hall / spa bullet lists) ──
+  const details = _parseJson(info.venue_details);
+  let venueDetailsHtml = '';
+  if (details && (Array.isArray(details.hall) || Array.isArray(details.spa))) {
+    const list = (items) => (Array.isArray(items) ? items : [])
+      .filter(Boolean)
+      .map(item => `<li style="margin:0 0 6px;color:#aaa;font-size:14px;line-height:1.5;">${escapeHtml(String(item))}</li>`)
+      .join('');
+    const hallItems = list(details.hall);
+    const spaItems  = list(details.spa);
+    if (hallItems || spaItems) {
+      venueDetailsHtml = `
+    <h3 style="margin:0 0 12px;font-size:17px;color:#c9a84c;">${escapeHtml(t(locale, 'email.partyWelcome.venueHeading'))}</h3>
+    ${hallItems ? `
+    <p style="margin:0 0 6px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.hallHeading'))}</p>
+    <ul style="margin:0 0 16px;padding:0 0 0 20px;">${hallItems}</ul>` : ''}
+    ${spaItems ? `
+    <p style="margin:0 0 6px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.spaHeading'))}</p>
+    <ul style="margin:0 0 16px;padding:0 0 0 20px;">${spaItems}</ul>` : ''}
+    <div style="margin:0 0 12px;"></div>`;
+    }
+  }
+
+  // ── Activities (daytime / evening) ──
+  const activities = _parseJson(info.activities);
+  let activitiesHtml = '';
+  if (activities && (Array.isArray(activities.daytime) || Array.isArray(activities.evening))) {
+    const group = (items) => (Array.isArray(items) ? items : [])
+      .filter(a => a && (a.name || a.description))
+      // Hide the seed placeholders — a TBD row helps nobody in an email.
+      .filter(a => String(a.name || '').trim().toUpperCase() !== 'TBD')
+      .map(a => `
+      <tr>
+        <td style="padding:8px 0;">
+          <p style="margin:0;font-size:14px;color:#e0e0e0;font-weight:600;">${escapeHtml(String(a.name || ''))}</p>
+          ${a.description ? `<p style="margin:2px 0 0;font-size:13px;color:#888;line-height:1.5;">${_escapeMultiline(a.description)}</p>` : ''}
+          ${a.rules ? `<p style="margin:2px 0 0;font-size:12px;color:#666;line-height:1.5;">${escapeHtml(String(a.rulesLabel || ''))} ${_escapeMultiline(a.rules)}</p>` : ''}
+        </td>
+      </tr>`).join('');
+    const daytimeRows = group(activities.daytime);
+    const eveningRows = group(activities.evening);
+    if (daytimeRows || eveningRows) {
+      activitiesHtml = `
+    <h3 style="margin:0 0 12px;font-size:17px;color:#c9a84c;">${escapeHtml(t(locale, 'email.partyWelcome.activitiesHeading'))}</h3>
+    ${daytimeRows ? `
+    <p style="margin:0 0 4px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.daytimeHeading'))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">${daytimeRows}</table>` : ''}
+    ${eveningRows ? `
+    <p style="margin:0 0 4px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.eveningHeading'))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">${eveningRows}</table>` : ''}
+    <div style="margin:0 0 12px;"></div>`;
+    }
+  }
+
+  // ── Good to know (fixed i18n copy) ──
+  const goodToKnowItems = ['goodToKnow1', 'goodToKnow2', 'goodToKnow3', 'goodToKnow4']
+    .map(k => `<li style="margin:0 0 8px;color:#aaa;font-size:14px;line-height:1.5;">${t(locale, `email.partyWelcome.${k}`)}</li>`)
+    .join('');
+  const goodToKnowHtml = `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 10px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.goodToKnowHeading'))}</p>
+          <ul style="margin:0;padding:0 0 0 20px;">${goodToKnowItems}</ul>
+        </td>
+      </tr>
+    </table>`;
+
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyWelcome.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      ${t(locale, 'email.partyWelcome.intro', { name: escapeHtml(name) })}
+    </p>
+    ${whenWhereHtml}
+    ${scheduleHtml}
+    ${venueDetailsHtml}
+    ${activitiesHtml}
+    ${goodToKnowHtml}
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${partyUrl}"
+             style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            ${t(locale, 'email.partyWelcome.button')}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:14px;color:#888;line-height:1.6;">
+      ${t(locale, 'email.partyWelcome.closing')}
+    </p>
+  `, locale);
+
+  const { data, error } = await getClient().emails.send({ from: FROM, to: user.email, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, emailHealthCheck, isConfigured };

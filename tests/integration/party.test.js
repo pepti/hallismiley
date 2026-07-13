@@ -940,23 +940,90 @@ describe('Old invite endpoints return 410 Gone', () => {
 
 describe('Party access requests', () => {
   describe('POST /api/v1/party/request-access', () => {
-    test('new email creates a passwordless pending guest', async () => {
+    test('new email creates a passwordless guest with instant access + magic token', async () => {
       const res = await request(app)
         .post('/api/v1/party/request-access')
         .send({ name: 'New Guest', email: 'newguest@example.com' });
       expect(res.status).toBe(200);
+      // Response stays the generic 'pending' on every path (anti-enumeration).
       expect(res.body).toEqual({ status: 'pending' });
 
       const { rows } = await db.query(
         `SELECT password_hash, party_access, approval_status, username,
-                requested_at, approval_action_token_hash
+                requested_at, approval_action_token_hash, preferred_locale,
+                magic_login_token_hash, welcome_email_sent_at
            FROM users WHERE LOWER(email) = 'newguest@example.com'`
       );
       expect(rows).toHaveLength(1);
       expect(rows[0].password_hash).toBeNull();
-      expect(rows[0].party_access).toBe(false);
-      expect(rows[0].approval_status).toBe('pending');
+      expect(rows[0].party_access).toBe(true);
+      expect(rows[0].approval_status).toBe('approved');
       expect(rows[0].username).toBeTruthy();
+      expect(rows[0].magic_login_token_hash).toBeTruthy();
+      // The owner's one-click link now sends the info email — token still set.
+      expect(rows[0].approval_action_token_hash).toBeTruthy();
+      // Info email not sent yet — the guest sits in the owner's welcome queue.
+      expect(rows[0].welcome_email_sent_at).toBeNull();
+      // Party API routes default to Icelandic for non-choosers.
+      expect(rows[0].preferred_locale).toBe('is');
+    });
+
+    test('explicit ?locale=en on request-access is honored for the new guest', async () => {
+      const res = await request(app)
+        .post('/api/v1/party/request-access?locale=en')
+        .send({ name: 'English Guest', email: 'english@example.com' });
+      expect(res.status).toBe(200);
+      const { rows } = await db.query(
+        `SELECT preferred_locale FROM users WHERE LOWER(email) = 'english@example.com'`
+      );
+      expect(rows[0].preferred_locale).toBe('en');
+    });
+
+    test('existing account with no party history is auto-granted and keeps its locale', async () => {
+      // user@test.com exists (beforeEach) without party access or any prior
+      // magic token — the friendly path.
+      const before = await db.query(
+        `SELECT preferred_locale FROM users WHERE LOWER(email) = 'user@test.com'`
+      );
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Existing User', email: 'user@test.com' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'pending' });
+
+      const { rows } = await db.query(
+        `SELECT party_access, approval_status, magic_login_token_hash,
+                approval_action_token_hash, preferred_locale
+           FROM users WHERE LOWER(email) = 'user@test.com'`
+      );
+      expect(rows[0].party_access).toBe(true);
+      expect(rows[0].approval_status).toBe('approved');
+      expect(rows[0].magic_login_token_hash).toBeTruthy();
+      expect(rows[0].approval_action_token_hash).toBeTruthy();
+      // The stored account preference is not touched by the auto-grant.
+      expect(rows[0].preferred_locale).toBe(before.rows[0].preferred_locale);
+    });
+
+    test('a declined guest is NOT auto-granted on re-request', async () => {
+      const guest = await createTestPendingGuest({ email: 'declined@test.com', username: 'declinedguest' });
+      await db.query(
+        `UPDATE users SET approval_status = 'declined', party_access = FALSE WHERE id = $1`,
+        [guest.id]
+      );
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Declined', email: 'declined@test.com' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'pending' });
+
+      const { rows } = await db.query(
+        `SELECT approval_status, party_access, magic_login_token_hash,
+                approval_action_token_hash
+           FROM users WHERE id = $1`, [guest.id]
+      );
+      expect(rows[0].approval_status).toBe('pending');
+      expect(rows[0].party_access).toBe(false);
+      expect(rows[0].magic_login_token_hash).toBeNull();
       expect(rows[0].approval_action_token_hash).toBeTruthy();
     });
 
@@ -969,12 +1036,17 @@ describe('Party access requests', () => {
       expect(res.body).toEqual({ status: 'already_member' });
     });
 
-    test('a previously-approved guest whose access was revoked can re-request', async () => {
-      // A Manage-Users revoke sets party_access=FALSE but leaves
-      // approval_status='approved'. They must still be able to ask again.
+    test('a previously-approved guest whose access was revoked goes to manual review', async () => {
+      // A Manage-Users revoke sets party_access=FALSE and nulls the magic
+      // token HASH but leaves magic_login_token_created_at — that history is
+      // exactly what routes them to manual review instead of the auto-grant
+      // (otherwise Remove would be meaningless).
       const guest = await createTestPendingGuest({ email: 'revoked@test.com', username: 'revokedguest' });
       await db.query(
-        `UPDATE users SET approval_status = 'approved', party_access = FALSE WHERE id = $1`,
+        `UPDATE users SET approval_status = 'approved', party_access = FALSE,
+                          magic_login_token_hash = NULL,
+                          magic_login_token_created_at = NOW()
+          WHERE id = $1`,
         [guest.id]
       );
       const res = await request(app)
@@ -984,9 +1056,14 @@ describe('Party access requests', () => {
       expect(res.body).toEqual({ status: 'pending' });
 
       const { rows } = await db.query(
-        'SELECT approval_status, approval_action_token_hash FROM users WHERE id = $1', [guest.id]
+        `SELECT approval_status, party_access, magic_login_token_hash,
+                approval_action_token_hash
+           FROM users WHERE id = $1`, [guest.id]
       );
       expect(rows[0].approval_status).toBe('pending');
+      expect(rows[0].party_access).toBe(false);
+      // No fresh magic link was issued — access stays gated on the owner.
+      expect(rows[0].magic_login_token_hash).toBeNull();
       expect(rows[0].approval_action_token_hash).toBeTruthy();
     });
 
@@ -1042,7 +1119,7 @@ describe('Party access requests', () => {
   });
 
   describe('PATCH /api/v1/admin/users/:id/approve|decline', () => {
-    test('admin approves a pending guest', async () => {
+    test('admin approves a pending guest (re-grant + welcome email stamped)', async () => {
       const guest = await createTestPendingGuest();
       const res = await request(app)
         .patch(`/api/v1/admin/users/${guest.id}/approve`)
@@ -1050,12 +1127,31 @@ describe('Party access requests', () => {
       expect(res.status).toBe(200);
       expect(res.body.approval_status).toBe('approved');
       expect(res.body.party_access).toBe(true);
+      expect(res.body.welcome_email_sent_at).toBeTruthy();
 
       const { rows } = await db.query(
-        'SELECT magic_login_token_hash, party_access FROM users WHERE id = $1', [guest.id]
+        'SELECT magic_login_token_hash, party_access, welcome_email_sent_at FROM users WHERE id = $1', [guest.id]
       );
       expect(rows[0].magic_login_token_hash).toBeTruthy();
       expect(rows[0].party_access).toBe(true);
+      expect(rows[0].welcome_email_sent_at).not.toBeNull();
+    });
+
+    test('approve is repeatable — a second call re-sends and re-stamps', async () => {
+      const guest = await createTestPendingGuest({ email: 'resend@test.com', username: 'resendguest' });
+      const first = await request(app)
+        .patch(`/api/v1/admin/users/${guest.id}/approve`)
+        .set('Cookie', adminCookie);
+      expect(first.status).toBe(200);
+      const firstStamp = first.body.welcome_email_sent_at;
+
+      const second = await request(app)
+        .patch(`/api/v1/admin/users/${guest.id}/approve`)
+        .set('Cookie', adminCookie);
+      expect(second.status).toBe(200);
+      expect(second.body.welcome_email_sent_at).toBeTruthy();
+      expect(new Date(second.body.welcome_email_sent_at).getTime())
+        .toBeGreaterThanOrEqual(new Date(firstStamp).getTime());
     });
 
     test('admin declines a pending guest', async () => {
@@ -1103,7 +1199,7 @@ describe('Party access requests', () => {
       expect(res.body).toEqual({ valid: false });
     });
 
-    test('POST approve grants access, issues a magic token, and consumes the action token', async () => {
+    test('POST approve grants access, sends the welcome email, and consumes the action token', async () => {
       const guest = await seedActionToken('tok-approve-1');
       const res = await request(app)
         .post('/api/v1/party/approval/tok-approve-1')
@@ -1112,19 +1208,61 @@ describe('Party access requests', () => {
       expect(res.body).toEqual({ status: 'approved' });
 
       const { rows } = await db.query(
-        `SELECT approval_status, party_access, magic_login_token_hash, approval_action_token_hash
+        `SELECT approval_status, party_access, magic_login_token_hash,
+                approval_action_token_hash, welcome_email_sent_at
            FROM users WHERE id = $1`, [guest.id]
       );
       expect(rows[0].approval_status).toBe('approved');
       expect(rows[0].party_access).toBe(true);
       expect(rows[0].magic_login_token_hash).toBeTruthy();
       expect(rows[0].approval_action_token_hash).toBeNull();
+      expect(rows[0].welcome_email_sent_at).not.toBeNull();
 
       // Replay of the now-consumed token fails.
       const replay = await request(app)
         .post('/api/v1/party/approval/tok-approve-1')
         .send({ action: 'approve' });
       expect(replay.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/v1/party/pending-requests (welcome queue)', () => {
+    test('auto-granted guest appears until the info email is sent; admins never appear', async () => {
+      await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Queue Guest', email: 'queue@example.com' });
+
+      const list = await request(app)
+        .get('/api/v1/party/pending-requests')
+        .set('Cookie', adminCookie);
+      expect(list.status).toBe(200);
+      const emails = list.body.map(r => r.email);
+      expect(emails).toContain('queue@example.com');
+      // The admin has party_access but no magic token — never queue-listed.
+      expect(emails).not.toContain('admin@test.com');
+
+      const guestId = list.body.find(r => r.email === 'queue@example.com').id;
+      const approve = await request(app)
+        .patch(`/api/v1/admin/users/${guestId}/approve`)
+        .set('Cookie', adminCookie);
+      expect(approve.status).toBe(200);
+
+      const after = await request(app)
+        .get('/api/v1/party/pending-requests')
+        .set('Cookie', adminCookie);
+      expect(after.body.map(r => r.email)).not.toContain('queue@example.com');
+    });
+
+    test('manual-review re-request appears flagged as pending', async () => {
+      const guest = await createTestPendingGuest({ email: 'reviewq@test.com', username: 'reviewqueue' });
+      const list = await request(app)
+        .get('/api/v1/party/pending-requests')
+        .set('Cookie', adminCookie);
+      const row = list.body.find(r => r.email === 'reviewq@test.com');
+      expect(row).toBeTruthy();
+      expect(row.id).toBe(guest.id);
+      expect(row.approval_status).toBe('pending');
+      expect(row.party_access).toBe(false);
     });
   });
 

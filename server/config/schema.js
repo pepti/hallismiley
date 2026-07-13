@@ -1852,6 +1852,28 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          FOR EACH ROW EXECUTE FUNCTION sync_primary_user_role()`,
     ],
   },
+  {
+    // Party flow change: guests are auto-granted access on request (instant
+    // magic link); the owner's "approve" action now sends a party-info
+    // ("welcome") email instead of gating access. These columns track that
+    // send so the admin queue can list guests who haven't received the info
+    // email yet, independent of approval_status (which partyMagicLogin flips
+    // to 'approved' on every sign-in and the password-login gate 403s when
+    // 'pending' — so it can't double as a "welcome not sent" flag). Also a
+    // one-time locale data fix: party-flow guests picked up preferred_locale
+    // 'en' from the column default / the old client bug that persisted the
+    // English fallback as if chosen; the party audience is Icelandic-first.
+    // Human-reference duplicate in server/migrations/062_party_welcome_email.sql.
+    name: '062_party_welcome_email',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_email_sent_at TIMESTAMPTZ`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_email_sent_by TEXT REFERENCES users(id) ON DELETE SET NULL`,
+      `UPDATE users SET preferred_locale = 'is'
+        WHERE preferred_locale = 'en'
+          AND role = 'user'
+          AND (requested_at IS NOT NULL OR magic_login_token_created_at IS NOT NULL)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

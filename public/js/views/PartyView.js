@@ -138,8 +138,17 @@ export class PartyView {
         `<p class="party-locked__text">${t('party.requestAbove')}</p>`);
     }
 
-    // Already requested this visit, or awaiting a decision server-side.
-    if (this._requestSubmitted || pending) {
+    // Just signed up this visit: the magic sign-in link is already on its way
+    // (access is granted instantly — see partyController.requestAccess).
+    if (this._requestSubmitted) {
+      return this._lockedShell(slug, title, emoji,
+        `<p class="party-locked__text">${t('party.checkEmail')}</p>`,
+        'party-locked--invite');
+    }
+
+    // Awaiting a decision server-side — only the manual-review path lands
+    // here (a guest whose access was previously declined/removed).
+    if (pending) {
       return this._lockedShell(slug, title, emoji,
         `<p class="party-locked__text">${t('party.awaitingApproval')}</p>`,
         'party-locked--invite');
@@ -741,7 +750,7 @@ export class PartyView {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Request failed');
 
-        // Flip to the "awaiting approval" panel and re-render.
+        // Flip to the "check your email" panel and re-render.
         this._requestSubmitted = true;
         showToast(
           data.status === 'already_member' ? t('party.requestExistingMember') : t('party.requestSubmitted'),

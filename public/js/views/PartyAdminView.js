@@ -168,6 +168,16 @@ export class PartyAdminView {
       return acc;
     }, {});
 
+    // Companion pills count going + maybe guests only — waiting guests
+    // haven't answered the form, and declined guests are filtered out above.
+    const companions = guests.reduce((acc, g) => {
+      if (g.rsvp_status !== 'going' && g.rsvp_status !== 'maybe') return acc;
+      const f = this._companionFlags(g);
+      if (f.spouse) acc.spouse += 1;
+      if (f.kids) acc.kids += 1;
+      return acc;
+    }, { spouse: 0, kids: 0 });
+
     const colSpan = this._invitedGuestColSpan(showRevoke);
     const rows = sorted.length
       ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
@@ -185,6 +195,8 @@ export class PartyAdminView {
         <div class="party-admin__invited-toolbar">
           <p class="party-admin__invited-summary">
             <span class="party-admin__pill party-admin__pill--going">✅ ${t('party.admin.statusGoing')}: ${counts.going || 0}</span>
+            <span class="party-admin__pill party-admin__pill--spouse">💑 ${t('party.admin.pillSpouses')}: ${companions.spouse}</span>
+            <span class="party-admin__pill party-admin__pill--kids">🧒 ${t('party.admin.pillKids')}: ${companions.kids}</span>
             <span class="party-admin__pill party-admin__pill--maybe">🤔 ${t('party.admin.statusMaybe')}: ${counts.maybe || 0}</span>
             <span class="party-admin__pill party-admin__pill--waiting">⏳ ${t('party.admin.statusPending')}: ${counts.waiting || 0}</span>
           </p>
@@ -297,6 +309,29 @@ export class PartyAdminView {
       return val;
     }
     return '—';
+  }
+
+  // Flags for the summary pills: does this guest bring a spouse and/or kids?
+  // Reuses _bringingFor's key regex; values are matched loosely because the
+  // option labels are admin-editable and locale-dependent ("Spouse / partner",
+  // "Maki / partner", "Kids", "Börn").
+  _companionFlags(g) {
+    const ans = g.rsvp_answers;
+    const flags = { spouse: false, kids: false };
+    if (!ans) return flags;
+    const keyRe = /^(plus[_-]?one|plus[_-]?ones|bringing|companions?|family|maki|fjölskylda|gestir)(_|$)/i;
+    const spouseRe = /spouse|maki|partner/i;
+    const kidsRe = /\bkids?\b|child|börn|barn/i;
+    for (const [k, v] of Object.entries(ans)) {
+      if (!keyRe.test(k)) continue;
+      const vals = Array.isArray(v) ? v : [v];
+      for (const val of vals) {
+        if (typeof val !== 'string') continue;
+        if (spouseRe.test(val)) flags.spouse = true;
+        if (kidsRe.test(val)) flags.kids = true;
+      }
+    }
+    return flags;
   }
 
   _renderInvitedGuestRow(g, showRevoke) {
@@ -526,9 +561,11 @@ export class PartyAdminView {
       </span>`;
   }
 
-  // Pending "request to join" submissions awaiting the owner's decision. Hidden
-  // when there are none. Distinct from the RSVP "pending" bucket above — these
-  // guests don't have access yet.
+  // The "send the party info email" queue: guests who signed up (access is
+  // auto-granted) but haven't received the welcome/info email yet, plus
+  // manual-review re-requests (approval_status='pending' — a guest whose
+  // access was previously removed) which get a badge. Hidden when empty.
+  // Distinct from the RSVP "pending" bucket above.
   _renderPendingRequests() {
     const pending = this._pendingRequests || [];
     if (!pending.length) return '';
@@ -537,6 +574,9 @@ export class PartyAdminView {
         <div class="party-admin__pending-info">
           <span class="party-admin__pending-name">${escHtml(p.display_name || p.username || '—')}</span>
           <span class="party-admin__pending-email">${escHtml(p.email)}</span>
+          ${p.approval_status === 'pending'
+            ? `<span class="party-admin__pending-badge">${t('party.admin.pendingNeedsApproval')}</span>`
+            : ''}
         </div>
         <div class="party-admin__pending-actions">
           <button type="button" class="lol-btn lol-btn--primary" data-approve="${escHtml(p.id)}">${t('party.admin.approve')}</button>

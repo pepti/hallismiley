@@ -1582,6 +1582,19 @@ button.party-admin__stat:focus-visible {
 .party-admin__pending-name  { font-weight: 600; }
 .party-admin__pending-email { font-size: 0.85rem; color: var(--text-secondary); }
 
+/* Manual-review marker: a previously removed guest asked to rejoin, so the
+   approve button gates access again instead of just re-sending the info email. */
+.party-admin__pending-badge {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 168, 76, 0.5);
+  color: var(--accent, #c9a84c);
+  background: rgba(201, 168, 76, 0.08);
+}
+
 .party-admin__pending-actions {
   display: flex;
   gap: var(--sp-2);
@@ -1652,6 +1665,16 @@ button.party-admin__stat:focus-visible {
   background: rgba(120, 120, 120, 0.12);
   color: #999;
   border-color: rgba(120, 120, 120, 0.3);
+}
+.party-admin__pill--spouse {
+  background: rgba(100, 181, 246, 0.12);
+  color: #64b5f6;
+  border-color: rgba(100, 181, 246, 0.3);
+}
+.party-admin__pill--kids {
+  background: rgba(186, 104, 200, 0.12);
+  color: #ce93d8;
+  border-color: rgba(186, 104, 200, 0.3);
 }
 
 .party-admin__status {

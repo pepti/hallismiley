@@ -3,8 +3,8 @@ import { getCSRFToken } from '../services/auth.js';
 const BASE = '/api/v1/projects';
 
 // Append ?locale= to a URL so the server's locale middleware pins the fetch
-// to the SPA's active locale instead of falling back to the preferred_locale
-// cookie (which lags URL-driven switches by one navigation).
+// to the SPA's active locale instead of falling back to the locale_choice
+// cookie / account preference (which can lag URL-driven switches).
 function withLocale(url) {
   const locale = encodeURIComponent(window.__locale || 'en');
   const sep = url.includes('?') ? '&' : '?';

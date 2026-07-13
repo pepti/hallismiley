@@ -98,7 +98,7 @@ describe('locale middleware priority', () => {
       .set('Cookie', cookie)
       .send({ preferred_locale: 'is' })
       .expect(200);
-    // No ?locale=, no X-Locale, no preferred_locale cookie — the saved
+    // No ?locale=, no X-Locale, no locale_choice cookie — the saved
     // account preference is the strongest remaining signal.
     const res = await request(app)
       .patch('/api/v1/users/me')
