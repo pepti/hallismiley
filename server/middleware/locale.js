@@ -3,7 +3,7 @@
 // Priority (highest first):
 //   1. ?locale= query param (used by SPA API calls)
 //   2. X-Locale request header
-//   3. preferred_locale cookie
+//   3. locale_choice cookie (the user's EXPLICIT switcher choice)
 //   4. Logged-in user's saved preferred_locale
 //   5. Party-route default ('is' for /party, /party/admin, /api/v1/party/*)
 //   6. Accept-Language header (first supported language)
@@ -12,13 +12,17 @@
 // Explicit per-request signals (query / header / cookie) win over the
 // account-level preference so that an admin whose users.preferred_locale='is'
 // can still browse /en/* or fetch ?locale=en content without their saved
-// preference overriding the URL they're actually on. The client mirrors the
-// active locale to the preferred_locale cookie (public/js/i18n/i18n.js), so
-// fresh sessions still inherit the account default via cookie + user pref.
+// preference overriding the URL they're actually on.
+//
+// The locale_choice cookie is written ONLY by the client's explicit language
+// switcher (public/js/i18n/i18n.js persistLocaleChoice) — never for
+// auto-resolved fallbacks. The old 'preferred_locale' cookie used to mirror
+// every resolved locale (fallbacks included), which polluted stored state and
+// defeated the party default below; it is deliberately ignored, not migrated.
 //
 // The party-route default sits between saved-preference signals and
-// Accept-Language so that visitors with no cookie / no saved pref land on
-// the birthday page in Icelandic, even if their browser advertises English.
+// Accept-Language so that visitors who never explicitly chose a language land
+// on the birthday page in Icelandic, even if their browser advertises English.
 
 const { DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_DEFAULT_LOCALE, isPartyPath } = require('../config/i18n');
 
@@ -40,7 +44,7 @@ function resolveLocale(req) {
   const candidates = [
     req.query?.locale,
     req.headers['x-locale'],
-    req.cookies?.preferred_locale,
+    req.cookies?.locale_choice,
     req.user?.preferred_locale,
   ];
 

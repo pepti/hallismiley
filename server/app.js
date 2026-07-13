@@ -481,9 +481,10 @@ app.use('/api/v1/shop',       shopRoutes);
 //   1. Refuse anything under /api/ or /auth/ — those are data endpoints,
 //      and a miss is a real 404.
 //   2. Redirect root-level paths ('/', '/en', '/is' with no trailing segment)
-//      to a locale prefix chosen from the preferred_locale cookie →
-//      Accept-Language → DEFAULT_LOCALE. This gives crawlers + humans a
-//      clean 302 to the right language instead of ambiguous content.
+//      to a locale prefix chosen from the locale_choice cookie (explicit
+//      switcher choice only) → Accept-Language → DEFAULT_LOCALE. This gives
+//      crawlers + humans a clean 302 to the right language instead of
+//      ambiguous content.
 //   3. Serve index.html with <title>, <meta description>, og:*, canonical,
 //      and hreflang tags filled in per-route. JS-free crawlers (Bing,
 //      Facebook, LinkedIn, X) get the right preview cards; humans get the
@@ -491,7 +492,7 @@ app.use('/api/v1/shop',       shopRoutes);
 const ssrMetaMiddleware = require('./middleware/ssrMeta');
 
 function pickLocaleForRedirect(req) {
-  const cookie = req.cookies?.preferred_locale;
+  const cookie = req.cookies?.locale_choice;
   if (cookie && ['en', 'is'].includes(cookie)) return cookie;
   const accept = (req.headers['accept-language'] || '').toLowerCase();
   for (const part of accept.split(',')) {

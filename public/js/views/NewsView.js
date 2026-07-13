@@ -92,7 +92,7 @@ export class NewsView {
       });
       if (this._category) params.set('category', this._category);
       // Pin the request locale — otherwise the server falls back to the
-      // preferred_locale cookie which lags the URL by one navigation.
+      // locale_choice cookie / account preference which can lag the URL.
       params.set('locale', window.__locale || 'en');
 
       const res = await fetch(`/api/v1/news?${params}`);

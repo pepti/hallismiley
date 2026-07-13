@@ -124,8 +124,8 @@ export class ArticleView {
       const isEditor = canEdit();
 
       // Pin the request locale to the URL path's locale via ?locale=. Without
-      // it the server falls back to the preferred_locale cookie, which lags
-      // the URL by one navigation when someone switches languages mid-flow.
+      // it the server falls back to the locale_choice cookie / account
+      // preference, which lags the URL when someone switches mid-flow.
       const localeParam = `?locale=${encodeURIComponent(window.__locale || 'en')}`;
       const publicUrl  = `/api/v1/news/${encodeURIComponent(this._slug)}${localeParam}`;
       const previewUrl = `/api/v1/news/${encodeURIComponent(this._slug)}/preview${localeParam}`;

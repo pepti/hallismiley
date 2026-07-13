@@ -46,13 +46,20 @@ function isPartyPath(pathname) {
   return stripped === '/party' || stripped === '/party/admin';
 }
 
-/** Determine locale from ?locale= → localStorage → party-route default →
- *  Accept-Language → default. The party-route step lets first-time visitors
- *  land on /party in Icelandic even when their browser language is English. */
+/** Determine locale from ?locale= → explicit saved choice → party-route
+ *  default → Accept-Language → default. The party-route step lets visitors
+ *  land on /party in Icelandic even when their browser language is English.
+ *
+ *  Only an EXPLICIT choice (the language switcher — see persistLocaleChoice)
+ *  is ever saved; auto-resolved fallbacks are not. The storage key is
+ *  'locale_choice' — deliberately NOT the old 'preferred_locale' key, which
+ *  loadLocale used to write for every resolved locale (including the English
+ *  fallback), polluting stored state and defeating the party default. Old
+ *  values are ignored, never migrated. */
 export function getPreferredLocale() {
   const fromQuery = getLocaleFromQuery();
   if (fromQuery) return fromQuery;
-  const saved = localStorage.getItem('preferred_locale');
+  const saved = localStorage.getItem('locale_choice');
   if (saved && SUPPORTED_LOCALES.includes(saved)) return saved;
   if (isPartyPath(window.location.pathname)) return 'is';
   for (const lang of (navigator.languages || [])) {
@@ -60,6 +67,19 @@ export function getPreferredLocale() {
     if (SUPPORTED_LOCALES.includes(code)) return code;
   }
   return DEFAULT_LOCALE;
+}
+
+/** Persist an EXPLICIT locale choice (localStorage + cookie). Called only
+ *  from the language switcher path — never from loadLocale, so a fallback
+ *  resolution is never mistaken for a choice. The cookie lets the server's
+ *  locale middleware honor the choice on the very next request — even for
+ *  anonymous users hitting a deep link before JS has rendered the first
+ *  frame. 1-year expiry, SameSite=Lax so it rides along with top-level
+ *  navigations (crawlers included). */
+export function persistLocaleChoice(locale) {
+  if (!SUPPORTED_LOCALES.includes(locale)) return;
+  localStorage.setItem('locale_choice', locale);
+  document.cookie = `locale_choice=${locale}; path=/; max-age=31536000; samesite=lax`;
 }
 
 // ── Loader ────────────────────────────────────────────────────────────────────
@@ -85,12 +105,10 @@ export async function loadLocale(locale) {
 
   _locale = locale;
   window.__locale = locale;
-  localStorage.setItem('preferred_locale', locale);
-  // Mirror to a cookie so the server's locale middleware picks it up on the
-  // very next request — even for anonymous users hitting a deep link before
-  // JS has rendered the first frame. 1-year expiry, SameSite=Lax so cookie
-  // rides along with top-level navigations (crawlers included).
-  document.cookie = `preferred_locale=${locale}; path=/; max-age=31536000; samesite=lax`;
+  // Deliberately NOT persisted here: loadLocale runs for every auto-resolved
+  // locale (including fallbacks), and saving those as if the user chose them
+  // is what used to break the party-page Icelandic default. Persistence is
+  // persistLocaleChoice's job, triggered only by the explicit switcher.
   document.documentElement.lang = locale;
 
   // Update og:locale so social scrapers that execute JS see the right locale.
@@ -140,9 +158,12 @@ export function t(key, params) {
 
 /** Switch to `newLocale` by updating the locale prefix in the URL pathname,
  *  which triggers the Router's popstate handler to re-render. History API
- *  only — no fallback to hash routing (SEO requires clean URLs). */
+ *  only — no fallback to hash routing (SEO requires clean URLs). This is the
+ *  single explicit-choice entry point (NavBar + Profile both route through
+ *  it), so it's also where the choice gets persisted. */
 export function switchLocale(newLocale) {
   if (!SUPPORTED_LOCALES.includes(newLocale)) return;
+  persistLocaleChoice(newLocale);
   const path  = window.location.pathname || '/';
   const parts = path.split('/').filter(Boolean);
   if (SUPPORTED_LOCALES.includes(parts[0])) parts.shift();

@@ -5,8 +5,7 @@ const emailService       = require('../services/emailService');
 const { t }              = require('../i18n');
 const Role               = require('../models/Role');
 const UserRole           = require('../models/UserRole');
-const logger             = require('../logger');
-const { approveGuest, declineGuest } = require('../services/partyApproval');
+const { declineGuest, sendWelcome } = require('../services/partyApproval');
 
 const adminController = {
   // GET /api/v1/admin/users?limit=20&offset=0&sort=username&order=asc&q=foo
@@ -139,7 +138,10 @@ const adminController = {
         return res.status(400).json({ error: 'party_access must be a boolean', code: 400 });
       }
       // Revoking access also nulls the magic-login token so a forwarded invite
-      // link can't silently re-grant entry.
+      // link can't silently re-grant entry. Only the HASH is cleared —
+      // magic_login_token_created_at must survive: partyController.requestAccess
+      // uses it to detect revoked guests and route them to manual review
+      // instead of auto-granting.
       const { rows } = await dbQuery(
         `UPDATE users
             SET party_access = $1,
@@ -155,29 +157,25 @@ const adminController = {
     } catch (err) { next(err); }
   },
 
-  // PATCH /api/v1/admin/users/:id/approve — approve a pending party guest, grant
-  // access, and email them their magic link (fire-and-forget).
+  // PATCH /api/v1/admin/users/:id/approve — send the party-info ("welcome")
+  // email to a guest. For manual-review guests (declined/revoked re-requests)
+  // sendWelcome first re-grants access and emails a fresh magic link. Repeat
+  // calls re-send the info email.
   async approveUser(req, res, next) {
     try {
       const { id } = req.params;
-      const result = await approveGuest(id, { approvedBy: req.user.id });
-      if (!result) {
+      const user = await sendWelcome(id, { sentBy: req.user.id });
+      if (!user) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
       res.json({
-        id:              result.user.id,
-        username:        result.user.username,
-        email:           result.user.email,
-        party_access:    result.user.party_access,
-        approval_status: result.user.approval_status,
+        id:                    user.id,
+        username:              user.username,
+        email:                 user.email,
+        party_access:          user.party_access,
+        approval_status:       user.approval_status,
+        welcome_email_sent_at: user.welcome_email_sent_at,
       });
-
-      emailService.sendPartyInviteEmail({
-        to:     result.user.email,
-        name:   result.user.display_name,
-        token:  result.magicToken,
-        locale: result.user.preferred_locale || 'en',
-      }).catch(err => logger.error({ err }, 'party invite email failed (admin approve)'));
     } catch (err) { next(err); }
   },
 

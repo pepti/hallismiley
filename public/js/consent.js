@@ -35,7 +35,7 @@
     var first = (window.location.pathname || '/').split('/').filter(Boolean)[0];
     if (first && SUPPORTED_LOCALES.indexOf(first) !== -1) return first;
     try {
-      var saved = localStorage.getItem('preferred_locale');
+      var saved = localStorage.getItem('locale_choice');
       if (saved && SUPPORTED_LOCALES.indexOf(saved) !== -1) return saved;
     } catch (_) { /* ignore storage errors */ }
     return DEFAULT_LOCALE;

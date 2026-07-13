@@ -41,8 +41,11 @@ export class PartyApproveView {
   }
 
   _prompt(data) {
+    // Re-send case: the info email already went out (e.g. via the admin queue
+    // before this emailed link was clicked).
+    const promptKey = data.welcome_email_sent_at ? 'party.approveResendPrompt' : 'party.approvePrompt';
     this._el.querySelector('#approve-text').innerHTML =
-      t('party.approvePrompt', { name: escHtml(data.name || data.email), email: escHtml(data.email) });
+      t(promptKey, { name: escHtml(data.name || data.email), email: escHtml(data.email) });
     const actions = this._el.querySelector('#approve-actions');
     actions.innerHTML = `
       <button class="btn btn--primary" id="approve-yes">${t('party.approveBtn')}</button>
