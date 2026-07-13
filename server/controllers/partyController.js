@@ -72,7 +72,7 @@ async function _sendRsvpEmails({ userId, answers, isUpdate }) {
         ORDER BY (locale = $1) DESC LIMIT 1`,
       [DEFAULT_LOCALE]
     ),
-    readPartyInfo(DEFAULT_LOCALE),
+    readPartyInfo(DEFAULT_LOCALE, { anyLocaleFallback: true }),
   ]);
 
   const user = userRes.rows[0];
@@ -263,11 +263,18 @@ const partyController = {
 
       const { rows } = await db.query(
         `SELECT id, party_access, approval_status, magic_login_token_created_at,
-                preferred_locale
+                preferred_locale, disabled
            FROM users WHERE LOWER(email) = $1 LIMIT 1`,
         [email]
       );
       const existing = rows[0] || null;
+
+      // Disabled accounts: respond generically and change NOTHING — no state
+      // flip, no tokens, no emails. Auto-granting here would silently plant a
+      // live magic credential that activates if the account is ever re-enabled.
+      if (existing && existing.disabled) {
+        return res.json({ status: 'pending' });
+      }
 
       // Already has access — nothing to do.
       if (existing && existing.party_access) {
@@ -281,12 +288,17 @@ const partyController = {
       const actionHash  = hashToken(actionToken);
       const actionExp   = new Date(Date.now() + APPROVAL_ACTION_TTL_MS);
 
-      // Manual-review path: the owner declined them, or they once held a magic
-      // link and access was later revoked (revoke nulls only the token HASH —
-      // adminController/declineGuest keep magic_login_token_created_at as the
-      // evidence this rule relies on; keep it that way).
+      // Manual-review path: the owner declined them, they're already awaiting
+      // review, or they once held a magic link and access was later revoked
+      // (revoke nulls only the token HASH — adminController/declineGuest keep
+      // magic_login_token_created_at as the evidence this rule relies on; keep
+      // it that way). 'pending' MUST be sticky here: the branch below rewrites
+      // 'declined' to 'pending', so if 'pending' didn't also require review, a
+      // declined guest with no magic-token history could launder their state
+      // and self-admit on the second form submission.
       const requiresReview = existing && (
         existing.approval_status === 'declined' ||
+        existing.approval_status === 'pending' ||
         (existing.magic_login_token_created_at != null && !existing.party_access)
       );
 
@@ -663,7 +675,7 @@ const partyController = {
       if (recipients.length === 0) return;
 
       // Pull party info for the venue/date block at the bottom of the email.
-      const partyInfo = await readPartyInfo(DEFAULT_LOCALE);
+      const partyInfo = await readPartyInfo(DEFAULT_LOCALE, { anyLocaleFallback: true });
 
       // One Resend call per recipient (see emailService.sendPartyAnnouncement)
       // so guests can't see each other's addresses. Partial failures are

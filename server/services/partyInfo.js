@@ -77,14 +77,21 @@ const DEFAULT_PARTY_INFO = {
  * stale per-locale row from before a key was made neutral must not shadow the
  * canonical value). Structured values are returned JSON-stringified, matching
  * how the SPA and email templates consume them.
+ *
+ * `anyLocaleFallback: true` drops the two-locale restriction so a key edited
+ * only in some OTHER locale still resolves (preference order unchanged:
+ * requested → default → any). The RSVP-confirmation and announcement email
+ * paths read at DEFAULT_LOCALE but must not lose content the admin only
+ * entered on /is/party — this preserves their pre-refactor any-locale
+ * behavior. getInfo keeps the strict read so page content stays per-locale.
  */
-async function readPartyInfo(locale) {
+async function readPartyInfo(locale, { anyLocaleFallback = false } = {}) {
   const loc = locale || DEFAULT_LOCALE;
   const { rows } = await db.query(
     `SELECT DISTINCT ON (key) key, locale, value FROM site_content
       WHERE key LIKE 'party_%' AND key <> 'party_invite_code'
-        AND (locale = $1 OR locale = $2)
-      ORDER BY key, (locale = $1) DESC`,
+        ${anyLocaleFallback ? '' : 'AND (locale = $1 OR locale = $2)'}
+      ORDER BY key, (locale = $1) DESC, (locale = $2) DESC`,
     [loc, DEFAULT_LOCALE]
   );
   const info = { ...DEFAULT_PARTY_INFO };

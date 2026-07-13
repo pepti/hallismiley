@@ -1004,6 +1004,58 @@ describe('Party access requests', () => {
       expect(rows[0].preferred_locale).toBe(before.rows[0].preferred_locale);
     });
 
+    test('a declined guest cannot self-admit via repeated submissions', async () => {
+      // Regression: the manual-review branch rewrites 'declined' → 'pending'.
+      // If 'pending' didn't also require review, a guest declined before ever
+      // holding a magic link (no token history) would launder their state on
+      // submit #1 and auto-grant on submit #2.
+      const guest = await createTestPendingGuest({ email: 'launder@test.com', username: 'launderguest' });
+      await db.query(
+        `UPDATE users SET approval_status = 'declined', party_access = FALSE,
+                          magic_login_token_hash = NULL, magic_login_token_created_at = NULL
+          WHERE id = $1`,
+        [guest.id]
+      );
+      for (let i = 0; i < 2; i++) {
+        const res = await request(app)
+          .post('/api/v1/party/request-access')
+          .send({ name: 'Launder', email: 'launder@test.com' });
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ status: 'pending' });
+      }
+      const { rows } = await db.query(
+        `SELECT party_access, approval_status, magic_login_token_hash
+           FROM users WHERE id = $1`, [guest.id]
+      );
+      expect(rows[0].party_access).toBe(false);
+      expect(rows[0].approval_status).toBe('pending');
+      expect(rows[0].magic_login_token_hash).toBeNull();
+    });
+
+    test('a disabled account is never granted or mutated', async () => {
+      const guest = await createTestPendingGuest({ email: 'disabled@test.com', username: 'disabledguest' });
+      await db.query(
+        `UPDATE users SET disabled = TRUE, approval_status = 'approved' WHERE id = $1`,
+        [guest.id]
+      );
+      const res = await request(app)
+        .post('/api/v1/party/request-access')
+        .send({ name: 'Disabled', email: 'disabled@test.com' });
+      expect(res.status).toBe(200);
+      // Same generic body as every other path — no enumeration of disabled state.
+      expect(res.body).toEqual({ status: 'pending' });
+
+      const { rows } = await db.query(
+        `SELECT party_access, approval_status, magic_login_token_hash,
+                approval_action_token_hash
+           FROM users WHERE id = $1`, [guest.id]
+      );
+      expect(rows[0].party_access).toBe(false);
+      expect(rows[0].approval_status).toBe('approved'); // untouched
+      expect(rows[0].magic_login_token_hash).toBeNull();
+      expect(rows[0].approval_action_token_hash).toBeNull();
+    });
+
     test('a declined guest is NOT auto-granted on re-request', async () => {
       const guest = await createTestPendingGuest({ email: 'declined@test.com', username: 'declinedguest' });
       await db.query(
