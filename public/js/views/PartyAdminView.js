@@ -393,15 +393,30 @@ export class PartyAdminView {
 
   _fmtIsk(n) { return formatMoney(n, 'ISK'); }
 
-  // Subtotal + count of unpriced rows for one logistics category.
+  // Subtotal for one logistics category. "missing" counts only PARTIALLY
+  // priced rows (qty without price, or price without qty) — those are the
+  // ones the planner clearly meant to cost out. Rows with neither (napkins,
+  // "handfylli") are intentionally silent so the warning stays meaningful.
   _categorySubtotal(catKey) {
     const items = (this._logistics || []).filter(i => (i.category || 'other') === catKey);
     let sum = 0, missing = 0;
     for (const i of items) {
       const c = this._lineCost(i);
-      if (c == null) missing++; else sum += c;
+      if (c == null) {
+        if ((i.quantity == null) !== (i.unit_price == null)) missing++;
+      } else {
+        sum += c;
+      }
     }
     return { sum, missing, count: items.length };
+  }
+
+  // Subtotal label — when the hide-bought filter is on, the footer still sums
+  // ALL rows (money spent is money spent), so say so to avoid reading like a
+  // math bug under a filtered table.
+  _subtotalLabel(sum) {
+    const key = this._hideBought ? 'party.admin.logisticsSubtotalAll' : 'party.admin.logisticsSubtotal';
+    return t(key, { v: this._fmtIsk(sum) });
   }
 
   // The three logistics tables. Internal keys must match the DB CHECK
@@ -470,7 +485,7 @@ export class PartyAdminView {
             <tfoot>
               <tr class="party-admin__logistics-subtotal-row">
                 <td colspan="4" data-logistics-subtotal-note="${escHtml(cat.key)}">${sub.missing > 0 ? `<span class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: sub.missing })}</span>` : ''}</td>
-                <td class="party-admin__logistics-line-cost" data-logistics-subtotal="${escHtml(cat.key)}">${t('party.admin.logisticsSubtotal', { v: this._fmtIsk(sub.sum) })}</td>
+                <td class="party-admin__logistics-line-cost" data-logistics-subtotal="${escHtml(cat.key)}">${this._subtotalLabel(sub.sum)}</td>
                 <td colspan="4"></td>
               </tr>
             </tfoot>` : '';
@@ -1187,6 +1202,10 @@ export class PartyAdminView {
         const status   = form.querySelector('[data-logistics-status]');
         const name = (nameEl?.value || '').trim();
         if (!name) { nameEl?.focus(); return; }
+        // badInput number fields report '' but display junk — sending null
+        // would silently drop what the user typed. Make them fix it instead.
+        const badEl = [qtyEl, priceEl].find(el => el?.validity?.badInput);
+        if (badEl) { badEl.focus(); badEl.select?.(); return; }
         if (status) status.textContent = t('form.saving');
         try {
           const headers = await getCsrfHeaders();
@@ -1273,9 +1292,11 @@ export class PartyAdminView {
       });
     });
 
-    // Inline cell editing — auto-save on blur (the 'change' event on text
-    // inputs fires on blur). Enter saves and jumps to the next row's name
-    // input (or the add-item name input if there is no next row).
+    // Inline cell editing — auto-save on 'change' (fires on blur for text
+    // inputs; number inputs also fire per spinner/arrow step — the save-token
+    // in _saveLogisticsCell keeps rapid bursts from applying stale responses).
+    // Enter saves and jumps to the next row's name input (or the add-item
+    // name input if there is no next row).
     section.querySelectorAll('input.party-admin__logistics-cell-input[data-logistics-id]').forEach(input => {
       input.addEventListener('change', () => this._saveLogisticsCell(input));
       input.addEventListener('keydown', (e) => {
@@ -1333,6 +1354,13 @@ export class PartyAdminView {
   async _saveLogisticsCell(input) {
     const field   = input.dataset.field;
     const numeric = field === 'quantity' || field === 'unit_price';
+    // A number input holding unparseable text ("24e", "2 kassar", Firefox
+    // free-typing) reports value === '' while still DISPLAYING the junk —
+    // treating that as "cleared" would silently NULL the saved value. Revert.
+    if (numeric && input.validity && input.validity.badInput) {
+      input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+      return;
+    }
     const value = input.value.trim();
     const last  = input.dataset.lastSaved !== undefined
       ? input.dataset.lastSaved
@@ -1345,6 +1373,10 @@ export class PartyAdminView {
 
     const id = input.dataset.logisticsId;
     input.dataset.lastSaved = value;
+    // Number inputs fire 'change' per spinner click / arrow step, so several
+    // saves can be in flight; only the latest may apply its response.
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
     const body = value === ''
       ? null
       : (field === 'unit_price' ? Math.round(Number(value))
@@ -1364,6 +1396,7 @@ export class PartyAdminView {
         throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
       }
       const updated = await res.json();
+      if (Number(input.dataset.saveToken) !== token) return; // superseded by a newer save
       this._logistics = (this._logistics || []).map(i =>
         String(i.id) === String(updated.id) ? updated : i
       );
@@ -1385,6 +1418,7 @@ export class PartyAdminView {
         this._rerenderCosts();
       }
     } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return; // a newer save owns the input
       input.value = last;
       input.dataset.lastSaved = last;
       showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
@@ -1396,7 +1430,7 @@ export class PartyAdminView {
   _updateLogisticsSubtotal(catKey) {
     const sub  = this._categorySubtotal(catKey);
     const cell = this._el.querySelector(`[data-logistics-subtotal="${CSS.escape(catKey)}"]`);
-    if (cell) cell.textContent = t('party.admin.logisticsSubtotal', { v: this._fmtIsk(sub.sum) });
+    if (cell) cell.textContent = this._subtotalLabel(sub.sum);
     const noteCell = this._el.querySelector(`[data-logistics-subtotal-note="${CSS.escape(catKey)}"]`);
     if (noteCell) {
       noteCell.innerHTML = sub.missing > 0
@@ -1603,11 +1637,14 @@ export class PartyAdminView {
             ? `${i.quantity}${i.quantity_note ? ` ${i.quantity_note}` : ''} × ${this._fmtIsk(i.unit_price)}`
             : (i.quantity_note || ''),
           cost: this._lineCost(i),
+          // Warn only on partially priced rows (see _categorySubtotal).
+          partial: (i.quantity == null) !== (i.unit_price == null),
         })),
     }));
     groups.push({
       key: 'todos', icon: '✅', label: t('party.admin.costGroupTodos'),
-      items: (this._todos || []).map(td => ({ name: td.title || '', detail: '', cost: td.cost ?? null })),
+      // A costless todo ("call the venue") is normal, not a warning.
+      items: (this._todos || []).map(td => ({ name: td.title || '', detail: '', cost: td.cost ?? null, partial: false })),
     });
     return groups;
   }
@@ -1625,7 +1662,7 @@ export class PartyAdminView {
           </div>`;
 
     const groupCards = groups.map(g => {
-      const missing = g.items.filter(x => x.cost == null).length;
+      const missing = g.items.filter(x => x.partial).length;
       const sorted = [...g.items].sort((a, b) => {
         if (a.cost == null && b.cost == null) return 0;
         if (a.cost == null) return 1;
@@ -1744,7 +1781,7 @@ export class PartyAdminView {
               <span>${t('party.admin.todoCost')}</span>
               <input type="number" min="0" step="1"
                      data-todo-field="cost" data-todo-id="${escHtml(id)}"
-                     value="${todo.cost ?? ''}" placeholder="—"
+                     value="${escHtml(String(todo.cost ?? ''))}" placeholder="—"
                      aria-label="${t('party.admin.todoCost')}" />
             </label>
             <label class="party-admin__todo-due">
@@ -1943,9 +1980,16 @@ export class PartyAdminView {
     if (field === 'due_date') {
       value = input.value || null;
     } else if (field === 'cost') {
+      // badInput: the number input shows junk text but reports value === ''
+      // — reverting (not clearing) protects the saved cost. See
+      // _saveLogisticsCell for the same guard.
+      if (input.validity && input.validity.badInput) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
       const raw = input.value.trim();
       if (raw !== '' && !Number.isFinite(Number(raw))) {
-        input.value = input.dataset.lastSaved ?? '';
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
         return;
       }
       value = raw === '' ? null : Math.round(Number(raw));
@@ -1960,8 +2004,13 @@ export class PartyAdminView {
     const cur = value == null ? '' : String(value);
     if (cur === (lastRaw ?? '')) return;
     input.dataset.lastSaved = cur;
+    // The cost input fires 'change' per spinner/arrow step — token guards
+    // against a stale response overwriting a newer save (see _saveLogisticsCell).
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
     try {
       const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(id)}`, { [field]: value });
+      if (Number(input.dataset.saveToken) !== token) return; // superseded by a newer save
       this._patchTodoLocal(id, { [field]: updated[field] }, false);
       if (field === 'title') {
         const del = input.closest('[data-todo-card]')?.querySelector('[data-todo-delete]');
@@ -1969,6 +2018,7 @@ export class PartyAdminView {
       }
       if (field === 'cost' || field === 'title') this._rerenderCosts();
     } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return; // a newer save owns the input
       input.value = lastRaw ?? '';
       input.dataset.lastSaved = lastRaw ?? '';
       showToast(err.message || t('party.admin.todoSaveFailed'), 'error');
@@ -2143,9 +2193,16 @@ export class PartyAdminView {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       const rect = card.getBoundingClientRect();
-      const isAbove = (e.clientY - rect.top) < (rect.height / 2);
+      // "above" means insert-before in list order. On desktop the list is a
+      // grid flowing left-to-right, so "before" is judged by the horizontal
+      // midpoint (and the CSS shows left/right markers there); in the mobile
+      // single column it stays the vertical midpoint.
+      const isGrid = getComputedStyle(list).display === 'grid';
+      const isBefore = isGrid
+        ? (e.clientX - rect.left) < (rect.width / 2)
+        : (e.clientY - rect.top) < (rect.height / 2);
       clearMarks();
-      card.classList.add(isAbove ? 'party-admin__todo-card--drop-above' : 'party-admin__todo-card--drop-below');
+      card.classList.add(isBefore ? 'party-admin__todo-card--drop-above' : 'party-admin__todo-card--drop-below');
     });
 
     list.addEventListener('drop', async (e) => {

@@ -766,6 +766,7 @@
   "party.admin.logisticsUnit": "Unit / note",
   "party.admin.logisticsUnitPh": "e.g. boxes",
   "party.admin.logisticsSubtotal": "Subtotal: {v}",
+  "party.admin.logisticsSubtotalAll": "Subtotal (incl. bought): {v}",
   "party.admin.todoTitle": "To-do list",
   "party.admin.todoHelp": "Anyone on the planning team can add to-dos, break them into subtasks, set due dates, and assign people.",
   "party.admin.todoEmpty": "No to-dos yet. Add the first one above.",

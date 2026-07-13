@@ -2216,6 +2216,18 @@ button.party-admin__stat:focus-visible {
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     align-items: start;
   }
+  /* In the grid, insert-before/after means left/right, not above/below.
+     Box-shadow instead of border so the marker doesn't nudge the layout
+     (the drag logic switches to the horizontal midpoint when the list
+     computes as a grid). */
+  .party-admin__todo-card--drop-above {
+    border-top: 1px solid rgba(200, 170, 110, 0.18);
+    box-shadow: -3px 0 0 0 var(--gold);
+  }
+  .party-admin__todo-card--drop-below {
+    border-bottom: 1px solid rgba(200, 170, 110, 0.18);
+    box-shadow: 3px 0 0 0 var(--gold);
+  }
 }
 .party-admin__todo-cost {
   display: inline-flex;

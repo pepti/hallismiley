@@ -2079,3 +2079,109 @@ describe('To-do costs (063)', () => {
     expect(created.body.cost).toBe(900);
   });
 });
+
+// ── Migration 063: legacy TEXT quantity conversion ────────────────────────────
+// globalSetup runs migrations against an EMPTY database, so the conversion
+// logic never sees legacy data in a normal test run. This suite reverts the
+// table to its pre-063 shape (quantity TEXT, no quantity_note), seeds the
+// kinds of free text real planners typed, then re-executes the actual 063
+// statements from schema.js and asserts every conversion rule — including the
+// two failure modes that would otherwise only surface in prod at container
+// startup (numeric overflow aborting the migration, and Icelandic thousands
+// separators being misread as decimals).
+
+describe('Migration 063 quantity conversion (legacy data)', () => {
+  const { migrations } = require('../../server/config/schema');
+  const m063 = migrations.find(m => m.name === '063_party_costs');
+
+  async function revertToPre063() {
+    await db.query(`ALTER TABLE party_logistics_items DROP CONSTRAINT IF EXISTS party_logistics_qty_nonneg_chk`);
+    await db.query(`ALTER TABLE party_logistics_items ALTER COLUMN quantity TYPE TEXT USING quantity::text`);
+    await db.query(`ALTER TABLE party_logistics_items DROP COLUMN IF EXISTS quantity_note`);
+  }
+
+  async function runMigration063() {
+    for (const statement of m063.statements) {
+      await db.query(statement);
+    }
+  }
+
+  test('converts every legacy pattern without data loss and without aborting', async () => {
+    expect(m063).toBeDefined();
+    await revertToPre063();
+
+    const legacy = [
+      ['simple int',        '100'],
+      ['leading + note',    '2 kassar'],
+      ['dash note',         '6-pack'],
+      ['comma decimal',     '2,5 kg'],
+      ['dot decimal',       '2.5'],
+      ['is thousands dot',  '1.234 stk'],
+      ['is thousands space','1 000'],
+      ['pure text',         'handfylli'],
+      ['11-digit overflow', '12345678901'],
+      ['huge + note',       '99999999999999 stk'],
+      ['ambiguous comma',   '1,2345'],
+      ['empty string',      ''],
+      ['null qty',          null],
+    ];
+    for (const [name, qty] of legacy) {
+      await db.query(
+        `INSERT INTO party_logistics_items (name, quantity, category) VALUES ($1, $2, 'other')`,
+        [name, qty]
+      );
+    }
+
+    // Must not throw — an abort here means every prod deploy fails at startup.
+    await runMigration063();
+
+    const { rows } = await db.query(
+      `SELECT name, quantity::float8 AS quantity, quantity_note
+         FROM party_logistics_items ORDER BY id`
+    );
+    const byName = Object.fromEntries(rows.map(r => [r.name, r]));
+
+    expect(byName['simple int']).toMatchObject({ quantity: 100, quantity_note: null });
+    expect(byName['leading + note']).toMatchObject({ quantity: 2, quantity_note: 'kassar' });
+    expect(byName['dash note']).toMatchObject({ quantity: 6, quantity_note: '-pack' });
+    expect(byName['comma decimal']).toMatchObject({ quantity: 2.5, quantity_note: 'kg' });
+    expect(byName['dot decimal']).toMatchObject({ quantity: 2.5, quantity_note: null });
+    // Icelandic thousands separators parse as thousands, not decimals.
+    expect(byName['is thousands dot']).toMatchObject({ quantity: 1234, quantity_note: 'stk' });
+    expect(byName['is thousands space']).toMatchObject({ quantity: 1000, quantity_note: null });
+    // Anything unparseable/ambiguous/oversized: quantity NULL, FULL text kept.
+    expect(byName['pure text']).toMatchObject({ quantity: null, quantity_note: 'handfylli' });
+    expect(byName['11-digit overflow']).toMatchObject({ quantity: null, quantity_note: '12345678901' });
+    expect(byName['huge + note']).toMatchObject({ quantity: null, quantity_note: '99999999999999 stk' });
+    expect(byName['ambiguous comma']).toMatchObject({ quantity: null, quantity_note: '1,2345' });
+    expect(byName['empty string']).toMatchObject({ quantity: null, quantity_note: null });
+    expect(byName['null qty']).toMatchObject({ quantity: null, quantity_note: null });
+
+    // Column ends up numeric and the CHECK constraint is back.
+    const col = await db.query(
+      `SELECT data_type FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'party_logistics_items'
+          AND column_name = 'quantity'`
+    );
+    expect(col.rows[0].data_type).toBe('numeric');
+    const chk = await db.query(
+      `SELECT 1 FROM pg_constraint
+        WHERE conname = 'party_logistics_qty_nonneg_chk'
+          AND conrelid = 'public.party_logistics_items'::regclass`
+    );
+    expect(chk.rows).toHaveLength(1);
+  });
+
+  test('re-running the migration on an already-converted table is a no-op', async () => {
+    await db.query(
+      `INSERT INTO party_logistics_items (name, quantity, quantity_note, unit_price, category)
+       VALUES ('Converted', 2, 'kassar', 450, 'other')`
+    );
+    await runMigration063(); // guard sees NUMERIC quantity → skips conversion
+    const { rows } = await db.query(
+      `SELECT quantity::float8 AS quantity, quantity_note, unit_price
+         FROM party_logistics_items WHERE name = 'Converted'`
+    );
+    expect(rows[0]).toMatchObject({ quantity: 2, quantity_note: 'kassar', unit_price: 450 });
+  });
+});

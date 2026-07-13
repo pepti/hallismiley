@@ -766,6 +766,7 @@
   "party.admin.logisticsUnit": "Eining / athugasemd",
   "party.admin.logisticsUnitPh": "t.d. kassar",
   "party.admin.logisticsSubtotal": "Samtals: {v}",
+  "party.admin.logisticsSubtotalAll": "Samtals (m. keyptu): {v}",
   "party.admin.todoTitle": "Verkefnalisti",
   "party.admin.todoHelp": "Hver sem er í skipulagsteyminu getur bætt við verkefnum, skipt þeim í undirverkefni, sett skiladaga og úthlutað fólki.",
   "party.admin.todoEmpty": "Engin verkefni enn. Bættu því fyrsta við hér að ofan.",
