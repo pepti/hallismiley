@@ -6,10 +6,24 @@ on:
   pull_request:
     branches: [main]
 
+# The workflow only needs to read the repo. Actions are SHA-pinned (with a
+# `# vN` comment dependabot keeps in sync) so a hijacked tag can't run
+# arbitrary code with our token.
+permissions:
+  contents: read
+
+# Superseded PR pushes cancel their in-flight run; main runs are NEVER
+# cancelled — a `cancelled` CI conclusion on main would skip the deploy AND
+# fire the deploy-blocked alert email for a commit that was simply superseded.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Lint + Integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -28,10 +42,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 20
           cache: npm
@@ -45,6 +59,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: i18n keys in sync
+        run: npm run check:i18n
+
       - name: Run tests with coverage
         env:
           NODE_ENV:            test
@@ -55,6 +72,7 @@ jobs:
   e2e:
     name: E2E tests (Playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: test
 
     services:
@@ -74,10 +92,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 20
           cache: npm
@@ -98,22 +116,68 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
 
   docker:
-    name: Docker build
+    name: Docker build + boot smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Gate on test — otherwise a green Docker job can mask a red test job
     # at the workflow-summary level, and the workflow_run trigger in
     # deploy.yml only sees the overall conclusion.
     needs: test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER:     postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB:       hallismiley_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Build Docker image
-        run: docker build .
+        run: docker build -t hallismiley:smoke .
+
+      # Boot the production image against an empty database: proves the
+      # container starts, the migration runner applies the full chain from
+      # scratch, and the app reaches /health + /ready — the same sequence a
+      # real Azure deploy performs. Catches broken migrations before merge.
+      - name: Boot smoke test
+        run: |
+          docker run -d --name smoke --network host \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_smoke \
+            -e ALLOWED_ORIGINS=http://localhost:3000 \
+            -e CSRF_SECRET=$(openssl rand -hex 32) \
+            hallismiley:smoke
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3000/health > /dev/null 2>&1; then
+              echo "/health OK after ~$((i*2))s"
+              break
+            fi
+            if [ "$i" = "45" ]; then
+              echo "Container never became healthy:"; docker logs smoke; exit 1
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/ready || { echo "/ready failed:"; docker logs smoke; exit 1; }
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs smoke || true
