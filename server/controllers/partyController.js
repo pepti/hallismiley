@@ -5,7 +5,13 @@ const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
 const { t }        = require('../i18n');
-const { DEFAULT_LOCALE } = require('../config/i18n');
+const { DEFAULT_LOCALE, PARTY_DEFAULT_LOCALE } = require('../config/i18n');
+
+// The /party page is Icelandic-primary: admins edit the IS content and the EN
+// content auto-follows (the reverse of every other content type, which is
+// EN-primary). Saving IS translates IS → EN; saving EN leaves IS untouched.
+const PARTY_PRIMARY_LOCALE   = PARTY_DEFAULT_LOCALE; // 'is' — source of truth
+const PARTY_SECONDARY_LOCALE = DEFAULT_LOCALE;       // 'en' — auto-translated follower
 const { isEnabled: translatorEnabled } = require('../services/translator');
 const {
   SITE_CONTENT_TRANSLATE_SKIP,
@@ -1414,12 +1420,12 @@ const partyController = {
       // Write to the request's locale — admins switching languages edit per-locale content.
       const locale = req.locale || DEFAULT_LOCALE;
 
-      // Captured per-key so the EN→IS background translate can detect which
-      // leaves the admin just changed and overwrite stale IS translations.
-      // Only populated when writing the EN locale; for IS writes we never
-      // need previousEn.
-      const previousEnByKey = {};
-      const parsedByKey     = {};
+      // Captured per-key so the IS→EN background translate can detect which
+      // leaves the admin just changed and overwrite stale EN translations.
+      // Only populated when writing the primary (IS) locale; for EN writes
+      // we never run a side effect, so we never need the previous source.
+      const previousPrimaryByKey = {};
+      const parsedByKey          = {};
 
       for (const [key, value] of Object.entries(updates)) {
         if (!allowed.includes(key)) {
@@ -1456,15 +1462,15 @@ const partyController = {
         const isLocaleNeutral = LOCALE_NEUTRAL_INFO_KEYS.has(key);
         const targetLocale    = isLocaleNeutral ? DEFAULT_LOCALE : locale;
 
-        // Capture the prior EN row BEFORE the upsert so the merge logic can
-        // detect "EN leaf changed since last save" and overwrite stale IS
-        // translations that no longer match the new EN value.
-        if (!isLocaleNeutral && locale === DEFAULT_LOCALE) {
+        // Capture the prior IS row BEFORE the upsert so the merge logic can
+        // detect "IS leaf changed since last save" and overwrite stale EN
+        // translations that no longer match the new IS value.
+        if (!isLocaleNeutral && locale === PARTY_PRIMARY_LOCALE) {
           const prev = await db.query(
             `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
-            [`party_${key}`, DEFAULT_LOCALE]
+            [`party_${key}`, PARTY_PRIMARY_LOCALE]
           );
-          previousEnByKey[key] = prev.rows[0] ? prev.rows[0].value : null;
+          previousPrimaryByKey[key] = prev.rows[0] ? prev.rows[0].value : null;
         }
 
         await db.query(
@@ -1503,22 +1509,26 @@ const partyController = {
       // jsonb blobs (e.g. activities with many entries).
       res.json(info);
 
-      // Mirrors contentController.putContent's auto-translate side effect.
-      // Runs only when saving the EN locale, the translator is enabled, and
-      // the caller did not opt out via __autoTranslate: false. Per-key so a
-      // single bulk patch can fan out into multiple background translates.
-      if (locale === DEFAULT_LOCALE && wantsAutoTranslate && translatorEnabled()) {
+      // Party is Icelandic-primary (unlike contentController, which is EN
+      // -primary): saving the IS locale translates IS → EN in the background.
+      // Saving EN runs no side effect, so IS is never overwritten by an EN
+      // edit. Runs only when the translator is enabled and the caller did not
+      // opt out via __autoTranslate: false. Per-key so a single bulk patch can
+      // fan out into multiple background translates.
+      if (locale === PARTY_PRIMARY_LOCALE && wantsAutoTranslate && translatorEnabled()) {
         for (const key of Object.keys(parsedByKey)) {
           const fullKey = `party_${key}`;
           if (SITE_CONTENT_TRANSLATE_SKIP.has(fullKey)) continue;
           if (LOCALE_NEUTRAL_INFO_KEYS.has(key)) continue;
-          const sourceEn = parsedByKey[key];
-          if (sourceEn === null || sourceEn === undefined) continue;
-          runAutoTranslateSideEffect(fullKey, sourceEn, previousEnByKey[key], req.user.id)
-            .catch(err => logger.error(
-              { err, key: fullKey },
-              'partyController.updateInfo IS auto-fill failed (background)'
-            ));
+          const sourceIs = parsedByKey[key];
+          if (sourceIs === null || sourceIs === undefined) continue;
+          runAutoTranslateSideEffect(
+            fullKey, sourceIs, previousPrimaryByKey[key], req.user.id,
+            { from: PARTY_PRIMARY_LOCALE, to: PARTY_SECONDARY_LOCALE }
+          ).catch(err => logger.error(
+            { err, key: fullKey },
+            'partyController.updateInfo EN auto-fill failed (background)'
+          ));
         }
       }
     } catch (err) { next(err); }

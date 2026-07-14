@@ -118,27 +118,35 @@ function mergeTranslatedTree(translatedEn, existingIs, sourceEn, previousEn) {
 // browser does not sit on "Saving…" while the LLM works through dozens of
 // nested string leaves on big jsonb keys like halli_bio.
 //
-// `previousEn` is the EN row's value BEFORE the just-completed upsert
-// (or null if the EN row didn't exist yet). Passing it lets the merge
-// detect "EN leaf changed since last save" and overwrite the stale
-// IS translation that no longer matches the new EN.
-async function runAutoTranslateSideEffect(key, sourceEn, previousEn, userId) {
-  const translated = await translateTree(sourceEn);
+// `previousSource` is the SOURCE-locale row's value BEFORE the just-completed
+// upsert (or null if that row didn't exist yet). Passing it lets the merge
+// detect "source leaf changed since last save" and overwrite the stale
+// target translation that no longer matches the new source.
+//
+// Direction is configurable via `opts.from` / `opts.to` and defaults to the
+// historical EN → IS flow used by generic site content. The party page passes
+// { from: 'is', to: 'en' } so Icelandic is the source of truth and English
+// auto-tracks it. Only the source→target direction runs a side effect; a save
+// on the target locale never touches the source row.
+async function runAutoTranslateSideEffect(key, source, previousSource, userId, opts = {}) {
+  const from = opts.from || 'en';
+  const to   = opts.to   || 'is';
+  const translated = await translateTree(source, { sourceLocale: from, targetLocale: to });
   if (!translated) return;
   const { rows } = await db.query(
     `SELECT value FROM site_content WHERE key = $1 AND locale = $2`,
-    [key, 'is']
+    [key, to]
   );
-  const existingIs = rows[0] ? rows[0].value : null;
-  const merged = mergeTranslatedTree(translated, existingIs, sourceEn, previousEn);
+  const existingTarget = rows[0] ? rows[0].value : null;
+  const merged = mergeTranslatedTree(translated, existingTarget, source, previousSource);
   await db.query(
     `INSERT INTO site_content (key, locale, value, updated_by, updated_at)
-     VALUES ($1, 'is', $2::jsonb, $3, NOW())
+     VALUES ($1, $2, $3::jsonb, $4, NOW())
      ON CONFLICT (key, locale) DO UPDATE
        SET value      = EXCLUDED.value,
            updated_by = EXCLUDED.updated_by,
            updated_at = NOW()`,
-    [key, JSON.stringify(merged), userId]
+    [key, to, JSON.stringify(merged), userId]
   );
 }
 
