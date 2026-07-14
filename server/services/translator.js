@@ -45,6 +45,17 @@ const DEFAULT_MODEL = 'claude-haiku-4-5';
 const DEFAULT_TIMEOUT_MS = 8000;
 const MAX_TREE_DEPTH = 20;
 
+// Human-readable language names used to build the system prompt. The
+// translator is direction-agnostic: callers pass sourceLocale/targetLocale
+// and the prompt is assembled from these. Defaults keep the historical
+// EN → IS behaviour for every existing caller (site content, projects,
+// news, shop) — only the party flow opts into IS → EN.
+const LOCALE_NAMES = { en: 'English', is: 'Icelandic' };
+
+function isSupportedDirection(from, to) {
+  return from !== to && !!LOCALE_NAMES[from] && !!LOCALE_NAMES[to];
+}
+
 // Lazy-initialised Anthropic client. Recreated if the API key changes at
 // runtime (rare but cheap).
 let cachedClient = null;
@@ -75,12 +86,14 @@ function getTimeout() {
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
 }
 
-function systemPrompt(format) {
+function systemPrompt(format, from = 'en', to = 'is') {
+  const fromName = LOCALE_NAMES[from] || 'English';
+  const toName   = LOCALE_NAMES[to]   || 'Icelandic';
   const formatNote = format === 'markdown'
     ? 'The input uses Markdown formatting — preserve all Markdown syntax (headings, lists, emphasis, links, code fences) exactly.'
     : 'The input is plain text — preserve line breaks, punctuation, and spacing exactly.';
   return [
-    'You are a professional translator. Translate the provided text from English to Icelandic.',
+    `You are a professional translator. Translate the provided text from ${fromName} to ${toName}.`,
     formatNote,
     '',
     'DO NOT translate, paraphrase, or alter any of the following — keep them verbatim:',
@@ -93,19 +106,21 @@ function systemPrompt(format) {
     '  • Proper nouns: "Halli Smiley", "Halli", "HALLI SMILEY", "NetApp", "GitHub", "LinkedIn", "Azure", "Railway", "Node.js", "Express", "PostgreSQL", "Resend", "Sentry", "Stripe", "Multer", "Pino", "Helmet", "CSRF", "Lucia"',
     '  • Short English enum tokens like "open", "limited", "draft", "published"',
     '',
-    'Icelandic style: natural, native — not word-for-word. Match the case of the input (ALL CAPS stays ALL CAPS, Title Case stays Title Case).',
+    `${toName} style: natural, native — not word-for-word. Match the case of the input (ALL CAPS stays ALL CAPS, Title Case stays Title Case).`,
     '',
     'Output rules:',
-    '  • Return ONLY the Icelandic translation.',
+    `  • Return ONLY the ${toName} translation.`,
     '  • No preamble, no commentary, no quotation marks around the result.',
-    '  • If a segment cannot be translated (e.g. it is already Icelandic), return it unchanged.',
+    `  • If a segment cannot be translated (e.g. it is already ${toName}), return it unchanged.`,
   ].join('\n');
 }
 
-function systemPromptForTree() {
+function systemPromptForTree(from = 'en', to = 'is') {
+  const fromName = LOCALE_NAMES[from] || 'English';
+  const toName   = LOCALE_NAMES[to]   || 'Icelandic';
   return [
-    'You are a professional translator. You will receive a JSON array of English strings.',
-    'Translate each string from English to Icelandic and return a JSON array of the SAME LENGTH with the translated strings in the SAME ORDER.',
+    `You are a professional translator. You will receive a JSON array of ${fromName} strings.`,
+    `Translate each string from ${fromName} to ${toName} and return a JSON array of the SAME LENGTH with the translated strings in the SAME ORDER.`,
     '',
     'For each string follow these rules strictly:',
     '  • Preserve URLs, email addresses, file paths, slash-handles, HTML tags, Markdown syntax, placeholder tokens ({0}, {1}, {name}), and code spans verbatim.',
@@ -114,7 +129,7 @@ function systemPromptForTree() {
     '  • Short English enum tokens ("open", "limited", "draft") stay unchanged.',
     '',
     'Output: a JSON array only — no preamble, no commentary, no code fences, no keys other than array elements.',
-    'If the input is already Icelandic for a given string, return it unchanged at the same position.',
+    `If the input is already ${toName} for a given string, return it unchanged at the same position.`,
   ].join('\n');
 }
 
@@ -148,8 +163,8 @@ function withTimeout(promiseFactory, timeoutMs) {
  * Translate a single piece of text. Returns null on any failure (flag off,
  * missing key, timeout, SDK error) so the caller keeps the EN save moving.
  */
-async function translate({ text, targetLocale = 'is', format = 'plain' } = {}) {
-  if (targetLocale !== 'is') return null;
+async function translate({ text, sourceLocale = 'en', targetLocale = 'is', format = 'plain' } = {}) {
+  if (!isSupportedDirection(sourceLocale, targetLocale)) return null;
   if (typeof text !== 'string' || text.trim() === '') return null;
   if (!isEnabled()) return null;
 
@@ -158,7 +173,7 @@ async function translate({ text, targetLocale = 'is', format = 'plain' } = {}) {
   try {
     const out = await withTimeout(
       (signal) => callModel({
-        systemText: systemPrompt(format),
+        systemText: systemPrompt(format, sourceLocale, targetLocale),
         userText: text,
         maxTokens,
         signal,
@@ -227,7 +242,7 @@ function setPath(root, path, value) {
   cur[path[path.length - 1]] = value;
 }
 
-async function translateBatch(strings) {
+async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is' } = {}) {
   if (!isEnabled()) return null;
   if (!Array.isArray(strings) || strings.length === 0) return [];
 
@@ -238,7 +253,7 @@ async function translateBatch(strings) {
   try {
     const out = await withTimeout(
       (signal) => callModel({
-        systemText: systemPromptForTree(),
+        systemText: systemPromptForTree(sourceLocale, targetLocale),
         userText: payload,
         maxTokens,
         signal,
@@ -299,7 +314,7 @@ const TRANSLATE_TREE_CHUNK_SIZE = 25;
  *      specific leaves only, NOT the whole tree.
  *   3. If everything fails, return null so the caller skips the write.
  */
-async function translateTree(tree, { format = 'plain' } = {}) {
+async function translateTree(tree, { format = 'plain', sourceLocale = 'en', targetLocale = 'is' } = {}) {
   // format is reserved; today we treat every string leaf as plain because
   // site_content rarely contains markdown. Left as a parameter so callers
   // can opt in later without changing signatures.
@@ -307,6 +322,7 @@ async function translateTree(tree, { format = 'plain' } = {}) {
   if (!isEnabled()) return null;
   if (!tree || typeof tree !== 'object') return null;
 
+  const dir = { sourceLocale, targetLocale };
   const clone = JSON.parse(JSON.stringify(tree));
   const leaves = [];
   collectLeaves(clone, [], 0, leaves);
@@ -315,7 +331,7 @@ async function translateTree(tree, { format = 'plain' } = {}) {
   // For small trees the single batched call is most efficient — one
   // round-trip and no overhead from chunk coordination.
   if (leaves.length <= TRANSLATE_TREE_CHUNK_SIZE) {
-    const batched = await translateBatch(leaves.map(l => l.value));
+    const batched = await translateBatch(leaves.map(l => l.value), dir);
     if (batched) {
       leaves.forEach((leaf, i) => setPath(clone, leaf.path, batched[i]));
       return clone;
@@ -329,7 +345,7 @@ async function translateTree(tree, { format = 'plain' } = {}) {
       chunks.push(leaves.slice(i, i + TRANSLATE_TREE_CHUNK_SIZE));
     }
     const chunkResults = await Promise.all(
-      chunks.map(chunk => translateBatch(chunk.map(l => l.value)))
+      chunks.map(chunk => translateBatch(chunk.map(l => l.value), dir))
     );
 
     // Apply translations from successful chunks. Track which leaves
@@ -350,20 +366,20 @@ async function translateTree(tree, { format = 'plain' } = {}) {
       'translator.translateTree falling back to per-leaf for failed chunks'
     );
     // Fall through to per-leaf only for the leaves whose chunk failed.
-    return await fillPerLeaf(clone, needsPerLeaf);
+    return await fillPerLeaf(clone, needsPerLeaf, dir);
   }
 
   // Per-leaf fallback for the small-tree path (single batch failed).
-  return await fillPerLeaf(clone, leaves);
+  return await fillPerLeaf(clone, leaves, dir);
 }
 
 // Translate the given leaves one at a time and apply to clone. Returns
 // the populated clone if at least one leaf succeeded, null otherwise.
 // Used as the last-resort fallback when batched translation fails.
-async function fillPerLeaf(clone, leaves) {
+async function fillPerLeaf(clone, leaves, { sourceLocale = 'en', targetLocale = 'is' } = {}) {
   let anyOk = false;
   for (const leaf of leaves) {
-    const t = await translate({ text: leaf.value, format: 'plain' });
+    const t = await translate({ text: leaf.value, sourceLocale, targetLocale, format: 'plain' });
     if (t) {
       setPath(clone, leaf.path, t);
       anyOk = true;
