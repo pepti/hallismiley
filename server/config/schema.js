@@ -1999,6 +1999,18 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
     ],
   },
+  {
+    // Bulk welcome-invite flow: invited_at marks a customer as already sent the
+    // set-password invite so the admin "Send invites" action is idempotent —
+    // candidates are approved, passwordless, not-yet-invited customers. Stamped
+    // only after a successful send so a mail failure stays retryable. Ported
+    // from icelandicstore (66d084c). Human-reference duplicate in
+    // server/migrations/065_user_invited_at.sql.
+    name: '065_user_invited_at',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

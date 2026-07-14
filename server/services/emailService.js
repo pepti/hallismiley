@@ -163,6 +163,66 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
   console.log(`[EmailService] Password reset email sent: id=${data.id}`);
 }
 
+// ── Welcome-invite email (bulk "Send invites" + preview) ─────────────────────
+
+// Builds the welcome-invite email HTML. Shared by the real send AND the admin
+// preview endpoint so what an admin previews is byte-identical to what ships.
+// subject/heading/body are already-resolved copy (admin override or i18n
+// default); the button / fallback / no-action lines + the dark shell stay fixed.
+// `link` is the set-password URL — a real per-recipient token when sending, a
+// SAMPLE token when previewing (the caller decides; never a real token in a
+// preview). body is intentionally raw HTML (i18n default carries <strong>; admin
+// overrides are allowlist-sanitised upstream); subject/heading are plain text.
+function buildInviteEmailHtml({ subject, heading, body, link, locale = 'en' }) {
+  return emailShell(subject, `
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${heading}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+      ${body}
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+      <tr>
+        <td style="background-color:#c9a84c;border-radius:8px;">
+          <a href="${link}"
+             style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+            ${t(locale, 'email.invite.button')}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 16px;font-size:13px;color:#555;line-height:1.6;">
+      ${t(locale, 'email.invite.fallback')}<br/>
+      <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
+    </p>
+    <p style="margin:0;font-size:13px;color:#444;">
+      ${t(locale, 'email.invite.noAction')}
+    </p>
+  `, locale);
+}
+
+async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) {
+  const link = `${APP_URL}/#/reset-password?token=${token}&locale=${encodeURIComponent(locale)}`;
+  if (!isConfigured()) {
+    // Do NOT log the token or the link — they are credential-equivalent.
+    console.log('[EmailService] Resend not configured — welcome invite skipped (retrieve token from DB)');
+    return false;
+  }
+  // Admin-saved copy wins per field; anything blank falls back to the i18n default.
+  const ov = (overrides && typeof overrides === 'object') ? overrides : {};
+  const subject = ov.subject || t(locale, 'email.invite.subject');
+  const html = buildInviteEmailHtml({
+    subject,
+    heading: ov.heading || t(locale, 'email.invite.heading'),
+    body:    ov.body    || t(locale, 'email.invite.body'),
+    link,
+    locale,
+  });
+  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Welcome invite sent: id=${data.id}`);
+  return data?.id;
+}
+
 // ── Order receipt email ───────────────────────────────────────────────────────
 
 function formatMoney(amount, currency, locale = 'en') {
@@ -908,4 +968,4 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
   console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, emailHealthCheck, isConfigured };
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, emailHealthCheck, isConfigured };

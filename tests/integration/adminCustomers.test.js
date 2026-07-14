@@ -182,3 +182,118 @@ describe('POST /api/v1/admin/customers/delete', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('bulk welcome invites', () => {
+  const previewUrl  = '/api/v1/admin/customers/send-invites/preview';
+  const sendUrl     = '/api/v1/admin/customers/send-invites';
+  const renderUrl   = '/api/v1/admin/customers/send-invites/render';
+  const templateUrl = '/api/v1/admin/customers/invite-template';
+
+  // A passwordless, approved shop customer — the canonical invite candidate.
+  async function createCandidate(email) {
+    const res = await request(app).post('/api/v1/admin/customers').set('Cookie', adminCookie).send({ email });
+    expect(res.status).toBe(201);
+    return res.body.customer.id;
+  }
+
+  test('preview lists candidates and excludes party guests, disabled and passworded users', async () => {
+    const candidateId = await createCandidate('invitee@example.com');
+    // Party guest: passwordless role=user but signs in via magic link.
+    await db.query(
+      `INSERT INTO users (email, username, password_hash, role, party_access)
+       VALUES ('guest@party.is', 'partyguest1', NULL, 'user', TRUE)`
+    );
+    // Disabled passwordless customer.
+    await db.query(
+      `INSERT INTO users (email, username, password_hash, role, disabled)
+       VALUES ('off@example.com', 'disabledcust', NULL, 'user', TRUE)`
+    );
+    // createTestRegularUser has a password — not a candidate either.
+
+    const res = await request(app).get(previewUrl).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.candidates.map(c => c.id)).toEqual([candidateId]);
+    expect(res.body.count).toBe(1);
+    expect(res.body.emailConfigured).toBe(false); // no Resend in tests
+    expect(res.body.template.en.subject).toBeTruthy();
+    expect(res.body.defaults.is.subject).toBeTruthy();
+  });
+
+  test('send stamps invited_at + reset token, returns devLinks, and is idempotent', async () => {
+    const candidateId = await createCandidate('invitee2@example.com');
+
+    const res = await request(app).post(sendUrl).set('Cookie', adminCookie).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(1);
+    expect(res.body.failed).toBe(0);
+    expect(res.body.devLinks).toHaveLength(1); // NODE_ENV=test → links surfaced
+    expect(res.body.devLinks[0].link).toContain('/#/reset-password?token=');
+
+    const { rows } = await db.query(
+      'SELECT invited_at, password_reset_token FROM users WHERE id = $1', [candidateId]
+    );
+    expect(rows[0].invited_at).toBeTruthy();
+    expect(rows[0].password_reset_token).toBeTruthy();
+
+    // Everyone is now invited → a second run sends nothing.
+    const again = await request(app).post(sendUrl).set('Cookie', adminCookie).send({});
+    expect(again.body.sent).toBe(0);
+  });
+
+  test('recipientIds narrows the send; forged/stale ids are ignored; empty list sends none', async () => {
+    const keepId   = await createCandidate('keep@example.com');
+    const removeId = await createCandidate('removed@example.com');
+
+    const res = await request(app).post(sendUrl).set('Cookie', adminCookie)
+      .send({ recipientIds: [keepId, 'forged-id'] });
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(1);
+
+    const { rows } = await db.query('SELECT id, invited_at FROM users WHERE id = ANY($1)', [[keepId, removeId]]);
+    const byId = new Map(rows.map(r => [r.id, r.invited_at]));
+    expect(byId.get(keepId)).toBeTruthy();
+    expect(byId.get(removeId)).toBeNull();
+
+    const none = await request(app).post(sendUrl).set('Cookie', adminCookie).send({ recipientIds: [] });
+    expect(none.body.sent).toBe(0);
+  });
+
+  test('render returns the preview HTML with a sample token; non-admin 403', async () => {
+    const res = await request(app).post(renderUrl).set('Cookie', adminCookie)
+      .send({ locale: 'is', subject: 'Halló', heading: 'Velkomin', body: 'Texti' });
+    expect(res.status).toBe(200);
+    expect(res.body.html).toContain('SAMPLE-PREVIEW-TOKEN');
+    expect(res.body.html).toContain('Velkomin');
+
+    const c = await getTestSessionCookie(userId);
+    expect((await request(app).post(renderUrl).set('Cookie', c).send({})).status).toBe(403);
+    expect((await request(app).get(previewUrl).set('Cookie', c)).status).toBe(403);
+    expect((await request(app).post(sendUrl).set('Cookie', c).send({})).status).toBe(403);
+  });
+
+  test('template PATCH persists per locale, merges, clears on empty string, 400 on over-length', async () => {
+    const saved = await request(app).patch(templateUrl).set('Cookie', adminCookie)
+      .send({ is: { subject: 'Sérsniðið efni' } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.template.is.subject).toBe('Sérsniðið efni');
+
+    // Merge: editing EN leaves the IS override intact.
+    const merged = await request(app).patch(templateUrl).set('Cookie', adminCookie)
+      .send({ en: { heading: 'Custom heading' } });
+    expect(merged.body.template.is.subject).toBe('Sérsniðið efni');
+    expect(merged.body.template.en.heading).toBe('Custom heading');
+
+    // Clearing falls back to the i18n default.
+    const cleared = await request(app).patch(templateUrl).set('Cookie', adminCookie)
+      .send({ is: { subject: '' } });
+    expect(cleared.body.template.is.subject).not.toBe('Sérsniðið efni');
+
+    const tooLong = await request(app).patch(templateUrl).set('Cookie', adminCookie)
+      .send({ en: { subject: 'x'.repeat(201) } });
+    expect(tooLong.status).toBe(400);
+
+    // app_settings isn't truncated between tests — clear the EN override too so
+    // template state can't leak into other suites/runs.
+    await request(app).patch(templateUrl).set('Cookie', adminCookie).send({ en: { heading: '' } });
+  });
+});

@@ -4,7 +4,7 @@
 // kennitala. Add/Import are admin-only; listing is gated by the 'customers' view.
 import { isAuthenticated, canSeeView, isAdmin } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
@@ -12,6 +12,7 @@ import { downloadCsv } from '../utils/downloadCsv.js';
 import {
   adminListCustomers, adminCreateCustomer,
   adminPreviewCustomerImport, adminApplyCustomerImport, adminDeleteCustomers,
+  adminGetInvitePreview, adminRenderInvitePreview, adminSaveInviteTemplate, adminSendBulkInvites,
 } from '../services/adminCustomers.js';
 import { parseCsvRecords } from '../utils/csv.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
@@ -45,6 +46,8 @@ export class AdminCustomersView {
   constructor() {
     this._el = null; this._customers = []; this._q = ''; this._searchDebounce = null;
     this._selected = new Set(); // selected customer ids (role='user' rows only)
+    this._invite = null;        // send-invites panel state { data, locale, edits, removed }
+    this._previewTimer = null;
   }
 
   async render() {
@@ -61,7 +64,8 @@ export class AdminCustomersView {
           <h1>${t('adminCustomers.title')}</h1>
           <div class="admin-shop__header-actions">
             <button type="button" id="cust-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
-            ${admin ? `<button type="button" id="cust-import" class="admin-shop__primary-btn">${t('adminProducts.import')}</button>
+            ${admin ? `<button type="button" id="cust-send-invites" class="admin-shop__primary-btn" aria-expanded="false">${t('adminCustomers.sendInvites')}</button>
+            <button type="button" id="cust-import" class="admin-shop__primary-btn">${t('adminProducts.import')}</button>
             <button type="button" id="cust-add" class="admin-shop__primary-btn">${t('adminCustomers.add')}</button>` : ''}
           </div>
         </header>
@@ -69,6 +73,7 @@ export class AdminCustomersView {
           <input type="search" id="cust-q" class="admin-shop__search"
                  placeholder="${t('adminCustomers.searchPlaceholder')}" autocomplete="off"/>
         </div>
+        <div class="inv-panel" id="inv-panel" hidden></div>
         <div class="cust-bulkbar" id="cust-bulkbar" hidden></div>
         <div id="cust-body"><p>${t('form.loading')}</p></div>
       </div>`;
@@ -76,6 +81,7 @@ export class AdminCustomersView {
     this._el.querySelector('#cust-export').addEventListener('click', () => this._exportCsv());
     this._el.querySelector('#cust-add')?.addEventListener('click', () => this._openAddModal());
     this._el.querySelector('#cust-import')?.addEventListener('click', () => this._openImportModal());
+    this._el.querySelector('#cust-send-invites')?.addEventListener('click', () => this._toggleInvitePanel());
     const search = this._el.querySelector('#cust-q');
     search.addEventListener('input', (e) => {
       clearTimeout(this._searchDebounce);
@@ -147,6 +153,287 @@ export class AdminCustomersView {
     body.querySelectorAll('.cust-notes-btn').forEach(btn => {
       btn.addEventListener('click', () => this._openNotesModal(btn.dataset.id, btn.dataset.email));
     });
+  }
+
+  // ── Send-invites confirmation panel ────────────────────────────────────────
+  // Bulk-send welcome invites to approved, passwordless, not-yet-invited
+  // customers. Clicking "Send invites" doesn't fire immediately — it toggles a
+  // panel that shows WHO will be emailed, warns that Send dispatches mail
+  // immediately, previews the email, and lets the admin edit + save the copy
+  // (per language) as the new default before sending.
+  async _toggleInvitePanel(force) {
+    const panel = this._el.querySelector('#inv-panel');
+    const btn   = this._el.querySelector('#cust-send-invites');
+    if (!panel) return;
+    const willOpen = (typeof force === 'boolean') ? force : panel.hidden;
+    if (!willOpen) {
+      panel.hidden = true;
+      btn?.setAttribute('aria-expanded', 'false');
+      clearTimeout(this._previewTimer);
+      return;
+    }
+    panel.hidden = false;
+    btn?.setAttribute('aria-expanded', 'true');
+    panel.innerHTML = `<p>${t('form.loading')}</p>`;
+    this._invite = { data: null, locale: getLocale(), edits: {}, removed: new Set() };
+    try {
+      this._invite.data = await adminGetInvitePreview();
+      this._renderInvitePanel();
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+      panel.innerHTML = `<p class="admin-shop__error">${escHtml(err.message)}</p>`;
+    }
+  }
+
+  // Current editor values for a locale: admin edit (if touched) over the saved/
+  // default template returned by the server.
+  _inviteFields(loc) {
+    const tpl = (this._invite.data.template || {})[loc] || {};
+    const e   = (this._invite.edits || {})[loc] || {};
+    return {
+      subject: e.subject ?? tpl.subject ?? '',
+      heading: e.heading ?? tpl.heading ?? '',
+      body:    e.body    ?? tpl.body    ?? '',
+    };
+  }
+
+  _renderInvitePanel() {
+    const panel = this._el.querySelector('#inv-panel');
+    if (!panel || !this._invite?.data) return;
+    const loc = this._invite.locale;
+    const f = this._inviteFields(loc);
+
+    const langBtns = ['en', 'is'].map(l =>
+      `<button type="button" class="inv-lang__btn${l === loc ? ' is-active' : ''}" data-lang="${l}" role="tab" aria-selected="${l === loc}">${l.toUpperCase()}</button>`
+    ).join('');
+
+    panel.innerHTML = `
+      <div class="inv-panel__head">
+        <h2 class="inv-panel__title">${t('adminCustomers.invitePanelTitle')}</h2>
+        <button type="button" class="inv-panel__close" id="inv-close" aria-label="${t('common.close')}">✕</button>
+      </div>
+
+      <div class="inv-grid">
+        <section class="inv-col inv-col--recipients">
+          <h3 class="inv-subhead" id="inv-recip-head"></h3>
+          <div id="inv-recipients-wrap"></div>
+          <p class="inv-hint">${t('adminCustomers.inviteHelp')}</p>
+        </section>
+
+        <section class="inv-col inv-col--editor">
+          <div class="inv-lang" role="tablist" aria-label="${t('adminCustomers.invitePanelTitle')}">
+            ${langBtns}
+            <button type="button" class="inv-reset" id="inv-reset">${t('adminCustomers.inviteResetDefault')}</button>
+          </div>
+          <label class="inv-field"><span>${t('adminCustomers.inviteSubject')}</span>
+            <input type="text" id="inv-subject" maxlength="200" value="${escHtml(f.subject)}"/></label>
+          <label class="inv-field"><span>${t('adminCustomers.inviteHeading')}</span>
+            <input type="text" id="inv-heading" maxlength="200" value="${escHtml(f.heading)}"/></label>
+          <label class="inv-field"><span>${t('adminCustomers.inviteBody')}</span>
+            <textarea id="inv-body" class="inv-textarea" maxlength="4000" rows="6">${escHtml(f.body)}</textarea></label>
+          <p class="inv-hint">${t('adminCustomers.inviteBodyHint')}</p>
+        </section>
+
+        <section class="inv-col inv-col--preview">
+          <h3 class="inv-subhead">${t('adminCustomers.invitePreviewTitle')}</h3>
+          <iframe id="inv-preview-frame" class="inv-preview-frame" title="${t('adminCustomers.invitePreviewTitle')}" sandbox></iframe>
+        </section>
+      </div>
+
+      <div class="inv-banner" id="inv-banner"></div>
+
+      <div class="inv-actions">
+        <label class="inv-ack"><input type="checkbox" id="inv-ack"/> <span>${t('adminCustomers.inviteAck')}</span></label>
+        <div class="inv-actions__btns">
+          <button type="button" class="admin-shop__primary-btn" id="inv-save">${t('adminCustomers.inviteSaveDefault')}</button>
+          <button type="button" class="admin-shop__primary-btn" id="inv-send" disabled></button>
+        </div>
+      </div>
+    `;
+
+    this._wireInvitePanel();
+    this._renderInviteRecipients(); // list + count-dependent labels (subhead/banner/send)
+    this._invitePreviewRender();    // initial preview (immediate, no debounce)
+  }
+
+  // Candidates minus the ones the admin removed in the panel (per-row ✕).
+  _activeCandidates() {
+    const all = (this._invite.data && this._invite.data.candidates) || [];
+    const removed = this._invite.removed || new Set();
+    return all.filter(c => !removed.has(c.id));
+  }
+
+  // Render the recipient list + everything whose text depends on the live count
+  // (the "Recipients (N)" head, the warn/info banner, the "Send N emails" label).
+  // Called on open and after each removal — never touches the editor/preview.
+  _renderInviteRecipients() {
+    const panel = this._el.querySelector('#inv-panel');
+    if (!panel || !this._invite?.data) return;
+    const d = this._invite.data;
+    const active = this._activeCandidates();
+    const count = active.length;
+
+    const head = panel.querySelector('#inv-recip-head');
+    if (head) head.textContent = t('adminCustomers.inviteRecipientsHead', { n: count });
+
+    const wrap = panel.querySelector('#inv-recipients-wrap');
+    if (wrap) {
+      if (!(d.candidates || []).length) {
+        wrap.innerHTML = `<p class="inv-empty">${t('adminCustomers.inviteNoRecipients')}</p>`;
+      } else if (!count) {
+        wrap.innerHTML = `<p class="inv-empty">${t('adminCustomers.inviteAllRemoved')}</p>`;
+      } else {
+        wrap.innerHTML = `<ul class="inv-recipients">${active.map(r => `
+          <li class="inv-recipients__row">
+            <span class="inv-recipients__name">${escHtml(r.display_name || r.email)}</span>
+            <span class="inv-recipients__email">${escHtml(r.email)}</span>
+            <span class="inv-recipients__lang">${escHtml(String(r.preferred_locale || 'en').toUpperCase())}</span>
+            <button type="button" class="inv-recipients__remove" data-id="${escHtml(String(r.id))}"
+                    aria-label="${t('adminCustomers.inviteRemoveRecipient')}" title="${t('adminCustomers.inviteRemoveRecipient')}">✕</button>
+          </li>`).join('')}</ul>`;
+        wrap.querySelectorAll('.inv-recipients__remove').forEach(b => {
+          b.addEventListener('click', () => {
+            (this._invite.removed ||= new Set()).add(b.dataset.id);
+            this._renderInviteRecipients();
+          });
+        });
+      }
+    }
+
+    const banner = panel.querySelector('#inv-banner');
+    if (banner) {
+      banner.className = 'inv-banner ' + (d.emailConfigured ? 'inv-banner--warn' : 'inv-banner--info');
+      banner.textContent = d.emailConfigured
+        ? t('adminCustomers.inviteWillSendNow', { n: count })
+        : t('adminCustomers.inviteEmailNotConfigured');
+    }
+
+    const send = panel.querySelector('#inv-send');
+    if (send) send.textContent = t('adminCustomers.inviteSendNow', { n: count });
+    this._syncInviteSend();
+  }
+
+  // Enable Send only when the ack box is ticked AND ≥1 recipient remains.
+  _syncInviteSend() {
+    const panel = this._el.querySelector('#inv-panel');
+    const send = panel?.querySelector('#inv-send');
+    const ack  = panel?.querySelector('#inv-ack');
+    if (send) send.disabled = !(ack?.checked && this._activeCandidates().length > 0);
+  }
+
+  _wireInvitePanel() {
+    const panel = this._el.querySelector('#inv-panel');
+    if (!panel) return;
+
+    panel.querySelector('#inv-close')?.addEventListener('click', () => this._toggleInvitePanel(false));
+
+    panel.querySelectorAll('.inv-lang__btn').forEach(b => {
+      b.addEventListener('click', () => { this._invite.locale = b.dataset.lang; this._renderInvitePanel(); });
+    });
+
+    const bind = (id, field) => {
+      const inp = panel.querySelector('#' + id);
+      inp?.addEventListener('input', () => {
+        const loc = this._invite.locale;
+        (this._invite.edits[loc] ||= {})[field] = inp.value;
+        this._invitePreviewRefresh();
+      });
+    };
+    bind('inv-subject', 'subject');
+    bind('inv-heading', 'heading');
+    bind('inv-body', 'body');
+
+    panel.querySelector('#inv-reset')?.addEventListener('click', () => {
+      const loc = this._invite.locale;
+      const def = (this._invite.data.defaults || {})[loc] || {};
+      this._invite.edits[loc] = { subject: def.subject || '', heading: def.heading || '', body: def.body || '' };
+      this._renderInvitePanel();
+    });
+
+    panel.querySelector('#inv-ack')?.addEventListener('change', () => this._syncInviteSend());
+
+    panel.querySelector('#inv-save')?.addEventListener('click', () => this._inviteSave());
+    panel.querySelector('#inv-send')?.addEventListener('click', () => this._inviteSend());
+  }
+
+  _invitePreviewRefresh() {
+    clearTimeout(this._previewTimer);
+    this._previewTimer = setTimeout(() => this._invitePreviewRender(), 300);
+  }
+
+  async _invitePreviewRender() {
+    const frame = this._el.querySelector('#inv-preview-frame');
+    if (!frame) return;
+    const loc = this._invite.locale;
+    const f = this._inviteFields(loc);
+    try {
+      const html = await adminRenderInvitePreview({ locale: loc, subject: f.subject, heading: f.heading, body: f.body });
+      if (frame.isConnected) frame.srcdoc = html;
+    } catch {
+      // Preview is best-effort; the editor stays usable without it.
+    }
+  }
+
+  // Build the per-locale patch from only the fields the admin actually touched.
+  _invitePatch() {
+    const patch = {};
+    for (const loc of ['en', 'is']) {
+      const e = this._invite.edits[loc];
+      if (e && Object.keys(e).length) patch[loc] = { ...e };
+    }
+    return patch;
+  }
+
+  async _inviteSave() {
+    const btn = this._el.querySelector('#inv-save');
+    if (btn) btn.disabled = true;
+    try {
+      const patch = this._invitePatch();
+      if (Object.keys(patch).length) {
+        this._invite.data.template = await adminSaveInviteTemplate(patch);
+        this._invite.edits = {}; // edits are now the saved baseline
+      }
+      showToast(t('adminCustomers.inviteSaved'), 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async _inviteSend() {
+    const send = this._el.querySelector('#inv-send');
+    const save = this._el.querySelector('#inv-save');
+    if (send) send.disabled = true;
+    if (save) save.disabled = true;
+    try {
+      // Persist edits as the new default first, so what we send == what we saved.
+      const patch = this._invitePatch();
+      if (Object.keys(patch).length) {
+        this._invite.data.template = await adminSaveInviteTemplate(patch);
+        this._invite.edits = {};
+      }
+      const result = await adminSendBulkInvites({ recipientIds: this._activeCandidates().map(c => c.id) });
+      if (result.sent === 0) {
+        showToast(t('adminCustomers.sendInvitesNone'), 'info');
+      } else {
+        showToast(t('adminCustomers.sendInvitesSent', { n: result.sent }), 'success');
+        if (result.devLinks?.length) {
+          // Dev convenience (Resend not configured) — surface the links somewhere
+          // copyable. console is deliberate here: dev-only, never in production.
+          // eslint-disable-next-line no-console
+          console.log('[Send invites] Dev links (Resend not configured — copy these):');
+          // eslint-disable-next-line no-console
+          result.devLinks.forEach(({ email, link }) => console.log(` ${email}: ${link}`));
+        }
+      }
+      this._toggleInvitePanel(false);
+      this._load();
+    } catch (err) {
+      showToast(err.message, 'error');
+      if (send) send.disabled = false;
+      if (save) save.disabled = false;
+    }
   }
 
   // Notes modal — hosts the reusable CustomerNotes component for one customer.
@@ -383,5 +670,5 @@ export class AdminCustomersView {
     });
   }
 
-  destroy() { clearTimeout(this._searchDebounce); }
+  destroy() { clearTimeout(this._searchDebounce); clearTimeout(this._previewTimer); }
 }
