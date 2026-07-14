@@ -14,6 +14,7 @@ import {
   adminPreviewCustomerImport, adminApplyCustomerImport, adminDeleteCustomers,
 } from '../services/adminCustomers.js';
 import { parseCsvRecords } from '../utils/csv.js';
+import { CustomerNotes } from '../components/CustomerNotes.js';
 
 // Parse an Email/Name/Phone CSV → [{ email, display_name, phone }]. Tolerant of
 // either English or Icelandic header names; rows without an email are dropped.
@@ -121,6 +122,7 @@ export class AdminCustomersView {
           <th>${t('adminCustomers.email')}</th><th>${t('adminCustomers.name')}</th><th>${t('adminCustomers.phone')}</th>
           <th>${t('adminCustomers.orders')}</th><th>${t('adminCustomers.spent')}</th>
           <th>${t('adminCustomers.joined')}</th><th>${t('adminCustomers.status')}</th>
+          <th></th>
         </tr></thead>
         <tbody>
           ${this._customers.map(c => `
@@ -135,10 +137,36 @@ export class AdminCustomersView {
               <td>${Number(c.total_spent) ? Number(c.total_spent).toLocaleString('is-IS') + ' kr' : '—'}</td>
               <td>${this._date(c.created_at)}</td>
               <td>${escHtml(this._statusLabel(c))}</td>
+              <td>${c.role === 'user'
+                ? `<button type="button" class="cust-notes-btn" data-id="${escHtml(String(c.id))}" data-email="${escHtml(c.email)}">${t('customerNotes.title')}</button>`
+                : ''}</td>
             </tr>`).join('')}
         </tbody>
       </table>`;
     if (admin) this._wireSelection(body);
+    body.querySelectorAll('.cust-notes-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._openNotesModal(btn.dataset.id, btn.dataset.email));
+    });
+  }
+
+  // Notes modal — hosts the reusable CustomerNotes component for one customer.
+  _openNotesModal(customerId, email) {
+    const modal = document.createElement('div');
+    modal.className = 'admin-shop__modal';
+    modal.innerHTML = `
+      <div class="admin-shop__modal-card">
+        <header>
+          <h2>${t('customerNotes.title')} — ${escHtml(email)}</h2>
+          <button type="button" class="admin-shop__modal-close" aria-label="${t('common.close')}">✕</button>
+        </header>
+        <div class="cn-modal-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    const notes = new CustomerNotes({ customerId, isAdminViewer: isAdmin() });
+    modal.querySelector('.cn-modal-body').appendChild(notes.mount());
+    const close = () => { notes.destroy(); modal.remove(); };
+    modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
   }
 
   // ── Bulk selection + delete (admin only) ──────────────────────────────────
