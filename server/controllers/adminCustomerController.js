@@ -8,6 +8,8 @@ const emailService = require('../services/emailService');
 const Customer     = require('../models/Customer');
 
 const MAX_IMPORT_ROWS = 1000;
+// Bulk delete is bounded so one request can't fan out across the whole base.
+const MAX_DELETE = 100;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 function cleanRow(r) {
@@ -107,6 +109,27 @@ const adminCustomerController = {
       }
       const created = await Customer.bulkCreate(toCreate); // ON CONFLICT skips existing
       return res.json({ created, total: rows.length });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/customers/delete  { userIds: [] }
+  // Bulk-delete from the Customers list. Hard-guarded server-side to role='user'
+  // (never staff/admin, never a multi-role holder) and the acting admin is
+  // skipped. Orders are kept as guest records (FK SET NULL + identity snapshot).
+  // Admin-only + CSRF (route middleware). Returns counts; the client reloads.
+  async deleteCustomers(req, res, next) {
+    try {
+      const userIds = Array.isArray(req.body && req.body.userIds)
+        ? req.body.userIds.filter(id => typeof id === 'string' && id.trim())
+        : [];
+      if (userIds.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.idsRequired'), code: 400 });
+      }
+      if (userIds.length > MAX_DELETE) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.idsTooMany'), code: 400 });
+      }
+      const r = await Customer.deleteCustomers({ userIds, excludeId: req.user.id });
+      return res.json({ accounts: r.deletedAccounts.length, deletedAccounts: r.deletedAccounts });
     } catch (err) { next(err); }
   },
 };

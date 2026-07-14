@@ -34,6 +34,19 @@ export async function adminPreviewCustomerImport(rows) {
   return data; // { counts }
 }
 
+export async function adminDeleteCustomers(userIds) {
+  const token = await getCSRFToken();
+  const res = await fetch('/api/v1/admin/customers/delete', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) },
+    body:        JSON.stringify({ userIds }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Delete failed');
+  return data; // { accounts, deletedAccounts }
+}
+
 export async function adminApplyCustomerImport(rows) {
   const token = await getCSRFToken();
   const res = await fetch('/api/v1/admin/customers/import', {

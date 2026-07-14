@@ -281,6 +281,8 @@
   "errors.admin.cannotChangeOwnRole": "Ekki er hægt að breyta eigin hlutverki",
   "errors.admin.cannotDisableSelf": "Ekki er hægt að loka eigin aðgangi",
   "errors.admin.cannotDeleteSelf": "Ekki er hægt að eyða eigin aðgangi",
+  "errors.admin.idsRequired": "Engir viðskiptavinir valdir",
+  "errors.admin.idsTooMany": "Of margir viðskiptavinir valdir (hámark 100)",
   "errors.admin.roleNameInvalid": "Heiti hlutverks verður að vera 2–32 stafir: lágstafir, tölur, bandstrik eða undirstrik",
   "errors.admin.roleNameReserved": "Þetta heiti hlutverks er frátekið",
   "errors.admin.roleNameTaken": "Hlutverk með þessu heiti er þegar til",

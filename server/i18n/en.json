@@ -281,6 +281,8 @@
   "errors.admin.cannotChangeOwnRole": "Cannot change your own role",
   "errors.admin.cannotDisableSelf": "Cannot disable your own account",
   "errors.admin.cannotDeleteSelf": "Cannot delete your own account",
+  "errors.admin.idsRequired": "No customers selected",
+  "errors.admin.idsTooMany": "Too many customers selected (max 100)",
   "errors.admin.roleNameInvalid": "Role name must be 2–32 chars: lowercase letters, numbers, hyphen or underscore",
   "errors.admin.roleNameReserved": "That role name is reserved",
   "errors.admin.roleNameTaken": "A role with that name already exists",

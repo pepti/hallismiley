@@ -16,5 +16,6 @@ router.get('/',                requireView('customers'), adminCustomer.listCusto
 router.post('/import/preview', requireView('customers'), adminCustomer.previewImport);
 router.post('/',               requireRole('admin'), csrfProtect, adminCustomer.createCustomer);
 router.post('/import',         requireRole('admin'), csrfProtect, adminCustomer.applyImport);
+router.post('/delete',         requireRole('admin'), csrfProtect, adminCustomer.deleteCustomers);
 
 module.exports = router;

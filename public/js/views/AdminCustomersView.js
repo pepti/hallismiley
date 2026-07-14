@@ -11,7 +11,7 @@ import { showToast } from '../components/Toast.js';
 import { downloadCsv } from '../utils/downloadCsv.js';
 import {
   adminListCustomers, adminCreateCustomer,
-  adminPreviewCustomerImport, adminApplyCustomerImport,
+  adminPreviewCustomerImport, adminApplyCustomerImport, adminDeleteCustomers,
 } from '../services/adminCustomers.js';
 import { parseCsvRecords } from '../utils/csv.js';
 
@@ -41,7 +41,10 @@ function parseCustomerCsv(text) {
 }
 
 export class AdminCustomersView {
-  constructor() { this._el = null; this._customers = []; this._q = ''; this._searchDebounce = null; }
+  constructor() {
+    this._el = null; this._customers = []; this._q = ''; this._searchDebounce = null;
+    this._selected = new Set(); // selected customer ids (role='user' rows only)
+  }
 
   async render() {
     if (!isAuthenticated() || !canSeeView('customers')) {
@@ -65,6 +68,7 @@ export class AdminCustomersView {
           <input type="search" id="cust-q" class="admin-shop__search"
                  placeholder="${t('adminCustomers.searchPlaceholder')}" autocomplete="off"/>
         </div>
+        <div class="cust-bulkbar" id="cust-bulkbar" hidden></div>
         <div id="cust-body"><p>${t('form.loading')}</p></div>
       </div>`;
 
@@ -84,6 +88,10 @@ export class AdminCustomersView {
 
   async _load() {
     const body = this._el.querySelector('#cust-body');
+    // Selection is per-rendered-list: reset on every (re)load so you can never
+    // act on rows you can't see (searching funnels through here too).
+    this._selected.clear();
+    this._syncBulkBar();
     try {
       const data = await adminListCustomers(this._q);
       this._customers = data.customers || [];
@@ -103,11 +111,13 @@ export class AdminCustomersView {
   }
 
   _paint() {
-    const body = this._el.querySelector('#cust-body');
+    const body  = this._el.querySelector('#cust-body');
+    const admin = isAdmin();
     if (!this._customers.length) { body.innerHTML = `<p>${t('adminCustomers.empty')}</p>`; return; }
     body.innerHTML = `
       <table class="admin-shop__table">
         <thead><tr>
+          ${admin ? `<th class="cust-select"><input type="checkbox" id="cust-select-all" aria-label="${t('adminCustomers.selectAll')}"/></th>` : ''}
           <th>${t('adminCustomers.email')}</th><th>${t('adminCustomers.name')}</th><th>${t('adminCustomers.phone')}</th>
           <th>${t('adminCustomers.orders')}</th><th>${t('adminCustomers.spent')}</th>
           <th>${t('adminCustomers.joined')}</th><th>${t('adminCustomers.status')}</th>
@@ -115,6 +125,9 @@ export class AdminCustomersView {
         <tbody>
           ${this._customers.map(c => `
             <tr>
+              ${admin ? `<td class="cust-select">${c.role === 'user'
+                ? `<input type="checkbox" class="cust-row-select" data-id="${escHtml(String(c.id))}" aria-label="${t('adminCustomers.selectRow')}"/>`
+                : ''}</td>` : ''}
               <td>${escHtml(c.email)}</td>
               <td>${escHtml(c.display_name || '—')}</td>
               <td>${escHtml(c.phone || '—')}</td>
@@ -125,6 +138,85 @@ export class AdminCustomersView {
             </tr>`).join('')}
         </tbody>
       </table>`;
+    if (admin) this._wireSelection(body);
+  }
+
+  // ── Bulk selection + delete (admin only) ──────────────────────────────────
+  // Only role='user' rows get a checkbox (staff/admin accounts are managed on
+  // /admin/users); the server re-guards regardless. The bar lives outside
+  // #cust-body so a repaint never drops it.
+  _wireSelection(body) {
+    const selectAll = body.querySelector('#cust-select-all');
+    const rowBoxes  = [...body.querySelectorAll('.cust-row-select')];
+    const syncHeader = () => {
+      if (!selectAll) return;
+      const checked = rowBoxes.filter(b => b.checked).length;
+      selectAll.checked = checked > 0 && checked === rowBoxes.length;
+      selectAll.indeterminate = checked > 0 && checked < rowBoxes.length;
+    };
+    selectAll?.addEventListener('change', () => {
+      rowBoxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+        if (selectAll.checked) this._selected.add(cb.dataset.id); else this._selected.delete(cb.dataset.id);
+      });
+      selectAll.indeterminate = false;
+      this._syncBulkBar();
+    });
+    rowBoxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) this._selected.add(cb.dataset.id); else this._selected.delete(cb.dataset.id);
+        syncHeader();
+        this._syncBulkBar();
+      });
+    });
+  }
+
+  _syncBulkBar() {
+    const bar = this._el?.querySelector('#cust-bulkbar');
+    if (!bar) return;
+    const n = this._selected.size;
+    if (n === 0) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.innerHTML = `
+      <span class="cust-bulkbar__count">${t('adminCustomers.nSelected', { n })}</span>
+      <button type="button" class="admin-shop__primary-btn cust-bulkbar__delete" id="cust-bulk-delete">${t('adminCustomers.deleteSelected')}</button>
+      <button type="button" class="admin-shop__primary-btn" id="cust-bulk-clear">${t('adminCustomers.clearSelection')}</button>`;
+    bar.hidden = false;
+    bar.querySelector('#cust-bulk-delete')?.addEventListener('click', () => this._deleteSelected());
+    bar.querySelector('#cust-bulk-clear')?.addEventListener('click', () => {
+      this._selected.clear();
+      this._el?.querySelectorAll('.cust-row-select').forEach(cb => { cb.checked = false; });
+      const all = this._el?.querySelector('#cust-select-all');
+      if (all) { all.checked = false; all.indeterminate = false; }
+      this._syncBulkBar();
+    });
+  }
+
+  // Itemized confirm spelling out exactly what's removed vs kept, then one
+  // delete request + reload.
+  async _deleteSelected() {
+    const ids = [...this._selected];
+    if (!ids.length) return;
+    const byId   = new Map(this._customers.map(c => [String(c.id), c]));
+    const emails = ids.map(id => byId.get(id)?.email).filter(Boolean);
+    const lines = [
+      t('adminCustomers.confirmDeleteIntro'),
+      '',
+      ...emails.map(e => `• ${e}`),
+      '',
+      t('adminCustomers.confirmKeptOrders'),
+    ];
+    if (!confirm(lines.join('\n'))) return;
+
+    const btn = this._el.querySelector('#cust-bulk-delete');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await adminDeleteCustomers(ids);
+      showToast(t('adminCustomers.deletedN', { n: res.accounts || 0 }), 'success');
+      await this._load();
+    } catch (err) {
+      showToast(err.message, 'error');
+      if (btn) btn.disabled = false;
+    }
   }
 
   _exportCsv() {

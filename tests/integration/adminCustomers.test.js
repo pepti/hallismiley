@@ -5,7 +5,8 @@ const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
 const {
-  createTestAdminUser, createTestRegularUser, getTestSessionCookie, cleanTables,
+  createTestAdminUser, createTestModeratorUser, createTestRegularUser,
+  getTestSessionCookie, cleanTables,
 } = require('../helpers');
 
 let adminCookie, userId;
@@ -113,5 +114,71 @@ describe('customer CSV import', () => {
     const c = await getTestSessionCookie(userId);
     const res = await request(app).post('/api/v1/admin/customers/import').set('Cookie', c).send({ rows: [{ email: 'x@example.com' }] });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/v1/admin/customers/delete', () => {
+  const del = (cookie, userIds) =>
+    request(app).post('/api/v1/admin/customers/delete').set('Cookie', cookie).send({ userIds });
+
+  test('deletes role=user accounts; orders are kept as guest records with identity backfilled', async () => {
+    await db.query(
+      `INSERT INTO orders (order_number, user_id, currency, subtotal, shipping, total, shipping_method)
+       VALUES ('T-1001', $1, 'ISK', 1000, 0, 1000, 'local_pickup')`,
+      [userId]
+    );
+    const res = await del(adminCookie, [userId]);
+    expect(res.status).toBe(200);
+    expect(res.body.accounts).toBe(1);
+    expect(res.body.deletedAccounts).toEqual([userId]);
+
+    expect((await db.query('SELECT 1 FROM users WHERE id = $1', [userId])).rows).toHaveLength(0);
+    const { rows: orders } = await db.query(
+      `SELECT user_id, guest_email, guest_name FROM orders WHERE order_number = 'T-1001'`
+    );
+    expect(orders).toHaveLength(1);
+    expect(orders[0].user_id).toBeNull();
+    expect(orders[0].guest_email).toBeTruthy(); // snapshotted from the deleted user
+    // Sessions are gone (CASCADE + invalidate)
+    expect((await db.query('SELECT 1 FROM user_sessions WHERE user_id = $1', [userId])).rows).toHaveLength(0);
+  });
+
+  test('silently skips staff accounts, multi-role holders and the acting admin (reported by absence)', async () => {
+    const moderatorId = await createTestModeratorUser();
+    const { rows: multi } = await db.query(
+      `INSERT INTO users (email, username, password_hash, role)
+       VALUES ('multi@example.com', 'multiuser', NULL, 'user') RETURNING id`
+    );
+    const multiRoleId = multi[0].id;
+    await db.query(`INSERT INTO roles (name, view_access) VALUES ('helper', '[]'::jsonb) ON CONFLICT DO NOTHING`);
+    await db.query(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'helper')`, [multiRoleId]);
+    const { rows: adminRows } = await db.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
+    const adminId = adminRows[0].id;
+
+    const res = await del(adminCookie, [moderatorId, multiRoleId, adminId, userId]);
+    expect(res.status).toBe(200);
+    expect(res.body.deletedAccounts).toEqual([userId]); // only the plain customer
+
+    const { rows: kept } = await db.query('SELECT id FROM users WHERE id = ANY($1)', [[moderatorId, multiRoleId, adminId]]);
+    expect(kept).toHaveLength(3);
+  });
+
+  test('400 on empty ids', async () => {
+    expect((await del(adminCookie, [])).status).toBe(400);
+  });
+
+  test('400 on more than 100 ids', async () => {
+    const ids = Array.from({ length: 101 }, (_, i) => `id-${i}`);
+    expect((await del(adminCookie, ids)).status).toBe(400);
+  });
+
+  test('regular user cannot delete — 403', async () => {
+    const c = await getTestSessionCookie(userId);
+    expect((await del(c, [userId])).status).toBe(403);
+  });
+
+  test('unauthenticated — 401', async () => {
+    const res = await request(app).post('/api/v1/admin/customers/delete').send({ userIds: ['x'] });
+    expect(res.status).toBe(401);
   });
 });

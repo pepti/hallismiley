@@ -1,3 +1,22 @@
 /* Admin Customers — the view reuses the shared .admin-shop chrome (table, modal,
    form, header actions, search). Only customer-specific tweaks live here. */
 .admin-shop__inner .admin-shop__header-controls { margin-bottom: var(--sp-3); }
+
+/* Bulk-action bar — shown (via the [hidden] toggle) when rows are selected.
+   .cust-bulkbar sets display:flex, so [hidden] must be re-asserted to hide it. */
+.cust-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.cust-bulkbar[hidden] { display: none; }
+.cust-bulkbar__count { font-size: 0.85rem; color: var(--text-muted); margin-right: auto; }
+.cust-bulkbar__delete { background: #b3261e; border-color: #b3261e; color: #fff; }
+.cust-bulkbar__delete:hover { filter: brightness(0.92); }
+
+.admin-shop__table .cust-select { width: 36px; text-align: center; }
