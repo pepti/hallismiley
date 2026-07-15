@@ -2568,6 +2568,9 @@ describe('PATCH /api/v1/party/guests/:id/companions', () => {
 
 describe('POST /api/v1/party/guests', () => {
   test('adds a verbal guest with no email — placeholder, going, shows in list', async () => {
+    // The new guest should inherit the admin's locale (req.locale) rather than
+    // the users column default 'en' — prove it with an Icelandic admin.
+    await db.query("UPDATE users SET preferred_locale = 'is' WHERE id = $1", [adminId]);
     const res = await request(app)
       .post('/api/v1/party/guests')
       .set('Cookie', adminCookie)
@@ -2577,13 +2580,15 @@ describe('POST /api/v1/party/guests', () => {
     const id = res.body.id;
 
     const { rows } = await db.query(
-      'SELECT display_name, email, party_access, approval_status, password_hash FROM users WHERE id = $1', [id]
+      'SELECT display_name, email, party_access, approval_status, password_hash, preferred_locale FROM users WHERE id = $1', [id]
     );
     expect(rows[0].display_name).toBe('Frændi Jón');
     expect(rows[0].party_access).toBe(true);
     expect(rows[0].approval_status).toBe('approved');
     expect(rows[0].password_hash).toBeNull();
     expect(rows[0].email).toMatch(/@guest\.invalid$/);
+    // Seeded from the party-route locale ('is'), not the users column default 'en'.
+    expect(rows[0].preferred_locale).toBe('is');
 
     // Shows as a going guest, but not as a submitted RSVP.
     const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);

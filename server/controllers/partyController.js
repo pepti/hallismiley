@@ -578,13 +578,17 @@ const partyController = {
       // Base the username on the name when there's no real email (avoid a
       // "verbal-…" handle leaking from the placeholder).
       const username = await generateGuestUsername(hasEmail ? email : '', name);
+      // Seed preferred_locale from the admin's current locale (party default
+      // 'is') so a later blast to a real-email manual guest isn't wrongly
+      // English on this Icelandic-first site.
+      const locale = req.locale || 'is';
       const ins = await db.query(
         `INSERT INTO users
-           (username, email, password_hash, role, display_name,
+           (username, email, password_hash, role, display_name, preferred_locale,
             email_verified, party_access, approval_status)
-         VALUES ($1, $2, NULL, 'user', $3, FALSE, TRUE, 'approved')
+         VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, TRUE, 'approved')
          RETURNING id`,
-        [username, email, name]
+        [username, email, name, locale]
       );
       const userId = ins.rows[0].id;
 
