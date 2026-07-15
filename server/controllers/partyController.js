@@ -776,6 +776,7 @@ const partyController = {
       if (clear != null && !Array.isArray(clear)) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.answersObject'), code: 400 });
       }
+      const clearKeys = Array.isArray(clear) ? clear.filter(k => typeof k === 'string') : [];
 
       const guest = await db.query(
         `SELECT 1 FROM users WHERE id = $1 AND party_access = TRUE AND disabled = FALSE`,
@@ -785,25 +786,16 @@ const partyController = {
         return res.status(404).json({ error: t(req.locale, 'errors.party.guestNotFound'), code: 404 });
       }
 
-      // Merge over the existing answers, then drop the cleared keys.
-      const existingRes = await db.query(
-        `SELECT answers FROM party_rsvps WHERE user_id = $1`, [id]
-      );
-      const existing = existingRes.rows[0]?.answers || {};
-      const merged   = { ...existing, ...answers };
-      if (Array.isArray(clear)) {
-        for (const key of clear) {
-          if (typeof key === 'string') delete merged[key];
-        }
-      }
-
+      // Merge `answers` over the guest's existing answers and drop the `clear`
+      // keys — done in a single statement (jsonb `||` then `-`) so a concurrent
+      // edit can't clobber a JS read-modify-write.
       await db.query(
         `INSERT INTO party_rsvps (user_id, attending, answers)
-         VALUES ($1, TRUE, $2::jsonb)
+         VALUES ($1, TRUE, ($2::jsonb - $3::text[]))
          ON CONFLICT (user_id) DO UPDATE SET
-           answers    = EXCLUDED.answers,
+           answers    = (COALESCE(party_rsvps.answers, '{}'::jsonb) || $2::jsonb) - $3::text[],
            updated_at = NOW()`,
-        [id, JSON.stringify(merged)]
+        [id, JSON.stringify(answers), clearKeys]
       );
 
       res.json({ ok: true });

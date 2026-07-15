@@ -481,7 +481,10 @@ export class PartyAdminView {
       const labels = new Set((f.options || []).map(o => this._optLabel(o)));
       return ans.every(v => labels.has(v));
     }
-    return true; // text / textarea
+    // text / textarea — a plain string fits; anything else (e.g. an array left
+    // over from a field whose type was changed) is preserved read-only instead
+    // of being lossily coerced into the input.
+    return typeof ans === 'string';
   }
 
   // The admin's editable version of the answer dump: one typed control per RSVP
@@ -508,7 +511,7 @@ export class PartyAdminView {
     const nm    = `ga_${escHtml(f.id)}`;
     const label = escHtml(f.label || f.id);
     const wrap  = (inner, extraType, extraAttr = '') =>
-      `<div class="party-admin__answer-field" data-answer-field="${escHtml(f.id)}" data-answer-type="${extraType}"${extraAttr}>${inner}</div>`;
+      `<div class="party-admin__answer-field" data-answer-field="${escHtml(f.id)}" data-answer-type="${escHtml(extraType)}"${extraAttr}>${inner}</div>`;
 
     // Answers the current form can't represent (other-locale / renamed options)
     // are shown read-only and skipped on save so they're never clobbered.
