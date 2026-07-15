@@ -198,6 +198,12 @@ router.post('/owner-invite',
   requireAuth, requireRole('admin'), emailBlastLimiter, csrfProtect,
   partyController.ownerInvite);
 
+// Manually add a single guest who accepted verbally. Body { name, email?,
+// status? }. No invite email is sent (email is optional). Admin-only.
+router.post('/guests',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.addGuest);
+
 // Guests awaiting approval — backs the admin pending-requests list.
 router.get('/pending-requests',
   requireAuth, requireRole('admin', 'moderator'),

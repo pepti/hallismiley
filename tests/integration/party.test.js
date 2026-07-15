@@ -2563,3 +2563,101 @@ describe('PATCH /api/v1/party/guests/:id/companions', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ── POST /api/v1/party/guests (manual add) ────────────────────────────────────
+
+describe('POST /api/v1/party/guests', () => {
+  test('adds a verbal guest with no email — placeholder, going, shows in list', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Frændi Jón' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ status: 'going', hasEmail: false });
+    const id = res.body.id;
+
+    const { rows } = await db.query(
+      'SELECT display_name, email, party_access, approval_status, password_hash FROM users WHERE id = $1', [id]
+    );
+    expect(rows[0].display_name).toBe('Frændi Jón');
+    expect(rows[0].party_access).toBe(true);
+    expect(rows[0].approval_status).toBe('approved');
+    expect(rows[0].password_hash).toBeNull();
+    expect(rows[0].email).toMatch(/@guest\.invalid$/);
+
+    // Shows as a going guest, but not as a submitted RSVP.
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    const g = list.body.find(x => x.id === id);
+    expect(g.rsvp_status).toBe('going');
+
+    const prow = await db.query('SELECT answers, admin_status FROM party_rsvps WHERE user_id = $1', [id]);
+    expect(prow.rows[0].admin_status).toBe('going');
+    expect(prow.rows[0].answers).toBeNull();
+
+    const rsvps = await request(app).get('/api/v1/party/rsvps').set('Cookie', adminCookie);
+    expect(rsvps.body.find(r => r.user_id === id)).toBeUndefined();
+  });
+
+  test('adds a guest with a real email', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Vinur Anna', email: 'Anna.Vinur@Example.com', status: 'maybe' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ status: 'maybe', hasEmail: true });
+
+    const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [res.body.id]);
+    expect(rows[0].email).toBe('anna.vinur@example.com'); // lowercased
+  });
+
+  test('status waiting creates no party_rsvps row', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'Óviss Óli', status: 'waiting' });
+    const prow = await db.query('SELECT 1 FROM party_rsvps WHERE user_id = $1', [res.body.id]);
+    expect(prow.rows).toHaveLength(0);
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(x => x.id === res.body.id).rsvp_status).toBe('waiting');
+  });
+
+  test('placeholder-email guests are excluded from the email blast', async () => {
+    await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'No Email Guest', status: 'going' });
+    const res = await request(app).post('/api/v1/party/email-going')
+      .set('Cookie', adminCookie).send({ subject: 'Hi', body: 'See you', includeMaybe: true });
+    expect(res.status).toBe(200);
+    // The placeholder guest has no deliverable address, so it isn't a recipient.
+    expect(res.body.sent).toBe(0);
+  });
+
+  test('rejects a missing/blank name with 400', async () => {
+    for (const body of [{}, { name: '   ' }, { name: 'x'.repeat(101) }]) {
+      const res = await request(app).post('/api/v1/party/guests')
+        .set('Cookie', adminCookie).send(body);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('rejects an invalid email with 400', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'Bad Email', email: 'not-an-email' });
+    expect(res.status).toBe(400);
+  });
+
+  test('duplicate email returns 409', async () => {
+    // adminId already exists with user@test.com / admin@… — reuse the regular user's email.
+    const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'Dup', email: rows[0].email });
+    expect(res.status).toBe(409);
+  });
+
+  test('regular (non-admin) user cannot add — 403', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', userCookie).send({ name: 'Nope' });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).post('/api/v1/party/guests').send({ name: 'Nope' });
+    expect(res.status).toBe(401);
+  });
+});

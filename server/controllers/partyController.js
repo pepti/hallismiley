@@ -30,6 +30,13 @@ const APPROVAL_ACTION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
 // Email shape check for owner-entered invite addresses (mirrors validate.js).
 const PARTY_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Synthetic, guaranteed-undeliverable email for guests the host adds manually
+// after a verbal yes and who gave no email — the users.email column is NOT
+// NULL UNIQUE, so we need *some* unique address, but it must never receive
+// mail. `.invalid` is reserved by RFC 6761 for exactly this. These addresses
+// are masked in the UI and excluded from email blasts.
+const PLACEHOLDER_EMAIL_DOMAIN = 'guest.invalid';
+
 // Recipients for the owner "new request" notification. Always includes the
 // configured owner address (default halli@hallismiley.is) so the notification
 // reaches Halli even when no admin account happens to be email-verified, PLUS
@@ -532,6 +539,69 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // POST /api/v1/party/guests  { name, email?, status? }
+  // Admin-only. Manually add a guest who accepted VERBALLY — creates a
+  // passwordless, pre-approved account and drops them straight into the
+  // attendance list. Distinct from owner-invite: no magic-link email is sent
+  // (that's owner-invite's job) and email is optional. A guest with no email
+  // gets a placeholder so the NOT NULL/UNIQUE constraint holds. `status`
+  // (default 'going' — they said yes) seeds an admin RSVP override; the row is
+  // created with answers=NULL so it never counts as a submitted RSVP.
+  async addGuest(req, res, next) {
+    try {
+      const name = String(req.body?.name || '').trim();
+      if (!name || name.length > 100) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.guestNameRequired'), code: 400 });
+      }
+
+      const VALID = new Set(['going', 'maybe', 'declined', 'waiting']);
+      const status = VALID.has(req.body?.status) ? req.body.status : 'going';
+
+      // Email optional. When given it must be a real, unused address; otherwise
+      // synthesize a unique undeliverable placeholder.
+      const rawEmail  = req.body?.email;
+      const hasEmail  = rawEmail != null && String(rawEmail).trim() !== '';
+      let email;
+      if (hasEmail) {
+        email = String(rawEmail).trim().toLowerCase();
+        if (!PARTY_EMAIL_RE.test(email) || email.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.inviteEmailInvalid', { email }), code: 400 });
+        }
+        const ex = await db.query('SELECT 1 FROM users WHERE LOWER(email) = $1 LIMIT 1', [email]);
+        if (ex.rows.length) {
+          return res.status(409).json({ error: t(req.locale, 'errors.party.guestEmailExists'), code: 409 });
+        }
+      } else {
+        email = `verbal-${makeToken().slice(0, 12)}@${PLACEHOLDER_EMAIL_DOMAIN}`;
+      }
+
+      // Base the username on the name when there's no real email (avoid a
+      // "verbal-…" handle leaking from the placeholder).
+      const username = await generateGuestUsername(hasEmail ? email : '', name);
+      const ins = await db.query(
+        `INSERT INTO users
+           (username, email, password_hash, role, display_name,
+            email_verified, party_access, approval_status)
+         VALUES ($1, $2, NULL, 'user', $3, FALSE, TRUE, 'approved')
+         RETURNING id`,
+        [username, email, name]
+      );
+      const userId = ins.rows[0].id;
+
+      // Seed the RSVP bucket via an admin override, answers=NULL so the guest
+      // shows as e.g. "going" without inflating the "RSVPs submitted" stats.
+      if (status !== 'waiting') {
+        await db.query(
+          `INSERT INTO party_rsvps (user_id, attending, answers, admin_status)
+           VALUES ($1, $2, NULL, $3)`,
+          [userId, status !== 'declined', status]
+        );
+      }
+
+      res.status(201).json({ id: userId, status, hasEmail });
+    } catch (err) { next(err); }
+  },
+
   // GET /api/v1/party/pending-requests — admin/moderator only.
   // The owner's "send the party info email" queue: auto-granted guests who
   // haven't received the welcome email yet (the magic-token guard keeps
@@ -902,7 +972,8 @@ const partyController = {
                   r.answers AS rsvp_answers
              FROM users u
              LEFT JOIN party_rsvps r ON r.user_id = u.id
-            WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL`
+            WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL
+              AND u.email NOT LIKE '%@guest.invalid'`
         ),
         _loadRsvpStatusMap(),
       ]);

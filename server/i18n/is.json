@@ -193,6 +193,8 @@
   "errors.party.invalidRsvpStatus": "Ógilt svarstöðugildi",
   "errors.party.invalidName": "Nafn má ekki vera lengra en 100 stafir",
   "errors.party.invalidCompanions": "Ógild fylgdargildi",
+  "errors.party.guestNameRequired": "Nafn gests er nauðsynlegt",
+  "errors.party.guestEmailExists": "Gestur með þetta netfang er þegar til",
   "errors.party.guestNotFound": "Gestur fannst ekki",
   "errors.party.messageRequired": "Skilaboð eru nauðsynleg",
   "errors.party.messageTooLong": "Skilaboð mega ekki vera lengri en {n} stafir",

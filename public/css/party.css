@@ -1565,6 +1565,20 @@ button.party-admin__stat:focus-visible {
   text-transform: none;
 }
 
+/* Manual add-guest form — a single responsive row that wraps on narrow screens. */
+.party-admin__add-guest-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.party-admin__add-guest-form .lol-input { text-transform: none; }
+.party-admin__add-guest-name  { flex: 1 1 12rem; min-width: 9rem; }
+.party-admin__add-guest-email { flex: 1 1 14rem; min-width: 10rem; }
+.party-admin__add-guest-status-sel { flex: 0 0 auto; }
+.party-admin__add-guest-status { font-size: 0.85rem; color: var(--text-secondary); }
+
 .party-admin__invite-actions {
   display: flex;
   gap: var(--sp-2);
