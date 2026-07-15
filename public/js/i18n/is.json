@@ -626,7 +626,7 @@
 
   "party.title": "Veisla",
   "party.heroSubtitle": "Stóru fjórir-núll — gerum þetta goðsagnakennt",
-  "party.requestIntro": "Nafn og netfang til að skrá mætingu og sjá nánari dagskrá.",
+  "party.requestIntro": "Nafn og netfang til að skrá mætingu.",
   "party.requestNameLabel": "Nafnið þitt",
   "party.requestEmailLabel": "Netfangið þitt",
   "party.requestSubmit": "Skrá mætingu",

@@ -228,7 +228,7 @@ export class PartyView {
       ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟', { primary: true })}
       ${this._renderSchedule(schedule)}
       ${this._renderVenue(info)}
-      ${unlocked ? this._renderActivities(activities) : this._renderLockedSection('Activities', '🎯', { primary: false })}`;
+      ${this._renderActivities(activities)}`;
   }
 
   _renderHero() {
