@@ -373,6 +373,18 @@ export class PartyAdminView {
   _renderInvitedGuestRow(g, showRevoke) {
     const name     = escHtml(g.display_name || g.username || '—');
     const email    = escHtml(g.email || '');
+    // Admins edit the display name inline; the placeholder shows the username
+    // fallback so a cleared name is obviously "will show as <username>".
+    const nameCell = showRevoke
+      ? `<td class="party-admin__name-cell">
+          <input type="text" class="party-admin__cell-input party-admin__name-input"
+                 data-guest-name-for="${escHtml(g.id)}"
+                 data-current="${escHtml(g.display_name || '')}"
+                 value="${escHtml(g.display_name || '')}"
+                 placeholder="${escHtml(g.username || '')}" maxlength="100"
+                 aria-label="${escHtml(t('party.admin.editNameAria', { name: g.display_name || g.username || '—' }))}" />
+        </td>`
+      : `<td>${name}</td>`;
     const rsvpedAt = g.rsvp_updated_at
       ? new Date(g.rsvp_updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
       : '—';
@@ -406,16 +418,21 @@ export class PartyAdminView {
 
     const bringingHtml = this._bringingFor(g);
 
-    // Detail row — full answer dump, hidden until row is clicked
+    // Detail row — hidden until the row is clicked. Admins get a full editable
+    // form of every RSVP answer (this is what "edit all fields" means, since
+    // the Bringing column is derived from these answers); everyone else sees
+    // the read-only answer dump.
     const detailFields = (this._rsvpForm || []).filter(f => !['heading','paragraph'].includes(f.type));
-    const detailsHtml = g.rsvp_answers
-      ? detailFields.map(f => {
-          const a = g.rsvp_answers[f.id];
-          if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
-          const val = Array.isArray(a) ? a.map(escHtml).join(', ') : escHtml(String(a));
-          return `<div><strong>${escHtml(f.label || f.id)}:</strong> ${val}</div>`;
-        }).filter(Boolean).join('')
-      : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`;
+    const detailsHtml = showRevoke
+      ? this._renderGuestAnswerEditor(g, detailFields)
+      : (g.rsvp_answers
+          ? detailFields.map(f => {
+              const a = g.rsvp_answers[f.id];
+              if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
+              const val = Array.isArray(a) ? a.map(escHtml).join(', ') : escHtml(String(a));
+              return `<div><strong>${escHtml(f.label || f.id)}:</strong> ${val}</div>`;
+            }).filter(Boolean).join('')
+          : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`);
 
     const colSpan = this._invitedGuestColSpan(showRevoke);
     const revokeCell = showRevoke
@@ -424,7 +441,7 @@ export class PartyAdminView {
 
     return `
       <tr class="party-admin__invited-row" data-expand-guest="${escHtml(g.id)}">
-        <td>${name}</td>
+        ${nameCell}
         <td>${email}</td>
         ${statusCell}
         <td class="party-admin__invited-bringing">${bringingHtml}</td>
@@ -436,6 +453,149 @@ export class PartyAdminView {
           <div class="party-admin__invited-detail-box">${detailsHtml}</div>
         </td>
       </tr>`;
+  }
+
+  // An RSVP option can be a bare string or a { label, status } object (the admin
+  // form editor upgrades them). Answers are always stored by label, so this is
+  // the single place that resolves an option to its answer-matching label.
+  _optLabel(opt) {
+    if (typeof opt === 'string') return opt;
+    return typeof opt?.label === 'string' ? opt.label : '';
+  }
+
+  // Can the currently-loaded form represent this stored answer? RSVP forms are
+  // translated per locale, so a guest who answered in a different language (or
+  // before an option was renamed) has answer labels that aren't in the option
+  // list the admin is looking at. If we rendered those as editable controls
+  // they'd show as unselected and a save would silently wipe them — so such
+  // fields are shown read-only and preserved untouched on save. Text/textarea
+  // answers are always representable; empty/absent answers have nothing to lose.
+  _answerRepresentable(f, ans) {
+    if (ans == null || ans === '') return true;
+    if (f.type === 'radio-group') {
+      if (typeof ans !== 'string') return false;
+      return (f.options || []).some(o => this._optLabel(o) === ans);
+    }
+    if (f.type === 'checkbox-group') {
+      if (!Array.isArray(ans)) return false;
+      const labels = new Set((f.options || []).map(o => this._optLabel(o)));
+      return ans.every(v => labels.has(v));
+    }
+    // text / textarea — a plain string fits; anything else (e.g. an array left
+    // over from a field whose type was changed) is preserved read-only instead
+    // of being lossily coerced into the input.
+    return typeof ans === 'string';
+  }
+
+  // The admin's editable version of the answer dump: one typed control per RSVP
+  // form field, pre-filled from the guest's answers (blank when they haven't
+  // answered, so the host can fill it in). Field types mirror the guest-facing
+  // form (PartyView._renderField): text, textarea, radio-group, checkbox-group.
+  _renderGuestAnswerEditor(g, fields) {
+    if (!fields.length) {
+      return `<em class="party-admin__no-answers">${t('party.admin.noRsvpFields')}</em>`;
+    }
+    const ans = g.rsvp_answers || {};
+    const body = fields.map(f => this._renderAnswerField(f, ans[f.id])).join('');
+    return `
+      <form class="party-admin__answers-form" data-guest-answers-form="${escHtml(g.id)}">
+        ${body}
+        <div class="party-admin__answers-actions">
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.saveAnswers')}</button>
+          <span class="party-admin__answers-status" aria-live="polite"></span>
+        </div>
+      </form>`;
+  }
+
+  _renderAnswerField(f, ans) {
+    const nm    = `ga_${escHtml(f.id)}`;
+    const label = escHtml(f.label || f.id);
+    const wrap  = (inner, extraType, extraAttr = '') =>
+      `<div class="party-admin__answer-field" data-answer-field="${escHtml(f.id)}" data-answer-type="${escHtml(extraType)}"${extraAttr}>${inner}</div>`;
+
+    // Answers the current form can't represent (other-locale / renamed options)
+    // are shown read-only and skipped on save so they're never clobbered.
+    if (!this._answerRepresentable(f, ans)) {
+      const shown = Array.isArray(ans) ? ans.map(escHtml).join(', ') : escHtml(String(ans));
+      return wrap(
+        `<span class="party-admin__answer-label">${label}</span>
+         <div class="party-admin__answer-readonly">${shown}
+           <span class="party-admin__answer-hint">${t('party.admin.answerOtherLocale')}</span>
+         </div>`, f.type, ' data-answer-skip="1"');
+    }
+
+    switch (f.type) {
+      case 'checkbox-group': {
+        const opts = (f.options || []).map(opt => {
+          const optLabel = this._optLabel(opt);
+          const checked  = Array.isArray(ans) && ans.includes(optLabel) ? 'checked' : '';
+          return `<label class="party-admin__answer-check">
+                    <input type="checkbox" name="${nm}" value="${escHtml(optLabel)}" ${checked} /> ${escHtml(optLabel)}
+                  </label>`;
+        }).join('');
+        return wrap(
+          `<span class="party-admin__answer-label">${label}</span>
+           <div class="party-admin__answer-opts">${opts}</div>`, 'checkbox-group');
+      }
+      case 'radio-group': {
+        const opts = (f.options || []).map(opt => {
+          const optLabel = this._optLabel(opt);
+          const checked  = typeof ans === 'string' && ans === optLabel ? 'checked' : '';
+          return `<label class="party-admin__answer-check">
+                    <input type="radio" name="${nm}" value="${escHtml(optLabel)}" ${checked} /> ${escHtml(optLabel)}
+                  </label>`;
+        }).join('');
+        // A "no answer" radio lets the admin clear a previously-picked option.
+        const clear = `<label class="party-admin__answer-check party-admin__answer-check--clear">
+                    <input type="radio" name="${nm}" value="" ${typeof ans === 'string' && ans ? '' : 'checked'} /> ${t('party.admin.answerNone')}
+                  </label>`;
+        return wrap(
+          `<span class="party-admin__answer-label">${label}</span>
+           <div class="party-admin__answer-opts">${opts}${clear}</div>`, 'radio-group');
+      }
+      case 'textarea':
+        return wrap(
+          `<label class="party-admin__answer-label">${label}
+             <textarea class="lol-input lol-textarea" name="${nm}" maxlength="1000">${escHtml(ans || '')}</textarea>
+           </label>`, 'textarea');
+      case 'text':
+      default:
+        return wrap(
+          `<label class="party-admin__answer-label">${label}
+             <input type="text" class="lol-input" name="${nm}" value="${escHtml(ans || '')}" maxlength="200" />
+           </label>`, 'text');
+    }
+  }
+
+  // Collect the answer editor into a { answers, clear } patch with SAFE, non-
+  // destructive semantics (the server merges answers over the guest's existing
+  // ones and deletes the `clear` keys):
+  //   - fields with a value      → answers[id] = value (overwrites)
+  //   - representable-but-emptied → id pushed to `clear` (explicit removal)
+  //   - read-only unmatched fields (data-answer-skip) → neither, so the stored
+  //     other-locale answer survives untouched
+  // Mirrors PartyView's per-type collection (checkbox-group → array, radio-group
+  // → string, text/textarea → trimmed string).
+  _collectAnswers(form) {
+    const answers = {};
+    const clear   = [];
+    form.querySelectorAll('[data-answer-field]').forEach(fieldEl => {
+      if (fieldEl.dataset.answerSkip) return;           // preserve as-is
+      const id   = fieldEl.dataset.answerField;
+      const type = fieldEl.dataset.answerType;
+      if (type === 'checkbox-group') {
+        const checked = [...fieldEl.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
+        if (checked.length) answers[id] = checked; else clear.push(id);
+      } else if (type === 'radio-group') {
+        const sel = fieldEl.querySelector('input[type="radio"]:checked');
+        if (sel && sel.value) answers[id] = sel.value; else clear.push(id);
+      } else {
+        const el = fieldEl.querySelector('input, textarea');
+        const v  = el?.value?.trim();
+        if (v) answers[id] = v; else clear.push(id);
+      }
+    });
+    return { answers, clear };
   }
 
   // Line cost of a logistics item — null (not 0) when qty or price is
@@ -2364,6 +2524,80 @@ export class PartyAdminView {
           sel.value    = prev;   // revert the visible selection
           sel.disabled = false;
           showToast(err.message || t('party.admin.rsvpStatusFailed'), 'error');
+        }
+      });
+    });
+
+    // Inline display-name edit (admin-only text input in the Name column).
+    this._el.querySelectorAll('[data-guest-name-for]').forEach(inp => {
+      if (inp.dataset.bound) return;
+      inp.dataset.bound = '1';
+      // Clicks in the input shouldn't toggle the row's detail expansion.
+      inp.addEventListener('click', (e) => e.stopPropagation());
+      inp.addEventListener('change', async () => {
+        const userId = inp.dataset.guestNameFor;
+        const prev   = inp.dataset.current;
+        const value  = inp.value.trim();
+        if (value === prev) return;
+
+        inp.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/profile`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ display_name: value }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.nameFailed'));
+          }
+          showToast(t('party.admin.nameUpdated'), 'success');
+          // Reload so the name propagates to the summary pills, sort order and
+          // the declined table's copy of this guest.
+          await this._loadAndRender();
+        } catch (err) {
+          inp.value    = prev;
+          inp.disabled = false;
+          showToast(err.message || t('party.admin.nameFailed'), 'error');
+        }
+      });
+    });
+
+    // Inline RSVP-answer edit (admin-only form in the expanded detail row).
+    this._el.querySelectorAll('[data-guest-answers-form]').forEach(form => {
+      if (form.dataset.bound) return;
+      form.dataset.bound = '1';
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId          = form.dataset.guestAnswersForm;
+        const { answers, clear } = this._collectAnswers(form);
+        const statusEl        = form.querySelector('.party-admin__answers-status');
+        const btn             = form.querySelector('[type="submit"]');
+
+        btn.disabled = true;
+        if (statusEl) statusEl.textContent = t('form.saving');
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/answers`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ answers, clear }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.answersFailed'));
+          }
+          showToast(t('party.admin.answersUpdated'), 'success');
+          // Reload so the Bringing column, status derivation and tallies reflect
+          // the edited answers.
+          await this._loadAndRender();
+        } catch (err) {
+          if (statusEl) statusEl.textContent = '';
+          btn.disabled = false;
+          showToast(err.message || t('party.admin.answersFailed'), 'error');
         }
       });
     });

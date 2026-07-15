@@ -2285,3 +2285,151 @@ describe('PATCH /api/v1/party/guests/:id/rsvp-status', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ── PATCH /api/v1/party/guests/:id/profile ────────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/profile', () => {
+  beforeEach(async () => {
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('admin updates a guest display name', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie)
+      .send({ display_name: '  Auntie Björk  ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, display_name: 'Auntie Björk' });
+
+    const { rows } = await db.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+    expect(rows[0].display_name).toBe('Auntie Björk');
+  });
+
+  test('empty display name clears back to the username fallback (null)', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: 'Temp' });
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: '   ' });
+    expect(res.status).toBe(200);
+    expect(res.body.display_name).toBeNull();
+
+    const { rows } = await db.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+    expect(rows[0].display_name).toBeNull();
+  });
+
+  test('rejects a name longer than 100 chars with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: 'x'.repeat(101) });
+    expect(res.status).toBe(400);
+  });
+
+  test('non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: 'Nope' });
+    expect(res.status).toBe(404);
+  });
+
+  test('moderator cannot edit (admin-only) — 403', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', modCookie).send({ display_name: 'Nope' });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .send({ display_name: 'Nope' });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── PATCH /api/v1/party/guests/:id/answers ────────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/answers', () => {
+  beforeEach(async () => {
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('sets answers on a guest who had not RSVP\'d — creates the row', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie)
+      .send({ answers: { attend_when: 'kannski', message: 'Told me in person' } });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    const { rows } = await db.query('SELECT answers, attending FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].answers).toMatchObject({ attend_when: 'kannski', message: 'Told me in person' });
+    expect(rows[0].attending).toBe(true);
+
+    // Derived status follows the new answer (no override set).
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('maybe');
+  });
+
+  test('merges over existing answers, preserving keys not in the payload', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes', message: 'old', bringing: ['Maki'] } });
+    // Only send `message` — `attend_when` and the other-locale `bringing` must survive.
+    await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: { message: 'new' } });
+
+    const { rows } = await db.query('SELECT answers FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].answers).toEqual({ attend_when: 'yes', message: 'new', bringing: ['Maki'] });
+  });
+
+  test('clear list removes only the named keys', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes', message: 'bye' } });
+    await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: {}, clear: ['message'] });
+
+    const { rows } = await db.query('SELECT answers FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].answers).toEqual({ attend_when: 'yes' });
+  });
+
+  test('rejects a non-array clear payload with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: {}, clear: 'message' });
+    expect(res.status).toBe(400);
+  });
+
+  test('preserves an existing admin_status override', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'declined' });   // override
+    await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: { attend_when: 'yes' } }); // would derive going
+
+    const { rows } = await db.query('SELECT admin_status FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].admin_status).toBe('declined');
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('declined');
+  });
+
+  test('rejects a non-object answers payload with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: ['not', 'an', 'object'] });
+    expect(res.status).toBe(400);
+  });
+
+  test('non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: { attend_when: 'yes' } });
+    expect(res.status).toBe(404);
+  });
+
+  test('regular (non-admin) user cannot edit — 403', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', userCookie).send({ answers: { attend_when: 'yes' } });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .send({ answers: { attend_when: 'yes' } });
+    expect(res.status).toBe(401);
+  });
+});

@@ -166,6 +166,18 @@ router.patch('/guests/:id/rsvp-status',
   requireAuth, requireRole('admin'), csrfProtect,
   partyController.setGuestRsvpStatus);
 
+// Admin edits a guest's display name from the attendance table. Body
+// { display_name }. Email stays read-only (it's the login identity).
+router.patch('/guests/:id/profile',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestProfile);
+
+// Admin overwrites a guest's RSVP answers from the attendance table. Body
+// { answers } keyed by form field id — same shape as the guest's own RSVP.
+router.patch('/guests/:id/answers',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestAnswers);
+
 // Send one email per recipient (privacy: no shared To:) to going + maybe
 // guests. Admin-only — moderators can view guests but can't blast emails
 // under the host's name. Body { subject?, body?, includeMaybe? }.
