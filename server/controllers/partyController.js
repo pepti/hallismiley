@@ -718,6 +718,98 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // PATCH /api/v1/party/guests/:id/profile — admin only.
+  // Edit a guest's editable profile fields from the attendance table. Currently
+  // just the display name (email is deliberately read-only — it's the login
+  // identity). Body { display_name } where '' / null clears it back to the
+  // username fallback.
+  async setGuestProfile(req, res, next) {
+    try {
+      const { id } = req.params;
+      let { display_name: name } = req.body;
+
+      if (name != null && typeof name !== 'string') {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.invalidName'), code: 400 });
+      }
+      if (typeof name === 'string') {
+        name = name.trim();
+        if (name.length > 100) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.invalidName'), code: 400 });
+        }
+        if (name === '') name = null;   // fall back to the username
+      }
+
+      const result = await db.query(
+        `UPDATE users SET display_name = $2
+          WHERE id = $1 AND party_access = TRUE AND disabled = FALSE
+        RETURNING id, display_name`,
+        [id, name ?? null]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.guestNotFound'), code: 404 });
+      }
+      res.json({ ok: true, display_name: result.rows[0].display_name });
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/party/guests/:id/answers — admin only.
+  // Edit a guest's RSVP answers from the attendance table (e.g. the host filling
+  // in / correcting what a guest told them in person). Minus the notification /
+  // confirmation emails — an admin edit shouldn't fire "thanks for your RSVP"
+  // mail at the guest. Upserts the row when the guest hadn't RSVP'd yet; an
+  // existing admin_status override is preserved.
+  //
+  // Body { answers, clear? }. The update is a NON-DESTRUCTIVE MERGE, not a
+  // replace: `answers` (object keyed by field id) is merged over the guest's
+  // existing answers and `clear` (array of field ids) removes keys. This is
+  // deliberate — the client omits fields it can't safely represent (answers a
+  // guest gave in another locale, or under a since-renamed option), so a merge
+  // preserves them instead of the editor silently wiping them on save.
+  async setGuestAnswers(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { answers, clear } = req.body;
+
+      if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.answersObject'), code: 400 });
+      }
+      if (clear != null && !Array.isArray(clear)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.answersObject'), code: 400 });
+      }
+
+      const guest = await db.query(
+        `SELECT 1 FROM users WHERE id = $1 AND party_access = TRUE AND disabled = FALSE`,
+        [id]
+      );
+      if (guest.rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.guestNotFound'), code: 404 });
+      }
+
+      // Merge over the existing answers, then drop the cleared keys.
+      const existingRes = await db.query(
+        `SELECT answers FROM party_rsvps WHERE user_id = $1`, [id]
+      );
+      const existing = existingRes.rows[0]?.answers || {};
+      const merged   = { ...existing, ...answers };
+      if (Array.isArray(clear)) {
+        for (const key of clear) {
+          if (typeof key === 'string') delete merged[key];
+        }
+      }
+
+      await db.query(
+        `INSERT INTO party_rsvps (user_id, attending, answers)
+         VALUES ($1, TRUE, $2::jsonb)
+         ON CONFLICT (user_id) DO UPDATE SET
+           answers    = EXCLUDED.answers,
+           updated_at = NOW()`,
+        [id, JSON.stringify(merged)]
+      );
+
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  },
+
   // POST /api/v1/party/email-going — admin only.
   // Sends one email per recipient (see emailService.sendPartyAnnouncement —
   // recipients never see each other's addresses) to going (+ optionally

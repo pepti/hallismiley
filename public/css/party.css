@@ -1796,6 +1796,76 @@ button.party-admin__stat:focus-visible {
    so they stay legible on the native dropdown background. */
 .party-admin__status-select option { color: initial; }
 
+/* Admin inline name edit — a text input that sits quietly in the Name cell
+   until focused, so the table still reads like a table. */
+.party-admin__cell-input {
+  font: inherit;
+  width: 100%;
+  min-width: 8ch;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__cell-input:hover  { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__cell-input:focus  {
+  outline: none;
+  border-color: #d4b877;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.party-admin__cell-input:disabled { opacity: 0.55; cursor: progress; }
+
+/* Admin RSVP-answer editor — the expanded detail row's editable form. Keeps a
+   compact, single-column layout so it stays readable inside the table row. */
+.party-admin__answers-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.party-admin__answer-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.party-admin__answer-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.party-admin__answer-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+.party-admin__answer-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 400;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.party-admin__answer-check--clear { opacity: 0.8; font-style: italic; }
+/* Read-only answer given on a different form version (other locale / renamed
+   option): shown so the admin knows it exists, but not editable here. */
+.party-admin__answer-readonly {
+  font-weight: 400;
+  color: var(--text-secondary, #999);
+}
+.party-admin__answer-hint {
+  display: block;
+  font-size: 0.75rem;
+  font-style: italic;
+  opacity: 0.75;
+  margin-top: 0.15rem;
+}
+.party-admin__answers-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.party-admin__answers-status { font-size: 0.85rem; color: var(--text-secondary, #999); }
+
 .party-admin__invited-toolbar {
   display: flex;
   align-items: center;
