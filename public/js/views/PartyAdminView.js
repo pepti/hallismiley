@@ -67,6 +67,9 @@ export class PartyAdminView {
     this._guestSort   = null;
     this._rsvpSort    = null;
     this._guestFilter = this._guestFilter || { q: '', group: null };
+    // Scroll-mode toggle is session-only and off by default (the guest list
+    // shows in full and the page scrolls); survives inline-edit reloads.
+    if (this._guestScroll === undefined) this._guestScroll = false;
 
     // Column widths persist across reloads (per browser). Ignored when the
     // stored array doesn't match the current column count (e.g. admin vs
@@ -90,8 +93,8 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
-        ${this._renderAddGuestSection()}
         ${this._renderAcceptedAndPending()}
+        ${this._renderAddGuestSection()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
         ${this._renderTodoSection()}
@@ -280,8 +283,12 @@ export class PartyAdminView {
                  placeholder="${escHtml(t('party.admin.guestFilterPlaceholder'))}"
                  aria-label="${escHtml(t('party.admin.guestFilterPlaceholder'))}" />
           <span class="party-admin__guest-filter-count" data-guest-filter-count ${filterActive ? '' : 'hidden'}>${filterCount}</span>
+          <label class="party-admin__scroll-toggle" title="${escHtml(t('party.admin.scrollToggleHint'))}">
+            <input type="checkbox" id="party-admin-scroll-toggle" ${this._guestScroll ? 'checked' : ''} />
+            ${t('party.admin.scrollToggle')}
+          </label>
         </div>
-        <div class="party-admin__table-wrap party-admin__table-wrap--sticky">
+        <div class="party-admin__table-wrap${this._guestScroll ? ' party-admin__table-wrap--sticky' : ''}">
           <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.acceptedAndPending', { n: '' }).trim()}">
             <thead>
               <tr>
@@ -290,7 +297,7 @@ export class PartyAdminView {
                 ${this._sortableTh('status',   'number', t('adminOrders.status'),  this._guestSort)}
                 ${this._sortableTh('bringing', 'string', t('party.admin.bringing'),this._guestSort)}
                 <th>${t('party.admin.rsvpControl')}</th>
-                ${this._sortableTh('rsvpdAt',  'date',   t('party.admin.rsvpdAt'), this._guestSort)}
+                <th>${t('party.admin.attendCol')}</th>
                 ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
               </tr>
             </thead>
@@ -331,7 +338,7 @@ export class PartyAdminView {
                   <th>${t('adminOrders.status')}</th>
                   <th>${t('party.admin.bringing')}</th>
                   <th>${t('party.admin.rsvpControl')}</th>
-                  <th>${t('party.admin.rsvpdAt')}</th>
+                  <th>${t('party.admin.attendCol')}</th>
                   ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
                 </tr>
               </thead>
@@ -362,14 +369,12 @@ export class PartyAdminView {
         const b = this._bringingFor(g);
         return b === '—' ? null : b;
       }
-      case 'rsvpdAt':  return g.rsvp_updated_at;
       default:         return null;
     }
   }
 
   _guestSortType(field) {
-    if (field === 'status')  return 'number';
-    if (field === 'rsvpdAt') return 'date';
+    if (field === 'status') return 'number';
     return 'string';
   }
 
@@ -501,9 +506,6 @@ export class PartyAdminView {
                  aria-label="${escHtml(t('party.admin.editNameAria', { name: g.display_name || g.username || '—' }))}" />
         </td>`
       : `<td>${name}</td>`;
-    const rsvpedAt = g.rsvp_updated_at
-      ? new Date(g.rsvp_updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-      : '—';
 
     const statusHtml = {
       going:    `<span class="party-admin__status party-admin__status--going">✅ ${t('party.admin.statusGoing')}</span>`,
@@ -564,7 +566,7 @@ export class PartyAdminView {
         ${statusCell}
         <td class="party-admin__invited-bringing">${bringingHtml}</td>
         ${this._renderCompanionsCell(g, showRevoke)}
-        <td>${rsvpedAt}</td>
+        ${this._renderTimingCell(g, showRevoke)}
         ${revokeCell}
       </tr>
       <tr class="party-admin__invited-details" data-guest-details="${escHtml(g.id)}" hidden>
@@ -614,6 +616,62 @@ export class PartyAdminView {
     if (kc > 0) parts.push(`🧒 ${kc}`);
     if (typeof ac.kids_ages === 'string' && ac.kids_ages) parts.push(`(${escHtml(ac.kids_ages)})`);
     return parts.length ? parts.join(' ') : '—';
+  }
+
+  // The RSVP form's attendance-timing radio field (id 'attend_when', or a
+  // radio-group whose label reads like timing). Shared by the Stats breakdown
+  // and the attendance-timing column.
+  _attendField() {
+    return (this._rsvpForm || []).find(f =>
+      f.type === 'radio-group' &&
+      (f.id === 'attend_when' || /attend|when|day|evening/i.test(f.label || ''))
+    ) || null;
+  }
+
+  // The three timing choices pulled from the attend_when options by meaning
+  // (order matters: match "both/all day" before "day" so it isn't stolen by
+  // the /day/ test). `value` is the real stored option label; icon+label are
+  // display only. Options the form lacks are skipped.
+  _timingOptions() {
+    const f = this._attendField();
+    if (!f) return [];
+    const opts = (f.options || []).map(o => this._optLabel(o)).filter(Boolean);
+    const both    = opts.find(l => /both|all\s*day/i.test(l));
+    const evening = opts.find(l => /evening|night|kvöld/i.test(l));
+    const day     = opts.find(l => /day|dag/i.test(l) && l !== both);
+    return [
+      day     && { value: day,     icon: '☀️', label: t('party.admin.dayOnly') },
+      evening && { value: evening, icon: '🌙', label: t('party.admin.eveningOnly') },
+      both    && { value: both,    icon: '🎉', label: t('party.admin.both') },
+    ].filter(Boolean);
+  }
+
+  // The attendance-timing cell (replaces the old "RSVP sent" date). Admins get
+  // an inline dropdown of the timing options + a blank "—"; picking one writes
+  // answers.attend_when. Non-timing answers (Maybe/Can't — owned by the Status
+  // column) show blank here. Moderators see a read-only label.
+  _renderTimingCell(g, isAdminUser) {
+    const field   = this._attendField();
+    const options = this._timingOptions();
+    if (!field || !options.length) return `<td>—</td>`;
+    const current = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
+    const match   = options.find(o => o.value === current);
+
+    if (!isAdminUser) {
+      return `<td class="party-admin__timing-cell">${match ? `${match.icon} ${escHtml(match.label)}` : '—'}</td>`;
+    }
+    const opts = options.map(o =>
+      `<option value="${escHtml(o.value)}"${o.value === current ? ' selected' : ''}>${o.icon} ${escHtml(o.label)}</option>`
+    ).join('');
+    return `
+      <td class="party-admin__timing-cell">
+        <select class="party-admin__timing-select" data-timing-for="${escHtml(g.id)}"
+                data-field="${escHtml(field.id)}" data-current="${escHtml(current)}"
+                aria-label="${escHtml(t('party.admin.attendCol'))}">
+          <option value="">—</option>
+          ${opts}
+        </select>
+      </td>`;
   }
 
   // An RSVP option can be a bare string or a { label, status } object (the admin
@@ -1044,9 +1102,9 @@ export class PartyAdminView {
       ['waiting', `⏳ ${t('party.admin.statusPending')}`],
     ];
     return `
-      <section class="party-admin__section party-admin__add-guest">
-        <h2 class="party-admin__section-title">${t('party.admin.addGuestTitle')}</h2>
-        <p class="party-admin__invite-help">${t('party.admin.addGuestHelp')}</p>
+      <section class="party-admin__section party-admin__add-guest party-admin__add-guest--compact">
+        <h2 class="party-admin__section-title party-admin__add-guest-title">${t('party.admin.addGuestTitle')}</h2>
+        <p class="party-admin__invite-help party-admin__add-guest-help">${t('party.admin.addGuestHelp')}</p>
         <form class="party-admin__add-guest-form" id="party-admin-add-guest-form" novalidate>
           <input type="text" id="party-admin-add-guest-name" class="lol-input party-admin__add-guest-name"
                  maxlength="100" required
@@ -1088,10 +1146,7 @@ export class PartyAdminView {
     const headcount = rsvps.filter(r => r.attending).length;
 
     // Try to derive day/evening/both from a radio-group field that looks like attendance timing
-    const attendField = this._rsvpForm.find(f =>
-      f.type === 'radio-group' &&
-      (f.id === 'attend_when' || /attend|when|day|evening/i.test(f.label || ''))
-    );
+    const attendField = this._attendField();
 
     let breakdownCards = '';
     if (attendField) {
@@ -2769,7 +2824,21 @@ export class PartyAdminView {
     this._bindPillDropdowns();
     this._bindPillFilters();
     this._bindGuestFilter();
+    this._bindScrollToggle();
     this._bindGuestRows();
+  }
+
+  // Scroll-mode checkbox: toggles the fixed-height scroll box (+ pinned header)
+  // on the attendance table in place, no reload needed.
+  _bindScrollToggle() {
+    const cb = this._el.querySelector('#party-admin-scroll-toggle');
+    if (!cb || cb.dataset.bound) return;
+    cb.dataset.bound = '1';
+    cb.addEventListener('change', () => {
+      this._guestScroll = cb.checked;
+      const wrap = this._el.querySelector('#party-admin-accepted-pending .party-admin__table-wrap');
+      wrap?.classList.toggle('party-admin__table-wrap--sticky', cb.checked);
+    });
   }
 
   // Pill click → toggle the table's group filter. Full section re-render so
@@ -2867,6 +2936,45 @@ export class PartyAdminView {
         } catch (err) {
           inputs.forEach(i => { i.disabled = false; });
           showToast(err.message || t('party.admin.companionsFailed'), 'error');
+        }
+      });
+    });
+
+    // Inline attendance-timing edit (admin-only select). Writes answers.attend_when
+    // via the merge endpoint; picking "—" clears it.
+    this._el.querySelectorAll('[data-timing-for]').forEach(sel => {
+      if (sel.dataset.bound) return;
+      sel.dataset.bound = '1';
+      sel.addEventListener('click', (e) => e.stopPropagation());
+      sel.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const userId  = sel.dataset.timingFor;
+        const fieldId = sel.dataset.field;
+        const prev    = sel.dataset.current || '';
+        const value   = sel.value;
+        if (value === prev) return;
+
+        sel.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const body = value
+            ? { answers: { [fieldId]: value } }
+            : { answers: {}, clear: [fieldId] };
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/answers`, {
+            method: 'PATCH', credentials: 'include', headers, body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.answersFailed'));
+          }
+          showToast(t('party.admin.answersUpdated'), 'success');
+          // Reload — attend_when drives the derived status and the Stats
+          // day/evening/all-day breakdown.
+          await this._loadAndRender();
+        } catch (err) {
+          sel.value    = prev;
+          sel.disabled = false;
+          showToast(err.message || t('party.admin.answersFailed'), 'error');
         }
       });
     });

@@ -1579,6 +1579,14 @@ button.party-admin__stat:focus-visible {
 .party-admin__add-guest-status-sel { flex: 0 0 auto; }
 .party-admin__add-guest-status { font-size: 0.85rem; color: var(--text-secondary); }
 
+/* Compact variant (form sits below the table): ~half the footprint. */
+.party-admin__add-guest--compact { max-width: 32rem; }
+.party-admin__add-guest--compact .party-admin__add-guest-form { gap: var(--sp-1, 0.35rem); }
+.party-admin__add-guest--compact .party-admin__add-guest-name  { flex: 1 1 8rem; min-width: 7rem; }
+.party-admin__add-guest--compact .party-admin__add-guest-email { flex: 1 1 9rem; min-width: 7rem; }
+.party-admin__add-guest-title { font-size: 1rem; margin-bottom: 0.25rem; }
+.party-admin__add-guest-help  { font-size: 0.8rem; margin-bottom: var(--sp-2); }
+
 .party-admin__invite-actions {
   display: flex;
   gap: var(--sp-2);
@@ -1810,6 +1818,23 @@ button.party-admin__stat:focus-visible {
    so they stay legible on the native dropdown background. */
 .party-admin__status-select option { color: initial; }
 
+/* Attendance-timing cell — same compact select styling as the status column. */
+.party-admin__timing-cell { white-space: nowrap; }
+.party-admin__timing-select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border-radius: 6px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, inherit);
+  cursor: pointer;
+  max-width: 100%;
+}
+.party-admin__timing-select:disabled { opacity: 0.55; cursor: progress; }
+.party-admin__timing-select:focus-visible { outline: 2px solid #d4b877; outline-offset: 1px; }
+.party-admin__timing-select option { color: initial; }
+
 /* Admin inline name edit — a text input that sits quietly in the Name cell
    until focused, so the table still reads like a table. */
 .party-admin__cell-input {
@@ -1932,6 +1957,17 @@ button.party-admin__stat:focus-visible {
 .party-admin__guest-filter-count {
   font-size: 0.85rem;
   color: var(--text-secondary);
+}
+/* Scroll-mode toggle, pushed to the far right of the filter bar. */
+.party-admin__scroll-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 /* Headcount stat pill — informational, not a button. */
