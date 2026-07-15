@@ -1565,6 +1565,20 @@ button.party-admin__stat:focus-visible {
   text-transform: none;
 }
 
+/* Manual add-guest form — a single responsive row that wraps on narrow screens. */
+.party-admin__add-guest-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.party-admin__add-guest-form .lol-input { text-transform: none; }
+.party-admin__add-guest-name  { flex: 1 1 12rem; min-width: 9rem; }
+.party-admin__add-guest-email { flex: 1 1 14rem; min-width: 10rem; }
+.party-admin__add-guest-status-sel { flex: 0 0 auto; }
+.party-admin__add-guest-status { font-size: 0.85rem; color: var(--text-secondary); }
+
 .party-admin__invite-actions {
   display: flex;
   gap: var(--sp-2);
@@ -1865,6 +1879,138 @@ button.party-admin__stat:focus-visible {
   margin-top: 0.25rem;
 }
 .party-admin__answers-status { font-size: 0.85rem; color: var(--text-secondary, #999); }
+
+/* ── RSVP Stýring cell: compact inline companion controls ────────────────── */
+.party-admin__companions-cell {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.party-admin__companions-cell--ro { color: var(--text-secondary); }
+.party-admin__companion-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+.party-admin__companion-kids {
+  width: 3.2rem;
+  font: inherit;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.25));
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__companion-ages {
+  width: 5.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__companion-ages:hover { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__companion-ages:focus,
+.party-admin__companion-kids:focus {
+  outline: none;
+  border-color: #d4b877;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.party-admin__companions-cell input:disabled { opacity: 0.55; cursor: progress; }
+
+/* ── Guest filter bar ─────────────────────────────────────────────────────── */
+.party-admin__guest-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.party-admin__guest-filter { max-width: 220px; }
+.party-admin__guest-filter-count {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Headcount stat pill — informational, not a button. */
+.party-admin__pill--headcount {
+  background: rgba(212, 184, 119, 0.10);
+  color: var(--text-primary);
+  border-color: rgba(212, 184, 119, 0.35);
+}
+
+/* Active pill = its group filter is applied to the table. */
+.party-admin__pill--active {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+
+/* Caret sub-button that opens the pill's name list. */
+.party-admin__pill-caret {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.3rem;
+  margin-left: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.party-admin__pill-caret:hover:not(:disabled) { color: var(--text-primary); }
+.party-admin__pill-caret:disabled { opacity: 0.45; cursor: default; }
+
+/* ── Column resize grips + sticky header (attendance table) ──────────────── */
+.party-admin__table--invited thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* Sticky needs an internal scroll context: cap the wrap's height so long
+   guest lists scroll under the pinned header. Short lists are unaffected. */
+.party-admin__table-wrap--sticky {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.party-admin__col-grip {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+.party-admin__col-grip:hover,
+.party-admin__table--resizing .party-admin__col-grip {
+  background: linear-gradient(to right, transparent 3px, rgba(212, 184, 119, 0.55) 4px, rgba(212, 184, 119, 0.55) 5px, transparent 6px);
+}
+.party-admin__table--resizing { user-select: none; }
+
+/* Icon-only revoke: small square ghost button, red on hover. */
+.party-admin__actions-cell { width: 2.2rem; text-align: center; }
+.party-admin__revoke-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.party-admin__revoke-btn:hover:not(:disabled) {
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.4);
+  background: rgba(239, 83, 80, 0.08);
+}
+.party-admin__revoke-btn:disabled { opacity: 0.55; cursor: progress; }
 
 .party-admin__invited-toolbar {
   display: flex;

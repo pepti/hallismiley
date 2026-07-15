@@ -61,8 +61,21 @@ export class PartyAdminView {
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
     // Sort state is session-only — each fresh load starts on the default view.
-    this._guestSort = null;
-    this._rsvpSort  = null;
+    // The guest filter (name query + pill group) survives the _loadAndRender
+    // reloads that follow every inline edit, so an admin working through e.g.
+    // the "waiting" list doesn't lose their place after each change.
+    this._guestSort   = null;
+    this._rsvpSort    = null;
+    this._guestFilter = this._guestFilter || { q: '', group: null };
+
+    // Column widths persist across reloads (per browser). Ignored when the
+    // stored array doesn't match the current column count (e.g. admin vs
+    // moderator see different columns).
+    if (this._guestColWidths === undefined) {
+      try {
+        this._guestColWidths = JSON.parse(localStorage.getItem('partyAdmin.guestColWidths') || 'null');
+      } catch { this._guestColWidths = null; }
+    }
 
     this._el.innerHTML = this._renderAll();
     this._bind();
@@ -77,6 +90,7 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
+        ${this._renderAddGuestSection()}
         ${this._renderAcceptedAndPending()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
@@ -142,38 +156,96 @@ export class PartyAdminView {
   // Sort order: going → maybe → waiting so the most-committed guests bubble
   // up when scanning the list. Pills above the table show the breakdown and
   // host the "Email accepted + maybe" action.
+  // Sort the (already filtered) guest list. Default sort (no column clicked):
+  // status priority then alphabetical. User-applied column sort takes over
+  // when this._guestSort is set. Shared by the full section render and the
+  // tbody-only refresh the filter box uses.
+  _sortInvitedGuests(guests) {
+    if (this._guestSort) {
+      return this._sortRows(
+        guests,
+        (g) => this._guestSortValue(g, this._guestSort.field),
+        this._guestSort.dir,
+        this._guestSortType(this._guestSort.field),
+      );
+    }
+    const order = { going: 0, maybe: 1, waiting: 2 };
+    const byName = (a, b) =>
+      (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
+    return [...guests].sort((a, b) => {
+      const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
+      return d !== 0 ? d : byName(a, b);
+    });
+  }
+
+  // Apply the toolbar filters to the non-declined guest list: the active pill
+  // group first (membership comes from the same lists the pills count), then
+  // the name query against display name OR username (the Notendanafn column
+  // shows display_name with username fallback, so match both).
+  _filterGuests(guests) {
+    const { q, group } = this._guestFilter || {};
+    let out = guests;
+    if (group) {
+      const grp = this._summaryGroups(guests).find(g2 => g2.key === group);
+      const ids = new Set((grp?.list || []).map(g2 => g2.id));
+      out = out.filter(g2 => ids.has(g2.id));
+    }
+    const needle = (q || '').trim().toLowerCase();
+    if (needle) {
+      out = out.filter(g2 =>
+        (g2.display_name || '').toLowerCase().includes(needle) ||
+        (g2.username || '').toLowerCase().includes(needle));
+    }
+    return out;
+  }
+
+  _guestFilterActive() {
+    const { q, group } = this._guestFilter || {};
+    return Boolean((q || '').trim() || group);
+  }
+
+  // The tbody rows for the attendance table — empty-state message depends on
+  // whether a filter is hiding everyone or there are simply no guests.
+  _guestRowsHtml(sorted, showRevoke, anyGuests) {
+    if (sorted.length) return sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('');
+    const colSpan = this._invitedGuestColSpan(showRevoke);
+    const msg = (anyGuests && this._guestFilterActive())
+      ? t('party.admin.guestFilterNoMatch')
+      : t('party.admin.noGuests');
+    return `<tr><td colspan="${colSpan}" class="party-empty">${msg}</td></tr>`;
+  }
+
+  // Planned headcount over GOING guests: each guest counts as one adult, plus
+  // one more when they bring a spouse/partner (admin RSVP Stýring wins over the
+  // guest's own answer — _companionFlags folds that in). Kids use the admin
+  // count when recorded; otherwise the original answer only tells us kids
+  // exist, so it conservatively counts as 1.
+  _plannedHeadcount() {
+    let adults = 0, kids = 0;
+    for (const g of this._invitedGuests || []) {
+      if (g.rsvp_status !== 'going') continue;
+      const flags = this._companionFlags(g);
+      adults += 1 + (flags.spouse ? 1 : 0);
+      const ac = g.admin_companions;
+      if (ac && typeof ac === 'object') kids += Number(ac.kids_count) || 0;
+      else if (flags.kids) kids += 1;
+    }
+    return { adults, kids };
+  }
+
   _renderAcceptedAndPending() {
     const guests = (this._invitedGuests || []).filter(g => g.rsvp_status !== 'declined');
     const showRevoke = isAdmin();
 
-    // Default sort (no column clicked): status priority then alphabetical.
-    // User-applied column sort takes over when this._guestSort is set.
-    const sorted = this._guestSort
-      ? this._sortRows(
-          guests,
-          (g) => this._guestSortValue(g, this._guestSort.field),
-          this._guestSort.dir,
-          this._guestSortType(this._guestSort.field),
-        )
-      : (() => {
-          const order = { going: 0, maybe: 1, waiting: 2 };
-          const byName = (a, b) =>
-            (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
-          return [...guests].sort((a, b) => {
-            const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
-            return d !== 0 ? d : byName(a, b);
-          });
-        })();
+    const visible = this._filterGuests(guests);
+    const sorted  = this._sortInvitedGuests(visible);
 
     const counts = guests.reduce((acc, g) => {
       acc[g.rsvp_status] = (acc[g.rsvp_status] || 0) + 1;
       return acc;
     }, {});
 
-    const colSpan = this._invitedGuestColSpan(showRevoke);
-    const rows = sorted.length
-      ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
-      : `<tr><td colspan="${colSpan}" class="party-empty">${t('party.admin.noGuests')}</td></tr>`;
+    const rows = this._guestRowsHtml(sorted, showRevoke, guests.length > 0);
 
     // Email button only renders for admins who actually have someone to email.
     const emailableCount = (counts.going || 0) + (counts.maybe || 0);
@@ -181,16 +253,35 @@ export class PartyAdminView {
       ? `<button type="button" class="lol-btn lol-btn--primary lol-btn--sm" id="party-admin-email-going-btn">${t('party.admin.emailGoingBtn')}</button>`
       : '';
 
+    // Planning stat: true mouths-to-feed count, not "guests who bring someone".
+    const hc = this._plannedHeadcount();
+    const headcountPill =
+      `<span class="party-admin__pill party-admin__pill--headcount"
+             title="${escHtml(t('party.admin.plannedHeadcount', { a: hc.adults, k: hc.kids }))}">
+         ${t('party.admin.plannedHeadcount', { a: hc.adults, k: hc.kids })}
+       </span>`;
+
+    const filterActive = this._guestFilterActive();
+    const filterCount  = t('party.admin.filterShowing', { x: sorted.length, y: guests.length });
+
     return `
       <section class="party-admin__section" id="party-admin-accepted-pending">
         <h2 class="party-admin__section-title">${t('party.admin.acceptedAndPending', { n: guests.length })}</h2>
         <div class="party-admin__invited-toolbar">
           <div class="party-admin__invited-summary">
             ${this._summaryGroups(guests).map(grp => this._renderSummaryPill(grp)).join('')}
+            ${headcountPill}
           </div>
           ${emailBtn}
         </div>
-        <div class="party-admin__table-wrap">
+        <div class="party-admin__guest-filterbar">
+          <input type="search" class="lol-input party-admin__guest-filter" id="party-admin-guest-filter"
+                 value="${escHtml(this._guestFilter.q || '')}"
+                 placeholder="${escHtml(t('party.admin.guestFilterPlaceholder'))}"
+                 aria-label="${escHtml(t('party.admin.guestFilterPlaceholder'))}" />
+          <span class="party-admin__guest-filter-count" data-guest-filter-count ${filterActive ? '' : 'hidden'}>${filterCount}</span>
+        </div>
+        <div class="party-admin__table-wrap party-admin__table-wrap--sticky">
           <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.acceptedAndPending', { n: '' }).trim()}">
             <thead>
               <tr>
@@ -198,6 +289,7 @@ export class PartyAdminView {
                 ${this._sortableTh('email',    'string', t('adminUsers.email'),    this._guestSort)}
                 ${this._sortableTh('status',   'number', t('adminOrders.status'),  this._guestSort)}
                 ${this._sortableTh('bringing', 'string', t('party.admin.bringing'),this._guestSort)}
+                <th>${t('party.admin.rsvpControl')}</th>
                 ${this._sortableTh('rsvpdAt',  'date',   t('party.admin.rsvpdAt'), this._guestSort)}
                 ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
               </tr>
@@ -238,6 +330,7 @@ export class PartyAdminView {
                   <th>${t('adminUsers.email')}</th>
                   <th>${t('adminOrders.status')}</th>
                   <th>${t('party.admin.bringing')}</th>
+                  <th>${t('party.admin.rsvpControl')}</th>
                   <th>${t('party.admin.rsvpdAt')}</th>
                   ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
                 </tr>
@@ -252,8 +345,8 @@ export class PartyAdminView {
   }
 
   _invitedGuestColSpan(showRevoke) {
-    // Name, Email, Status, Bringing, RSVP'd at (+ Actions if admin)
-    return showRevoke ? 6 : 5;
+    // Name, Email, Status, Bringing, RSVP Stýring, RSVP'd at (+ Actions if admin)
+    return showRevoke ? 7 : 6;
   }
 
   _guestSortValue(g, field) {
@@ -304,6 +397,13 @@ export class PartyAdminView {
   // option labels are admin-editable and locale-dependent ("Spouse / partner",
   // "Maki / partner", "Kids", "Börn").
   _companionFlags(g) {
+    // Admin RSVP Stýring wins outright when recorded — it's the host's own
+    // note of the CURRENT plan after phone/text updates, so it overrides
+    // whatever the guest originally answered on the form.
+    const ac = g.admin_companions;
+    if (ac && typeof ac === 'object') {
+      return { spouse: !!ac.plus_one, kids: (Number(ac.kids_count) || 0) > 0 };
+    }
     const ans = g.rsvp_answers;
     const flags = { spouse: false, kids: false };
     if (!ans) return flags;
@@ -342,11 +442,14 @@ export class PartyAdminView {
     ];
   }
 
-  // One summary pill: a button showing icon + label + count, with a dropdown
-  // listing the names in that category. Empty groups render a disabled pill
-  // (nothing to drop down). Names sorted alphabetically.
+  // One summary pill: the main button toggles the table filter for that group
+  // (active pill highlighted), and a small caret sub-button opens the dropdown
+  // listing the names in the category. Empty groups render both disabled
+  // (nothing to filter or drop down). Names sorted alphabetically. The caret
+  // carries data-pill-group so _bindPillDropdowns keeps working unchanged.
   _renderSummaryPill(grp) {
     const n = grp.list.length;
+    const active = this._guestFilter?.group === grp.key;
     const names = grp.list
       .map(g => g.display_name || g.username || '—')
       .sort((a, b) => a.localeCompare(b));
@@ -360,19 +463,32 @@ export class PartyAdminView {
     return `
       <span class="party-admin__pill-wrap">
         <button type="button"
-                class="party-admin__pill party-admin__pill--${grp.cls} party-admin__pill--btn"
-                data-pill-group="${escHtml(grp.key)}"
-                aria-haspopup="true" aria-expanded="false"
+                class="party-admin__pill party-admin__pill--${grp.cls} party-admin__pill--btn${active ? ' party-admin__pill--active' : ''}"
+                data-pill-filter="${escHtml(grp.key)}"
+                aria-pressed="${active}"
                 ${n ? '' : 'disabled'}>
           ${grp.icon} ${escHtml(grp.label)}: ${n}
         </button>
+        <button type="button"
+                class="party-admin__pill-caret"
+                data-pill-group="${escHtml(grp.key)}"
+                aria-haspopup="true" aria-expanded="false"
+                aria-label="${escHtml(t('party.admin.pillNamesAria', { label: grp.label }))}"
+                ${n ? '' : 'disabled'}>▾</button>
         ${dropdown}
       </span>`;
   }
 
+  // Placeholder emails for verbal-only guests are internal bookkeeping — show
+  // an em-dash instead of "verbal-…@guest.invalid".
+  _displayEmail(email) {
+    if (!email || email.endsWith('@guest.invalid')) return '';
+    return email;
+  }
+
   _renderInvitedGuestRow(g, showRevoke) {
     const name     = escHtml(g.display_name || g.username || '—');
-    const email    = escHtml(g.email || '');
+    const email    = escHtml(this._displayEmail(g.email));
     // Admins edit the display name inline; the placeholder shows the username
     // fallback so a cleared name is obviously "will show as <username>".
     const nameCell = showRevoke
@@ -435,16 +551,19 @@ export class PartyAdminView {
           : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`);
 
     const colSpan = this._invitedGuestColSpan(showRevoke);
+    // Icon-only ✕ keeps the Actions column narrow; the confirm dialog (bound
+    // on data-revoke-user-id) still guards the action.
     const revokeCell = showRevoke
-      ? `<td><button class="lol-btn lol-btn--ghost lol-btn--sm" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}">${t('profile.revoke')}</button></td>`
+      ? `<td class="party-admin__actions-cell"><button class="party-admin__revoke-btn" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}" title="${escHtml(t('profile.revoke'))}" aria-label="${escHtml(t('profile.revoke'))}">✕</button></td>`
       : '';
 
     return `
       <tr class="party-admin__invited-row" data-expand-guest="${escHtml(g.id)}">
         ${nameCell}
-        <td>${email}</td>
+        <td>${email || '—'}</td>
         ${statusCell}
         <td class="party-admin__invited-bringing">${bringingHtml}</td>
+        ${this._renderCompanionsCell(g, showRevoke)}
         <td>${rsvpedAt}</td>
         ${revokeCell}
       </tr>
@@ -453,6 +572,48 @@ export class PartyAdminView {
           <div class="party-admin__invited-detail-box">${detailsHtml}</div>
         </td>
       </tr>`;
+  }
+
+  // The "RSVP Stýring" cell: the host's own record of what this guest is
+  // CURRENTLY bringing (after phone/text updates), separate from the guest's
+  // original answer shown in the Bringing column. Admins get inline controls
+  // (save on change); moderators see a read-only summary.
+  _renderCompanionsCell(g, isAdminUser) {
+    const ac = (g.admin_companions && typeof g.admin_companions === 'object') ? g.admin_companions : null;
+    if (!isAdminUser) {
+      return `<td class="party-admin__companions-cell party-admin__companions-cell--ro">${this._companionsSummary(ac)}</td>`;
+    }
+    const kc   = Number(ac?.kids_count) || 0;
+    const ages = typeof ac?.kids_ages === 'string' ? ac.kids_ages : '';
+    return `
+      <td class="party-admin__companions-cell" data-companions-for="${escHtml(g.id)}">
+        <label class="party-admin__companion-ctl" title="${escHtml(t('party.admin.companionPlusOne'))}">
+          <span aria-hidden="true">💑</span>
+          <input type="checkbox" data-companion-field="plus_one" ${ac?.plus_one ? 'checked' : ''}
+                 aria-label="${escHtml(t('party.admin.companionPlusOne'))}" />
+        </label>
+        <label class="party-admin__companion-ctl" title="${escHtml(t('party.admin.companionKidsCount'))}">
+          <span aria-hidden="true">🧒</span>
+          <input type="number" min="0" max="25" step="1" class="party-admin__companion-kids"
+                 data-companion-field="kids_count" value="${kc > 0 ? kc : ''}" placeholder="0"
+                 aria-label="${escHtml(t('party.admin.companionKidsCount'))}" />
+        </label>
+        <input type="text" class="party-admin__companion-ages"
+               data-companion-field="kids_ages" value="${escHtml(ages)}" maxlength="100"
+               placeholder="${escHtml(t('party.admin.companionKidsAges'))}"
+               aria-label="${escHtml(t('party.admin.companionKidsAges'))}" />
+      </td>`;
+  }
+
+  // Compact one-line summary of an admin_companions record, e.g. "💑 🧒 2 (3, 7)".
+  _companionsSummary(ac) {
+    if (!ac) return '—';
+    const parts = [];
+    if (ac.plus_one) parts.push('💑');
+    const kc = Number(ac.kids_count) || 0;
+    if (kc > 0) parts.push(`🧒 ${kc}`);
+    if (typeof ac.kids_ages === 'string' && ac.kids_ages) parts.push(`(${escHtml(ac.kids_ages)})`);
+    return parts.length ? parts.join(' ') : '—';
   }
 
   // An RSVP option can be a bare string or a { label, status } object (the admin
@@ -872,6 +1033,39 @@ export class PartyAdminView {
   // Owner-initiated invites: paste emails you already have (one per line, or
   // "Name <email>"); each becomes a pre-approved guest and gets a magic-link
   // invite immediately.
+  // Add a guest who accepted verbally — straight into the attendance list,
+  // no invite email. Email is optional (use the invite box below to send a
+  // magic link if you do have one). Its own section so a partial re-render of
+  // the attendance table (sort/filter) never wipes half-typed input.
+  _renderAddGuestSection() {
+    const statusOpts = [
+      ['going',   `✅ ${t('party.admin.statusGoing')}`],
+      ['maybe',   `🤔 ${t('party.admin.statusMaybe')}`],
+      ['waiting', `⏳ ${t('party.admin.statusPending')}`],
+    ];
+    return `
+      <section class="party-admin__section party-admin__add-guest">
+        <h2 class="party-admin__section-title">${t('party.admin.addGuestTitle')}</h2>
+        <p class="party-admin__invite-help">${t('party.admin.addGuestHelp')}</p>
+        <form class="party-admin__add-guest-form" id="party-admin-add-guest-form" novalidate>
+          <input type="text" id="party-admin-add-guest-name" class="lol-input party-admin__add-guest-name"
+                 maxlength="100" required
+                 placeholder="${escHtml(t('party.admin.addGuestNamePh'))}"
+                 aria-label="${escHtml(t('party.admin.addGuestNamePh'))}" />
+          <input type="email" id="party-admin-add-guest-email" class="lol-input party-admin__add-guest-email"
+                 maxlength="200"
+                 placeholder="${escHtml(t('party.admin.addGuestEmailPh'))}"
+                 aria-label="${escHtml(t('party.admin.addGuestEmailPh'))}" />
+          <select id="party-admin-add-guest-status" class="lol-input party-admin__add-guest-status-sel"
+                  aria-label="${escHtml(t('adminOrders.status'))}">
+            ${statusOpts.map(([v, l]) => `<option value="${v}"${v === 'going' ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.addGuestBtn')}</button>
+          <span class="party-admin__add-guest-status" id="party-admin-add-guest-status-msg" aria-live="polite"></span>
+        </form>
+      </section>`;
+  }
+
   _renderOwnerInviteSection() {
     return `
       <section class="party-admin__section party-admin__invite">
@@ -1158,6 +1352,7 @@ export class PartyAdminView {
   }
 
   _bind() {
+    this._bindAddGuest();
     this._bindOwnerInvite();
     this._bindPendingRequests();
     this._bindInvitedGuests();
@@ -1167,12 +1362,15 @@ export class PartyAdminView {
     this._bindStatCards();
     this._bindEmailGoing();
     this._bindRsvpSort();
+    this._applyColWidths();
   }
 
   _bindGuestsSort() {
     const thead = this._el.querySelector('#party-admin-accepted-pending thead');
     if (!thead) return;
     const handler = (e) => {
+      // Clicks that start on a column-resize grip are drags, not sorts.
+      if (e.target.closest?.('[data-col-grip]')) return;
       const th = e.target.closest('th[data-sort-field]');
       if (!th || !thead.contains(th)) return;
       if (e.type === 'keydown') {
@@ -1215,6 +1413,100 @@ export class PartyAdminView {
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindEmailGoing();
+    this._applyColWidths();
+  }
+
+  // Swap ONLY the attendance tbody + result counter — used by the name-filter
+  // box so the input keeps focus and caret while the user types. Pills, header
+  // and column widths stay untouched; row-level handlers re-bind on the fresh
+  // rows (their `bound` guards make that idempotent).
+  _refreshGuestTbody() {
+    const section = this._el.querySelector('#party-admin-accepted-pending');
+    const tbody   = section?.querySelector('tbody');
+    if (!tbody) return;
+    const showRevoke = isAdmin();
+    const guests  = (this._invitedGuests || []).filter(g => g.rsvp_status !== 'declined');
+    const visible = this._filterGuests(guests);
+    const sorted  = this._sortInvitedGuests(visible);
+    tbody.innerHTML = this._guestRowsHtml(sorted, showRevoke, guests.length > 0);
+    this._bindGuestRows();
+
+    const countEl = section.querySelector('[data-guest-filter-count]');
+    if (countEl) {
+      countEl.textContent = t('party.admin.filterShowing', { x: sorted.length, y: guests.length });
+      countEl.hidden = !this._guestFilterActive();
+    }
+  }
+
+  // ── Column resize (attendance table only) ────────────────────────────────
+  // Injects a drag grip into each header cell (except the narrow Actions
+  // column) and re-applies persisted widths. Called after every render or
+  // section re-render — grip injection is idempotent per fresh <th>.
+  _applyColWidths() {
+    const table = this._el.querySelector('#party-admin-accepted-pending table');
+    if (!table) return;
+    const ths = [...table.querySelectorAll('thead th')];
+
+    // Stored widths only apply when the column count matches (admin vs
+    // moderator see different columns; stale arrays are ignored).
+    if (Array.isArray(this._guestColWidths) && this._guestColWidths.length === ths.length) {
+      table.style.tableLayout = 'fixed';
+      ths.forEach((th, i) => {
+        const w = Number(this._guestColWidths[i]);
+        if (w > 0) th.style.width = `${w}px`;
+      });
+    }
+
+    ths.forEach((th, i) => {
+      if (th.querySelector('[data-col-grip]')) return;
+      if (i === ths.length - 1) return; // last column takes the leftover space
+      const grip = document.createElement('span');
+      grip.className = 'party-admin__col-grip';
+      grip.setAttribute('data-col-grip', '');
+      grip.setAttribute('aria-hidden', 'true');
+      // Grip interactions must never reach the sortable-header handler.
+      grip.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+      grip.addEventListener('pointerdown', (e) => this._startColResize(e, table, th));
+      th.appendChild(grip);
+    });
+  }
+
+  _startColResize(e, table, th) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ths = [...table.querySelectorAll('thead th')];
+    const index = ths.indexOf(th);
+    if (index < 0) return;
+
+    // Freeze the current layout so switching to table-layout:fixed doesn't
+    // reshuffle the untouched columns mid-drag.
+    const widths = ths.map(el => el.offsetWidth);
+    table.style.tableLayout = 'fixed';
+    ths.forEach((el, i) => { el.style.width = `${widths[i]}px`; });
+    table.classList.add('party-admin__table--resizing');
+
+    const grip   = e.currentTarget;
+    const startX = e.clientX;
+    const startW = widths[index];
+    grip.setPointerCapture?.(e.pointerId);
+
+    const onMove = (ev) => {
+      const w = Math.max(60, startW + (ev.clientX - startX));
+      th.style.width = `${w}px`;
+    };
+    const onUp = () => {
+      grip.removeEventListener('pointermove', onMove);
+      grip.removeEventListener('pointerup', onUp);
+      grip.removeEventListener('pointercancel', onUp);
+      table.classList.remove('party-admin__table--resizing');
+      this._guestColWidths = ths.map(el => el.offsetWidth);
+      try {
+        localStorage.setItem('partyAdmin.guestColWidths', JSON.stringify(this._guestColWidths));
+      } catch { /* storage full/blocked — widths stay session-only */ }
+    };
+    grip.addEventListener('pointermove', onMove);
+    grip.addEventListener('pointerup', onUp);
+    grip.addEventListener('pointercancel', onUp);
   }
 
   // Same pattern for the Total RSVPs table. The section re-renders on every
@@ -2475,16 +2767,107 @@ export class PartyAdminView {
 
   _bindInvitedGuests() {
     this._bindPillDropdowns();
+    this._bindPillFilters();
+    this._bindGuestFilter();
+    this._bindGuestRows();
+  }
 
-    // Row click → toggle detail expansion. Ignores clicks on buttons within
-    // the row so Revoke doesn't also open the details.
+  // Pill click → toggle the table's group filter. Full section re-render so
+  // the active pill highlight, rows and result count all update together.
+  _bindPillFilters() {
+    const section = this._el.querySelector('#party-admin-accepted-pending');
+    if (!section) return;
+    section.querySelectorAll('[data-pill-filter]').forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.pillFilter;
+        this._guestFilter.group = this._guestFilter.group === key ? null : key;
+        this._rerenderAcceptedPending();
+      });
+    });
+  }
+
+  // Debounced name filter (Notendanafn column = display name with username
+  // fallback, so both are matched). Refreshes ONLY the tbody so the input
+  // keeps focus and caret while the user types.
+  _bindGuestFilter() {
+    const input = this._el.querySelector('#party-admin-guest-filter');
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const next = input.value.trim();
+        if (next === this._guestFilter.q) return;
+        this._guestFilter.q = next;
+        this._refreshGuestTbody();
+      }, 250);
+    });
+  }
+
+  // Row-level bindings for the attendance tables. Split out from
+  // _bindInvitedGuests so the tbody-only filter refresh can re-bind fresh rows
+  // without re-touching the pills/filter controls (whose own `bound` guards
+  // would otherwise be pointless — pill buttons survive a tbody swap).
+  _bindGuestRows() {
+    // Row click → toggle detail expansion. Ignores clicks on interactive
+    // controls within the row so inline edits don't also open the details.
     this._el.querySelectorAll('[data-expand-guest]').forEach(row => {
+      if (row.dataset.bound) return;
+      row.dataset.bound = '1';
       row.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
+        if (e.target.closest('button, input, select, textarea, label')) return;
         const id = row.dataset.expandGuest;
         const details = this._el.querySelector(`[data-guest-details="${CSS.escape(id)}"]`);
         if (!details) return;
         details.hidden = !details.hidden;
+      });
+    });
+
+    // RSVP Stýring: the three companion controls share one delegated change
+    // listener on the cell; any change PATCHes the full record.
+    this._el.querySelectorAll('[data-companions-for]').forEach(cell => {
+      if (cell.dataset.bound) return;
+      cell.dataset.bound = '1';
+      cell.addEventListener('click', (e) => e.stopPropagation());
+      cell.addEventListener('change', async () => {
+        const userId  = cell.dataset.companionsFor;
+        const plusOne = cell.querySelector('[data-companion-field="plus_one"]')?.checked || false;
+        const kcEl    = cell.querySelector('[data-companion-field="kids_count"]');
+        const kcRaw   = kcEl?.value ?? '';
+        const kids    = kcRaw === '' ? 0 : Number(kcRaw);
+        const ages    = cell.querySelector('[data-companion-field="kids_ages"]')?.value.trim() || '';
+        // badInput (e.g. "e" typed into the number field) yields NaN — reject
+        // locally instead of round-tripping a guaranteed 400.
+        if (!Number.isInteger(kids) || kids < 0 || kids > 25) {
+          showToast(t('party.admin.companionsFailed'), 'error');
+          return;
+        }
+
+        const inputs = cell.querySelectorAll('input');
+        inputs.forEach(i => { i.disabled = true; });
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/companions`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ plus_one: plusOne, kids_count: kids, kids_ages: ages }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.companionsFailed'));
+          }
+          showToast(t('party.admin.companionsUpdated'), 'success');
+          // Reload so the Maki/Börn pills and the headcount stat pick up the
+          // new companion record.
+          await this._loadAndRender();
+        } catch (err) {
+          inputs.forEach(i => { i.disabled = false; });
+          showToast(err.message || t('party.admin.companionsFailed'), 'error');
+        }
       });
     });
 
@@ -2604,6 +2987,8 @@ export class PartyAdminView {
 
     // Revoke → flip party_access to false, remove the two rows for this guest.
     this._el.querySelectorAll('[data-revoke-user-id]').forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const userId = btn.dataset.revokeUserId;
@@ -2611,7 +2996,7 @@ export class PartyAdminView {
         if (!confirm(t('party.admin.confirmRevoke', { name }))) return;
 
         btn.disabled = true;
-        btn.textContent = t('profile.revoking');
+        btn.textContent = '…';   // icon button — spinner-ish glyph, not text
         try {
           await adminUpdateUser(userId, { party_access: false });
           // Remove the two related rows and any cached entry
@@ -2624,7 +3009,7 @@ export class PartyAdminView {
         } catch (err) {
           showToast(err.message || t('party.admin.revokeFailed'), 'error');
           btn.disabled = false;
-          btn.textContent = t('profile.revoke');
+          btn.textContent = '✕';
         }
       });
     });
@@ -2698,6 +3083,51 @@ export class PartyAdminView {
         if (m) return { name: m[1].trim(), email: m[2].trim() };
         return { email: line };
       });
+  }
+
+  _bindAddGuest() {
+    const form = this._el.querySelector('#party-admin-add-guest-form');
+    if (!form) return;
+    const nameEl   = form.querySelector('#party-admin-add-guest-name');
+    const emailEl  = form.querySelector('#party-admin-add-guest-email');
+    const statusEl = form.querySelector('#party-admin-add-guest-status');
+    const msgEl    = form.querySelector('#party-admin-add-guest-status-msg');
+    const btn      = form.querySelector('[type="submit"]');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = (nameEl?.value || '').trim();
+      if (!name) {
+        msgEl.textContent = t('party.admin.addGuestNameRequired');
+        nameEl?.focus();
+        return;
+      }
+
+      btn.disabled = true;
+      msgEl.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/guests', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({
+            name,
+            email:  (emailEl?.value || '').trim() || undefined,
+            status: statusEl?.value || 'going',
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || t('party.admin.addGuestFailed'));
+        showToast(t('party.admin.addGuestAdded', { name }), 'success');
+        // Reload so the new guest appears in the attendance table with the
+        // right status, and the pills/headcount update.
+        await this._loadAndRender();
+      } catch (err) {
+        btn.disabled = false;
+        msgEl.textContent = err.message || t('party.admin.addGuestFailed');
+      }
+    });
   }
 
   _bindOwnerInvite() {

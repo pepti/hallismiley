@@ -30,6 +30,13 @@ const APPROVAL_ACTION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
 // Email shape check for owner-entered invite addresses (mirrors validate.js).
 const PARTY_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Synthetic, guaranteed-undeliverable email for guests the host adds manually
+// after a verbal yes and who gave no email — the users.email column is NOT
+// NULL UNIQUE, so we need *some* unique address, but it must never receive
+// mail. `.invalid` is reserved by RFC 6761 for exactly this. These addresses
+// are masked in the UI and excluded from email blasts.
+const PLACEHOLDER_EMAIL_DOMAIN = 'guest.invalid';
+
 // Recipients for the owner "new request" notification. Always includes the
 // configured owner address (default halli@hallismiley.is) so the notification
 // reaches Halli even when no admin account happens to be email-verified, PLUS
@@ -532,6 +539,73 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // POST /api/v1/party/guests  { name, email?, status? }
+  // Admin-only. Manually add a guest who accepted VERBALLY — creates a
+  // passwordless, pre-approved account and drops them straight into the
+  // attendance list. Distinct from owner-invite: no magic-link email is sent
+  // (that's owner-invite's job) and email is optional. A guest with no email
+  // gets a placeholder so the NOT NULL/UNIQUE constraint holds. `status`
+  // (default 'going' — they said yes) seeds an admin RSVP override; the row is
+  // created with answers=NULL so it never counts as a submitted RSVP.
+  async addGuest(req, res, next) {
+    try {
+      const name = String(req.body?.name || '').trim();
+      if (!name || name.length > 100) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.guestNameRequired'), code: 400 });
+      }
+
+      const VALID = new Set(['going', 'maybe', 'declined', 'waiting']);
+      const status = VALID.has(req.body?.status) ? req.body.status : 'going';
+
+      // Email optional. When given it must be a real, unused address; otherwise
+      // synthesize a unique undeliverable placeholder.
+      const rawEmail  = req.body?.email;
+      const hasEmail  = rawEmail != null && String(rawEmail).trim() !== '';
+      let email;
+      if (hasEmail) {
+        email = String(rawEmail).trim().toLowerCase();
+        if (!PARTY_EMAIL_RE.test(email) || email.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.inviteEmailInvalid', { email }), code: 400 });
+        }
+        const ex = await db.query('SELECT 1 FROM users WHERE LOWER(email) = $1 LIMIT 1', [email]);
+        if (ex.rows.length) {
+          return res.status(409).json({ error: t(req.locale, 'errors.party.guestEmailExists'), code: 409 });
+        }
+      } else {
+        email = `verbal-${makeToken().slice(0, 12)}@${PLACEHOLDER_EMAIL_DOMAIN}`;
+      }
+
+      // Base the username on the name when there's no real email (avoid a
+      // "verbal-…" handle leaking from the placeholder).
+      const username = await generateGuestUsername(hasEmail ? email : '', name);
+      // Seed preferred_locale from the admin's current locale (party default
+      // 'is') so a later blast to a real-email manual guest isn't wrongly
+      // English on this Icelandic-first site.
+      const locale = req.locale || 'is';
+      const ins = await db.query(
+        `INSERT INTO users
+           (username, email, password_hash, role, display_name, preferred_locale,
+            email_verified, party_access, approval_status)
+         VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, TRUE, 'approved')
+         RETURNING id`,
+        [username, email, name, locale]
+      );
+      const userId = ins.rows[0].id;
+
+      // Seed the RSVP bucket via an admin override, answers=NULL so the guest
+      // shows as e.g. "going" without inflating the "RSVPs submitted" stats.
+      if (status !== 'waiting') {
+        await db.query(
+          `INSERT INTO party_rsvps (user_id, attending, answers, admin_status)
+           VALUES ($1, $2, NULL, $3)`,
+          [userId, status !== 'declined', status]
+        );
+      }
+
+      res.status(201).json({ id: userId, status, hasEmail });
+    } catch (err) { next(err); }
+  },
+
   // GET /api/v1/party/pending-requests — admin/moderator only.
   // The owner's "send the party info email" queue: auto-granted guests who
   // haven't received the welcome email yet (the magic-token guard keeps
@@ -572,11 +646,15 @@ const partyController = {
 
       // Store `attending=true` on the legacy column so headcount queries keep working.
       // Real data lives in `answers` (keyed by field id chosen by the admin).
+      // attending is re-asserted on conflict: the row may pre-exist with
+      // attending=FALSE when the admin recorded companions (RSVP Stýring)
+      // before the guest submitted their own RSVP.
       const { rows } = await db.query(
         `INSERT INTO party_rsvps (user_id, attending, answers)
          VALUES ($1, TRUE, $2::jsonb)
          ON CONFLICT (user_id) DO UPDATE SET
            answers    = EXCLUDED.answers,
+           attending  = TRUE,
            updated_at = NOW()
          RETURNING *`,
         [req.user.id, JSON.stringify(answers)]
@@ -608,10 +686,14 @@ const partyController = {
 
   async getAllRsvps(req, res, next) {
     try {
+      // answers IS NOT NULL: rows created only to hold admin bookkeeping
+      // (RSVP Stýring companions before the guest replied) aren't RSVPs and
+      // must not inflate the "RSVPs submitted" stats or the export.
       const { rows } = await db.query(
         `SELECT r.*, u.username, u.display_name, u.email, u.avatar
          FROM party_rsvps r
          JOIN users u ON u.id = r.user_id
+         WHERE r.answers IS NOT NULL
          ORDER BY r.created_at ASC`
       );
       res.json(rows);
@@ -634,10 +716,11 @@ const partyController = {
         db.query(
           `SELECT
              u.id, u.username, u.display_name, u.email, u.avatar, u.role,
-             r.answers      AS rsvp_answers,
-             r.admin_status AS rsvp_admin_status,
-             r.created_at   AS rsvp_created_at,
-             r.updated_at   AS rsvp_updated_at
+             r.answers          AS rsvp_answers,
+             r.admin_status     AS rsvp_admin_status,
+             r.admin_companions AS rsvp_admin_companions,
+             r.created_at       AS rsvp_created_at,
+             r.updated_at       AS rsvp_updated_at
            FROM users u
            LEFT JOIN party_rsvps r ON r.user_id = u.id
            WHERE u.party_access = TRUE AND u.disabled = FALSE
@@ -655,10 +738,11 @@ const partyController = {
         role:            r.role,
         // An admin override (set from the attendance table) wins over the
         // status derived from the guest's own answer.
-        rsvp_status:     r.rsvp_admin_status || _deriveRsvpStatus(r.rsvp_answers, statusMap),
-        rsvp_answers:    r.rsvp_answers || null,
-        rsvp_created_at: r.rsvp_created_at,
-        rsvp_updated_at: r.rsvp_updated_at,
+        rsvp_status:      r.rsvp_admin_status || _deriveRsvpStatus(r.rsvp_answers, statusMap),
+        rsvp_answers:     r.rsvp_answers || null,
+        admin_companions: r.rsvp_admin_companions || null,
+        rsvp_created_at:  r.rsvp_created_at,
+        rsvp_updated_at:  r.rsvp_updated_at,
       }));
       res.json(shaped);
     } catch (err) { next(err); }
@@ -802,6 +886,71 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // PATCH /api/v1/party/guests/:id/companions — admin only.
+  // "RSVP Stýring": the host's own record of what a guest is CURRENTLY
+  // bringing (plus-one, kids count, kids ages) after phone/text updates —
+  // kept separate from the guest's original RSVP answers, which stay
+  // untouched. Body { plus_one?, kids_count?, kids_ages? }; sending all
+  // fields empty/absent clears the record (column back to NULL) so the UI
+  // falls back to the guest's own answer.
+  async setGuestCompanions(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { plus_one: plusOne, kids_count: kidsCount, kids_ages: kidsAges } = req.body;
+
+      const bad = () =>
+        res.status(400).json({ error: t(req.locale, 'errors.party.invalidCompanions'), code: 400 });
+
+      if (plusOne != null && typeof plusOne !== 'boolean') return bad();
+      if (kidsCount != null && kidsCount !== '' &&
+          (typeof kidsCount !== 'number' || !Number.isInteger(kidsCount) || kidsCount < 0 || kidsCount > 25)) {
+        return bad();
+      }
+      if (kidsAges != null && typeof kidsAges !== 'string') return bad();
+      const ages = typeof kidsAges === 'string' ? kidsAges.trim() : '';
+      if (ages.length > 100) return bad();
+
+      const guest = await db.query(
+        `SELECT 1 FROM users WHERE id = $1 AND party_access = TRUE AND disabled = FALSE`,
+        [id]
+      );
+      if (guest.rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.guestNotFound'), code: 404 });
+      }
+
+      // Build the stored object from the meaningful values only; an entirely
+      // empty record means "clear the override".
+      const companions = {};
+      if (plusOne === true) companions.plus_one = true;
+      if (typeof kidsCount === 'number' && kidsCount > 0) companions.kids_count = kidsCount;
+      if (ages) companions.kids_ages = ages;
+      const value = Object.keys(companions).length ? JSON.stringify(companions) : null;
+
+      if (value === null) {
+        // Clear — no-op when the guest has no RSVP row yet.
+        await db.query(
+          `UPDATE party_rsvps SET admin_companions = NULL, updated_at = NOW() WHERE user_id = $1`,
+          [id]
+        );
+      } else {
+        // Upsert; attending/admin_status/answers are left untouched on conflict.
+        // A freshly-created row keeps answers NULL and attending FALSE so a
+        // waiting guest still derives as 'waiting' (answers {} would derive as
+        // 'going') and isn't counted in the legacy headcount before confirming.
+        await db.query(
+          `INSERT INTO party_rsvps (user_id, attending, answers, admin_companions)
+           VALUES ($1, FALSE, NULL, $2::jsonb)
+           ON CONFLICT (user_id) DO UPDATE SET
+             admin_companions = EXCLUDED.admin_companions,
+             updated_at       = NOW()`,
+          [id, value]
+        );
+      }
+
+      res.json({ ok: true, admin_companions: value ? companions : null });
+    } catch (err) { next(err); }
+  },
+
   // POST /api/v1/party/email-going — admin only.
   // Sends one email per recipient (see emailService.sendPartyAnnouncement —
   // recipients never see each other's addresses) to going (+ optionally
@@ -827,7 +976,8 @@ const partyController = {
                   r.answers AS rsvp_answers
              FROM users u
              LEFT JOIN party_rsvps r ON r.user_id = u.id
-            WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL`
+            WHERE u.party_access = TRUE AND u.disabled = FALSE AND u.email IS NOT NULL
+              AND u.email NOT LIKE '%@guest.invalid'`
         ),
         _loadRsvpStatusMap(),
       ]);
