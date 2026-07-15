@@ -384,6 +384,26 @@ export class PartyAdminView {
       waiting:  `<span class="party-admin__status party-admin__status--waiting">⏳ ${t('party.admin.statusPending')}</span>`,
     }[g.rsvp_status] || '—';
 
+    // Admins get an inline dropdown to set/correct the RSVP right from the
+    // table (e.g. a guest who replied by text); everyone else sees the pill.
+    const statusOptions = [
+      ['going',    `✅ ${t('party.admin.statusGoing')}`],
+      ['maybe',    `🤔 ${t('party.admin.statusMaybe')}`],
+      ['declined', `❌ ${t('party.admin.statusDeclined')}`],
+      ['waiting',  `⏳ ${t('party.admin.statusPending')}`],
+    ];
+    const statusCell = showRevoke
+      ? `<td class="party-admin__status-cell">
+          <select class="party-admin__status-select party-admin__status-select--${escHtml(g.rsvp_status || 'waiting')}"
+                  data-rsvp-status-for="${escHtml(g.id)}"
+                  data-current="${escHtml(g.rsvp_status || 'waiting')}"
+                  aria-label="${escHtml(t('party.admin.editRsvpAria', { name: g.display_name || g.username || '—' }))}">
+            ${statusOptions.map(([val, label]) =>
+              `<option value="${val}"${g.rsvp_status === val ? ' selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </td>`
+      : `<td>${statusHtml}</td>`;
+
     const bringingHtml = this._bringingFor(g);
 
     // Detail row — full answer dump, hidden until row is clicked
@@ -406,7 +426,7 @@ export class PartyAdminView {
       <tr class="party-admin__invited-row" data-expand-guest="${escHtml(g.id)}">
         <td>${name}</td>
         <td>${email}</td>
-        <td>${statusHtml}</td>
+        ${statusCell}
         <td class="party-admin__invited-bringing">${bringingHtml}</td>
         <td>${rsvpedAt}</td>
         ${revokeCell}
@@ -2305,6 +2325,46 @@ export class PartyAdminView {
         const details = this._el.querySelector(`[data-guest-details="${CSS.escape(id)}"]`);
         if (!details) return;
         details.hidden = !details.hidden;
+      });
+    });
+
+    // Inline RSVP-status edit (admin-only select in the status column). The
+    // `bound` guard means a partial re-render (e.g. sort) that re-runs this
+    // binder won't stack a second listener on selects that already have one.
+    this._el.querySelectorAll('[data-rsvp-status-for]').forEach(sel => {
+      if (sel.dataset.bound) return;
+      sel.dataset.bound = '1';
+      // Don't let clicks bubble to the row-expand handler.
+      sel.addEventListener('click', (e) => e.stopPropagation());
+      sel.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const userId = sel.dataset.rsvpStatusFor;
+        const prev   = sel.dataset.current;
+        const status = sel.value;
+        if (status === prev) return;
+
+        sel.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/rsvp-status`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ status }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.rsvpStatusFailed'));
+          }
+          showToast(t('party.admin.rsvpStatusUpdated'), 'success');
+          // Reload so the guest re-buckets (moves between accepted/declined),
+          // pills and counts update — same pattern as the pending-approval flow.
+          await this._loadAndRender();
+        } catch (err) {
+          sel.value    = prev;   // revert the visible selection
+          sel.disabled = false;
+          showToast(err.message || t('party.admin.rsvpStatusFailed'), 'error');
+        }
       });
     });
 

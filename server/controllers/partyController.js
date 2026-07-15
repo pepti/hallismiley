@@ -634,9 +634,10 @@ const partyController = {
         db.query(
           `SELECT
              u.id, u.username, u.display_name, u.email, u.avatar, u.role,
-             r.answers    AS rsvp_answers,
-             r.created_at AS rsvp_created_at,
-             r.updated_at AS rsvp_updated_at
+             r.answers      AS rsvp_answers,
+             r.admin_status AS rsvp_admin_status,
+             r.created_at   AS rsvp_created_at,
+             r.updated_at   AS rsvp_updated_at
            FROM users u
            LEFT JOIN party_rsvps r ON r.user_id = u.id
            WHERE u.party_access = TRUE AND u.disabled = FALSE
@@ -652,12 +653,68 @@ const partyController = {
         email:           r.email,
         avatar:          r.avatar,
         role:            r.role,
-        rsvp_status:     _deriveRsvpStatus(r.rsvp_answers, statusMap),
+        // An admin override (set from the attendance table) wins over the
+        // status derived from the guest's own answer.
+        rsvp_status:     r.rsvp_admin_status || _deriveRsvpStatus(r.rsvp_answers, statusMap),
         rsvp_answers:    r.rsvp_answers || null,
         rsvp_created_at: r.rsvp_created_at,
         rsvp_updated_at: r.rsvp_updated_at,
       }));
       res.json(shaped);
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/party/guests/:id/rsvp-status — admin only.
+  // Lets the host set or correct a guest's RSVP bucket straight from the
+  // attendance table (e.g. someone who replied by text). Body: { status } where
+  // status is 'going' | 'maybe' | 'declined' | 'waiting'.
+  //
+  //   going/maybe/declined → store an explicit admin override on the guest's
+  //     party_rsvps row (upserting the row if they hadn't RSVP'd yet). The
+  //     override wins over their derived status in listInvitedGuests. The legacy
+  //     `attending` column is kept in sync (false only for declined) so the
+  //     headcount stat stays correct.
+  //   waiting → clear the override, reverting to the guest's own answer (or
+  //     "no reply" when they never RSVP'd). Their answers are left untouched.
+  async setGuestRsvpStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const VALID = new Set(['going', 'maybe', 'declined', 'waiting']);
+      if (typeof status !== 'string' || !VALID.has(status)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.invalidRsvpStatus'), code: 400 });
+      }
+
+      // Only real, active party guests can be edited — never an arbitrary user id.
+      const guest = await db.query(
+        `SELECT 1 FROM users WHERE id = $1 AND party_access = TRUE AND disabled = FALSE`,
+        [id]
+      );
+      if (guest.rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.guestNotFound'), code: 404 });
+      }
+
+      if (status === 'waiting') {
+        // Clear the override (no-op if the guest has no RSVP row yet).
+        await db.query(
+          `UPDATE party_rsvps SET admin_status = NULL, updated_at = NOW() WHERE user_id = $1`,
+          [id]
+        );
+      } else {
+        const attending = status !== 'declined';
+        await db.query(
+          `INSERT INTO party_rsvps (user_id, attending, answers, admin_status)
+           VALUES ($1, $2, '{}'::jsonb, $3)
+           ON CONFLICT (user_id) DO UPDATE SET
+             admin_status = EXCLUDED.admin_status,
+             attending    = EXCLUDED.attending,
+             updated_at   = NOW()`,
+          [id, attending, status]
+        );
+      }
+
+      res.json({ ok: true, status });
     } catch (err) { next(err); }
   },
 

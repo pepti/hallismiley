@@ -159,6 +159,13 @@ router.get('/invited-guests',
   requireAuth, requireRole('admin', 'moderator'),
   partyController.listInvitedGuests);
 
+// Admin sets/corrects a guest's RSVP bucket from the attendance table.
+// Body { status: 'going'|'maybe'|'declined'|'waiting' }. Admin-only, mirroring
+// the revoke/email-blast actions on the same table.
+router.patch('/guests/:id/rsvp-status',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestRsvpStatus);
+
 // Send one email per recipient (privacy: no shared To:) to going + maybe
 // guests. Admin-only — moderators can view guests but can't blast emails
 // under the host's name. Body { subject?, body?, includeMaybe? }.

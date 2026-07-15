@@ -2011,6 +2011,21 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ`,
     ],
   },
+  {
+    // Admin override for a guest's RSVP bucket. When set it wins over the
+    // status derived from the guest's own `attend_when` answer (see
+    // _deriveRsvpStatus), letting the host set/correct an RSVP straight from
+    // the admin attendance table — e.g. for a guest who replied by text.
+    // NULL = no override (derive from the guest's answer as before). The CHECK
+    // is added separately and idempotently so re-runs stay clean.
+    name: '066_party_rsvp_admin_status',
+    statements: [
+      `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS admin_status TEXT`,
+      `ALTER TABLE party_rsvps DROP CONSTRAINT IF EXISTS party_rsvps_admin_status_chk`,
+      `ALTER TABLE party_rsvps ADD CONSTRAINT party_rsvps_admin_status_chk
+         CHECK (admin_status IS NULL OR admin_status IN ('going', 'maybe', 'declined'))`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

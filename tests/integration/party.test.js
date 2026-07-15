@@ -2185,3 +2185,103 @@ describe('Migration 063 quantity conversion (legacy data)', () => {
     expect(rows[0]).toMatchObject({ quantity: 2, quantity_note: 'kassar', unit_price: 450 });
   });
 });
+
+// ── PATCH /api/v1/party/guests/:id/rsvp-status ────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/rsvp-status', () => {
+  beforeEach(async () => {
+    // Turn the regular user into a real, editable party guest.
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('sets a waiting guest to going — creates rsvp row carrying the override', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie)
+      .send({ status: 'going' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, status: 'going' });
+
+    const { rows } = await db.query(
+      'SELECT admin_status, attending FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0]).toMatchObject({ admin_status: 'going', attending: true });
+  });
+
+  test('declined clears the legacy attending flag and shows in invited-guests', async () => {
+    await request(app)
+      .patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie)
+      .send({ status: 'declined' });
+
+    const { rows } = await db.query(
+      'SELECT admin_status, attending FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0]).toMatchObject({ admin_status: 'declined', attending: false });
+
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('declined');
+  });
+
+  test('override wins over the status derived from the guest own answer', async () => {
+    // Guest answers in a way that derives to "going"...
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes, see you there' } });
+    // ...admin overrides to "maybe".
+    await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'maybe' });
+
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('maybe');
+  });
+
+  test('waiting clears the override, reverting to the derived answer', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes' } });                 // derives → going
+    await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'declined' });   // override → declined
+
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'waiting' });    // clear
+    expect(res.status).toBe(200);
+
+    const { rows } = await db.query('SELECT admin_status FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].admin_status).toBeNull();
+
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('going');
+  });
+
+  test('rejects an invalid status with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'perhaps' });
+    expect(res.status).toBe(400);
+  });
+
+  test('unknown / non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'going' });
+    expect(res.status).toBe(404);
+  });
+
+  test('moderator cannot edit (admin-only) — 403', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', modCookie).send({ status: 'going' });
+    expect(res.status).toBe(403);
+  });
+
+  test('regular (non-admin) user cannot edit — 403', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', userCookie).send({ status: 'going' });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .send({ status: 'going' });
+    expect(res.status).toBe(401);
+  });
+});

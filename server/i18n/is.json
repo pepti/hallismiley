@@ -196,6 +196,8 @@
   "errors.user.sessionNotFound": "Seta fannst ekki",
 
   "errors.party.answersObject": "Svör verða að vera hlutur",
+  "errors.party.invalidRsvpStatus": "Ógilt svarstöðugildi",
+  "errors.party.guestNotFound": "Gestur fannst ekki",
   "errors.party.messageRequired": "Skilaboð eru nauðsynleg",
   "errors.party.messageTooLong": "Skilaboð mega ekki vera lengri en {n} stafir",
   "errors.party.entryNotFound": "Færsla fannst ekki",

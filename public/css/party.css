@@ -1768,6 +1768,34 @@ button.party-admin__stat:focus-visible {
 .party-admin__status--declined { color: #999; }
 .party-admin__status--waiting  { color: #d4b877; }
 
+/* Admin inline RSVP editor — a compact select coloured to echo the read-only
+   status pills above, so the column reads the same whether or not it's editable. */
+.party-admin__status-cell { white-space: nowrap; }
+.party-admin__status-select {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border-radius: 6px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, inherit);
+  cursor: pointer;
+  max-width: 100%;
+}
+.party-admin__status-select:disabled { opacity: 0.55; cursor: progress; }
+.party-admin__status-select:focus-visible {
+  outline: 2px solid #d4b877;
+  outline-offset: 1px;
+}
+.party-admin__status-select--going    { color: #81c784; }
+.party-admin__status-select--maybe    { color: #ffb74d; }
+.party-admin__status-select--declined { color: #999; }
+.party-admin__status-select--waiting  { color: #d4b877; }
+/* Options inherit the browser menu colours, not the coloured control text,
+   so they stay legible on the native dropdown background. */
+.party-admin__status-select option { color: initial; }
+
 .party-admin__invited-toolbar {
   display: flex;
   align-items: center;
