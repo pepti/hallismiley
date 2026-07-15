@@ -6,7 +6,7 @@ const app     = require('../../server/app');
 const db      = require('../../server/config/database');
 const {
   createTestAdminUser, createTestModeratorUser, createTestRegularUser,
-  getTestSessionCookie, cleanTables,
+  createTestPendingGuest, getTestSessionCookie, cleanTables,
 } = require('../helpers');
 
 let adminCookie, userId;
@@ -161,6 +161,40 @@ describe('POST /api/v1/admin/customers/delete', () => {
 
     const { rows: kept } = await db.query('SELECT id FROM users WHERE id = ANY($1)', [[moderatorId, multiRoleId, adminId]]);
     expect(kept).toHaveLength(3);
+  });
+
+  test('NEVER deletes party guests (their critical party data must survive); list flags them', async () => {
+    // A pending party guest (requested_at set) and an approved one with access.
+    const pending  = await createTestPendingGuest({ email: 'pg1@party.is', username: 'pg1' });
+    const { rows: appr } = await db.query(
+      `INSERT INTO users (email, username, password_hash, role, party_access, approval_status, requested_at, magic_login_token_hash)
+       VALUES ('pg2@party.is', 'pg2', NULL, 'user', TRUE, 'approved', NOW(), 'hash-xyz') RETURNING id`
+    );
+    const approvedGuest = appr[0].id;
+    // Give the approved guest an RSVP so we can prove it isn't cascade-deleted.
+    await db.query(
+      `INSERT INTO party_rsvps (user_id, attending, plus_one) VALUES ($1, TRUE, TRUE)`,
+      [approvedGuest]
+    );
+
+    // The Customers list marks party guests so the client hides their checkbox;
+    // a real shop customer is not flagged (stays deletable). Checked before the
+    // delete, while all three rows still exist.
+    const listed = await request(app).get('/api/v1/admin/customers').set('Cookie', adminCookie);
+    const byId = new Map(listed.body.customers.map(c => [c.id, c.is_party_guest]));
+    expect(byId.get(pending.id)).toBe(true);
+    expect(byId.get(approvedGuest)).toBe(true);
+    expect(byId.get(userId)).toBe(false);
+
+    // Even explicitly targeting both guest ids deletes NEITHER.
+    const res = await del(adminCookie, [pending.id, approvedGuest, userId]);
+    expect(res.status).toBe(200);
+    expect(res.body.deletedAccounts).toEqual([userId]); // only the plain shop customer
+
+    const { rows: survivors } = await db.query('SELECT id FROM users WHERE id = ANY($1)', [[pending.id, approvedGuest]]);
+    expect(survivors).toHaveLength(2);
+    // The party RSVP is intact (would have cascade-deleted with the user).
+    expect((await db.query('SELECT 1 FROM party_rsvps WHERE user_id = $1', [approvedGuest])).rows).toHaveLength(1);
   });
 
   test('400 on empty ids', async () => {

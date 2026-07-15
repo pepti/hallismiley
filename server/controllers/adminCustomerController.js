@@ -35,7 +35,8 @@ const INVITE_CANDIDATES_WHERE = `
   AND invited_at IS NULL
   AND disabled = FALSE
   AND party_access = FALSE
-  AND magic_login_token_hash IS NULL`;
+  AND magic_login_token_hash IS NULL
+  AND requested_at IS NULL`;
 
 const INVITE_CANDIDATES_SQL = `
   SELECT id, email, display_name, preferred_locale

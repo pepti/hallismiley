@@ -10,6 +10,18 @@ const UserRole = require('./UserRole');
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days to accept an invite
 
+// A party guest is a role='user' account that came through the party flow — it
+// shares the users table with shop customers and shows up in this admin list,
+// but its RSVP/guestbook/photo rows cascade on delete and are critical. These
+// canonical party-flow markers (matching migration 062) identify such accounts
+// so the shop Customers tools never delete them. `p` is the table alias ('' for
+// unqualified). isPartyGuest → boolean expression; notPartyGuest → its negation.
+const isPartyGuest = (p = '') => {
+  const c = p ? `${p}.` : '';
+  return `(${c}party_access = TRUE OR ${c}requested_at IS NOT NULL OR ${c}magic_login_token_hash IS NOT NULL)`;
+};
+const notPartyGuest = (p = '') => `NOT ${isPartyGuest(p)}`;
+
 function makeToken() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -49,6 +61,7 @@ const Customer = {
     const { rows } = await dbQuery(
       `SELECT u.id, u.email, u.username, u.display_name, u.phone, u.role,
               u.email_verified, u.disabled, u.created_at,
+              ${isPartyGuest('u')} AS is_party_guest,
               COALESCE(o.cnt, 0)::int    AS order_count,
               COALESCE(o.spent, 0)::bigint AS total_spent
          FROM users u
@@ -161,17 +174,25 @@ const Customer = {
             SET guest_email = COALESCE(o.guest_email, u.email),
                 guest_name  = COALESCE(o.guest_name, u.display_name)
            FROM users u
-          WHERE o.user_id = u.id AND u.id = ANY($1) AND u.role = 'user'`,
+          WHERE o.user_id = u.id AND u.id = ANY($1) AND u.role = 'user'
+            AND ${notPartyGuest('u')}`,
         [ids]
       );
-      // Note: a DB trigger mirrors every user's PRIMARY role into user_roles, so
-      // plain customers always hold exactly the 'user' membership — only an EXTRA
-      // grant (any role_name <> 'user') marks a staff-ish account we must skip.
+      // Guards, all AND-ed so a match must clear every one:
+      //  • role='user' — never a staff/admin account.
+      //  • no EXTRA user_roles grant — a DB trigger mirrors every user's PRIMARY
+      //    role into user_roles, so plain customers hold exactly the 'user'
+      //    membership; any role_name <> 'user' marks a staff-ish account to skip.
+      //  • NOT a party guest — party guests are also role='user' and appear in
+      //    this list, but their data (RSVP/guestbook/photos) is critical and
+      //    cascades on user delete, so the shop Customers bulk tool must NEVER
+      //    touch them (manage them from the party admin instead).
       const { rows } = await client.query(
         `DELETE FROM users
           WHERE id = ANY($1) AND role = 'user'
             AND NOT EXISTS (SELECT 1 FROM user_roles ur
                              WHERE ur.user_id = users.id AND ur.role_name <> 'user')
+            AND ${notPartyGuest('users')}
           RETURNING id`,
         [ids]
       );

@@ -133,7 +133,7 @@ export class AdminCustomersView {
         <tbody>
           ${this._customers.map(c => `
             <tr>
-              ${admin ? `<td class="cust-select">${c.role === 'user'
+              ${admin ? `<td class="cust-select">${(c.role === 'user' && !c.is_party_guest)
                 ? `<input type="checkbox" class="cust-row-select" data-id="${escHtml(String(c.id))}" aria-label="${t('adminCustomers.selectRow')}"/>`
                 : ''}</td>` : ''}
               <td>${escHtml(c.email)}</td>
