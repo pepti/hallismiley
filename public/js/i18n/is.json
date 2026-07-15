@@ -626,7 +626,7 @@
 
   "party.title": "Veisla",
   "party.heroSubtitle": "Stóru fjórir-núll — gerum þetta goðsagnakennt",
-  "party.requestIntro": "Nafn og netfang til að skrá mætingu og sjá nánari dagskrá.",
+  "party.requestIntro": "Nafn og netfang til að skrá mætingu.",
   "party.requestNameLabel": "Nafnið þitt",
   "party.requestEmailLabel": "Netfangið þitt",
   "party.requestSubmit": "Skrá mætingu",
@@ -635,7 +635,6 @@
   "party.requestEmailRequired": "Sláðu inn netfangið þitt",
   "party.requestSubmitted": "Kíktu í pósthólfið — innskráningarhlekkurinn er á leiðinni! 🎉",
   "party.requestExistingMember": "Þú ert nú þegar á listanum — athugaðu póstinn fyrir hlekkinn þinn.",
-  "party.requestAbove": "Skráðu þig að ofan til að opna þetta.",
   "party.checkEmail": "Kíktu í pósthólfið eftir innskráningarhlekknum — hann ætti að berast innan fárra mínútna.",
   "party.awaitingApproval": "Beiðnin þín er komin — þú færð póst þegar Halli samþykkir þig.",
   "party.alreadyInvited": "Ertu nú þegar með aðgang?",

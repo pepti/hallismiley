@@ -119,24 +119,17 @@ export class PartyView {
 
   // ── Locked section overlay ─────────────────────────────────────────────────
 
-  _renderLockedSection(title, emoji, opts = {}) {
+  _renderLockedSection(title, emoji) {
     // Anyone without access (logged in or not) gets the request-to-join flow.
-    // Editors always have access, so they never reach a locked section. The
-    // primary section (RSVP) shows the form / status; the secondary section
-    // (Activities) shows a short hint pointing back up to it.
-    return this._renderRequestLocked(title, emoji, opts.primary !== false);
+    // Editors always have access, so they never reach a locked section. RSVP is
+    // the only gated section — it shows the request form / status.
+    return this._renderRequestLocked(title, emoji);
   }
 
-  _renderRequestLocked(title, emoji, primary) {
+  _renderRequestLocked(title, emoji) {
     const slug    = title.toLowerCase().replace(/\s+/g, '-');
     const user    = getUser();
     const pending = isAuthenticated() && user?.approval_status === 'pending';
-
-    // Secondary section: a hint pointing at the form in the primary section.
-    if (!primary) {
-      return this._lockedShell(slug, title, emoji,
-        `<p class="party-locked__text">${t('party.requestAbove')}</p>`);
-    }
 
     // Just signed up this visit: the magic sign-in link is already on its way
     // (access is granted instantly — see partyController.requestAccess).
@@ -225,10 +218,10 @@ export class PartyView {
 
     return `
       ${this._renderHero()}
-      ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟', { primary: true })}
+      ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟')}
       ${this._renderSchedule(schedule)}
       ${this._renderVenue(info)}
-      ${unlocked ? this._renderActivities(activities) : this._renderLockedSection('Activities', '🎯', { primary: false })}`;
+      ${this._renderActivities(activities)}`;
   }
 
   _renderHero() {

@@ -635,7 +635,6 @@
   "party.requestEmailRequired": "Please enter your email",
   "party.requestSubmitted": "Check your email — your sign-in link is on its way! 🎉",
   "party.requestExistingMember": "You're already on the list — check your email for your link.",
-  "party.requestAbove": "Sign up above to unlock this.",
   "party.checkEmail": "Check your email for your sign-in link — it should arrive within a minute or two.",
   "party.awaitingApproval": "Your request is in — you'll get an email once Halli approves you.",
   "party.alreadyInvited": "Already have an account?",
