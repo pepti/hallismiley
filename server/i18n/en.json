@@ -192,6 +192,7 @@
   "errors.party.answersObject": "Answers must be an object",
   "errors.party.invalidRsvpStatus": "Invalid RSVP status",
   "errors.party.invalidName": "Name must be 100 characters or fewer",
+  "errors.party.invalidCompanions": "Invalid companion values",
   "errors.party.guestNotFound": "Guest not found",
   "errors.party.messageRequired": "Message is required",
   "errors.party.messageTooLong": "Message must not exceed {n} characters",

@@ -2433,3 +2433,133 @@ describe('PATCH /api/v1/party/guests/:id/answers', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ── PATCH /api/v1/party/guests/:id/companions ─────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/companions', () => {
+  beforeEach(async () => {
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('records companions on a guest without an RSVP row — creates the row', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie)
+      .send({ plus_one: true, kids_count: 2, kids_ages: ' 3, 7 ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      admin_companions: { plus_one: true, kids_count: 2, kids_ages: '3, 7' },
+    });
+
+    const { rows } = await db.query(
+      'SELECT admin_companions, attending, answers FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].admin_companions).toEqual({ plus_one: true, kids_count: 2, kids_ages: '3, 7' });
+    // Companions-only row must NOT look like an RSVP: still not attending,
+    // no answers — the guest keeps deriving as 'waiting'.
+    expect(rows[0].attending).toBe(false);
+    expect(rows[0].answers).toBeNull();
+
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    const g = list.body.find(x => x.id === userId);
+    expect(g.rsvp_status).toBe('waiting');
+    expect(g.admin_companions).toEqual({ plus_one: true, kids_count: 2, kids_ages: '3, 7' });
+  });
+
+  test('companions-only row does not appear in getAllRsvps', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: true });
+    const res = await request(app).get('/api/v1/party/rsvps').set('Cookie', adminCookie);
+    expect(res.body.find(r => r.user_id === userId)).toBeUndefined();
+  });
+
+  test('guest RSVPing after a companions-only row sets attending TRUE', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ kids_count: 1 });
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes' } });
+
+    const { rows } = await db.query(
+      'SELECT attending, admin_companions FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].attending).toBe(true);
+    expect(rows[0].admin_companions).toEqual({ kids_count: 1 }); // survives the RSVP
+  });
+
+  test('updates existing companions; answers and admin_status untouched', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes', bringing: ['Maki'] } });
+    await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'maybe' });
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: false, kids_count: 3, kids_ages: '1, 4, 9' });
+
+    const { rows } = await db.query(
+      'SELECT admin_companions, admin_status, answers FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].admin_companions).toEqual({ kids_count: 3, kids_ages: '1, 4, 9' });
+    expect(rows[0].admin_status).toBe('maybe');
+    expect(rows[0].answers).toEqual({ attend_when: 'yes', bringing: ['Maki'] });
+  });
+
+  test('all-empty body clears the record back to NULL', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: true, kids_count: 2 });
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: false, kids_count: 0, kids_ages: '' });
+    expect(res.status).toBe(200);
+    expect(res.body.admin_companions).toBeNull();
+
+    const { rows } = await db.query(
+      'SELECT admin_companions FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].admin_companions).toBeNull();
+  });
+
+  test('clear on a guest with no RSVP row is a 200 no-op', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({});
+    expect(res.status).toBe(200);
+    const { rows } = await db.query('SELECT 1 FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows).toHaveLength(0); // no ghost row created
+  });
+
+  test('rejects invalid values with 400', async () => {
+    const bad = [
+      { plus_one: 'yes' },
+      { kids_count: -1 },
+      { kids_count: 2.5 },
+      { kids_count: 26 },
+      { kids_count: 'two' },
+      { kids_ages: 42 },
+      { kids_ages: 'x'.repeat(101) },
+    ];
+    for (const body of bad) {
+      const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+        .set('Cookie', adminCookie).send(body);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: true });
+    expect(res.status).toBe(404);
+  });
+
+  test('moderator cannot edit (admin-only) — 403', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', modCookie).send({ plus_one: true });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .send({ plus_one: true });
+    expect(res.status).toBe(401);
+  });
+});

@@ -1983,6 +1983,19 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          CHECK (admin_status IS NULL OR admin_status IN ('going', 'maybe', 'declined'))`,
     ],
   },
+  {
+    // Admin-managed companion overrides ("RSVP Stýring") for the attendance
+    // table: when a guest phones/texts a change of plan (bringing a spouse,
+    // kids and their ages), the host records the CURRENT plan here without
+    // touching the guest's original RSVP answers. Shape:
+    //   { plus_one: bool, kids_count: int, kids_ages: string }
+    // All keys optional; NULL column = not set (UI falls back to the guest's
+    // own answer). Validated in the controller like the `answers` JSONB.
+    name: '067_party_rsvp_admin_companions',
+    statements: [
+      `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS admin_companions JSONB`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

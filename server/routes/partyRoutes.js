@@ -178,6 +178,13 @@ router.patch('/guests/:id/answers',
   requireAuth, requireRole('admin'), csrfProtect,
   partyController.setGuestAnswers);
 
+// Admin records the guest's CURRENT companion plan ("RSVP Stýring") — plus-one,
+// kids count and ages — after phone/text updates, without touching the guest's
+// own RSVP answers. Body { plus_one?, kids_count?, kids_ages? }.
+router.patch('/guests/:id/companions',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestCompanions);
+
 // Send one email per recipient (privacy: no shared To:) to going + maybe
 // guests. Admin-only — moderators can view guests but can't blast emails
 // under the host's name. Body { subject?, body?, includeMaybe? }.
