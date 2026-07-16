@@ -590,14 +590,18 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
-  // POST /api/v1/party/guests  { name, email?, status? }
-  // Admin-only. Manually add a guest who accepted VERBALLY — creates a
-  // passwordless, pre-approved account and drops them straight into the
-  // attendance list. Distinct from owner-invite: no magic-link email is sent
-  // (that's owner-invite's job) and email is optional. A guest with no email
-  // gets a placeholder so the NOT NULL/UNIQUE constraint holds. `status`
-  // (default 'going' — they said yes) seeds an admin RSVP override; the row is
-  // created with answers=NULL so it never counts as a submitted RSVP.
+  // POST /api/v1/party/guests  { name, email?, status?, invite? }
+  // Admin-only. Manually add a guest — creates a passwordless, pre-approved
+  // account and drops them straight into the attendance list. Email is optional
+  // (someone who accepted verbally may not have one); a guest without one gets a
+  // placeholder so the NOT NULL/UNIQUE constraint holds. `status` (default
+  // 'going' — they said yes) seeds an admin RSVP override; the row is created
+  // with answers=NULL so it never counts as a submitted RSVP.
+  //
+  // `invite: true` also issues a magic-login token and emails the link — the
+  // single-guest counterpart to ownerInvite's bulk paste. It needs a real email,
+  // so with a placeholder the flag is refused up front rather than reported as
+  // an invite that never left.
   async addGuest(req, res, next) {
     try {
       const name = String(req.body?.name || '').trim();
@@ -612,6 +616,10 @@ const partyController = {
       // synthesize a unique undeliverable placeholder.
       const rawEmail  = req.body?.email;
       const hasEmail  = rawEmail != null && String(rawEmail).trim() !== '';
+      const invite    = req.body?.invite === true;
+      if (invite && !hasEmail) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.inviteNeedsEmail'), code: 400 });
+      }
       let email;
       if (hasEmail) {
         email = String(rawEmail).trim().toLowerCase();
@@ -653,7 +661,32 @@ const partyController = {
         );
       }
 
-      res.status(201).json({ id: userId, status, hasEmail });
+      // Magic link, only when asked for. The account is already approved with
+      // party_access above; approveGuest's job here is issuing the token. Await
+      // the send so `invited` reflects a mail that actually went out — the admin
+      // adds one guest at a time here, so there's no batch to keep unblocked.
+      let invited = false;
+      if (invite) {
+        const result = await approveGuest(userId, { approvedBy: req.user.id });
+        if (result) {
+          try {
+            await emailService.sendPartyInviteEmail({
+              to:     result.user.email,
+              name:   result.user.display_name || name,
+              token:  result.magicToken,
+              locale: result.user.preferred_locale || PARTY_DEFAULT_LOCALE,
+            });
+            invited = true;
+          } catch (err) {
+            // The guest exists and holds a working magic token; only the mail
+            // failed. Keep the 201 and report invited:false so the admin knows
+            // to chase it rather than losing the row to a rollback.
+            logger.error({ err, userId }, 'addGuest: invite email failed');
+          }
+        }
+      }
+
+      res.status(201).json({ id: userId, status, hasEmail, invited });
     } catch (err) { next(err); }
   },
 

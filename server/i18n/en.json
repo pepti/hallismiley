@@ -195,6 +195,7 @@
   "errors.party.invalidCompanions": "Invalid companion values",
   "errors.party.guestNameRequired": "A guest name is required",
   "errors.party.guestEmailExists": "A guest with that email already exists",
+  "errors.party.inviteNeedsEmail": "An email is required to send an invite",
   "errors.party.guestNotFound": "Guest not found",
   "errors.party.messageRequired": "Message is required",
   "errors.party.messageTooLong": "Message must not exceed {n} characters",

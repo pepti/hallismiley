@@ -2817,6 +2817,48 @@ describe('POST /api/v1/party/guests', () => {
     expect(rows[0].email).toBe('anna.vinur@example.com'); // lowercased
   });
 
+  // The default stays "no email leaves the building" — only invite:true sends.
+  test('adding without invite issues no magic token', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Kyrr Katrín', email: 'katrin@example.com' });
+    expect(res.status).toBe(201);
+    expect(res.body.invited).toBe(false);
+
+    const { rows } = await db.query(
+      'SELECT magic_login_token_hash FROM users WHERE id = $1', [res.body.id]
+    );
+    expect(rows[0].magic_login_token_hash).toBeNull();
+  });
+
+  test('invite:true issues a magic token and reports invited', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Boðinn Ingi', email: 'ingi@example.com', invite: true });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ hasEmail: true, invited: true });
+
+    const { rows } = await db.query(
+      'SELECT magic_login_token_hash, approval_status, party_access FROM users WHERE id = $1',
+      [res.body.id]
+    );
+    expect(rows[0].magic_login_token_hash).toBeTruthy();
+    expect(rows[0].approval_status).toBe('approved');
+    expect(rows[0].party_access).toBe(true);
+  });
+
+  test('invite:true without an email is refused and creates no guest', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Netfangslaus Nonni', invite: true });
+    expect(res.status).toBe(400);
+
+    const { rows } = await db.query(
+      "SELECT 1 FROM users WHERE display_name = 'Netfangslaus Nonni'"
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   test('status waiting creates no party_rsvps row', async () => {
     const res = await request(app).post('/api/v1/party/guests')
       .set('Cookie', adminCookie).send({ name: 'Óviss Óli', status: 'waiting' });

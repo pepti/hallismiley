@@ -102,7 +102,6 @@ export class PartyAdminView {
         ${this._renderLogistics()}
         ${this._renderTodoSection()}
         ${this._renderCostSection()}
-        ${this._renderOwnerInviteSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
         ${this._renderHelpersList()}
@@ -1172,13 +1171,11 @@ export class PartyAdminView {
       </section>`;
   }
 
-  // Owner-initiated invites: paste emails you already have (one per line, or
-  // "Name <email>"); each becomes a pre-approved guest and gets a magic-link
-  // invite immediately.
-  // Add a guest who accepted verbally — straight into the attendance list,
-  // no invite email. Email is optional (use the invite box below to send a
-  // magic link if you do have one). Its own section so a partial re-render of
-  // the attendance table (sort/filter) never wipes half-typed input.
+  // Add a guest straight into the attendance list. Email is optional (someone
+  // who accepted verbally may not have one); when an email IS given, "send
+  // invite" also mails them a magic link, which is what folds the old paste-many
+  // invite box into this one form. Its own section so a partial re-render of the
+  // attendance table (sort/filter) never wipes half-typed input.
   _renderAddGuestSection() {
     const statusOpts = [
       ['going',   `✅ ${t('party.admin.statusGoing')}`],
@@ -1202,25 +1199,12 @@ export class PartyAdminView {
                   aria-label="${escHtml(t('adminOrders.status'))}">
             ${statusOpts.map(([v, l]) => `<option value="${v}"${v === 'going' ? ' selected' : ''}>${l}</option>`).join('')}
           </select>
+          <label class="party-admin__add-guest-invite">
+            <input type="checkbox" id="party-admin-add-guest-invite" />
+            ${t('party.admin.addGuestSendInvite')}
+          </label>
           <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.addGuestBtn')}</button>
           <span class="party-admin__add-guest-status" id="party-admin-add-guest-status-msg" aria-live="polite"></span>
-        </form>
-      </section>`;
-  }
-
-  _renderOwnerInviteSection() {
-    return `
-      <section class="party-admin__section party-admin__invite">
-        <h2 class="party-admin__section-title">${t('party.admin.ownerInviteTitle')}</h2>
-        <p class="party-admin__invite-help">${t('party.admin.ownerInviteHelp')}</p>
-        <form class="party-admin__invite-form" id="party-admin-owner-invite-form">
-          <textarea id="party-admin-owner-invite-input" class="lol-input" rows="4"
-                    placeholder="${escHtml(t('party.admin.ownerInvitePlaceholder'))}"
-                    aria-label="${t('party.admin.ownerInviteTitle')}"></textarea>
-          <div class="party-admin__invite-actions">
-            <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.ownerInviteSend')}</button>
-            <span class="party-admin__invite-status" id="party-admin-owner-invite-status" aria-live="polite"></span>
-          </div>
         </form>
       </section>`;
   }
@@ -1503,7 +1487,6 @@ export class PartyAdminView {
 
   _bind() {
     this._bindAddGuest();
-    this._bindOwnerInvite();
     this._bindPendingRequests();
     this._bindInvitedGuests();
     this._bindGuestsSort();
@@ -3450,34 +3433,31 @@ export class PartyAdminView {
     }
   }
 
-  // Parse the owner-invite textarea: one entry per line, "email" or "Name <email>".
-  _parseInviteLines(raw) {
-    return String(raw)
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(line => {
-        const m = line.match(/^(.*?)<([^>]+)>$/);
-        if (m) return { name: m[1].trim(), email: m[2].trim() };
-        return { email: line };
-      });
-  }
-
   _bindAddGuest() {
     const form = this._el.querySelector('#party-admin-add-guest-form');
     if (!form) return;
     const nameEl   = form.querySelector('#party-admin-add-guest-name');
     const emailEl  = form.querySelector('#party-admin-add-guest-email');
     const statusEl = form.querySelector('#party-admin-add-guest-status');
+    const inviteEl = form.querySelector('#party-admin-add-guest-invite');
     const msgEl    = form.querySelector('#party-admin-add-guest-status-msg');
     const btn      = form.querySelector('[type="submit"]');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = (nameEl?.value || '').trim();
+      const name  = (nameEl?.value || '').trim();
+      const email = (emailEl?.value || '').trim();
       if (!name) {
         msgEl.textContent = t('party.admin.addGuestNameRequired');
         nameEl?.focus();
+        return;
+      }
+      // The invite is an email — refuse the combination that can't work rather
+      // than silently adding the guest with no link sent.
+      const invite = !!inviteEl?.checked;
+      if (invite && !email) {
+        msgEl.textContent = t('party.admin.addGuestInviteNeedsEmail');
+        emailEl?.focus();
         return;
       }
 
@@ -3491,52 +3471,27 @@ export class PartyAdminView {
           headers,
           body: JSON.stringify({
             name,
-            email:  (emailEl?.value || '').trim() || undefined,
+            email:  email || undefined,
             status: statusEl?.value || 'going',
+            invite,
           }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || t('party.admin.addGuestFailed'));
-        showToast(t('party.admin.addGuestAdded', { name }), 'success');
+        // Report what actually happened: the server only claims `invited` once
+        // the magic link is on its way.
+        showToast(
+          data.invited
+            ? t('party.admin.addGuestAddedInvited', { name })
+            : t('party.admin.addGuestAdded', { name }),
+          'success'
+        );
         // Reload so the new guest appears in the attendance table with the
         // right status, and the pills/headcount update.
         await this._loadAndRender();
       } catch (err) {
         btn.disabled = false;
         msgEl.textContent = err.message || t('party.admin.addGuestFailed');
-      }
-    });
-  }
-
-  _bindOwnerInvite() {
-    const form = this._el.querySelector('#party-admin-owner-invite-form');
-    if (!form) return;
-    const input  = form.querySelector('#party-admin-owner-invite-input');
-    const status = form.querySelector('#party-admin-owner-invite-status');
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const invites = this._parseInviteLines(input?.value || '');
-      if (!invites.length) {
-        status.textContent = t('party.admin.ownerInviteEmpty');
-        return;
-      }
-      status.textContent = t('form.saving');
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/owner-invite', {
-          method:      'POST',
-          credentials: 'include',
-          headers,
-          body:        JSON.stringify({ invites }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Send failed');
-        status.textContent = '';
-        showToast(t('party.admin.inviteSent', { n: data.invited ?? invites.length }), 'success');
-        if (input) input.value = '';
-      } catch (err) {
-        status.textContent = err.message;
       }
     });
   }
