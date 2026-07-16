@@ -1718,6 +1718,209 @@ describe('Logistics categories', () => {
   });
 });
 
+// ── Custom logistics sections (068) ───────────────────────────────────────────
+
+describe('Logistics category CRUD (068)', () => {
+  const mkCat = (body, cookie = adminCookie) => request(app)
+    .post('/api/v1/party/logistics/categories')
+    .set('Cookie', cookie)
+    .send(body);
+
+  test('GET lists the three seeded built-ins', async () => {
+    const res = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.map(c => c.key)).toEqual(['food', 'drinks', 'other']);
+    // label NULL is what tells the client to resolve the name from i18n.
+    expect(res.body.every(c => c.label === null && c.is_builtin === true)).toBe(true);
+  });
+
+  test('GET requires admin/moderator', async () => {
+    const anon = await request(app).get('/api/v1/party/logistics/categories');
+    expect(anon.status).toBe(401);
+    const user = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', userCookie);
+    expect(user.status).toBe(403);
+  });
+
+  test('POST creates a section with a slugified key', async () => {
+    const res = await mkCat({ label: 'Skreytingar', icon: '🎈' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      key: 'skreytingar', label: 'Skreytingar', icon: '🎈', is_builtin: false,
+    });
+  });
+
+  test('POST folds Icelandic characters into the key', async () => {
+    const res = await mkCat({ label: 'Þrif og frágangur' });
+    expect(res.status).toBe(201);
+    expect(res.body.key).toBe('thrif-og-fragangur');
+  });
+
+  test('POST suffixes the key when the slug is taken', async () => {
+    const a = await mkCat({ label: 'Salur' });
+    const b = await mkCat({ label: 'Salur' });
+    expect(a.body.key).toBe('salur');
+    expect(b.body.key).toBe('salur-2');
+  });
+
+  test('POST falls back to a generated key when the label has no letters', async () => {
+    const res = await mkCat({ label: '🎉' });
+    expect(res.status).toBe(201);
+    expect(res.body.key).toBe('section');
+  });
+
+  test('POST rejects a blank or over-long label', async () => {
+    expect((await mkCat({ label: '   ' })).status).toBe(400);
+    expect((await mkCat({})).status).toBe(400);
+    expect((await mkCat({ label: 'x'.repeat(61) })).status).toBe(400);
+  });
+
+  test('POST rejects an over-long icon by grapheme count, not code units', async () => {
+    // '🎈' is 2 UTF-16 code units — a .length check would cap the icon at 4
+    // emoji instead of 8. Exactly 8 must pass; 9 must not.
+    expect((await mkCat({ label: 'Eight', icon: '🎈'.repeat(8) })).status).toBe(201);
+    expect((await mkCat({ label: 'Nine', icon: '🎈'.repeat(9) })).status).toBe(400);
+  });
+
+  test('POST requires admin/moderator', async () => {
+    expect((await mkCat({ label: 'Sneaky' }, userCookie)).status).toBe(403);
+    const anon = await request(app)
+      .post('/api/v1/party/logistics/categories')
+      .send({ label: 'Sneaky' });
+    expect(anon.status).toBe(401);
+  });
+
+  test('a custom section accepts items and shows up in the item list', async () => {
+    await mkCat({ label: 'Skreytingar' });
+    const item = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Blóm', quantity: 1, unit_price: 18500, category: 'skreytingar' });
+    expect(item.status).toBe(201);
+    expect(item.body.category).toBe('skreytingar');
+  });
+
+  test('PATCH renames a section and updates its icon', async () => {
+    await mkCat({ label: 'Salur', icon: '🏠' });
+    const res = await request(app)
+      .patch('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', adminCookie)
+      .send({ label: 'Salur og borð', icon: '🪑' });
+    expect(res.status).toBe(200);
+    // The key is stable across a rename — items keep pointing at it.
+    expect(res.body).toMatchObject({ key: 'salur', label: 'Salur og borð', icon: '🪑' });
+  });
+
+  test('PATCH returns 404 for an unknown section and 400 with no fields', async () => {
+    expect((await request(app)
+      .patch('/api/v1/party/logistics/categories/nope')
+      .set('Cookie', adminCookie).send({ label: 'X' })).status).toBe(404);
+    expect((await request(app)
+      .patch('/api/v1/party/logistics/categories/other')
+      .set('Cookie', adminCookie).send({ bogus: 1 })).status).toBe(400);
+  });
+
+  test('DELETE removes a custom section', async () => {
+    await mkCat({ label: 'Salur' });
+    const del = await request(app)
+      .delete('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const list = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', adminCookie);
+    expect(list.body.map(c => c.key)).not.toContain('salur');
+  });
+
+  test('DELETE refuses to remove a built-in section', async () => {
+    for (const key of ['food', 'drinks', 'other']) {
+      const res = await request(app)
+        .delete(`/api/v1/party/logistics/categories/${key}`)
+        .set('Cookie', adminCookie);
+      expect(res.status).toBe(400);
+    }
+    const list = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', adminCookie);
+    expect(list.body.map(c => c.key)).toEqual(['food', 'drinks', 'other']);
+  });
+
+  test('DELETE returns 404 for an unknown section', async () => {
+    const res = await request(app)
+      .delete('/api/v1/party/logistics/categories/nope')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(404);
+  });
+
+  test('DELETE requires admin/moderator', async () => {
+    await mkCat({ label: 'Salur' });
+    const res = await request(app)
+      .delete('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', userCookie);
+    expect(res.status).toBe(403);
+  });
+
+  // The load-bearing guarantee: tidying a section away must never destroy the
+  // costs recorded in it. The FK's ON DELETE SET DEFAULT sweeps items to
+  // 'other' with their price intact.
+  test('DELETE sweeps the section items into "other" instead of deleting them', async () => {
+    await mkCat({ label: 'Skreytingar' });
+    await request(app).post('/api/v1/party/logistics').set('Cookie', adminCookie)
+      .send({ name: 'Blóm', quantity: 1, unit_price: 18500, category: 'skreytingar' });
+    await request(app).post('/api/v1/party/logistics').set('Cookie', adminCookie)
+      .send({ name: 'Dúkar', quantity: 2, unit_price: 3000, category: 'skreytingar' });
+
+    await request(app)
+      .delete('/api/v1/party/logistics/categories/skreytingar')
+      .set('Cookie', adminCookie)
+      .expect(204);
+
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    const blom  = list.body.find(i => i.name === 'Blóm');
+    const dukar = list.body.find(i => i.name === 'Dúkar');
+    expect(blom).toBeDefined();
+    expect(dukar).toBeDefined();
+    expect(blom.category).toBe('other');
+    expect(dukar.category).toBe('other');
+    // Prices survive the sweep — the total bill is unchanged.
+    expect(blom.unit_price).toBe(18500);
+    expect(dukar.unit_price).toBe(3000);
+  });
+
+  test('POST /logistics accepts a custom category and rejects a deleted one', async () => {
+    await mkCat({ label: 'Salur' });
+    expect((await request(app).post('/api/v1/party/logistics').set('Cookie', adminCookie)
+      .send({ name: 'Leiga', category: 'salur' })).status).toBe(201);
+
+    await request(app).delete('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', adminCookie);
+
+    // A stale tab posting into the deleted section gets a readable 400, not a
+    // 500 surfaced from the FK violation.
+    const res = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Leiga 2', category: 'salur' });
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH /logistics can move an item into a custom section', async () => {
+    await mkCat({ label: 'Salur' });
+    const created = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'Leiga' });
+    const moved = await request(app)
+      .patch(`/api/v1/party/logistics/${created.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ category: 'salur' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.category).toBe('salur');
+  });
+});
+
 // ── To-do list (059) ──────────────────────────────────────────────────────────
 
 describe('To-do list endpoints', () => {

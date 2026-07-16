@@ -219,7 +219,24 @@ router.post('/logistics',
   partyController.addLogisticsItem);
 
 // Specific logistics actions MUST be declared before the /:id routes,
-// otherwise Express matches them as PATCH/DELETE on an item with id="reorder".
+// otherwise Express matches them as PATCH/DELETE on an item with id="reorder"
+// (or id="categories").
+router.get('/logistics/categories',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listLogisticsCategories);
+
+router.post('/logistics/categories',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addLogisticsCategory);
+
+router.patch('/logistics/categories/:key',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updateLogisticsCategory);
+
+router.delete('/logistics/categories/:key',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deleteLogisticsCategory);
+
 router.post('/logistics/reorder',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.reorderLogistics);

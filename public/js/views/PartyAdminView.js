@@ -33,13 +33,14 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, todosRes] = await Promise.all([
+    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, catsRes, todosRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',            { credentials: 'include' }),
       fetch('/api/v1/party/info',             { credentials: 'include' }),
       fetch('/api/v1/party/pending-requests', { credentials: 'include' }),
       fetch('/api/v1/admin/email-health',     { credentials: 'include' }),
       fetch('/api/v1/party/invited-guests',   { credentials: 'include' }),
       fetch('/api/v1/party/logistics',        { credentials: 'include' }),
+      fetch('/api/v1/party/logistics/categories', { credentials: 'include' }),
       fetch('/api/v1/party/todos',            { credentials: 'include' }),
     ]);
     const rsvps     = await rsvpsRes.json();
@@ -48,6 +49,7 @@ export class PartyAdminView {
     const health    = healthRes.ok ? await healthRes.json() : null;
     const guests    = guestsRes.ok ? await guestsRes.json() : [];
     const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
+    const cats      = catsRes.ok ? await catsRes.json() : [];
     const todos     = todosRes.ok ? await todosRes.json() : [];
 
     this._rsvps           = Array.isArray(rsvps) ? rsvps : [];
@@ -55,6 +57,7 @@ export class PartyAdminView {
     this._emailHealth   = health;
     this._invitedGuests = Array.isArray(guests) ? guests : [];
     this._logistics     = Array.isArray(logistics) ? logistics : [];
+    this._logisticsCats = Array.isArray(cats) ? cats : [];
     this._todos         = Array.isArray(todos) ? todos : [];
     this._peopleNames   = this._collectPeopleNames();
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
@@ -852,14 +855,34 @@ export class PartyAdminView {
     return t(key, { v: this._fmtIsk(sum) });
   }
 
-  // The three logistics tables. Internal keys must match the DB CHECK
-  // constraint (058) and the controller's LOGISTICS_CATEGORIES.
+  // The logistics tables, one per section. Sections are DB rows now (068), not
+  // a hardcoded triple — the planner adds their own. A row with no `label` is a
+  // built-in whose name comes from i18n, so it follows the EN/IS toggle; a row
+  // WITH a label shows that literal text, because planner-typed section names
+  // have no translation pipeline behind them.
+  //
+  // The fallback keeps the section list rendering if the categories fetch
+  // failed (this._logisticsCats === []): without it the whole logistics + cost
+  // UI would silently vanish rather than degrade to the three built-ins.
   _logisticsCategories() {
-    return [
-      { key: 'food',   label: t('party.admin.logisticsCatFood'),   icon: '🍽️' },
-      { key: 'drinks', label: t('party.admin.logisticsCatDrinks'), icon: '🥤' },
-      { key: 'other',  label: t('party.admin.logisticsCatOther'),  icon: '📦' },
-    ];
+    const BUILTIN_LABEL = {
+      food:   'party.admin.logisticsCatFood',
+      drinks: 'party.admin.logisticsCatDrinks',
+      other:  'party.admin.logisticsCatOther',
+    };
+    const rows = (this._logisticsCats || []).length
+      ? this._logisticsCats
+      : [
+        { key: 'food',   label: null, icon: '🍽️', is_builtin: true },
+        { key: 'drinks', label: null, icon: '🥤', is_builtin: true },
+        { key: 'other',  label: null, icon: '📦', is_builtin: true },
+      ];
+    return rows.map(c => ({
+      key: c.key,
+      label: c.label || (BUILTIN_LABEL[c.key] ? t(BUILTIN_LABEL[c.key]) : c.key),
+      icon: c.icon || '📦',
+      isBuiltin: !!c.is_builtin,
+    }));
   }
 
   _renderLogistics() {
@@ -926,7 +949,7 @@ export class PartyAdminView {
     return `
       <div class="party-admin__logistics-group">
         <h3 class="party-admin__logistics-cat-title">
-          ${cat.icon} ${escHtml(cat.label)}
+          ${escHtml(cat.icon)} ${escHtml(cat.label)}
           <span class="party-admin__logistics-cat-count">${all.length}</span>
         </h3>
         <form class="party-admin__logistics-add" data-logistics-add="${escHtml(cat.key)}" novalidate>
@@ -1413,6 +1436,7 @@ export class PartyAdminView {
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindLogistics();
+    this._bindCosts();
     this._bindTodos();
     this._bindStatCards();
     this._bindEmailGoing();
@@ -2185,18 +2209,19 @@ export class PartyAdminView {
   // and a grand total, so the final bill is never a surprise. Unpriced items
   // count as 0 but are surfaced via the "{n} without a price" hint.
 
-  // The four cost groups: one per logistics category + a pseudo-group for
-  // todos (client-side only — never written to logistics).
+  // The cost groups: one per logistics section + a pseudo-group for todos
+  // (client-side only — never written to logistics). `addable` marks the groups
+  // that can take a manual line; todos can't, because a todo is a task that may
+  // happen to cost money, not a cost line.
   _costGroups() {
     const groups = this._logisticsCategories().map(c => ({
       key: c.key, icon: c.icon, label: c.label,
+      addable: true, isBuiltin: c.isBuiltin,
       items: (this._logistics || [])
         .filter(i => (i.category || 'other') === c.key)
         .map(i => ({
           name: i.name || '',
-          detail: i.quantity != null && i.unit_price != null
-            ? `${i.quantity}${i.quantity_note ? ` ${i.quantity_note}` : ''} × ${this._fmtIsk(i.unit_price)}`
-            : (i.quantity_note || ''),
+          detail: this._costDetail(i),
           cost: this._lineCost(i),
           // Warn only on partially priced rows (see _categorySubtotal).
           partial: (i.quantity == null) !== (i.unit_price == null),
@@ -2204,10 +2229,21 @@ export class PartyAdminView {
     }));
     groups.push({
       key: 'todos', icon: '✅', label: t('party.admin.costGroupTodos'),
+      addable: false, isBuiltin: true,
       // A costless todo ("call the venue") is normal, not a warning.
       items: (this._todos || []).map(td => ({ name: td.title || '', detail: '', cost: td.cost ?? null, partial: false })),
     });
     return groups;
+  }
+
+  // The "2 kg × ISK 2,900" hint under a cost line. A manual line is stored as
+  // qty 1 × the amount (see _bindCosts), so spelling that out would render a
+  // noisy "1 × ISK 50,000" where the planner just entered a lump sum — an
+  // unqualified quantity of exactly 1 carries no information, so it stays quiet.
+  _costDetail(i) {
+    if (i.quantity == null || i.unit_price == null) return i.quantity_note || '';
+    if (Number(i.quantity) === 1 && !i.quantity_note) return '';
+    return `${i.quantity}${i.quantity_note ? ` ${i.quantity_note}` : ''} × ${this._fmtIsk(i.unit_price)}`;
   }
 
   _renderCostSection() {
@@ -2235,11 +2271,34 @@ export class PartyAdminView {
               <span>${escHtml(x.name)}${x.detail ? ` <small>${escHtml(x.detail)}</small>` : ''}</span>
               <span>${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>
             </li>`).join('');
+      // A manual line writes a real logistics item, so it shows up in the 🛒
+      // tables too — one cost lives in exactly one place.
+      const addForm = g.addable ? `
+          <form class="party-admin__cost-add" data-cost-add="${escHtml(g.key)}" novalidate>
+            <input type="text" class="lol-input party-admin__cost-add-name"
+                   placeholder="${escHtml(t('party.admin.costAddNamePh'))}"
+                   maxlength="200"
+                   aria-label="${t('party.admin.costAddName')}" />
+            <input type="number" min="0" step="1" class="lol-input party-admin__cost-add-amount"
+                   placeholder="${escHtml(t('party.admin.costAddAmountPh'))}"
+                   aria-label="${t('party.admin.costAddAmount')}" />
+            <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.costAddLine')}</button>
+            <span class="party-admin__logistics-status" data-cost-status="${escHtml(g.key)}" aria-live="polite"></span>
+          </form>` : '';
+
+      // Built-ins have no delete button: 'other' is where a deleted section's
+      // items land, and food/drinks anchor the i18n names.
+      const del = (g.addable && !g.isBuiltin) ? `
+            <button type="button" class="party-admin__cost-del" data-cost-del="${escHtml(g.key)}"
+                    title="${t('party.admin.costDelSection')}"
+                    aria-label="${escHtml(t('party.admin.costDelSectionAria', { name: g.label }))}">✕</button>` : '';
+
       return `
         <div class="party-admin__cost-group">
-          <h3>${g.icon} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span></h3>
+          <h3>${escHtml(g.icon)} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
           ${g.items.length ? `<ol class="party-admin__cost-list">${rows}</ol>` : `<p class="party-empty">${t('party.admin.logisticsNoItems')}</p>`}
           ${missing > 0 ? `<p class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: missing })}</p>` : ''}
+          ${addForm}
         </div>`;
     }).join('');
 
@@ -2250,20 +2309,150 @@ export class PartyAdminView {
         ${anyPriced ? `
         <div class="party-admin__stats party-admin__stats--compact">
           ${tile(this._fmtIsk(grand), t('party.admin.costGrandTotal'), 'party-admin__stat--gold')}
-          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${g.icon} ${escHtml(g.label)}`)).join('')}
-        </div>
-        <div class="party-admin__cost-groups">${groupCards}</div>`
-        : `<p class="party-empty">${t('party.admin.costEmpty')}</p>`}
+          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${escHtml(g.icon)} ${escHtml(g.label)}`)).join('')}
+        </div>` : `<p class="party-empty">${t('party.admin.costEmpty')}</p>`}
+        <div class="party-admin__cost-groups">${groupCards}</div>
+        <form class="party-admin__cost-add-section" id="party-admin-cost-add-section" novalidate>
+          <input type="text" class="lol-input party-admin__cost-section-icon"
+                 placeholder="🎈" maxlength="8"
+                 aria-label="${t('party.admin.costSectionIcon')}" />
+          <input type="text" class="lol-input party-admin__cost-section-label"
+                 placeholder="${escHtml(t('party.admin.costSectionNamePh'))}"
+                 maxlength="60"
+                 aria-label="${t('party.admin.costSectionName')}" />
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.costAddSection')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-cost-section-status" aria-live="polite"></span>
+        </form>
       </section>`;
   }
 
-  // Replace-in-place; the section is static (no handlers), so nothing to bind.
+  // Replace-in-place. The section carries its own forms now, so the fresh node
+  // has to be re-bound — a plain replaceWith would leave dead buttons behind.
   _rerenderCosts() {
     const old = this._el.querySelector('#party-admin-costs');
     if (!old) return;
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderCostSection();
     old.replaceWith(tmp.firstElementChild);
+    this._bindCosts();
+  }
+
+  _bindCosts() {
+    const section = this._el.querySelector('#party-admin-costs');
+    if (!section) return;
+
+    // Manual line — name + amount, stored as a real logistics item at qty 1 so
+    // it lands in the 🛒 table too and stays editable there (change the qty and
+    // it stops being a lump sum, which is exactly right). Both fields are
+    // required: a manual line with no amount would post qty-without-price and
+    // trip the "{n} without a price" warning the planner is trying to clear.
+    section.querySelectorAll('form[data-cost-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const category = form.dataset.costAdd;
+        const nameEl   = form.querySelector('.party-admin__cost-add-name');
+        const amtEl    = form.querySelector('.party-admin__cost-add-amount');
+        const status   = form.querySelector('[data-cost-status]');
+        const name = (nameEl?.value || '').trim();
+        if (!name) { nameEl?.focus(); return; }
+        // badInput reports '' while showing junk ("12e") — don't silently drop it.
+        if (amtEl?.validity?.badInput) { amtEl.focus(); amtEl.select?.(); return; }
+        if ((amtEl?.value || '').trim() === '') { amtEl?.focus(); return; }
+
+        if (status) status.textContent = t('form.saving');
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch('/api/v1/party/logistics', {
+            method:      'POST',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({
+              name,
+              quantity:   1,
+              unit_price: Math.round(Number(amtEl.value)),
+              category,
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsAddFailed'));
+          }
+          const item = await res.json();
+          this._logistics = [...(this._logistics || []), item];
+          this._rerenderLogistics();   // also re-renders (and re-binds) costs
+          this._el.querySelector(`form[data-cost-add="${category}"] .party-admin__cost-add-name`)?.focus();
+        } catch (err) {
+          if (status) status.textContent = err.message || t('party.admin.logisticsAddFailed');
+        }
+      });
+    });
+
+    // Add a section. The server derives the key from the label, so the client
+    // sends only what the planner typed.
+    const secForm = section.querySelector('#party-admin-cost-add-section');
+    secForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const iconEl  = secForm.querySelector('.party-admin__cost-section-icon');
+      const labelEl = secForm.querySelector('.party-admin__cost-section-label');
+      const status  = secForm.querySelector('#party-admin-cost-section-status');
+      const label = (labelEl?.value || '').trim();
+      if (!label) { labelEl?.focus(); return; }
+
+      if (status) status.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/logistics/categories', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({ label, icon: (iconEl?.value || '').trim() || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.costSectionAddFailed'));
+        }
+        const cat = await res.json();
+        this._logisticsCats = [...(this._logisticsCats || []), cat];
+        this._rerenderLogistics();   // new section needs its own 🛒 table too
+        this._el.querySelector(`form[data-cost-add="${cat.key}"] .party-admin__cost-add-name`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.costSectionAddFailed');
+      }
+    });
+
+    // Delete a section. Items are not deleted — the FK sweeps them into 'other'
+    // (068), so the confirm says so rather than implying the costs go with it.
+    section.querySelectorAll('[data-cost-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.costDel;
+        const cat = (this._logisticsCats || []).find(c => c.key === key);
+        const name = cat?.label || key;
+        const n = (this._logistics || []).filter(i => (i.category || 'other') === key).length;
+        const msg = n > 0
+          ? t('party.admin.costDelSectionConfirmItems', { name, n })
+          : t('party.admin.costDelSectionConfirm', { name });
+        if (!confirm(msg)) return;
+
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/categories/${encodeURIComponent(key)}`, {
+            method: 'DELETE', credentials: 'include', headers,
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.costSectionDelFailed'));
+          }
+          this._logisticsCats = (this._logisticsCats || []).filter(c => c.key !== key);
+          // Mirror the FK's ON DELETE SET DEFAULT locally so the items reappear
+          // under Other without a refetch.
+          this._logistics = (this._logistics || [])
+            .map(i => ((i.category || 'other') === key ? { ...i, category: 'other' } : i));
+          this._rerenderLogistics();
+        } catch (err) {
+          showToast(err.message || t('party.admin.costSectionDelFailed'), 'error');
+        }
+      });
+    });
   }
 
   // ── To-do list ─────────────────────────────────────────────────────────────
