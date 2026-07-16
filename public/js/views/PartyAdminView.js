@@ -619,43 +619,67 @@ export class PartyAdminView {
   }
 
   // The RSVP form's attendance-timing radio field (id 'attend_when', or a
-  // radio-group whose label reads like timing). Shared by the Stats breakdown
-  // and the attendance-timing column.
+  // radio-group whose label reads like timing — EN or IS). Shared by the Stats
+  // breakdown and the attendance-timing column.
   _attendField() {
     return (this._rsvpForm || []).find(f =>
       f.type === 'radio-group' &&
-      (f.id === 'attend_when' || /attend|when|day|evening/i.test(f.label || ''))
+      (f.id === 'attend_when' || /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(f.label || ''))
     ) || null;
   }
 
-  // The three timing choices pulled from the attend_when options by meaning
-  // (order matters: match "both/all day" before "day" so it isn't stolen by
-  // the /day/ test). `value` is the real stored option label; icon+label are
-  // display only. Options the form lacks are skipped.
+  // Classify an attend_when label into a timing bucket BY MEANING, across both
+  // locales and old form versions: 'day' | 'evening' | 'both' | null (declines,
+  // maybes, unknown → no timing). Matching by meaning instead of exact label is
+  // what lets a guest who answered "Já, aðeins á daginn" light up the ☀️ option
+  // even when the admin's loaded form says "☀️ Daytime only". Order matters:
+  // evening first, then explicit all-day (so "all day"/"allan daginn" isn't
+  // stolen by the day test), then day, and finally a bare yes ("Já", "Yes")
+  // which means attending all day.
+  _timingBucket(label) {
+    if (typeof label !== 'string' || !label.trim()) return null;
+    if (/kvöld|evening|night/i.test(label))                    return 'evening';
+    if (/both|all\s*day|allan\s*dag|heilan\s*dag/i.test(label)) return 'both';
+    if (/dag|day/i.test(label))                                 return 'day';
+    if (/^[^\p{L}]*(já|yes|jebb)[^\p{L}]*$/iu.test(label))      return 'both';
+    return null;
+  }
+
+  // The timing choices offered by the current form, one per bucket (first
+  // option wins). `value` is the real stored option label (what a save writes
+  // into answers); icon + short label are display only.
   _timingOptions() {
     const f = this._attendField();
     if (!f) return [];
-    const opts = (f.options || []).map(o => this._optLabel(o)).filter(Boolean);
-    const both    = opts.find(l => /both|all\s*day/i.test(l));
-    const evening = opts.find(l => /evening|night|kvöld/i.test(l));
-    const day     = opts.find(l => /day|dag/i.test(l) && l !== both);
+    const byBucket = {};
+    for (const o of (f.options || [])) {
+      const label = this._optLabel(o);
+      const b = this._timingBucket(label);
+      if (b && !byBucket[b]) byBucket[b] = label;
+    }
     return [
-      day     && { value: day,     icon: '☀️', label: t('party.admin.dayOnly') },
-      evening && { value: evening, icon: '🌙', label: t('party.admin.eveningOnly') },
-      both    && { value: both,    icon: '🎉', label: t('party.admin.both') },
+      byBucket.day     && { bucket: 'day',     value: byBucket.day,     icon: '☀️', label: t('party.admin.dayOnly') },
+      byBucket.evening && { bucket: 'evening', value: byBucket.evening, icon: '🌙', label: t('party.admin.eveningOnly') },
+      byBucket.both    && { bucket: 'both',    value: byBucket.both,    icon: '🎉', label: t('party.admin.both') },
     ].filter(Boolean);
   }
 
   // The attendance-timing cell (replaces the old "RSVP sent" date). Admins get
   // an inline dropdown of the timing options + a blank "—"; picking one writes
-  // answers.attend_when. Non-timing answers (Maybe/Can't — owned by the Status
-  // column) show blank here. Moderators see a read-only label.
+  // answers.attend_when. The guest's stored answer is matched exactly first,
+  // then by bucket, so answers given in the other locale (or under renamed
+  // options) still select the right entry. Non-timing answers (Maybe/Can't —
+  // owned by the Status column) show blank. Moderators see a read-only label.
   _renderTimingCell(g, isAdminUser) {
     const field   = this._attendField();
     const options = this._timingOptions();
     if (!field || !options.length) return `<td>—</td>`;
-    const current = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
-    const match   = options.find(o => o.value === current);
+    const raw   = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
+    const match = options.find(o => o.value === raw)
+      || (raw ? options.find(o => o.bucket === this._timingBucket(raw)) : undefined);
+    // data-current mirrors the SELECTED OPTION's value (not the raw stored
+    // label) so the no-op guard in the change handler compares like with like.
+    const current = match ? match.value : '';
 
     if (!isAdminUser) {
       return `<td class="party-admin__timing-cell">${match ? `${match.icon} ${escHtml(match.label)}` : '—'}</td>`;
@@ -1151,13 +1175,25 @@ export class PartyAdminView {
     let breakdownCards = '';
     if (attendField) {
       const tally = {};
-      (attendField.options || []).forEach(opt => { tally[opt] = 0; });
+      (attendField.options || []).forEach(opt => { tally[this._optLabel(opt)] = 0; });
       rsvps.forEach(r => {
         const a = r.answers?.[attendField.id];
         if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
       });
-      // pickMatch returns the first option matching `regex` along with its count,
-      // so the rendered card carries the actual option string for click-to-filter.
+      // Sum every tally key that classifies into the bucket, so answers given
+      // in either locale (or under renamed options) all count. The card carries
+      // the highest-count answer string for click-to-filter (the modal filters
+      // by exact answer, so a cross-locale split shows the dominant one).
+      const pickBucket = (bucket) => {
+        let total = 0, best = null, bestCount = -1;
+        for (const [opt, count] of Object.entries(tally)) {
+          if (this._timingBucket(opt) !== bucket) continue;
+          total += count;
+          if (count > bestCount) { best = opt; bestCount = count; }
+        }
+        return { opt: best, count: total };
+      };
+      // Declines aren't a timing bucket — matched by phrase (EN + IS), first hit.
       const pickMatch = (regex) => {
         for (const [opt, count] of Object.entries(tally)) {
           if (regex.test(opt)) return { opt, count };
@@ -1175,10 +1211,10 @@ export class PartyAdminView {
           <span class="party-admin__stat-label">${labelHtml}</span>
         </button>`;
       };
-      const day      = pickMatch(/day/i);
-      const evening  = pickMatch(/evening/i);
-      const both     = pickMatch(/both|all day/i);
-      const declined = pickMatch(/can'?t|sorry|no/i);
+      const day      = pickBucket('day');
+      const evening  = pickBucket('evening');
+      const both     = pickBucket('both');
+      const declined = pickMatch(/can'?t|sorry|\bno\b|kemst ekki|kem ekki|afþakka|\bnei\b/i);
       breakdownCards = [
         breakdownCard(day,      `☀️ ${t('party.admin.dayOnly')}`),
         breakdownCard(evening,  `🌙 ${t('party.admin.eveningOnly')}`),
