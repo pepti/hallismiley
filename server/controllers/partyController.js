@@ -183,9 +183,60 @@ async function _checkInviteAccess(email) {
   return rows.length > 0;
 }
 
-// Logistics categories — the three grouped tables on the planner page. Stored
-// in party_logistics_items.category and mirrored by a CHECK constraint (058).
-const LOGISTICS_CATEGORIES = ['food', 'drinks', 'other'];
+// Logistics categories — the grouped tables on the planner page. Once a fixed
+// triple mirrored by a CHECK constraint (058), now rows in
+// party_logistics_categories so the planner can add sections without a deploy
+// (068). These three are seeded is_builtin and cannot be deleted: 'other' backs
+// the column DEFAULT that the FK's ON DELETE SET DEFAULT relies on, and all
+// three resolve their display name from i18n rather than a stored label.
+const BUILTIN_LOGISTICS_CATEGORIES = ['food', 'drinks', 'other'];
+const LOGISTICS_CATEGORY_LABEL_MAX = 60;
+const LOGISTICS_CATEGORY_ICON_MAX = 8;
+
+// Does this category key exist? Every write path that accepts a category checks
+// here rather than against a constant — the FK would catch a bad key anyway,
+// but as a 500 from the driver instead of a 400 the planner can read.
+async function _categoryExists(key) {
+  if (typeof key !== 'string') return false;
+  const { rows } = await db.query(
+    `SELECT 1 FROM party_logistics_categories WHERE key = $1`, [key]
+  );
+  return rows.length > 0;
+}
+
+// Derive a URL-safe key from a planner-typed label. Icelandic letters fold to
+// their ASCII base (þ→th, æ→ae, ö→o) so 'Skreytingar & blóm' → 'skreytingar-blom'.
+// A label with no usable letters at all (emoji, punctuation) yields '' and the
+// caller falls back to a generated key — the key is internal plumbing, so it
+// never needs to be pretty, only stable and unique.
+function _slugifyCategoryKey(label) {
+  const folded = String(label || '')
+    .toLowerCase()
+    .replace(/þ/g, 'th').replace(/ð/g, 'd').replace(/æ/g, 'ae')
+    .normalize('NFD').replace(/\p{M}/gu, '');
+  return folded
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+// A key that is free, derived from the label where possible. The -2/-3 suffix
+// loop is bounded by the same UNIQUE index it is probing, so it terminates;
+// the INSERT still races (two admins adding "Salur" at once), which the caller
+// resolves by surfacing the UNIQUE violation as a 409.
+async function _freeCategoryKey(label) {
+  const base = _slugifyCategoryKey(label) || 'section';
+  const { rows } = await db.query(
+    `SELECT key FROM party_logistics_categories WHERE key = $1 OR key LIKE $2`,
+    [base, `${base}-%`]
+  );
+  const taken = new Set(rows.map(r => r.key));
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
 
 // ── To-do list validation helpers ─────────────────────────────────────────────
 const TODO_MAX_ASSIGNEES = 25;
@@ -1008,6 +1059,128 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // ── Logistics categories (admin/moderator) ───────────────────────────────────
+  // The sections the logistics tables and the Cost overview group by. Three are
+  // seeded built-ins (i18n names); the planner adds the rest. See 068.
+
+  async listLogisticsCategories(_req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, key, label, icon, sort_order, is_builtin, created_at, updated_at
+           FROM party_logistics_categories
+          ORDER BY sort_order ASC, id ASC`
+      );
+      res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  // Body: { label, icon? }. The key is derived server-side — the client never
+  // picks it, so it can't collide with a built-in or smuggle in a value the FK
+  // would reject.
+  async addLogisticsCategory(req, res, next) {
+    try {
+      const { label, icon = null } = req.body || {};
+      if (typeof label !== 'string' || label.trim().length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatLabelRequired'), code: 400 });
+      }
+      if (label.trim().length > LOGISTICS_CATEGORY_LABEL_MAX) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatLabelTooLong', { n: LOGISTICS_CATEGORY_LABEL_MAX }), code: 400 });
+      }
+      if (icon != null && (typeof icon !== 'string' || [...icon].length > LOGISTICS_CATEGORY_ICON_MAX)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatIconTooLong', { n: LOGISTICS_CATEGORY_ICON_MAX }), code: 400 });
+      }
+
+      const key = await _freeCategoryKey(label.trim());
+      try {
+        const { rows } = await db.query(
+          `INSERT INTO party_logistics_categories (key, label, icon, sort_order, is_builtin, created_by)
+           VALUES ($1, $2, $3,
+             COALESCE((SELECT MAX(sort_order) FROM party_logistics_categories), 0) + 1,
+             FALSE, $4)
+           RETURNING id, key, label, icon, sort_order, is_builtin, created_at, updated_at`,
+          [key, label.trim(), icon ? icon.trim() || null : null, req.user.id]
+        );
+        res.status(201).json(rows[0]);
+      } catch (err) {
+        // Two admins adding a section with the same name at the same moment —
+        // _freeCategoryKey read a free key that the other INSERT then took.
+        if (err.code === '23505') {
+          return res.status(409).json({ error: t(req.locale, 'errors.party.logisticsCatExists'), code: 409 });
+        }
+        throw err;
+      }
+    } catch (err) { next(err); }
+  },
+
+  // Body: { label?, icon? }. Renaming a BUILT-IN writes a literal label, which
+  // opts that section out of EN/IS translation from then on — the planner asked
+  // for that name specifically, so it wins over the i18n default. Clearing the
+  // label (null) hands a built-in back to i18n.
+  async updateLogisticsCategory(req, res, next) {
+    try {
+      const key = req.params.key;
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'label')) {
+        let v = req.body.label;
+        if (v != null) {
+          if (typeof v !== 'string' || v.trim().length === 0) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatLabelRequired'), code: 400 });
+          }
+          if (v.trim().length > LOGISTICS_CATEGORY_LABEL_MAX) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatLabelTooLong', { n: LOGISTICS_CATEGORY_LABEL_MAX }), code: 400 });
+          }
+          v = v.trim();
+        }
+        sets.push(`label = $${idx++}`);
+        values.push(v);
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'icon')) {
+        let v = req.body.icon;
+        if (v != null && (typeof v !== 'string' || [...v].length > LOGISTICS_CATEGORY_ICON_MAX)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatIconTooLong', { n: LOGISTICS_CATEGORY_ICON_MAX }), code: 400 });
+        }
+        sets.push(`icon = $${idx++}`);
+        values.push(v ? v.trim() || null : null);
+      }
+      if (sets.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsNoFields'), code: 400 });
+      }
+
+      values.push(key);
+      const { rows } = await db.query(
+        `UPDATE party_logistics_categories
+            SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE key = $${idx}
+          RETURNING id, key, label, icon, sort_order, is_builtin, created_at, updated_at`,
+        values
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.logisticsCatNotFound'), code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  // Items in a deleted section are NOT deleted — the FK's ON DELETE SET DEFAULT
+  // sweeps them into 'other' (068), so a priced item can never vanish because a
+  // section was tidied away. Built-ins are undeletable: 'other' is the sweep
+  // target itself, and food/drinks anchor i18n keys.
+  async deleteLogisticsCategory(req, res, next) {
+    try {
+      const key = req.params.key;
+      if (BUILTIN_LOGISTICS_CATEGORIES.includes(key)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCatBuiltinLocked'), code: 400 });
+      }
+      const { rows } = await db.query(
+        `DELETE FROM party_logistics_categories WHERE key = $1 RETURNING key`,
+        [key]
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.logisticsCatNotFound'), code: 404 });
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
   // ── Logistics (admin/moderator) ──────────────────────────────────────────────
   // Items the planner needs to buy and bring to the venue. Two independent
   // boolean flags so "bought" and "at venue" can be ticked in either order.
@@ -1051,7 +1224,7 @@ const partyController = {
       if (assigned_to != null && (typeof assigned_to !== 'string' || assigned_to.length > 100)) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsAssignedTooLong', { n: 100 }), code: 400 });
       }
-      if (!LOGISTICS_CATEGORIES.includes(category)) {
+      if (!await _categoryExists(category)) {
         return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCategoryInvalid'), code: 400 });
       }
 
@@ -1117,7 +1290,7 @@ const partyController = {
             v = v.trim() || null;
           }
         } else if (key === 'category') {
-          if (!LOGISTICS_CATEGORIES.includes(v)) {
+          if (!await _categoryExists(v)) {
             return res.status(400).json({ error: t(req.locale, 'errors.party.logisticsCategoryInvalid'), code: 400 });
           }
         } else if (key === 'bought' || key === 'at_venue') {

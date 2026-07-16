@@ -166,7 +166,20 @@ async function getTestSessionCookie(userId) {
 /** Truncate all mutable tables and reset sequences between tests. */
 async function cleanTables() {
   await db.query(
-    'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_logistics_categories, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
+  );
+  // party_logistics_categories is listed above only for clarity — it would be
+  // truncated regardless, because TRUNCATE ... CASCADE sweeps every table with
+  // an FK to `users` (created_by), and CASCADE ignores ON DELETE SET NULL. Its
+  // three built-in rows are seeded by migration 068, not written by any test,
+  // so without this re-seed every category-aware endpoint would 400 after the
+  // first cleanTables() call. Mirrors the 068 seed exactly.
+  await db.query(
+    `INSERT INTO party_logistics_categories (key, label, icon, sort_order, is_builtin)
+     VALUES ('food', NULL, '🍽️', 1, TRUE),
+            ('drinks', NULL, '🥤', 2, TRUE),
+            ('other', NULL, '📦', 3, TRUE)
+     ON CONFLICT (key) DO NOTHING`
   );
   // user_roles is cleared via the users CASCADE above; also drop the in-process
   // per-user role cache so a fresh DB starts with a fresh cache (tests mutate

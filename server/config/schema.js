@@ -1996,6 +1996,65 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS admin_companions JSONB`,
     ],
   },
+  {
+    // Logistics categories become data instead of a hardcoded triple. 058 fixed
+    // the set to ('food','drinks','other') via a CHECK; the planner needs to add
+    // their own sections ("Skreytingar", "Salur") without a deploy, so the CHECK
+    // is replaced by a registry table + FK.
+    //
+    // `label` is NULL for the three built-ins — their names are i18n keys
+    // resolved at render time (party.admin.logisticsCatFood etc.), so they stay
+    // translated when the admin flips EN/IS. Custom categories carry a literal
+    // label typed by the planner in whichever locale they used; there is no
+    // translation pipeline for user data, and inventing one for two words of
+    // section title isn't worth it.
+    //
+    // `is_builtin` guards deletion: dropping 'other' would break the DEFAULT
+    // that ON DELETE SET DEFAULT depends on, and dropping food/drinks would
+    // orphan i18n keys. The controller enforces it; the column is the record.
+    //
+    // The FK carries ON DELETE SET DEFAULT so deleting a custom section sweeps
+    // its items into 'other' rather than deleting them — losing a priced item
+    // because a section was renamed away would be a silent data loss the
+    // planner would only notice in the final bill. Existing rows are guaranteed
+    // FK-clean because 058's CHECK admitted only the three seeded keys.
+    name: '068_party_logistics_categories',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_logistics_categories (
+        id          SERIAL      PRIMARY KEY,
+        key         TEXT        NOT NULL UNIQUE,
+        label       TEXT,
+        icon        TEXT,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        is_builtin  BOOLEAN     NOT NULL DEFAULT FALSE,
+        created_by  TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      // Seed the three built-ins to match 058's CHECK values and the icons the
+      // view used to hardcode. ON CONFLICT DO NOTHING keeps re-runs a no-op and
+      // preserves any sort_order the planner has since dragged them into.
+      `INSERT INTO party_logistics_categories (key, label, icon, sort_order, is_builtin)
+       VALUES ('food', NULL, '🍽️', 1, TRUE),
+              ('drinks', NULL, '🥤', 2, TRUE),
+              ('other', NULL, '📦', 3, TRUE)
+       ON CONFLICT (key) DO NOTHING`,
+      `ALTER TABLE party_logistics_items DROP CONSTRAINT IF EXISTS party_logistics_category_chk`,
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'party_logistics_category_fk'
+         ) THEN
+           ALTER TABLE party_logistics_items
+             ADD CONSTRAINT party_logistics_category_fk
+             FOREIGN KEY (category) REFERENCES party_logistics_categories (key)
+             ON UPDATE CASCADE ON DELETE SET DEFAULT;
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_party_logistics_categories_sort
+         ON party_logistics_categories (sort_order, id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
