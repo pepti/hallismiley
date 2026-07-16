@@ -621,44 +621,105 @@ export class PartyAdminView {
     return parts.length ? parts.join(' ') : '—';
   }
 
-  // The RSVP form's attendance-timing radio field (id 'attend_when', or a
-  // radio-group whose label reads like timing). Shared by the Stats breakdown
-  // and the attendance-timing column.
+  // The RSVP form's attendance-timing radio field. The canonical `attend_when`
+  // id wins outright; the label heuristic is only a fallback for forms that
+  // renamed the id. (A single find() with an OR would let an *earlier*
+  // radio-group whose label merely mentions "dag"/"kvöld" — e.g. "Verður þú í
+  // kvöldmat?" — hijack the column even though attend_when exists.)
   _attendField() {
-    return (this._rsvpForm || []).find(f =>
-      f.type === 'radio-group' &&
-      (f.id === 'attend_when' || /attend|when|day|evening/i.test(f.label || ''))
-    ) || null;
+    const radios = (this._rsvpForm || []).filter(f => f.type === 'radio-group');
+    return radios.find(f => f.id === 'attend_when')
+      || radios.find(f => /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(f.label || ''))
+      || null;
   }
 
-  // The three timing choices pulled from the attend_when options by meaning
-  // (order matters: match "both/all day" before "day" so it isn't stolen by
-  // the /day/ test). `value` is the real stored option label; icon+label are
-  // display only. Options the form lacks are skipped.
+  // Declared status of a form option ({label,status}); legacy bare-string
+  // options predate the status field and mean "going".
+  _optStatus(opt) {
+    if (typeof opt === 'string') return 'going';
+    return ['going', 'maybe', 'declined'].includes(opt?.status) ? opt.status : 'going';
+  }
+
+  // Status of a STORED answer label. The admin's declared status on a matching
+  // form option is authoritative; answers from another locale (or a renamed
+  // option) aren't in the form at all, so they fall back to phrase matching —
+  // the same shape as _deriveRsvpStatus on the server.
+  _answerStatus(label) {
+    if (typeof label !== 'string') return 'going';
+    const opt = (this._attendField()?.options || []).find(o => this._optLabel(o) === label);
+    if (opt) return this._optStatus(opt);
+    const s = label.normalize('NFC');
+    if (/can'?t|sorry|kemst ekki|kem ekki|afþakka|\bnei\b/i.test(s)) return 'declined';
+    if (/\bmaybe\b|kannski|óvíst/i.test(s))                          return 'maybe';
+    return 'going';
+  }
+
+  // Classify a label into a timing bucket BY MEANING, across both locales and
+  // old form versions: 'day' | 'evening' | 'both' | null. Matching by meaning
+  // rather than exact label is what lets a guest who answered "Já, aðeins á
+  // daginn" light up ☀️ even when the admin's loaded form says "☀️ Daytime
+  // only". Order matters: evening first, then explicit all-day (so "all day" /
+  // "allan daginn" isn't stolen by the day test), then day, and finally an
+  // unqualified yes ("Já", "Yes, I'll be there") which means all day.
+  // Pure text — callers go through _answerTimingBucket so a decline/maybe can
+  // never land in a bucket just because its wording mentions a time.
+  _timingBucket(label) {
+    if (typeof label !== 'string' || !label.trim()) return null;
+    const s = label.normalize('NFC');
+    if (/kvöld|evening|night/i.test(s))                          return 'evening';
+    if (/both|all\s*day|allan\s*dag|heilan\s*dag/i.test(s))      return 'both';
+    if (/dag|day/i.test(s))                                      return 'day';
+    // (?![\p{L}]) not \b — JS word boundaries are ASCII-only, so \b after the
+    // 'á' in "Já" never matches and every bare-yes guest would fall through.
+    if (/^[^\p{L}]*(já|jú|yes|jebb)(?![\p{L}])/iu.test(s))       return 'both';
+    return null;
+  }
+
+  // Timing bucket of a stored answer: only guests who are actually coming have
+  // a timing. Without this a decline worded "Can't make it that day" would
+  // bucket as ☀️ — showing a timing that contradicts the Status column, and
+  // letting the select's "—" wipe their real answer.
+  _answerTimingBucket(label) {
+    return this._answerStatus(label) === 'going' ? this._timingBucket(label) : null;
+  }
+
+  // The timing choices offered by the current form, one per bucket (first
+  // option wins). Only 'going' options qualify — a maybe/decline must never
+  // back a timing slot, or picking it would flip the guest's status. `value` is
+  // the real stored option label (what a save writes); icon+label are display.
   _timingOptions() {
     const f = this._attendField();
     if (!f) return [];
-    const opts = (f.options || []).map(o => this._optLabel(o)).filter(Boolean);
-    const both    = opts.find(l => /both|all\s*day/i.test(l));
-    const evening = opts.find(l => /evening|night|kvöld/i.test(l));
-    const day     = opts.find(l => /day|dag/i.test(l) && l !== both);
+    const byBucket = {};
+    for (const o of (f.options || [])) {
+      if (this._optStatus(o) !== 'going') continue;
+      const label = this._optLabel(o);
+      const b = this._timingBucket(label);
+      if (b && !byBucket[b]) byBucket[b] = label;
+    }
     return [
-      day     && { value: day,     icon: '☀️', label: t('party.admin.dayOnly') },
-      evening && { value: evening, icon: '🌙', label: t('party.admin.eveningOnly') },
-      both    && { value: both,    icon: '🎉', label: t('party.admin.both') },
+      byBucket.day     && { bucket: 'day',     value: byBucket.day,     icon: '☀️', label: t('party.admin.dayOnly') },
+      byBucket.evening && { bucket: 'evening', value: byBucket.evening, icon: '🌙', label: t('party.admin.eveningOnly') },
+      byBucket.both    && { bucket: 'both',    value: byBucket.both,    icon: '🎉', label: t('party.admin.both') },
     ].filter(Boolean);
   }
 
   // The attendance-timing cell (replaces the old "RSVP sent" date). Admins get
   // an inline dropdown of the timing options + a blank "—"; picking one writes
-  // answers.attend_when. Non-timing answers (Maybe/Can't — owned by the Status
-  // column) show blank here. Moderators see a read-only label.
+  // answers.attend_when. The guest's stored answer is matched exactly first,
+  // then by bucket, so answers given in the other locale (or under renamed
+  // options) still select the right entry. Non-timing answers (Maybe/Can't —
+  // owned by the Status column) show blank. Moderators see a read-only label.
   _renderTimingCell(g, isAdminUser) {
     const field   = this._attendField();
     const options = this._timingOptions();
     if (!field || !options.length) return `<td>—</td>`;
-    const current = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
-    const match   = options.find(o => o.value === current);
+    const raw   = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
+    const match = options.find(o => o.value === raw)
+      || (raw ? options.find(o => o.bucket === this._answerTimingBucket(raw)) : undefined);
+    // data-current mirrors the SELECTED OPTION's value (not the raw stored
+    // label) so the no-op guard in the change handler compares like with like.
+    const current = match ? match.value : '';
 
     if (!isAdminUser) {
       return `<td class="party-admin__timing-cell">${match ? `${match.icon} ${escHtml(match.label)}` : '—'}</td>`;
@@ -1174,22 +1235,31 @@ export class PartyAdminView {
     let breakdownCards = '';
     if (attendField) {
       const tally = {};
-      (attendField.options || []).forEach(opt => { tally[opt] = 0; });
+      (attendField.options || []).forEach(opt => { tally[this._optLabel(opt)] = 0; });
       rsvps.forEach(r => {
         const a = r.answers?.[attendField.id];
         if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
       });
-      // pickMatch returns the first option matching `regex` along with its count,
-      // so the rendered card carries the actual option string for click-to-filter.
-      const pickMatch = (regex) => {
-        for (const [opt, count] of Object.entries(tally)) {
-          if (regex.test(opt)) return { opt, count };
+      // Collect EVERY tally label matching `pred`, not just the first hit. Two
+      // reasons: cross-locale answers ("Já, aðeins á daginn" + "☀️ Daytime
+      // only") belong to one card, and the loaded form's own labels are seeded
+      // at 0 — a first-hit picker would return that 0 and report an empty card
+      // while the real answers sat one key later.
+      const pickWhere = (pred) => {
+        const labels = [];
+        let count = 0;
+        for (const [opt, n] of Object.entries(tally)) {
+          if (!pred(opt)) continue;
+          labels.push(opt);
+          count += n;
         }
-        return { opt: null, count: 0 };
+        return { labels, count };
       };
-      const breakdownCard = (match, labelHtml, modifierClass = '') => {
-        const dataAttrs = match.opt
-          ? `data-stat-key="field:${escHtml(attendField.id)}:${escHtml(match.opt)}" data-stat-field="${escHtml(attendField.id)}" data-stat-value="${escHtml(match.opt)}" data-stat-multi="false"`
+      // The card carries every label it counted, so the drill-down modal shows
+      // exactly the guests the number claims.
+      const breakdownCard = (match, labelHtml, title, modifierClass = '') => {
+        const dataAttrs = match.labels.length
+          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}" data-stat-multi="false"`
           : `data-stat-key="empty"`;
         const cls = 'party-admin__stat party-admin__stat--sm' + (modifierClass ? ' ' + modifierClass : '');
         return `
@@ -1198,15 +1268,17 @@ export class PartyAdminView {
           <span class="party-admin__stat-label">${labelHtml}</span>
         </button>`;
       };
-      const day      = pickMatch(/day/i);
-      const evening  = pickMatch(/evening/i);
-      const both     = pickMatch(/both|all day/i);
-      const declined = pickMatch(/can'?t|sorry|no/i);
+      const day      = pickWhere(o => this._answerTimingBucket(o) === 'day');
+      const evening  = pickWhere(o => this._answerTimingBucket(o) === 'evening');
+      const both     = pickWhere(o => this._answerTimingBucket(o) === 'both');
+      const declined = pickWhere(o => this._answerStatus(o) === 'declined');
+      const dayT = t('party.admin.dayOnly'), evgT = t('party.admin.eveningOnly'),
+            bothT = t('party.admin.both'),   decT = t('party.admin.statusDeclined');
       breakdownCards = [
-        breakdownCard(day,      `☀️ ${t('party.admin.dayOnly')}`),
-        breakdownCard(evening,  `🌙 ${t('party.admin.eveningOnly')}`),
-        breakdownCard(both,     `🎉 ${t('party.admin.both')}`),
-        breakdownCard(declined, t('party.admin.statusDeclined'), 'party-admin__stat--muted'),
+        breakdownCard(day,      `☀️ ${dayT}`,  `☀️ ${dayT}`),
+        breakdownCard(evening,  `🌙 ${evgT}`,  `🌙 ${evgT}`),
+        breakdownCard(both,     `🎉 ${bothT}`, `🎉 ${bothT}`),
+        breakdownCard(declined, decT,          decT, 'party-admin__stat--muted'),
       ].join('');
     }
 
@@ -1753,13 +1825,22 @@ export class PartyAdminView {
         title = t('party.admin.totalHeadcount');
       } else if (key.startsWith('field:')) {
         const fieldId = card.dataset.statField;
-        const value   = card.dataset.statValue;
         const multi   = card.dataset.statMulti === 'true';
+        // Bucket cards (the timing breakdown) carry every label they counted in
+        // data-stat-values; plain option cards carry a single data-stat-value.
+        let values;
+        try {
+          values = card.dataset.statValues
+            ? JSON.parse(card.dataset.statValues)
+            : [card.dataset.statValue];
+        } catch { values = [card.dataset.statValue]; }
         rsvps = this._rsvps.filter(r => {
           const a = r.answers?.[fieldId];
-          return multi ? Array.isArray(a) && a.includes(value) : a === value;
+          return multi
+            ? Array.isArray(a) && values.some(v => a.includes(v))
+            : values.includes(a);
         });
-        title = value;
+        title = card.dataset.statTitle || values[0];
       } else {
         return;
       }
