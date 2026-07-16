@@ -198,10 +198,16 @@ router.post('/owner-invite',
   requireAuth, requireRole('admin'), emailBlastLimiter, csrfProtect,
   partyController.ownerInvite);
 
-// Manually add a single guest who accepted verbally. Body { name, email?,
-// status? }. No invite email is sent (email is optional). Admin-only.
+// Manually add a single guest. Body { name, email?, status?, invite? }.
+// Admin-only. With invite:true this sends a magic-link email, so it has to sit
+// behind the same blast limiter as the other send routes — but only then: a
+// verbal add sends nothing and shouldn't burn the quota.
 router.post('/guests',
-  requireAuth, requireRole('admin'), csrfProtect,
+  requireAuth, requireRole('admin'),
+  (req, res, next) => (req.body?.invite === true
+    ? emailBlastLimiter(req, res, next)
+    : next()),
+  csrfProtect,
   partyController.addGuest);
 
 // Guests awaiting approval — backs the admin pending-requests list.

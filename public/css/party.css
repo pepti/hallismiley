@@ -1541,28 +1541,12 @@ button.party-admin__stat:focus-visible {
   font-style: normal;
 }
 
-/* ── Party Admin: owner invites + pending requests ─────────────────────── */
+/* ── Party Admin: add guest + pending requests ─────────────────────────── */
 
 .party-admin__invite-help {
   color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: var(--sp-2);
-}
-
-.party-admin__invite-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  align-items: stretch;
-  max-width: 560px;
-  margin-bottom: var(--sp-3);
-}
-
-.party-admin__invite-form textarea.lol-input {
-  width: 100%;
-  resize: vertical;
-  font-family: inherit;
-  text-transform: none;
 }
 
 /* Manual add-guest form — a single responsive row that wraps on narrow screens. */
@@ -1578,6 +1562,17 @@ button.party-admin__stat:focus-visible {
 .party-admin__add-guest-email { flex: 1 1 14rem; min-width: 10rem; }
 .party-admin__add-guest-status-sel { flex: 0 0 auto; }
 .party-admin__add-guest-status { font-size: 0.85rem; color: var(--text-secondary); }
+.party-admin__add-guest-invite {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.party-admin__add-guest-invite input { cursor: pointer; }
 
 /* Compact variant (form sits below the table): ~half the footprint. */
 .party-admin__add-guest--compact { max-width: 32rem; }
@@ -1586,18 +1581,6 @@ button.party-admin__stat:focus-visible {
 .party-admin__add-guest--compact .party-admin__add-guest-email { flex: 1 1 9rem; min-width: 7rem; }
 .party-admin__add-guest-title { font-size: 1rem; margin-bottom: 0.25rem; }
 .party-admin__add-guest-help  { font-size: 0.8rem; margin-bottom: var(--sp-2); }
-
-.party-admin__invite-actions {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: center;
-}
-
-.party-admin__invite-status {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  margin-left: var(--sp-2);
-}
 
 .party-admin__pending-list {
   list-style: none;
