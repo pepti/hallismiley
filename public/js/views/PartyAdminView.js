@@ -949,7 +949,7 @@ export class PartyAdminView {
     return `
       <div class="party-admin__logistics-group">
         <h3 class="party-admin__logistics-cat-title">
-          ${cat.icon} ${escHtml(cat.label)}
+          ${escHtml(cat.icon)} ${escHtml(cat.label)}
           <span class="party-admin__logistics-cat-count">${all.length}</span>
         </h3>
         <form class="party-admin__logistics-add" data-logistics-add="${escHtml(cat.key)}" novalidate>
@@ -2291,11 +2291,11 @@ export class PartyAdminView {
       const del = (g.addable && !g.isBuiltin) ? `
             <button type="button" class="party-admin__cost-del" data-cost-del="${escHtml(g.key)}"
                     title="${t('party.admin.costDelSection')}"
-                    aria-label="${t('party.admin.costDelSectionAria', { name: g.label })}">✕</button>` : '';
+                    aria-label="${escHtml(t('party.admin.costDelSectionAria', { name: g.label }))}">✕</button>` : '';
 
       return `
         <div class="party-admin__cost-group">
-          <h3>${g.icon} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
+          <h3>${escHtml(g.icon)} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
           ${g.items.length ? `<ol class="party-admin__cost-list">${rows}</ol>` : `<p class="party-empty">${t('party.admin.logisticsNoItems')}</p>`}
           ${missing > 0 ? `<p class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: missing })}</p>` : ''}
           ${addForm}
@@ -2309,7 +2309,7 @@ export class PartyAdminView {
         ${anyPriced ? `
         <div class="party-admin__stats party-admin__stats--compact">
           ${tile(this._fmtIsk(grand), t('party.admin.costGrandTotal'), 'party-admin__stat--gold')}
-          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${g.icon} ${escHtml(g.label)}`)).join('')}
+          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${escHtml(g.icon)} ${escHtml(g.label)}`)).join('')}
         </div>` : `<p class="party-empty">${t('party.admin.costEmpty')}</p>`}
         <div class="party-admin__cost-groups">${groupCards}</div>
         <form class="party-admin__cost-add-section" id="party-admin-cost-add-section" novalidate>
