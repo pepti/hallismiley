@@ -753,6 +753,7 @@
   "party.admin.addGuestInviteNeedsEmail": "Enter an email to send an invite.",
   "party.admin.addGuestAdded": "Added {name}",
   "party.admin.addGuestAddedInvited": "Added {name} and sent their invite",
+  "party.admin.addGuestInviteFailed": "Added {name}, but the invite email didn't send — they have no link yet",
   "party.admin.addGuestFailed": "Couldn't add guest",
   "party.admin.scrollToggle": "Scroll",
   "party.admin.scrollToggleHint": "Show the guest list in a fixed-height, scrollable box with a pinned header. Off: the full list shows and the page scrolls.",

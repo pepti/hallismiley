@@ -753,6 +753,7 @@
   "party.admin.addGuestInviteNeedsEmail": "Sláðu inn netfang til að senda boð.",
   "party.admin.addGuestAdded": "{name} bætt við",
   "party.admin.addGuestAddedInvited": "{name} bætt við og boð sent",
+  "party.admin.addGuestInviteFailed": "{name} bætt við, en boðið sendist ekki — viðkomandi hefur engan tengil enn",
   "party.admin.addGuestFailed": "Tókst ekki að bæta við gesti",
   "party.admin.scrollToggle": "Fletta",
   "party.admin.scrollToggleHint": "Sýna gestalistann í kassa með fastri hæð og skrunstiku, með haus sem helst kyrr. Óvirkt: allur listinn birtist og síðan skrunar.",

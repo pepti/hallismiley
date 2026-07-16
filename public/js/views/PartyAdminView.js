@@ -3479,13 +3479,21 @@ export class PartyAdminView {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || t('party.admin.addGuestFailed'));
         // Report what actually happened: the server only claims `invited` once
-        // the magic link is on its way.
-        showToast(
-          data.invited
-            ? t('party.admin.addGuestAddedInvited', { name })
-            : t('party.admin.addGuestAdded', { name }),
-          'success'
-        );
+        // the magic link is on its way. An invite that was asked for and didn't
+        // send is a warning — the guest is on the list either way, but nobody
+        // told them, and only this toast would say so.
+        if (invite && !data.invited) {
+          // 'error' for the accent colour — the add succeeded, but a silently
+          // unsent invite is the failure the admin has to act on.
+          showToast(t('party.admin.addGuestInviteFailed', { name }), 'error');
+        } else {
+          showToast(
+            data.invited
+              ? t('party.admin.addGuestAddedInvited', { name })
+              : t('party.admin.addGuestAdded', { name }),
+            'success'
+          );
+        }
         // Reload so the new guest appears in the attendance table with the
         // right status, and the pills/headcount update.
         await this._loadAndRender();
