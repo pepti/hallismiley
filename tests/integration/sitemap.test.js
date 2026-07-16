@@ -41,10 +41,23 @@ describe('GET /sitemap.xml', () => {
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/contact<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/halli<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/party<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/party<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/privacy<\/loc>/);
     expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/terms<\/loc>/);
+  });
+
+  // The party page is Icelandic-only (server/config/i18n.js forcedLocaleFor).
+  // /en/party 301s away, so advertising it here would feed crawlers a URL that
+  // contradicts both the redirect and the page's own canonical.
+  test('party is listed once, in Icelandic only', () => {
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/party<\/loc>/);
+    expect(res.text).not.toMatch(/<loc>https?:\/\/[^<]+\/en\/party<\/loc>/);
+  });
+
+  test('the party entry carries no hreflang alternates', () => {
+    // Isolate the <url> block whose <loc> is /is/party.
+    const block = res.text.match(/ {2}<url>\n {4}<loc>[^<]+\/is\/party<\/loc>[\s\S]*?<\/url>/);
+    expect(block).not.toBeNull();
+    expect(block[0]).not.toMatch(/hreflang/);
   });
 
   test('each entry has matching hreflang alternates', () => {

@@ -36,32 +36,52 @@ export function getLocaleFromQuery() {
   return (lc && SUPPORTED_LOCALES.includes(lc)) ? lc : null;
 }
 
-/** True for /party and /party/admin (with or without /en/ or /is/ prefix).
- *  Mirrors server/config/i18n.js — kept in lockstep when either changes. */
+/** The locale the party pages are locked to. Party content is Icelandic-only —
+ *  see server/config/i18n.js, which owns the authoritative copy of this rule. */
+const PARTY_FORCED_LOCALE = 'is';
+
+/** True for /party and every /party/* sub-route (with or without an /en/ or
+ *  /is/ prefix). Mirrors server/config/i18n.js isPartyPath — minus the
+ *  /api/v1/party branch, which the server resolves on its own. Kept in lockstep
+ *  when either changes. */
 function isPartyPath(pathname) {
   if (!pathname) return false;
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
   const stripped = '/' + parts.join('/');
-  return stripped === '/party' || stripped === '/party/admin';
+  return stripped === '/party' || stripped.startsWith('/party/');
 }
 
-/** Determine locale from ?locale= → explicit saved choice → party-route
- *  default → Accept-Language → default. The party-route step lets visitors
- *  land on /party in Icelandic even when their browser language is English.
+/** The locale `pathname` is locked to, or null when it may render in any
+ *  supported locale. Mirrors server/config/i18n.js forcedLocaleFor. Consumers:
+ *  getPreferredLocale + switchLocale + href below, the Router's locale guard,
+ *  and the NavBar's language switcher (hidden entirely on locked routes).
+ *
+ *  Defaults to the current URL so callers on the party page can just ask
+ *  `forcedLocaleFor()`. */
+export function forcedLocaleFor(pathname = window.location.pathname) {
+  return isPartyPath(pathname) ? PARTY_FORCED_LOCALE : null;
+}
+
+/** Determine locale from locale-lock → ?locale= → explicit saved choice →
+ *  Accept-Language → default.
+ *
+ *  The lock is checked FIRST — a guest whose saved choice is English still gets
+ *  Icelandic on the party page, matching what the server already decided for the
+ *  SSR <head> and the API payload.
  *
  *  Only an EXPLICIT choice (the language switcher — see persistLocaleChoice)
  *  is ever saved; auto-resolved fallbacks are not. The storage key is
  *  'locale_choice' — deliberately NOT the old 'preferred_locale' key, which
  *  loadLocale used to write for every resolved locale (including the English
- *  fallback), polluting stored state and defeating the party default. Old
- *  values are ignored, never migrated. */
+ *  fallback), polluting stored state. Old values are ignored, never migrated. */
 export function getPreferredLocale() {
+  const forced = forcedLocaleFor(window.location.pathname);
+  if (forced) return forced;
   const fromQuery = getLocaleFromQuery();
   if (fromQuery) return fromQuery;
   const saved = localStorage.getItem('locale_choice');
   if (saved && SUPPORTED_LOCALES.includes(saved)) return saved;
-  if (isPartyPath(window.location.pathname)) return 'is';
   for (const lang of (navigator.languages || [])) {
     const code = lang.split('-')[0].toLowerCase();
     if (SUPPORTED_LOCALES.includes(code)) return code;
@@ -163,8 +183,13 @@ export function t(key, params) {
  *  it), so it's also where the choice gets persisted. */
 export function switchLocale(newLocale) {
   if (!SUPPORTED_LOCALES.includes(newLocale)) return;
+  const path = window.location.pathname || '/';
+  // Locale-locked route (party): there is nothing to switch to, and persisting
+  // a choice made here would leak an English preference into the rest of the
+  // site from a page that never offered the option. The NavBar hides the
+  // switcher on these routes, so this is the belt-and-braces half.
+  if (forcedLocaleFor(path)) return;
   persistLocaleChoice(newLocale);
-  const path  = window.location.pathname || '/';
   const parts = path.split('/').filter(Boolean);
   if (SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
   const newPath = '/' + newLocale + (parts.length ? '/' + parts.join('/') : '/');
@@ -173,9 +198,13 @@ export function switchLocale(newLocale) {
 }
 
 /** Build a locale-prefixed clean URL for a route pattern. Returns e.g.
- *  '/en/projects' — consumable by <a href> and history.pushState alike. */
+ *  '/en/projects' — consumable by <a href> and history.pushState alike.
+ *  Locale-locked routes get their own locale rather than the active one, so
+ *  the NavBar's party link reads /is/party even while browsing in English —
+ *  the link lands on its final URL instead of bouncing through a redirect. */
 export function href(route) {
-  return '/' + (_locale || DEFAULT_LOCALE) + (route.startsWith('/') ? route : '/' + route);
+  const locale = forcedLocaleFor(route) || _locale || DEFAULT_LOCALE;
+  return '/' + locale + (route.startsWith('/') ? route : '/' + route);
 }
 
 /**

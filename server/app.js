@@ -485,20 +485,22 @@ app.use('/api/v1/shop',       shopRoutes);
 //      switcher choice only) → Accept-Language → DEFAULT_LOCALE. This gives
 //      crawlers + humans a clean 302 to the right language instead of
 //      ambiguous content.
-//   3. Serve index.html with <title>, <meta description>, og:*, canonical,
+//   3. Redirect locale-locked routes (the Icelandic-only party pages) to
+//      their one true locale, so /en/party never renders.
+//   4. Serve index.html with <title>, <meta description>, og:*, canonical,
 //      and hreflang tags filled in per-route. JS-free crawlers (Bing,
 //      Facebook, LinkedIn, X) get the right preview cards; humans get the
 //      SPA shell and client-side hydration kicks in.
 const ssrMetaMiddleware = require('./middleware/ssrMeta');
+const { SUPPORTED_LOCALES, forcedLocaleFor } = require('./config/i18n');
 
 function pickLocaleForRedirect(req) {
   const cookie = req.cookies?.locale_choice;
-  if (cookie && ['en', 'is'].includes(cookie)) return cookie;
+  if (cookie && SUPPORTED_LOCALES.includes(cookie)) return cookie;
   const accept = (req.headers['accept-language'] || '').toLowerCase();
   for (const part of accept.split(',')) {
     const code = part.split(';')[0].trim().split('-')[0];
-    if (code === 'is') return 'is';
-    if (code === 'en') return 'en';
+    if (SUPPORTED_LOCALES.includes(code)) return code;
   }
   return 'en';
 }
@@ -508,13 +510,30 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
     return res.status(404).json({ error: 'Not found', code: 404 });
   }
+
+  const parts  = req.path.split('/').filter(Boolean);
+  const search = req.url.slice(req.path.length); // '' | '?token=…'
+
+  // Locale-locked routes: the party pages are Icelandic-only. Any other locale
+  // prefix — and the unprefixed /party a shared link or the sitemap might carry
+  // — collapses onto /is/… before the SPA or SSR ever picks a language. Done
+  // here rather than in the SPA so crawlers and JS-less clients see the same
+  // single URL, and so magic-link tokens in ?query survive the hop.
+  const forced = forcedLocaleFor(req.path);
+  if (forced) {
+    const hasLocale = parts[0] && SUPPORTED_LOCALES.includes(parts[0]);
+    if (!hasLocale || parts[0] !== forced) {
+      const rest = (hasLocale ? parts.slice(1) : parts).join('/');
+      return res.redirect(301, `/${forced}/${rest}${search}`);
+    }
+  }
+
   // '/', '/en', '/en/', '/is', '/is/' → redirect to `/<locale>/`
-  const parts = req.path.split('/').filter(Boolean);
   if (parts.length === 0) {
     const locale = pickLocaleForRedirect(req);
     return res.redirect(302, `/${locale}/${req.url.slice(1)}`);
   }
-  if (parts.length === 1 && ['en', 'is'].includes(parts[0]) && !req.path.endsWith('/')) {
+  if (parts.length === 1 && SUPPORTED_LOCALES.includes(parts[0]) && !req.path.endsWith('/')) {
     return res.redirect(301, `/${parts[0]}/${req.url.slice(parts[0].length + 1)}`);
   }
   return ssrMetaMiddleware(req, res, next);

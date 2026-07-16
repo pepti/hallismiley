@@ -29,7 +29,7 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES, isPartyPath } = require('../config/i18n');
+const { DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 
 const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
@@ -127,18 +127,21 @@ function extractDetail(route) {
 function extractLocale(req) {
   const pathname = req.path || '/';
   const parts = pathname.split('/').filter(Boolean);
-  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) {
-    return { locale: parts[0], rest: '/' + parts.slice(1).join('/') || '/' };
-  }
-  // No URL locale prefix. For party paths, defer to the locale middleware's
-  // resolution (cookie → user-pref → party-default 'is' → Accept-Language)
-  // so an EN-cookie user doesn't see SSR render IS before the SPA flips to EN.
-  // Other unprefixed paths keep the historic DEFAULT_LOCALE fallback so SEO
-  // for /, /projects, etc. stays unchanged.
-  if (isPartyPath(pathname)) {
-    const resolved = req.locale && SUPPORTED_LOCALES.includes(req.locale) ? req.locale : null;
-    return { locale: resolved || DEFAULT_LOCALE, rest: pathname };
-  }
+  const hasLocalePrefix = parts[0] && SUPPORTED_LOCALES.includes(parts[0]);
+  const rest = hasLocalePrefix ? ('/' + parts.slice(1).join('/') || '/') : pathname;
+
+  // Locale-locked routes (Icelandic-only party pages) ignore the URL prefix
+  // entirely. app.js 301s /en/party → /is/party before we get here, so in
+  // practice the prefix already agrees; this is the belt-and-braces half that
+  // guarantees the SSR <head> can never advertise a language the page isn't
+  // written in, however the request arrived.
+  const forced = forcedLocaleFor(pathname);
+  if (forced) return { locale: forced, rest };
+
+  if (hasLocalePrefix) return { locale: parts[0], rest };
+
+  // Unprefixed non-party path — keep the historic DEFAULT_LOCALE fallback so
+  // SEO for /, /projects, etc. stays unchanged.
   return { locale: DEFAULT_LOCALE, rest: pathname };
 }
 
@@ -613,6 +616,14 @@ function replaceById(html, id, attrs, innerText) {
   return html;
 }
 
+// Delete a placeholder <link>/<meta> from the template by id. Used for the
+// hreflang alternates a locale-locked route has no counterpart for — leaving
+// the baked-in tag would advertise a language the page isn't served in.
+function removeById(html, id) {
+  const selfRe = new RegExp(`[ \\t]*<(?:link|meta)\\b[^>]*\\bid="${id}"[^>]*\\/?\\s*>\\n?`, 'i');
+  return html.replace(selfRe, '');
+}
+
 function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd }) {
   if (/<title\b/i.test(html)) {
     html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
@@ -667,10 +678,17 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+property="og:image"[^>]*>/i,
     `<meta property="og:image" content="${esc(ogImage)}" data-base-href="${OG_IMAGE_PATH}" />`
   );
-  html = replaceById(html, 'ssr-canonical',        { rel: 'canonical', href: canonical });
-  html = replaceById(html, 'ssr-hreflang-en',      { rel: 'alternate', hreflang: 'en',        href: hreflang.en });
-  html = replaceById(html, 'ssr-hreflang-is',      { rel: 'alternate', hreflang: 'is',        href: hreflang.is });
-  html = replaceById(html, 'ssr-hreflang-default', { rel: 'alternate', hreflang: 'x-default', href: hreflang['x-default'] });
+  html = replaceById(html, 'ssr-canonical', { rel: 'canonical', href: canonical });
+  // Emit an alternate per locale the caller supplied; drop the placeholder tag
+  // for any locale it omitted (locale-locked routes supply only their own).
+  for (const lc of SUPPORTED_LOCALES) {
+    html = hreflang[lc]
+      ? replaceById(html, `ssr-hreflang-${lc}`, { rel: 'alternate', hreflang: lc, href: hreflang[lc] })
+      : removeById(html, `ssr-hreflang-${lc}`);
+  }
+  html = hreflang['x-default']
+    ? replaceById(html, 'ssr-hreflang-default', { rel: 'alternate', hreflang: 'x-default', href: hreflang['x-default'] })
+    : removeById(html, 'ssr-hreflang-default');
   html = html.replace(/<html\b[^>]*\blang="[^"]*"/i, `<html lang="${esc(ogLocale.split('_')[0])}"`);
 
   // Inject per-route JSON-LD just before </head>. The baked Person schema
@@ -798,12 +816,27 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     }
   }
 
-  const canonical = `${APP_URL}${req.path}`;
-  const hreflang  = {
-    en:           `${APP_URL}/en${route === '/' ? '/' : route}`,
-    is:           `${APP_URL}/is${route === '/' ? '/' : route}`,
-    'x-default':  `${APP_URL}${route === '/' ? '/' : route}`,
-  };
+  const routePath = route === '/' ? '/' : route;
+
+  // Locale-locked routes (Icelandic-only party pages) publish exactly one URL:
+  // canonical points at it, x-default falls back to it, and the alternates for
+  // every other language are omitted entirely (rewriteHead drops the tags).
+  // Claiming an hreflang="en" alternate that 301s to Icelandic is a
+  // contradiction crawlers resolve by discarding the whole cluster.
+  const forcedLocale = forcedLocaleFor(req.path);
+  const canonical = forcedLocale
+    ? `${APP_URL}/${forcedLocale}${routePath}`
+    : `${APP_URL}${req.path}`;
+  const hreflang = forcedLocale
+    ? {
+      [forcedLocale]: `${APP_URL}/${forcedLocale}${routePath}`,
+      'x-default':    `${APP_URL}/${forcedLocale}${routePath}`,
+    }
+    : {
+      en:           `${APP_URL}/en${routePath}`,
+      is:           `${APP_URL}/is${routePath}`,
+      'x-default':  `${APP_URL}${routePath}`,
+    };
   const ogLocale = locale === 'is' ? 'is_IS' : 'en_IS';
 
   const jsonLdHtml = jsonLdScript(schemas);

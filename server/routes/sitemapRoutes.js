@@ -12,6 +12,7 @@
 
 const express = require('express');
 const { query } = require('../config/database');
+const { forcedLocaleFor } = require('../config/i18n');
 
 const APP_URL = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
 
@@ -57,11 +58,27 @@ function isoDate(d) {
 // Build a <url> entry with both locales linked via hreflang.
 // `localePath` is the per-locale suffix applied after /en or /is
 // (e.g. '/news/my-slug' — does NOT include the locale prefix).
-function urlEntry({ localePath, lastmod, priority = '0.5', changefreq = 'monthly', includeXDefault = false }) {
+//
+// `onlyLocale` marks a locale-locked route (the Icelandic-only party pages):
+// it emits a single <url> for that locale with no hreflang alternates at all.
+// The other-locale URL 301s away, so listing it here would hand crawlers a
+// sitemap entry that contradicts both the redirect and the page's canonical.
+function urlEntry({ localePath, lastmod, priority = '0.5', changefreq = 'monthly', includeXDefault = false, onlyLocale = null }) {
   // Home (empty path) renders as /en/ with trailing slash to match the
   // locale-prefix convention used everywhere else in the app; deep paths
   // (/projects, /news/slug, …) concatenate directly.
   const suffix = localePath === '' ? '/' : localePath;
+
+  if (onlyLocale) {
+    const loc = localePath === '' ? `${APP_URL}/${onlyLocale}/` : `${APP_URL}/${onlyLocale}${suffix}`;
+    const only = ['  <url>', `    <loc>${xmlEscape(loc)}</loc>`];
+    if (lastmod) only.push(`    <lastmod>${lastmod}</lastmod>`);
+    only.push(`    <changefreq>${changefreq}</changefreq>`);
+    only.push(`    <priority>${priority}</priority>`);
+    only.push('  </url>');
+    return only.join('\n');
+  }
+
   const en = localePath === '' ? `${APP_URL}/en/` : `${APP_URL}/en${suffix}`;
   const is = localePath === '' ? `${APP_URL}/is/` : `${APP_URL}/is${suffix}`;
   const lines = [
@@ -121,13 +138,15 @@ async function buildSitemap() {
 
   const urls = [];
 
-  // Static pages
+  // Static pages. Locale-locked routes are derived from config/i18n rather than
+  // flagged in the table above, so the lock has exactly one source of truth.
   for (const r of STATIC_ROUTES) {
     urls.push(urlEntry({
       localePath: r.path,
       priority: r.priority,
       changefreq: r.changefreq,
       includeXDefault: !!r.includeXDefault,
+      onlyLocale: forcedLocaleFor(r.path || '/'),
     }));
   }
 

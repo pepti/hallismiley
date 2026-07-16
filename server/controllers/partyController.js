@@ -5,13 +5,19 @@ const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
 const { t }        = require('../i18n');
-const { DEFAULT_LOCALE, PARTY_DEFAULT_LOCALE } = require('../config/i18n');
+const { DEFAULT_LOCALE, PARTY_FORCED_LOCALE } = require('../config/i18n');
 
 // The /party page is Icelandic-primary: admins edit the IS content and the EN
 // content auto-follows (the reverse of every other content type, which is
 // EN-primary). Saving IS translates IS → EN; saving EN leaves IS untouched.
-const PARTY_PRIMARY_LOCALE   = PARTY_DEFAULT_LOCALE; // 'is' — source of truth
-const PARTY_SECONDARY_LOCALE = DEFAULT_LOCALE;       // 'en' — auto-translated follower
+//
+// The party page is now served in Icelandic ONLY (see config/i18n.js
+// forcedLocaleFor), so nothing reads the EN column today. The IS → EN
+// auto-translate below is deliberately left running: it costs one translator
+// call per admin save and keeps the English copy warm, so re-enabling English
+// stays a one-line config change rather than a re-translation project.
+const PARTY_PRIMARY_LOCALE   = PARTY_FORCED_LOCALE; // 'is' — source of truth
+const PARTY_SECONDARY_LOCALE = DEFAULT_LOCALE;      // 'en' — auto-translated, not served
 const { isEnabled: translatorEnabled } = require('../services/translator');
 const {
   SITE_CONTENT_TRANSLATE_SKIP,
