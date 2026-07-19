@@ -9,6 +9,7 @@ import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import * as cart from '../services/cart.js';
+import { CustomerNotes } from '../components/CustomerNotes.js';
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -18,7 +19,7 @@ function fmtDate(iso) {
 }
 
 export class AdminOrderDetailView {
-  constructor(id) { this._id = id; this._el = null; this._order = null; this._items = []; }
+  constructor(id) { this._id = id; this._el = null; this._order = null; this._items = []; this._notes = null; }
 
   async render() {
     if (!isAuthenticated() || !isAdmin()) {
@@ -94,6 +95,11 @@ export class AdminOrderDetailView {
             ${o.user_email ? `<p class="ord-detail__muted">${t('adminOrders.ordersCount', { n: o.user_order_count })}</p>` : `<p class="ord-detail__muted">${t('adminOrders.guest')}</p>`}
           </section>
 
+          ${o.user_id ? `<section class="ord-detail__card">
+            <h2>${t('customerNotes.title')}</h2>
+            <div id="ord-notes-host"></div>
+          </section>` : ''}
+
           <section class="ord-detail__card">
             <h2>${t('adminOrders.payment')}</h2>
             <div class="ord-detail__actions">
@@ -121,6 +127,14 @@ export class AdminOrderDetailView {
       </div>
     `;
     this._bind();
+    // Staff notes about the customer (registered orders only). The component
+    // renders nothing if the viewer lacks the 'customers' view (403).
+    const notesHost = this._el.querySelector('#ord-notes-host');
+    if (notesHost) {
+      if (this._notes) this._notes.destroy();
+      this._notes = new CustomerNotes({ customerId: o.user_id, isAdminViewer: isAdmin() });
+      notesHost.appendChild(this._notes.mount());
+    }
   }
 
   _tagsHtml() {
@@ -167,5 +181,5 @@ export class AdminOrderDetailView {
     } catch (err) { showToast(err.message, 'error'); }
   }
 
-  destroy() {}
+  destroy() { if (this._notes) this._notes.destroy(); }
 }

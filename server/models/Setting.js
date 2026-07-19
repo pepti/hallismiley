@@ -28,7 +28,18 @@ const KEYS = {
   timezone:     'general.timezone',
   orderPrefix:  'general.order_prefix',
   orderSuffix:  'general.order_suffix',
+
+  // Welcome-invite email template (admin "Send invites" editor). One JSONB blob
+  // of per-locale OVERRIDES { en:{subject,heading,body}, is:{...} }; the default
+  // copy stays in i18n (email.invite.*), so a missing field falls back at render.
+  inviteEmail: 'invite_email',
 };
+
+// Welcome-invite editable fields + per-locale limits. body allows the rich-text
+// allowlist (sanitizeBody), subject/heading are tag-stripped to plain text.
+const INVITE_LOCALES = ['en', 'is'];
+const INVITE_FIELDS  = ['subject', 'heading', 'body'];
+const INVITE_LIMITS  = { subject: 200, heading: 200, body: 4000 };
 
 // Allowed values for the General-settings enums. TIMEZONES is a *curated* IANA
 // allowlist: real IANA ids so the stored value can drive Intl date formatting
@@ -70,6 +81,9 @@ const DEFAULTS = {
   [KEYS.timezone]:     'Atlantic/Reykjavik',
   [KEYS.orderPrefix]:  '#',
   [KEYS.orderSuffix]:  '',
+
+  // No invite-copy overrides by default — render falls back to the i18n strings.
+  [KEYS.inviteEmail]: {},
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -194,6 +208,52 @@ class Setting {
     await textField('order_suffix', KEYS.orderSuffix, { maxLen: 10 });
 
     return this.getGeneralSettings();
+  }
+
+  // ── Welcome-invite template overrides (admin "Send invites" editor) ─────────
+  // Returns ONLY the admin-saved overrides, per locale; any missing field falls
+  // back to the i18n default (email.invite.*) at render time. Coerced so a
+  // malformed DB row can't break the send/preview path.
+  static async getInviteEmail() {
+    const raw = await this.get(KEYS.inviteEmail);
+    const out = {};
+    for (const loc of INVITE_LOCALES) {
+      const src = (raw && typeof raw === 'object' && raw[loc] && typeof raw[loc] === 'object') ? raw[loc] : {};
+      const o = {};
+      for (const f of INVITE_FIELDS) {
+        if (typeof src[f] === 'string' && src[f].trim() !== '') o[f] = src[f];
+      }
+      out[loc] = o;
+    }
+    return out; // { en: { subject?, heading?, body? }, is: { ... } }
+  }
+
+  // Partial, per-locale update of the invite overrides. Validates types/lengths
+  // and throws Error(message) on bad input (controller → 400). An empty string
+  // CLEARS that field (falls back to the i18n default). Merges onto existing so
+  // editing one locale leaves the other intact.
+  static async updateInviteEmail(patch = {}) {
+    if (patch == null || typeof patch !== 'object') throw new Error('Invalid invite template payload');
+    const current = await this.get(KEYS.inviteEmail);
+    const merged  = (current && typeof current === 'object') ? { ...current } : {};
+    for (const loc of INVITE_LOCALES) {
+      if (!(loc in patch)) continue;
+      const incoming = patch[loc];
+      if (incoming == null || typeof incoming !== 'object') throw new Error(`${loc} must be an object`);
+      const next = { ...(merged[loc] && typeof merged[loc] === 'object' ? merged[loc] : {}) };
+      for (const f of INVITE_FIELDS) {
+        if (!(f in incoming)) continue;
+        const val = incoming[f];
+        if (typeof val !== 'string') throw new Error(`${loc}.${f} must be text`);
+        if (val.length > INVITE_LIMITS[f]) throw new Error(`${loc}.${f} is too long (max ${INVITE_LIMITS[f]} characters)`);
+        const trimmed = val.trim();
+        if (trimmed === '') delete next[f]; // clear → fall back to default
+        else next[f] = trimmed;
+      }
+      merged[loc] = next;
+    }
+    await this.set(KEYS.inviteEmail, merged);
+    return this.getInviteEmail();
   }
 }
 

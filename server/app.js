@@ -29,6 +29,7 @@ const adminNavRoutes = require('./routes/adminNavRoutes');
 const adminRolesRoutes = require('./routes/adminRolesRoutes');
 const adminBinsRoutes = require('./routes/adminBinsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
+const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -470,6 +471,7 @@ app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1
 app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

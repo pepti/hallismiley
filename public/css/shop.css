@@ -823,17 +823,22 @@
   display: flex; gap: 12px; flex-wrap: wrap;
 }
 .shop-checkout__radios label {
-  flex: 1 1 200px;
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px;
+  flex: 0 1 auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
   border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   margin: 0;
+  white-space: nowrap; /* keep "Shipping · Free" on one line — compact chip */
 }
+/* Keep the radio at its intrinsic size — the global form styling otherwise
+   stretches inputs, which in this flex row squeezes the label text. */
+.shop-checkout__radios input { flex: none; width: auto; min-width: 0; margin: 0; }
 .shop-checkout__radios label:has(input:checked) { border-color: var(--gold); }
 .shop-checkout__rate {
-  display: block; color: var(--gold); font-style: normal;
-  font-size: 12px; margin-top: 4px;
+  display: inline; color: var(--gold); font-style: normal;
+  font-size: 12px; margin: 0 0 0 4px;
 }
 .shop-checkout__submit {
   width: 100%;

@@ -1969,6 +1969,49 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
+    // Staff-authored, categorized note LOG about a customer (order preferences,
+    // how they order, special needs, general) — shown on the admin Customers list
+    // and on a customer's order detail. Per-note visibility: 'admin' = admins
+    // only, 'staff' = anyone holding the grantable 'customers' view. author_name
+    // is a snapshot so a note survives its author being deleted. Ported from
+    // icelandicstore (89285ef) with the polymorphic company owner collapsed to
+    // user-only (B2C). Human-reference duplicate in
+    // server/migrations/064_customer_notes.sql.
+    name: '064_customer_notes',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS customer_notes (
+        id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id     TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        category    TEXT        NOT NULL DEFAULT 'general'
+                                CHECK (category IN ('order_prefs','ordering','special_needs','general')),
+        body        TEXT        NOT NULL,
+        visibility  TEXT        NOT NULL DEFAULT 'admin' CHECK (visibility IN ('admin','staff')),
+        author_id   TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        author_name TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_notes_user   ON customer_notes (user_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_notes_author ON customer_notes (author_id)`,
+      `DROP TRIGGER IF EXISTS trg_customer_notes_updated_at ON customer_notes`,
+      `CREATE TRIGGER trg_customer_notes_updated_at
+         BEFORE UPDATE ON customer_notes
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
+  {
+    // Bulk welcome-invite flow: invited_at marks a customer as already sent the
+    // set-password invite so the admin "Send invites" action is idempotent —
+    // candidates are approved, passwordless, not-yet-invited customers. Stamped
+    // only after a successful send so a mail failure stays retryable. Ported
+    // from icelandicstore (66d084c). Human-reference duplicate in
+    // server/migrations/065_user_invited_at.sql.
+    name: '065_user_invited_at',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ`,
+    ],
+  },
+  {
     // Admin override for a guest's RSVP bucket. When set it wins over the
     // status derived from the guest's own `attend_when` answer (see
     // _deriveRsvpStatus), letting the host set/correct an RSVP straight from

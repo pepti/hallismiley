@@ -1,8 +1,21 @@
 // Client-side shopping cart. State lives in localStorage so guests can shop
-// without any backend state and the nav badge updates across tabs/views.
+// without any backend state and the nav badge updates across tabs/views. The
+// basket is NAMESPACED PER ACCOUNT (`…::<userId>`, or `…::guest`) so one account
+// never inherits another's basket on a shared browser; currency stays a global
+// preference.
+import { getUser } from './auth.js';
 
-const ITEMS_KEY    = 'shop.cart.items';
-const CURRENCY_KEY = 'shop.cart.currency';
+const ITEMS_NS     = 'shop.cart.items';    // per-account → `${ITEMS_NS}::${owner}`
+const CURRENCY_KEY = 'shop.cart.currency'; // global preference, not account-specific
+
+// One-time migration: drop the pre-namespacing global key so a basket left by a
+// previous session/account can't leak into — or be adopted by — the next login.
+try {
+  localStorage.removeItem(ITEMS_NS);
+} catch { /* ignore */ }
+
+const _ownerId  = () => { const u = getUser(); return u && u.id != null ? String(u.id) : 'guest'; };
+const _itemsKey = () => `${ITEMS_NS}::${_ownerId()}`;
 
 const _listeners = new Set();
 
@@ -16,7 +29,7 @@ function _emit() {
 
 function _load() {
   try {
-    const raw = localStorage.getItem(ITEMS_KEY);
+    const raw = localStorage.getItem(_itemsKey());
     const items = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(items)) return [];
     return items;
@@ -27,7 +40,7 @@ function _load() {
 
 function _save(items) {
   try {
-    localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+    localStorage.setItem(_itemsKey(), JSON.stringify(items));
   } catch (err) {
     console.warn('[cart] failed to save', err);
   }
@@ -126,7 +139,7 @@ export function remove(lineKey) {
 export { lineKeyOf };
 
 export function clear() {
-  localStorage.removeItem(ITEMS_KEY);
+  localStorage.removeItem(_itemsKey());
   _emit();
 }
 
@@ -135,10 +148,16 @@ export function subscribe(fn) {
   return () => _listeners.delete(fn);
 }
 
-// Listen to storage events from other tabs so the badge stays in sync.
+// Listen to storage events from other tabs so the badge stays in sync. Item keys
+// are per-account (`shop.cart.items::<owner>`), so match by namespace prefix.
 window.addEventListener('storage', (e) => {
-  if (e.key === ITEMS_KEY || e.key === CURRENCY_KEY) _emit();
+  if (!e.key) return;
+  if (e.key === CURRENCY_KEY || e.key.startsWith(ITEMS_NS)) _emit();
 });
+
+// The basket is keyed per account — when the signed-in user changes, re-emit so
+// the cart badge + cart view re-read the now-current account's basket.
+window.addEventListener('authchange', () => _emit());
 
 export function formatMoney(amount, currency = getCurrency()) {
   if (currency === 'ISK') {

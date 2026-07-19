@@ -4,9 +4,23 @@
 // like OAuth users) with role hardwired to 'user'; a password-reset token powers
 // the "set your password" invite, reusing the existing reset flow.
 const crypto = require('crypto');
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery, pool } = require('../config/database');
+const { lucia } = require('../auth/lucia');
+const UserRole = require('./UserRole');
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days to accept an invite
+
+// A party guest is a role='user' account that came through the party flow — it
+// shares the users table with shop customers and shows up in this admin list,
+// but its RSVP/guestbook/photo rows cascade on delete and are critical. These
+// canonical party-flow markers (matching migration 062) identify such accounts
+// so the shop Customers tools never delete them. `p` is the table alias ('' for
+// unqualified). isPartyGuest → boolean expression; notPartyGuest → its negation.
+const isPartyGuest = (p = '') => {
+  const c = p ? `${p}.` : '';
+  return `(${c}party_access = TRUE OR ${c}requested_at IS NOT NULL OR ${c}magic_login_token_hash IS NOT NULL)`;
+};
+const notPartyGuest = (p = '') => `NOT ${isPartyGuest(p)}`;
 
 function makeToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -47,6 +61,7 @@ const Customer = {
     const { rows } = await dbQuery(
       `SELECT u.id, u.email, u.username, u.display_name, u.phone, u.role,
               u.email_verified, u.disabled, u.created_at,
+              ${isPartyGuest('u')} AS is_party_guest,
               COALESCE(o.cnt, 0)::int    AS order_count,
               COALESCE(o.spent, 0)::bigint AS total_spent
          FROM users u
@@ -133,6 +148,71 @@ const Customer = {
       }
     }
     return created;
+  },
+
+  // Hard-delete customers from the admin list, in one transaction. Hard-guarded
+  // to role='user' AND no extra user_roles grants, so the customers page can
+  // NEVER delete a staff/admin account (a forged/staff/unknown id simply isn't
+  // in the RETURNING set — that's also how skipped ids are reported, by absence).
+  // orders.user_id is ON DELETE SET NULL, so past orders are KEPT — but unlike
+  // real guest orders they'd have no contact identity, so we snapshot the user's
+  // email/name into guest_email/guest_name first. Sessions for every deleted user
+  // are invalidated after commit (user_sessions rows already CASCADE). excludeId
+  // defensively drops the acting admin from the set. Returns { deletedAccounts }.
+  async deleteCustomers({ userIds = [], excludeId = null } = {}) {
+    const exclude = excludeId == null ? '' : String(excludeId);
+    const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map(String).filter(Boolean))]
+      .filter(id => id !== exclude);
+    if (!ids.length) return { deletedAccounts: [] };
+
+    const client = await pool.connect();
+    let deletedAccounts = [];
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE orders o
+            SET guest_email = COALESCE(o.guest_email, u.email),
+                guest_name  = COALESCE(o.guest_name, u.display_name)
+           FROM users u
+          WHERE o.user_id = u.id AND u.id = ANY($1) AND u.role = 'user'
+            AND ${notPartyGuest('u')}`,
+        [ids]
+      );
+      // Guards, all AND-ed so a match must clear every one:
+      //  • role='user' — never a staff/admin account.
+      //  • no EXTRA user_roles grant — a DB trigger mirrors every user's PRIMARY
+      //    role into user_roles, so plain customers hold exactly the 'user'
+      //    membership; any role_name <> 'user' marks a staff-ish account to skip.
+      //  • NOT a party guest — party guests are also role='user' and appear in
+      //    this list, but their data (RSVP/guestbook/photos) is critical and
+      //    cascades on user delete, so the shop Customers bulk tool must NEVER
+      //    touch them (manage them from the party admin instead).
+      const { rows } = await client.query(
+        `DELETE FROM users
+          WHERE id = ANY($1) AND role = 'user'
+            AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                             WHERE ur.user_id = users.id AND ur.role_name <> 'user')
+            AND ${notPartyGuest('users')}
+          RETURNING id`,
+        [ids]
+      );
+      deletedAccounts = rows.map(r => r.id);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // CASCADE already removed user_sessions; invalidate is a safe no-op kept for
+    // consistency with adminController.deleteUser, and the role cache must drop
+    // the id so a recreated account can't read a stale entry.
+    for (const id of deletedAccounts) {
+      await lucia.invalidateUserSessions(id);
+      UserRole.invalidateUser(id);
+    }
+    return { deletedAccounts };
   },
 };
 
