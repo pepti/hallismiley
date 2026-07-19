@@ -9,6 +9,11 @@ const { t } = require('../i18n');
 const CATEGORIES   = ['order_prefs', 'ordering', 'special_needs', 'general'];
 const VISIBILITIES = ['admin', 'staff'];
 const MAX_BODY = 5000;
+// Note bodies are PLAIN TEXT. The shared sanitizeBody middleware happens to treat
+// any field named `body` as rich text (RICH_TEXT_FIELDS), so a note arrives
+// allowlist-sanitized rather than fully tag-stripped — but CustomerNotes.js renders
+// it with escHtml, so any surviving markup displays as literal text. Safe either
+// way; don't read that allowlist as licence to start rendering note HTML.
 
 const rolesOf = (req) => (Array.isArray(req.user.roles) ? req.user.roles : [req.user.role]);
 const isAdminViewer = (req) => rolesOf(req).includes('admin');

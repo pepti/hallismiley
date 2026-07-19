@@ -906,6 +906,7 @@
   "adminCustomers.sendInvites": "Send invites",
   "adminCustomers.sendInvitesSent": "Sent {n} invite(s)",
   "adminCustomers.sendInvitesNone": "No invites sent",
+  "adminCustomers.sendInvitesRemaining": "{n} still waiting — send again to continue",
   "adminCustomers.invitePanelTitle": "Send welcome invites",
   "adminCustomers.inviteRecipientsHead": "Recipients ({n})",
   "adminCustomers.inviteNoRecipients": "No customers are waiting for an invite — everyone already has a password or has been invited.",

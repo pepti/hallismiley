@@ -249,8 +249,35 @@ describe('bulk welcome invites', () => {
     expect(res.body.candidates.map(c => c.id)).toEqual([candidateId]);
     expect(res.body.count).toBe(1);
     expect(res.body.emailConfigured).toBe(false); // no Resend in tests
+    expect(res.body.maxPerRun).toBeGreaterThan(0); // how many one Send covers
     expect(res.body.template.en.subject).toBeTruthy();
     expect(res.body.defaults.is.subject).toBeTruthy();
+  });
+
+  test('a run reports what is still waiting (never silent truncation)', async () => {
+    await createCandidate('cap1@example.com');
+    await createCandidate('cap2@example.com');
+
+    const res = await request(app).post(sendUrl).set('Cookie', adminCookie).send({});
+    expect(res.status).toBe(200);
+    // Both fit under the real cap, so everything drains and nothing is left.
+    expect(res.body.sent).toBe(2);
+    expect(res.body.remaining).toBe(0);
+
+    // A second run has no candidates left — remaining stays 0, nothing re-sent.
+    const again = await request(app).post(sendUrl).set('Cookie', adminCookie).send({});
+    expect(again.body.sent).toBe(0);
+    expect(again.body.remaining).toBe(0);
+  });
+
+  test('remaining counts candidates left after a partial (include-list) run', async () => {
+    const a = await createCandidate('part1@example.com');
+    await createCandidate('part2@example.com');
+    // Admin removed the second recipient in the confirm panel — only `a` is sent.
+    const res = await request(app).post(sendUrl).set('Cookie', adminCookie).send({ recipientIds: [a] });
+    expect(res.body.sent).toBe(1);
+    // The untouched candidate is still waiting and must be reported.
+    expect(res.body.remaining).toBe(1);
   });
 
   test('send stamps invited_at + reset token, returns devLinks, and is idempotent', async () => {

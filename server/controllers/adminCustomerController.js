@@ -19,10 +19,18 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INVITE_LOCALES = ['en', 'is'];
 const inviteLocale = (loc) => (INVITE_LOCALES.includes(loc) ? loc : 'en');
-// One send run is bounded, and consecutive Resend calls are spaced out to stay
-// under its ~2 req/s rate limit.
-const INVITE_MAX_PER_RUN = 500;
+// Consecutive Resend calls are spaced out to stay under its ~2 req/s rate limit.
 const INVITE_SEND_GAP_MS = 600;
+// One send run is bounded so the request finishes well inside Azure App Service's
+// ~230s idle timeout — past that the gateway 502s while sends keep running and the
+// admin loses the result. Budget ≈ (gap + Resend latency) per recipient, so 100 is
+// ~2 min worst case. Runs are idempotent (invited_at is stamped only on success),
+// so a bigger base is drained by simply sending again; the response reports how
+// many candidates are still waiting so this is never a silent truncation.
+const INVITE_MAX_PER_RUN = 100;
+// The preview lists at most this many recipients; `count` always reports the true
+// total so the admin sees the real size of the base.
+const INVITE_PREVIEW_LIMIT = 500;
 
 // Candidates = approved, passwordless, not-yet-invited, enabled customers.
 // Party guests are customers too (role='user') but sign in via magic link and
@@ -42,7 +50,12 @@ const INVITE_CANDIDATES_SQL = `
   SELECT id, email, display_name, preferred_locale
   FROM users
   WHERE ${INVITE_CANDIDATES_WHERE}
-  ORDER BY created_at`;
+  ORDER BY created_at
+  LIMIT $1`;
+
+// True candidate total, independent of the preview/send caps above.
+const INVITE_CANDIDATES_COUNT_SQL = `
+  SELECT COUNT(*)::int AS total FROM users WHERE ${INVITE_CANDIDATES_WHERE}`;
 
 // Same candidates, narrowed to an explicit include-list (the admin can remove
 // individual recipients with the per-row ✕). Intersecting with the live
@@ -212,8 +225,10 @@ const adminCustomerController = {
       if (hasList) {
         rows = idList.length ? (await dbQuery(INVITE_CANDIDATES_BY_IDS_SQL, [idList])).rows : [];
       } else {
-        rows = (await dbQuery(INVITE_CANDIDATES_SQL)).rows;
+        rows = (await dbQuery(INVITE_CANDIDATES_SQL, [INVITE_MAX_PER_RUN])).rows;
       }
+      // Bounded run (see INVITE_MAX_PER_RUN) — the explicit include-list path is
+      // capped here, the candidate query caps in SQL.
       rows = rows.slice(0, INVITE_MAX_PER_RUN);
 
       const overrides = await Setting.getInviteEmail(); // saved per-locale copy (the editable "default")
@@ -225,6 +240,9 @@ const adminCustomerController = {
         const expiry = new Date(Date.now() + INVITE_TTL_MS);
         // Set token + expiry first; stamp invited_at only after a successful send
         // so a Resend error doesn't permanently lock the user out of future retries.
+        // Note this overwrites any reset token already in flight for the user, even
+        // if the send then fails. Harmless in practice — candidates are passwordless
+        // accounts that have never been invited, so there is no live reset to lose.
         await dbQuery(
           `UPDATE users SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3`,
           [token, expiry, user.id]
@@ -249,7 +267,11 @@ const adminCustomerController = {
           logger.warn({ userId: user.id, err: emailErr }, 'sendWelcomeInviteEmail failed');
         }
       }
-      const payload = { sent, failed };
+      // Candidates still waiting after this run, counted fresh: successful sends
+      // stamped invited_at and dropped out, so this covers both what the cap held
+      // back and anything that failed (those stay candidates and are retryable).
+      const { rows: [{ total: remaining }] } = await dbQuery(INVITE_CANDIDATES_COUNT_SQL);
+      const payload = { sent, failed, remaining };
       if (devLinks.length) payload.devLinks = devLinks;
       return res.json(payload);
     } catch (err) { next(err); }
@@ -262,11 +284,15 @@ const adminCustomerController = {
   // pure i18n defaults (for the editor's "reset to default").
   async getInvitePreview(req, res, next) {
     try {
-      const { rows: candidates } = await dbQuery(INVITE_CANDIDATES_SQL);
+      const { rows: candidates } = await dbQuery(INVITE_CANDIDATES_SQL, [INVITE_PREVIEW_LIMIT]);
+      const { rows: [{ total }] } = await dbQuery(INVITE_CANDIDATES_COUNT_SQL);
       const overrides = await Setting.getInviteEmail();
       const { template, defaults } = effectiveInviteTemplate(overrides);
       return res.json({
-        count: candidates.length,
+        // `count` is the true base size; `candidates` is capped for display, and
+        // `maxPerRun` tells the UI how many one Send actually covers.
+        count: total,
+        maxPerRun: INVITE_MAX_PER_RUN,
         candidates: candidates.map(c => ({
           id:               c.id,
           email:            c.email,

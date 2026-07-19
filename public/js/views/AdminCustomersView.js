@@ -418,6 +418,11 @@ export class AdminCustomersView {
         showToast(t('adminCustomers.sendInvitesNone'), 'info');
       } else {
         showToast(t('adminCustomers.sendInvitesSent', { n: result.sent }), 'success');
+        // One run is capped server-side; if candidates are still waiting say so
+        // explicitly, so a bounded run never reads as "everyone was invited".
+        if (result.remaining > 0) {
+          showToast(t('adminCustomers.sendInvitesRemaining', { n: result.remaining }), 'info');
+        }
         if (result.devLinks?.length) {
           // Dev convenience (Resend not configured) — surface the links somewhere
           // copyable. console is deliberate here: dev-only, never in production.

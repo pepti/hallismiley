@@ -906,6 +906,7 @@
   "adminCustomers.sendInvites": "Senda boð",
   "adminCustomers.sendInvitesSent": "{n} boð send",
   "adminCustomers.sendInvitesNone": "Engin boð send",
+  "adminCustomers.sendInvitesRemaining": "{n} bíða enn — sendu aftur til að halda áfram",
   "adminCustomers.invitePanelTitle": "Senda velkomin boð",
   "adminCustomers.inviteRecipientsHead": "Viðtakendur ({n})",
   "adminCustomers.inviteNoRecipients": "Engir viðskiptavinir bíða eftir boði — allir hafa þegar lykilorð eða hafa fengið boð.",
