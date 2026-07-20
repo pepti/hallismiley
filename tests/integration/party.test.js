@@ -1814,6 +1814,24 @@ describe('Logistics category CRUD (068)', () => {
     expect(res.body).toMatchObject({ key: 'salur', label: 'Salur og borð', icon: '🪑' });
   });
 
+  // A renamed built-in stores a literal label that overrides its i18n name;
+  // clearing both hands the name (and icon fallback) back to the client.
+  test('PATCH label:null hands a renamed built-in back to i18n', async () => {
+    await request(app)
+      .patch('/api/v1/party/logistics/categories/food')
+      .set('Cookie', adminCookie)
+      .send({ label: 'Veitingar', icon: '🍕' })
+      .expect(200);
+    const res = await request(app)
+      .patch('/api/v1/party/logistics/categories/food')
+      .set('Cookie', adminCookie)
+      .send({ label: null, icon: null });
+    expect(res.status).toBe(200);
+    expect(res.body.label).toBe(null); // client resolves the i18n name again
+    expect(res.body.icon).toBe(null);
+    expect(res.body.is_builtin).toBe(true);
+  });
+
   test('PATCH returns 404 for an unknown section and 400 with no fields', async () => {
     expect((await request(app)
       .patch('/api/v1/party/logistics/categories/nope')

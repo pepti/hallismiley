@@ -2674,3 +2674,58 @@ button.party-admin__stat:focus-visible {
 }
 .party-admin__cost-add-section .party-admin__cost-section-icon  { flex: 0 0 4.5rem; text-align: center; }
 .party-admin__cost-add-section .party-admin__cost-section-label { flex: 1 1 220px; min-width: 0; }
+
+/* Inline-editable cost lines — inputs sit flush in the li (transparent border)
+   until hovered/focused, mirroring the logistics-table cell idiom. */
+.party-admin__cost-item-main { display: flex; align-items: baseline; gap: 0.35rem; flex: 1 1 auto; min-width: 0; }
+.party-admin__cost-item-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.05rem 0.25rem;
+  min-width: 0;
+}
+.party-admin__cost-item-input:hover { border-color: rgba(200, 170, 110, 0.25); }
+.party-admin__cost-item-input:focus {
+  border-color: var(--gold);
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+.party-admin__cost-item-name   { flex: 1 1 auto; }
+.party-admin__cost-item-amount { flex: 0 0 6rem; text-align: right; color: var(--gold); }
+.party-admin__cost-item-total  { white-space: nowrap; color: var(--gold); }
+
+/* Rename affordance — mirrors .party-admin__cost-del but hovers gold, not red. */
+.party-admin__cost-rename {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.party-admin__cost-rename:hover,
+.party-admin__cost-rename:focus-visible { color: var(--gold); }
+.party-admin__cost-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  flex: 1 1 100%;
+  font-weight: normal;
+}
+/* The h3's descendant span rules (gold, margin-left:auto, nowrap) must not
+   restyle the rename form's status span. */
+.party-admin__cost-rename-form span {
+  margin-left: 0;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+.party-admin__cost-rename-form .party-admin__cost-section-icon  { flex: 0 0 3.5rem; text-align: center; }
+.party-admin__cost-rename-form .party-admin__cost-rename-label  { flex: 1 1 120px; min-width: 0; }
