@@ -930,17 +930,21 @@ export class PartyAdminView {
       drinks: 'party.admin.logisticsCatDrinks',
       other:  'party.admin.logisticsCatOther',
     };
+    // Per-builtin icon fallback, mirroring the label rule: a NULL icon means
+    // "default", and food's default is 🍽️, not the generic 📦 — otherwise
+    // clearing the icon in the rename form would "restore" the wrong one.
+    const BUILTIN_ICON = { food: '🍽️', drinks: '🥤', other: '📦' };
     const rows = (this._logisticsCats || []).length
       ? this._logisticsCats
       : [
-        { key: 'food',   label: null, icon: '🍽️', is_builtin: true },
-        { key: 'drinks', label: null, icon: '🥤', is_builtin: true },
-        { key: 'other',  label: null, icon: '📦', is_builtin: true },
+        { key: 'food',   label: null, icon: null, is_builtin: true },
+        { key: 'drinks', label: null, icon: null, is_builtin: true },
+        { key: 'other',  label: null, icon: null, is_builtin: true },
       ];
     return rows.map(c => ({
       key: c.key,
       label: c.label || (BUILTIN_LABEL[c.key] ? t(BUILTIN_LABEL[c.key]) : c.key),
-      icon: c.icon || '📦',
+      icon: c.icon || BUILTIN_ICON[c.key] || '📦',
       isBuiltin: !!c.is_builtin,
     }));
   }
@@ -2284,6 +2288,12 @@ export class PartyAdminView {
       items: (this._logistics || [])
         .filter(i => (i.category || 'other') === c.key)
         .map(i => ({
+          // id + quantity + unit_price ride along so the card can edit and
+          // delete lines in place — the card is a second editing surface over
+          // the same logistics rows, not a separate store.
+          id: i.id,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
           name: i.name || '',
           detail: this._costDetail(i),
           cost: this._lineCost(i),
@@ -2330,11 +2340,41 @@ export class PartyAdminView {
         if (b.cost == null) return -1;
         return b.cost - a.cost;
       });
-      const rows = sorted.map(x => `
+      // Todos lines stay read-only (a todo is a task, edited in its own
+      // section); logistics-backed lines are editable in place. The amount is
+      // only editable on lump sums — qty 1 or unpriced — because on a
+      // "100 × ISK 45" row an amount edit would be ambiguous (change qty?
+      // price?); those keep the computed total and are edited in the 🛒 table.
+      const rows = sorted.map(x => {
+        if (!g.addable) return `
             <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
               <span>${escHtml(x.name)}${x.detail ? ` <small>${escHtml(x.detail)}</small>` : ''}</span>
               <span>${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>
-            </li>`).join('');
+            </li>`;
+        const id = escHtml(String(x.id));
+        const amountEditable = x.quantity == null || Number(x.quantity) === 1;
+        const amount = amountEditable ? `
+              <input type="number" min="0" step="1" class="party-admin__cost-item-input party-admin__cost-item-amount"
+                     data-cost-item-id="${id}" data-cost-field="amount"
+                     value="${x.unit_price == null ? '' : escHtml(String(x.unit_price))}" placeholder="—"
+                     aria-label="${t('party.admin.costItemAmount')}" />`
+          : `<span class="party-admin__cost-item-total">${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>`;
+        return `
+            <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
+              <span class="party-admin__cost-item-main">
+                <input type="text" class="party-admin__cost-item-input party-admin__cost-item-name"
+                       data-cost-item-id="${id}" data-cost-field="name"
+                       value="${escHtml(x.name)}" maxlength="200" required
+                       aria-label="${t('party.admin.costItemName')}" />
+                ${x.detail ? `<small>${escHtml(x.detail)}</small>` : ''}
+              </span>
+              ${amount}
+              <button type="button" class="party-admin__cost-del" data-cost-item-del="${id}"
+                      data-cost-item-name="${escHtml(x.name)}"
+                      title="${t('party.admin.costItemDel')}"
+                      aria-label="${escHtml(t('party.admin.costItemDelAria', { name: x.name }))}">✕</button>
+            </li>`;
+      }).join('');
       // A manual line writes a real logistics item, so it shows up in the 🛒
       // tables too — one cost lives in exactly one place.
       const addForm = g.addable ? `
@@ -2357,9 +2397,17 @@ export class PartyAdminView {
                     title="${t('party.admin.costDelSection')}"
                     aria-label="${escHtml(t('party.admin.costDelSectionAria', { name: g.label }))}">✕</button>` : '';
 
+      // Rename works on built-ins too: a saved label overrides the i18n name
+      // (the planner asked for that exact text), and clearing it hands the
+      // name back to i18n. See _openCostRename.
+      const rename = g.addable ? `
+            <button type="button" class="party-admin__cost-rename" data-cost-rename="${escHtml(g.key)}"
+                    title="${t('party.admin.costRenameSection')}"
+                    aria-label="${escHtml(t('party.admin.costRenameSectionAria', { name: g.label }))}">✎</button>` : '';
+
       return `
         <div class="party-admin__cost-group">
-          <h3>${escHtml(g.icon)} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
+          <h3 data-cost-head="${escHtml(g.key)}">${escHtml(g.icon)} ${escHtml(g.label)}${rename} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
           ${g.items.length ? `<ol class="party-admin__cost-list">${rows}</ol>` : `<p class="party-empty">${t('party.admin.logisticsNoItems')}</p>`}
           ${missing > 0 ? `<p class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: missing })}</p>` : ''}
           ${addForm}
@@ -2392,13 +2440,44 @@ export class PartyAdminView {
 
   // Replace-in-place. The section carries its own forms now, so the fresh node
   // has to be re-bound — a plain replaceWith would leave dead buttons behind.
+  //
+  // Focus survives the rebuild: cost-line inputs are identified by a stable
+  // (item id, field) pair, so if the admin is mid-edit when a save — theirs or
+  // a logistics-table one — triggers this, the same input is refocused in the
+  // fresh DOM. The row may still jump visually (cards sort cost-descending);
+  // the id-based lookup follows it. An open rename form is NOT preserved — it
+  // is ephemeral by design and a concurrent rebuild simply discards it.
   _rerenderCosts() {
     const old = this._el.querySelector('#party-admin-costs');
     if (!old) return;
+    const focus = this._captureCostFocus();
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderCostSection();
     old.replaceWith(tmp.firstElementChild);
     this._bindCosts();
+    this._restoreCostFocus(focus);
+  }
+
+  // Captured at rebuild time (not save-start): a blur-triggered save can
+  // resolve while the admin is already typing in the NEXT input, and it's
+  // that input — the currently focused one — that must survive.
+  _captureCostFocus() {
+    const el = document.activeElement;
+    if (!el || !this._el.contains(el) || !el.dataset?.costItemId) return null;
+    return {
+      id: el.dataset.costItemId, field: el.dataset.costField,
+      start: el.selectionStart, end: el.selectionEnd,
+    };
+  }
+
+  _restoreCostFocus(f) {
+    if (!f) return;
+    const el = this._el.querySelector(
+      `input[data-cost-item-id="${CSS.escape(f.id)}"][data-cost-field="${CSS.escape(f.field)}"]`);
+    if (!el) return; // line was deleted or became read-only — nothing to restore
+    el.focus();
+    // Number inputs throw on setSelectionRange in some browsers.
+    try { if (f.start != null) el.setSelectionRange(f.start, f.end); } catch { /* ignore */ }
   }
 
   _bindCosts() {
@@ -2517,6 +2596,202 @@ export class PartyAdminView {
         }
       });
     });
+
+    // Inline edit of a cost line (name always; amount on lump sums only).
+    // Enter commits without waiting for blur; preventDefault is belt-and-braces
+    // (the inputs live in an <li>, not a form, so Enter can't submit anything).
+    section.querySelectorAll('input[data-cost-item-id]').forEach(input => {
+      input.addEventListener('change', () => this._saveCostLine(input));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); this._saveCostLine(input); }
+      });
+    });
+
+    // Delete a cost line — the same logistics item the 🛒 table would delete,
+    // so the confirm + failure strings are the table's own.
+    section.querySelectorAll('[data-cost-item-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id   = btn.dataset.costItemDel;
+        const name = btn.dataset.costItemName || '';
+        if (!confirm(t('party.admin.logisticsConfirmDelete', { name }))) return;
+        btn.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+            method: 'DELETE', credentials: 'include', headers,
+          });
+          if (!res.ok && res.status !== 204) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsDeleteFailed'));
+          }
+          this._logistics = (this._logistics || []).filter(i => String(i.id) !== String(id));
+          this._rerenderLogistics();
+        } catch (err) {
+          showToast(err.message || t('party.admin.logisticsDeleteFailed'), 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Rename a section (label + icon) — wires the PATCH endpoint that has
+    // existed since 068 but had no UI.
+    section.querySelectorAll('[data-cost-rename]').forEach(btn => {
+      btn.addEventListener('click', () => this._openCostRename(btn.dataset.costRename));
+    });
+  }
+
+  // Save a cost-card line edit. Mirrors _saveLogisticsCell: badInput guard,
+  // lastSaved no-op check, save token against overlapping spinner-step saves.
+  // The amount field writes unit_price; on a previously unpriced line it also
+  // sets quantity to 1, so a bare name added in the 🛒 table can be priced as
+  // a lump sum from the card. Clearing the amount nulls unit_price only — the
+  // line goes partial and the "{n} without a price" hint surfaces it.
+  async _saveCostLine(input) {
+    const field  = input.dataset.costField;
+    const isAmt  = field === 'amount';
+    if (isAmt && input.validity && input.validity.badInput) {
+      // '' value while junk is displayed — revert rather than silently null.
+      input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+      return;
+    }
+    const value = input.value.trim();
+    const last  = input.dataset.lastSaved !== undefined
+      ? input.dataset.lastSaved
+      : (input.defaultValue ?? '');
+    if (value === last) return;
+    if (isAmt && value !== '' && !Number.isFinite(Number(value))) {
+      input.value = last;
+      return;
+    }
+    if (field === 'name' && value === '') {
+      // Server rejects empty names; match the table idiom and revert locally.
+      input.value = last;
+      return;
+    }
+
+    const id = input.dataset.costItemId;
+    const item = (this._logistics || []).find(i => String(i.id) === String(id));
+    if (!item) return; // deleted concurrently — the pending rebuild will drop this input
+
+    input.dataset.lastSaved = value;
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
+    const body = field === 'name'
+      ? { name: value }
+      : value === ''
+        ? { unit_price: null }
+        : { unit_price: Math.round(Number(value)), ...(item.quantity == null ? { quantity: 1 } : {}) };
+
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
+      }
+      const updated = await res.json();
+      if (Number(input.dataset.saveToken) !== token) return; // superseded
+      this._logistics = (this._logistics || []).map(i =>
+        String(i.id) === String(updated.id) ? updated : i
+      );
+      // Full logistics rebuild: the 🛒 table renders its inputs' value= from
+      // _logistics, so this one call syncs name/price/line-cost/subtotal there
+      // AND cascades into _rerenderCosts, whose focus capture keeps the admin
+      // in this input (found again by its stable id+field).
+      this._rerenderLogistics();
+    } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return; // a newer save owns the input
+      input.value = last;
+      input.dataset.lastSaved = last;
+      showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+    }
+  }
+
+  // Swap a cost card's heading for an icon+label edit form. Explicit
+  // Save/Cancel (+ Enter/Escape) — no save-on-blur, because two inputs and two
+  // buttons would make blur-commit fire on every internal tab.
+  //
+  // Built-ins open with an empty label input and the translated name as
+  // placeholder: emptiness visibly means "default". Saving a label on a
+  // built-in stores that literal text (overrides i18n in BOTH locales, since
+  // the planner asked for that exact name); clearing it sends label:null,
+  // which hands the name back to i18n. A custom section with an emptied label
+  // just refocuses — the server would 400 on a nameless section.
+  _openCostRename(key) {
+    // Need the RAW DB row (literal label or null), not the resolved display
+    // row — resolving would bake the translated name into a built-in's label.
+    const cat = (this._logisticsCats || []).find(c => c.key === key);
+    if (!cat) { showToast(t('party.admin.costRenameFailed'), 'error'); return; }
+    const resolved = this._logisticsCategories().find(c => c.key === key);
+    const h3 = this._el.querySelector(`[data-cost-head="${CSS.escape(key)}"]`);
+    if (!h3) return;
+
+    h3.innerHTML = `
+          <form class="party-admin__cost-rename-form" novalidate>
+            <input type="text" class="lol-input party-admin__cost-section-icon"
+                   value="${escHtml(cat.icon || '')}" maxlength="8" placeholder="📦"
+                   aria-label="${t('party.admin.costSectionIcon')}" />
+            <input type="text" class="lol-input party-admin__cost-rename-label"
+                   value="${escHtml(cat.label || '')}" maxlength="60"
+                   placeholder="${escHtml(resolved?.label || key)}"
+                   ${cat.is_builtin ? `title="${escHtml(t('party.admin.costRenameBuiltinHint'))}"` : ''}
+                   aria-label="${t('party.admin.costSectionName')}" />
+            <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.costRenameSave')}</button>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm" data-rename-cancel>${t('party.admin.costRenameCancel')}</button>
+            <span class="party-admin__logistics-status" aria-live="polite"></span>
+          </form>`;
+
+    const form    = h3.querySelector('form');
+    const iconEl  = form.querySelector('.party-admin__cost-section-icon');
+    const labelEl = form.querySelector('.party-admin__cost-rename-label');
+    const status  = form.querySelector('.party-admin__logistics-status');
+
+    // Binding on the ephemeral form (outside _bindCosts) is safe: any rebuild
+    // discards the form wholesale, listeners and all.
+    const close = () => {
+      this._rerenderCosts(); // cheapest correct restore of the pristine h3
+      this._el.querySelector(`[data-cost-rename="${CSS.escape(key)}"]`)?.focus();
+    };
+    form.querySelector('[data-rename-cancel]').addEventListener('click', close);
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const label = (labelEl.value || '').trim();
+      const icon  = (iconEl.value || '').trim();
+      if (!label && !cat.is_builtin) { labelEl.focus(); return; }
+
+      if (status) status.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch(`/api/v1/party/logistics/categories/${encodeURIComponent(key)}`, {
+          method:      'PATCH',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({ label: label || null, icon: icon || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.costRenameFailed'));
+        }
+        const updated = await res.json();
+        this._logisticsCats = (this._logisticsCats || []).map(c => c.key === key ? updated : c);
+        // Name/icon appear in the logistics heading + table aria-label, the
+        // cost heading, and the stat tiles — the cascade covers all four.
+        this._rerenderLogistics();
+        this._el.querySelector(`[data-cost-rename="${CSS.escape(key)}"]`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.costRenameFailed');
+      }
+    });
+
+    labelEl.focus();
+    labelEl.select();
   }
 
   // ── To-do list ─────────────────────────────────────────────────────────────
