@@ -620,15 +620,24 @@ export class PartyAdminView {
     return parts.length ? parts.join(' ') : '—';
   }
 
-  // The RSVP form's attendance-timing radio field. The canonical `attend_when`
-  // id wins outright; the label heuristic is only a fallback for forms that
-  // renamed the id. (A single find() with an OR would let an *earlier*
-  // radio-group whose label merely mentions "dag"/"kvöld" — e.g. "Verður þú í
-  // kvöldmat?" — hijack the column even though attend_when exists.)
+  // The RSVP form's attendance-timing field. The canonical `attend_when` id
+  // wins outright; the id/label heuristic is only a fallback for forms that
+  // renamed it. (A single find() with an OR would let an *earlier* field whose
+  // label merely mentions "dag"/"kvöld" — e.g. "Verður þú í kvöldmat?" —
+  // hijack the column even though attend_when exists.) Checkbox-groups qualify
+  // too — the live form's attendance field ("attend", label "Svar") is one,
+  // still semantically single-choice — but radio-groups are tried first so an
+  // unrelated multi-pick that mentions a time can't steal the column. The
+  // heuristic tests the id as well as the label because "Svar" says nothing
+  // while the id "attend" does.
   _attendField() {
-    const radios = (this._rsvpForm || []).filter(f => f.type === 'radio-group');
-    return radios.find(f => f.id === 'attend_when')
-      || radios.find(f => /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(f.label || ''))
+    const groups = (this._rsvpForm || []).filter(f =>
+      f.type === 'radio-group' || f.type === 'checkbox-group');
+    const canonical = groups.find(f => f.id === 'attend_when');
+    if (canonical) return canonical;
+    const heur = (f) => /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(`${f.id} ${f.label || ''}`);
+    return groups.filter(f => f.type === 'radio-group').find(heur)
+      || groups.filter(f => f.type === 'checkbox-group').find(heur)
       || null;
   }
 
@@ -642,14 +651,21 @@ export class PartyAdminView {
   // Status of a STORED answer label. The admin's declared status on a matching
   // form option is authoritative; answers from another locale (or a renamed
   // option) aren't in the form at all, so they fall back to phrase matching —
-  // the same shape as _deriveRsvpStatus on the server.
+  // the same shape as _deriveRsvpStatus on the server. Bare-string options
+  // carry no declaration (only the radio editor upgrades them to objects), so
+  // they use the phrase fallback too — otherwise the live checkbox form's
+  // "Get ekki mætt." / "Kannski" would classify as going just for existing.
+  // The decline phrases stay ANCHORED TO A VERB OF ATTENDING ("ekki mætt",
+  // not a bare "get ekki") — Icelandic "get ekki beðið" ("can't wait!") is an
+  // enthusiastic YES, and a looser pattern would bucket it as a decline and
+  // drop that option out of the timing select entirely.
   _answerStatus(label) {
     if (typeof label !== 'string') return 'going';
     const opt = (this._attendField()?.options || []).find(o => this._optLabel(o) === label);
-    if (opt) return this._optStatus(opt);
+    if (opt && typeof opt === 'object') return this._optStatus(opt);
     const s = label.normalize('NFC');
-    if (/can'?t|sorry|kemst ekki|kem ekki|afþakka|\bnei\b/i.test(s)) return 'declined';
-    if (/\bmaybe\b|kannski|óvíst/i.test(s))                          return 'maybe';
+    if (/can'?t|sorry|kemst ekki|kem ekki|ekki mætt|afþakka|\bnei\b/i.test(s)) return 'declined';
+    if (/\bmaybe\b|kannski|óvíst/i.test(s))                                    return 'maybe';
     return 'going';
   }
 
@@ -682,6 +698,15 @@ export class PartyAdminView {
     return this._answerStatus(label) === 'going' ? this._timingBucket(label) : null;
   }
 
+  // A radio-group answer is a string; a checkbox-group answer is an array of
+  // checked labels. Everything downstream of the attend field treats both as
+  // a list of candidate labels.
+  _answerLabels(ans) {
+    if (typeof ans === 'string') return ans ? [ans] : [];
+    if (Array.isArray(ans)) return ans.filter(v => typeof v === 'string' && v);
+    return [];
+  }
+
   // The timing choices offered by the current form, one per bucket (first
   // option wins). Only 'going' options qualify — a maybe/decline must never
   // back a timing slot, or picking it would flip the guest's status. `value` is
@@ -691,7 +716,9 @@ export class PartyAdminView {
     if (!f) return [];
     const byBucket = {};
     for (const o of (f.options || [])) {
-      if (this._optStatus(o) !== 'going') continue;
+      // _answerStatus (not _optStatus) so a BARE-STRING decline/maybe worded
+      // with a timing phrase can't become a selectable option either.
+      if (this._answerStatus(this._optLabel(o)) !== 'going') continue;
       const label = this._optLabel(o);
       const b = this._timingBucket(label);
       if (b && !byBucket[b]) byBucket[b] = label;
@@ -713,9 +740,15 @@ export class PartyAdminView {
     const field   = this._attendField();
     const options = this._timingOptions();
     if (!field || !options.length) return `<td>—</td>`;
-    const raw   = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
-    const match = options.find(o => o.value === raw)
-      || (raw ? options.find(o => o.bucket === this._answerTimingBucket(raw)) : undefined);
+    // A checkbox-group attend field stores an ARRAY of labels; treat every
+    // checked label as a candidate — exact option match first, then by bucket
+    // (first label that buckets wins, mirroring the single-answer path).
+    const labels = this._answerLabels(g.rsvp_answers?.[field.id]);
+    let match = options.find(o => labels.includes(o.value));
+    if (!match) {
+      const bucket = labels.map(l => this._answerTimingBucket(l)).find(Boolean);
+      if (bucket) match = options.find(o => o.bucket === bucket);
+    }
     // data-current mirrors the SELECTED OPTION's value (not the raw stored
     // label) so the no-op guard in the change handler compares like with like.
     const current = match ? match.value : '';
@@ -1217,7 +1250,7 @@ export class PartyAdminView {
     const rsvps = this._rsvps;
     const headcount = rsvps.filter(r => r.attending).length;
 
-    // Try to derive day/evening/both from a radio-group field that looks like attendance timing
+    // Try to derive day/evening/both from a field that looks like attendance timing
     const attendField = this._attendField();
 
     let breakdownCards = '';
@@ -1225,8 +1258,9 @@ export class PartyAdminView {
       const tally = {};
       (attendField.options || []).forEach(opt => { tally[this._optLabel(opt)] = 0; });
       rsvps.forEach(r => {
-        const a = r.answers?.[attendField.id];
-        if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
+        for (const label of this._answerLabels(r.answers?.[attendField.id])) {
+          tally[label] = (tally[label] || 0) + 1;
+        }
       });
       // Collect EVERY tally label matching `pred`, not just the first hit. Two
       // reasons: cross-locale answers ("Já, aðeins á daginn" + "☀️ Daytime
@@ -1247,7 +1281,7 @@ export class PartyAdminView {
       // exactly the guests the number claims.
       const breakdownCard = (match, labelHtml, title, modifierClass = '') => {
         const dataAttrs = match.labels.length
-          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}" data-stat-multi="false"`
+          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}"`
           : `data-stat-key="empty"`;
         const cls = 'party-admin__stat party-admin__stat--sm' + (modifierClass ? ' ' + modifierClass : '');
         return `
@@ -1397,13 +1431,11 @@ export class PartyAdminView {
           tally[ans] = (tally[ans] || 0) + 1;
         }
       });
-      const multi = g.type === 'checkbox-group';
       const items = Object.entries(tally).map(([name, count]) => `
         <button type="button" class="party-admin__stat party-admin__stat--sm"
                 data-stat-key="field:${escHtml(g.id)}:${escHtml(name)}"
                 data-stat-field="${escHtml(g.id)}"
                 data-stat-value="${escHtml(name)}"
-                data-stat-multi="${multi}"
                 aria-label="${escHtml(name)}: ${count}. ${t('party.admin.statClickHint')}">
           <span class="party-admin__stat-num">${count}</span>
           <span class="party-admin__stat-label">${escHtml(name)}</span>
@@ -1812,7 +1844,6 @@ export class PartyAdminView {
         title = t('party.admin.totalHeadcount');
       } else if (key.startsWith('field:')) {
         const fieldId = card.dataset.statField;
-        const multi   = card.dataset.statMulti === 'true';
         // Bucket cards (the timing breakdown) carry every label they counted in
         // data-stat-values; plain option cards carry a single data-stat-value.
         let values;
@@ -1821,12 +1852,13 @@ export class PartyAdminView {
             ? JSON.parse(card.dataset.statValues)
             : [card.dataset.statValue];
         } catch { values = [card.dataset.statValue]; }
-        rsvps = this._rsvps.filter(r => {
-          const a = r.answers?.[fieldId];
-          return multi
-            ? Array.isArray(a) && values.some(v => a.includes(v))
-            : values.includes(a);
-        });
+        // Match on the NORMALIZED label list rather than branching on the
+        // field's declared type: a radio answer is a string, a checkbox answer
+        // an array, and a field whose type was changed after guests replied
+        // holds both. The cards tally through the same helper, so this is what
+        // keeps the modal's rows consistent with the number that opened it.
+        rsvps = this._rsvps.filter(r =>
+          this._answerLabels(r.answers?.[fieldId]).some(l => values.includes(l)));
         title = card.dataset.statTitle || values[0];
       } else {
         return;
@@ -3485,8 +3517,12 @@ export class PartyAdminView {
         sel.disabled = true;
         try {
           const headers = await getCsrfHeaders();
+          // Keep the stored shape the guest's own form expects: checkbox-group
+          // answers are arrays. (Replaces the whole array — the admin's pick is
+          // the definitive attendance.)
+          const multi = this._attendField()?.type === 'checkbox-group';
           const body = value
-            ? { answers: { [fieldId]: value } }
+            ? { answers: { [fieldId]: multi ? [value] : value } }
             : { answers: {}, clear: [fieldId] };
           const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/answers`, {
             method: 'PATCH', credentials: 'include', headers, body: JSON.stringify(body),
