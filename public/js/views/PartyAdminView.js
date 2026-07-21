@@ -655,13 +655,17 @@ export class PartyAdminView {
   // carry no declaration (only the radio editor upgrades them to objects), so
   // they use the phrase fallback too — otherwise the live checkbox form's
   // "Get ekki mætt." / "Kannski" would classify as going just for existing.
+  // The decline phrases stay ANCHORED TO A VERB OF ATTENDING ("ekki mætt",
+  // not a bare "get ekki") — Icelandic "get ekki beðið" ("can't wait!") is an
+  // enthusiastic YES, and a looser pattern would bucket it as a decline and
+  // drop that option out of the timing select entirely.
   _answerStatus(label) {
     if (typeof label !== 'string') return 'going';
     const opt = (this._attendField()?.options || []).find(o => this._optLabel(o) === label);
     if (opt && typeof opt === 'object') return this._optStatus(opt);
     const s = label.normalize('NFC');
-    if (/can'?t|sorry|kemst ekki|kem ekki|get ekki|ekki mætt|afþakka|\bnei\b/i.test(s)) return 'declined';
-    if (/\bmaybe\b|kannski|óvíst/i.test(s))                                            return 'maybe';
+    if (/can'?t|sorry|kemst ekki|kem ekki|ekki mætt|afþakka|\bnei\b/i.test(s)) return 'declined';
+    if (/\bmaybe\b|kannski|óvíst/i.test(s))                                    return 'maybe';
     return 'going';
   }
 
@@ -1277,7 +1281,7 @@ export class PartyAdminView {
       // exactly the guests the number claims.
       const breakdownCard = (match, labelHtml, title, modifierClass = '') => {
         const dataAttrs = match.labels.length
-          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}" data-stat-multi="${attendField.type === 'checkbox-group'}"`
+          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}"`
           : `data-stat-key="empty"`;
         const cls = 'party-admin__stat party-admin__stat--sm' + (modifierClass ? ' ' + modifierClass : '');
         return `
@@ -1427,13 +1431,11 @@ export class PartyAdminView {
           tally[ans] = (tally[ans] || 0) + 1;
         }
       });
-      const multi = g.type === 'checkbox-group';
       const items = Object.entries(tally).map(([name, count]) => `
         <button type="button" class="party-admin__stat party-admin__stat--sm"
                 data-stat-key="field:${escHtml(g.id)}:${escHtml(name)}"
                 data-stat-field="${escHtml(g.id)}"
                 data-stat-value="${escHtml(name)}"
-                data-stat-multi="${multi}"
                 aria-label="${escHtml(name)}: ${count}. ${t('party.admin.statClickHint')}">
           <span class="party-admin__stat-num">${count}</span>
           <span class="party-admin__stat-label">${escHtml(name)}</span>
@@ -1842,7 +1844,6 @@ export class PartyAdminView {
         title = t('party.admin.totalHeadcount');
       } else if (key.startsWith('field:')) {
         const fieldId = card.dataset.statField;
-        const multi   = card.dataset.statMulti === 'true';
         // Bucket cards (the timing breakdown) carry every label they counted in
         // data-stat-values; plain option cards carry a single data-stat-value.
         let values;
@@ -1851,12 +1852,13 @@ export class PartyAdminView {
             ? JSON.parse(card.dataset.statValues)
             : [card.dataset.statValue];
         } catch { values = [card.dataset.statValue]; }
-        rsvps = this._rsvps.filter(r => {
-          const a = r.answers?.[fieldId];
-          return multi
-            ? Array.isArray(a) && values.some(v => a.includes(v))
-            : values.includes(a);
-        });
+        // Match on the NORMALIZED label list rather than branching on the
+        // field's declared type: a radio answer is a string, a checkbox answer
+        // an array, and a field whose type was changed after guests replied
+        // holds both. The cards tally through the same helper, so this is what
+        // keeps the modal's rows consistent with the number that opened it.
+        rsvps = this._rsvps.filter(r =>
+          this._answerLabels(r.answers?.[fieldId]).some(l => values.includes(l)));
         title = card.dataset.statTitle || values[0];
       } else {
         return;

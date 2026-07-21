@@ -406,7 +406,7 @@ describe('_renderStats — timing breakdown cards', () => {
     expect(nums[3]).toBe('0');  // all-day — nobody picked it
   });
 
-  test('array answers from the live checkbox form are tallied and cards are multi', () => {
+  test('array answers from the live checkbox form are tallied', () => {
     const h = withRender(liveForm(), [
       { attending: true,  answers: { attend: ['Já, aðeins á daginn'] } },
       { attending: true,  answers: { attend: ['Já'] } },
@@ -414,7 +414,46 @@ describe('_renderStats — timing breakdown cards', () => {
     ])._renderStats();
     // [all, day, evening, both, declined, headcount]
     expect(cardNums(h)).toEqual(['3', '1', '0', '1', '1', '2']);
-    // The drill-down must filter with array semantics, or every card opens empty.
-    expect(h).toContain('data-stat-multi="true"');
+  });
+
+  // A card's number and the rows its drill-down modal opens are computed in two
+  // different places, so they can silently disagree. They previously did: the
+  // tally normalizes the answer shape, while the modal's filter branched on the
+  // field's declared type and dropped every answer of the other shape.
+  test('a card number matches what its drill-down selects, across answer shapes', () => {
+    const rsvps = [
+      { attending: true, answers: { attend: ['Já, aðeins á daginn'] } },  // array (checkbox)
+      { attending: true, answers: { attend: 'Já, aðeins á daginn' } },    // legacy string
+    ];
+    const h = withRender(liveForm(), rsvps)._renderStats();
+    expect(cardNums(h)[1]).toBe('2');   // ☀️ day card counts both shapes
+
+    // Replicates the modal's filter (_bindStatCards) against the card's own
+    // data-stat-values, so a divergence fails here rather than in the UI.
+    const values = JSON.parse(h.match(/data-stat-values="([^"]*)"/)[1].replace(/&quot;/g, '"'));
+    const selected = rsvps.filter(r =>
+      P._answerLabels(r.answers?.attend).some(l => values.includes(l)));
+    expect(String(selected.length)).toBe(cardNums(h)[1]);
+  });
+});
+
+describe('_answerStatus — decline phrases must not swallow an enthusiastic yes', () => {
+  // Icelandic "get ekki beðið" = "can't wait!". A decline pattern loose enough
+  // to match a bare "get ekki" turns that into a decline, which both mis-buckets
+  // the guest and removes the option from the timing select entirely.
+  test('"Get ekki beðið!" is going, while "Get ekki mætt." is still declined', () => {
+    const v = withForm(liveForm());
+    expect(v._answerStatus('Get ekki beðið!')).toBe('going');
+    expect(v._answerStatus('Ég get ekki beðið')).toBe('going');
+    expect(v._answerStatus('Get ekki mætt.')).toBe('declined');
+  });
+
+  test('an enthusiastic-yes option still backs its timing bucket', () => {
+    const opts = withForm([
+      { id: 'attend', type: 'checkbox-group', label: 'Svar',
+        options: ['Get ekki beðið, kem allan daginn!', 'Já, aðeins um kvöldið'] },
+    ])._timingOptions();
+    expect(opts.map(o => o.bucket)).toEqual(['evening', 'both']);
+    expect(opts.find(o => o.bucket === 'both').value).toBe('Get ekki beðið, kem allan daginn!');
   });
 });
