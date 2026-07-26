@@ -58,4 +58,35 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth };
+// Best-effort variant for PUBLIC routes that still want attribution when a
+// session happens to be present (e.g. the party album: anonymous visitors may
+// upload, but a signed-in guest's upload should carry their user_id so they can
+// delete it later). Never rejects — any missing/invalid/disabled session just
+// leaves req.user undefined and the request proceeds anonymously.
+async function optionalAuth(req, res, next) {
+  try {
+    const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
+    if (!sessionId) return next();
+
+    const { session, user } = await lucia.validateSession(sessionId);
+    if (!session || user.disabled) return next();
+
+    if (session.fresh) {
+      const refreshed = lucia.createSessionCookie(session.id);
+      res.setHeader('Set-Cookie', refreshed.serialize());
+    }
+
+    req.user    = user;
+    req.session = session;
+    try {
+      const roles = await UserRole.listForUser(user.id);
+      req.user.roles = roles.length ? roles : [user.role];
+    } catch {
+      req.user.roles = [user.role];
+    }
+    req.locale = resolveLocale(req);
+  } catch { /* treat any validation error as anonymous */ }
+  next();
+}
+
+module.exports = { requireAuth, optionalAuth };
