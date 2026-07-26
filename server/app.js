@@ -79,11 +79,12 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc:  ["'self'", 'https://www.googletagmanager.com'],
       styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      // blob: is needed for the party album's client-side thumbnail generation
-      // (picked images/videos are previewed via URL.createObjectURL before the
-      // canvas downscale / poster-frame capture). Explicit allowlist extension,
-      // not a defaultSrc relaxation.
-      imgSrc:     ["'self'", 'data:', 'blob:', 'https:'],
+      imgSrc:     ["'self'", 'data:', 'https:'],
+      // blob: is needed for the party album's client-side video poster-frame
+      // capture (the picked file is loaded into a <video> via
+      // URL.createObjectURL, then drawn to canvas). Photos use
+      // createImageBitmap and never touch the DOM, so imgSrc needs no blob:.
+      // Explicit allowlist extension, not a defaultSrc relaxation.
       mediaSrc:   ["'self'", 'blob:'],
       connectSrc: ["'self'", 'https://www.google-analytics.com', 'https://analytics.google.com'],
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],

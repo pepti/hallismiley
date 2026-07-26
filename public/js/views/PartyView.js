@@ -7,6 +7,14 @@ import { t, getLocale, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i
 
 const PARTY_DATE = new Date('2026-07-25T14:00:00');
 
+// Mirrors the server-side allowlist in partyRoutes.js. The explicit accept
+// list (instead of image/*) makes iOS transcode HEIC→JPEG at pick time.
+// Module-level const, not a static class field: guests open this page on old
+// phones, and a static field is a parse error on pre-2021 Safari that would
+// take the whole view down.
+const ALBUM_MIMES = ['image/jpeg', 'image/png', 'image/webp',
+                     'video/mp4', 'video/webm', 'video/quicktime'];
+
 // Default party hero content — fallback if the site_content row is missing.
 // Mirrors HomeView's DEFAULT_HERO_CONTENT shape. The IS row uses "ára" instead
 // of a superscript ordinal; the <sup> just shrinks to fit a word naturally.
@@ -712,11 +720,6 @@ export class PartyView {
 
   // ── Photo album ───────────────────────────────────────────────────────────────
 
-  // Mirrors the server-side allowlist in partyRoutes.js. The explicit accept
-  // list (instead of image/*) makes iOS transcode HEIC→JPEG at pick time.
-  static ALBUM_MIMES = ['image/jpeg', 'image/png', 'image/webp',
-                        'video/mp4', 'video/webm', 'video/quicktime'];
-
   _renderAlbum() {
     return `
       <section class="party-section party-album" aria-labelledby="album-heading">
@@ -727,7 +730,7 @@ export class PartyView {
               ${t('party.album.upload')}
             </button>
             <input type="file" multiple hidden data-album-file
-                   accept="${PartyView.ALBUM_MIMES.join(',')}">
+                   accept="${ALBUM_MIMES.join(',')}">
             <span class="party-album__count" data-album-count aria-live="polite"></span>
           </div>
           <div class="party-album__sort" role="group" aria-label="${t('party.album.sortLabel')}">
@@ -803,8 +806,15 @@ export class PartyView {
       const res = await fetch(`/api/v1/party/photos?${params}`, { credentials: 'include' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { photos, total } = await res.json();
-      this._album.photos = reset ? photos : [...this._album.photos, ...photos];
-      this._album.total  = total;
+      if (reset) {
+        this._album.photos = photos;
+      } else {
+        // Other visitors may upload while we page, shifting server offsets —
+        // drop any rows we already have so the grid never shows duplicates.
+        const seen = new Set(this._album.photos.map(p => p.id));
+        this._album.photos = [...this._album.photos, ...photos.filter(p => !seen.has(p.id))];
+      }
+      this._album.total = total;
       this._renderAlbumGrid();
     } catch (err) {
       console.error('[PartyView] album load failed:', err);
@@ -896,7 +906,7 @@ export class PartyView {
 
   _enqueueUploads(files) {
     for (const file of files) {
-      const supported = PartyView.ALBUM_MIMES.includes(file.type);
+      const supported = ALBUM_MIMES.includes(file.type);
       this._queue.push({
         id:     `q${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         file,
