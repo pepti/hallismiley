@@ -280,6 +280,26 @@ body.lb-open { overflow: hidden; }
   color: var(--gold);
 }
 
+/* Download button (opt-in via Lightbox opts.download) — mirrors .lb-close on
+   the opposite corner */
+.lb-download {
+  position: absolute; top: var(--sp-4); left: var(--sp-4);
+  width: 36px; height: 36px;
+  background: rgba(30, 35, 40, 0.8);
+  border: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  z-index: 2;
+}
+
+.lb-download:hover {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 /* Counter */
 .lb-counter {
   position: absolute; bottom: var(--sp-4); left: 50%;

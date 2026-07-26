@@ -33,7 +33,8 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, catsRes, todosRes] = await Promise.all([
+    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, catsRes, todosRes,
+      planRes, phasesRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',            { credentials: 'include' }),
       fetch('/api/v1/party/info',             { credentials: 'include' }),
       fetch('/api/v1/party/pending-requests', { credentials: 'include' }),
@@ -42,6 +43,8 @@ export class PartyAdminView {
       fetch('/api/v1/party/logistics',        { credentials: 'include' }),
       fetch('/api/v1/party/logistics/categories', { credentials: 'include' }),
       fetch('/api/v1/party/todos',            { credentials: 'include' }),
+      fetch('/api/v1/party/plan',             { credentials: 'include' }),
+      fetch('/api/v1/party/plan/phases',      { credentials: 'include' }),
     ]);
     const rsvps     = await rsvpsRes.json();
     const info      = await infoRes.json();
@@ -51,6 +54,8 @@ export class PartyAdminView {
     const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
     const cats      = catsRes.ok ? await catsRes.json() : [];
     const todos     = todosRes.ok ? await todosRes.json() : [];
+    const plan      = planRes.ok ? await planRes.json() : [];
+    const phases    = phasesRes.ok ? await phasesRes.json() : [];
 
     this._rsvps           = Array.isArray(rsvps) ? rsvps : [];
     this._pendingRequests = Array.isArray(pending) ? pending : [];
@@ -59,6 +64,8 @@ export class PartyAdminView {
     this._logistics     = Array.isArray(logistics) ? logistics : [];
     this._logisticsCats = Array.isArray(cats) ? cats : [];
     this._todos         = Array.isArray(todos) ? todos : [];
+    this._plan          = Array.isArray(plan) ? plan : [];
+    this._planPhases    = Array.isArray(phases) ? phases : [];
     this._peopleNames   = this._collectPeopleNames();
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
@@ -96,6 +103,7 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
+        ${this._renderPlanSection()}
         ${this._renderAcceptedAndPending()}
         ${this._renderAddGuestSection()}
         ${this._renderDeclinedGuests()}
@@ -1529,6 +1537,7 @@ export class PartyAdminView {
     this._bindLogistics();
     this._bindCosts();
     this._bindTodos();
+    this._bindPlan();
     this._bindStatCards();
     this._bindEmailGoing();
     this._bindRsvpSort();
@@ -2826,6 +2835,716 @@ export class PartyAdminView {
     labelEl.select();
   }
 
+  // ── Project plan ───────────────────────────────────────────────────────────
+  // The party as an operation: what gets picked up, set up, minded during the
+  // party, and packed away afterwards. Each task carries an estimate in minutes
+  // and the number of helpers it needs; the section sums those per phase so the
+  // planners can see how many hands each stage takes before they start asking
+  // people. Where the ✅ to-do list is about individuals, this is about the job.
+
+  // Phases resolved for display. Same rule as _logisticsCategories: a row with
+  // no label is a built-in whose name follows the EN/IS toggle, a row WITH a
+  // label shows that literal text. The fallback keeps the section usable if the
+  // phases fetch failed — degrading to the five built-ins beats vanishing.
+  _planPhases_() {
+    const BUILTIN_LABEL = {
+      pickup:   'party.admin.planPhasePickup',
+      setup:    'party.admin.planPhaseSetup',
+      during:   'party.admin.planPhaseDuring',
+      teardown: 'party.admin.planPhaseTeardown',
+      other:    'party.admin.planPhaseOther',
+    };
+    const BUILTIN_ICON = { pickup: '🚗', setup: '🔨', during: '🎉', teardown: '🧹', other: '📦' };
+    const rows = (this._planPhases || []).length
+      ? this._planPhases
+      : Object.keys(BUILTIN_LABEL).map(key => ({ key, label: null, icon: null, is_builtin: true }));
+    return rows.map(p => ({
+      key: p.key,
+      label: p.label || (BUILTIN_LABEL[p.key] ? t(BUILTIN_LABEL[p.key]) : p.key),
+      icon: p.icon || BUILTIN_ICON[p.key] || '📋',
+      isBuiltin: !!p.is_builtin,
+    }));
+  }
+
+  _planTasksIn(phaseKey) {
+    return (this._plan || []).filter(task => (task.phase || 'other') === phaseKey);
+  }
+
+  // "1 klst 30 mín". Unestimated tasks read as an em dash rather than "0 mín" —
+  // not knowing yet and knowing it takes no time are different answers.
+  _formatPlanMinutes(min) {
+    if (min == null) return '—';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    if (h === 0) return t('party.admin.planTimeFmtM', { m });
+    if (m === 0) return t('party.admin.planTimeFmtH', { h });
+    return t('party.admin.planTimeFmtHM', { h, m });
+  }
+
+  // Totals for one phase (or the whole plan). Time sums every task, done or
+  // not: the estimate is what the phase costs to run, and shrinking it as
+  // people tick things off would destroy the staffing answer mid-party.
+  // People is the MAX, not the sum — tasks in a phase run in parallel with the
+  // same crew, so three 2-person jobs need 2 helpers on site, not 6.
+  _planTotals(tasks) {
+    const minutes = tasks.reduce((s, x) => s + (x.time_minutes ?? 0), 0);
+    const people  = tasks.reduce((m, x) => Math.max(m, x.people_needed ?? 0), 0);
+    return {
+      minutes: tasks.some(x => x.time_minutes != null) ? minutes : null,
+      people:  tasks.some(x => x.people_needed != null) ? people : null,
+      done:    tasks.filter(x => x.done).length,
+      total:   tasks.length,
+    };
+  }
+
+  _renderPlanSection() {
+    // Expand/collapse state lives on the view, not the DOM, so it survives the
+    // full-section re-render every mutation triggers. Tasks start collapsed (the
+    // dense overview is the point); phases start open.
+    this._planExpanded = this._planExpanded || new Set();
+    this._planCollapsed = this._planCollapsed || new Set();
+
+    const phases = this._planPhases_();
+    const all    = this._plan || [];
+    const grand  = this._planTotals(all);
+
+    const tile = (num, label, extraCls = '') => `
+          <div class="party-admin__stat party-admin__stat--sm${extraCls ? ' ' + extraCls : ''}">
+            <span class="party-admin__stat-num">${num}</span>
+            <span class="party-admin__stat-label">${label}</span>
+          </div>`;
+
+    // The staffing strip: one chip per phase that has work in it, so "how many
+    // helpers do I need at set-up" is answered without scrolling the groups.
+    const staffing = phases
+      .map(p => ({ p, tasks: this._planTasksIn(p.key) }))
+      .filter(x => x.tasks.length > 0)
+      .map(({ p, tasks }) => {
+        const s = this._planTotals(tasks);
+        return `
+          <button type="button" class="party-admin__plan-chip" data-plan-jump="${escHtml(p.key)}">
+            <span>${escHtml(p.icon)} ${escHtml(p.label)}</span>
+            <span class="party-admin__plan-chip-num">⏱ ${this._formatPlanMinutes(s.minutes)}</span>
+            <span class="party-admin__plan-chip-num">👥 ${s.people ?? '—'}</span>
+          </button>`;
+      }).join('');
+
+    // One toggle for the whole plan: if anything is open, collapse everything;
+    // otherwise open everything. Label reflects the action it will take.
+    const anyOpen = phases.some(p => !this._planCollapsed.has(p.key));
+    const collapseAll = all.length ? `
+        <div class="party-admin__plan-toolbar">
+          <button type="button" class="party-admin__plan-collapse-all" data-plan-collapse-all>
+            ${anyOpen ? '▾' : '▸'} ${anyOpen ? t('party.admin.planCollapseAll') : t('party.admin.planExpandAll')}
+          </button>
+        </div>` : '';
+
+    return `
+      <section class="party-admin__section" id="party-admin-plan">
+        <h2 class="party-admin__section-title">📋 ${t('party.admin.planTitle')}</h2>
+        <p class="party-admin__logistics-help">${t('party.admin.planHelp')}</p>
+
+        ${all.length ? `
+        <div class="party-admin__stats party-admin__stats--compact">
+          ${tile(grand.total, t('party.admin.planSummaryTasks'))}
+          ${tile(grand.done, t('party.admin.planSummaryDone'))}
+          ${tile(this._formatPlanMinutes(grand.minutes), t('party.admin.planSummaryTime'), 'party-admin__stat--gold')}
+          ${tile(grand.people ?? '—', t('party.admin.planSummaryPeople'))}
+        </div>
+        <div class="party-admin__plan-summary">${staffing}</div>` : `<p class="party-empty">${t('party.admin.planEmpty')}</p>`}
+
+        ${collapseAll}
+        <div class="party-admin__plan-groups">
+          ${phases.map(p => this._renderPlanPhaseGroup(p)).join('')}
+        </div>
+
+        <form class="party-admin__cost-add-section" id="party-admin-plan-phase-add" novalidate>
+          <input type="text" class="lol-input party-admin__plan-phase-icon"
+                 placeholder="🎈" maxlength="8"
+                 aria-label="${t('party.admin.planPhaseIcon')}" />
+          <input type="text" class="lol-input party-admin__plan-phase-label"
+                 placeholder="${escHtml(t('party.admin.planPhaseNamePh'))}"
+                 maxlength="60"
+                 aria-label="${t('party.admin.planPhaseName')}" />
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.planAddPhase')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-plan-phase-status" aria-live="polite"></span>
+        </form>
+      </section>`;
+  }
+
+  // Initials for the read-only assignee avatars on a collapsed row.
+  _initials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    const first = parts[0][0];
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase();
+  }
+
+  // Compact assignee display for the collapsed row — up to three initials plus
+  // a "+N" overflow. The full editable chip list lives in the expanded editor.
+  _planAssigneeSummary(assignees) {
+    const list = assignees || [];
+    if (!list.length) return '';
+    const shown = list.slice(0, 3).map(n =>
+      `<span class="party-admin__plan-av" title="${escHtml(n)}">${escHtml(this._initials(n))}</span>`).join('');
+    const extra = list.length > 3
+      ? `<span class="party-admin__plan-av party-admin__plan-av--more">+${list.length - 3}</span>` : '';
+    return `<span class="party-admin__plan-avs" aria-hidden="true">${shown}${extra}</span>`;
+  }
+
+  _renderPlanPhaseGroup(phase) {
+    const key       = escHtml(phase.key);
+    const tasks     = this._planTasksIn(phase.key);
+    const s         = this._planTotals(tasks);
+    const collapsed = this._planCollapsed.has(phase.key);
+
+    // Built-ins have no delete button: 'other' is where a deleted phase's tasks
+    // land, and the other four anchor the i18n names.
+    const del = phase.isBuiltin ? '' : `
+            <button type="button" class="party-admin__cost-del" data-plan-phase-del="${key}"
+                    title="${t('party.admin.planPhaseDelete')}"
+                    aria-label="${escHtml(t('party.admin.planPhaseDeleteAria', { name: phase.label }))}">✕</button>`;
+
+    const body = collapsed ? '' : `
+        <div class="party-admin__plan-group-body">
+          <div class="party-admin__plan-list" data-plan-list="${key}">
+            ${tasks.length
+    ? tasks.map(task => this._renderPlanTaskCard(task, phase)).join('')
+    : `<p class="party-empty">${t('party.admin.planPhaseEmpty')}</p>`}
+          </div>
+          <form class="party-admin__plan-add" data-plan-add="${key}" novalidate>
+            <input type="text" class="lol-input party-admin__plan-add-input"
+                   placeholder="${escHtml(t('party.admin.planAddPh'))}" maxlength="200"
+                   aria-label="${t('party.admin.planTaskTitleLabel')}" />
+            <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.planAdd')}</button>
+            <span class="party-admin__logistics-status" data-plan-status="${key}" aria-live="polite"></span>
+          </form>
+        </div>`;
+
+    return `
+      <div class="party-admin__plan-group${collapsed ? ' party-admin__plan-group--collapsed' : ''}" data-plan-group="${key}">
+        <div class="party-admin__plan-group-head">
+          <button type="button" class="party-admin__plan-caret" data-plan-phase-toggle="${key}"
+                  aria-expanded="${collapsed ? 'false' : 'true'}"
+                  aria-label="${escHtml(t('party.admin.planTogglePhase', { name: phase.label }))}">▾</button>
+          <span class="party-admin__plan-group-icon">${escHtml(phase.icon)}</span>
+          <input type="text" class="party-admin__plan-group-name"
+                 data-plan-phase-rename="${key}" value="${escHtml(phase.label)}" maxlength="60"
+                 aria-label="${escHtml(t('party.admin.planPhaseRenameAria', { name: phase.label }))}" />
+          <span class="party-admin__plan-totals">
+            ⏱ ${this._formatPlanMinutes(s.minutes)} · 👥 ${s.people ?? '—'} · ${s.done}/${s.total}
+          </span>
+          ${del}
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  // A task is one dense row (title + time + helpers + assignee initials) with a
+  // caret that reveals the full editor (phase, assignees, to-do link, notes,
+  // delete). Keeping the heavy controls behind the caret is what restores the
+  // overview the stacked cards had buried.
+  _renderPlanTaskCard(task, phase) {
+    const id     = escHtml(String(task.id));
+    const open   = this._planExpanded.has(String(task.id));
+    const phases = this._planPhases_();
+    const todo   = task.linked_todo_id != null
+      ? (this._todos || []).find(td => String(td.id) === String(task.linked_todo_id))
+      : null;
+
+    const phaseOpts = phases.map(p => `
+                <option value="${escHtml(p.key)}" ${p.key === phase.key ? 'selected' : ''}>${escHtml(p.icon)} ${escHtml(p.label)}</option>`).join('');
+
+    // Linked → a chip that jumps to the TODO and shows whether it is done, so
+    // the plan reflects real progress. Unlinked → spawn a TODO, or adopt one
+    // that already exists (the planner often wrote it there first).
+    const link = todo ? `
+              <button type="button" class="party-admin__plan-linked${todo.done ? ' party-admin__plan-linked--done' : ''}"
+                      data-plan-goto-todo="${escHtml(String(todo.id))}"
+                      title="${escHtml(t('party.admin.planGoToTodo'))}">
+                ${todo.done ? '✅' : '⬜'} ${escHtml(todo.title || '')}
+              </button>
+              <button type="button" class="party-admin__cost-del" data-plan-unlink="${id}"
+                      title="${t('party.admin.planUnlink')}" aria-label="${t('party.admin.planUnlink')}">✕</button>`
+      : `
+              <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm" data-plan-create-todo="${id}">
+                ➕ ${t('party.admin.planCreateTodo')}
+              </button>
+              <select class="party-admin__plan-link-select" data-plan-link="${id}"
+                      aria-label="${t('party.admin.planLinkTodo')}">
+                <option value="">${escHtml(t('party.admin.planLinkTodoPh'))}</option>
+                ${(this._todos || []).map(td => `<option value="${escHtml(String(td.id))}">${escHtml(td.title || '')}</option>`).join('')}
+              </select>`;
+
+    return `
+      <div class="party-admin__plan-task${task.done ? ' party-admin__plan-task--done' : ''}${open ? ' party-admin__plan-task--open' : ''}"
+           data-plan-card="${id}" draggable="true">
+        <div class="party-admin__plan-row">
+          <span class="party-admin__plan-handle" title="${t('party.admin.planReorderHandle')}"
+                aria-label="${t('party.admin.planReorderHandle')}">⋮⋮</span>
+          <input type="checkbox" class="party-admin__todo-done" data-plan-done="${id}"
+                 ${task.done ? 'checked' : ''} aria-label="${t('party.admin.planMarkDone')}" />
+          <input type="text" class="party-admin__plan-title-input"
+                 data-plan-field="title" data-plan-id="${id}"
+                 value="${escHtml(task.title || '')}" maxlength="200"
+                 aria-label="${t('party.admin.planTaskTitleLabel')}" />
+          <span class="party-admin__plan-cell">
+            <input type="number" min="0" step="5" class="party-admin__plan-time-input"
+                   data-plan-field="time_minutes" data-plan-id="${id}"
+                   value="${escHtml(String(task.time_minutes ?? ''))}" placeholder="—"
+                   aria-label="${t('party.admin.planTime')}" />
+            <span class="party-admin__plan-unit">${t('party.admin.planTime')}</span>
+          </span>
+          <span class="party-admin__plan-cell">
+            <span aria-hidden="true">👥</span>
+            <input type="number" min="0" step="1" class="party-admin__plan-people-input"
+                   data-plan-field="people_needed" data-plan-id="${id}"
+                   value="${escHtml(String(task.people_needed ?? ''))}" placeholder="—"
+                   aria-label="${t('party.admin.planPeople')}" />
+          </span>
+          ${this._planAssigneeSummary(task.assignees)}
+          <button type="button" class="party-admin__plan-expand" data-plan-expand="${id}"
+                  aria-expanded="${open ? 'true' : 'false'}"
+                  aria-label="${escHtml(t('party.admin.planToggleTask', { name: task.title || '' }))}">▾</button>
+        </div>
+
+        <div class="party-admin__plan-editor" data-plan-editor="${id}"${open ? '' : ' hidden'}>
+          <div class="party-admin__plan-editor-row">
+            <label class="party-admin__plan-field">
+              <span>${t('party.admin.planPhaseLabel')}</span>
+              <select class="party-admin__plan-phase-select" data-plan-field="phase" data-plan-id="${id}"
+                      aria-label="${t('party.admin.planPhaseLabel')}">${phaseOpts}
+              </select>
+            </label>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                    data-plan-delete="${id}" data-plan-name="${escHtml(task.title || '')}">
+              ${t('party.admin.planDelete')}
+            </button>
+          </div>
+
+          ${this._renderAssigneeControl('plan', task.id, null, task.assignees)}
+
+          <div class="party-admin__plan-link">
+            <span class="party-admin__assignees-label">${t('party.admin.planTodoLabel')}</span>
+            ${link}
+          </div>
+
+          <textarea class="party-admin__todo-notes" data-plan-field="notes" data-plan-id="${id}"
+                    placeholder="${escHtml(t('party.admin.planNotesPh'))}"
+                    maxlength="2000" rows="2">${escHtml(task.notes || '')}</textarea>
+        </div>
+      </div>`;
+  }
+
+  _bindPlan() {
+    const section = this._el.querySelector('#party-admin-plan');
+    if (!section) return;
+
+    // Add a task — one form per phase, so a new task lands where it belongs
+    // without a follow-up edit.
+    section.querySelectorAll('form[data-plan-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const phase  = form.dataset.planAdd;
+        const input  = form.querySelector('.party-admin__plan-add-input');
+        const status = form.querySelector(`[data-plan-status="${CSS.escape(phase)}"]`);
+        const title  = (input?.value || '').trim();
+        if (!title) { input?.focus(); return; }
+        if (status) status.textContent = t('form.saving');
+        try {
+          const created = await this._todoApi('POST', '/api/v1/party/plan', { title, phase });
+          this._plan = [...(this._plan || []), created];
+          this._rerenderPlan();
+          this._el.querySelector(`form[data-plan-add="${CSS.escape(phase)}"] .party-admin__plan-add-input`)?.focus();
+        } catch (err) {
+          if (status) status.textContent = err.message || t('party.admin.planSaveFailed');
+        }
+      });
+    });
+
+    // Add a phase. The server derives the key from the label, as with sections.
+    const phaseForm = section.querySelector('#party-admin-plan-phase-add');
+    phaseForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const iconEl  = phaseForm.querySelector('.party-admin__plan-phase-icon');
+      const labelEl = phaseForm.querySelector('.party-admin__plan-phase-label');
+      const status  = phaseForm.querySelector('#party-admin-plan-phase-status');
+      const label = (labelEl?.value || '').trim();
+      if (!label) { labelEl?.focus(); return; }
+      if (status) status.textContent = t('form.saving');
+      try {
+        const phase = await this._todoApi('POST', '/api/v1/party/plan/phases', {
+          label, icon: (iconEl?.value || '').trim() || null,
+        });
+        this._planPhases = [...(this._planPhases || []), phase];
+        this._rerenderPlan();
+        this._el.querySelector(`form[data-plan-add="${CSS.escape(phase.key)}"] .party-admin__plan-add-input`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.planSaveFailed');
+      }
+    });
+
+    // Delegated change: done toggles, inline field edits, phase moves, the
+    // link-an-existing-todo select, and assignee names typed into a chip input.
+    section.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.matches?.('[data-plan-done]'))             return void this._togglePlanDone(el);
+      if (el.matches?.('[data-plan-phase-rename]'))     return void this._savePlanPhaseName(el);
+      if (el.matches?.('[data-plan-field]'))            return void this._savePlanField(el);
+      if (el.matches?.('[data-plan-link]'))             return void this._linkPlanTodo(el);
+      if (el.matches?.('.party-admin__assignee-input')) return void this._addAssignee(el);
+    });
+
+    section.addEventListener('click', (e) => {
+      const expand = e.target.closest?.('[data-plan-expand]');
+      if (expand) return void this._togglePlanExpand(expand.dataset.planExpand);
+      const ptoggle = e.target.closest?.('[data-plan-phase-toggle]');
+      if (ptoggle) return void this._togglePlanPhase(ptoggle.dataset.planPhaseToggle);
+      if (e.target.closest?.('[data-plan-collapse-all]')) return void this._togglePlanCollapseAll();
+      const jump = e.target.closest?.('[data-plan-jump]');
+      if (jump) {
+        // A collapsed target phase can't be scrolled to usefully — open it first.
+        this._planCollapsed.delete(jump.dataset.planJump);
+        this._rerenderPlan();
+        return void this._el.querySelector(`[data-plan-group="${CSS.escape(jump.dataset.planJump)}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      const goto = e.target.closest?.('[data-plan-goto-todo]');
+      if (goto) return void this._scrollToTodo(goto.dataset.planGotoTodo);
+      const del = e.target.closest?.('[data-plan-delete]');
+      if (del) return void this._deletePlanTask(del);
+      const pdel = e.target.closest?.('[data-plan-phase-del]');
+      if (pdel) return void this._deletePlanPhase(pdel);
+      const create = e.target.closest?.('[data-plan-create-todo]');
+      if (create) return void this._createTodoFromPlan(create);
+      const unlink = e.target.closest?.('[data-plan-unlink]');
+      if (unlink) return void this._unlinkPlanTodo(unlink);
+      const chip = e.target.closest?.('[data-chip-remove]');
+      if (chip) return void this._removeAssignee(chip);
+    });
+
+    // Enter in the assignee input adds a chip (the control isn't a <form>).
+    section.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const asg = e.target.closest?.('.party-admin__assignee-input');
+      if (asg) { e.preventDefault(); this._addAssignee(asg); }
+    });
+
+    this._bindPlanDrag(section);
+  }
+
+  _patchPlanLocal(taskId, patch, rerender) {
+    this._plan = (this._plan || []).map(task =>
+      String(task.id) === String(taskId) ? { ...task, ...patch } : task);
+    if (rerender) this._rerenderPlan();
+  }
+
+  // Row editor open/close. State is a Set on the view so it survives the
+  // re-render (and so the same task stays open across an unrelated save).
+  _togglePlanExpand(id) {
+    const key = String(id);
+    if (this._planExpanded.has(key)) this._planExpanded.delete(key);
+    else this._planExpanded.add(key);
+    this._rerenderPlan();
+  }
+
+  _togglePlanPhase(key) {
+    if (this._planCollapsed.has(key)) this._planCollapsed.delete(key);
+    else this._planCollapsed.add(key);
+    this._rerenderPlan();
+  }
+
+  // Collapse everything if anything is open, else open everything.
+  _togglePlanCollapseAll() {
+    const keys = this._planPhases_().map(p => p.key);
+    const anyOpen = keys.some(k => !this._planCollapsed.has(k));
+    this._planCollapsed = new Set(anyOpen ? keys : []);
+    this._rerenderPlan();
+  }
+
+  // Inline title/notes/time/people/phase edit. Mirrors _saveTodoText: no-op when
+  // unchanged, reverts on failure, badInput guard on the number fields.
+  async _savePlanField(input) {
+    const field = input.dataset.planField;   // title | notes | time_minutes | people_needed | phase
+    const id    = input.dataset.planId;
+    const isNum = field === 'time_minutes' || field === 'people_needed';
+    let value;
+    if (isNum) {
+      // badInput: the number input displays junk but reports value === '' —
+      // reverting protects the saved estimate instead of silently clearing it.
+      if (input.validity && input.validity.badInput) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
+      const raw = input.value.trim();
+      if (raw !== '' && !Number.isFinite(Number(raw))) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
+      value = raw === '' ? null : Math.round(Number(raw));
+    } else {
+      value = input.value.trim();
+      if (field === 'title' && value === '') {
+        input.value = input.dataset.lastSaved ?? input.defaultValue;
+        return;
+      }
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    const cur = value == null ? '' : String(value);
+    if (cur === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = cur;
+    // The number inputs fire 'change' per spinner step — the token stops a
+    // stale response from overwriting a newer save.
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, { [field]: value });
+      if (Number(input.dataset.saveToken) !== token) return; // superseded
+      // Estimates feed the phase totals and a phase change moves the card into
+      // another group, so both need the section rebuilt; a title/notes edit
+      // does not, and rebuilding would yank focus out of the field being typed.
+      this._patchPlanLocal(id, { [field]: updated[field] }, isNum || field === 'phase');
+      if (field === 'title') {
+        const btn = input.closest('[data-plan-card]')?.querySelector('[data-plan-delete]');
+        if (btn) btn.dataset.planName = value;
+      }
+    } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return;
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _togglePlanDone(cb) {
+    const id = cb.dataset.planDone;
+    const next = cb.checked;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, { done: next });
+      this._patchPlanLocal(id, { done: updated.done }, true);
+    } catch (err) {
+      cb.checked = !next;
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _deletePlanTask(btn) {
+    const id   = btn.dataset.planDelete;
+    const name = btn.dataset.planName || '';
+    if (!confirm(t('party.admin.planDeleteConfirm', { name }))) return;
+    btn.disabled = true;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/plan/${encodeURIComponent(id)}`);
+      this._plan = (this._plan || []).filter(task => String(task.id) !== String(id));
+      this._rerenderPlan();
+    } catch (err) {
+      showToast(err.message || t('party.admin.planDeleteFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  // Rename a phase inline. Clearing the field on a built-in hands its name back
+  // to i18n; on a custom phase an empty name is meaningless, so it reverts.
+  async _savePlanPhaseName(input) {
+    const key = input.dataset.planPhaseRename;
+    const row = (this._planPhases || []).find(p => p.key === key);
+    const value = input.value.trim();
+    if (!value && !row?.is_builtin) {
+      input.value = input.dataset.lastSaved ?? input.defaultValue;
+      return;
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    if (value === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = value;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/phases/${encodeURIComponent(key)}`, {
+        label: value || null,
+      });
+      this._planPhases = (this._planPhases || []).map(p => p.key === key ? updated : p);
+      this._rerenderPlan();
+      this._el.querySelector(`[data-plan-phase-rename="${CSS.escape(key)}"]`)?.focus();
+    } catch (err) {
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Delete a phase. Its tasks are NOT deleted — the FK sweeps them into "other"
+  // (069), so the confirm says so rather than implying the work goes with it.
+  async _deletePlanPhase(btn) {
+    const key   = btn.dataset.planPhaseDel;
+    const phase = this._planPhases_().find(p => p.key === key);
+    const name  = phase?.label || key;
+    const n     = this._planTasksIn(key).length;
+    const msg = n > 0
+      ? t('party.admin.planPhaseDeleteConfirmTasks', { name, n })
+      : t('party.admin.planPhaseDeleteConfirm', { name });
+    if (!confirm(msg)) return;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/plan/phases/${encodeURIComponent(key)}`);
+      this._planPhases = (this._planPhases || []).filter(p => p.key !== key);
+      // Mirror the FK's ON DELETE SET DEFAULT locally so the tasks reappear
+      // under Other without a refetch.
+      this._plan = (this._plan || [])
+        .map(task => ((task.phase || 'other') === key ? { ...task, phase: 'other' } : task));
+      this._rerenderPlan();
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Spawn a TODO from this task. The plan says the party needs the job done;
+  // the ✅ list is where a named person picks it up, so both sections refresh.
+  async _createTodoFromPlan(btn) {
+    const id = btn.dataset.planCreateTodo;
+    btn.disabled = true;
+    try {
+      const res = await this._todoApi('POST', `/api/v1/party/plan/${encodeURIComponent(id)}/create-todo`);
+      this._todos = [...(this._todos || []), res.todo];
+      this._patchPlanLocal(id, { linked_todo_id: res.task.linked_todo_id }, false);
+      this._rerenderTodos();          // cascades into _rerenderPlan
+      showToast(t('party.admin.planCreatedTodo'), 'success');
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  async _linkPlanTodo(select) {
+    const id = select.dataset.planLink;
+    const raw = select.value;
+    if (!raw) return;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, {
+        linked_todo_id: Number(raw),
+      });
+      this._patchPlanLocal(id, { linked_todo_id: updated.linked_todo_id }, true);
+    } catch (err) {
+      select.value = '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _unlinkPlanTodo(btn) {
+    const id = btn.dataset.planUnlink;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, {
+        linked_todo_id: null,
+      });
+      this._patchPlanLocal(id, { linked_todo_id: updated.linked_todo_id }, true);
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Jump to the linked TODO's card in the ✅ section and flash it, so the click
+  // lands somewhere obvious rather than dumping the planner mid-page.
+  _scrollToTodo(todoId) {
+    const card = this._el.querySelector(`[data-todo-card="${CSS.escape(String(todoId))}"]`)
+      || this._el.querySelector('#party-admin-todos');
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('party-admin__todo-card--flash');
+    setTimeout(() => card.classList.remove('party-admin__todo-card--flash'), 1600);
+  }
+
+  // Drag-to-reorder within one phase. Moving a task to another phase is the
+  // phase <select> on the card, not a cross-group drag: dropping between groups
+  // means a move plus a reorder, two writes with two ways to half-fail, and
+  // drag is unreliable on the phone the planner is actually holding.
+  _bindPlanDrag(section) {
+    let draggedId = null;
+
+    const clearMarks = () => {
+      section.querySelectorAll('.party-admin__plan-task--drop-above, .party-admin__plan-task--drop-below')
+        .forEach(c => c.classList.remove('party-admin__plan-task--drop-above', 'party-admin__plan-task--drop-below'));
+    };
+    const listKeyOf = (el) => el?.closest('[data-plan-list]')?.dataset.planList;
+
+    section.addEventListener('dragstart', (e) => {
+      const handle = e.target.closest?.('.party-admin__plan-handle');
+      if (!handle) {
+        // Cards are draggable so the handle works, which also lets the card
+        // body ghost-drag. Cancel that, but only inside a card — a text
+        // selection dragged out of an input elsewhere is nobody's business.
+        if (e.target.closest?.('[data-plan-card]')) e.preventDefault();
+        return;
+      }
+      const card = handle.closest('[data-plan-card]');
+      if (!card) { e.preventDefault(); return; }
+      draggedId = card.dataset.planCard;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
+      card.classList.add('party-admin__plan-task--dragging');
+    });
+
+    section.addEventListener('dragend', (e) => {
+      e.target.closest?.('[data-plan-card]')?.classList.remove('party-admin__plan-task--dragging');
+      clearMarks();
+      draggedId = null;
+    });
+
+    section.addEventListener('dragover', (e) => {
+      if (!draggedId) return;
+      const card = e.target.closest('[data-plan-card]');
+      if (!card || card.dataset.planCard === draggedId) return;
+      const from = this._el.querySelector(`[data-plan-card="${CSS.escape(draggedId)}"]`);
+      if (listKeyOf(card) !== listKeyOf(from)) return;   // same phase only
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isBefore = (e.clientY - rect.top) < (rect.height / 2);
+      clearMarks();
+      card.classList.add(isBefore ? 'party-admin__plan-task--drop-above' : 'party-admin__plan-task--drop-below');
+    });
+
+    section.addEventListener('drop', async (e) => {
+      if (!draggedId) return;
+      e.preventDefault();
+      const card = e.target.closest('[data-plan-card]');
+      if (!card || card.dataset.planCard === draggedId) { clearMarks(); return; }
+      const targetId = card.dataset.planCard;
+      const isAbove  = card.classList.contains('party-admin__plan-task--drop-above');
+      clearMarks();
+      const moved = draggedId;
+      draggedId = null;
+
+      const tasks   = this._plan || [];
+      const dragged = tasks.find(x => String(x.id) === String(moved));
+      if (!dragged) return;
+      const without = tasks.filter(x => String(x.id) !== String(moved));
+      const idx     = without.findIndex(x => String(x.id) === String(targetId));
+      if (idx < 0) return;
+      const insertAt  = isAbove ? idx : idx + 1;
+      const reordered = [...without.slice(0, insertAt), dragged, ...without.slice(insertAt)];
+
+      const previous = this._plan;
+      this._plan = reordered;
+      this._rerenderPlan();
+      try {
+        await this._todoApi('POST', '/api/v1/party/plan/reorder', { ids: reordered.map(x => x.id) });
+      } catch (err) {
+        this._plan = previous;
+        this._rerenderPlan();
+        showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+      }
+    });
+  }
+
+  _rerenderPlan() {
+    const old = this._el.querySelector('#party-admin-plan');
+    if (!old) return;
+    // Which rows/phases are open is tracked on the view (_planExpanded /
+    // _planCollapsed), so the fresh markup already reflects it — no DOM state to
+    // carry across, unlike the old <details> approach.
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderPlanSection();
+    old.replaceWith(tmp.firstElementChild);
+    this._bindPlan();
+  }
+
   // ── To-do list ─────────────────────────────────────────────────────────────
   // A collaborative checklist for the planning team. Each TODO has notes, an
   // optional due date + assignees, and breaks down into subtasks that carry
@@ -2843,6 +3562,7 @@ export class PartyAdminView {
       (td.assignees || []).forEach(add);
       (td.subtasks  || []).forEach(s => (s.assignees || []).forEach(add));
     }
+    for (const task of (this._plan || [])) (task.assignees || []).forEach(add);
     return [...names].sort((a, b) => a.localeCompare(b));
   }
 
@@ -2968,12 +3688,16 @@ export class PartyAdminView {
       </div>`;
   }
 
-  // Assignee chip control, reused for both TODOs and subtasks. The container's
-  // data-* attributes tell the delegated handlers which entity to PATCH.
+  // Assignee chip control, reused for TODOs, subtasks and plan tasks. The
+  // container's data-* attributes tell the delegated handlers which entity to
+  // PATCH. Plan tasks pass their own id in the todoId slot — the three scopes
+  // share this markup, they just resolve `current` from different stores.
   _renderAssigneeControl(scope, todoId, subtaskId, assignees) {
     const attrs = scope === 'subtask'
       ? `data-assignee-scope="subtask" data-todo-id="${escHtml(String(todoId))}" data-subtask-id="${escHtml(String(subtaskId))}"`
-      : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
+      : scope === 'plan'
+        ? `data-assignee-scope="plan" data-todo-id="${escHtml(String(todoId))}"`
+        : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
     const chips = (assignees || []).map(n => `
         <span class="party-admin__chip">${escHtml(n)}<button type="button" class="party-admin__chip-remove" data-chip-remove="${escHtml(n)}" aria-label="${t('party.admin.todoRemoveAssignee')}">×</button></span>`).join('');
     return `
@@ -3235,8 +3959,13 @@ export class PartyAdminView {
     const scope     = container.dataset.assigneeScope;
     const todoId    = container.dataset.todoId;
     const subtaskId = container.dataset.subtaskId;
-    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
     let current = [];
+    if (scope === 'plan') {
+      const task = (this._plan || []).find(x => String(x.id) === String(todoId));
+      current = task?.assignees || [];
+      return { scope, todoId, subtaskId, current: [...current] };
+    }
+    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
     if (scope === 'subtask') {
       const s = td?.subtasks?.find(x => String(x.id) === String(subtaskId));
       current = s?.assignees || [];
@@ -3265,6 +3994,13 @@ export class PartyAdminView {
 
   async _saveAssignees(scope, todoId, subtaskId, assignees) {
     try {
+      if (scope === 'plan') {
+        const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(todoId)}`, { assignees });
+        this._patchPlanLocal(todoId, { assignees: updated.assignees }, false);
+        this._peopleNames = this._collectPeopleNames();
+        this._rerenderPlan();
+        return;
+      }
       if (scope === 'subtask') {
         const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(subtaskId)}`, { assignees });
         this._patchSubtaskLocal(todoId, subtaskId, { assignees: updated.assignees }, false);
@@ -3378,6 +4114,10 @@ export class PartyAdminView {
     old.replaceWith(next);
     this._bindTodos();
     this._rerenderCosts();
+    // Plan tasks show their linked TODO's title and done state, so any change
+    // here can stale those chips. One-directional on purpose: _rerenderPlan
+    // never calls back into this, or the two would ping-pong forever.
+    this._rerenderPlan();
   }
 
   _bindInvitedGuests() {

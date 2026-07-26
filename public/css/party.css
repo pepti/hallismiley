@@ -2729,3 +2729,484 @@ button.party-admin__stat:focus-visible {
 }
 .party-admin__cost-rename-form .party-admin__cost-section-icon  { flex: 0 0 3.5rem; text-align: center; }
 .party-admin__cost-rename-form .party-admin__cost-rename-label  { flex: 1 1 120px; min-width: 0; }
+
+/* ── Project plan (069) ───────────────────────────────────────────────────── */
+
+/* Staffing strip — the "how many helpers at set-up" answer, one chip per phase
+   that has work in it. Chips jump to their group. */
+.party-admin__plan-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.015);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.party-admin__plan-chip:hover,
+.party-admin__plan-chip:focus-visible { border-color: var(--gold); }
+.party-admin__plan-chip-num { color: var(--gold); white-space: nowrap; }
+
+/* Collapse-all toggle above the groups. */
+.party-admin__plan-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-collapse-all {
+  background: none;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 2px 4px;
+}
+.party-admin__plan-collapse-all:hover { color: var(--gold); }
+
+.party-admin__plan-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-group {
+  border: 1px solid rgba(200, 170, 110, 0.22);
+  border-radius: 8px;
+  padding: var(--sp-2) var(--sp-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.party-admin__plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+/* Caret buttons (phase collapse + row expand) share one look; rotation encodes
+   open/closed. Default ▾ = open; rotated = closed/collapsed. */
+.party-admin__plan-caret,
+.party-admin__plan-expand {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 2px 3px;
+  transition: transform 120ms ease;
+  flex: 0 0 auto;
+}
+.party-admin__plan-caret:hover,
+.party-admin__plan-expand:hover { color: var(--gold); }
+.party-admin__plan-group--collapsed .party-admin__plan-caret { transform: rotate(-90deg); }
+.party-admin__plan-task--open .party-admin__plan-expand { transform: rotate(180deg); }
+.party-admin__plan-group-icon { flex: 0 0 auto; }
+.party-admin__plan-group-name {
+  flex: 1 1 120px;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.1rem 0.3rem;
+}
+.party-admin__plan-group-name:hover { border-color: rgba(200, 170, 110, 0.25); }
+.party-admin__plan-group-name:focus {
+  border-color: var(--gold);
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+.party-admin__plan-totals {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.party-admin__plan-group-body { margin-top: var(--sp-1); }
+
+.party-admin__plan-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed rgba(200, 170, 110, 0.18);
+}
+.party-admin__plan-add .party-admin__plan-add-input { flex: 1 1 240px; min-width: 0; }
+.party-admin__plan-add .party-admin__logistics-status {
+  flex: 1 0 100%;
+  margin-left: 0;
+  font-size: 0.78rem;
+}
+
+/* Dense rows: one task per line, hairline-separated, no per-task card chrome. */
+.party-admin__plan-list { display: flex; flex-direction: column; }
+.party-admin__plan-task { border-top: 1px solid rgba(200, 170, 110, 0.12); }
+.party-admin__plan-task:first-child { border-top: 0; }
+.party-admin__plan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 0;
+}
+.party-admin__plan-task--done .party-admin__plan-title-input {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.party-admin__plan-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  user-select: none;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.party-admin__plan-handle:hover { color: var(--gold); }
+.party-admin__plan-handle:active { cursor: grabbing; }
+
+.party-admin__plan-title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 0;
+  outline: none;
+}
+.party-admin__plan-title-input:hover { border-bottom-color: rgba(200, 170, 110, 0.25); }
+.party-admin__plan-title-input:focus {
+  border-bottom-color: var(--gold);
+  background: rgba(200, 170, 110, 0.05);
+}
+
+/* Compact time/helpers cells on the row. */
+.party-admin__plan-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.party-admin__plan-unit { color: var(--text-muted); }
+.party-admin__plan-time-input,
+.party-admin__plan-people-input {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 2px 3px;
+  text-align: right;
+  color-scheme: dark;
+}
+.party-admin__plan-time-input   { width: 3.2rem; }
+.party-admin__plan-people-input { width: 2.6rem; }
+
+/* Read-only assignee initials on the collapsed row. */
+.party-admin__plan-avs { display: inline-flex; flex: 0 0 auto; }
+.party-admin__plan-av {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(200, 170, 110, 0.2);
+  color: var(--gold);
+  font-size: 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -5px;
+  border: 1px solid #17110a;
+}
+.party-admin__plan-av:first-child { margin-left: 0; }
+.party-admin__plan-av--more { color: var(--text-secondary); }
+
+/* The expandable editor holds the heavy controls, indented under its row. */
+.party-admin__plan-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3) 26px;
+}
+.party-admin__plan-editor[hidden] { display: none; }
+.party-admin__plan-editor-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.party-admin__plan-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__plan-phase-select,
+.party-admin__plan-link-select {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  color-scheme: dark;
+}
+.party-admin__plan-phase-select { max-width: 14rem; }
+.party-admin__plan-link-select  { max-width: 14rem; }
+
+/* Link to the ✅ to-do list. Green tint once the linked to-do is ticked, so a
+   glance down the plan shows what has actually been done. */
+.party-admin__plan-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__plan-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.party-admin__plan-linked:hover,
+.party-admin__plan-linked:focus-visible { border-color: var(--gold); }
+.party-admin__plan-linked--done {
+  border-color: rgba(120, 190, 130, 0.45);
+  color: #8fca9a;
+}
+
+/* Flash the to-do a plan chip jumped to, so the scroll lands somewhere obvious. */
+.party-admin__todo-card--flash {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  transition: outline-color 300ms ease;
+}
+
+/* Plan drag-reorder — always a single column, so above/below is always vertical
+   (unlike the to-do grid, which flips to left/right on desktop). */
+.party-admin__plan-task--dragging { opacity: 0.4; }
+.party-admin__plan-task--drop-above { border-top: 2px solid var(--gold); }
+.party-admin__plan-task--drop-below { border-bottom: 2px solid var(--gold); }
+
+@media (max-width: 560px) {
+  /* Keep the row on one line but let the title shrink; the phase-select and
+     other heavy controls already live in the expander, so the row stays tight. */
+  .party-admin__plan-title-input { flex: 1 1 40%; }
+  .party-admin__plan-editor-row { gap: var(--sp-2); }
+}
+
+/* ── Photo album ─────────────────────────────────────────────────────────────── */
+
+.party-album__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__sort-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-right: var(--sp-1);
+}
+
+.party-album__sort-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  background: rgba(30, 35, 40, 0.6);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.party-album__sort-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.party-album__sort-btn--active {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.party-album__count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.party-album__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.party-album__tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(30, 35, 40, 0.6);
+}
+
+.party-album__open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.party-album__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.party-album__placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgba(30, 35, 40, 0.9);
+}
+
+/* Play badge on video tiles */
+.party-album__tile--video::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(1, 10, 19, 0.65) no-repeat 55% 50% /
+    14px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.party-album__delete {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-dim);
+  border-radius: 50%;
+  background: rgba(1, 10, 19, 0.7);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.party-album__delete:hover { color: var(--gold); border-color: var(--gold); }
+
+/* Upload queue */
+.party-album__queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__queue-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.party-album__queue-item--error { border-color: var(--danger, #c0392b); }
+
+.party-album__queue-name {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.party-album__queue-size { color: var(--text-secondary); font-family: var(--font-mono); }
+
+.party-album__bar {
+  flex: 1 1 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.party-album__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 200ms ease;
+}
+
+.party-album__queue-error { color: var(--danger, #c0392b); }
+
+.party-album__retry { padding: 2px 10px; font-size: 0.75rem; }
+
+.party-album__more {
+  display: block;
+  margin: var(--sp-4) auto 0;
+}
+
+@media (max-width: 600px) {
+  .party-album__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+  /* Thumb-sized touch target on the delete chip */
+  .party-album__delete { width: 32px; height: 32px; }
+  .party-album__count { flex-basis: 100%; margin-left: 0; }
+}

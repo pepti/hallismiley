@@ -26,6 +26,11 @@ const MIME_TO_EXT = {
   'image/webp': '.webp',
   'video/mp4':  '.mp4',
   'video/webm': '.webm',
+  // quicktime is accepted only by the party album upload (iPhones record .mov);
+  // it is deliberately NOT in ALLOWED_VIDEO_TYPES, so project/news/product
+  // uploads still reject it — this map is only consulted after a fileFilter
+  // has accepted the MIME type.
+  'video/quicktime': '.mov',
 };
 
 /**

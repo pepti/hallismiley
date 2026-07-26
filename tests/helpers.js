@@ -166,7 +166,7 @@ async function getTestSessionCookie(userId) {
 /** Truncate all mutable tables and reset sequences between tests. */
 async function cleanTables() {
   await db.query(
-    'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_logistics_categories, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_logistics_categories, party_plan_tasks, party_plan_phases, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
   );
   // party_logistics_categories is listed above only for clarity — it would be
   // truncated regardless, because TRUNCATE ... CASCADE sweeps every table with
@@ -179,6 +179,18 @@ async function cleanTables() {
      VALUES ('food', NULL, '🍽️', 1, TRUE),
             ('drinks', NULL, '🥤', 2, TRUE),
             ('other', NULL, '📦', 3, TRUE)
+     ON CONFLICT (key) DO NOTHING`
+  );
+  // party_plan_phases is swept by the same users CASCADE for the same reason;
+  // re-seed migration 069's five built-ins or every plan endpoint 400s on an
+  // unknown phase after the first cleanTables() call.
+  await db.query(
+    `INSERT INTO party_plan_phases (key, label, icon, sort_order, is_builtin)
+     VALUES ('pickup',   NULL, '🚗', 1, TRUE),
+            ('setup',    NULL, '🔨', 2, TRUE),
+            ('during',   NULL, '🎉', 3, TRUE),
+            ('teardown', NULL, '🧹', 4, TRUE),
+            ('other',    NULL, '📦', 5, TRUE)
      ON CONFLICT (key) DO NOTHING`
   );
   // user_roles is cleared via the users CASCADE above; also drop the in-process

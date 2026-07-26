@@ -41,6 +41,14 @@ export class PartyView {
     this._rsvp          = null;
     this._rsvpCount     = 0;
     this._requestSubmitted = false;
+
+    // Photo album state. Loaded after first paint (not in _loadAll) so the
+    // page renders without waiting on the grid.
+    this._album         = { photos: [], total: 0, sort: 'newest', loading: false };
+    this._albumLightbox = null;
+    this._albumStale    = false;
+    this._queue         = [];
+    this._queueActive   = 0;
   }
 
   // Gates RSVP + Activities. Admins/moderators bypass; everyone else needs the
@@ -218,6 +226,7 @@ export class PartyView {
 
     return `
       ${this._renderHero()}
+      ${this._renderAlbum()}
       ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟')}
       ${this._renderSchedule(schedule)}
       ${this._renderVenue(info)}
@@ -701,10 +710,391 @@ export class PartyView {
   }
 
 
+  // ── Photo album ───────────────────────────────────────────────────────────────
+
+  // Mirrors the server-side allowlist in partyRoutes.js. The explicit accept
+  // list (instead of image/*) makes iOS transcode HEIC→JPEG at pick time.
+  static ALBUM_MIMES = ['image/jpeg', 'image/png', 'image/webp',
+                        'video/mp4', 'video/webm', 'video/quicktime'];
+
+  _renderAlbum() {
+    return `
+      <section class="party-section party-album" aria-labelledby="album-heading">
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="album-heading">📸 ${t('party.album')}</h2>
+          <div class="party-album__toolbar">
+            <button type="button" class="lol-btn lol-btn--primary party-album__upload" data-album-upload>
+              ${t('party.album.upload')}
+            </button>
+            <input type="file" multiple hidden data-album-file
+                   accept="${PartyView.ALBUM_MIMES.join(',')}">
+            <span class="party-album__count" data-album-count aria-live="polite"></span>
+          </div>
+          <div class="party-album__sort" role="group" aria-label="${t('party.album.sortLabel')}">
+            <span class="party-album__sort-label">${t('party.album.sortLabel')}</span>
+            ${[
+              ['newest',   t('party.album.sortNewest')],
+              ['oldest',   t('party.album.sortOldest')],
+              ['uploader', t('party.album.sortUploader')],
+              ['videos',   t('party.album.sortVideos')],
+              ['photos',   t('party.album.sortPhotos')],
+              ['shuffle',  t('party.album.sortShuffle')],
+            ].map(([key, label]) => `
+              <button type="button"
+                      class="party-album__sort-btn${this._album.sort === key ? ' party-album__sort-btn--active' : ''}"
+                      data-album-sort="${key}" aria-pressed="${this._album.sort === key}">
+                ${label}
+              </button>`).join('')}
+          </div>
+          <div class="party-album__queue" data-album-queue hidden></div>
+          <div class="party-album__grid" data-album-grid></div>
+          <p class="party-album__empty" data-album-empty hidden>${t('party.album.empty')}</p>
+          <button type="button" class="lol-btn lol-btn--ghost party-album__more" data-album-more hidden>
+            ${t('party.album.loadMore')}
+          </button>
+        </div>
+      </section>`;
+  }
+
+  _bindAlbum() {
+    const section = this._el.querySelector('.party-album');
+    if (!section) return;
+
+    section.querySelectorAll('[data-album-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.albumSort;
+        // Re-clicking Shuffle deals a fresh order; re-clicking others is a no-op.
+        if (key === this._album.sort && key !== 'shuffle') return;
+        this._album.sort = key;
+        if (key === 'shuffle') {
+          this._album.seed = Math.random().toString(36).slice(2, 10);
+        }
+        section.querySelectorAll('[data-album-sort]').forEach(b => {
+          const active = b === btn;
+          b.classList.toggle('party-album__sort-btn--active', active);
+          b.setAttribute('aria-pressed', String(active));
+        });
+        this._loadAlbumPage(true);
+      });
+    });
+    section.querySelector('[data-album-more]').addEventListener('click', () => {
+      this._loadAlbumPage(false);
+    });
+
+    const fileInput = section.querySelector('[data-album-file]');
+    section.querySelector('[data-album-upload]').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files?.length) this._enqueueUploads(Array.from(fileInput.files));
+      fileInput.value = '';
+    });
+
+    this._loadAlbumPage(true);
+  }
+
+  async _loadAlbumPage(reset) {
+    if (this._album.loading) return;
+    this._album.loading = true;
+    const offset = reset ? 0 : this._album.photos.length;
+    try {
+      const params = new URLSearchParams({
+        sort: this._album.sort, limit: '60', offset: String(offset),
+      });
+      if (this._album.sort === 'shuffle') params.set('seed', this._album.seed || '');
+      const res = await fetch(`/api/v1/party/photos?${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { photos, total } = await res.json();
+      this._album.photos = reset ? photos : [...this._album.photos, ...photos];
+      this._album.total  = total;
+      this._renderAlbumGrid();
+    } catch (err) {
+      console.error('[PartyView] album load failed:', err);
+      showToast(t('party.loadError'), 'error');
+    } finally {
+      this._album.loading = false;
+    }
+  }
+
+  _renderAlbumGrid() {
+    const section = this._el?.querySelector('.party-album');
+    if (!section) return;
+    const grid    = section.querySelector('[data-album-grid]');
+    const { photos, total } = this._album;
+    const me      = getUser();
+
+    grid.innerHTML = photos.map((p, i) => {
+      const isVideo   = p.media_type === 'video';
+      const canDelete = (me && p.user_id === me.id) || canEdit();
+      const caption   = p.caption || p.display_name || p.username || '';
+      // Never point an <img> at a video file — thumbless videos get a
+      // placeholder tile with the play badge.
+      const media = (isVideo && !p.thumb_path)
+        ? '<span class="party-album__placeholder" aria-hidden="true"></span>'
+        : `<img class="party-album__thumb" src="${escHtml(p.thumb_path || p.file_path)}"
+                alt="${escHtml(caption)}" loading="lazy" decoding="async">`;
+      return `
+        <div class="party-album__tile${isVideo ? ' party-album__tile--video' : ''}">
+          <button type="button" class="party-album__open" data-album-open data-index="${i}"
+                  aria-label="${escHtml(caption) || t('party.album')}">
+            ${media}
+          </button>
+          ${canDelete ? `
+          <button type="button" class="party-album__delete" data-album-delete data-id="${p.id}"
+                  aria-label="${t('form.delete')}">&#x2715;</button>` : ''}
+        </div>`;
+    }).join('');
+
+    section.querySelector('[data-album-empty]').hidden = photos.length > 0;
+    section.querySelector('[data-album-more]').hidden  = photos.length >= total;
+    section.querySelector('[data-album-count]').textContent =
+      total > 0 ? t('party.album.count', { shown: photos.length, total }) : '';
+
+    grid.querySelectorAll('[data-album-open]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this._albumLightbox?.open(Number(btn.dataset.index));
+      });
+    });
+    grid.querySelectorAll('[data-album-delete]').forEach(btn => {
+      btn.addEventListener('click', () => this._deleteAlbumPhoto(Number(btn.dataset.id)));
+    });
+
+    this._bindAlbumLightbox();
+  }
+
+  _bindAlbumLightbox() {
+    if (this._albumLightbox) { this._albumLightbox.destroy(); this._albumLightbox = null; }
+    if (!this._album.photos.length) return;
+
+    const items = this._album.photos.map(p => ({
+      file_path:  p.file_path,
+      media_type: p.media_type,
+      caption:    p.caption || p.display_name || p.username || '',
+    }));
+    this._albumLightbox = new Lightbox(items, { download: true });
+    this._albumLightbox.mount();
+  }
+
+  async _deleteAlbumPhoto(id) {
+    if (!window.confirm(t('party.album.deleteConfirm'))) return;
+    try {
+      const res = await fetch(`/api/v1/party/photos/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: await getCsrfHeaders(),
+      });
+      if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+      this._album.photos = this._album.photos.filter(p => p.id !== id);
+      this._album.total  = Math.max(0, this._album.total - 1);
+      this._renderAlbumGrid();
+      showToast(t('party.album.deleted'), 'success');
+    } catch (err) {
+      console.error('[PartyView] delete failed:', err);
+      showToast(t('party.album.uploadFailed'), 'error');
+    }
+  }
+
+  // ── Photo album: upload queue ─────────────────────────────────────────────────
+
+  _enqueueUploads(files) {
+    for (const file of files) {
+      const supported = PartyView.ALBUM_MIMES.includes(file.type);
+      this._queue.push({
+        id:     `q${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        file,
+        status: supported ? 'pending' : 'error',
+        error:  supported ? null : t('party.album.unsupportedType'),
+        pct:    0,
+        xhr:    null,
+      });
+    }
+    this._renderQueue();
+    this._pumpQueue();
+  }
+
+  _renderQueue() {
+    const container = this._el?.querySelector('[data-album-queue]');
+    if (!container) return;
+    const visible = this._queue.filter(e => e.status !== 'done');
+    container.hidden = visible.length === 0;
+    if (container.hidden) { container.innerHTML = ''; this._queue = []; return; }
+
+    container.innerHTML = visible.map(e => `
+      <div class="party-album__queue-item${e.status === 'error' ? ' party-album__queue-item--error' : ''}"
+           data-queue-id="${e.id}">
+        <span class="party-album__queue-name">${escHtml(e.file.name)}</span>
+        <span class="party-album__queue-size">${this._formatSize(e.file.size)}</span>
+        <span class="party-album__bar"><i style="width:${e.pct}%"></i></span>
+        ${e.status === 'error' ? `
+          <span class="party-album__queue-error">${escHtml(e.error || t('party.album.uploadFailed'))}</span>
+          ${e.error === t('party.album.unsupportedType') ? '' : `
+          <button type="button" class="lol-btn lol-btn--ghost party-album__retry" data-queue-retry="${e.id}">
+            ${t('party.album.retry')}
+          </button>`}` : ''}
+      </div>`).join('');
+
+    container.querySelectorAll('[data-queue-retry]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const entry = this._queue.find(e => e.id === btn.dataset.queueRetry);
+        if (entry) { entry.status = 'pending'; entry.error = null; entry.pct = 0; }
+        this._renderQueue();
+        this._pumpQueue();
+      });
+    });
+  }
+
+  _formatSize(bytes) {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  _pumpQueue() {
+    while (this._queueActive < 2) {
+      const next = this._queue.find(e => e.status === 'pending');
+      if (!next) break;
+      next.status = 'uploading';
+      this._queueActive++;
+      this._uploadOne(next).finally(() => {
+        this._queueActive--;
+        this._pumpQueue();
+      });
+    }
+    // Queue drained: if uploads landed while a non-newest sort was active the
+    // local ordering is unknowable — refetch once instead of guessing.
+    const busy = this._queue.some(e => e.status === 'pending' || e.status === 'uploading');
+    if (!busy) {
+      this._renderQueue();
+      if (this._albumStale) {
+        this._albumStale = false;
+        this._loadAlbumPage(true);
+      }
+    }
+  }
+
+  async _uploadOne(entry) {
+    const thumb = await this._makeThumb(entry.file);
+    const token = await getCSRFToken();
+
+    await new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      entry.xhr = xhr;
+      xhr.open('POST', '/api/v1/party/photos');
+      xhr.withCredentials = true;
+      if (token) xhr.setRequestHeader('X-CSRF-Token', token);
+
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        entry.pct = Math.round((e.loaded / e.total) * 100);
+        const bar = this._el?.querySelector(`[data-queue-id="${entry.id}"] .party-album__bar > i`);
+        if (bar) bar.style.width = `${entry.pct}%`;
+      };
+
+      xhr.onload = () => {
+        entry.xhr = null;
+        if (xhr.status === 201) {
+          entry.status = 'done';
+          try {
+            const row = JSON.parse(xhr.responseText);
+            if (this._album.sort === 'newest') {
+              const me = getUser();
+              this._album.photos.unshift({
+                ...row,
+                display_name: me?.display_name,
+                username:     me?.username,
+              });
+              this._album.total++;
+              this._renderAlbumGrid();
+            } else {
+              this._albumStale = true;
+            }
+          } catch { this._albumStale = true; }
+        } else {
+          let msg = t('party.album.uploadFailed');
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* keep default */ }
+          entry.status = 'error';
+          entry.error  = msg;
+        }
+        this._renderQueue();
+        resolve();
+      };
+
+      xhr.onerror = xhr.onabort = () => {
+        entry.xhr    = null;
+        entry.status = 'error';
+        entry.error  = t('party.album.uploadFailed');
+        this._renderQueue();
+        resolve();
+      };
+
+      const form = new FormData();
+      form.append('file', entry.file);
+      if (thumb) form.append('thumb', thumb.blob, thumb.name);
+      xhr.send(form);
+    });
+  }
+
+  // Browser-side thumbnail: canvas downscale for photos, poster-frame capture
+  // for videos. Best-effort only — any failure (undecodable HEVC, canvas
+  // errors, slow decode) resolves null and the original uploads thumbless.
+  async _makeThumb(file) {
+    const THUMB_EDGE = 640;
+    const work = file.type.startsWith('video/')
+      ? this._makeVideoThumb(file, THUMB_EDGE)
+      : this._makeImageThumb(file, THUMB_EDGE);
+    try {
+      return await Promise.race([
+        work,
+        new Promise(resolve => setTimeout(() => resolve(null), 8000)),
+      ]);
+    } catch { return null; }
+  }
+
+  async _makeImageThumb(file, edge) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const scale  = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/webp', 0.8));
+      return blob ? { blob, name: 'thumb.webp' } : null;
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  _makeVideoThumb(file, edge) {
+    return new Promise((resolve, reject) => {
+      const url   = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      const cleanup = () => { video.src = ''; URL.revokeObjectURL(url); };
+
+      video.onloadedmetadata = () => { video.currentTime = Math.min(0.1, video.duration || 0.1); };
+      video.onseeked = async () => {
+        try {
+          const scale  = Math.min(1, edge / Math.max(video.videoWidth, video.videoHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width  = Math.max(1, Math.round(video.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+          cleanup();
+          resolve(blob ? { blob, name: 'thumb.jpg' } : null);
+        } catch (err) { cleanup(); reject(err); }
+      };
+      video.onerror = () => { cleanup(); resolve(null); };
+      video.src = url;
+    });
+  }
+
   // ── Binding ───────────────────────────────────────────────────────────────────
 
   _bindAll() {
     if (this._hasPartyAccess()) this._bindRsvp();
+    this._bindAlbum();
     this._bindVenueLightbox();
     this._bindRequestForm();
     if (canEdit()) this._bindEditing();
@@ -2030,5 +2420,11 @@ export class PartyView {
       this._venueLightbox.destroy();
       this._venueLightbox = null;
     }
+    if (this._albumLightbox) {
+      this._albumLightbox.destroy();
+      this._albumLightbox = null;
+    }
+    this._queue.forEach(e => e.xhr?.abort());
+    this._queue = [];
   }
 }
