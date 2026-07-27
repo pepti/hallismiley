@@ -222,7 +222,6 @@ body.lb-open { overflow: hidden; }
 }
 
 .lb-media-wrap {
-  flex: 1;
   display: flex; flex-direction: column; align-items: center;
   min-height: 0;
 }
