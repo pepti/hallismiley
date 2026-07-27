@@ -34,14 +34,16 @@ export class Lightbox {
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </a>` : ''}
-        <button class="lb-arrow lb-arrow--prev" aria-label="${t('lightbox.previous')}">&#x2039;</button>
         <div class="lb-media-wrap">
           <img class="lb-img" src="" alt="" draggable="false">
           <video class="lb-video" controls playsinline></video>
           <p class="lb-caption"></p>
         </div>
-        <button class="lb-arrow lb-arrow--next" aria-label="${t('lightbox.next')}">&#x203A;</button>
-        <div class="lb-counter" aria-live="polite"></div>
+        <div class="lb-controls">
+          <button class="lb-arrow lb-arrow--prev" aria-label="${t('lightbox.previous')}">&#x2039;</button>
+          <div class="lb-counter" aria-live="polite"></div>
+          <button class="lb-arrow lb-arrow--next" aria-label="${t('lightbox.next')}">&#x203A;</button>
+        </div>
       </div>
     `;
 
