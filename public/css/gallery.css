@@ -200,12 +200,20 @@ body.lb-open { overflow: hidden; }
   to   { opacity: 1; }
 }
 
+/* Column layout: media on top, nav controls in a row underneath. Arrows used
+   to flank the image, which stole ~2×48px of width from the photo on phones —
+   below-the-photo controls let the image use the full viewport width. */
 .lb-container {
   position: relative; z-index: 1;
-  display: flex; align-items: center; gap: var(--sp-3);
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-3);
   width: 100%; max-width: 1200px;
   padding: var(--sp-6) var(--sp-5);
   animation: lb-slide-in 220ms ease forwards;
+}
+
+.lb-controls {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--sp-4);
 }
 
 @keyframes lb-slide-in {
@@ -222,7 +230,8 @@ body.lb-open { overflow: hidden; }
 .lb-img,
 .lb-video {
   max-width: 100%;
-  max-height: calc(100vh - 160px);
+  /* Leave room for the controls row below the media plus container padding */
+  max-height: calc(100vh - 210px);
   object-fit: contain;
   border: 1px solid var(--border-dim);
   display: block;
@@ -237,14 +246,14 @@ body.lb-open { overflow: hidden; }
 
 .lb-video { width: 100%; }
 
-/* Navigation arrows */
+/* Navigation arrows — sit in the .lb-controls row under the media */
 .lb-arrow {
   flex-shrink: 0;
-  width: 48px; height: 80px;
+  width: 64px; height: 44px;
   background: rgba(30, 35, 40, 0.7);
   border: 1px solid var(--border-dim);
   color: var(--gold-light);
-  font-size: 2rem; line-height: 1;
+  font-size: 1.5rem; line-height: 1;
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition), color var(--transition);
   display: flex; align-items: center; justify-content: center;
@@ -300,16 +309,15 @@ body.lb-open { overflow: hidden; }
   color: var(--gold);
 }
 
-/* Counter */
+/* Counter — sits between the arrows in the .lb-controls row */
 .lb-counter {
-  position: absolute; bottom: var(--sp-4); left: 50%;
-  transform: translateX(-50%);
   font-size: 0.75rem; font-family: var(--font-mono);
   color: var(--text-secondary); letter-spacing: 0.1em;
   background: rgba(1, 10, 19, 0.6);
   padding: 3px 10px;
   border: 1px solid var(--border-dim);
   white-space: nowrap;
+  min-width: 64px; text-align: center;
 }
 
 /* Caption */
@@ -319,20 +327,16 @@ body.lb-open { overflow: hidden; }
   text-align: center;
 }
 
-/* Mobile adjustments */
+/* Mobile adjustments — no side arrows anymore, so the media wrap spans the
+   full viewport width */
 @media (max-width: 600px) {
   .lb-container {
-    padding: var(--sp-7) var(--sp-2) var(--sp-6);
+    padding: var(--sp-7) var(--sp-2) var(--sp-4);
     gap: var(--sp-2);
-  }
-
-  .lb-arrow {
-    width: 36px; height: 60px;
-    font-size: 1.5rem;
   }
 
   .lb-img,
   .lb-video {
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 170px);
   }
 }
