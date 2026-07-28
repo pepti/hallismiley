@@ -54,6 +54,7 @@ export class PartyView {
     // page renders without waiting on the grid.
     this._album         = { photos: [], total: 0, sort: 'newest', loading: false };
     this._albumLightbox = null;
+    this._albumObserver = null;
     this._albumStale    = false;
     this._queue         = [];
     this._queueActive   = 0;
@@ -780,9 +781,25 @@ export class PartyView {
         this._loadAlbumPage(true);
       });
     });
-    section.querySelector('[data-album-more]').addEventListener('click', () => {
+    const moreBtn = section.querySelector('[data-album-more]');
+    moreBtn.addEventListener('click', () => {
       this._loadAlbumPage(false);
     });
+
+    // Auto-load the next page when the load-more button scrolls into view, so
+    // guests just keep scrolling. The button stays as a manual fallback for
+    // browsers without IntersectionObserver. _album.loading guards against
+    // duplicate fetches; a hidden button never intersects, so the observer
+    // goes quiet once everything is loaded.
+    if ('IntersectionObserver' in window) {
+      this._albumObserver?.disconnect();
+      this._albumObserver = new IntersectionObserver((entries) => {
+        if (entries.some(e => e.isIntersecting) && !moreBtn.hidden) {
+          this._loadAlbumPage(false);
+        }
+      }, { rootMargin: '600px' });
+      this._albumObserver.observe(moreBtn);
+    }
 
     const fileInput = section.querySelector('[data-album-file]');
     section.querySelector('[data-album-upload]').addEventListener('click', () => fileInput.click());
@@ -800,7 +817,7 @@ export class PartyView {
     const offset = reset ? 0 : this._album.photos.length;
     try {
       const params = new URLSearchParams({
-        sort: this._album.sort, limit: '60', offset: String(offset),
+        sort: this._album.sort, limit: '100', offset: String(offset),
       });
       if (this._album.sort === 'shuffle') params.set('seed', this._album.seed || '');
       const res = await fetch(`/api/v1/party/photos?${params}`, { credentials: 'include' });
@@ -2434,6 +2451,8 @@ export class PartyView {
       this._albumLightbox.destroy();
       this._albumLightbox = null;
     }
+    this._albumObserver?.disconnect();
+    this._albumObserver = null;
     this._queue.forEach(e => e.xhr?.abort());
     this._queue = [];
   }
