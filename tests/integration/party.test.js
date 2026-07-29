@@ -610,6 +610,61 @@ describe('GET /api/v1/party/photos', () => {
   });
 });
 
+// ── GET /api/v1/party/photos/archive ─────────────────────────────────────────
+
+describe('GET /api/v1/party/photos/archive', () => {
+  test('streams a zip of uploaded originals without auth', async () => {
+    // Upload through the API so real files land in the party upload dir
+    await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'one.png', contentType: 'image/png' });
+    await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'two.png', contentType: 'image/png' });
+
+    const res = await request(app)
+      .get('/api/v1/party/photos/archive')
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/zip');
+    expect(res.headers['content-disposition']).toContain('afmaeli-halla-myndir.zip');
+    // Zip local-file-header magic
+    expect(res.body.slice(0, 2).toString()).toBe('PK');
+  });
+
+  test('rows whose file is missing on disk are skipped, not fatal', async () => {
+    await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'real.png', contentType: 'image/png' });
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path) VALUES (NULL, '/assets/party/ghost-does-not-exist.jpg')`
+    );
+
+    const res = await request(app)
+      .get('/api/v1/party/photos/archive')
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.slice(0, 2).toString()).toBe('PK');
+  });
+
+  test('empty album returns 404 with the error envelope', async () => {
+    const res = await request(app).get('/api/v1/party/photos/archive');
+    expect(res.status).toBe(404);
+    expect(res.body).toHaveProperty('error');
+    expect(res.body.code).toBe(404);
+  });
+});
+
 // ── DELETE /api/v1/party/photos/:id ──────────────────────────────────────────
 
 describe('DELETE /api/v1/party/photos/:id', () => {

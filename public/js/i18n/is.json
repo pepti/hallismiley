@@ -917,6 +917,7 @@
   "party.album.sortVideos": "Myndbönd fyrst",
   "party.album.sortPhotos": "Myndir fyrst",
   "party.album.sortShuffle": "Stokka",
+  "party.album.downloadAll": "Sækja allt",
   "party.album.loadMore": "Sækja fleiri",
   "party.album.empty": "Engar myndir enn — vertu fyrst(ur) til að deila!",
   "party.album.count": "{shown} / {total}",

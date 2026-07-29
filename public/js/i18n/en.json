@@ -917,6 +917,7 @@
   "party.album.sortVideos": "Videos first",
   "party.album.sortPhotos": "Photos first",
   "party.album.sortShuffle": "Shuffle",
+  "party.album.downloadAll": "Download all",
   "party.album.loadMore": "Load more",
   "party.album.empty": "No photos yet — be the first to share one!",
   "party.album.count": "{shown} / {total}",

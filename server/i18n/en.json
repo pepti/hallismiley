@@ -203,6 +203,7 @@
   "errors.party.photoNotFound": "Photo not found",
   "errors.party.forbidden": "Forbidden",
   "errors.party.photoTooLarge": "Photo must not exceed 10 MB",
+  "errors.party.albumEmpty": "The album has no photos yet",
   "errors.party.imageTooLarge": "Image must not exceed 50 MB",
   "errors.party.invalidMagicLink": "This sign-in link is invalid or has been revoked.",
   "errors.party.approvalPending": "Your request to join is awaiting approval.",
