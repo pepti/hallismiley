@@ -1,5 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
+const archiver = require('archiver');
 const db   = require('../config/database');
 const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
@@ -2291,6 +2292,47 @@ const partyController = {
       ]);
       res.json({ photos: rows, total: countRows[0].total });
     } catch (err) { next(err); }
+  },
+
+  // Streams every album original as a store-only (uncompressed) zip — photos
+  // and videos are already compressed formats, so store keeps CPU near zero
+  // and the download starts immediately. Thumbnails are excluded.
+  async downloadArchive(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        'SELECT file_path FROM party_photos ORDER BY created_at ASC, id ASC'
+      );
+      if (!rows.length) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.albumEmpty'), code: 404 });
+      }
+
+      const partyDir = path.join(UPLOAD_ROOT, 'party');
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="afmaeli-halla-myndir.zip"');
+
+      const archive = archiver('zip', { store: true });
+      archive.on('warning', (err) => logger.warn({ err }, 'party album archive warning'));
+      archive.on('error', (err) => {
+        // Headers are already sent once streaming starts — all we can do is
+        // log and cut the connection so the client sees a failed download
+        // rather than a silently truncated zip.
+        logger.error({ err }, 'party album archive failed');
+        res.destroy(err);
+      });
+      archive.pipe(res);
+
+      for (const row of rows) {
+        // file_path is server-generated, but basename() keeps any future bad
+        // row from ever reaching outside the party upload dir.
+        const name = path.basename(row.file_path);
+        const abs  = path.join(partyDir, name);
+        if (fs.existsSync(abs)) archive.file(abs, { name });
+      }
+      await archive.finalize();
+    } catch (err) {
+      if (res.headersSent) { res.destroy(); return; }
+      next(err);
+    }
   },
 
   async deletePhoto(req, res, next) {

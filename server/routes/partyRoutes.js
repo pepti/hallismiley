@@ -422,6 +422,12 @@ router.post('/photos',
 router.get('/photos',
   partyController.getPhotos);
 
+// Streams the whole album as one zip. Public like the rest of the album;
+// GETs only face the global limiter, and the response is a single long
+// stream, so no dedicated limiter is needed.
+router.get('/photos/archive',
+  partyController.downloadArchive);
+
 router.delete('/photos/:id',
   requireAuth, csrfProtect,
   partyController.deletePhoto);

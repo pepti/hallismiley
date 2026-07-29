@@ -203,6 +203,7 @@
   "errors.party.photoNotFound": "Mynd fannst ekki",
   "errors.party.forbidden": "Ekki heimilt",
   "errors.party.photoTooLarge": "Mynd má ekki vera stærri en 10 MB",
+  "errors.party.albumEmpty": "Albúmið er tómt ennþá",
   "errors.party.imageTooLarge": "Mynd má ekki vera stærri en 50 MB",
   "errors.party.invalidMagicLink": "Þessi innskráningarhlekkur er ógildur eða hefur verið afturkallaður.",
   "errors.party.approvalPending": "Beiðni þín um aðgang bíður samþykktar.",

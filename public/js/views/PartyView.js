@@ -732,6 +732,11 @@ export class PartyView {
             </button>
             <input type="file" multiple hidden data-album-file
                    accept="${ALBUM_MIMES.join(',')}">
+            <a class="lol-btn lol-btn--ghost party-album__download-all"
+               href="/api/v1/party/photos/archive" download
+               data-album-download-all hidden>
+              ⭳ ${t('party.album.downloadAll')}
+            </a>
             <span class="party-album__count" data-album-count aria-live="polite"></span>
           </div>
           <div class="party-album__sort" role="group" aria-label="${t('party.album.sortLabel')}">
@@ -872,6 +877,7 @@ export class PartyView {
 
     section.querySelector('[data-album-empty]').hidden = photos.length > 0;
     section.querySelector('[data-album-more]').hidden  = photos.length >= total;
+    section.querySelector('[data-album-download-all]').hidden = total === 0;
     section.querySelector('[data-album-count]').textContent =
       total > 0 ? t('party.album.count', { shown: photos.length, total }) : '';
 
