@@ -133,6 +133,9 @@ const adminCustomerController = {
         try {
           await emailService.sendPasswordResetEmail(c.email, resetToken, req.locale);
           invited = true;
+          // Stamp invited_at so the bulk-invite run doesn't treat this account as
+          // never-invited and overwrite the reset token this email just carried.
+          await dbQuery(`UPDATE users SET invited_at = NOW() WHERE id = $1`, [user.id]);
         } catch (err) {
           logger.warn({ err }, 'customer invite email failed');
         }
@@ -233,6 +236,16 @@ const adminCustomerController = {
 
       const overrides = await Setting.getInviteEmail(); // saved per-locale copy (the editable "default")
       const configured = emailService.isConfigured();
+      // Outside production an unconfigured transport is the normal local setup:
+      // we stamp invited_at anyway and hand back copy-paste links. In production
+      // there is no such fallback, so an unconfigured transport must NOT count as
+      // a send (see the !emailId branch below).
+      const devFallback = !configured && process.env.NODE_ENV !== 'production';
+      if (!configured && !devFallback) {
+        // Fail before the loop rather than churning a fresh reset token through
+        // every candidate for sends that cannot happen.
+        return res.status(503).json({ error: t(req.locale, 'errors.admin.inviteMailUnavailable'), code: 503 });
+      }
       const devLinks = [];
       let sent = 0, failed = 0;
       for (const user of rows) {
@@ -250,9 +263,17 @@ const adminCustomerController = {
         const locale = inviteLocale(user.preferred_locale || 'en');
         try {
           const emailId = await emailService.sendWelcomeInviteEmail(user.email, token, locale, overrides[locale]);
+          if (!emailId && !devFallback) {
+            // Nothing was delivered and there is no dev link to fall back on.
+            // Leave invited_at NULL so the user stays a candidate once the mail
+            // transport is fixed — stamping here would silently retire them.
+            failed++;
+            logger.warn({ userId: user.id }, 'welcome invite not sent — mail transport unavailable');
+            continue;
+          }
           await dbQuery(`UPDATE users SET invited_at = NOW() WHERE id = $1`, [user.id]);
           sent++;
-          if (!emailId && process.env.NODE_ENV !== 'production') {
+          if (!emailId) {
             // Dev path — Resend not configured; invited_at is stamped so this run
             // is idempotent, and the link is returned for copy-paste.
             devLinks.push({ email: user.email, link: inviteResetLink(token, locale) });

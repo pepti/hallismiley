@@ -4,6 +4,7 @@
 const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
+const adminCustomerController = require('../../server/controllers/adminCustomerController');
 const {
   createTestAdminUser, createTestModeratorUser, createTestRegularUser,
   createTestPendingGuest, getTestSessionCookie, cleanTables,
@@ -163,6 +164,36 @@ describe('POST /api/v1/admin/customers/delete', () => {
     expect(kept).toHaveLength(3);
   });
 
+  test('a skipped multi-role account keeps a clean order history (no guest identity stamped)', async () => {
+    // The guest_email/guest_name snapshot exists so a DELETED user's orders keep
+    // a contact identity. It must never touch an account we then decline to
+    // delete — a live customer whose orders carry a guest identity would show
+    // that identity on delivery notes and order emails.
+    const { rows: multi } = await db.query(
+      `INSERT INTO users (email, username, password_hash, role, display_name)
+       VALUES ('keeper@example.com', 'keeper', NULL, 'user', 'Keeper') RETURNING id`
+    );
+    const keeperId = multi[0].id;
+    await db.query(`INSERT INTO roles (name, view_access) VALUES ('helper', '[]'::jsonb) ON CONFLICT DO NOTHING`);
+    await db.query(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'helper')`, [keeperId]);
+    await db.query(
+      `INSERT INTO orders (order_number, user_id, currency, subtotal, shipping, total, shipping_method)
+       VALUES ('T-2002', $1, 'ISK', 1000, 0, 1000, 'local_pickup')`,
+      [keeperId]
+    );
+
+    const res = await del(adminCookie, [keeperId]);
+    expect(res.status).toBe(200);
+    expect(res.body.deletedAccounts).toEqual([]); // skipped, as the guard intends
+
+    const { rows: orders } = await db.query(
+      `SELECT user_id, guest_email, guest_name FROM orders WHERE order_number = 'T-2002'`
+    );
+    expect(orders[0].user_id).toBe(keeperId); // still owned by the live account
+    expect(orders[0].guest_email).toBeNull();
+    expect(orders[0].guest_name).toBeNull();
+  });
+
   test('NEVER deletes party guests (their critical party data must survive); list flags them', async () => {
     // A pending party guest (requested_at set) and an approved one with access.
     const pending  = await createTestPendingGuest({ email: 'pg1@party.is', username: 'pg1' });
@@ -278,6 +309,46 @@ describe('bulk welcome invites', () => {
     expect(res.body.sent).toBe(1);
     // The untouched candidate is still waiting and must be reported.
     expect(res.body.remaining).toBe(1);
+  });
+
+  test('in production an unconfigured mail transport fails the run instead of retiring candidates', async () => {
+    // Outside production a missing transport is normal (we hand back devLinks and
+    // stamp invited_at). In production there is no such fallback, so stamping
+    // would drop these users out of the candidate set for good — with no email
+    // ever delivered and no link to recover. The run must refuse instead.
+    // Driven straight at the controller: flipping NODE_ENV around a supertest
+    // request also flips the auth/CSRF middleware and yields a 403 before the
+    // handler is reached, which would test nothing.
+    const candidateId = await createCandidate('prodfail@example.com');
+    const { rows: before } = await db.query(
+      'SELECT password_reset_token FROM users WHERE id = $1', [candidateId]
+    );
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    let status = null, body = null;
+    try {
+      const res = {
+        status(c) { status = c; return this; },
+        json(b)   { body = b;  return this; },
+      };
+      await adminCustomerController.sendBulkInvites({ body: {}, locale: 'en' }, res, (err) => { throw err; });
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+    expect(status).toBe(503);
+    expect(body.code).toBe(503);
+
+    // Still a candidate: nothing stamped, and the reset token the account already
+    // had is left alone rather than churned for a send that never happened.
+    const { rows } = await db.query(
+      'SELECT invited_at, password_reset_token FROM users WHERE id = $1', [candidateId]
+    );
+    expect(rows[0].invited_at).toBeNull();
+    expect(rows[0].password_reset_token).toBe(before[0].password_reset_token);
+
+    // And a normal (non-production) run still reaches them.
+    const ok = await request(app).post(sendUrl).set('Cookie', adminCookie).send({});
+    expect(ok.body.sent).toBe(1);
   });
 
   test('send stamps invited_at + reset token, returns devLinks, and is idempotent', async () => {

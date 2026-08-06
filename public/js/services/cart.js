@@ -157,7 +157,60 @@ window.addEventListener('storage', (e) => {
 
 // The basket is keyed per account — when the signed-in user changes, re-emit so
 // the cart badge + cart view re-read the now-current account's basket.
-window.addEventListener('authchange', () => _emit());
+//
+// Signing in is the one transition where the previous basket must carry over:
+// shopping as a guest and then logging in at checkout is a normal flow, and
+// dropping the basket there would look like the cart silently emptied itself.
+//
+// The merge is deliberately narrow. It runs only on an explicit sign-in
+// (`detail.reason === 'login'`), never on a session restored at page load —
+// otherwise a leftover guest basket on a shared browser would be adopted by
+// whoever's session happens to resume. Account → guest (logout) and
+// account → account never merge; that direction is the leak the per-account
+// namespacing exists to prevent.
+let _lastOwner = _ownerId();
+window.addEventListener('authchange', (e) => {
+  const owner = _ownerId();
+  if (owner !== _lastOwner) {
+    const isLogin = e && e.detail && e.detail.reason === 'login';
+    if (isLogin && _lastOwner === 'guest' && owner !== 'guest') _mergeGuestBasketInto(owner);
+    _lastOwner = owner;
+  }
+  _emit();
+});
+
+// Fold the guest basket into the signed-in account's basket, then clear it so a
+// later logout doesn't resurrect lines the user already carried into the account.
+// Quantities add up per line; the account's own lines win on any other field.
+function _mergeGuestBasketInto(owner) {
+  const guestKey = `${ITEMS_NS}::guest`;
+  let guestItems = [];
+  try {
+    const raw = localStorage.getItem(guestKey);
+    guestItems = raw ? JSON.parse(raw) : [];
+  } catch { /* unreadable guest basket — nothing to merge */ }
+  if (!Array.isArray(guestItems) || !guestItems.length) return;
+
+  const ownerKey = `${ITEMS_NS}::${owner}`;
+  let items = [];
+  try {
+    const raw = localStorage.getItem(ownerKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) items = parsed;
+  } catch { /* unreadable account basket — treat as empty */ }
+
+  for (const g of guestItems) {
+    const i = items.findIndex(x => lineKeyOf(x) === lineKeyOf(g));
+    if (i >= 0) items[i].qty = Number(items[i].qty || 0) + Number(g.qty || 0);
+    else items.push(g);
+  }
+  try {
+    localStorage.setItem(ownerKey, JSON.stringify(items));
+    localStorage.removeItem(guestKey);
+  } catch (err) {
+    console.warn('[cart] failed to merge guest basket', err);
+  }
+}
 
 export function formatMoney(amount, currency = getCurrency()) {
   if (currency === 'ISK') {

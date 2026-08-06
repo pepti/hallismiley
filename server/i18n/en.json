@@ -321,6 +321,7 @@
   "errors.admin.cannotDeleteSelf": "Cannot delete your own account",
   "errors.admin.idsRequired": "No customers selected",
   "errors.admin.idsTooMany": "Too many customers selected (max 100)",
+  "errors.admin.inviteMailUnavailable": "Email sending is not configured, so invites cannot be sent right now.",
   "errors.admin.noteOwnerRequired": "A customer is required.",
   "errors.admin.noteBodyRequired": "Note text is required.",
   "errors.admin.noteCategoryInvalid": "Invalid note category.",

@@ -172,10 +172,12 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
 // `link` is the set-password URL — a real per-recipient token when sending, a
 // SAMPLE token when previewing (the caller decides; never a real token in a
 // preview). body is intentionally raw HTML (i18n default carries <strong>; admin
-// overrides are allowlist-sanitised upstream); subject/heading are plain text.
+// overrides are allowlist-sanitised upstream); subject/heading are plain text and
+// are escaped here — the upstream tag-stripper only removes well-formed `<…>`, so
+// an unterminated tag would otherwise reach the recipient as live markup.
 function buildInviteEmailHtml({ subject, heading, body, link, locale = 'en' }) {
-  return emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${heading}</h2>
+  return emailShell(escapeHtml(subject), `
+    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
       ${body}
     </p>

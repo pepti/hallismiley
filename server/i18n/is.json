@@ -321,6 +321,7 @@
   "errors.admin.cannotDeleteSelf": "Ekki er hægt að eyða eigin aðgangi",
   "errors.admin.idsRequired": "Engir viðskiptavinir valdir",
   "errors.admin.idsTooMany": "Of margir viðskiptavinir valdir (hámark 100)",
+  "errors.admin.inviteMailUnavailable": "Tölvupóstsending er ekki uppsett, því er ekki hægt að senda boð núna.",
   "errors.admin.noteOwnerRequired": "Viðskiptavin vantar.",
   "errors.admin.noteBodyRequired": "Athugasemdartexta vantar.",
   "errors.admin.noteCategoryInvalid": "Ógildur flokkur athugasemdar.",

@@ -169,12 +169,17 @@ const Customer = {
     let deletedAccounts = [];
     try {
       await client.query('BEGIN');
+      // Guards here MUST match the DELETE below exactly — an account we snapshot
+      // but then decline to delete would be left alive carrying a guest identity
+      // on all its past orders (which the delivery note and order emails print).
       await client.query(
         `UPDATE orders o
             SET guest_email = COALESCE(o.guest_email, u.email),
                 guest_name  = COALESCE(o.guest_name, u.display_name)
            FROM users u
           WHERE o.user_id = u.id AND u.id = ANY($1) AND u.role = 'user'
+            AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                             WHERE ur.user_id = u.id AND ur.role_name <> 'user')
             AND ${notPartyGuest('u')}`,
         [ids]
       );

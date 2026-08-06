@@ -255,10 +255,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Redirect HTTP → HTTPS in production (skip /health so internal probes aren't redirected)
+// Redirect HTTP → HTTPS in production (skip the probes so internal health checks
+// aren't redirected — the canonical-host middleware below exempts the same two)
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
-    if (req.path === '/health') return next();
+    if (req.path === '/health' || req.path === '/ready') return next();
     if (req.headers['x-forwarded-proto'] !== 'https') {
       return res.redirect(301, `https://${req.headers.host}${req.url}`);
     }
