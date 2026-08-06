@@ -357,19 +357,53 @@ describe('DELETE /api/v1/party/guestbook/:id', () => {
 
 // ── POST /api/v1/party/photos ─────────────────────────────────────────────────
 
+const fakePngBuffer = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64'
+);
+
 describe('POST /api/v1/party/photos', () => {
   test('invited user can upload a photo', async () => {
-    const fakeImage = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-      'base64'
-    );
     const res = await request(app)
       .post('/api/v1/party/photos')
       .set('Cookie', adminCookie)
-      .attach('file', fakeImage, { filename: 'test.png', contentType: 'image/png' });
+      .attach('file', fakePngBuffer, { filename: 'test.png', contentType: 'image/png' });
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('file_path');
     expect(res.body.user_id).toBe(adminId);
+    expect(res.body.media_type).toBe('image');
+    expect(res.body.thumb_path).toBeNull();
+  });
+
+  test('invited user can upload a video (mp4)', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/photos')
+      .set('Cookie', adminCookie)
+      .attach('file', Buffer.from('fake mp4 bytes'), { filename: 'clip.mp4', contentType: 'video/mp4' });
+    expect(res.status).toBe(201);
+    expect(res.body.media_type).toBe('video');
+    expect(res.body.file_path).toMatch(/\.mp4$/);
+  });
+
+  test('accepts iPhone quicktime video and stores .mov extension', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/photos')
+      .set('Cookie', adminCookie)
+      .attach('file', Buffer.from('fake mov bytes'), { filename: 'clip.mov', contentType: 'video/quicktime' });
+    expect(res.status).toBe(201);
+    expect(res.body.media_type).toBe('video');
+    expect(res.body.file_path).toMatch(/\.mov$/);
+  });
+
+  test('stores browser-generated thumb alongside the original', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/photos')
+      .set('Cookie', adminCookie)
+      .attach('file', Buffer.from('fake mp4 bytes'), { filename: 'clip.mp4', contentType: 'video/mp4' })
+      .attach('thumb', fakePngBuffer, { filename: 'thumb.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    expect(res.body.thumb_path).toMatch(/^\/assets\/party\//);
+    expect(res.body.thumb_path).not.toBe(res.body.file_path);
   });
 
   test('returns 400 when no file is provided', async () => {
@@ -380,7 +414,7 @@ describe('POST /api/v1/party/photos', () => {
     expect(res.status).toBe(400);
   });
 
-  test('returns 400 for non-image file type', async () => {
+  test('returns 400 for unsupported file type', async () => {
     const res = await request(app)
       .post('/api/v1/party/photos')
       .set('Cookie', adminCookie)
@@ -388,24 +422,45 @@ describe('POST /api/v1/party/photos', () => {
     expect(res.status).toBe(400);
   });
 
-  test('returns 403 for user without party access', async () => {
+  test('returns 400 for HEIC (browsers cannot render it)', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/photos')
+      .set('Cookie', adminCookie)
+      .attach('file', Buffer.from('fake heic'), { filename: 'img.heic', contentType: 'image/heic' });
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 400 when the thumb field is not an image', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/photos')
+      .set('Cookie', adminCookie)
+      .attach('file', fakePngBuffer, { filename: 'test.png', contentType: 'image/png' })
+      .attach('thumb', Buffer.from('fake mp4'), { filename: 'thumb.mp4', contentType: 'video/mp4' });
+    expect(res.status).toBe(400);
+  });
+
+  test('user without party access can upload (album is public)', async () => {
     const res = await request(app)
       .post('/api/v1/party/photos')
       .set('Cookie', userCookie)
-      .attach('file', Buffer.from('fake'), { filename: 'test.jpg', contentType: 'image/jpeg' });
-    expect(res.status).toBe(403);
+      .attach('file', fakePngBuffer, { filename: 'test.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    expect(res.body.user_id).toBe(userId);
   });
 
-  test('unauthenticated returns 401', async () => {
-    const res = await request(app).post('/api/v1/party/photos');
-    expect(res.status).toBe(401);
+  test('unauthenticated visitor can upload anonymously (user_id is null)', async () => {
+    const res = await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'test.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    expect(res.body.user_id).toBeNull();
   });
 });
 
 // ── GET /api/v1/party/photos ──────────────────────────────────────────────────
 
 describe('GET /api/v1/party/photos', () => {
-  test('returns list of photos for invited user', async () => {
+  test('returns { photos, total } for invited user', async () => {
     // Insert photo directly to avoid disk I/O dependency on upload working
     await db.query(
       `INSERT INTO party_photos (user_id, file_path) VALUES ($1, '/assets/party/test.jpg')`,
@@ -416,22 +471,197 @@ describe('GET /api/v1/party/photos', () => {
       .get('/api/v1/party/photos')
       .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0]).toHaveProperty('file_path');
-    expect(res.body[0]).toHaveProperty('username');
+    expect(Array.isArray(res.body.photos)).toBe(true);
+    expect(res.body.photos).toHaveLength(1);
+    expect(res.body.total).toBe(1);
+    expect(res.body.photos[0]).toHaveProperty('file_path');
+    expect(res.body.photos[0]).toHaveProperty('username');
+    expect(res.body.photos[0]).toHaveProperty('media_type');
+    expect(res.body.photos[0]).toHaveProperty('thumb_path');
   });
 
-  test('returns 403 for user without party access', async () => {
+  test('sorts oldest first with ?sort=oldest', async () => {
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path, created_at)
+       VALUES ($1, '/assets/party/old.jpg', NOW() - INTERVAL '2 hours'),
+              ($1, '/assets/party/mid.jpg', NOW() - INTERVAL '1 hour'),
+              ($1, '/assets/party/new.jpg', NOW())`,
+      [adminId]
+    );
+
+    const res = await request(app)
+      .get('/api/v1/party/photos?sort=oldest')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.photos.map(p => p.file_path)).toEqual([
+      '/assets/party/old.jpg', '/assets/party/mid.jpg', '/assets/party/new.jpg',
+    ]);
+  });
+
+  test('defaults to newest first', async () => {
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path, created_at)
+       VALUES ($1, '/assets/party/old.jpg', NOW() - INTERVAL '1 hour'),
+              ($1, '/assets/party/new.jpg', NOW())`,
+      [adminId]
+    );
+
     const res = await request(app)
       .get('/api/v1/party/photos')
-      .set('Cookie', userCookie);
-    expect(res.status).toBe(403);
+      .set('Cookie', adminCookie);
+    expect(res.body.photos.map(p => p.file_path)).toEqual([
+      '/assets/party/new.jpg', '/assets/party/old.jpg',
+    ]);
   });
 
-  test('unauthenticated returns 401', async () => {
+  test('groups by uploader name with ?sort=uploader', async () => {
+    const guest = await createTestPendingGuest({
+      email: 'guest2@test.com', username: 'guest2', display_name: 'Alice',
+    });
+    await db.query(
+      `UPDATE users SET party_access = TRUE, display_name = 'Alice' WHERE id = $1`,
+      [guest.id]
+    );
+    await db.query(`UPDATE users SET display_name = 'Zed' WHERE id = $1`, [adminId]);
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path, created_at)
+       VALUES ($1, '/assets/party/by-zed.jpg', NOW()),
+              ($2, '/assets/party/by-alice.jpg', NOW() - INTERVAL '1 hour')`,
+      [adminId, guest.id]
+    );
+
+    const res = await request(app)
+      .get('/api/v1/party/photos?sort=uploader')
+      .set('Cookie', adminCookie);
+    expect(res.body.photos.map(p => p.file_path)).toEqual([
+      '/assets/party/by-alice.jpg', '/assets/party/by-zed.jpg',
+    ]);
+  });
+
+  test('sorts videos first with ?sort=videos, photos first with ?sort=photos', async () => {
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path, media_type, created_at)
+       VALUES ($1, '/assets/party/a.jpg', 'image', NOW()),
+              ($1, '/assets/party/b.mp4', 'video', NOW() - INTERVAL '1 hour'),
+              ($1, '/assets/party/c.jpg', 'image', NOW() - INTERVAL '2 hours')`,
+      [adminId]
+    );
+
+    const vids = await request(app).get('/api/v1/party/photos?sort=videos');
+    expect(vids.body.photos.map(p => p.media_type)).toEqual(['video', 'image', 'image']);
+
+    const pics = await request(app).get('/api/v1/party/photos?sort=photos');
+    expect(pics.body.photos.map(p => p.media_type)).toEqual(['image', 'image', 'video']);
+  });
+
+  test('shuffle with the same seed pages without duplicates or gaps', async () => {
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path)
+       SELECT $1, '/assets/party/s' || n || '.jpg' FROM generate_series(1, 5) n`,
+      [adminId]
+    );
+
+    const page1 = await request(app).get('/api/v1/party/photos?sort=shuffle&seed=abc&limit=3&offset=0');
+    const page2 = await request(app).get('/api/v1/party/photos?sort=shuffle&seed=abc&limit=3&offset=3');
+    expect(page1.status).toBe(200);
+    const ids = [...page1.body.photos, ...page2.body.photos].map(p => p.id);
+    expect(new Set(ids).size).toBe(5);
+
+    // Same seed, same deal — deterministic within a browsing session.
+    const again = await request(app).get('/api/v1/party/photos?sort=shuffle&seed=abc&limit=3&offset=0');
+    expect(again.body.photos.map(p => p.id)).toEqual(page1.body.photos.map(p => p.id));
+  });
+
+  test('pages with limit/offset while total stays constant', async () => {
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path, created_at)
+       SELECT $1, '/assets/party/p' || n || '.jpg', NOW() - (n || ' minutes')::interval
+       FROM generate_series(1, 5) n`,
+      [adminId]
+    );
+
+    const page1 = await request(app)
+      .get('/api/v1/party/photos?limit=2&offset=0')
+      .set('Cookie', adminCookie);
+    const page2 = await request(app)
+      .get('/api/v1/party/photos?limit=2&offset=2')
+      .set('Cookie', adminCookie);
+
+    expect(page1.body.photos).toHaveLength(2);
+    expect(page2.body.photos).toHaveLength(2);
+    expect(page1.body.total).toBe(5);
+    expect(page2.body.total).toBe(5);
+    const ids1 = page1.body.photos.map(p => p.id);
+    expect(page2.body.photos.every(p => !ids1.includes(p.id))).toBe(true);
+  });
+
+  test('unauthenticated visitor can view the album (public)', async () => {
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path) VALUES ($1, '/assets/party/test.jpg'), (NULL, '/assets/party/anon.jpg')`,
+      [adminId]
+    );
+
     const res = await request(app).get('/api/v1/party/photos');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    const anon = res.body.photos.find(p => p.file_path === '/assets/party/anon.jpg');
+    expect(anon.user_id).toBeNull();
+    expect(anon.username).toBeNull();
+  });
+});
+
+// ── GET /api/v1/party/photos/archive ─────────────────────────────────────────
+
+describe('GET /api/v1/party/photos/archive', () => {
+  test('streams a zip of uploaded originals without auth', async () => {
+    // Upload through the API so real files land in the party upload dir
+    await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'one.png', contentType: 'image/png' });
+    await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'two.png', contentType: 'image/png' });
+
+    const res = await request(app)
+      .get('/api/v1/party/photos/archive')
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/zip');
+    expect(res.headers['content-disposition']).toContain('afmaeli-halla-myndir.zip');
+    // Zip local-file-header magic
+    expect(res.body.slice(0, 2).toString()).toBe('PK');
+  });
+
+  test('rows whose file is missing on disk are skipped, not fatal', async () => {
+    await request(app)
+      .post('/api/v1/party/photos')
+      .attach('file', fakePngBuffer, { filename: 'real.png', contentType: 'image/png' });
+    await db.query(
+      `INSERT INTO party_photos (user_id, file_path) VALUES (NULL, '/assets/party/ghost-does-not-exist.jpg')`
+    );
+
+    const res = await request(app)
+      .get('/api/v1/party/photos/archive')
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.slice(0, 2).toString()).toBe('PK');
+  });
+
+  test('empty album returns 404 with the error envelope', async () => {
+    const res = await request(app).get('/api/v1/party/photos/archive');
+    expect(res.status).toBe(404);
+    expect(res.body).toHaveProperty('error');
+    expect(res.body.code).toBe(404);
   });
 });
 
@@ -450,6 +680,47 @@ describe('DELETE /api/v1/party/photos/:id', () => {
     expect(res.status).toBe(204);
   });
 
+  test('deleting an uploaded photo removes original and thumb from disk', async () => {
+    const upload = await request(app)
+      .post('/api/v1/party/photos')
+      .set('Cookie', adminCookie)
+      .attach('file', fakePngBuffer, { filename: 'test.png', contentType: 'image/png' })
+      .attach('thumb', fakePngBuffer, { filename: 'thumb.png', contentType: 'image/png' });
+    expect(upload.status).toBe(201);
+
+    const fs = require('fs');
+    const path = require('path');
+    const { UPLOAD_ROOT } = require('../../server/config/paths');
+    const toDisk = p => path.join(UPLOAD_ROOT, p.replace(/^\/assets\//, ''));
+    expect(fs.existsSync(toDisk(upload.body.file_path))).toBe(true);
+    expect(fs.existsSync(toDisk(upload.body.thumb_path))).toBe(true);
+
+    const res = await request(app)
+      .delete(`/api/v1/party/photos/${upload.body.id}`)
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(204);
+    expect(fs.existsSync(toDisk(upload.body.file_path))).toBe(false);
+    expect(fs.existsSync(toDisk(upload.body.thumb_path))).toBe(false);
+  });
+
+  test('guest with party access cannot delete another guest\'s photo', async () => {
+    const guest = await createTestPendingGuest({
+      email: 'guest2@test.com', username: 'guest2',
+    });
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [guest.id]);
+    const guestCookie = await getTestSessionCookie(guest.id);
+
+    const { rows } = await db.query(
+      `INSERT INTO party_photos (user_id, file_path) VALUES ($1, '/assets/party/test.jpg') RETURNING id`,
+      [adminId]
+    );
+
+    const res = await request(app)
+      .delete(`/api/v1/party/photos/${rows[0].id}`)
+      .set('Cookie', guestCookie);
+    expect(res.status).toBe(403);
+  });
+
   test('returns 404 for non-existent photo', async () => {
     const res = await request(app)
       .delete('/api/v1/party/photos/99999')
@@ -457,7 +728,7 @@ describe('DELETE /api/v1/party/photos/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  test('returns 403 for user without party access', async () => {
+  test('signed-in non-owner cannot delete someone else\'s photo', async () => {
     const { rows } = await db.query(
       `INSERT INTO party_photos (user_id, file_path) VALUES ($1, '/assets/party/test.jpg') RETURNING id`,
       [adminId]
@@ -469,7 +740,23 @@ describe('DELETE /api/v1/party/photos/:id', () => {
     expect(res.status).toBe(403);
   });
 
-  test('unauthenticated returns 401', async () => {
+  test('anonymous photo can only be deleted by an editor', async () => {
+    const { rows } = await db.query(
+      `INSERT INTO party_photos (user_id, file_path) VALUES (NULL, '/assets/party/anon.jpg') RETURNING id`
+    );
+
+    const denied = await request(app)
+      .delete(`/api/v1/party/photos/${rows[0].id}`)
+      .set('Cookie', userCookie);
+    expect(denied.status).toBe(403);
+
+    const allowed = await request(app)
+      .delete(`/api/v1/party/photos/${rows[0].id}`)
+      .set('Cookie', adminCookie);
+    expect(allowed.status).toBe(204);
+  });
+
+  test('unauthenticated returns 401 (deletes still require an account)', async () => {
     const res = await request(app).delete('/api/v1/party/photos/1');
     expect(res.status).toBe(401);
   });
@@ -895,8 +1182,9 @@ describe('Non-invited user blocked on all party endpoints', () => {
     { method: 'post',   path: '/api/v1/party/guestbook',  body: { message: 'hi' } },
     { method: 'get',    path: '/api/v1/party/guestbook' },
     { method: 'delete', path: '/api/v1/party/guestbook/1' },
-    { method: 'get',    path: '/api/v1/party/photos' },
-    { method: 'delete', path: '/api/v1/party/photos/1' },
+    // /photos GET+POST are deliberately absent: the album is fully public
+    // (migration 071). DELETE /photos/:id needs auth but not party access —
+    // its ownership rules are covered in the DELETE describe block above.
   ];
 
   protectedEndpoints.forEach(({ method, path: endpoint, body }) => {
@@ -1718,6 +2006,227 @@ describe('Logistics categories', () => {
   });
 });
 
+// ── Custom logistics sections (068) ───────────────────────────────────────────
+
+describe('Logistics category CRUD (068)', () => {
+  const mkCat = (body, cookie = adminCookie) => request(app)
+    .post('/api/v1/party/logistics/categories')
+    .set('Cookie', cookie)
+    .send(body);
+
+  test('GET lists the three seeded built-ins', async () => {
+    const res = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.map(c => c.key)).toEqual(['food', 'drinks', 'other']);
+    // label NULL is what tells the client to resolve the name from i18n.
+    expect(res.body.every(c => c.label === null && c.is_builtin === true)).toBe(true);
+  });
+
+  test('GET requires admin/moderator', async () => {
+    const anon = await request(app).get('/api/v1/party/logistics/categories');
+    expect(anon.status).toBe(401);
+    const user = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', userCookie);
+    expect(user.status).toBe(403);
+  });
+
+  test('POST creates a section with a slugified key', async () => {
+    const res = await mkCat({ label: 'Skreytingar', icon: '🎈' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      key: 'skreytingar', label: 'Skreytingar', icon: '🎈', is_builtin: false,
+    });
+  });
+
+  test('POST folds Icelandic characters into the key', async () => {
+    const res = await mkCat({ label: 'Þrif og frágangur' });
+    expect(res.status).toBe(201);
+    expect(res.body.key).toBe('thrif-og-fragangur');
+  });
+
+  test('POST suffixes the key when the slug is taken', async () => {
+    const a = await mkCat({ label: 'Salur' });
+    const b = await mkCat({ label: 'Salur' });
+    expect(a.body.key).toBe('salur');
+    expect(b.body.key).toBe('salur-2');
+  });
+
+  test('POST falls back to a generated key when the label has no letters', async () => {
+    const res = await mkCat({ label: '🎉' });
+    expect(res.status).toBe(201);
+    expect(res.body.key).toBe('section');
+  });
+
+  test('POST rejects a blank or over-long label', async () => {
+    expect((await mkCat({ label: '   ' })).status).toBe(400);
+    expect((await mkCat({})).status).toBe(400);
+    expect((await mkCat({ label: 'x'.repeat(61) })).status).toBe(400);
+  });
+
+  test('POST rejects an over-long icon by grapheme count, not code units', async () => {
+    // '🎈' is 2 UTF-16 code units — a .length check would cap the icon at 4
+    // emoji instead of 8. Exactly 8 must pass; 9 must not.
+    expect((await mkCat({ label: 'Eight', icon: '🎈'.repeat(8) })).status).toBe(201);
+    expect((await mkCat({ label: 'Nine', icon: '🎈'.repeat(9) })).status).toBe(400);
+  });
+
+  test('POST requires admin/moderator', async () => {
+    expect((await mkCat({ label: 'Sneaky' }, userCookie)).status).toBe(403);
+    const anon = await request(app)
+      .post('/api/v1/party/logistics/categories')
+      .send({ label: 'Sneaky' });
+    expect(anon.status).toBe(401);
+  });
+
+  test('a custom section accepts items and shows up in the item list', async () => {
+    await mkCat({ label: 'Skreytingar' });
+    const item = await request(app)
+      .post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Blóm', quantity: 1, unit_price: 18500, category: 'skreytingar' });
+    expect(item.status).toBe(201);
+    expect(item.body.category).toBe('skreytingar');
+  });
+
+  test('PATCH renames a section and updates its icon', async () => {
+    await mkCat({ label: 'Salur', icon: '🏠' });
+    const res = await request(app)
+      .patch('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', adminCookie)
+      .send({ label: 'Salur og borð', icon: '🪑' });
+    expect(res.status).toBe(200);
+    // The key is stable across a rename — items keep pointing at it.
+    expect(res.body).toMatchObject({ key: 'salur', label: 'Salur og borð', icon: '🪑' });
+  });
+
+  // A renamed built-in stores a literal label that overrides its i18n name;
+  // clearing both hands the name (and icon fallback) back to the client.
+  test('PATCH label:null hands a renamed built-in back to i18n', async () => {
+    await request(app)
+      .patch('/api/v1/party/logistics/categories/food')
+      .set('Cookie', adminCookie)
+      .send({ label: 'Veitingar', icon: '🍕' })
+      .expect(200);
+    const res = await request(app)
+      .patch('/api/v1/party/logistics/categories/food')
+      .set('Cookie', adminCookie)
+      .send({ label: null, icon: null });
+    expect(res.status).toBe(200);
+    expect(res.body.label).toBe(null); // client resolves the i18n name again
+    expect(res.body.icon).toBe(null);
+    expect(res.body.is_builtin).toBe(true);
+  });
+
+  test('PATCH returns 404 for an unknown section and 400 with no fields', async () => {
+    expect((await request(app)
+      .patch('/api/v1/party/logistics/categories/nope')
+      .set('Cookie', adminCookie).send({ label: 'X' })).status).toBe(404);
+    expect((await request(app)
+      .patch('/api/v1/party/logistics/categories/other')
+      .set('Cookie', adminCookie).send({ bogus: 1 })).status).toBe(400);
+  });
+
+  test('DELETE removes a custom section', async () => {
+    await mkCat({ label: 'Salur' });
+    const del = await request(app)
+      .delete('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const list = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', adminCookie);
+    expect(list.body.map(c => c.key)).not.toContain('salur');
+  });
+
+  test('DELETE refuses to remove a built-in section', async () => {
+    for (const key of ['food', 'drinks', 'other']) {
+      const res = await request(app)
+        .delete(`/api/v1/party/logistics/categories/${key}`)
+        .set('Cookie', adminCookie);
+      expect(res.status).toBe(400);
+    }
+    const list = await request(app)
+      .get('/api/v1/party/logistics/categories')
+      .set('Cookie', adminCookie);
+    expect(list.body.map(c => c.key)).toEqual(['food', 'drinks', 'other']);
+  });
+
+  test('DELETE returns 404 for an unknown section', async () => {
+    const res = await request(app)
+      .delete('/api/v1/party/logistics/categories/nope')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(404);
+  });
+
+  test('DELETE requires admin/moderator', async () => {
+    await mkCat({ label: 'Salur' });
+    const res = await request(app)
+      .delete('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', userCookie);
+    expect(res.status).toBe(403);
+  });
+
+  // The load-bearing guarantee: tidying a section away must never destroy the
+  // costs recorded in it. The FK's ON DELETE SET DEFAULT sweeps items to
+  // 'other' with their price intact.
+  test('DELETE sweeps the section items into "other" instead of deleting them', async () => {
+    await mkCat({ label: 'Skreytingar' });
+    await request(app).post('/api/v1/party/logistics').set('Cookie', adminCookie)
+      .send({ name: 'Blóm', quantity: 1, unit_price: 18500, category: 'skreytingar' });
+    await request(app).post('/api/v1/party/logistics').set('Cookie', adminCookie)
+      .send({ name: 'Dúkar', quantity: 2, unit_price: 3000, category: 'skreytingar' });
+
+    await request(app)
+      .delete('/api/v1/party/logistics/categories/skreytingar')
+      .set('Cookie', adminCookie)
+      .expect(204);
+
+    const list = await request(app)
+      .get('/api/v1/party/logistics')
+      .set('Cookie', adminCookie);
+    const blom  = list.body.find(i => i.name === 'Blóm');
+    const dukar = list.body.find(i => i.name === 'Dúkar');
+    expect(blom).toBeDefined();
+    expect(dukar).toBeDefined();
+    expect(blom.category).toBe('other');
+    expect(dukar.category).toBe('other');
+    // Prices survive the sweep — the total bill is unchanged.
+    expect(blom.unit_price).toBe(18500);
+    expect(dukar.unit_price).toBe(3000);
+  });
+
+  test('POST /logistics accepts a custom category and rejects a deleted one', async () => {
+    await mkCat({ label: 'Salur' });
+    expect((await request(app).post('/api/v1/party/logistics').set('Cookie', adminCookie)
+      .send({ name: 'Leiga', category: 'salur' })).status).toBe(201);
+
+    await request(app).delete('/api/v1/party/logistics/categories/salur')
+      .set('Cookie', adminCookie);
+
+    // A stale tab posting into the deleted section gets a readable 400, not a
+    // 500 surfaced from the FK violation.
+    const res = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Leiga 2', category: 'salur' });
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH /logistics can move an item into a custom section', async () => {
+    await mkCat({ label: 'Salur' });
+    const created = await request(app).post('/api/v1/party/logistics')
+      .set('Cookie', adminCookie).send({ name: 'Leiga' });
+    const moved = await request(app)
+      .patch(`/api/v1/party/logistics/${created.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ category: 'salur' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.category).toBe('salur');
+  });
+});
+
 // ── To-do list (059) ──────────────────────────────────────────────────────────
 
 describe('To-do list endpoints', () => {
@@ -2283,5 +2792,745 @@ describe('PATCH /api/v1/party/guests/:id/rsvp-status', () => {
     const res = await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
       .send({ status: 'going' });
     expect(res.status).toBe(401);
+  });
+});
+
+// ── PATCH /api/v1/party/guests/:id/profile ────────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/profile', () => {
+  beforeEach(async () => {
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('admin updates a guest display name', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie)
+      .send({ display_name: '  Auntie Björk  ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, display_name: 'Auntie Björk' });
+
+    const { rows } = await db.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+    expect(rows[0].display_name).toBe('Auntie Björk');
+  });
+
+  test('empty display name clears back to the username fallback (null)', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: 'Temp' });
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: '   ' });
+    expect(res.status).toBe(200);
+    expect(res.body.display_name).toBeNull();
+
+    const { rows } = await db.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+    expect(rows[0].display_name).toBeNull();
+  });
+
+  test('rejects a name longer than 100 chars with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: 'x'.repeat(101) });
+    expect(res.status).toBe(400);
+  });
+
+  test('non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', adminCookie).send({ display_name: 'Nope' });
+    expect(res.status).toBe(404);
+  });
+
+  test('moderator cannot edit (admin-only) — 403', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .set('Cookie', modCookie).send({ display_name: 'Nope' });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/profile`)
+      .send({ display_name: 'Nope' });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── PATCH /api/v1/party/guests/:id/answers ────────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/answers', () => {
+  beforeEach(async () => {
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('sets answers on a guest who had not RSVP\'d — creates the row', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie)
+      .send({ answers: { attend_when: 'kannski', message: 'Told me in person' } });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    const { rows } = await db.query('SELECT answers, attending FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].answers).toMatchObject({ attend_when: 'kannski', message: 'Told me in person' });
+    expect(rows[0].attending).toBe(true);
+
+    // Derived status follows the new answer (no override set).
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('maybe');
+  });
+
+  test('merges over existing answers, preserving keys not in the payload', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes', message: 'old', bringing: ['Maki'] } });
+    // Only send `message` — `attend_when` and the other-locale `bringing` must survive.
+    await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: { message: 'new' } });
+
+    const { rows } = await db.query('SELECT answers FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].answers).toEqual({ attend_when: 'yes', message: 'new', bringing: ['Maki'] });
+  });
+
+  test('clear list removes only the named keys', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes', message: 'bye' } });
+    await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: {}, clear: ['message'] });
+
+    const { rows } = await db.query('SELECT answers FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].answers).toEqual({ attend_when: 'yes' });
+  });
+
+  test('rejects a non-array clear payload with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: {}, clear: 'message' });
+    expect(res.status).toBe(400);
+  });
+
+  test('preserves an existing admin_status override', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'declined' });   // override
+    await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: { attend_when: 'yes' } }); // would derive going
+
+    const { rows } = await db.query('SELECT admin_status FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows[0].admin_status).toBe('declined');
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(g => g.id === userId).rsvp_status).toBe('declined');
+  });
+
+  test('rejects a non-object answers payload with 400', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: ['not', 'an', 'object'] });
+    expect(res.status).toBe(400);
+  });
+
+  test('non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', adminCookie).send({ answers: { attend_when: 'yes' } });
+    expect(res.status).toBe(404);
+  });
+
+  test('regular (non-admin) user cannot edit — 403', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .set('Cookie', userCookie).send({ answers: { attend_when: 'yes' } });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/answers`)
+      .send({ answers: { attend_when: 'yes' } });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── PATCH /api/v1/party/guests/:id/companions ─────────────────────────────────
+
+describe('PATCH /api/v1/party/guests/:id/companions', () => {
+  beforeEach(async () => {
+    await db.query('UPDATE users SET party_access = TRUE WHERE id = $1', [userId]);
+  });
+
+  test('records companions on a guest without an RSVP row — creates the row', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie)
+      .send({ plus_one: true, kids_count: 2, kids_ages: ' 3, 7 ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      admin_companions: { plus_one: true, kids_count: 2, kids_ages: '3, 7' },
+    });
+
+    const { rows } = await db.query(
+      'SELECT admin_companions, attending, answers FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].admin_companions).toEqual({ plus_one: true, kids_count: 2, kids_ages: '3, 7' });
+    // Companions-only row must NOT look like an RSVP: still not attending,
+    // no answers — the guest keeps deriving as 'waiting'.
+    expect(rows[0].attending).toBe(false);
+    expect(rows[0].answers).toBeNull();
+
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    const g = list.body.find(x => x.id === userId);
+    expect(g.rsvp_status).toBe('waiting');
+    expect(g.admin_companions).toEqual({ plus_one: true, kids_count: 2, kids_ages: '3, 7' });
+  });
+
+  test('companions-only row does not appear in getAllRsvps', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: true });
+    const res = await request(app).get('/api/v1/party/rsvps').set('Cookie', adminCookie);
+    expect(res.body.find(r => r.user_id === userId)).toBeUndefined();
+  });
+
+  test('guest RSVPing after a companions-only row sets attending TRUE', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ kids_count: 1 });
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes' } });
+
+    const { rows } = await db.query(
+      'SELECT attending, admin_companions FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].attending).toBe(true);
+    expect(rows[0].admin_companions).toEqual({ kids_count: 1 }); // survives the RSVP
+  });
+
+  test('updates existing companions; answers and admin_status untouched', async () => {
+    await request(app).post('/api/v1/party/rsvp').set('Cookie', userCookie)
+      .send({ answers: { attend_when: 'yes', bringing: ['Maki'] } });
+    await request(app).patch(`/api/v1/party/guests/${userId}/rsvp-status`)
+      .set('Cookie', adminCookie).send({ status: 'maybe' });
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: false, kids_count: 3, kids_ages: '1, 4, 9' });
+
+    const { rows } = await db.query(
+      'SELECT admin_companions, admin_status, answers FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].admin_companions).toEqual({ kids_count: 3, kids_ages: '1, 4, 9' });
+    expect(rows[0].admin_status).toBe('maybe');
+    expect(rows[0].answers).toEqual({ attend_when: 'yes', bringing: ['Maki'] });
+  });
+
+  test('all-empty body clears the record back to NULL', async () => {
+    await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: true, kids_count: 2 });
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: false, kids_count: 0, kids_ages: '' });
+    expect(res.status).toBe(200);
+    expect(res.body.admin_companions).toBeNull();
+
+    const { rows } = await db.query(
+      'SELECT admin_companions FROM party_rsvps WHERE user_id = $1', [userId]
+    );
+    expect(rows[0].admin_companions).toBeNull();
+  });
+
+  test('clear on a guest with no RSVP row is a 200 no-op', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({});
+    expect(res.status).toBe(200);
+    const { rows } = await db.query('SELECT 1 FROM party_rsvps WHERE user_id = $1', [userId]);
+    expect(rows).toHaveLength(0); // no ghost row created
+  });
+
+  test('rejects invalid values with 400', async () => {
+    const bad = [
+      { plus_one: 'yes' },
+      { kids_count: -1 },
+      { kids_count: 2.5 },
+      { kids_count: 26 },
+      { kids_count: 'two' },
+      { kids_ages: 42 },
+      { kids_ages: 'x'.repeat(101) },
+    ];
+    for (const body of bad) {
+      const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+        .set('Cookie', adminCookie).send(body);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('non-guest user id returns 404', async () => {
+    await db.query('UPDATE users SET party_access = FALSE WHERE id = $1', [userId]);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', adminCookie).send({ plus_one: true });
+    expect(res.status).toBe(404);
+  });
+
+  test('moderator cannot edit (admin-only) — 403', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .set('Cookie', modCookie).send({ plus_one: true });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).patch(`/api/v1/party/guests/${userId}/companions`)
+      .send({ plus_one: true });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/v1/party/guests (manual add) ────────────────────────────────────
+
+describe('POST /api/v1/party/guests', () => {
+  test('adds a verbal guest with no email — placeholder, going, shows in list', async () => {
+    // The new guest should inherit the admin's locale (req.locale) rather than
+    // the users column default 'en' — prove it with an Icelandic admin.
+    await db.query("UPDATE users SET preferred_locale = 'is' WHERE id = $1", [adminId]);
+    const res = await request(app)
+      .post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Frændi Jón' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ status: 'going', hasEmail: false });
+    const id = res.body.id;
+
+    const { rows } = await db.query(
+      'SELECT display_name, email, party_access, approval_status, password_hash, preferred_locale FROM users WHERE id = $1', [id]
+    );
+    expect(rows[0].display_name).toBe('Frændi Jón');
+    expect(rows[0].party_access).toBe(true);
+    expect(rows[0].approval_status).toBe('approved');
+    expect(rows[0].password_hash).toBeNull();
+    expect(rows[0].email).toMatch(/@guest\.invalid$/);
+    // Seeded from the party-route locale ('is'), not the users column default 'en'.
+    expect(rows[0].preferred_locale).toBe('is');
+
+    // Shows as a going guest, but not as a submitted RSVP.
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    const g = list.body.find(x => x.id === id);
+    expect(g.rsvp_status).toBe('going');
+
+    const prow = await db.query('SELECT answers, admin_status FROM party_rsvps WHERE user_id = $1', [id]);
+    expect(prow.rows[0].admin_status).toBe('going');
+    expect(prow.rows[0].answers).toBeNull();
+
+    const rsvps = await request(app).get('/api/v1/party/rsvps').set('Cookie', adminCookie);
+    expect(rsvps.body.find(r => r.user_id === id)).toBeUndefined();
+  });
+
+  test('adds a guest with a real email', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Vinur Anna', email: 'Anna.Vinur@Example.com', status: 'maybe' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ status: 'maybe', hasEmail: true });
+
+    const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [res.body.id]);
+    expect(rows[0].email).toBe('anna.vinur@example.com'); // lowercased
+  });
+
+  // The default stays "no email leaves the building" — only invite:true sends.
+  test('adding without invite issues no magic token', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Kyrr Katrín', email: 'katrin@example.com' });
+    expect(res.status).toBe(201);
+    expect(res.body.invited).toBe(false);
+
+    const { rows } = await db.query(
+      'SELECT magic_login_token_hash FROM users WHERE id = $1', [res.body.id]
+    );
+    expect(rows[0].magic_login_token_hash).toBeNull();
+  });
+
+  test('invite:true issues a magic token and reports invited', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Boðinn Ingi', email: 'ingi@example.com', invite: true });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ hasEmail: true, invited: true });
+
+    const { rows } = await db.query(
+      'SELECT magic_login_token_hash, approval_status, party_access FROM users WHERE id = $1',
+      [res.body.id]
+    );
+    expect(rows[0].magic_login_token_hash).toBeTruthy();
+    expect(rows[0].approval_status).toBe('approved');
+    expect(rows[0].party_access).toBe(true);
+  });
+
+  test('invite:true without an email is refused and creates no guest', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie)
+      .send({ name: 'Netfangslaus Nonni', invite: true });
+    expect(res.status).toBe(400);
+
+    const { rows } = await db.query(
+      "SELECT 1 FROM users WHERE display_name = 'Netfangslaus Nonni'"
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  test('status waiting creates no party_rsvps row', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'Óviss Óli', status: 'waiting' });
+    const prow = await db.query('SELECT 1 FROM party_rsvps WHERE user_id = $1', [res.body.id]);
+    expect(prow.rows).toHaveLength(0);
+    const list = await request(app).get('/api/v1/party/invited-guests').set('Cookie', adminCookie);
+    expect(list.body.find(x => x.id === res.body.id).rsvp_status).toBe('waiting');
+  });
+
+  test('placeholder-email guests are excluded from the email blast', async () => {
+    await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'No Email Guest', status: 'going' });
+    const res = await request(app).post('/api/v1/party/email-going')
+      .set('Cookie', adminCookie).send({ subject: 'Hi', body: 'See you', includeMaybe: true });
+    expect(res.status).toBe(200);
+    // The placeholder guest has no deliverable address, so it isn't a recipient.
+    expect(res.body.sent).toBe(0);
+  });
+
+  test('rejects a missing/blank name with 400', async () => {
+    for (const body of [{}, { name: '   ' }, { name: 'x'.repeat(101) }]) {
+      const res = await request(app).post('/api/v1/party/guests')
+        .set('Cookie', adminCookie).send(body);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('rejects an invalid email with 400', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'Bad Email', email: 'not-an-email' });
+    expect(res.status).toBe(400);
+  });
+
+  test('duplicate email returns 409', async () => {
+    // adminId already exists with user@test.com / admin@… — reuse the regular user's email.
+    const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', adminCookie).send({ name: 'Dup', email: rows[0].email });
+    expect(res.status).toBe(409);
+  });
+
+  test('regular (non-admin) user cannot add — 403', async () => {
+    const res = await request(app).post('/api/v1/party/guests')
+      .set('Cookie', userCookie).send({ name: 'Nope' });
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthenticated returns 401', async () => {
+    const res = await request(app).post('/api/v1/party/guests').send({ name: 'Nope' });
+    expect(res.status).toBe(401);
+  });
+});
+
+
+// ── Project plan (069) ────────────────────────────────────────────────────────
+
+describe('Party project plan — phases', () => {
+  test('GET /plan/phases returns the five built-ins in sort order', async () => {
+    const res = await request(app).get('/api/v1/party/plan/phases')
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.map(p => p.key)).toEqual(['pickup', 'setup', 'during', 'teardown', 'other']);
+    // Built-ins carry no label — the view resolves their name from i18n.
+    expect(res.body.every(p => p.is_builtin === true && p.label === null)).toBe(true);
+  });
+
+  test('POST /plan/phases derives a key from the label', async () => {
+    const res = await request(app).post('/api/v1/party/plan/phases')
+      .set('Cookie', adminCookie).send({ label: 'Skreytingar & blóm', icon: '🌸' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ key: 'skreytingar-blom', label: 'Skreytingar & blóm', icon: '🌸', is_builtin: false });
+  });
+
+  test('POST /plan/phases rejects a missing / over-long label and over-long icon', async () => {
+    const r1 = await request(app).post('/api/v1/party/plan/phases')
+      .set('Cookie', adminCookie).send({});
+    expect(r1.status).toBe(400);
+    const r2 = await request(app).post('/api/v1/party/plan/phases')
+      .set('Cookie', adminCookie).send({ label: 'x'.repeat(61) });
+    expect(r2.status).toBe(400);
+    const r3 = await request(app).post('/api/v1/party/plan/phases')
+      .set('Cookie', adminCookie).send({ label: 'Fine', icon: 'xxxxxxxxx' });
+    expect(r3.status).toBe(400);
+  });
+
+  test('PATCH renames a phase; clearing a built-in label hands it back to i18n', async () => {
+    const renamed = await request(app).patch('/api/v1/party/plan/phases/setup')
+      .set('Cookie', adminCookie).send({ label: 'Uppsetning í sal', icon: '🏠' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body).toMatchObject({ label: 'Uppsetning í sal', icon: '🏠' });
+
+    const cleared = await request(app).patch('/api/v1/party/plan/phases/setup')
+      .set('Cookie', adminCookie).send({ label: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.label).toBeNull();
+  });
+
+  test('PATCH with no recognized fields returns 400; unknown key returns 404', async () => {
+    const empty = await request(app).patch('/api/v1/party/plan/phases/setup')
+      .set('Cookie', adminCookie).send({});
+    expect(empty.status).toBe(400);
+    const missing = await request(app).patch('/api/v1/party/plan/phases/nope')
+      .set('Cookie', adminCookie).send({ label: 'X' });
+    expect(missing.status).toBe(404);
+  });
+
+  test('DELETE refuses built-in phases and 404s on an unknown key', async () => {
+    for (const key of ['pickup', 'setup', 'during', 'teardown', 'other']) {
+      const res = await request(app).delete(`/api/v1/party/plan/phases/${key}`)
+        .set('Cookie', adminCookie);
+      expect(res.status).toBe(400);
+    }
+    const missing = await request(app).delete('/api/v1/party/plan/phases/nope')
+      .set('Cookie', adminCookie);
+    expect(missing.status).toBe(404);
+  });
+
+  test('deleting a custom phase sweeps its tasks into "other" instead of deleting them', async () => {
+    const phase = await request(app).post('/api/v1/party/plan/phases')
+      .set('Cookie', adminCookie).send({ label: 'Salur' });
+    const task = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'Sópa gólfið', phase: phase.body.key, time_minutes: 45 });
+    expect(task.body.phase).toBe('salur');
+
+    const del = await request(app).delete(`/api/v1/party/plan/phases/${phase.body.key}`)
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+
+    const list = await request(app).get('/api/v1/party/plan').set('Cookie', adminCookie);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0]).toMatchObject({ id: task.body.id, phase: 'other', time_minutes: 45 });
+  });
+});
+
+describe('Party project plan — tasks', () => {
+  test('unauthenticated returns 401; non-admin returns 403', async () => {
+    expect((await request(app).get('/api/v1/party/plan')).status).toBe(401);
+    expect((await request(app).get('/api/v1/party/plan').set('Cookie', userCookie)).status).toBe(403);
+    expect((await request(app).post('/api/v1/party/plan')
+      .set('Cookie', userCookie).send({ title: 'Nope' })).status).toBe(403);
+  });
+
+  test('GET returns an empty list before anything is planned', async () => {
+    const res = await request(app).get('/api/v1/party/plan').set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  test('POST with only a title defaults to the "other" phase and unknown estimates', async () => {
+    const res = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'Sækja borð' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      title: 'Sækja borð', phase: 'other', done: false,
+      time_minutes: null, people_needed: null, linked_todo_id: null, sort_order: 1,
+    });
+    expect(res.body.assignees).toEqual([]);
+  });
+
+  test('POST carries phase, estimates and assignees', async () => {
+    const res = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({
+        title: 'Reisa tjald', notes: 'þarf skrúfjárn', phase: 'setup',
+        time_minutes: 90, people_needed: 3, assignees: ['  Halli  ', 'Halli', 'Bjarni'],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      title: 'Reisa tjald', notes: 'þarf skrúfjárn', phase: 'setup',
+      time_minutes: 90, people_needed: 3,
+    });
+    expect(res.body.assignees).toEqual(['Halli', 'Bjarni']);
+  });
+
+  test('moderator can create and delete plan tasks', async () => {
+    const modId     = await createTestModeratorUser();
+    const modCookie = await getTestSessionCookie(modId);
+    const created = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', modCookie).send({ title: 'Mod task' });
+    expect(created.status).toBe(201);
+    const del = await request(app).delete(`/api/v1/party/plan/${created.body.id}`)
+      .set('Cookie', modCookie);
+    expect(del.status).toBe(204);
+  });
+
+  test('POST rejects a missing / over-long title and over-long notes', async () => {
+    expect((await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({})).status).toBe(400);
+    expect((await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: '   ' })).status).toBe(400);
+    expect((await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'x'.repeat(201) })).status).toBe(400);
+    expect((await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'T', notes: 'x'.repeat(2001) })).status).toBe(400);
+  });
+
+  test('POST rejects negative, fractional and oversized estimates', async () => {
+    for (const time_minutes of [-1, 1.5, 10081, '90']) {
+      const res = await request(app).post('/api/v1/party/plan')
+        .set('Cookie', adminCookie).send({ title: 'T', time_minutes });
+      expect(res.status).toBe(400);
+    }
+    for (const people_needed of [-1, 2.5, 1001, '3']) {
+      const res = await request(app).post('/api/v1/party/plan')
+        .set('Cookie', adminCookie).send({ title: 'T', people_needed });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('POST rejects an unknown phase', async () => {
+    const res = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'T', phase: 'nope' });
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH updates each field and clears estimates back to unknown', async () => {
+    const created = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'T', time_minutes: 30, people_needed: 2 });
+    const id = created.body.id;
+
+    const patched = await request(app).patch(`/api/v1/party/plan/${id}`)
+      .set('Cookie', adminCookie).send({
+        title: 'Sækja stóla', notes: 'hjá Jóni', done: true, phase: 'pickup',
+        time_minutes: 120, people_needed: 4, assignees: ['Halli'],
+      });
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject({
+      title: 'Sækja stóla', notes: 'hjá Jóni', done: true, phase: 'pickup',
+      time_minutes: 120, people_needed: 4,
+    });
+    expect(patched.body.assignees).toEqual(['Halli']);
+
+    const cleared = await request(app).patch(`/api/v1/party/plan/${id}`)
+      .set('Cookie', adminCookie).send({ time_minutes: null, people_needed: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.time_minutes).toBeNull();
+    expect(cleared.body.people_needed).toBeNull();
+  });
+
+  test('PATCH rejects a non-boolean done, an unknown phase and an empty body', async () => {
+    const created = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'T' });
+    const id = created.body.id;
+    expect((await request(app).patch(`/api/v1/party/plan/${id}`)
+      .set('Cookie', adminCookie).send({ done: 'yes' })).status).toBe(400);
+    expect((await request(app).patch(`/api/v1/party/plan/${id}`)
+      .set('Cookie', adminCookie).send({ phase: 'nope' })).status).toBe(400);
+    expect((await request(app).patch(`/api/v1/party/plan/${id}`)
+      .set('Cookie', adminCookie).send({ nonsense: 1 })).status).toBe(400);
+  });
+
+  test('PATCH and DELETE 404 on a non-existent task', async () => {
+    expect((await request(app).patch('/api/v1/party/plan/999999')
+      .set('Cookie', adminCookie).send({ done: true })).status).toBe(404);
+
+    const created = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'T' });
+    expect((await request(app).delete(`/api/v1/party/plan/${created.body.id}`)
+      .set('Cookie', adminCookie)).status).toBe(204);
+    expect((await request(app).delete(`/api/v1/party/plan/${created.body.id}`)
+      .set('Cookie', adminCookie)).status).toBe(404);
+  });
+
+  test('POST /plan/reorder rewrites sort_order; bad ids are rejected', async () => {
+    const ids = [];
+    for (const title of ['A', 'B', 'C']) {
+      const r = await request(app).post('/api/v1/party/plan')
+        .set('Cookie', adminCookie).send({ title });
+      ids.push(r.body.id);
+    }
+    const reordered = await request(app).post('/api/v1/party/plan/reorder')
+      .set('Cookie', adminCookie).send({ ids: [...ids].reverse() });
+    expect(reordered.status).toBe(204);
+
+    const list = await request(app).get('/api/v1/party/plan').set('Cookie', adminCookie);
+    expect(list.body.map(t => t.title)).toEqual(['C', 'B', 'A']);
+
+    expect((await request(app).post('/api/v1/party/plan/reorder')
+      .set('Cookie', adminCookie).send({ ids: [] })).status).toBe(400);
+    expect((await request(app).post('/api/v1/party/plan/reorder')
+      .set('Cookie', adminCookie).send({ ids: ['1'] })).status).toBe(400);
+  });
+});
+
+describe('Party project plan — linking to the to-do list', () => {
+  test('PATCH links an existing todo, clears with null, and rejects a bogus id', async () => {
+    const todo = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'Sækja stóla' });
+    const task = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'Sækja stóla' });
+
+    const linked = await request(app).patch(`/api/v1/party/plan/${task.body.id}`)
+      .set('Cookie', adminCookie).send({ linked_todo_id: todo.body.id });
+    expect(linked.status).toBe(200);
+    expect(linked.body.linked_todo_id).toBe(todo.body.id);
+
+    expect((await request(app).patch(`/api/v1/party/plan/${task.body.id}`)
+      .set('Cookie', adminCookie).send({ linked_todo_id: 999999 })).status).toBe(400);
+    expect((await request(app).patch(`/api/v1/party/plan/${task.body.id}`)
+      .set('Cookie', adminCookie).send({ linked_todo_id: 'abc' })).status).toBe(400);
+
+    const cleared = await request(app).patch(`/api/v1/party/plan/${task.body.id}`)
+      .set('Cookie', adminCookie).send({ linked_todo_id: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.linked_todo_id).toBeNull();
+  });
+
+  test('deleting the linked todo unlinks the task but keeps the planned work', async () => {
+    const todo = await request(app).post('/api/v1/party/todos')
+      .set('Cookie', adminCookie).send({ title: 'Sækja stóla' });
+    const task = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'Sækja stóla' });
+    await request(app).patch(`/api/v1/party/plan/${task.body.id}`)
+      .set('Cookie', adminCookie).send({ linked_todo_id: todo.body.id });
+
+    const del = await request(app).delete(`/api/v1/party/todos/${todo.body.id}`)
+      .set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+
+    const list = await request(app).get('/api/v1/party/plan').set('Cookie', adminCookie);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0]).toMatchObject({ id: task.body.id, linked_todo_id: null });
+  });
+
+  test('POST /plan/:id/create-todo spawns a linked todo carrying title, notes and assignees', async () => {
+    const task = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({
+        title: 'Reisa tjald', notes: 'þarf skrúfjárn', phase: 'setup', assignees: ['Halli', 'Bjarni'],
+      });
+
+    const res = await request(app).post(`/api/v1/party/plan/${task.body.id}/create-todo`)
+      .set('Cookie', adminCookie).send({});
+    expect(res.status).toBe(201);
+    expect(res.body.todo).toMatchObject({ title: 'Reisa tjald', notes: 'þarf skrúfjárn', done: false });
+    expect(res.body.todo.assignees).toEqual(['Halli', 'Bjarni']);
+    expect(res.body.todo.subtasks).toEqual([]);
+    expect(res.body.task.linked_todo_id).toBe(res.body.todo.id);
+
+    const todos = await request(app).get('/api/v1/party/todos').set('Cookie', adminCookie);
+    expect(todos.body.map(t => t.id)).toContain(res.body.todo.id);
+  });
+
+  test('create-todo refuses a second spawn while the link still resolves', async () => {
+    const task = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'Reisa tjald' });
+    const first = await request(app).post(`/api/v1/party/plan/${task.body.id}/create-todo`)
+      .set('Cookie', adminCookie).send({});
+    expect(first.status).toBe(201);
+
+    const second = await request(app).post(`/api/v1/party/plan/${task.body.id}/create-todo`)
+      .set('Cookie', adminCookie).send({});
+    expect(second.status).toBe(409);
+  });
+
+  test('create-todo works again once the linked todo is gone, and 404s on an unknown task', async () => {
+    const task = await request(app).post('/api/v1/party/plan')
+      .set('Cookie', adminCookie).send({ title: 'Reisa tjald' });
+    const first = await request(app).post(`/api/v1/party/plan/${task.body.id}/create-todo`)
+      .set('Cookie', adminCookie).send({});
+    await request(app).delete(`/api/v1/party/todos/${first.body.todo.id}`).set('Cookie', adminCookie);
+
+    const again = await request(app).post(`/api/v1/party/plan/${task.body.id}/create-todo`)
+      .set('Cookie', adminCookie).send({});
+    expect(again.status).toBe(201);
+    expect(again.body.task.linked_todo_id).toBe(again.body.todo.id);
+
+    expect((await request(app).post('/api/v1/party/plan/999999/create-todo')
+      .set('Cookie', adminCookie).send({})).status).toBe(404);
   });
 });

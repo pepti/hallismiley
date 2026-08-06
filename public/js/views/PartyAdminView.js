@@ -33,14 +33,18 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, todosRes] = await Promise.all([
+    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, catsRes, todosRes,
+      planRes, phasesRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',            { credentials: 'include' }),
       fetch('/api/v1/party/info',             { credentials: 'include' }),
       fetch('/api/v1/party/pending-requests', { credentials: 'include' }),
       fetch('/api/v1/admin/email-health',     { credentials: 'include' }),
       fetch('/api/v1/party/invited-guests',   { credentials: 'include' }),
       fetch('/api/v1/party/logistics',        { credentials: 'include' }),
+      fetch('/api/v1/party/logistics/categories', { credentials: 'include' }),
       fetch('/api/v1/party/todos',            { credentials: 'include' }),
+      fetch('/api/v1/party/plan',             { credentials: 'include' }),
+      fetch('/api/v1/party/plan/phases',      { credentials: 'include' }),
     ]);
     const rsvps     = await rsvpsRes.json();
     const info      = await infoRes.json();
@@ -48,21 +52,43 @@ export class PartyAdminView {
     const health    = healthRes.ok ? await healthRes.json() : null;
     const guests    = guestsRes.ok ? await guestsRes.json() : [];
     const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
+    const cats      = catsRes.ok ? await catsRes.json() : [];
     const todos     = todosRes.ok ? await todosRes.json() : [];
+    const plan      = planRes.ok ? await planRes.json() : [];
+    const phases    = phasesRes.ok ? await phasesRes.json() : [];
 
     this._rsvps           = Array.isArray(rsvps) ? rsvps : [];
     this._pendingRequests = Array.isArray(pending) ? pending : [];
     this._emailHealth   = health;
     this._invitedGuests = Array.isArray(guests) ? guests : [];
     this._logistics     = Array.isArray(logistics) ? logistics : [];
+    this._logisticsCats = Array.isArray(cats) ? cats : [];
     this._todos         = Array.isArray(todos) ? todos : [];
+    this._plan          = Array.isArray(plan) ? plan : [];
+    this._planPhases    = Array.isArray(phases) ? phases : [];
     this._peopleNames   = this._collectPeopleNames();
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
 
     // Sort state is session-only — each fresh load starts on the default view.
-    this._guestSort = null;
-    this._rsvpSort  = null;
+    // The guest filter (name query + pill group) survives the _loadAndRender
+    // reloads that follow every inline edit, so an admin working through e.g.
+    // the "waiting" list doesn't lose their place after each change.
+    this._guestSort   = null;
+    this._rsvpSort    = null;
+    this._guestFilter = this._guestFilter || { q: '', group: null };
+    // Scroll-mode toggle is session-only and off by default (the guest list
+    // shows in full and the page scrolls); survives inline-edit reloads.
+    if (this._guestScroll === undefined) this._guestScroll = false;
+
+    // Column widths persist across reloads (per browser). Ignored when the
+    // stored array doesn't match the current column count (e.g. admin vs
+    // moderator see different columns).
+    if (this._guestColWidths === undefined) {
+      try {
+        this._guestColWidths = JSON.parse(localStorage.getItem('partyAdmin.guestColWidths') || 'null');
+      } catch { this._guestColWidths = null; }
+    }
 
     this._el.innerHTML = this._renderAll();
     this._bind();
@@ -77,12 +103,13 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
+        ${this._renderPlanSection()}
         ${this._renderAcceptedAndPending()}
+        ${this._renderAddGuestSection()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
         ${this._renderTodoSection()}
         ${this._renderCostSection()}
-        ${this._renderOwnerInviteSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
         ${this._renderHelpersList()}
@@ -142,38 +169,96 @@ export class PartyAdminView {
   // Sort order: going → maybe → waiting so the most-committed guests bubble
   // up when scanning the list. Pills above the table show the breakdown and
   // host the "Email accepted + maybe" action.
+  // Sort the (already filtered) guest list. Default sort (no column clicked):
+  // status priority then alphabetical. User-applied column sort takes over
+  // when this._guestSort is set. Shared by the full section render and the
+  // tbody-only refresh the filter box uses.
+  _sortInvitedGuests(guests) {
+    if (this._guestSort) {
+      return this._sortRows(
+        guests,
+        (g) => this._guestSortValue(g, this._guestSort.field),
+        this._guestSort.dir,
+        this._guestSortType(this._guestSort.field),
+      );
+    }
+    const order = { going: 0, maybe: 1, waiting: 2 };
+    const byName = (a, b) =>
+      (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
+    return [...guests].sort((a, b) => {
+      const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
+      return d !== 0 ? d : byName(a, b);
+    });
+  }
+
+  // Apply the toolbar filters to the non-declined guest list: the active pill
+  // group first (membership comes from the same lists the pills count), then
+  // the name query against display name OR username (the Notendanafn column
+  // shows display_name with username fallback, so match both).
+  _filterGuests(guests) {
+    const { q, group } = this._guestFilter || {};
+    let out = guests;
+    if (group) {
+      const grp = this._summaryGroups(guests).find(g2 => g2.key === group);
+      const ids = new Set((grp?.list || []).map(g2 => g2.id));
+      out = out.filter(g2 => ids.has(g2.id));
+    }
+    const needle = (q || '').trim().toLowerCase();
+    if (needle) {
+      out = out.filter(g2 =>
+        (g2.display_name || '').toLowerCase().includes(needle) ||
+        (g2.username || '').toLowerCase().includes(needle));
+    }
+    return out;
+  }
+
+  _guestFilterActive() {
+    const { q, group } = this._guestFilter || {};
+    return Boolean((q || '').trim() || group);
+  }
+
+  // The tbody rows for the attendance table — empty-state message depends on
+  // whether a filter is hiding everyone or there are simply no guests.
+  _guestRowsHtml(sorted, showRevoke, anyGuests) {
+    if (sorted.length) return sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('');
+    const colSpan = this._invitedGuestColSpan(showRevoke);
+    const msg = (anyGuests && this._guestFilterActive())
+      ? t('party.admin.guestFilterNoMatch')
+      : t('party.admin.noGuests');
+    return `<tr><td colspan="${colSpan}" class="party-empty">${msg}</td></tr>`;
+  }
+
+  // Planned headcount over GOING guests: each guest counts as one adult, plus
+  // one more when they bring a spouse/partner (admin RSVP Stýring wins over the
+  // guest's own answer — _companionFlags folds that in). Kids use the admin
+  // count when recorded; otherwise the original answer only tells us kids
+  // exist, so it conservatively counts as 1.
+  _plannedHeadcount() {
+    let adults = 0, kids = 0;
+    for (const g of this._invitedGuests || []) {
+      if (g.rsvp_status !== 'going') continue;
+      const flags = this._companionFlags(g);
+      adults += 1 + (flags.spouse ? 1 : 0);
+      const ac = g.admin_companions;
+      if (ac && typeof ac === 'object') kids += Number(ac.kids_count) || 0;
+      else if (flags.kids) kids += 1;
+    }
+    return { adults, kids };
+  }
+
   _renderAcceptedAndPending() {
     const guests = (this._invitedGuests || []).filter(g => g.rsvp_status !== 'declined');
     const showRevoke = isAdmin();
 
-    // Default sort (no column clicked): status priority then alphabetical.
-    // User-applied column sort takes over when this._guestSort is set.
-    const sorted = this._guestSort
-      ? this._sortRows(
-          guests,
-          (g) => this._guestSortValue(g, this._guestSort.field),
-          this._guestSort.dir,
-          this._guestSortType(this._guestSort.field),
-        )
-      : (() => {
-          const order = { going: 0, maybe: 1, waiting: 2 };
-          const byName = (a, b) =>
-            (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '');
-          return [...guests].sort((a, b) => {
-            const d = (order[a.rsvp_status] ?? 9) - (order[b.rsvp_status] ?? 9);
-            return d !== 0 ? d : byName(a, b);
-          });
-        })();
+    const visible = this._filterGuests(guests);
+    const sorted  = this._sortInvitedGuests(visible);
 
     const counts = guests.reduce((acc, g) => {
       acc[g.rsvp_status] = (acc[g.rsvp_status] || 0) + 1;
       return acc;
     }, {});
 
-    const colSpan = this._invitedGuestColSpan(showRevoke);
-    const rows = sorted.length
-      ? sorted.map(g => this._renderInvitedGuestRow(g, showRevoke)).join('')
-      : `<tr><td colspan="${colSpan}" class="party-empty">${t('party.admin.noGuests')}</td></tr>`;
+    const rows = this._guestRowsHtml(sorted, showRevoke, guests.length > 0);
 
     // Email button only renders for admins who actually have someone to email.
     const emailableCount = (counts.going || 0) + (counts.maybe || 0);
@@ -181,16 +266,39 @@ export class PartyAdminView {
       ? `<button type="button" class="lol-btn lol-btn--primary lol-btn--sm" id="party-admin-email-going-btn">${t('party.admin.emailGoingBtn')}</button>`
       : '';
 
+    // Planning stat: true mouths-to-feed count, not "guests who bring someone".
+    const hc = this._plannedHeadcount();
+    const headcountPill =
+      `<span class="party-admin__pill party-admin__pill--headcount"
+             title="${escHtml(t('party.admin.plannedHeadcount', { a: hc.adults, k: hc.kids }))}">
+         ${t('party.admin.plannedHeadcount', { a: hc.adults, k: hc.kids })}
+       </span>`;
+
+    const filterActive = this._guestFilterActive();
+    const filterCount  = t('party.admin.filterShowing', { x: sorted.length, y: guests.length });
+
     return `
       <section class="party-admin__section" id="party-admin-accepted-pending">
         <h2 class="party-admin__section-title">${t('party.admin.acceptedAndPending', { n: guests.length })}</h2>
         <div class="party-admin__invited-toolbar">
           <div class="party-admin__invited-summary">
             ${this._summaryGroups(guests).map(grp => this._renderSummaryPill(grp)).join('')}
+            ${headcountPill}
           </div>
           ${emailBtn}
         </div>
-        <div class="party-admin__table-wrap">
+        <div class="party-admin__guest-filterbar">
+          <input type="search" class="lol-input party-admin__guest-filter" id="party-admin-guest-filter"
+                 value="${escHtml(this._guestFilter.q || '')}"
+                 placeholder="${escHtml(t('party.admin.guestFilterPlaceholder'))}"
+                 aria-label="${escHtml(t('party.admin.guestFilterPlaceholder'))}" />
+          <span class="party-admin__guest-filter-count" data-guest-filter-count ${filterActive ? '' : 'hidden'}>${filterCount}</span>
+          <label class="party-admin__scroll-toggle" title="${escHtml(t('party.admin.scrollToggleHint'))}">
+            <input type="checkbox" id="party-admin-scroll-toggle" ${this._guestScroll ? 'checked' : ''} />
+            ${t('party.admin.scrollToggle')}
+          </label>
+        </div>
+        <div class="party-admin__table-wrap${this._guestScroll ? ' party-admin__table-wrap--sticky' : ''}">
           <table class="party-admin__table party-admin__table--invited" aria-label="${t('party.admin.acceptedAndPending', { n: '' }).trim()}">
             <thead>
               <tr>
@@ -198,7 +306,8 @@ export class PartyAdminView {
                 ${this._sortableTh('email',    'string', t('adminUsers.email'),    this._guestSort)}
                 ${this._sortableTh('status',   'number', t('adminOrders.status'),  this._guestSort)}
                 ${this._sortableTh('bringing', 'string', t('party.admin.bringing'),this._guestSort)}
-                ${this._sortableTh('rsvpdAt',  'date',   t('party.admin.rsvpdAt'), this._guestSort)}
+                <th>${t('party.admin.rsvpControl')}</th>
+                <th>${t('party.admin.attendCol')}</th>
                 ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
               </tr>
             </thead>
@@ -238,7 +347,8 @@ export class PartyAdminView {
                   <th>${t('adminUsers.email')}</th>
                   <th>${t('adminOrders.status')}</th>
                   <th>${t('party.admin.bringing')}</th>
-                  <th>${t('party.admin.rsvpdAt')}</th>
+                  <th>${t('party.admin.rsvpControl')}</th>
+                  <th>${t('party.admin.attendCol')}</th>
                   ${showRevoke ? '<th aria-label="Actions"></th>' : ''}
                 </tr>
               </thead>
@@ -252,8 +362,8 @@ export class PartyAdminView {
   }
 
   _invitedGuestColSpan(showRevoke) {
-    // Name, Email, Status, Bringing, RSVP'd at (+ Actions if admin)
-    return showRevoke ? 6 : 5;
+    // Name, Email, Status, Bringing, RSVP Stýring, RSVP'd at (+ Actions if admin)
+    return showRevoke ? 7 : 6;
   }
 
   _guestSortValue(g, field) {
@@ -269,14 +379,12 @@ export class PartyAdminView {
         const b = this._bringingFor(g);
         return b === '—' ? null : b;
       }
-      case 'rsvpdAt':  return g.rsvp_updated_at;
       default:         return null;
     }
   }
 
   _guestSortType(field) {
-    if (field === 'status')  return 'number';
-    if (field === 'rsvpdAt') return 'date';
+    if (field === 'status') return 'number';
     return 'string';
   }
 
@@ -304,6 +412,13 @@ export class PartyAdminView {
   // option labels are admin-editable and locale-dependent ("Spouse / partner",
   // "Maki / partner", "Kids", "Börn").
   _companionFlags(g) {
+    // Admin RSVP Stýring wins outright when recorded — it's the host's own
+    // note of the CURRENT plan after phone/text updates, so it overrides
+    // whatever the guest originally answered on the form.
+    const ac = g.admin_companions;
+    if (ac && typeof ac === 'object') {
+      return { spouse: !!ac.plus_one, kids: (Number(ac.kids_count) || 0) > 0 };
+    }
     const ans = g.rsvp_answers;
     const flags = { spouse: false, kids: false };
     if (!ans) return flags;
@@ -342,11 +457,14 @@ export class PartyAdminView {
     ];
   }
 
-  // One summary pill: a button showing icon + label + count, with a dropdown
-  // listing the names in that category. Empty groups render a disabled pill
-  // (nothing to drop down). Names sorted alphabetically.
+  // One summary pill: the main button toggles the table filter for that group
+  // (active pill highlighted), and a small caret sub-button opens the dropdown
+  // listing the names in the category. Empty groups render both disabled
+  // (nothing to filter or drop down). Names sorted alphabetically. The caret
+  // carries data-pill-group so _bindPillDropdowns keeps working unchanged.
   _renderSummaryPill(grp) {
     const n = grp.list.length;
+    const active = this._guestFilter?.group === grp.key;
     const names = grp.list
       .map(g => g.display_name || g.username || '—')
       .sort((a, b) => a.localeCompare(b));
@@ -360,22 +478,44 @@ export class PartyAdminView {
     return `
       <span class="party-admin__pill-wrap">
         <button type="button"
-                class="party-admin__pill party-admin__pill--${grp.cls} party-admin__pill--btn"
-                data-pill-group="${escHtml(grp.key)}"
-                aria-haspopup="true" aria-expanded="false"
+                class="party-admin__pill party-admin__pill--${grp.cls} party-admin__pill--btn${active ? ' party-admin__pill--active' : ''}"
+                data-pill-filter="${escHtml(grp.key)}"
+                aria-pressed="${active}"
                 ${n ? '' : 'disabled'}>
           ${grp.icon} ${escHtml(grp.label)}: ${n}
         </button>
+        <button type="button"
+                class="party-admin__pill-caret"
+                data-pill-group="${escHtml(grp.key)}"
+                aria-haspopup="true" aria-expanded="false"
+                aria-label="${escHtml(t('party.admin.pillNamesAria', { label: grp.label }))}"
+                ${n ? '' : 'disabled'}>▾</button>
         ${dropdown}
       </span>`;
   }
 
+  // Placeholder emails for verbal-only guests are internal bookkeeping — show
+  // an em-dash instead of "verbal-…@guest.invalid".
+  _displayEmail(email) {
+    if (!email || email.endsWith('@guest.invalid')) return '';
+    return email;
+  }
+
   _renderInvitedGuestRow(g, showRevoke) {
     const name     = escHtml(g.display_name || g.username || '—');
-    const email    = escHtml(g.email || '');
-    const rsvpedAt = g.rsvp_updated_at
-      ? new Date(g.rsvp_updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-      : '—';
+    const email    = escHtml(this._displayEmail(g.email));
+    // Admins edit the display name inline; the placeholder shows the username
+    // fallback so a cleared name is obviously "will show as <username>".
+    const nameCell = showRevoke
+      ? `<td class="party-admin__name-cell">
+          <input type="text" class="party-admin__cell-input party-admin__name-input"
+                 data-guest-name-for="${escHtml(g.id)}"
+                 data-current="${escHtml(g.display_name || '')}"
+                 value="${escHtml(g.display_name || '')}"
+                 placeholder="${escHtml(g.username || '')}" maxlength="100"
+                 aria-label="${escHtml(t('party.admin.editNameAria', { name: g.display_name || g.username || '—' }))}" />
+        </td>`
+      : `<td>${name}</td>`;
 
     const statusHtml = {
       going:    `<span class="party-admin__status party-admin__status--going">✅ ${t('party.admin.statusGoing')}</span>`,
@@ -406,29 +546,37 @@ export class PartyAdminView {
 
     const bringingHtml = this._bringingFor(g);
 
-    // Detail row — full answer dump, hidden until row is clicked
+    // Detail row — hidden until the row is clicked. Admins get a full editable
+    // form of every RSVP answer (this is what "edit all fields" means, since
+    // the Bringing column is derived from these answers); everyone else sees
+    // the read-only answer dump.
     const detailFields = (this._rsvpForm || []).filter(f => !['heading','paragraph'].includes(f.type));
-    const detailsHtml = g.rsvp_answers
-      ? detailFields.map(f => {
-          const a = g.rsvp_answers[f.id];
-          if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
-          const val = Array.isArray(a) ? a.map(escHtml).join(', ') : escHtml(String(a));
-          return `<div><strong>${escHtml(f.label || f.id)}:</strong> ${val}</div>`;
-        }).filter(Boolean).join('')
-      : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`;
+    const detailsHtml = showRevoke
+      ? this._renderGuestAnswerEditor(g, detailFields)
+      : (g.rsvp_answers
+          ? detailFields.map(f => {
+              const a = g.rsvp_answers[f.id];
+              if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
+              const val = Array.isArray(a) ? a.map(escHtml).join(', ') : escHtml(String(a));
+              return `<div><strong>${escHtml(f.label || f.id)}:</strong> ${val}</div>`;
+            }).filter(Boolean).join('')
+          : `<em class="party-admin__no-answers">${t('party.admin.hasntRsvpd')}</em>`);
 
     const colSpan = this._invitedGuestColSpan(showRevoke);
+    // Icon-only ✕ keeps the Actions column narrow; the confirm dialog (bound
+    // on data-revoke-user-id) still guards the action.
     const revokeCell = showRevoke
-      ? `<td><button class="lol-btn lol-btn--ghost lol-btn--sm" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}">${t('profile.revoke')}</button></td>`
+      ? `<td class="party-admin__actions-cell"><button class="party-admin__revoke-btn" data-revoke-user-id="${escHtml(g.id)}" data-revoke-user-name="${name}" title="${escHtml(t('profile.revoke'))}" aria-label="${escHtml(t('profile.revoke'))}">✕</button></td>`
       : '';
 
     return `
       <tr class="party-admin__invited-row" data-expand-guest="${escHtml(g.id)}">
-        <td>${name}</td>
-        <td>${email}</td>
+        ${nameCell}
+        <td>${email || '—'}</td>
         ${statusCell}
         <td class="party-admin__invited-bringing">${bringingHtml}</td>
-        <td>${rsvpedAt}</td>
+        ${this._renderCompanionsCell(g, showRevoke)}
+        ${this._renderTimingCell(g, showRevoke)}
         ${revokeCell}
       </tr>
       <tr class="party-admin__invited-details" data-guest-details="${escHtml(g.id)}" hidden>
@@ -436,6 +584,341 @@ export class PartyAdminView {
           <div class="party-admin__invited-detail-box">${detailsHtml}</div>
         </td>
       </tr>`;
+  }
+
+  // The "RSVP Stýring" cell: the host's own record of what this guest is
+  // CURRENTLY bringing (after phone/text updates), separate from the guest's
+  // original answer shown in the Bringing column. Admins get inline controls
+  // (save on change); moderators see a read-only summary.
+  _renderCompanionsCell(g, isAdminUser) {
+    const ac = (g.admin_companions && typeof g.admin_companions === 'object') ? g.admin_companions : null;
+    if (!isAdminUser) {
+      return `<td class="party-admin__companions-cell party-admin__companions-cell--ro">${this._companionsSummary(ac)}</td>`;
+    }
+    const kc   = Number(ac?.kids_count) || 0;
+    const ages = typeof ac?.kids_ages === 'string' ? ac.kids_ages : '';
+    return `
+      <td class="party-admin__companions-cell" data-companions-for="${escHtml(g.id)}">
+        <label class="party-admin__companion-ctl" title="${escHtml(t('party.admin.companionPlusOne'))}">
+          <span aria-hidden="true">💑</span>
+          <input type="checkbox" data-companion-field="plus_one" ${ac?.plus_one ? 'checked' : ''}
+                 aria-label="${escHtml(t('party.admin.companionPlusOne'))}" />
+        </label>
+        <label class="party-admin__companion-ctl" title="${escHtml(t('party.admin.companionKidsCount'))}">
+          <span aria-hidden="true">🧒</span>
+          <input type="number" min="0" max="25" step="1" class="party-admin__companion-kids"
+                 data-companion-field="kids_count" value="${kc > 0 ? kc : ''}" placeholder="0"
+                 aria-label="${escHtml(t('party.admin.companionKidsCount'))}" />
+        </label>
+        <input type="text" class="party-admin__companion-ages"
+               data-companion-field="kids_ages" value="${escHtml(ages)}" maxlength="100"
+               placeholder="${escHtml(t('party.admin.companionKidsAges'))}"
+               aria-label="${escHtml(t('party.admin.companionKidsAges'))}" />
+      </td>`;
+  }
+
+  // Compact one-line summary of an admin_companions record, e.g. "💑 🧒 2 (3, 7)".
+  _companionsSummary(ac) {
+    if (!ac) return '—';
+    const parts = [];
+    if (ac.plus_one) parts.push('💑');
+    const kc = Number(ac.kids_count) || 0;
+    if (kc > 0) parts.push(`🧒 ${kc}`);
+    if (typeof ac.kids_ages === 'string' && ac.kids_ages) parts.push(`(${escHtml(ac.kids_ages)})`);
+    return parts.length ? parts.join(' ') : '—';
+  }
+
+  // The RSVP form's attendance-timing field. The canonical `attend_when` id
+  // wins outright; the id/label heuristic is only a fallback for forms that
+  // renamed it. (A single find() with an OR would let an *earlier* field whose
+  // label merely mentions "dag"/"kvöld" — e.g. "Verður þú í kvöldmat?" —
+  // hijack the column even though attend_when exists.) Checkbox-groups qualify
+  // too — the live form's attendance field ("attend", label "Svar") is one,
+  // still semantically single-choice — but radio-groups are tried first so an
+  // unrelated multi-pick that mentions a time can't steal the column. The
+  // heuristic tests the id as well as the label because "Svar" says nothing
+  // while the id "attend" does.
+  _attendField() {
+    const groups = (this._rsvpForm || []).filter(f =>
+      f.type === 'radio-group' || f.type === 'checkbox-group');
+    const canonical = groups.find(f => f.id === 'attend_when');
+    if (canonical) return canonical;
+    const heur = (f) => /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(`${f.id} ${f.label || ''}`);
+    return groups.filter(f => f.type === 'radio-group').find(heur)
+      || groups.filter(f => f.type === 'checkbox-group').find(heur)
+      || null;
+  }
+
+  // Declared status of a form option ({label,status}); legacy bare-string
+  // options predate the status field and mean "going".
+  _optStatus(opt) {
+    if (typeof opt === 'string') return 'going';
+    return ['going', 'maybe', 'declined'].includes(opt?.status) ? opt.status : 'going';
+  }
+
+  // Status of a STORED answer label. The admin's declared status on a matching
+  // form option is authoritative; answers from another locale (or a renamed
+  // option) aren't in the form at all, so they fall back to phrase matching —
+  // the same shape as _deriveRsvpStatus on the server. Bare-string options
+  // carry no declaration (only the radio editor upgrades them to objects), so
+  // they use the phrase fallback too — otherwise the live checkbox form's
+  // "Get ekki mætt." / "Kannski" would classify as going just for existing.
+  // The decline phrases stay ANCHORED TO A VERB OF ATTENDING ("ekki mætt",
+  // not a bare "get ekki") — Icelandic "get ekki beðið" ("can't wait!") is an
+  // enthusiastic YES, and a looser pattern would bucket it as a decline and
+  // drop that option out of the timing select entirely.
+  _answerStatus(label) {
+    if (typeof label !== 'string') return 'going';
+    const opt = (this._attendField()?.options || []).find(o => this._optLabel(o) === label);
+    if (opt && typeof opt === 'object') return this._optStatus(opt);
+    const s = label.normalize('NFC');
+    if (/can'?t|sorry|kemst ekki|kem ekki|ekki mætt|afþakka|\bnei\b/i.test(s)) return 'declined';
+    if (/\bmaybe\b|kannski|óvíst/i.test(s))                                    return 'maybe';
+    return 'going';
+  }
+
+  // Classify a label into a timing bucket BY MEANING, across both locales and
+  // old form versions: 'day' | 'evening' | 'both' | null. Matching by meaning
+  // rather than exact label is what lets a guest who answered "Já, aðeins á
+  // daginn" light up ☀️ even when the admin's loaded form says "☀️ Daytime
+  // only". Order matters: evening first, then explicit all-day (so "all day" /
+  // "allan daginn" isn't stolen by the day test), then day, and finally an
+  // unqualified yes ("Já", "Yes, I'll be there") which means all day.
+  // Pure text — callers go through _answerTimingBucket so a decline/maybe can
+  // never land in a bucket just because its wording mentions a time.
+  _timingBucket(label) {
+    if (typeof label !== 'string' || !label.trim()) return null;
+    const s = label.normalize('NFC');
+    if (/kvöld|evening|night/i.test(s))                          return 'evening';
+    if (/both|all\s*day|allan\s*dag|heilan\s*dag/i.test(s))      return 'both';
+    if (/dag|day/i.test(s))                                      return 'day';
+    // (?![\p{L}]) not \b — JS word boundaries are ASCII-only, so \b after the
+    // 'á' in "Já" never matches and every bare-yes guest would fall through.
+    if (/^[^\p{L}]*(já|jú|yes|jebb)(?![\p{L}])/iu.test(s))       return 'both';
+    return null;
+  }
+
+  // Timing bucket of a stored answer: only guests who are actually coming have
+  // a timing. Without this a decline worded "Can't make it that day" would
+  // bucket as ☀️ — showing a timing that contradicts the Status column, and
+  // letting the select's "—" wipe their real answer.
+  _answerTimingBucket(label) {
+    return this._answerStatus(label) === 'going' ? this._timingBucket(label) : null;
+  }
+
+  // A radio-group answer is a string; a checkbox-group answer is an array of
+  // checked labels. Everything downstream of the attend field treats both as
+  // a list of candidate labels.
+  _answerLabels(ans) {
+    if (typeof ans === 'string') return ans ? [ans] : [];
+    if (Array.isArray(ans)) return ans.filter(v => typeof v === 'string' && v);
+    return [];
+  }
+
+  // The timing choices offered by the current form, one per bucket (first
+  // option wins). Only 'going' options qualify — a maybe/decline must never
+  // back a timing slot, or picking it would flip the guest's status. `value` is
+  // the real stored option label (what a save writes); icon+label are display.
+  _timingOptions() {
+    const f = this._attendField();
+    if (!f) return [];
+    const byBucket = {};
+    for (const o of (f.options || [])) {
+      // _answerStatus (not _optStatus) so a BARE-STRING decline/maybe worded
+      // with a timing phrase can't become a selectable option either.
+      if (this._answerStatus(this._optLabel(o)) !== 'going') continue;
+      const label = this._optLabel(o);
+      const b = this._timingBucket(label);
+      if (b && !byBucket[b]) byBucket[b] = label;
+    }
+    return [
+      byBucket.day     && { bucket: 'day',     value: byBucket.day,     icon: '☀️', label: t('party.admin.dayOnly') },
+      byBucket.evening && { bucket: 'evening', value: byBucket.evening, icon: '🌙', label: t('party.admin.eveningOnly') },
+      byBucket.both    && { bucket: 'both',    value: byBucket.both,    icon: '🎉', label: t('party.admin.both') },
+    ].filter(Boolean);
+  }
+
+  // The attendance-timing cell (replaces the old "RSVP sent" date). Admins get
+  // an inline dropdown of the timing options + a blank "—"; picking one writes
+  // answers.attend_when. The guest's stored answer is matched exactly first,
+  // then by bucket, so answers given in the other locale (or under renamed
+  // options) still select the right entry. Non-timing answers (Maybe/Can't —
+  // owned by the Status column) show blank. Moderators see a read-only label.
+  _renderTimingCell(g, isAdminUser) {
+    const field   = this._attendField();
+    const options = this._timingOptions();
+    if (!field || !options.length) return `<td>—</td>`;
+    // A checkbox-group attend field stores an ARRAY of labels; treat every
+    // checked label as a candidate — exact option match first, then by bucket
+    // (first label that buckets wins, mirroring the single-answer path).
+    const labels = this._answerLabels(g.rsvp_answers?.[field.id]);
+    let match = options.find(o => labels.includes(o.value));
+    if (!match) {
+      const bucket = labels.map(l => this._answerTimingBucket(l)).find(Boolean);
+      if (bucket) match = options.find(o => o.bucket === bucket);
+    }
+    // data-current mirrors the SELECTED OPTION's value (not the raw stored
+    // label) so the no-op guard in the change handler compares like with like.
+    const current = match ? match.value : '';
+
+    if (!isAdminUser) {
+      return `<td class="party-admin__timing-cell">${match ? `${match.icon} ${escHtml(match.label)}` : '—'}</td>`;
+    }
+    const opts = options.map(o =>
+      `<option value="${escHtml(o.value)}"${o.value === current ? ' selected' : ''}>${o.icon} ${escHtml(o.label)}</option>`
+    ).join('');
+    return `
+      <td class="party-admin__timing-cell">
+        <select class="party-admin__timing-select" data-timing-for="${escHtml(g.id)}"
+                data-field="${escHtml(field.id)}" data-current="${escHtml(current)}"
+                aria-label="${escHtml(t('party.admin.attendCol'))}">
+          <option value="">—</option>
+          ${opts}
+        </select>
+      </td>`;
+  }
+
+  // An RSVP option can be a bare string or a { label, status } object (the admin
+  // form editor upgrades them). Answers are always stored by label, so this is
+  // the single place that resolves an option to its answer-matching label.
+  _optLabel(opt) {
+    if (typeof opt === 'string') return opt;
+    return typeof opt?.label === 'string' ? opt.label : '';
+  }
+
+  // Can the currently-loaded form represent this stored answer? RSVP forms are
+  // translated per locale, so a guest who answered in a different language (or
+  // before an option was renamed) has answer labels that aren't in the option
+  // list the admin is looking at. If we rendered those as editable controls
+  // they'd show as unselected and a save would silently wipe them — so such
+  // fields are shown read-only and preserved untouched on save. Text/textarea
+  // answers are always representable; empty/absent answers have nothing to lose.
+  _answerRepresentable(f, ans) {
+    if (ans == null || ans === '') return true;
+    if (f.type === 'radio-group') {
+      if (typeof ans !== 'string') return false;
+      return (f.options || []).some(o => this._optLabel(o) === ans);
+    }
+    if (f.type === 'checkbox-group') {
+      if (!Array.isArray(ans)) return false;
+      const labels = new Set((f.options || []).map(o => this._optLabel(o)));
+      return ans.every(v => labels.has(v));
+    }
+    // text / textarea — a plain string fits; anything else (e.g. an array left
+    // over from a field whose type was changed) is preserved read-only instead
+    // of being lossily coerced into the input.
+    return typeof ans === 'string';
+  }
+
+  // The admin's editable version of the answer dump: one typed control per RSVP
+  // form field, pre-filled from the guest's answers (blank when they haven't
+  // answered, so the host can fill it in). Field types mirror the guest-facing
+  // form (PartyView._renderField): text, textarea, radio-group, checkbox-group.
+  _renderGuestAnswerEditor(g, fields) {
+    if (!fields.length) {
+      return `<em class="party-admin__no-answers">${t('party.admin.noRsvpFields')}</em>`;
+    }
+    const ans = g.rsvp_answers || {};
+    const body = fields.map(f => this._renderAnswerField(f, ans[f.id])).join('');
+    return `
+      <form class="party-admin__answers-form" data-guest-answers-form="${escHtml(g.id)}">
+        ${body}
+        <div class="party-admin__answers-actions">
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.saveAnswers')}</button>
+          <span class="party-admin__answers-status" aria-live="polite"></span>
+        </div>
+      </form>`;
+  }
+
+  _renderAnswerField(f, ans) {
+    const nm    = `ga_${escHtml(f.id)}`;
+    const label = escHtml(f.label || f.id);
+    const wrap  = (inner, extraType, extraAttr = '') =>
+      `<div class="party-admin__answer-field" data-answer-field="${escHtml(f.id)}" data-answer-type="${escHtml(extraType)}"${extraAttr}>${inner}</div>`;
+
+    // Answers the current form can't represent (other-locale / renamed options)
+    // are shown read-only and skipped on save so they're never clobbered.
+    if (!this._answerRepresentable(f, ans)) {
+      const shown = Array.isArray(ans) ? ans.map(escHtml).join(', ') : escHtml(String(ans));
+      return wrap(
+        `<span class="party-admin__answer-label">${label}</span>
+         <div class="party-admin__answer-readonly">${shown}
+           <span class="party-admin__answer-hint">${t('party.admin.answerOtherLocale')}</span>
+         </div>`, f.type, ' data-answer-skip="1"');
+    }
+
+    switch (f.type) {
+      case 'checkbox-group': {
+        const opts = (f.options || []).map(opt => {
+          const optLabel = this._optLabel(opt);
+          const checked  = Array.isArray(ans) && ans.includes(optLabel) ? 'checked' : '';
+          return `<label class="party-admin__answer-check">
+                    <input type="checkbox" name="${nm}" value="${escHtml(optLabel)}" ${checked} /> ${escHtml(optLabel)}
+                  </label>`;
+        }).join('');
+        return wrap(
+          `<span class="party-admin__answer-label">${label}</span>
+           <div class="party-admin__answer-opts">${opts}</div>`, 'checkbox-group');
+      }
+      case 'radio-group': {
+        const opts = (f.options || []).map(opt => {
+          const optLabel = this._optLabel(opt);
+          const checked  = typeof ans === 'string' && ans === optLabel ? 'checked' : '';
+          return `<label class="party-admin__answer-check">
+                    <input type="radio" name="${nm}" value="${escHtml(optLabel)}" ${checked} /> ${escHtml(optLabel)}
+                  </label>`;
+        }).join('');
+        // A "no answer" radio lets the admin clear a previously-picked option.
+        const clear = `<label class="party-admin__answer-check party-admin__answer-check--clear">
+                    <input type="radio" name="${nm}" value="" ${typeof ans === 'string' && ans ? '' : 'checked'} /> ${t('party.admin.answerNone')}
+                  </label>`;
+        return wrap(
+          `<span class="party-admin__answer-label">${label}</span>
+           <div class="party-admin__answer-opts">${opts}${clear}</div>`, 'radio-group');
+      }
+      case 'textarea':
+        return wrap(
+          `<label class="party-admin__answer-label">${label}
+             <textarea class="lol-input lol-textarea" name="${nm}" maxlength="1000">${escHtml(ans || '')}</textarea>
+           </label>`, 'textarea');
+      case 'text':
+      default:
+        return wrap(
+          `<label class="party-admin__answer-label">${label}
+             <input type="text" class="lol-input" name="${nm}" value="${escHtml(ans || '')}" maxlength="200" />
+           </label>`, 'text');
+    }
+  }
+
+  // Collect the answer editor into a { answers, clear } patch with SAFE, non-
+  // destructive semantics (the server merges answers over the guest's existing
+  // ones and deletes the `clear` keys):
+  //   - fields with a value      → answers[id] = value (overwrites)
+  //   - representable-but-emptied → id pushed to `clear` (explicit removal)
+  //   - read-only unmatched fields (data-answer-skip) → neither, so the stored
+  //     other-locale answer survives untouched
+  // Mirrors PartyView's per-type collection (checkbox-group → array, radio-group
+  // → string, text/textarea → trimmed string).
+  _collectAnswers(form) {
+    const answers = {};
+    const clear   = [];
+    form.querySelectorAll('[data-answer-field]').forEach(fieldEl => {
+      if (fieldEl.dataset.answerSkip) return;           // preserve as-is
+      const id   = fieldEl.dataset.answerField;
+      const type = fieldEl.dataset.answerType;
+      if (type === 'checkbox-group') {
+        const checked = [...fieldEl.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
+        if (checked.length) answers[id] = checked; else clear.push(id);
+      } else if (type === 'radio-group') {
+        const sel = fieldEl.querySelector('input[type="radio"]:checked');
+        if (sel && sel.value) answers[id] = sel.value; else clear.push(id);
+      } else {
+        const el = fieldEl.querySelector('input, textarea');
+        const v  = el?.value?.trim();
+        if (v) answers[id] = v; else clear.push(id);
+      }
+    });
+    return { answers, clear };
   }
 
   // Line cost of a logistics item — null (not 0) when qty or price is
@@ -473,14 +956,38 @@ export class PartyAdminView {
     return t(key, { v: this._fmtIsk(sum) });
   }
 
-  // The three logistics tables. Internal keys must match the DB CHECK
-  // constraint (058) and the controller's LOGISTICS_CATEGORIES.
+  // The logistics tables, one per section. Sections are DB rows now (068), not
+  // a hardcoded triple — the planner adds their own. A row with no `label` is a
+  // built-in whose name comes from i18n, so it follows the EN/IS toggle; a row
+  // WITH a label shows that literal text, because planner-typed section names
+  // have no translation pipeline behind them.
+  //
+  // The fallback keeps the section list rendering if the categories fetch
+  // failed (this._logisticsCats === []): without it the whole logistics + cost
+  // UI would silently vanish rather than degrade to the three built-ins.
   _logisticsCategories() {
-    return [
-      { key: 'food',   label: t('party.admin.logisticsCatFood'),   icon: '🍽️' },
-      { key: 'drinks', label: t('party.admin.logisticsCatDrinks'), icon: '🥤' },
-      { key: 'other',  label: t('party.admin.logisticsCatOther'),  icon: '📦' },
-    ];
+    const BUILTIN_LABEL = {
+      food:   'party.admin.logisticsCatFood',
+      drinks: 'party.admin.logisticsCatDrinks',
+      other:  'party.admin.logisticsCatOther',
+    };
+    // Per-builtin icon fallback, mirroring the label rule: a NULL icon means
+    // "default", and food's default is 🍽️, not the generic 📦 — otherwise
+    // clearing the icon in the rename form would "restore" the wrong one.
+    const BUILTIN_ICON = { food: '🍽️', drinks: '🥤', other: '📦' };
+    const rows = (this._logisticsCats || []).length
+      ? this._logisticsCats
+      : [
+        { key: 'food',   label: null, icon: null, is_builtin: true },
+        { key: 'drinks', label: null, icon: null, is_builtin: true },
+        { key: 'other',  label: null, icon: null, is_builtin: true },
+      ];
+    return rows.map(c => ({
+      key: c.key,
+      label: c.label || (BUILTIN_LABEL[c.key] ? t(BUILTIN_LABEL[c.key]) : c.key),
+      icon: c.icon || BUILTIN_ICON[c.key] || '📦',
+      isBuiltin: !!c.is_builtin,
+    }));
   }
 
   _renderLogistics() {
@@ -547,7 +1054,7 @@ export class PartyAdminView {
     return `
       <div class="party-admin__logistics-group">
         <h3 class="party-admin__logistics-cat-title">
-          ${cat.icon} ${escHtml(cat.label)}
+          ${escHtml(cat.icon)} ${escHtml(cat.label)}
           <span class="party-admin__logistics-cat-count">${all.length}</span>
         </h3>
         <form class="party-admin__logistics-add" data-logistics-add="${escHtml(cat.key)}" novalidate>
@@ -709,22 +1216,40 @@ export class PartyAdminView {
       </section>`;
   }
 
-  // Owner-initiated invites: paste emails you already have (one per line, or
-  // "Name <email>"); each becomes a pre-approved guest and gets a magic-link
-  // invite immediately.
-  _renderOwnerInviteSection() {
+  // Add a guest straight into the attendance list. Email is optional (someone
+  // who accepted verbally may not have one); when an email IS given, "send
+  // invite" also mails them a magic link, which is what folds the old paste-many
+  // invite box into this one form. Its own section so a partial re-render of the
+  // attendance table (sort/filter) never wipes half-typed input.
+  _renderAddGuestSection() {
+    const statusOpts = [
+      ['going',   `✅ ${t('party.admin.statusGoing')}`],
+      ['maybe',   `🤔 ${t('party.admin.statusMaybe')}`],
+      ['waiting', `⏳ ${t('party.admin.statusPending')}`],
+    ];
     return `
-      <section class="party-admin__section party-admin__invite">
-        <h2 class="party-admin__section-title">${t('party.admin.ownerInviteTitle')}</h2>
-        <p class="party-admin__invite-help">${t('party.admin.ownerInviteHelp')}</p>
-        <form class="party-admin__invite-form" id="party-admin-owner-invite-form">
-          <textarea id="party-admin-owner-invite-input" class="lol-input" rows="4"
-                    placeholder="${escHtml(t('party.admin.ownerInvitePlaceholder'))}"
-                    aria-label="${t('party.admin.ownerInviteTitle')}"></textarea>
-          <div class="party-admin__invite-actions">
-            <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.ownerInviteSend')}</button>
-            <span class="party-admin__invite-status" id="party-admin-owner-invite-status" aria-live="polite"></span>
-          </div>
+      <section class="party-admin__section party-admin__add-guest party-admin__add-guest--compact">
+        <h2 class="party-admin__section-title party-admin__add-guest-title">${t('party.admin.addGuestTitle')}</h2>
+        <p class="party-admin__invite-help party-admin__add-guest-help">${t('party.admin.addGuestHelp')}</p>
+        <form class="party-admin__add-guest-form" id="party-admin-add-guest-form" novalidate>
+          <input type="text" id="party-admin-add-guest-name" class="lol-input party-admin__add-guest-name"
+                 maxlength="100" required
+                 placeholder="${escHtml(t('party.admin.addGuestNamePh'))}"
+                 aria-label="${escHtml(t('party.admin.addGuestNamePh'))}" />
+          <input type="email" id="party-admin-add-guest-email" class="lol-input party-admin__add-guest-email"
+                 maxlength="200"
+                 placeholder="${escHtml(t('party.admin.addGuestEmailPh'))}"
+                 aria-label="${escHtml(t('party.admin.addGuestEmailPh'))}" />
+          <select id="party-admin-add-guest-status" class="lol-input party-admin__add-guest-status-sel"
+                  aria-label="${escHtml(t('adminOrders.status'))}">
+            ${statusOpts.map(([v, l]) => `<option value="${v}"${v === 'going' ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <label class="party-admin__add-guest-invite">
+            <input type="checkbox" id="party-admin-add-guest-invite" />
+            ${t('party.admin.addGuestSendInvite')}
+          </label>
+          <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.addGuestBtn')}</button>
+          <span class="party-admin__add-guest-status" id="party-admin-add-guest-status-msg" aria-live="polite"></span>
         </form>
       </section>`;
   }
@@ -733,31 +1258,38 @@ export class PartyAdminView {
     const rsvps = this._rsvps;
     const headcount = rsvps.filter(r => r.attending).length;
 
-    // Try to derive day/evening/both from a radio-group field that looks like attendance timing
-    const attendField = this._rsvpForm.find(f =>
-      f.type === 'radio-group' &&
-      (f.id === 'attend_when' || /attend|when|day|evening/i.test(f.label || ''))
-    );
+    // Try to derive day/evening/both from a field that looks like attendance timing
+    const attendField = this._attendField();
 
     let breakdownCards = '';
     if (attendField) {
       const tally = {};
-      (attendField.options || []).forEach(opt => { tally[opt] = 0; });
+      (attendField.options || []).forEach(opt => { tally[this._optLabel(opt)] = 0; });
       rsvps.forEach(r => {
-        const a = r.answers?.[attendField.id];
-        if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
-      });
-      // pickMatch returns the first option matching `regex` along with its count,
-      // so the rendered card carries the actual option string for click-to-filter.
-      const pickMatch = (regex) => {
-        for (const [opt, count] of Object.entries(tally)) {
-          if (regex.test(opt)) return { opt, count };
+        for (const label of this._answerLabels(r.answers?.[attendField.id])) {
+          tally[label] = (tally[label] || 0) + 1;
         }
-        return { opt: null, count: 0 };
+      });
+      // Collect EVERY tally label matching `pred`, not just the first hit. Two
+      // reasons: cross-locale answers ("Já, aðeins á daginn" + "☀️ Daytime
+      // only") belong to one card, and the loaded form's own labels are seeded
+      // at 0 — a first-hit picker would return that 0 and report an empty card
+      // while the real answers sat one key later.
+      const pickWhere = (pred) => {
+        const labels = [];
+        let count = 0;
+        for (const [opt, n] of Object.entries(tally)) {
+          if (!pred(opt)) continue;
+          labels.push(opt);
+          count += n;
+        }
+        return { labels, count };
       };
-      const breakdownCard = (match, labelHtml, modifierClass = '') => {
-        const dataAttrs = match.opt
-          ? `data-stat-key="field:${escHtml(attendField.id)}:${escHtml(match.opt)}" data-stat-field="${escHtml(attendField.id)}" data-stat-value="${escHtml(match.opt)}" data-stat-multi="false"`
+      // The card carries every label it counted, so the drill-down modal shows
+      // exactly the guests the number claims.
+      const breakdownCard = (match, labelHtml, title, modifierClass = '') => {
+        const dataAttrs = match.labels.length
+          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}"`
           : `data-stat-key="empty"`;
         const cls = 'party-admin__stat party-admin__stat--sm' + (modifierClass ? ' ' + modifierClass : '');
         return `
@@ -766,15 +1298,17 @@ export class PartyAdminView {
           <span class="party-admin__stat-label">${labelHtml}</span>
         </button>`;
       };
-      const day      = pickMatch(/day/i);
-      const evening  = pickMatch(/evening/i);
-      const both     = pickMatch(/both|all day/i);
-      const declined = pickMatch(/can'?t|sorry|no/i);
+      const day      = pickWhere(o => this._answerTimingBucket(o) === 'day');
+      const evening  = pickWhere(o => this._answerTimingBucket(o) === 'evening');
+      const both     = pickWhere(o => this._answerTimingBucket(o) === 'both');
+      const declined = pickWhere(o => this._answerStatus(o) === 'declined');
+      const dayT = t('party.admin.dayOnly'), evgT = t('party.admin.eveningOnly'),
+            bothT = t('party.admin.both'),   decT = t('party.admin.statusDeclined');
       breakdownCards = [
-        breakdownCard(day,      `☀️ ${t('party.admin.dayOnly')}`),
-        breakdownCard(evening,  `🌙 ${t('party.admin.eveningOnly')}`),
-        breakdownCard(both,     `🎉 ${t('party.admin.both')}`),
-        breakdownCard(declined, t('party.admin.statusDeclined'), 'party-admin__stat--muted'),
+        breakdownCard(day,      `☀️ ${dayT}`,  `☀️ ${dayT}`),
+        breakdownCard(evening,  `🌙 ${evgT}`,  `🌙 ${evgT}`),
+        breakdownCard(both,     `🎉 ${bothT}`, `🎉 ${bothT}`),
+        breakdownCard(declined, decT,          decT, 'party-admin__stat--muted'),
       ].join('');
     }
 
@@ -905,13 +1439,11 @@ export class PartyAdminView {
           tally[ans] = (tally[ans] || 0) + 1;
         }
       });
-      const multi = g.type === 'checkbox-group';
       const items = Object.entries(tally).map(([name, count]) => `
         <button type="button" class="party-admin__stat party-admin__stat--sm"
                 data-stat-key="field:${escHtml(g.id)}:${escHtml(name)}"
                 data-stat-field="${escHtml(g.id)}"
                 data-stat-value="${escHtml(name)}"
-                data-stat-multi="${multi}"
                 aria-label="${escHtml(name)}: ${count}. ${t('party.admin.statClickHint')}">
           <span class="party-admin__stat-num">${count}</span>
           <span class="party-admin__stat-label">${escHtml(name)}</span>
@@ -998,21 +1530,26 @@ export class PartyAdminView {
   }
 
   _bind() {
-    this._bindOwnerInvite();
+    this._bindAddGuest();
     this._bindPendingRequests();
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindLogistics();
+    this._bindCosts();
     this._bindTodos();
+    this._bindPlan();
     this._bindStatCards();
     this._bindEmailGoing();
     this._bindRsvpSort();
+    this._applyColWidths();
   }
 
   _bindGuestsSort() {
     const thead = this._el.querySelector('#party-admin-accepted-pending thead');
     if (!thead) return;
     const handler = (e) => {
+      // Clicks that start on a column-resize grip are drags, not sorts.
+      if (e.target.closest?.('[data-col-grip]')) return;
       const th = e.target.closest('th[data-sort-field]');
       if (!th || !thead.contains(th)) return;
       if (e.type === 'keydown') {
@@ -1055,6 +1592,100 @@ export class PartyAdminView {
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindEmailGoing();
+    this._applyColWidths();
+  }
+
+  // Swap ONLY the attendance tbody + result counter — used by the name-filter
+  // box so the input keeps focus and caret while the user types. Pills, header
+  // and column widths stay untouched; row-level handlers re-bind on the fresh
+  // rows (their `bound` guards make that idempotent).
+  _refreshGuestTbody() {
+    const section = this._el.querySelector('#party-admin-accepted-pending');
+    const tbody   = section?.querySelector('tbody');
+    if (!tbody) return;
+    const showRevoke = isAdmin();
+    const guests  = (this._invitedGuests || []).filter(g => g.rsvp_status !== 'declined');
+    const visible = this._filterGuests(guests);
+    const sorted  = this._sortInvitedGuests(visible);
+    tbody.innerHTML = this._guestRowsHtml(sorted, showRevoke, guests.length > 0);
+    this._bindGuestRows();
+
+    const countEl = section.querySelector('[data-guest-filter-count]');
+    if (countEl) {
+      countEl.textContent = t('party.admin.filterShowing', { x: sorted.length, y: guests.length });
+      countEl.hidden = !this._guestFilterActive();
+    }
+  }
+
+  // ── Column resize (attendance table only) ────────────────────────────────
+  // Injects a drag grip into each header cell (except the narrow Actions
+  // column) and re-applies persisted widths. Called after every render or
+  // section re-render — grip injection is idempotent per fresh <th>.
+  _applyColWidths() {
+    const table = this._el.querySelector('#party-admin-accepted-pending table');
+    if (!table) return;
+    const ths = [...table.querySelectorAll('thead th')];
+
+    // Stored widths only apply when the column count matches (admin vs
+    // moderator see different columns; stale arrays are ignored).
+    if (Array.isArray(this._guestColWidths) && this._guestColWidths.length === ths.length) {
+      table.style.tableLayout = 'fixed';
+      ths.forEach((th, i) => {
+        const w = Number(this._guestColWidths[i]);
+        if (w > 0) th.style.width = `${w}px`;
+      });
+    }
+
+    ths.forEach((th, i) => {
+      if (th.querySelector('[data-col-grip]')) return;
+      if (i === ths.length - 1) return; // last column takes the leftover space
+      const grip = document.createElement('span');
+      grip.className = 'party-admin__col-grip';
+      grip.setAttribute('data-col-grip', '');
+      grip.setAttribute('aria-hidden', 'true');
+      // Grip interactions must never reach the sortable-header handler.
+      grip.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+      grip.addEventListener('pointerdown', (e) => this._startColResize(e, table, th));
+      th.appendChild(grip);
+    });
+  }
+
+  _startColResize(e, table, th) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ths = [...table.querySelectorAll('thead th')];
+    const index = ths.indexOf(th);
+    if (index < 0) return;
+
+    // Freeze the current layout so switching to table-layout:fixed doesn't
+    // reshuffle the untouched columns mid-drag.
+    const widths = ths.map(el => el.offsetWidth);
+    table.style.tableLayout = 'fixed';
+    ths.forEach((el, i) => { el.style.width = `${widths[i]}px`; });
+    table.classList.add('party-admin__table--resizing');
+
+    const grip   = e.currentTarget;
+    const startX = e.clientX;
+    const startW = widths[index];
+    grip.setPointerCapture?.(e.pointerId);
+
+    const onMove = (ev) => {
+      const w = Math.max(60, startW + (ev.clientX - startX));
+      th.style.width = `${w}px`;
+    };
+    const onUp = () => {
+      grip.removeEventListener('pointermove', onMove);
+      grip.removeEventListener('pointerup', onUp);
+      grip.removeEventListener('pointercancel', onUp);
+      table.classList.remove('party-admin__table--resizing');
+      this._guestColWidths = ths.map(el => el.offsetWidth);
+      try {
+        localStorage.setItem('partyAdmin.guestColWidths', JSON.stringify(this._guestColWidths));
+      } catch { /* storage full/blocked — widths stay session-only */ }
+    };
+    grip.addEventListener('pointermove', onMove);
+    grip.addEventListener('pointerup', onUp);
+    grip.addEventListener('pointercancel', onUp);
   }
 
   // Same pattern for the Total RSVPs table. The section re-renders on every
@@ -1222,13 +1853,22 @@ export class PartyAdminView {
         title = t('party.admin.totalHeadcount');
       } else if (key.startsWith('field:')) {
         const fieldId = card.dataset.statField;
-        const value   = card.dataset.statValue;
-        const multi   = card.dataset.statMulti === 'true';
-        rsvps = this._rsvps.filter(r => {
-          const a = r.answers?.[fieldId];
-          return multi ? Array.isArray(a) && a.includes(value) : a === value;
-        });
-        title = value;
+        // Bucket cards (the timing breakdown) carry every label they counted in
+        // data-stat-values; plain option cards carry a single data-stat-value.
+        let values;
+        try {
+          values = card.dataset.statValues
+            ? JSON.parse(card.dataset.statValues)
+            : [card.dataset.statValue];
+        } catch { values = [card.dataset.statValue]; }
+        // Match on the NORMALIZED label list rather than branching on the
+        // field's declared type: a radio answer is a string, a checkbox answer
+        // an array, and a field whose type was changed after guests replied
+        // holds both. The cards tally through the same helper, so this is what
+        // keeps the modal's rows consistent with the number that opened it.
+        rsvps = this._rsvps.filter(r =>
+          this._answerLabels(r.answers?.[fieldId]).some(l => values.includes(l)));
+        title = card.dataset.statTitle || values[0];
       } else {
         return;
       }
@@ -1678,18 +2318,25 @@ export class PartyAdminView {
   // and a grand total, so the final bill is never a surprise. Unpriced items
   // count as 0 but are surfaced via the "{n} without a price" hint.
 
-  // The four cost groups: one per logistics category + a pseudo-group for
-  // todos (client-side only — never written to logistics).
+  // The cost groups: one per logistics section + a pseudo-group for todos
+  // (client-side only — never written to logistics). `addable` marks the groups
+  // that can take a manual line; todos can't, because a todo is a task that may
+  // happen to cost money, not a cost line.
   _costGroups() {
     const groups = this._logisticsCategories().map(c => ({
       key: c.key, icon: c.icon, label: c.label,
+      addable: true, isBuiltin: c.isBuiltin,
       items: (this._logistics || [])
         .filter(i => (i.category || 'other') === c.key)
         .map(i => ({
+          // id + quantity + unit_price ride along so the card can edit and
+          // delete lines in place — the card is a second editing surface over
+          // the same logistics rows, not a separate store.
+          id: i.id,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
           name: i.name || '',
-          detail: i.quantity != null && i.unit_price != null
-            ? `${i.quantity}${i.quantity_note ? ` ${i.quantity_note}` : ''} × ${this._fmtIsk(i.unit_price)}`
-            : (i.quantity_note || ''),
+          detail: this._costDetail(i),
           cost: this._lineCost(i),
           // Warn only on partially priced rows (see _categorySubtotal).
           partial: (i.quantity == null) !== (i.unit_price == null),
@@ -1697,10 +2344,21 @@ export class PartyAdminView {
     }));
     groups.push({
       key: 'todos', icon: '✅', label: t('party.admin.costGroupTodos'),
+      addable: false, isBuiltin: true,
       // A costless todo ("call the venue") is normal, not a warning.
       items: (this._todos || []).map(td => ({ name: td.title || '', detail: '', cost: td.cost ?? null, partial: false })),
     });
     return groups;
+  }
+
+  // The "2 kg × ISK 2,900" hint under a cost line. A manual line is stored as
+  // qty 1 × the amount (see _bindCosts), so spelling that out would render a
+  // noisy "1 × ISK 50,000" where the planner just entered a lump sum — an
+  // unqualified quantity of exactly 1 carries no information, so it stays quiet.
+  _costDetail(i) {
+    if (i.quantity == null || i.unit_price == null) return i.quantity_note || '';
+    if (Number(i.quantity) === 1 && !i.quantity_note) return '';
+    return `${i.quantity}${i.quantity_note ? ` ${i.quantity_note}` : ''} × ${this._fmtIsk(i.unit_price)}`;
   }
 
   _renderCostSection() {
@@ -1723,16 +2381,77 @@ export class PartyAdminView {
         if (b.cost == null) return -1;
         return b.cost - a.cost;
       });
-      const rows = sorted.map(x => `
+      // Todos lines stay read-only (a todo is a task, edited in its own
+      // section); logistics-backed lines are editable in place. The amount is
+      // only editable on lump sums — qty 1 or unpriced — because on a
+      // "100 × ISK 45" row an amount edit would be ambiguous (change qty?
+      // price?); those keep the computed total and are edited in the 🛒 table.
+      const rows = sorted.map(x => {
+        if (!g.addable) return `
             <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
               <span>${escHtml(x.name)}${x.detail ? ` <small>${escHtml(x.detail)}</small>` : ''}</span>
               <span>${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>
-            </li>`).join('');
+            </li>`;
+        const id = escHtml(String(x.id));
+        const amountEditable = x.quantity == null || Number(x.quantity) === 1;
+        const amount = amountEditable ? `
+              <input type="number" min="0" step="1" class="party-admin__cost-item-input party-admin__cost-item-amount"
+                     data-cost-item-id="${id}" data-cost-field="amount"
+                     value="${x.unit_price == null ? '' : escHtml(String(x.unit_price))}" placeholder="—"
+                     aria-label="${t('party.admin.costItemAmount')}" />`
+          : `<span class="party-admin__cost-item-total">${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>`;
+        return `
+            <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
+              <span class="party-admin__cost-item-main">
+                <input type="text" class="party-admin__cost-item-input party-admin__cost-item-name"
+                       data-cost-item-id="${id}" data-cost-field="name"
+                       value="${escHtml(x.name)}" maxlength="200" required
+                       aria-label="${t('party.admin.costItemName')}" />
+                ${x.detail ? `<small>${escHtml(x.detail)}</small>` : ''}
+              </span>
+              ${amount}
+              <button type="button" class="party-admin__cost-del" data-cost-item-del="${id}"
+                      data-cost-item-name="${escHtml(x.name)}"
+                      title="${t('party.admin.costItemDel')}"
+                      aria-label="${escHtml(t('party.admin.costItemDelAria', { name: x.name }))}">✕</button>
+            </li>`;
+      }).join('');
+      // A manual line writes a real logistics item, so it shows up in the 🛒
+      // tables too — one cost lives in exactly one place.
+      const addForm = g.addable ? `
+          <form class="party-admin__cost-add" data-cost-add="${escHtml(g.key)}" novalidate>
+            <input type="text" class="lol-input party-admin__cost-add-name"
+                   placeholder="${escHtml(t('party.admin.costAddNamePh'))}"
+                   maxlength="200"
+                   aria-label="${t('party.admin.costAddName')}" />
+            <input type="number" min="0" step="1" class="lol-input party-admin__cost-add-amount"
+                   placeholder="${escHtml(t('party.admin.costAddAmountPh'))}"
+                   aria-label="${t('party.admin.costAddAmount')}" />
+            <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.costAddLine')}</button>
+            <span class="party-admin__logistics-status" data-cost-status="${escHtml(g.key)}" aria-live="polite"></span>
+          </form>` : '';
+
+      // Built-ins have no delete button: 'other' is where a deleted section's
+      // items land, and food/drinks anchor the i18n names.
+      const del = (g.addable && !g.isBuiltin) ? `
+            <button type="button" class="party-admin__cost-del" data-cost-del="${escHtml(g.key)}"
+                    title="${t('party.admin.costDelSection')}"
+                    aria-label="${escHtml(t('party.admin.costDelSectionAria', { name: g.label }))}">✕</button>` : '';
+
+      // Rename works on built-ins too: a saved label overrides the i18n name
+      // (the planner asked for that exact text), and clearing it hands the
+      // name back to i18n. See _openCostRename.
+      const rename = g.addable ? `
+            <button type="button" class="party-admin__cost-rename" data-cost-rename="${escHtml(g.key)}"
+                    title="${t('party.admin.costRenameSection')}"
+                    aria-label="${escHtml(t('party.admin.costRenameSectionAria', { name: g.label }))}">✎</button>` : '';
+
       return `
         <div class="party-admin__cost-group">
-          <h3>${g.icon} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span></h3>
+          <h3 data-cost-head="${escHtml(g.key)}">${escHtml(g.icon)} ${escHtml(g.label)}${rename} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
           ${g.items.length ? `<ol class="party-admin__cost-list">${rows}</ol>` : `<p class="party-empty">${t('party.admin.logisticsNoItems')}</p>`}
           ${missing > 0 ? `<p class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: missing })}</p>` : ''}
+          ${addForm}
         </div>`;
     }).join('');
 
@@ -1743,20 +2462,1087 @@ export class PartyAdminView {
         ${anyPriced ? `
         <div class="party-admin__stats party-admin__stats--compact">
           ${tile(this._fmtIsk(grand), t('party.admin.costGrandTotal'), 'party-admin__stat--gold')}
-          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${g.icon} ${escHtml(g.label)}`)).join('')}
-        </div>
-        <div class="party-admin__cost-groups">${groupCards}</div>`
-        : `<p class="party-empty">${t('party.admin.costEmpty')}</p>`}
+          ${groups.map(g => tile(this._fmtIsk(groupSum(g)), `${escHtml(g.icon)} ${escHtml(g.label)}`)).join('')}
+        </div>` : `<p class="party-empty">${t('party.admin.costEmpty')}</p>`}
+        <div class="party-admin__cost-groups">${groupCards}</div>
+        <form class="party-admin__cost-add-section" id="party-admin-cost-add-section" novalidate>
+          <input type="text" class="lol-input party-admin__cost-section-icon"
+                 placeholder="🎈" maxlength="8"
+                 aria-label="${t('party.admin.costSectionIcon')}" />
+          <input type="text" class="lol-input party-admin__cost-section-label"
+                 placeholder="${escHtml(t('party.admin.costSectionNamePh'))}"
+                 maxlength="60"
+                 aria-label="${t('party.admin.costSectionName')}" />
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.costAddSection')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-cost-section-status" aria-live="polite"></span>
+        </form>
       </section>`;
   }
 
-  // Replace-in-place; the section is static (no handlers), so nothing to bind.
+  // Replace-in-place. The section carries its own forms now, so the fresh node
+  // has to be re-bound — a plain replaceWith would leave dead buttons behind.
+  //
+  // Focus survives the rebuild: cost-line inputs are identified by a stable
+  // (item id, field) pair, so if the admin is mid-edit when a save — theirs or
+  // a logistics-table one — triggers this, the same input is refocused in the
+  // fresh DOM. The row may still jump visually (cards sort cost-descending);
+  // the id-based lookup follows it. An open rename form is NOT preserved — it
+  // is ephemeral by design and a concurrent rebuild simply discards it.
   _rerenderCosts() {
     const old = this._el.querySelector('#party-admin-costs');
     if (!old) return;
+    const focus = this._captureCostFocus();
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderCostSection();
     old.replaceWith(tmp.firstElementChild);
+    this._bindCosts();
+    this._restoreCostFocus(focus);
+  }
+
+  // Captured at rebuild time (not save-start): a blur-triggered save can
+  // resolve while the admin is already typing in the NEXT input, and it's
+  // that input — the currently focused one — that must survive.
+  _captureCostFocus() {
+    const el = document.activeElement;
+    if (!el || !this._el.contains(el) || !el.dataset?.costItemId) return null;
+    return {
+      id: el.dataset.costItemId, field: el.dataset.costField,
+      start: el.selectionStart, end: el.selectionEnd,
+    };
+  }
+
+  _restoreCostFocus(f) {
+    if (!f) return;
+    const el = this._el.querySelector(
+      `input[data-cost-item-id="${CSS.escape(f.id)}"][data-cost-field="${CSS.escape(f.field)}"]`);
+    if (!el) return; // line was deleted or became read-only — nothing to restore
+    el.focus();
+    // Number inputs throw on setSelectionRange in some browsers.
+    try { if (f.start != null) el.setSelectionRange(f.start, f.end); } catch { /* ignore */ }
+  }
+
+  _bindCosts() {
+    const section = this._el.querySelector('#party-admin-costs');
+    if (!section) return;
+
+    // Manual line — name + amount, stored as a real logistics item at qty 1 so
+    // it lands in the 🛒 table too and stays editable there (change the qty and
+    // it stops being a lump sum, which is exactly right). Both fields are
+    // required: a manual line with no amount would post qty-without-price and
+    // trip the "{n} without a price" warning the planner is trying to clear.
+    section.querySelectorAll('form[data-cost-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const category = form.dataset.costAdd;
+        const nameEl   = form.querySelector('.party-admin__cost-add-name');
+        const amtEl    = form.querySelector('.party-admin__cost-add-amount');
+        const status   = form.querySelector('[data-cost-status]');
+        const name = (nameEl?.value || '').trim();
+        if (!name) { nameEl?.focus(); return; }
+        // badInput reports '' while showing junk ("12e") — don't silently drop it.
+        if (amtEl?.validity?.badInput) { amtEl.focus(); amtEl.select?.(); return; }
+        if ((amtEl?.value || '').trim() === '') { amtEl?.focus(); return; }
+
+        if (status) status.textContent = t('form.saving');
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch('/api/v1/party/logistics', {
+            method:      'POST',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({
+              name,
+              quantity:   1,
+              unit_price: Math.round(Number(amtEl.value)),
+              category,
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsAddFailed'));
+          }
+          const item = await res.json();
+          this._logistics = [...(this._logistics || []), item];
+          this._rerenderLogistics();   // also re-renders (and re-binds) costs
+          this._el.querySelector(`form[data-cost-add="${category}"] .party-admin__cost-add-name`)?.focus();
+        } catch (err) {
+          if (status) status.textContent = err.message || t('party.admin.logisticsAddFailed');
+        }
+      });
+    });
+
+    // Add a section. The server derives the key from the label, so the client
+    // sends only what the planner typed.
+    const secForm = section.querySelector('#party-admin-cost-add-section');
+    secForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const iconEl  = secForm.querySelector('.party-admin__cost-section-icon');
+      const labelEl = secForm.querySelector('.party-admin__cost-section-label');
+      const status  = secForm.querySelector('#party-admin-cost-section-status');
+      const label = (labelEl?.value || '').trim();
+      if (!label) { labelEl?.focus(); return; }
+
+      if (status) status.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/logistics/categories', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({ label, icon: (iconEl?.value || '').trim() || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.costSectionAddFailed'));
+        }
+        const cat = await res.json();
+        this._logisticsCats = [...(this._logisticsCats || []), cat];
+        this._rerenderLogistics();   // new section needs its own 🛒 table too
+        this._el.querySelector(`form[data-cost-add="${cat.key}"] .party-admin__cost-add-name`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.costSectionAddFailed');
+      }
+    });
+
+    // Delete a section. Items are not deleted — the FK sweeps them into 'other'
+    // (068), so the confirm says so rather than implying the costs go with it.
+    section.querySelectorAll('[data-cost-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.costDel;
+        const cat = (this._logisticsCats || []).find(c => c.key === key);
+        const name = cat?.label || key;
+        const n = (this._logistics || []).filter(i => (i.category || 'other') === key).length;
+        const msg = n > 0
+          ? t('party.admin.costDelSectionConfirmItems', { name, n })
+          : t('party.admin.costDelSectionConfirm', { name });
+        if (!confirm(msg)) return;
+
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/categories/${encodeURIComponent(key)}`, {
+            method: 'DELETE', credentials: 'include', headers,
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.costSectionDelFailed'));
+          }
+          this._logisticsCats = (this._logisticsCats || []).filter(c => c.key !== key);
+          // Mirror the FK's ON DELETE SET DEFAULT locally so the items reappear
+          // under Other without a refetch.
+          this._logistics = (this._logistics || [])
+            .map(i => ((i.category || 'other') === key ? { ...i, category: 'other' } : i));
+          this._rerenderLogistics();
+        } catch (err) {
+          showToast(err.message || t('party.admin.costSectionDelFailed'), 'error');
+        }
+      });
+    });
+
+    // Inline edit of a cost line (name always; amount on lump sums only).
+    // Enter commits without waiting for blur; preventDefault is belt-and-braces
+    // (the inputs live in an <li>, not a form, so Enter can't submit anything).
+    section.querySelectorAll('input[data-cost-item-id]').forEach(input => {
+      input.addEventListener('change', () => this._saveCostLine(input));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); this._saveCostLine(input); }
+      });
+    });
+
+    // Delete a cost line — the same logistics item the 🛒 table would delete,
+    // so the confirm + failure strings are the table's own.
+    section.querySelectorAll('[data-cost-item-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id   = btn.dataset.costItemDel;
+        const name = btn.dataset.costItemName || '';
+        if (!confirm(t('party.admin.logisticsConfirmDelete', { name }))) return;
+        btn.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+            method: 'DELETE', credentials: 'include', headers,
+          });
+          if (!res.ok && res.status !== 204) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsDeleteFailed'));
+          }
+          this._logistics = (this._logistics || []).filter(i => String(i.id) !== String(id));
+          this._rerenderLogistics();
+        } catch (err) {
+          showToast(err.message || t('party.admin.logisticsDeleteFailed'), 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Rename a section (label + icon) — wires the PATCH endpoint that has
+    // existed since 068 but had no UI.
+    section.querySelectorAll('[data-cost-rename]').forEach(btn => {
+      btn.addEventListener('click', () => this._openCostRename(btn.dataset.costRename));
+    });
+  }
+
+  // Save a cost-card line edit. Mirrors _saveLogisticsCell: badInput guard,
+  // lastSaved no-op check, save token against overlapping spinner-step saves.
+  // The amount field writes unit_price; on a previously unpriced line it also
+  // sets quantity to 1, so a bare name added in the 🛒 table can be priced as
+  // a lump sum from the card. Clearing the amount nulls unit_price only — the
+  // line goes partial and the "{n} without a price" hint surfaces it.
+  async _saveCostLine(input) {
+    const field  = input.dataset.costField;
+    const isAmt  = field === 'amount';
+    if (isAmt && input.validity && input.validity.badInput) {
+      // '' value while junk is displayed — revert rather than silently null.
+      input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+      return;
+    }
+    const value = input.value.trim();
+    const last  = input.dataset.lastSaved !== undefined
+      ? input.dataset.lastSaved
+      : (input.defaultValue ?? '');
+    if (value === last) return;
+    if (isAmt && value !== '' && !Number.isFinite(Number(value))) {
+      input.value = last;
+      return;
+    }
+    if (field === 'name' && value === '') {
+      // Server rejects empty names; match the table idiom and revert locally.
+      input.value = last;
+      return;
+    }
+
+    const id = input.dataset.costItemId;
+    const item = (this._logistics || []).find(i => String(i.id) === String(id));
+    if (!item) return; // deleted concurrently — the pending rebuild will drop this input
+
+    input.dataset.lastSaved = value;
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
+    const body = field === 'name'
+      ? { name: value }
+      : value === ''
+        ? { unit_price: null }
+        : { unit_price: Math.round(Number(value)), ...(item.quantity == null ? { quantity: 1 } : {}) };
+
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
+      }
+      const updated = await res.json();
+      if (Number(input.dataset.saveToken) !== token) return; // superseded
+      this._logistics = (this._logistics || []).map(i =>
+        String(i.id) === String(updated.id) ? updated : i
+      );
+      // Full logistics rebuild: the 🛒 table renders its inputs' value= from
+      // _logistics, so this one call syncs name/price/line-cost/subtotal there
+      // AND cascades into _rerenderCosts, whose focus capture keeps the admin
+      // in this input (found again by its stable id+field).
+      this._rerenderLogistics();
+    } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return; // a newer save owns the input
+      input.value = last;
+      input.dataset.lastSaved = last;
+      showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+    }
+  }
+
+  // Swap a cost card's heading for an icon+label edit form. Explicit
+  // Save/Cancel (+ Enter/Escape) — no save-on-blur, because two inputs and two
+  // buttons would make blur-commit fire on every internal tab.
+  //
+  // Built-ins open with an empty label input and the translated name as
+  // placeholder: emptiness visibly means "default". Saving a label on a
+  // built-in stores that literal text (overrides i18n in BOTH locales, since
+  // the planner asked for that exact name); clearing it sends label:null,
+  // which hands the name back to i18n. A custom section with an emptied label
+  // just refocuses — the server would 400 on a nameless section.
+  _openCostRename(key) {
+    // Need the RAW DB row (literal label or null), not the resolved display
+    // row — resolving would bake the translated name into a built-in's label.
+    const cat = (this._logisticsCats || []).find(c => c.key === key);
+    if (!cat) { showToast(t('party.admin.costRenameFailed'), 'error'); return; }
+    const resolved = this._logisticsCategories().find(c => c.key === key);
+    const h3 = this._el.querySelector(`[data-cost-head="${CSS.escape(key)}"]`);
+    if (!h3) return;
+
+    h3.innerHTML = `
+          <form class="party-admin__cost-rename-form" novalidate>
+            <input type="text" class="lol-input party-admin__cost-section-icon"
+                   value="${escHtml(cat.icon || '')}" maxlength="8" placeholder="📦"
+                   aria-label="${t('party.admin.costSectionIcon')}" />
+            <input type="text" class="lol-input party-admin__cost-rename-label"
+                   value="${escHtml(cat.label || '')}" maxlength="60"
+                   placeholder="${escHtml(resolved?.label || key)}"
+                   ${cat.is_builtin ? `title="${escHtml(t('party.admin.costRenameBuiltinHint'))}"` : ''}
+                   aria-label="${t('party.admin.costSectionName')}" />
+            <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.costRenameSave')}</button>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm" data-rename-cancel>${t('party.admin.costRenameCancel')}</button>
+            <span class="party-admin__logistics-status" aria-live="polite"></span>
+          </form>`;
+
+    const form    = h3.querySelector('form');
+    const iconEl  = form.querySelector('.party-admin__cost-section-icon');
+    const labelEl = form.querySelector('.party-admin__cost-rename-label');
+    const status  = form.querySelector('.party-admin__logistics-status');
+
+    // Binding on the ephemeral form (outside _bindCosts) is safe: any rebuild
+    // discards the form wholesale, listeners and all.
+    const close = () => {
+      this._rerenderCosts(); // cheapest correct restore of the pristine h3
+      this._el.querySelector(`[data-cost-rename="${CSS.escape(key)}"]`)?.focus();
+    };
+    form.querySelector('[data-rename-cancel]').addEventListener('click', close);
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const label = (labelEl.value || '').trim();
+      const icon  = (iconEl.value || '').trim();
+      if (!label && !cat.is_builtin) { labelEl.focus(); return; }
+
+      if (status) status.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch(`/api/v1/party/logistics/categories/${encodeURIComponent(key)}`, {
+          method:      'PATCH',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({ label: label || null, icon: icon || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.costRenameFailed'));
+        }
+        const updated = await res.json();
+        this._logisticsCats = (this._logisticsCats || []).map(c => c.key === key ? updated : c);
+        // Name/icon appear in the logistics heading + table aria-label, the
+        // cost heading, and the stat tiles — the cascade covers all four.
+        this._rerenderLogistics();
+        this._el.querySelector(`[data-cost-rename="${CSS.escape(key)}"]`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.costRenameFailed');
+      }
+    });
+
+    labelEl.focus();
+    labelEl.select();
+  }
+
+  // ── Project plan ───────────────────────────────────────────────────────────
+  // The party as an operation: what gets picked up, set up, minded during the
+  // party, and packed away afterwards. Each task carries an estimate in minutes
+  // and the number of helpers it needs; the section sums those per phase so the
+  // planners can see how many hands each stage takes before they start asking
+  // people. Where the ✅ to-do list is about individuals, this is about the job.
+
+  // Phases resolved for display. Same rule as _logisticsCategories: a row with
+  // no label is a built-in whose name follows the EN/IS toggle, a row WITH a
+  // label shows that literal text. The fallback keeps the section usable if the
+  // phases fetch failed — degrading to the five built-ins beats vanishing.
+  _planPhases_() {
+    const BUILTIN_LABEL = {
+      pickup:   'party.admin.planPhasePickup',
+      setup:    'party.admin.planPhaseSetup',
+      during:   'party.admin.planPhaseDuring',
+      teardown: 'party.admin.planPhaseTeardown',
+      other:    'party.admin.planPhaseOther',
+    };
+    const BUILTIN_ICON = { pickup: '🚗', setup: '🔨', during: '🎉', teardown: '🧹', other: '📦' };
+    const rows = (this._planPhases || []).length
+      ? this._planPhases
+      : Object.keys(BUILTIN_LABEL).map(key => ({ key, label: null, icon: null, is_builtin: true }));
+    return rows.map(p => ({
+      key: p.key,
+      label: p.label || (BUILTIN_LABEL[p.key] ? t(BUILTIN_LABEL[p.key]) : p.key),
+      icon: p.icon || BUILTIN_ICON[p.key] || '📋',
+      isBuiltin: !!p.is_builtin,
+    }));
+  }
+
+  _planTasksIn(phaseKey) {
+    return (this._plan || []).filter(task => (task.phase || 'other') === phaseKey);
+  }
+
+  // "1 klst 30 mín". Unestimated tasks read as an em dash rather than "0 mín" —
+  // not knowing yet and knowing it takes no time are different answers.
+  _formatPlanMinutes(min) {
+    if (min == null) return '—';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    if (h === 0) return t('party.admin.planTimeFmtM', { m });
+    if (m === 0) return t('party.admin.planTimeFmtH', { h });
+    return t('party.admin.planTimeFmtHM', { h, m });
+  }
+
+  // Totals for one phase (or the whole plan). Time sums every task, done or
+  // not: the estimate is what the phase costs to run, and shrinking it as
+  // people tick things off would destroy the staffing answer mid-party.
+  // People is the MAX, not the sum — tasks in a phase run in parallel with the
+  // same crew, so three 2-person jobs need 2 helpers on site, not 6.
+  _planTotals(tasks) {
+    const minutes = tasks.reduce((s, x) => s + (x.time_minutes ?? 0), 0);
+    const people  = tasks.reduce((m, x) => Math.max(m, x.people_needed ?? 0), 0);
+    return {
+      minutes: tasks.some(x => x.time_minutes != null) ? minutes : null,
+      people:  tasks.some(x => x.people_needed != null) ? people : null,
+      done:    tasks.filter(x => x.done).length,
+      total:   tasks.length,
+    };
+  }
+
+  _renderPlanSection() {
+    // Expand/collapse state lives on the view, not the DOM, so it survives the
+    // full-section re-render every mutation triggers. Tasks start collapsed (the
+    // dense overview is the point); phases start open.
+    this._planExpanded = this._planExpanded || new Set();
+    this._planCollapsed = this._planCollapsed || new Set();
+
+    const phases = this._planPhases_();
+    const all    = this._plan || [];
+    const grand  = this._planTotals(all);
+
+    const tile = (num, label, extraCls = '') => `
+          <div class="party-admin__stat party-admin__stat--sm${extraCls ? ' ' + extraCls : ''}">
+            <span class="party-admin__stat-num">${num}</span>
+            <span class="party-admin__stat-label">${label}</span>
+          </div>`;
+
+    // The staffing strip: one chip per phase that has work in it, so "how many
+    // helpers do I need at set-up" is answered without scrolling the groups.
+    const staffing = phases
+      .map(p => ({ p, tasks: this._planTasksIn(p.key) }))
+      .filter(x => x.tasks.length > 0)
+      .map(({ p, tasks }) => {
+        const s = this._planTotals(tasks);
+        return `
+          <button type="button" class="party-admin__plan-chip" data-plan-jump="${escHtml(p.key)}">
+            <span>${escHtml(p.icon)} ${escHtml(p.label)}</span>
+            <span class="party-admin__plan-chip-num">⏱ ${this._formatPlanMinutes(s.minutes)}</span>
+            <span class="party-admin__plan-chip-num">👥 ${s.people ?? '—'}</span>
+          </button>`;
+      }).join('');
+
+    // One toggle for the whole plan: if anything is open, collapse everything;
+    // otherwise open everything. Label reflects the action it will take.
+    const anyOpen = phases.some(p => !this._planCollapsed.has(p.key));
+    const collapseAll = all.length ? `
+        <div class="party-admin__plan-toolbar">
+          <button type="button" class="party-admin__plan-collapse-all" data-plan-collapse-all>
+            ${anyOpen ? '▾' : '▸'} ${anyOpen ? t('party.admin.planCollapseAll') : t('party.admin.planExpandAll')}
+          </button>
+        </div>` : '';
+
+    return `
+      <section class="party-admin__section" id="party-admin-plan">
+        <h2 class="party-admin__section-title">📋 ${t('party.admin.planTitle')}</h2>
+        <p class="party-admin__logistics-help">${t('party.admin.planHelp')}</p>
+
+        ${all.length ? `
+        <div class="party-admin__stats party-admin__stats--compact">
+          ${tile(grand.total, t('party.admin.planSummaryTasks'))}
+          ${tile(grand.done, t('party.admin.planSummaryDone'))}
+          ${tile(this._formatPlanMinutes(grand.minutes), t('party.admin.planSummaryTime'), 'party-admin__stat--gold')}
+          ${tile(grand.people ?? '—', t('party.admin.planSummaryPeople'))}
+        </div>
+        <div class="party-admin__plan-summary">${staffing}</div>` : `<p class="party-empty">${t('party.admin.planEmpty')}</p>`}
+
+        ${collapseAll}
+        <div class="party-admin__plan-groups">
+          ${phases.map(p => this._renderPlanPhaseGroup(p)).join('')}
+        </div>
+
+        <form class="party-admin__cost-add-section" id="party-admin-plan-phase-add" novalidate>
+          <input type="text" class="lol-input party-admin__plan-phase-icon"
+                 placeholder="🎈" maxlength="8"
+                 aria-label="${t('party.admin.planPhaseIcon')}" />
+          <input type="text" class="lol-input party-admin__plan-phase-label"
+                 placeholder="${escHtml(t('party.admin.planPhaseNamePh'))}"
+                 maxlength="60"
+                 aria-label="${t('party.admin.planPhaseName')}" />
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.planAddPhase')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-plan-phase-status" aria-live="polite"></span>
+        </form>
+      </section>`;
+  }
+
+  // Initials for the read-only assignee avatars on a collapsed row.
+  _initials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    const first = parts[0][0];
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase();
+  }
+
+  // Compact assignee display for the collapsed row — up to three initials plus
+  // a "+N" overflow. The full editable chip list lives in the expanded editor.
+  _planAssigneeSummary(assignees) {
+    const list = assignees || [];
+    if (!list.length) return '';
+    const shown = list.slice(0, 3).map(n =>
+      `<span class="party-admin__plan-av" title="${escHtml(n)}">${escHtml(this._initials(n))}</span>`).join('');
+    const extra = list.length > 3
+      ? `<span class="party-admin__plan-av party-admin__plan-av--more">+${list.length - 3}</span>` : '';
+    return `<span class="party-admin__plan-avs" aria-hidden="true">${shown}${extra}</span>`;
+  }
+
+  _renderPlanPhaseGroup(phase) {
+    const key       = escHtml(phase.key);
+    const tasks     = this._planTasksIn(phase.key);
+    const s         = this._planTotals(tasks);
+    const collapsed = this._planCollapsed.has(phase.key);
+
+    // Built-ins have no delete button: 'other' is where a deleted phase's tasks
+    // land, and the other four anchor the i18n names.
+    const del = phase.isBuiltin ? '' : `
+            <button type="button" class="party-admin__cost-del" data-plan-phase-del="${key}"
+                    title="${t('party.admin.planPhaseDelete')}"
+                    aria-label="${escHtml(t('party.admin.planPhaseDeleteAria', { name: phase.label }))}">✕</button>`;
+
+    const body = collapsed ? '' : `
+        <div class="party-admin__plan-group-body">
+          <div class="party-admin__plan-list" data-plan-list="${key}">
+            ${tasks.length
+    ? tasks.map(task => this._renderPlanTaskCard(task, phase)).join('')
+    : `<p class="party-empty">${t('party.admin.planPhaseEmpty')}</p>`}
+          </div>
+          <form class="party-admin__plan-add" data-plan-add="${key}" novalidate>
+            <input type="text" class="lol-input party-admin__plan-add-input"
+                   placeholder="${escHtml(t('party.admin.planAddPh'))}" maxlength="200"
+                   aria-label="${t('party.admin.planTaskTitleLabel')}" />
+            <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.planAdd')}</button>
+            <span class="party-admin__logistics-status" data-plan-status="${key}" aria-live="polite"></span>
+          </form>
+        </div>`;
+
+    return `
+      <div class="party-admin__plan-group${collapsed ? ' party-admin__plan-group--collapsed' : ''}" data-plan-group="${key}">
+        <div class="party-admin__plan-group-head">
+          <button type="button" class="party-admin__plan-caret" data-plan-phase-toggle="${key}"
+                  aria-expanded="${collapsed ? 'false' : 'true'}"
+                  aria-label="${escHtml(t('party.admin.planTogglePhase', { name: phase.label }))}">▾</button>
+          <span class="party-admin__plan-group-icon">${escHtml(phase.icon)}</span>
+          <input type="text" class="party-admin__plan-group-name"
+                 data-plan-phase-rename="${key}" value="${escHtml(phase.label)}" maxlength="60"
+                 aria-label="${escHtml(t('party.admin.planPhaseRenameAria', { name: phase.label }))}" />
+          <span class="party-admin__plan-totals">
+            ⏱ ${this._formatPlanMinutes(s.minutes)} · 👥 ${s.people ?? '—'} · ${s.done}/${s.total}
+          </span>
+          ${del}
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  // A task is one dense row (title + time + helpers + assignee initials) with a
+  // caret that reveals the full editor (phase, assignees, to-do link, notes,
+  // delete). Keeping the heavy controls behind the caret is what restores the
+  // overview the stacked cards had buried.
+  _renderPlanTaskCard(task, phase) {
+    const id     = escHtml(String(task.id));
+    const open   = this._planExpanded.has(String(task.id));
+    const phases = this._planPhases_();
+    const todo   = task.linked_todo_id != null
+      ? (this._todos || []).find(td => String(td.id) === String(task.linked_todo_id))
+      : null;
+
+    const phaseOpts = phases.map(p => `
+                <option value="${escHtml(p.key)}" ${p.key === phase.key ? 'selected' : ''}>${escHtml(p.icon)} ${escHtml(p.label)}</option>`).join('');
+
+    // Linked → a chip that jumps to the TODO and shows whether it is done, so
+    // the plan reflects real progress. Unlinked → spawn a TODO, or adopt one
+    // that already exists (the planner often wrote it there first).
+    const link = todo ? `
+              <button type="button" class="party-admin__plan-linked${todo.done ? ' party-admin__plan-linked--done' : ''}"
+                      data-plan-goto-todo="${escHtml(String(todo.id))}"
+                      title="${escHtml(t('party.admin.planGoToTodo'))}">
+                ${todo.done ? '✅' : '⬜'} ${escHtml(todo.title || '')}
+              </button>
+              <button type="button" class="party-admin__cost-del" data-plan-unlink="${id}"
+                      title="${t('party.admin.planUnlink')}" aria-label="${t('party.admin.planUnlink')}">✕</button>`
+      : `
+              <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm" data-plan-create-todo="${id}">
+                ➕ ${t('party.admin.planCreateTodo')}
+              </button>
+              <select class="party-admin__plan-link-select" data-plan-link="${id}"
+                      aria-label="${t('party.admin.planLinkTodo')}">
+                <option value="">${escHtml(t('party.admin.planLinkTodoPh'))}</option>
+                ${(this._todos || []).map(td => `<option value="${escHtml(String(td.id))}">${escHtml(td.title || '')}</option>`).join('')}
+              </select>`;
+
+    return `
+      <div class="party-admin__plan-task${task.done ? ' party-admin__plan-task--done' : ''}${open ? ' party-admin__plan-task--open' : ''}"
+           data-plan-card="${id}" draggable="true">
+        <div class="party-admin__plan-row">
+          <span class="party-admin__plan-handle" title="${t('party.admin.planReorderHandle')}"
+                aria-label="${t('party.admin.planReorderHandle')}">⋮⋮</span>
+          <input type="checkbox" class="party-admin__todo-done" data-plan-done="${id}"
+                 ${task.done ? 'checked' : ''} aria-label="${t('party.admin.planMarkDone')}" />
+          <input type="text" class="party-admin__plan-title-input"
+                 data-plan-field="title" data-plan-id="${id}"
+                 value="${escHtml(task.title || '')}" maxlength="200"
+                 aria-label="${t('party.admin.planTaskTitleLabel')}" />
+          <span class="party-admin__plan-cell">
+            <input type="number" min="0" step="5" class="party-admin__plan-time-input"
+                   data-plan-field="time_minutes" data-plan-id="${id}"
+                   value="${escHtml(String(task.time_minutes ?? ''))}" placeholder="—"
+                   aria-label="${t('party.admin.planTime')}" />
+            <span class="party-admin__plan-unit">${t('party.admin.planTime')}</span>
+          </span>
+          <span class="party-admin__plan-cell">
+            <span aria-hidden="true">👥</span>
+            <input type="number" min="0" step="1" class="party-admin__plan-people-input"
+                   data-plan-field="people_needed" data-plan-id="${id}"
+                   value="${escHtml(String(task.people_needed ?? ''))}" placeholder="—"
+                   aria-label="${t('party.admin.planPeople')}" />
+          </span>
+          ${this._planAssigneeSummary(task.assignees)}
+          <button type="button" class="party-admin__plan-expand" data-plan-expand="${id}"
+                  aria-expanded="${open ? 'true' : 'false'}"
+                  aria-label="${escHtml(t('party.admin.planToggleTask', { name: task.title || '' }))}">▾</button>
+        </div>
+
+        <div class="party-admin__plan-editor" data-plan-editor="${id}"${open ? '' : ' hidden'}>
+          <div class="party-admin__plan-editor-row">
+            <label class="party-admin__plan-field">
+              <span>${t('party.admin.planPhaseLabel')}</span>
+              <select class="party-admin__plan-phase-select" data-plan-field="phase" data-plan-id="${id}"
+                      aria-label="${t('party.admin.planPhaseLabel')}">${phaseOpts}
+              </select>
+            </label>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                    data-plan-delete="${id}" data-plan-name="${escHtml(task.title || '')}">
+              ${t('party.admin.planDelete')}
+            </button>
+          </div>
+
+          ${this._renderAssigneeControl('plan', task.id, null, task.assignees)}
+
+          <div class="party-admin__plan-link">
+            <span class="party-admin__assignees-label">${t('party.admin.planTodoLabel')}</span>
+            ${link}
+          </div>
+
+          <textarea class="party-admin__todo-notes" data-plan-field="notes" data-plan-id="${id}"
+                    placeholder="${escHtml(t('party.admin.planNotesPh'))}"
+                    maxlength="2000" rows="2">${escHtml(task.notes || '')}</textarea>
+        </div>
+      </div>`;
+  }
+
+  _bindPlan() {
+    const section = this._el.querySelector('#party-admin-plan');
+    if (!section) return;
+
+    // Add a task — one form per phase, so a new task lands where it belongs
+    // without a follow-up edit.
+    section.querySelectorAll('form[data-plan-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const phase  = form.dataset.planAdd;
+        const input  = form.querySelector('.party-admin__plan-add-input');
+        const status = form.querySelector(`[data-plan-status="${CSS.escape(phase)}"]`);
+        const title  = (input?.value || '').trim();
+        if (!title) { input?.focus(); return; }
+        if (status) status.textContent = t('form.saving');
+        try {
+          const created = await this._todoApi('POST', '/api/v1/party/plan', { title, phase });
+          this._plan = [...(this._plan || []), created];
+          this._rerenderPlan();
+          this._el.querySelector(`form[data-plan-add="${CSS.escape(phase)}"] .party-admin__plan-add-input`)?.focus();
+        } catch (err) {
+          if (status) status.textContent = err.message || t('party.admin.planSaveFailed');
+        }
+      });
+    });
+
+    // Add a phase. The server derives the key from the label, as with sections.
+    const phaseForm = section.querySelector('#party-admin-plan-phase-add');
+    phaseForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const iconEl  = phaseForm.querySelector('.party-admin__plan-phase-icon');
+      const labelEl = phaseForm.querySelector('.party-admin__plan-phase-label');
+      const status  = phaseForm.querySelector('#party-admin-plan-phase-status');
+      const label = (labelEl?.value || '').trim();
+      if (!label) { labelEl?.focus(); return; }
+      if (status) status.textContent = t('form.saving');
+      try {
+        const phase = await this._todoApi('POST', '/api/v1/party/plan/phases', {
+          label, icon: (iconEl?.value || '').trim() || null,
+        });
+        this._planPhases = [...(this._planPhases || []), phase];
+        this._rerenderPlan();
+        this._el.querySelector(`form[data-plan-add="${CSS.escape(phase.key)}"] .party-admin__plan-add-input`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.planSaveFailed');
+      }
+    });
+
+    // Delegated change: done toggles, inline field edits, phase moves, the
+    // link-an-existing-todo select, and assignee names typed into a chip input.
+    section.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.matches?.('[data-plan-done]'))             return void this._togglePlanDone(el);
+      if (el.matches?.('[data-plan-phase-rename]'))     return void this._savePlanPhaseName(el);
+      if (el.matches?.('[data-plan-field]'))            return void this._savePlanField(el);
+      if (el.matches?.('[data-plan-link]'))             return void this._linkPlanTodo(el);
+      if (el.matches?.('.party-admin__assignee-input')) return void this._addAssignee(el);
+    });
+
+    section.addEventListener('click', (e) => {
+      const expand = e.target.closest?.('[data-plan-expand]');
+      if (expand) return void this._togglePlanExpand(expand.dataset.planExpand);
+      const ptoggle = e.target.closest?.('[data-plan-phase-toggle]');
+      if (ptoggle) return void this._togglePlanPhase(ptoggle.dataset.planPhaseToggle);
+      if (e.target.closest?.('[data-plan-collapse-all]')) return void this._togglePlanCollapseAll();
+      const jump = e.target.closest?.('[data-plan-jump]');
+      if (jump) {
+        // A collapsed target phase can't be scrolled to usefully — open it first.
+        this._planCollapsed.delete(jump.dataset.planJump);
+        this._rerenderPlan();
+        return void this._el.querySelector(`[data-plan-group="${CSS.escape(jump.dataset.planJump)}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      const goto = e.target.closest?.('[data-plan-goto-todo]');
+      if (goto) return void this._scrollToTodo(goto.dataset.planGotoTodo);
+      const del = e.target.closest?.('[data-plan-delete]');
+      if (del) return void this._deletePlanTask(del);
+      const pdel = e.target.closest?.('[data-plan-phase-del]');
+      if (pdel) return void this._deletePlanPhase(pdel);
+      const create = e.target.closest?.('[data-plan-create-todo]');
+      if (create) return void this._createTodoFromPlan(create);
+      const unlink = e.target.closest?.('[data-plan-unlink]');
+      if (unlink) return void this._unlinkPlanTodo(unlink);
+      const chip = e.target.closest?.('[data-chip-remove]');
+      if (chip) return void this._removeAssignee(chip);
+    });
+
+    // Enter in the assignee input adds a chip (the control isn't a <form>).
+    section.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const asg = e.target.closest?.('.party-admin__assignee-input');
+      if (asg) { e.preventDefault(); this._addAssignee(asg); }
+    });
+
+    this._bindPlanDrag(section);
+  }
+
+  _patchPlanLocal(taskId, patch, rerender) {
+    this._plan = (this._plan || []).map(task =>
+      String(task.id) === String(taskId) ? { ...task, ...patch } : task);
+    if (rerender) this._rerenderPlan();
+  }
+
+  // Row editor open/close. State is a Set on the view so it survives the
+  // re-render (and so the same task stays open across an unrelated save).
+  _togglePlanExpand(id) {
+    const key = String(id);
+    if (this._planExpanded.has(key)) this._planExpanded.delete(key);
+    else this._planExpanded.add(key);
+    this._rerenderPlan();
+  }
+
+  _togglePlanPhase(key) {
+    if (this._planCollapsed.has(key)) this._planCollapsed.delete(key);
+    else this._planCollapsed.add(key);
+    this._rerenderPlan();
+  }
+
+  // Collapse everything if anything is open, else open everything.
+  _togglePlanCollapseAll() {
+    const keys = this._planPhases_().map(p => p.key);
+    const anyOpen = keys.some(k => !this._planCollapsed.has(k));
+    this._planCollapsed = new Set(anyOpen ? keys : []);
+    this._rerenderPlan();
+  }
+
+  // Inline title/notes/time/people/phase edit. Mirrors _saveTodoText: no-op when
+  // unchanged, reverts on failure, badInput guard on the number fields.
+  async _savePlanField(input) {
+    const field = input.dataset.planField;   // title | notes | time_minutes | people_needed | phase
+    const id    = input.dataset.planId;
+    const isNum = field === 'time_minutes' || field === 'people_needed';
+    let value;
+    if (isNum) {
+      // badInput: the number input displays junk but reports value === '' —
+      // reverting protects the saved estimate instead of silently clearing it.
+      if (input.validity && input.validity.badInput) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
+      const raw = input.value.trim();
+      if (raw !== '' && !Number.isFinite(Number(raw))) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
+      value = raw === '' ? null : Math.round(Number(raw));
+    } else {
+      value = input.value.trim();
+      if (field === 'title' && value === '') {
+        input.value = input.dataset.lastSaved ?? input.defaultValue;
+        return;
+      }
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    const cur = value == null ? '' : String(value);
+    if (cur === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = cur;
+    // The number inputs fire 'change' per spinner step — the token stops a
+    // stale response from overwriting a newer save.
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, { [field]: value });
+      if (Number(input.dataset.saveToken) !== token) return; // superseded
+      // Estimates feed the phase totals and a phase change moves the card into
+      // another group, so both need the section rebuilt; a title/notes edit
+      // does not, and rebuilding would yank focus out of the field being typed.
+      this._patchPlanLocal(id, { [field]: updated[field] }, isNum || field === 'phase');
+      if (field === 'title') {
+        const btn = input.closest('[data-plan-card]')?.querySelector('[data-plan-delete]');
+        if (btn) btn.dataset.planName = value;
+      }
+    } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return;
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _togglePlanDone(cb) {
+    const id = cb.dataset.planDone;
+    const next = cb.checked;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, { done: next });
+      this._patchPlanLocal(id, { done: updated.done }, true);
+    } catch (err) {
+      cb.checked = !next;
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _deletePlanTask(btn) {
+    const id   = btn.dataset.planDelete;
+    const name = btn.dataset.planName || '';
+    if (!confirm(t('party.admin.planDeleteConfirm', { name }))) return;
+    btn.disabled = true;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/plan/${encodeURIComponent(id)}`);
+      this._plan = (this._plan || []).filter(task => String(task.id) !== String(id));
+      this._rerenderPlan();
+    } catch (err) {
+      showToast(err.message || t('party.admin.planDeleteFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  // Rename a phase inline. Clearing the field on a built-in hands its name back
+  // to i18n; on a custom phase an empty name is meaningless, so it reverts.
+  async _savePlanPhaseName(input) {
+    const key = input.dataset.planPhaseRename;
+    const row = (this._planPhases || []).find(p => p.key === key);
+    const value = input.value.trim();
+    if (!value && !row?.is_builtin) {
+      input.value = input.dataset.lastSaved ?? input.defaultValue;
+      return;
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    if (value === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = value;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/phases/${encodeURIComponent(key)}`, {
+        label: value || null,
+      });
+      this._planPhases = (this._planPhases || []).map(p => p.key === key ? updated : p);
+      this._rerenderPlan();
+      this._el.querySelector(`[data-plan-phase-rename="${CSS.escape(key)}"]`)?.focus();
+    } catch (err) {
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Delete a phase. Its tasks are NOT deleted — the FK sweeps them into "other"
+  // (069), so the confirm says so rather than implying the work goes with it.
+  async _deletePlanPhase(btn) {
+    const key   = btn.dataset.planPhaseDel;
+    const phase = this._planPhases_().find(p => p.key === key);
+    const name  = phase?.label || key;
+    const n     = this._planTasksIn(key).length;
+    const msg = n > 0
+      ? t('party.admin.planPhaseDeleteConfirmTasks', { name, n })
+      : t('party.admin.planPhaseDeleteConfirm', { name });
+    if (!confirm(msg)) return;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/plan/phases/${encodeURIComponent(key)}`);
+      this._planPhases = (this._planPhases || []).filter(p => p.key !== key);
+      // Mirror the FK's ON DELETE SET DEFAULT locally so the tasks reappear
+      // under Other without a refetch.
+      this._plan = (this._plan || [])
+        .map(task => ((task.phase || 'other') === key ? { ...task, phase: 'other' } : task));
+      this._rerenderPlan();
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Spawn a TODO from this task. The plan says the party needs the job done;
+  // the ✅ list is where a named person picks it up, so both sections refresh.
+  async _createTodoFromPlan(btn) {
+    const id = btn.dataset.planCreateTodo;
+    btn.disabled = true;
+    try {
+      const res = await this._todoApi('POST', `/api/v1/party/plan/${encodeURIComponent(id)}/create-todo`);
+      this._todos = [...(this._todos || []), res.todo];
+      this._patchPlanLocal(id, { linked_todo_id: res.task.linked_todo_id }, false);
+      this._rerenderTodos();          // cascades into _rerenderPlan
+      showToast(t('party.admin.planCreatedTodo'), 'success');
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  async _linkPlanTodo(select) {
+    const id = select.dataset.planLink;
+    const raw = select.value;
+    if (!raw) return;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, {
+        linked_todo_id: Number(raw),
+      });
+      this._patchPlanLocal(id, { linked_todo_id: updated.linked_todo_id }, true);
+    } catch (err) {
+      select.value = '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _unlinkPlanTodo(btn) {
+    const id = btn.dataset.planUnlink;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, {
+        linked_todo_id: null,
+      });
+      this._patchPlanLocal(id, { linked_todo_id: updated.linked_todo_id }, true);
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Jump to the linked TODO's card in the ✅ section and flash it, so the click
+  // lands somewhere obvious rather than dumping the planner mid-page.
+  _scrollToTodo(todoId) {
+    const card = this._el.querySelector(`[data-todo-card="${CSS.escape(String(todoId))}"]`)
+      || this._el.querySelector('#party-admin-todos');
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('party-admin__todo-card--flash');
+    setTimeout(() => card.classList.remove('party-admin__todo-card--flash'), 1600);
+  }
+
+  // Drag-to-reorder within one phase. Moving a task to another phase is the
+  // phase <select> on the card, not a cross-group drag: dropping between groups
+  // means a move plus a reorder, two writes with two ways to half-fail, and
+  // drag is unreliable on the phone the planner is actually holding.
+  _bindPlanDrag(section) {
+    let draggedId = null;
+
+    const clearMarks = () => {
+      section.querySelectorAll('.party-admin__plan-task--drop-above, .party-admin__plan-task--drop-below')
+        .forEach(c => c.classList.remove('party-admin__plan-task--drop-above', 'party-admin__plan-task--drop-below'));
+    };
+    const listKeyOf = (el) => el?.closest('[data-plan-list]')?.dataset.planList;
+
+    section.addEventListener('dragstart', (e) => {
+      const handle = e.target.closest?.('.party-admin__plan-handle');
+      if (!handle) {
+        // Cards are draggable so the handle works, which also lets the card
+        // body ghost-drag. Cancel that, but only inside a card — a text
+        // selection dragged out of an input elsewhere is nobody's business.
+        if (e.target.closest?.('[data-plan-card]')) e.preventDefault();
+        return;
+      }
+      const card = handle.closest('[data-plan-card]');
+      if (!card) { e.preventDefault(); return; }
+      draggedId = card.dataset.planCard;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
+      card.classList.add('party-admin__plan-task--dragging');
+    });
+
+    section.addEventListener('dragend', (e) => {
+      e.target.closest?.('[data-plan-card]')?.classList.remove('party-admin__plan-task--dragging');
+      clearMarks();
+      draggedId = null;
+    });
+
+    section.addEventListener('dragover', (e) => {
+      if (!draggedId) return;
+      const card = e.target.closest('[data-plan-card]');
+      if (!card || card.dataset.planCard === draggedId) return;
+      const from = this._el.querySelector(`[data-plan-card="${CSS.escape(draggedId)}"]`);
+      if (listKeyOf(card) !== listKeyOf(from)) return;   // same phase only
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isBefore = (e.clientY - rect.top) < (rect.height / 2);
+      clearMarks();
+      card.classList.add(isBefore ? 'party-admin__plan-task--drop-above' : 'party-admin__plan-task--drop-below');
+    });
+
+    section.addEventListener('drop', async (e) => {
+      if (!draggedId) return;
+      e.preventDefault();
+      const card = e.target.closest('[data-plan-card]');
+      if (!card || card.dataset.planCard === draggedId) { clearMarks(); return; }
+      const targetId = card.dataset.planCard;
+      const isAbove  = card.classList.contains('party-admin__plan-task--drop-above');
+      clearMarks();
+      const moved = draggedId;
+      draggedId = null;
+
+      const tasks   = this._plan || [];
+      const dragged = tasks.find(x => String(x.id) === String(moved));
+      if (!dragged) return;
+      const without = tasks.filter(x => String(x.id) !== String(moved));
+      const idx     = without.findIndex(x => String(x.id) === String(targetId));
+      if (idx < 0) return;
+      const insertAt  = isAbove ? idx : idx + 1;
+      const reordered = [...without.slice(0, insertAt), dragged, ...without.slice(insertAt)];
+
+      const previous = this._plan;
+      this._plan = reordered;
+      this._rerenderPlan();
+      try {
+        await this._todoApi('POST', '/api/v1/party/plan/reorder', { ids: reordered.map(x => x.id) });
+      } catch (err) {
+        this._plan = previous;
+        this._rerenderPlan();
+        showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+      }
+    });
+  }
+
+  _rerenderPlan() {
+    const old = this._el.querySelector('#party-admin-plan');
+    if (!old) return;
+    // Which rows/phases are open is tracked on the view (_planExpanded /
+    // _planCollapsed), so the fresh markup already reflects it — no DOM state to
+    // carry across, unlike the old <details> approach.
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderPlanSection();
+    old.replaceWith(tmp.firstElementChild);
+    this._bindPlan();
   }
 
   // ── To-do list ─────────────────────────────────────────────────────────────
@@ -1776,6 +3562,7 @@ export class PartyAdminView {
       (td.assignees || []).forEach(add);
       (td.subtasks  || []).forEach(s => (s.assignees || []).forEach(add));
     }
+    for (const task of (this._plan || [])) (task.assignees || []).forEach(add);
     return [...names].sort((a, b) => a.localeCompare(b));
   }
 
@@ -1901,12 +3688,16 @@ export class PartyAdminView {
       </div>`;
   }
 
-  // Assignee chip control, reused for both TODOs and subtasks. The container's
-  // data-* attributes tell the delegated handlers which entity to PATCH.
+  // Assignee chip control, reused for TODOs, subtasks and plan tasks. The
+  // container's data-* attributes tell the delegated handlers which entity to
+  // PATCH. Plan tasks pass their own id in the todoId slot — the three scopes
+  // share this markup, they just resolve `current` from different stores.
   _renderAssigneeControl(scope, todoId, subtaskId, assignees) {
     const attrs = scope === 'subtask'
       ? `data-assignee-scope="subtask" data-todo-id="${escHtml(String(todoId))}" data-subtask-id="${escHtml(String(subtaskId))}"`
-      : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
+      : scope === 'plan'
+        ? `data-assignee-scope="plan" data-todo-id="${escHtml(String(todoId))}"`
+        : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
     const chips = (assignees || []).map(n => `
         <span class="party-admin__chip">${escHtml(n)}<button type="button" class="party-admin__chip-remove" data-chip-remove="${escHtml(n)}" aria-label="${t('party.admin.todoRemoveAssignee')}">×</button></span>`).join('');
     return `
@@ -2168,8 +3959,13 @@ export class PartyAdminView {
     const scope     = container.dataset.assigneeScope;
     const todoId    = container.dataset.todoId;
     const subtaskId = container.dataset.subtaskId;
-    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
     let current = [];
+    if (scope === 'plan') {
+      const task = (this._plan || []).find(x => String(x.id) === String(todoId));
+      current = task?.assignees || [];
+      return { scope, todoId, subtaskId, current: [...current] };
+    }
+    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
     if (scope === 'subtask') {
       const s = td?.subtasks?.find(x => String(x.id) === String(subtaskId));
       current = s?.assignees || [];
@@ -2198,6 +3994,13 @@ export class PartyAdminView {
 
   async _saveAssignees(scope, todoId, subtaskId, assignees) {
     try {
+      if (scope === 'plan') {
+        const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(todoId)}`, { assignees });
+        this._patchPlanLocal(todoId, { assignees: updated.assignees }, false);
+        this._peopleNames = this._collectPeopleNames();
+        this._rerenderPlan();
+        return;
+      }
       if (scope === 'subtask') {
         const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(subtaskId)}`, { assignees });
         this._patchSubtaskLocal(todoId, subtaskId, { assignees: updated.assignees }, false);
@@ -2311,20 +4114,172 @@ export class PartyAdminView {
     old.replaceWith(next);
     this._bindTodos();
     this._rerenderCosts();
+    // Plan tasks show their linked TODO's title and done state, so any change
+    // here can stale those chips. One-directional on purpose: _rerenderPlan
+    // never calls back into this, or the two would ping-pong forever.
+    this._rerenderPlan();
   }
 
   _bindInvitedGuests() {
     this._bindPillDropdowns();
+    this._bindPillFilters();
+    this._bindGuestFilter();
+    this._bindScrollToggle();
+    this._bindGuestRows();
+  }
 
-    // Row click → toggle detail expansion. Ignores clicks on buttons within
-    // the row so Revoke doesn't also open the details.
+  // Scroll-mode checkbox: toggles the fixed-height scroll box (+ pinned header)
+  // on the attendance table in place, no reload needed.
+  _bindScrollToggle() {
+    const cb = this._el.querySelector('#party-admin-scroll-toggle');
+    if (!cb || cb.dataset.bound) return;
+    cb.dataset.bound = '1';
+    cb.addEventListener('change', () => {
+      this._guestScroll = cb.checked;
+      const wrap = this._el.querySelector('#party-admin-accepted-pending .party-admin__table-wrap');
+      wrap?.classList.toggle('party-admin__table-wrap--sticky', cb.checked);
+    });
+  }
+
+  // Pill click → toggle the table's group filter. Full section re-render so
+  // the active pill highlight, rows and result count all update together.
+  _bindPillFilters() {
+    const section = this._el.querySelector('#party-admin-accepted-pending');
+    if (!section) return;
+    section.querySelectorAll('[data-pill-filter]').forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.pillFilter;
+        this._guestFilter.group = this._guestFilter.group === key ? null : key;
+        this._rerenderAcceptedPending();
+      });
+    });
+  }
+
+  // Debounced name filter (Notendanafn column = display name with username
+  // fallback, so both are matched). Refreshes ONLY the tbody so the input
+  // keeps focus and caret while the user types.
+  _bindGuestFilter() {
+    const input = this._el.querySelector('#party-admin-guest-filter');
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const next = input.value.trim();
+        if (next === this._guestFilter.q) return;
+        this._guestFilter.q = next;
+        this._refreshGuestTbody();
+      }, 250);
+    });
+  }
+
+  // Row-level bindings for the attendance tables. Split out from
+  // _bindInvitedGuests so the tbody-only filter refresh can re-bind fresh rows
+  // without re-touching the pills/filter controls (whose own `bound` guards
+  // would otherwise be pointless — pill buttons survive a tbody swap).
+  _bindGuestRows() {
+    // Row click → toggle detail expansion. Ignores clicks on interactive
+    // controls within the row so inline edits don't also open the details.
     this._el.querySelectorAll('[data-expand-guest]').forEach(row => {
+      if (row.dataset.bound) return;
+      row.dataset.bound = '1';
       row.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
+        if (e.target.closest('button, input, select, textarea, label')) return;
         const id = row.dataset.expandGuest;
         const details = this._el.querySelector(`[data-guest-details="${CSS.escape(id)}"]`);
         if (!details) return;
         details.hidden = !details.hidden;
+      });
+    });
+
+    // RSVP Stýring: the three companion controls share one delegated change
+    // listener on the cell; any change PATCHes the full record.
+    this._el.querySelectorAll('[data-companions-for]').forEach(cell => {
+      if (cell.dataset.bound) return;
+      cell.dataset.bound = '1';
+      cell.addEventListener('click', (e) => e.stopPropagation());
+      cell.addEventListener('change', async () => {
+        const userId  = cell.dataset.companionsFor;
+        const plusOne = cell.querySelector('[data-companion-field="plus_one"]')?.checked || false;
+        const kcEl    = cell.querySelector('[data-companion-field="kids_count"]');
+        const kcRaw   = kcEl?.value ?? '';
+        const kids    = kcRaw === '' ? 0 : Number(kcRaw);
+        const ages    = cell.querySelector('[data-companion-field="kids_ages"]')?.value.trim() || '';
+        // badInput (e.g. "e" typed into the number field) yields NaN — reject
+        // locally instead of round-tripping a guaranteed 400.
+        if (!Number.isInteger(kids) || kids < 0 || kids > 25) {
+          showToast(t('party.admin.companionsFailed'), 'error');
+          return;
+        }
+
+        const inputs = cell.querySelectorAll('input');
+        inputs.forEach(i => { i.disabled = true; });
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/companions`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ plus_one: plusOne, kids_count: kids, kids_ages: ages }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.companionsFailed'));
+          }
+          showToast(t('party.admin.companionsUpdated'), 'success');
+          // Reload so the Maki/Börn pills and the headcount stat pick up the
+          // new companion record.
+          await this._loadAndRender();
+        } catch (err) {
+          inputs.forEach(i => { i.disabled = false; });
+          showToast(err.message || t('party.admin.companionsFailed'), 'error');
+        }
+      });
+    });
+
+    // Inline attendance-timing edit (admin-only select). Writes answers.attend_when
+    // via the merge endpoint; picking "—" clears it.
+    this._el.querySelectorAll('[data-timing-for]').forEach(sel => {
+      if (sel.dataset.bound) return;
+      sel.dataset.bound = '1';
+      sel.addEventListener('click', (e) => e.stopPropagation());
+      sel.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const userId  = sel.dataset.timingFor;
+        const fieldId = sel.dataset.field;
+        const prev    = sel.dataset.current || '';
+        const value   = sel.value;
+        if (value === prev) return;
+
+        sel.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          // Keep the stored shape the guest's own form expects: checkbox-group
+          // answers are arrays. (Replaces the whole array — the admin's pick is
+          // the definitive attendance.)
+          const multi = this._attendField()?.type === 'checkbox-group';
+          const body = value
+            ? { answers: { [fieldId]: multi ? [value] : value } }
+            : { answers: {}, clear: [fieldId] };
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/answers`, {
+            method: 'PATCH', credentials: 'include', headers, body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.answersFailed'));
+          }
+          showToast(t('party.admin.answersUpdated'), 'success');
+          // Reload — attend_when drives the derived status and the Stats
+          // day/evening/all-day breakdown.
+          await this._loadAndRender();
+        } catch (err) {
+          sel.value    = prev;
+          sel.disabled = false;
+          showToast(err.message || t('party.admin.answersFailed'), 'error');
+        }
       });
     });
 
@@ -2368,8 +4323,84 @@ export class PartyAdminView {
       });
     });
 
+    // Inline display-name edit (admin-only text input in the Name column).
+    this._el.querySelectorAll('[data-guest-name-for]').forEach(inp => {
+      if (inp.dataset.bound) return;
+      inp.dataset.bound = '1';
+      // Clicks in the input shouldn't toggle the row's detail expansion.
+      inp.addEventListener('click', (e) => e.stopPropagation());
+      inp.addEventListener('change', async () => {
+        const userId = inp.dataset.guestNameFor;
+        const prev   = inp.dataset.current;
+        const value  = inp.value.trim();
+        if (value === prev) return;
+
+        inp.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/profile`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ display_name: value }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.nameFailed'));
+          }
+          showToast(t('party.admin.nameUpdated'), 'success');
+          // Reload so the name propagates to the summary pills, sort order and
+          // the declined table's copy of this guest.
+          await this._loadAndRender();
+        } catch (err) {
+          inp.value    = prev;
+          inp.disabled = false;
+          showToast(err.message || t('party.admin.nameFailed'), 'error');
+        }
+      });
+    });
+
+    // Inline RSVP-answer edit (admin-only form in the expanded detail row).
+    this._el.querySelectorAll('[data-guest-answers-form]').forEach(form => {
+      if (form.dataset.bound) return;
+      form.dataset.bound = '1';
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId          = form.dataset.guestAnswersForm;
+        const { answers, clear } = this._collectAnswers(form);
+        const statusEl        = form.querySelector('.party-admin__answers-status');
+        const btn             = form.querySelector('[type="submit"]');
+
+        btn.disabled = true;
+        if (statusEl) statusEl.textContent = t('form.saving');
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/answers`, {
+            method:      'PATCH',
+            credentials: 'include',
+            headers,
+            body:        JSON.stringify({ answers, clear }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.answersFailed'));
+          }
+          showToast(t('party.admin.answersUpdated'), 'success');
+          // Reload so the Bringing column, status derivation and tallies reflect
+          // the edited answers.
+          await this._loadAndRender();
+        } catch (err) {
+          if (statusEl) statusEl.textContent = '';
+          btn.disabled = false;
+          showToast(err.message || t('party.admin.answersFailed'), 'error');
+        }
+      });
+    });
+
     // Revoke → flip party_access to false, remove the two rows for this guest.
     this._el.querySelectorAll('[data-revoke-user-id]').forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const userId = btn.dataset.revokeUserId;
@@ -2377,7 +4408,7 @@ export class PartyAdminView {
         if (!confirm(t('party.admin.confirmRevoke', { name }))) return;
 
         btn.disabled = true;
-        btn.textContent = t('profile.revoking');
+        btn.textContent = '…';   // icon button — spinner-ish glyph, not text
         try {
           await adminUpdateUser(userId, { party_access: false });
           // Remove the two related rows and any cached entry
@@ -2390,7 +4421,7 @@ export class PartyAdminView {
         } catch (err) {
           showToast(err.message || t('party.admin.revokeFailed'), 'error');
           btn.disabled = false;
-          btn.textContent = t('profile.revoke');
+          btn.textContent = '✕';
         }
       });
     });
@@ -2453,48 +4484,73 @@ export class PartyAdminView {
     }
   }
 
-  // Parse the owner-invite textarea: one entry per line, "email" or "Name <email>".
-  _parseInviteLines(raw) {
-    return String(raw)
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(line => {
-        const m = line.match(/^(.*?)<([^>]+)>$/);
-        if (m) return { name: m[1].trim(), email: m[2].trim() };
-        return { email: line };
-      });
-  }
-
-  _bindOwnerInvite() {
-    const form = this._el.querySelector('#party-admin-owner-invite-form');
+  _bindAddGuest() {
+    const form = this._el.querySelector('#party-admin-add-guest-form');
     if (!form) return;
-    const input  = form.querySelector('#party-admin-owner-invite-input');
-    const status = form.querySelector('#party-admin-owner-invite-status');
+    const nameEl   = form.querySelector('#party-admin-add-guest-name');
+    const emailEl  = form.querySelector('#party-admin-add-guest-email');
+    const statusEl = form.querySelector('#party-admin-add-guest-status');
+    const inviteEl = form.querySelector('#party-admin-add-guest-invite');
+    const msgEl    = form.querySelector('#party-admin-add-guest-status-msg');
+    const btn      = form.querySelector('[type="submit"]');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const invites = this._parseInviteLines(input?.value || '');
-      if (!invites.length) {
-        status.textContent = t('party.admin.ownerInviteEmpty');
+      const name  = (nameEl?.value || '').trim();
+      const email = (emailEl?.value || '').trim();
+      if (!name) {
+        msgEl.textContent = t('party.admin.addGuestNameRequired');
+        nameEl?.focus();
         return;
       }
-      status.textContent = t('form.saving');
+      // The invite is an email — refuse the combination that can't work rather
+      // than silently adding the guest with no link sent.
+      const invite = !!inviteEl?.checked;
+      if (invite && !email) {
+        msgEl.textContent = t('party.admin.addGuestInviteNeedsEmail');
+        emailEl?.focus();
+        return;
+      }
+
+      btn.disabled = true;
+      msgEl.textContent = t('form.saving');
       try {
         const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/owner-invite', {
+        const res = await fetch('/api/v1/party/guests', {
           method:      'POST',
           credentials: 'include',
           headers,
-          body:        JSON.stringify({ invites }),
+          body: JSON.stringify({
+            name,
+            email:  email || undefined,
+            status: statusEl?.value || 'going',
+            invite,
+          }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Send failed');
-        status.textContent = '';
-        showToast(t('party.admin.inviteSent', { n: data.invited ?? invites.length }), 'success');
-        if (input) input.value = '';
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || t('party.admin.addGuestFailed'));
+        // Report what actually happened: the server only claims `invited` once
+        // the magic link is on its way. An invite that was asked for and didn't
+        // send is a warning — the guest is on the list either way, but nobody
+        // told them, and only this toast would say so.
+        if (invite && !data.invited) {
+          // 'error' for the accent colour — the add succeeded, but a silently
+          // unsent invite is the failure the admin has to act on.
+          showToast(t('party.admin.addGuestInviteFailed', { name }), 'error');
+        } else {
+          showToast(
+            data.invited
+              ? t('party.admin.addGuestAddedInvited', { name })
+              : t('party.admin.addGuestAdded', { name }),
+            'success'
+          );
+        }
+        // Reload so the new guest appears in the attendance table with the
+        // right status, and the pills/headcount update.
+        await this._loadAndRender();
       } catch (err) {
-        status.textContent = err.message;
+        btn.disabled = false;
+        msgEl.textContent = err.message || t('party.admin.addGuestFailed');
       }
     });
   }

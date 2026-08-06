@@ -24,6 +24,7 @@
     "@anthropic-ai/sdk": "^0.91.0",
     "@lucia-auth/adapter-postgresql": "^3.1.2",
     "@sentry/node": "^10.46.0",
+    "archiver": "^7.0.1",
     "arctic": "^3.7.0",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
@@ -59,7 +60,10 @@
     "husky": "^9.1.7",
     "jest": "^29.7.0",
     "nodemon": "^3.1.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "supertest": "^7.0.0"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8"
   }
 }

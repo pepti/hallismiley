@@ -1541,7 +1541,7 @@ button.party-admin__stat:focus-visible {
   font-style: normal;
 }
 
-/* ── Party Admin: owner invites + pending requests ─────────────────────── */
+/* ── Party Admin: add guest + pending requests ─────────────────────────── */
 
 .party-admin__invite-help {
   color: var(--text-secondary);
@@ -1549,33 +1549,38 @@ button.party-admin__stat:focus-visible {
   margin-bottom: var(--sp-2);
 }
 
-.party-admin__invite-form {
+/* Manual add-guest form — a single responsive row that wraps on narrow screens. */
+.party-admin__add-guest-form {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--sp-2);
-  align-items: stretch;
-  max-width: 560px;
   margin-bottom: var(--sp-3);
 }
-
-.party-admin__invite-form textarea.lol-input {
-  width: 100%;
-  resize: vertical;
-  font-family: inherit;
-  text-transform: none;
-}
-
-.party-admin__invite-actions {
+.party-admin__add-guest-form .lol-input { text-transform: none; }
+.party-admin__add-guest-name  { flex: 1 1 12rem; min-width: 9rem; }
+.party-admin__add-guest-email { flex: 1 1 14rem; min-width: 10rem; }
+.party-admin__add-guest-status-sel { flex: 0 0 auto; }
+.party-admin__add-guest-status { font-size: 0.85rem; color: var(--text-secondary); }
+.party-admin__add-guest-invite {
   display: flex;
-  gap: var(--sp-2);
   align-items: center;
-}
-
-.party-admin__invite-status {
+  gap: 0.35rem;
+  flex: 0 0 auto;
   font-size: 0.85rem;
   color: var(--text-secondary);
-  margin-left: var(--sp-2);
+  cursor: pointer;
+  white-space: nowrap;
 }
+.party-admin__add-guest-invite input { cursor: pointer; }
+
+/* Compact variant (form sits below the table): ~half the footprint. */
+.party-admin__add-guest--compact { max-width: 32rem; }
+.party-admin__add-guest--compact .party-admin__add-guest-form { gap: var(--sp-1, 0.35rem); }
+.party-admin__add-guest--compact .party-admin__add-guest-name  { flex: 1 1 8rem; min-width: 7rem; }
+.party-admin__add-guest--compact .party-admin__add-guest-email { flex: 1 1 9rem; min-width: 7rem; }
+.party-admin__add-guest-title { font-size: 1rem; margin-bottom: 0.25rem; }
+.party-admin__add-guest-help  { font-size: 0.8rem; margin-bottom: var(--sp-2); }
 
 .party-admin__pending-list {
   list-style: none;
@@ -1795,6 +1800,236 @@ button.party-admin__stat:focus-visible {
 /* Options inherit the browser menu colours, not the coloured control text,
    so they stay legible on the native dropdown background. */
 .party-admin__status-select option { color: initial; }
+
+/* Attendance-timing cell — same compact select styling as the status column. */
+.party-admin__timing-cell { white-space: nowrap; }
+.party-admin__timing-select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border-radius: 6px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, inherit);
+  cursor: pointer;
+  max-width: 100%;
+}
+.party-admin__timing-select:disabled { opacity: 0.55; cursor: progress; }
+.party-admin__timing-select:focus-visible { outline: 2px solid #d4b877; outline-offset: 1px; }
+.party-admin__timing-select option { color: initial; }
+
+/* Admin inline name edit — a text input that sits quietly in the Name cell
+   until focused, so the table still reads like a table. */
+.party-admin__cell-input {
+  font: inherit;
+  width: 100%;
+  min-width: 8ch;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__cell-input:hover  { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__cell-input:focus  {
+  outline: none;
+  border-color: #d4b877;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.party-admin__cell-input:disabled { opacity: 0.55; cursor: progress; }
+
+/* Admin RSVP-answer editor — the expanded detail row's editable form. Keeps a
+   compact, single-column layout so it stays readable inside the table row. */
+.party-admin__answers-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.party-admin__answer-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.party-admin__answer-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.party-admin__answer-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+.party-admin__answer-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 400;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.party-admin__answer-check--clear { opacity: 0.8; font-style: italic; }
+/* Read-only answer given on a different form version (other locale / renamed
+   option): shown so the admin knows it exists, but not editable here. */
+.party-admin__answer-readonly {
+  font-weight: 400;
+  color: var(--text-secondary, #999);
+}
+.party-admin__answer-hint {
+  display: block;
+  font-size: 0.75rem;
+  font-style: italic;
+  opacity: 0.75;
+  margin-top: 0.15rem;
+}
+.party-admin__answers-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.party-admin__answers-status { font-size: 0.85rem; color: var(--text-secondary, #999); }
+
+/* ── RSVP Stýring cell: compact inline companion controls ────────────────── */
+.party-admin__companions-cell {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.party-admin__companions-cell--ro { color: var(--text-secondary); }
+.party-admin__companion-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+.party-admin__companion-kids {
+  width: 3.2rem;
+  font: inherit;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.25));
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__companion-ages {
+  width: 5.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__companion-ages:hover { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__companion-ages:focus,
+.party-admin__companion-kids:focus {
+  outline: none;
+  border-color: #d4b877;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.party-admin__companions-cell input:disabled { opacity: 0.55; cursor: progress; }
+
+/* ── Guest filter bar ─────────────────────────────────────────────────────── */
+.party-admin__guest-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.party-admin__guest-filter { max-width: 220px; }
+.party-admin__guest-filter-count {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+/* Scroll-mode toggle, pushed to the far right of the filter bar. */
+.party-admin__scroll-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Headcount stat pill — informational, not a button. */
+.party-admin__pill--headcount {
+  background: rgba(212, 184, 119, 0.10);
+  color: var(--text-primary);
+  border-color: rgba(212, 184, 119, 0.35);
+}
+
+/* Active pill = its group filter is applied to the table. */
+.party-admin__pill--active {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+
+/* Caret sub-button that opens the pill's name list. */
+.party-admin__pill-caret {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.3rem;
+  margin-left: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.party-admin__pill-caret:hover:not(:disabled) { color: var(--text-primary); }
+.party-admin__pill-caret:disabled { opacity: 0.45; cursor: default; }
+
+/* ── Column resize grips + sticky header (attendance table) ──────────────── */
+.party-admin__table--invited thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* Sticky needs an internal scroll context: cap the wrap's height so long
+   guest lists scroll under the pinned header. Short lists are unaffected. */
+.party-admin__table-wrap--sticky {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.party-admin__col-grip {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+.party-admin__col-grip:hover,
+.party-admin__table--resizing .party-admin__col-grip {
+  background: linear-gradient(to right, transparent 3px, rgba(212, 184, 119, 0.55) 4px, rgba(212, 184, 119, 0.55) 5px, transparent 6px);
+}
+.party-admin__table--resizing { user-select: none; }
+
+/* Icon-only revoke: small square ghost button, red on hover. */
+.party-admin__actions-cell { width: 2.2rem; text-align: center; }
+.party-admin__revoke-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.party-admin__revoke-btn:hover:not(:disabled) {
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.4);
+  background: rgba(239, 83, 80, 0.08);
+}
+.party-admin__revoke-btn:disabled { opacity: 0.55; cursor: progress; }
 
 .party-admin__invited-toolbar {
   display: flex;
@@ -2395,4 +2630,583 @@ button.party-admin__stat:focus-visible {
   font-size: 0.78rem;
   color: #e5a973;
   margin: var(--sp-2) 0 0 0;
+}
+
+/* Manual cost line + section management. The h3 keeps space-between for the
+   two-child (label / total) case; margin-left:auto is what stops a third child
+   — the delete button — from being spread into the middle. */
+.party-admin__cost-group h3 span { margin-left: auto; }
+.party-admin__cost-del {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.party-admin__cost-del:hover,
+.party-admin__cost-del:focus-visible { color: #e57373; }
+.party-admin__cost-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed rgba(200, 170, 110, 0.2);
+}
+.party-admin__cost-add .party-admin__cost-add-name   { flex: 1 1 120px; min-width: 0; }
+.party-admin__cost-add .party-admin__cost-add-amount { flex: 0 1 90px;  min-width: 0; }
+.party-admin__cost-add .party-admin__logistics-status {
+  flex: 1 0 100%;
+  margin-left: 0;
+  font-size: 0.78rem;
+}
+.party-admin__cost-add-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-3);
+}
+.party-admin__cost-add-section .party-admin__cost-section-icon  { flex: 0 0 4.5rem; text-align: center; }
+.party-admin__cost-add-section .party-admin__cost-section-label { flex: 1 1 220px; min-width: 0; }
+
+/* Inline-editable cost lines — inputs sit flush in the li (transparent border)
+   until hovered/focused, mirroring the logistics-table cell idiom. */
+.party-admin__cost-item-main { display: flex; align-items: baseline; gap: 0.35rem; flex: 1 1 auto; min-width: 0; }
+.party-admin__cost-item-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.05rem 0.25rem;
+  min-width: 0;
+}
+.party-admin__cost-item-input:hover { border-color: rgba(200, 170, 110, 0.25); }
+.party-admin__cost-item-input:focus {
+  border-color: var(--gold);
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+.party-admin__cost-item-name   { flex: 1 1 auto; }
+.party-admin__cost-item-amount { flex: 0 0 6rem; text-align: right; color: var(--gold); }
+.party-admin__cost-item-total  { white-space: nowrap; color: var(--gold); }
+
+/* Rename affordance — mirrors .party-admin__cost-del but hovers gold, not red. */
+.party-admin__cost-rename {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.party-admin__cost-rename:hover,
+.party-admin__cost-rename:focus-visible { color: var(--gold); }
+.party-admin__cost-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  flex: 1 1 100%;
+  font-weight: normal;
+}
+/* The h3's descendant span rules (gold, margin-left:auto, nowrap) must not
+   restyle the rename form's status span. */
+.party-admin__cost-rename-form span {
+  margin-left: 0;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+.party-admin__cost-rename-form .party-admin__cost-section-icon  { flex: 0 0 3.5rem; text-align: center; }
+.party-admin__cost-rename-form .party-admin__cost-rename-label  { flex: 1 1 120px; min-width: 0; }
+
+/* ── Project plan (069) ───────────────────────────────────────────────────── */
+
+/* Staffing strip — the "how many helpers at set-up" answer, one chip per phase
+   that has work in it. Chips jump to their group. */
+.party-admin__plan-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.015);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.party-admin__plan-chip:hover,
+.party-admin__plan-chip:focus-visible { border-color: var(--gold); }
+.party-admin__plan-chip-num { color: var(--gold); white-space: nowrap; }
+
+/* Collapse-all toggle above the groups. */
+.party-admin__plan-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-collapse-all {
+  background: none;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 2px 4px;
+}
+.party-admin__plan-collapse-all:hover { color: var(--gold); }
+
+.party-admin__plan-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-group {
+  border: 1px solid rgba(200, 170, 110, 0.22);
+  border-radius: 8px;
+  padding: var(--sp-2) var(--sp-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.party-admin__plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+/* Caret buttons (phase collapse + row expand) share one look; rotation encodes
+   open/closed. Default ▾ = open; rotated = closed/collapsed. */
+.party-admin__plan-caret,
+.party-admin__plan-expand {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 2px 3px;
+  transition: transform 120ms ease;
+  flex: 0 0 auto;
+}
+.party-admin__plan-caret:hover,
+.party-admin__plan-expand:hover { color: var(--gold); }
+.party-admin__plan-group--collapsed .party-admin__plan-caret { transform: rotate(-90deg); }
+.party-admin__plan-task--open .party-admin__plan-expand { transform: rotate(180deg); }
+.party-admin__plan-group-icon { flex: 0 0 auto; }
+.party-admin__plan-group-name {
+  flex: 1 1 120px;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.1rem 0.3rem;
+}
+.party-admin__plan-group-name:hover { border-color: rgba(200, 170, 110, 0.25); }
+.party-admin__plan-group-name:focus {
+  border-color: var(--gold);
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+.party-admin__plan-totals {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.party-admin__plan-group-body { margin-top: var(--sp-1); }
+
+.party-admin__plan-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed rgba(200, 170, 110, 0.18);
+}
+.party-admin__plan-add .party-admin__plan-add-input { flex: 1 1 240px; min-width: 0; }
+.party-admin__plan-add .party-admin__logistics-status {
+  flex: 1 0 100%;
+  margin-left: 0;
+  font-size: 0.78rem;
+}
+
+/* Dense rows: one task per line, hairline-separated, no per-task card chrome. */
+.party-admin__plan-list { display: flex; flex-direction: column; }
+.party-admin__plan-task { border-top: 1px solid rgba(200, 170, 110, 0.12); }
+.party-admin__plan-task:first-child { border-top: 0; }
+.party-admin__plan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 0;
+}
+.party-admin__plan-task--done .party-admin__plan-title-input {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.party-admin__plan-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  user-select: none;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.party-admin__plan-handle:hover { color: var(--gold); }
+.party-admin__plan-handle:active { cursor: grabbing; }
+
+.party-admin__plan-title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 0;
+  outline: none;
+}
+.party-admin__plan-title-input:hover { border-bottom-color: rgba(200, 170, 110, 0.25); }
+.party-admin__plan-title-input:focus {
+  border-bottom-color: var(--gold);
+  background: rgba(200, 170, 110, 0.05);
+}
+
+/* Compact time/helpers cells on the row. */
+.party-admin__plan-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.party-admin__plan-unit { color: var(--text-muted); }
+.party-admin__plan-time-input,
+.party-admin__plan-people-input {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 2px 3px;
+  text-align: right;
+  color-scheme: dark;
+}
+.party-admin__plan-time-input   { width: 3.2rem; }
+.party-admin__plan-people-input { width: 2.6rem; }
+
+/* Read-only assignee initials on the collapsed row. */
+.party-admin__plan-avs { display: inline-flex; flex: 0 0 auto; }
+.party-admin__plan-av {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(200, 170, 110, 0.2);
+  color: var(--gold);
+  font-size: 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -5px;
+  border: 1px solid #17110a;
+}
+.party-admin__plan-av:first-child { margin-left: 0; }
+.party-admin__plan-av--more { color: var(--text-secondary); }
+
+/* The expandable editor holds the heavy controls, indented under its row. */
+.party-admin__plan-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3) 26px;
+}
+.party-admin__plan-editor[hidden] { display: none; }
+.party-admin__plan-editor-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.party-admin__plan-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__plan-phase-select,
+.party-admin__plan-link-select {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  color-scheme: dark;
+}
+.party-admin__plan-phase-select { max-width: 14rem; }
+.party-admin__plan-link-select  { max-width: 14rem; }
+
+/* Link to the ✅ to-do list. Green tint once the linked to-do is ticked, so a
+   glance down the plan shows what has actually been done. */
+.party-admin__plan-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__plan-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.party-admin__plan-linked:hover,
+.party-admin__plan-linked:focus-visible { border-color: var(--gold); }
+.party-admin__plan-linked--done {
+  border-color: rgba(120, 190, 130, 0.45);
+  color: #8fca9a;
+}
+
+/* Flash the to-do a plan chip jumped to, so the scroll lands somewhere obvious. */
+.party-admin__todo-card--flash {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  transition: outline-color 300ms ease;
+}
+
+/* Plan drag-reorder — always a single column, so above/below is always vertical
+   (unlike the to-do grid, which flips to left/right on desktop). */
+.party-admin__plan-task--dragging { opacity: 0.4; }
+.party-admin__plan-task--drop-above { border-top: 2px solid var(--gold); }
+.party-admin__plan-task--drop-below { border-bottom: 2px solid var(--gold); }
+
+@media (max-width: 560px) {
+  /* Keep the row on one line but let the title shrink; the phase-select and
+     other heavy controls already live in the expander, so the row stays tight. */
+  .party-admin__plan-title-input { flex: 1 1 40%; }
+  .party-admin__plan-editor-row { gap: var(--sp-2); }
+}
+
+/* ── Photo album ─────────────────────────────────────────────────────────────── */
+
+.party-album__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__sort-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-right: var(--sp-1);
+}
+
+.party-album__sort-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  background: rgba(30, 35, 40, 0.6);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.party-album__sort-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.party-album__sort-btn--active {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.party-album__count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.party-album__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.party-album__tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(30, 35, 40, 0.6);
+}
+
+.party-album__open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.party-album__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.party-album__placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgba(30, 35, 40, 0.9);
+}
+
+/* Play badge on video tiles */
+.party-album__tile--video::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(1, 10, 19, 0.65) no-repeat 55% 50% /
+    14px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.party-album__delete {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-dim);
+  border-radius: 50%;
+  background: rgba(1, 10, 19, 0.7);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.party-album__delete:hover { color: var(--gold); border-color: var(--gold); }
+
+/* Upload queue */
+.party-album__queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__queue-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.party-album__queue-item--error { border-color: var(--danger, #c0392b); }
+
+.party-album__queue-name {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.party-album__queue-size { color: var(--text-secondary); font-family: var(--font-mono); }
+
+.party-album__bar {
+  flex: 1 1 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.party-album__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 200ms ease;
+}
+
+.party-album__queue-error { color: var(--danger, #c0392b); }
+
+.party-album__retry { padding: 2px 10px; font-size: 0.75rem; }
+
+.party-album__more {
+  display: block;
+  margin: var(--sp-4) auto 0;
+}
+
+@media (max-width: 600px) {
+  .party-album__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+  /* Thumb-sized touch target on the delete chip */
+  .party-album__delete { width: 32px; height: 32px; }
+  .party-album__count { flex-basis: 100%; margin-left: 0; }
 }

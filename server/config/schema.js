@@ -2026,6 +2026,196 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          CHECK (admin_status IS NULL OR admin_status IN ('going', 'maybe', 'declined'))`,
     ],
   },
+  {
+    // Admin-managed companion overrides ("RSVP Stýring") for the attendance
+    // table: when a guest phones/texts a change of plan (bringing a spouse,
+    // kids and their ages), the host records the CURRENT plan here without
+    // touching the guest's original RSVP answers. Shape:
+    //   { plus_one: bool, kids_count: int, kids_ages: string }
+    // All keys optional; NULL column = not set (UI falls back to the guest's
+    // own answer). Validated in the controller like the `answers` JSONB.
+    name: '067_party_rsvp_admin_companions',
+    statements: [
+      `ALTER TABLE party_rsvps ADD COLUMN IF NOT EXISTS admin_companions JSONB`,
+    ],
+  },
+  {
+    // Logistics categories become data instead of a hardcoded triple. 058 fixed
+    // the set to ('food','drinks','other') via a CHECK; the planner needs to add
+    // their own sections ("Skreytingar", "Salur") without a deploy, so the CHECK
+    // is replaced by a registry table + FK.
+    //
+    // `label` is NULL for the three built-ins — their names are i18n keys
+    // resolved at render time (party.admin.logisticsCatFood etc.), so they stay
+    // translated when the admin flips EN/IS. Custom categories carry a literal
+    // label typed by the planner in whichever locale they used; there is no
+    // translation pipeline for user data, and inventing one for two words of
+    // section title isn't worth it.
+    //
+    // `is_builtin` guards deletion: dropping 'other' would break the DEFAULT
+    // that ON DELETE SET DEFAULT depends on, and dropping food/drinks would
+    // orphan i18n keys. The controller enforces it; the column is the record.
+    //
+    // The FK carries ON DELETE SET DEFAULT so deleting a custom section sweeps
+    // its items into 'other' rather than deleting them — losing a priced item
+    // because a section was renamed away would be a silent data loss the
+    // planner would only notice in the final bill. Existing rows are guaranteed
+    // FK-clean because 058's CHECK admitted only the three seeded keys.
+    name: '068_party_logistics_categories',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_logistics_categories (
+        id          SERIAL      PRIMARY KEY,
+        key         TEXT        NOT NULL UNIQUE,
+        label       TEXT,
+        icon        TEXT,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        is_builtin  BOOLEAN     NOT NULL DEFAULT FALSE,
+        created_by  TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      // Seed the three built-ins to match 058's CHECK values and the icons the
+      // view used to hardcode. ON CONFLICT DO NOTHING keeps re-runs a no-op and
+      // preserves any sort_order the planner has since dragged them into.
+      `INSERT INTO party_logistics_categories (key, label, icon, sort_order, is_builtin)
+       VALUES ('food', NULL, '🍽️', 1, TRUE),
+              ('drinks', NULL, '🥤', 2, TRUE),
+              ('other', NULL, '📦', 3, TRUE)
+       ON CONFLICT (key) DO NOTHING`,
+      `ALTER TABLE party_logistics_items DROP CONSTRAINT IF EXISTS party_logistics_category_chk`,
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'party_logistics_category_fk'
+         ) THEN
+           ALTER TABLE party_logistics_items
+             ADD CONSTRAINT party_logistics_category_fk
+             FOREIGN KEY (category) REFERENCES party_logistics_categories (key)
+             ON UPDATE CASCADE ON DELETE SET DEFAULT;
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_party_logistics_categories_sort
+         ON party_logistics_categories (sort_order, id)`,
+    ],
+  },
+  {
+    // Project plan for running the party as an operation: what gets picked up,
+    // set up, minded during the party, and packed away afterwards. The existing
+    // to-do list (059) answers "who is doing what"; this answers "how many
+    // helpers do we need, and when" — hence time_minutes and people_needed,
+    // which the admin view sums per phase into a staffing strip.
+    //
+    // Phases are data, not an enum, for the same reason logistics categories
+    // are (068): every party invents its own steps ("Sækja tjald", "Þrífa
+    // salinn") and none of them are worth a deploy. Same registry shape, same
+    // NULL-label-means-i18n-key convention, same is_builtin deletion guard.
+    // 'other' is the sweep target for ON DELETE SET DEFAULT so deleting a phase
+    // reparents its tasks instead of destroying planning work.
+    //
+    // linked_todo_id is a soft pointer at the per-person to-do list: a plan task
+    // can spawn or adopt a TODO so the person acting on it sees it in their own
+    // list. ON DELETE SET NULL — deleting the TODO unlinks, it does not delete
+    // the plan task, because the work still needs doing even if nobody is
+    // currently assigned to it.
+    //
+    // time_minutes and people_needed are nullable: "unknown yet" is a real and
+    // common state during planning, and NULL keeps it out of the totals rather
+    // than pretending an unestimated task takes zero minutes.
+    name: '069_party_plan',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_plan_phases (
+        id          SERIAL      PRIMARY KEY,
+        key         TEXT        NOT NULL UNIQUE,
+        label       TEXT,
+        icon        TEXT,
+        sort_order  INTEGER     NOT NULL DEFAULT 0,
+        is_builtin  BOOLEAN     NOT NULL DEFAULT FALSE,
+        created_by  TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `INSERT INTO party_plan_phases (key, label, icon, sort_order, is_builtin)
+       VALUES ('pickup',   NULL, '🚗', 1, TRUE),
+              ('setup',    NULL, '🔨', 2, TRUE),
+              ('during',   NULL, '🎉', 3, TRUE),
+              ('teardown', NULL, '🧹', 4, TRUE),
+              ('other',    NULL, '📦', 5, TRUE)
+       ON CONFLICT (key) DO NOTHING`,
+      `CREATE INDEX IF NOT EXISTS idx_party_plan_phases_sort
+         ON party_plan_phases (sort_order, id)`,
+      `CREATE TABLE IF NOT EXISTS party_plan_tasks (
+        id             SERIAL      PRIMARY KEY,
+        title          TEXT        NOT NULL,
+        notes          TEXT,
+        done           BOOLEAN     NOT NULL DEFAULT FALSE,
+        phase          TEXT        NOT NULL DEFAULT 'other'
+                                   REFERENCES party_plan_phases(key)
+                                   ON UPDATE CASCADE ON DELETE SET DEFAULT,
+        time_minutes   INTEGER     CHECK (time_minutes IS NULL OR time_minutes >= 0),
+        people_needed  INTEGER     CHECK (people_needed IS NULL OR people_needed >= 0),
+        assignees      JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        linked_todo_id INTEGER     REFERENCES party_todos(id) ON DELETE SET NULL,
+        sort_order     INTEGER     NOT NULL DEFAULT 0,
+        created_by     TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_party_plan_tasks_sort
+         ON party_plan_tasks (phase, sort_order, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_party_plan_tasks_linked
+         ON party_plan_tasks (linked_todo_id)`,
+    ],
+  },
+  {
+    // Photo album: turns party_photos from an images-only side table into the
+    // backing store for the guest-facing album, where guests dump whole camera
+    // rolls — photos and videos, originals kept at full quality.
+    //
+    // thumb_path exists because we keep originals and have no server-side image
+    // processing (no sharp anywhere in this project). The browser generates the
+    // thumbnail — a canvas downscale for photos, a captured poster frame for
+    // videos — and uploads it alongside the original, so the grid never pulls
+    // full-res files down a phone connection. It is NULLABLE on purpose: a
+    // browser that cannot decode the file (HEVC video, say) still gets to
+    // upload it, it just lands without a thumbnail. Losing the thumbnail must
+    // never cost us the original.
+    //
+    // media_type mirrors project_media's image/video CHECK rather than sniffing
+    // the extension at render time, so the frontend knows to render a <video>
+    // and a play badge without parsing file_path.
+    name: '070_party_photo_album',
+    statements: [
+      `ALTER TABLE party_photos
+         ADD COLUMN IF NOT EXISTS media_type TEXT NOT NULL DEFAULT 'image'`,
+      `ALTER TABLE party_photos
+         ADD COLUMN IF NOT EXISTS thumb_path TEXT`,
+      // Named constraint added separately so re-running the migration is a
+      // no-op; ADD CONSTRAINT has no IF NOT EXISTS in PostgreSQL 16.
+      `DO $$ BEGIN
+         ALTER TABLE party_photos
+           ADD CONSTRAINT party_photos_media_type_check
+           CHECK (media_type IN ('image', 'video'));
+       EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+      // (created_at DESC, id DESC) matches the default "newest first" ordering
+      // exactly, so paging through a few hundred rows stays an index scan.
+      `CREATE INDEX IF NOT EXISTS idx_party_photos_created
+         ON party_photos (created_at DESC, id DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_party_photos_user
+         ON party_photos (user_id)`,
+    ],
+  },
+  {
+    // The album is fully public by owner decision (2026-07-26): anyone who can
+    // reach /party can view and upload without an account, so uploads may have
+    // no owner — user_id becomes nullable. NULL means "anonymous visitor";
+    // such photos can only be deleted by admin/moderator, since there is no
+    // owner to claim them. The FK and its ON DELETE CASCADE are unchanged for
+    // rows that DO have an owner.
+    name: '071_party_photos_public',
+    statements: [
+      `ALTER TABLE party_photos ALTER COLUMN user_id DROP NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

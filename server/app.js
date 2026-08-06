@@ -81,6 +81,12 @@ app.use(helmet({
       scriptSrc:  ["'self'", 'https://www.googletagmanager.com'],
       styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc:     ["'self'", 'data:', 'https:'],
+      // blob: is needed for the party album's client-side video poster-frame
+      // capture (the picked file is loaded into a <video> via
+      // URL.createObjectURL, then drawn to canvas). Photos use
+      // createImageBitmap and never touch the DOM, so imgSrc needs no blob:.
+      // Explicit allowlist extension, not a defaultSrc relaxation.
+      mediaSrc:   ["'self'", 'blob:'],
       connectSrc: ["'self'", 'https://www.google-analytics.com', 'https://analytics.google.com'],
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
       objectSrc:  ["'none'"],
@@ -209,6 +215,14 @@ app.use('/api/v1/projects', (req, res, next) => {
   next();
 });
 app.use('/api/v1/party', (req, res, next) => {
+  // EXEMPT: POST /photos (album upload). Guests bulk-upload whole camera rolls
+  // after the party — 90 writes/15 min would stall a batch after ~90 files.
+  // The album is fully PUBLIC by owner decision (2026-07-26) — no auth on the
+  // route — so the dedicated abuse backstop (partyUploadLimiter, 1000/15 min,
+  // in partyRoutes.js) plus CSRF are the only gates. DELETE /photos/:id
+  // deliberately stays under writeLimiter — deletes are rare and need no bulk
+  // allowance.
+  if (req.method === 'POST' && req.path === '/photos') return next();
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }

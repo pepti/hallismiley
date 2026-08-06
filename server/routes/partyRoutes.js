@@ -6,7 +6,7 @@ const router    = express.Router();
 
 const partyController              = require('../controllers/partyController');
 const { _checkInviteAccess }       = require('../controllers/partyController');
-const { requireAuth }              = require('../auth/middleware');
+const { requireAuth, optionalAuth } = require('../auth/middleware');
 const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
 const { validatePartyRequest }     = require('../middleware/validate');
@@ -67,6 +67,46 @@ const partyPhotoUpload = multer({
     cb(err);
   },
   limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+// ── Party album media upload (photos + videos, originals kept) ─────────────────
+// Separate from partyPhotoUpload so /cover-image keeps its images-only 10 MB
+// posture. Two fields per request: 'file' is the original (image or video),
+// 'thumb' is a small browser-generated preview (canvas downscale / video poster
+// frame) — images only. The 2 GB fileSize is a sanity cap, not a product limit:
+// originals are stored untouched and multer streams to disk, so the practical
+// ceiling is Azure's ~230 s front-end request timeout, not memory.
+const PARTY_MEDIA_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+const PARTY_MEDIA_VIDEO_MIMES = ['video/mp4', 'video/webm', 'video/quicktime'];
+
+const partyMediaUpload = multer({
+  storage: partyPhotoStorage,
+  fileFilter(req, file, cb) {
+    const allowed = file.fieldname === 'thumb'
+      ? PARTY_MEDIA_IMAGE_MIMES
+      : [...PARTY_MEDIA_IMAGE_MIMES, ...PARTY_MEDIA_VIDEO_MIMES];
+    if ((file.fieldname === 'file' || file.fieldname === 'thumb') &&
+        allowed.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    const err = new Error('Only images (jpg, png, webp) and videos (mp4, webm, mov) are allowed');
+    err.code = 'INVALID_TYPE';
+    cb(err);
+  },
+  limits: { fileSize: 2 * 1024 ** 3, files: 2 },
+});
+
+// Album uploads: guests bulk-upload whole camera rolls, so this is a
+// deliberately generous abuse backstop (auth + party access + CSRF are the real
+// gates), NOT a UX throttle. Pairs with the writeLimiter carve-out for
+// POST /api/v1/party/photos in app.js.
+const partyUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: isTest,
+  message: { error: 'Too many uploads. Try again shortly.', code: 429 },
 });
 
 // ── requirePartyAccess — invited users only ────────────────────────────────────
@@ -166,6 +206,25 @@ router.patch('/guests/:id/rsvp-status',
   requireAuth, requireRole('admin'), csrfProtect,
   partyController.setGuestRsvpStatus);
 
+// Admin edits a guest's display name from the attendance table. Body
+// { display_name }. Email stays read-only (it's the login identity).
+router.patch('/guests/:id/profile',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestProfile);
+
+// Admin overwrites a guest's RSVP answers from the attendance table. Body
+// { answers } keyed by form field id — same shape as the guest's own RSVP.
+router.patch('/guests/:id/answers',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestAnswers);
+
+// Admin records the guest's CURRENT companion plan ("RSVP Stýring") — plus-one,
+// kids count and ages — after phone/text updates, without touching the guest's
+// own RSVP answers. Body { plus_one?, kids_count?, kids_ages? }.
+router.patch('/guests/:id/companions',
+  requireAuth, requireRole('admin'), csrfProtect,
+  partyController.setGuestCompanions);
+
 // Send one email per recipient (privacy: no shared To:) to going + maybe
 // guests. Admin-only — moderators can view guests but can't blast emails
 // under the host's name. Body { subject?, body?, includeMaybe? }.
@@ -178,6 +237,18 @@ router.post('/email-going',
 router.post('/owner-invite',
   requireAuth, requireRole('admin'), emailBlastLimiter, csrfProtect,
   partyController.ownerInvite);
+
+// Manually add a single guest. Body { name, email?, status?, invite? }.
+// Admin-only. With invite:true this sends a magic-link email, so it has to sit
+// behind the same blast limiter as the other send routes — but only then: a
+// verbal add sends nothing and shouldn't burn the quota.
+router.post('/guests',
+  requireAuth, requireRole('admin'),
+  (req, res, next) => (req.body?.invite === true
+    ? emailBlastLimiter(req, res, next)
+    : next()),
+  csrfProtect,
+  partyController.addGuest);
 
 // Guests awaiting approval — backs the admin pending-requests list.
 router.get('/pending-requests',
@@ -194,7 +265,24 @@ router.post('/logistics',
   partyController.addLogisticsItem);
 
 // Specific logistics actions MUST be declared before the /:id routes,
-// otherwise Express matches them as PATCH/DELETE on an item with id="reorder".
+// otherwise Express matches them as PATCH/DELETE on an item with id="reorder"
+// (or id="categories").
+router.get('/logistics/categories',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listLogisticsCategories);
+
+router.post('/logistics/categories',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addLogisticsCategory);
+
+router.patch('/logistics/categories/:key',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updateLogisticsCategory);
+
+router.delete('/logistics/categories/:key',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deleteLogisticsCategory);
+
 router.post('/logistics/reorder',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.reorderLogistics);
@@ -250,6 +338,49 @@ router.delete('/todos/:todoId/subtasks/:id',
   requireAuth, requireRole('admin', 'moderator'), csrfProtect,
   partyController.deleteSubtask);
 
+// ── Project plan (admin/moderator) ────────────────────────────────────────────
+router.get('/plan',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listPlanTasks);
+
+router.post('/plan',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addPlanTask);
+
+// Phases and reorder MUST precede /plan/:id, else Express matches "phases" and
+// "reorder" as task ids.
+router.get('/plan/phases',
+  requireAuth, requireRole('admin', 'moderator'),
+  partyController.listPlanPhases);
+
+router.post('/plan/phases',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.addPlanPhase);
+
+router.patch('/plan/phases/:key',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updatePlanPhase);
+
+router.delete('/plan/phases/:key',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deletePlanPhase);
+
+router.post('/plan/reorder',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.reorderPlanTasks);
+
+router.post('/plan/:id/create-todo',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.createTodoFromPlanTask);
+
+router.patch('/plan/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.updatePlanTask);
+
+router.delete('/plan/:id',
+  requireAuth, requireRole('admin', 'moderator'), csrfProtect,
+  partyController.deletePlanTask);
+
 // ── Guestbook ─────────────────────────────────────────────────────────────────
 router.post('/guestbook',
   requireAuth, requirePartyAccess, csrfProtect,
@@ -264,10 +395,19 @@ router.delete('/guestbook/:id',
   partyController.deleteGuestbookEntry);
 
 // ── Photos ────────────────────────────────────────────────────────────────────
+// Deliberately UNAUTHENTICATED (owner decision 2026-07-26): the album is fully
+// public — anyone reaching /party can view and upload without an account, so
+// there is no requireAuth/requirePartyAccess here. CSRF still applies (the
+// token endpoint is public) and partyUploadLimiter is the abuse backstop.
+// DELETE keeps requireAuth: anonymous uploads have no owner, so only the
+// owner (for account uploads) or admin/moderator can remove a photo.
 router.post('/photos',
-  requireAuth, requirePartyAccess, csrfProtect,
+  optionalAuth, csrfProtect, partyUploadLimiter,
   (req, res, next) => {
-    partyPhotoUpload.single('file')(req, res, (err) => {
+    partyMediaUpload.fields([
+      { name: 'file', maxCount: 1 },
+      { name: 'thumb', maxCount: 1 },
+    ])(req, res, (err) => {
       if (err instanceof multer.MulterError) {
         return res.status(400).json({ error: `Upload error: ${err.message}`, code: 400 });
       }
@@ -280,11 +420,16 @@ router.post('/photos',
   partyController.uploadPhoto);
 
 router.get('/photos',
-  requireAuth, requirePartyAccess,
   partyController.getPhotos);
 
+// Streams the whole album as one zip. Public like the rest of the album;
+// GETs only face the global limiter, and the response is a single long
+// stream, so no dedicated limiter is needed.
+router.get('/photos/archive',
+  partyController.downloadArchive);
+
 router.delete('/photos/:id',
-  requireAuth, requirePartyAccess, csrfProtect,
+  requireAuth, csrfProtect,
   partyController.deletePhoto);
 
 module.exports = router;

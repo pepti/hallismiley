@@ -1,8 +1,9 @@
 import { t } from '../i18n/i18n.js';
 
 export class Lightbox {
-  constructor(items = []) {
+  constructor(items = [], opts = {}) {
     this._items   = items;
+    this._opts    = opts;
     this._index   = 0;
     this._el      = null;
     this._onKey   = this._onKey.bind(this);
@@ -25,14 +26,24 @@ export class Lightbox {
       <div class="lb-backdrop"></div>
       <div class="lb-container">
         <button class="lb-close" aria-label="${t('lightbox.close')}">&#x2715;</button>
-        <button class="lb-arrow lb-arrow--prev" aria-label="${t('lightbox.previous')}">&#x2039;</button>
+        ${this._opts.download ? `
+        <a class="lb-download" href="" download aria-label="${t('lightbox.download')}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>` : ''}
         <div class="lb-media-wrap">
           <img class="lb-img" src="" alt="" draggable="false">
           <video class="lb-video" controls playsinline></video>
           <p class="lb-caption"></p>
         </div>
-        <button class="lb-arrow lb-arrow--next" aria-label="${t('lightbox.next')}">&#x203A;</button>
-        <div class="lb-counter" aria-live="polite"></div>
+        <div class="lb-controls">
+          <button class="lb-arrow lb-arrow--prev" aria-label="${t('lightbox.previous')}">&#x2039;</button>
+          <div class="lb-counter" aria-live="polite"></div>
+          <button class="lb-arrow lb-arrow--next" aria-label="${t('lightbox.next')}">&#x203A;</button>
+        </div>
       </div>
     `;
 
@@ -47,6 +58,7 @@ export class Lightbox {
     this._prevBtn   = this._el.querySelector('.lb-arrow--prev');
     this._nextBtn   = this._el.querySelector('.lb-arrow--next');
     this._closeBtn  = this._el.querySelector('.lb-close');
+    this._download  = this._el.querySelector('.lb-download');
 
     // Event listeners
     this._closeBtn.addEventListener('click', () => this.close());
@@ -115,6 +127,9 @@ export class Lightbox {
     this._nextBtn.disabled    = this._index === total - 1;
     this._caption.textContent = item.caption || '';
     this._caption.hidden      = !item.caption;
+
+    // Same-origin /assets/... URLs, so the download attribute is honored.
+    if (this._download) this._download.href = item.file_path;
 
     if (item.media_type === 'video') {
       this._img.hidden   = true;
