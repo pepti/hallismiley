@@ -5,8 +5,14 @@
 let _user = null; // cached user info from last successful session check
 let _csrfToken = null;
 
-function _dispatch() {
-  window.dispatchEvent(new CustomEvent('authchange', { detail: { authenticated: isAuthenticated() } }));
+// `reason: 'login'` marks the transitions where the user deliberately signed in
+// on this page (password login, party magic link, post-signup Continue) as
+// opposed to a session simply being restored on page load. cart.js uses it to
+// decide whether a guest basket should be folded into the account's basket.
+function _dispatch(reason = null) {
+  window.dispatchEvent(new CustomEvent('authchange', {
+    detail: { authenticated: isAuthenticated(), reason },
+  }));
 }
 
 export function getUser()         { return _user; }
@@ -80,7 +86,7 @@ export async function login(username, password) {
   if (!res.ok) throw new Error(data.error || 'Login failed');
   _user = data.user;
   _csrfToken = null; // refresh CSRF after login
-  _dispatch();
+  _dispatch('login');
   return data;
 }
 
@@ -97,15 +103,19 @@ export async function partyMagicLogin(token) {
   if (!res.ok) throw new Error(data.error || 'Sign-in failed');
   _user = data.user;
   _csrfToken = null; // refresh CSRF after login
-  _dispatch();
+  _dispatch('login');
   return data;
 }
 
 export async function logout() {
-  _user = null;
-  _csrfToken = null;
+  _csrfToken = null; // force a fresh CSRF token for the logout POST
   const headers = await _csrfHeaders();
   await fetch('/auth/logout', { method: 'POST', credentials: 'include', headers }).catch(() => {});
+  // Cleared only once the round-trips are done and we're about to notify
+  // listeners. Clearing it first would flip the per-account cart key to ::guest
+  // while the UI still showed the signed-in basket, so a qty change or remove
+  // during that window wrote the ex-user's lines into the guest basket.
+  _user = null;
   _dispatch();
 }
 
@@ -145,7 +155,7 @@ export async function signup(data) {
 /** Notify the app that auth state changed. Used by SignupView to sync the
  *  NavBar after the user clicks Continue from the welcome screen. */
 export function notifyAuthChange() {
-  _dispatch();
+  _dispatch('login');
 }
 
 export async function verifyEmail(token) {

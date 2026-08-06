@@ -1,8 +1,21 @@
 // Client-side shopping cart. State lives in localStorage so guests can shop
-// without any backend state and the nav badge updates across tabs/views.
+// without any backend state and the nav badge updates across tabs/views. The
+// basket is NAMESPACED PER ACCOUNT (`…::<userId>`, or `…::guest`) so one account
+// never inherits another's basket on a shared browser; currency stays a global
+// preference.
+import { getUser } from './auth.js';
 
-const ITEMS_KEY    = 'shop.cart.items';
-const CURRENCY_KEY = 'shop.cart.currency';
+const ITEMS_NS     = 'shop.cart.items';    // per-account → `${ITEMS_NS}::${owner}`
+const CURRENCY_KEY = 'shop.cart.currency'; // global preference, not account-specific
+
+// One-time migration: drop the pre-namespacing global key so a basket left by a
+// previous session/account can't leak into — or be adopted by — the next login.
+try {
+  localStorage.removeItem(ITEMS_NS);
+} catch { /* ignore */ }
+
+const _ownerId  = () => { const u = getUser(); return u && u.id != null ? String(u.id) : 'guest'; };
+const _itemsKey = () => `${ITEMS_NS}::${_ownerId()}`;
 
 const _listeners = new Set();
 
@@ -16,7 +29,7 @@ function _emit() {
 
 function _load() {
   try {
-    const raw = localStorage.getItem(ITEMS_KEY);
+    const raw = localStorage.getItem(_itemsKey());
     const items = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(items)) return [];
     return items;
@@ -27,7 +40,7 @@ function _load() {
 
 function _save(items) {
   try {
-    localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+    localStorage.setItem(_itemsKey(), JSON.stringify(items));
   } catch (err) {
     console.warn('[cart] failed to save', err);
   }
@@ -126,7 +139,7 @@ export function remove(lineKey) {
 export { lineKeyOf };
 
 export function clear() {
-  localStorage.removeItem(ITEMS_KEY);
+  localStorage.removeItem(_itemsKey());
   _emit();
 }
 
@@ -135,10 +148,69 @@ export function subscribe(fn) {
   return () => _listeners.delete(fn);
 }
 
-// Listen to storage events from other tabs so the badge stays in sync.
+// Listen to storage events from other tabs so the badge stays in sync. Item keys
+// are per-account (`shop.cart.items::<owner>`), so match by namespace prefix.
 window.addEventListener('storage', (e) => {
-  if (e.key === ITEMS_KEY || e.key === CURRENCY_KEY) _emit();
+  if (!e.key) return;
+  if (e.key === CURRENCY_KEY || e.key.startsWith(ITEMS_NS)) _emit();
 });
+
+// The basket is keyed per account — when the signed-in user changes, re-emit so
+// the cart badge + cart view re-read the now-current account's basket.
+//
+// Signing in is the one transition where the previous basket must carry over:
+// shopping as a guest and then logging in at checkout is a normal flow, and
+// dropping the basket there would look like the cart silently emptied itself.
+//
+// The merge is deliberately narrow. It runs only on an explicit sign-in
+// (`detail.reason === 'login'`), never on a session restored at page load —
+// otherwise a leftover guest basket on a shared browser would be adopted by
+// whoever's session happens to resume. Account → guest (logout) and
+// account → account never merge; that direction is the leak the per-account
+// namespacing exists to prevent.
+let _lastOwner = _ownerId();
+window.addEventListener('authchange', (e) => {
+  const owner = _ownerId();
+  if (owner !== _lastOwner) {
+    const isLogin = e && e.detail && e.detail.reason === 'login';
+    if (isLogin && _lastOwner === 'guest' && owner !== 'guest') _mergeGuestBasketInto(owner);
+    _lastOwner = owner;
+  }
+  _emit();
+});
+
+// Fold the guest basket into the signed-in account's basket, then clear it so a
+// later logout doesn't resurrect lines the user already carried into the account.
+// Quantities add up per line; the account's own lines win on any other field.
+function _mergeGuestBasketInto(owner) {
+  const guestKey = `${ITEMS_NS}::guest`;
+  let guestItems = [];
+  try {
+    const raw = localStorage.getItem(guestKey);
+    guestItems = raw ? JSON.parse(raw) : [];
+  } catch { /* unreadable guest basket — nothing to merge */ }
+  if (!Array.isArray(guestItems) || !guestItems.length) return;
+
+  const ownerKey = `${ITEMS_NS}::${owner}`;
+  let items = [];
+  try {
+    const raw = localStorage.getItem(ownerKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) items = parsed;
+  } catch { /* unreadable account basket — treat as empty */ }
+
+  for (const g of guestItems) {
+    const i = items.findIndex(x => lineKeyOf(x) === lineKeyOf(g));
+    if (i >= 0) items[i].qty = Number(items[i].qty || 0) + Number(g.qty || 0);
+    else items.push(g);
+  }
+  try {
+    localStorage.setItem(ownerKey, JSON.stringify(items));
+    localStorage.removeItem(guestKey);
+  } catch (err) {
+    console.warn('[cart] failed to merge guest basket', err);
+  }
+}
 
 export function formatMoney(amount, currency = getCurrency()) {
   if (currency === 'ISK') {

@@ -29,6 +29,7 @@ const adminNavRoutes = require('./routes/adminNavRoutes');
 const adminRolesRoutes = require('./routes/adminRolesRoutes');
 const adminBinsRoutes = require('./routes/adminBinsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
+const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -254,10 +255,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Redirect HTTP → HTTPS in production (skip /health so internal probes aren't redirected)
+// Redirect HTTP → HTTPS in production (skip the probes so internal health checks
+// aren't redirected — the canonical-host middleware below exempts the same two)
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
-    if (req.path === '/health') return next();
+    if (req.path === '/health' || req.path === '/ready') return next();
     if (req.headers['x-forwarded-proto'] !== 'https') {
       return res.redirect(301, `https://${req.headers.host}${req.url}`);
     }
@@ -484,6 +486,7 @@ app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1
 app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

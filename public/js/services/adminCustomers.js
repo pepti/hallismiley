@@ -34,6 +34,66 @@ export async function adminPreviewCustomerImport(rows) {
   return data; // { counts }
 }
 
+// ── Bulk welcome invites ─────────────────────────────────────────────────────
+
+export async function adminGetInvitePreview() {
+  const res  = await fetch('/api/v1/admin/customers/send-invites/preview', { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load invite preview');
+  return data; // { count, candidates, emailConfigured, template, defaults }
+}
+
+export async function adminRenderInvitePreview({ locale, subject, heading, body }) {
+  const res = await fetch('/api/v1/admin/customers/send-invites/render', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify({ locale, subject, heading, body }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Preview failed');
+  return data.html;
+}
+
+export async function adminSaveInviteTemplate(patch) {
+  const token = await getCSRFToken();
+  const res = await fetch('/api/v1/admin/customers/invite-template', {
+    method:      'PATCH',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) },
+    body:        JSON.stringify(patch),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Save failed');
+  return data.template;
+}
+
+export async function adminSendBulkInvites({ recipientIds } = {}) {
+  const token = await getCSRFToken();
+  const res = await fetch('/api/v1/admin/customers/send-invites', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) },
+    body:        JSON.stringify(recipientIds ? { recipientIds } : {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Send failed');
+  return data; // { sent, failed, devLinks? }
+}
+
+export async function adminDeleteCustomers(userIds) {
+  const token = await getCSRFToken();
+  const res = await fetch('/api/v1/admin/customers/delete', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) },
+    body:        JSON.stringify({ userIds }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Delete failed');
+  return data; // { accounts, deletedAccounts }
+}
+
 export async function adminApplyCustomerImport(rows) {
   const token = await getCSRFToken();
   const res = await fetch('/api/v1/admin/customers/import', {
