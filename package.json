@@ -51,7 +51,7 @@
     "stripe": "^22.0.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
+    "@babel/core": "^8.0.1",
     "@babel/preset-env": "^7.29.2",
     "@playwright/test": "^1.59.0",
     "babel-jest": "^30.3.0",
