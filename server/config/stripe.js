@@ -17,7 +17,7 @@ function getStripe() {
     throw err;
   }
 
-  // eslint-disable-next-line global-require
+
   const Stripe = require('stripe');
   _client = new Stripe(key, {
     // Pin a specific API version so Stripe library upgrades don't silently

@@ -426,9 +426,9 @@ export class AdminCustomersView {
         if (result.devLinks?.length) {
           // Dev convenience (Resend not configured) — surface the links somewhere
           // copyable. console is deliberate here: dev-only, never in production.
-          // eslint-disable-next-line no-console
+
           console.log('[Send invites] Dev links (Resend not configured — copy these):');
-          // eslint-disable-next-line no-console
+
           result.devLinks.forEach(({ email, link }) => console.log(` ${email}: ${link}`));
         }
       }

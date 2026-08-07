@@ -166,7 +166,7 @@ const Customer = {
     if (!ids.length) return { deletedAccounts: [] };
 
     const client = await pool.connect();
-    let deletedAccounts = [];
+    let deletedAccounts;
     try {
       await client.query('BEGIN');
       // Guards here MUST match the DELETE below exactly — an account we snapshot
