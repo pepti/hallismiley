@@ -1,5 +1,10 @@
-/* Bókhald screens. Uses the admin shell's existing tokens rather than introducing
-   a second palette — see admin-shell.css. */
+/* Bókhald screens.
+
+   Uses the project theme tokens from variables.css (--bg-surface, --border-dim,
+   --text-muted, --accent-amber, --bg-hover), which themes.css re-defines per
+   theme. Do NOT introduce a parallel --admin-* namespace: no such tokens exist,
+   so every var() would silently fall back to its literal and the screens would
+   ignore the theme switcher entirely. */
 
 .admin-books__head {
   display: flex;
@@ -15,7 +20,7 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: var(--admin-text-muted, #8b8b8b);
+  color: var(--text-muted);
 }
 
 /* ── Standing warnings ─────────────────────────────────────────────────────── */
@@ -52,8 +57,8 @@
 }
 
 .books-stat {
-  background: var(--admin-panel, #1a1a1a);
-  border: 1px solid var(--admin-border, #2a2a2a);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
   border-radius: 10px;
   padding: 0.95rem 1rem;
 }
@@ -62,7 +67,7 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--admin-text-muted, #8b8b8b);
+  color: var(--text-muted);
 }
 .books-stat__value {
   font-size: 1.4rem;
@@ -74,7 +79,7 @@
 .books-stat__hint {
   font-size: 0.78rem;
   line-height: 1.35;
-  color: var(--admin-text-muted, #8b8b8b);
+  color: var(--text-muted);
 }
 
 /* ── Sections and columns ──────────────────────────────────────────────────── */
@@ -104,11 +109,11 @@
 .books-table--clickable tbody tr { cursor: pointer; }
 .books-table--clickable tbody tr:hover,
 .books-table--clickable tbody tr:focus-visible {
-  background: var(--admin-hover, rgba(255, 255, 255, 0.04));
+  background: var(--bg-hover);
   outline: none;
 }
 
-.books-muted { color: var(--admin-text-muted, #8b8b8b); font-size: 0.8rem; }
+.books-muted { color: var(--text-muted); font-size: 0.8rem; }
 
 .books-sort {
   background: none;
@@ -118,10 +123,10 @@
   font: inherit;
   cursor: pointer;
 }
-.books-sort.is-active { color: var(--admin-accent, #d98b3a); }
+.books-sort.is-active { color: var(--accent-amber); }
 
 .books-totals table { max-width: 420px; margin-left: auto; }
-.books-totals__grand td { font-weight: 600; border-top: 1px solid var(--admin-border, #2a2a2a); }
+.books-totals__grand td { font-weight: 600; border-top: 1px solid var(--border-dim); }
 
 /* ── Status pills ──────────────────────────────────────────────────────────── */
 
@@ -136,7 +141,7 @@
 .books-pill--ok    { background: rgba(80, 180, 120, 0.15); border-color: rgba(80, 180, 120, 0.4); color: #7ac89a; }
 .books-pill--warn  { background: rgba(214, 158, 46, 0.15); border-color: rgba(214, 158, 46, 0.4); color: #e0b155; }
 .books-pill--info  { background: rgba(90, 140, 220, 0.15); border-color: rgba(90, 140, 220, 0.4); color: #8fb2e8; }
-.books-pill--muted { background: rgba(255, 255, 255, 0.06); border-color: var(--admin-border, #2a2a2a); color: var(--admin-text-muted, #8b8b8b); }
+.books-pill--muted { background: rgba(255, 255, 255, 0.06); border-color: var(--border-dim); color: var(--text-muted); }
 
 /* ── Filters, forms, pager ─────────────────────────────────────────────────── */
 
@@ -149,8 +154,8 @@
 .books-filters input[type='search'] { flex: 1 1 260px; }
 
 .books-form {
-  background: var(--admin-panel, #1a1a1a);
-  border: 1px solid var(--admin-border, #2a2a2a);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
   border-radius: 10px;
   padding: 1rem;
 }
@@ -159,7 +164,7 @@
   display: block;
   margin-bottom: 0.7rem;
   font-size: 0.82rem;
-  color: var(--admin-text-muted, #8b8b8b);
+  color: var(--text-muted);
 }
 .books-form input,
 .books-form select { width: 100%; margin-top: 0.25rem; }
@@ -172,5 +177,5 @@
   gap: 0.75rem;
   margin-top: 1rem;
   font-size: 0.85rem;
-  color: var(--admin-text-muted, #8b8b8b);
+  color: var(--text-muted);
 }

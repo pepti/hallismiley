@@ -30,6 +30,7 @@ const db = require('../../config/database');
 const logger = require('../../logger');
 const { assertIntegerIsk } = require('../../utils/vat');
 const { periodForDate, periodBounds } = require('../../utils/vatPeriod');
+const { toIsoDate, todayIso } = require('../../utils/booksDate');
 
 class LedgerError extends Error {
   constructor(message, status = 400, code) {
@@ -231,21 +232,26 @@ async function postEntry(client, entry) {
     );
   }
 
-  const entryNumber = await nextCounter(client, 'journal_entry');
+  // Built as a DRAFT first, then flipped to posted once its lines exist. Two
+  // reasons, in order of importance:
+  //   1. It lets the database refuse line INSERTs into a posted entry outright.
+  //      If entries were born posted, that guard would have to allow appends and
+  //      posted history could be rewritten by adding a balanced pair of lines.
+  //   2. The gapless counter is consumed at the very end, so the row lock that
+  //      serialises ALL document creation is held for one statement instead of
+  //      across the whole line insert.
   const { rows } = await client.query(
     `INSERT INTO journal_entries
-       (entry_number, entry_date, memo, source_type, source_id, document_id,
-        reverses_entry_id, is_correction, posted_at, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
-     RETURNING id, entry_number, entry_date`,
-    [entryNumber, date, String(memo).trim(), sourceType, sourceId, documentId,
+       (entry_date, memo, source_type, source_id, document_id,
+        reverses_entry_id, is_correction, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, entry_date`,
+    [date, String(memo).trim(), sourceType, sourceId, documentId,
       reversesEntryId, Boolean(isCorrection), createdBy]
   );
   const created = rows[0];
 
-  // One multi-row INSERT rather than a loop: the counter row is locked until
-  // COMMIT, so every extra round-trip here is time the whole system spends
-  // serialised behind invoice numbering.
+  // One multi-row INSERT rather than a loop.
   const values = [];
   const params = [];
   prepared.forEach((line, i) => {
@@ -259,11 +265,19 @@ async function postEntry(client, entry) {
     params
   );
 
+  const entryNumber = await nextCounter(client, 'journal_entry');
+  const { rows: postedRows } = await client.query(
+    `UPDATE journal_entries SET posted_at = NOW(), entry_number = $2
+      WHERE id = $1 RETURNING id, entry_number, entry_date`,
+    [created.id, entryNumber]
+  );
+  const posted = postedRows[0];
+
   logger.info(
-    { entryId: created.id, entryNumber: created.entry_number, sourceType, period, lineCount: prepared.length },
+    { entryId: posted.id, entryNumber: Number(posted.entry_number), sourceType, period, lineCount: prepared.length },
     'ledger entry posted'
   );
-  return { ...created, period };
+  return { ...posted, entry_number: Number(posted.entry_number), period };
 }
 
 /**
@@ -387,20 +401,20 @@ async function postDraft(client, draftId, { createdBy } = {}) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Accounting dates are DATE columns: a calendar day, not an instant. Normalising
-// through UTC keeps the day stable regardless of server timezone.
+// Accounting dates are DATE columns: a calendar day, not an instant.
+//
+// Delegates to the shared helper rather than doing its own `toISOString()` —
+// which reads the UTC day and, on a server at a positive offset, moves a late
+// evening transaction into the next day and sometimes into the next VSK period.
+// One conversion, used everywhere, is the only way the app and the DB triggers
+// agree on which period a document belongs to.
 function normaliseDate(value) {
-  if (value === undefined || value === null) {
-    return new Date().toISOString().slice(0, 10);
-  }
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-    return value.trim();
-  }
-  const d = value instanceof Date ? value : new Date(String(value));
-  if (Number.isNaN(d.getTime())) {
+  if (value === undefined || value === null) return todayIso();
+  try {
+    return toIsoDate(value);
+  } catch (err) {
     throw new LedgerError(`Invalid accounting date: ${value}`, 400, 'INVALID_DATE');
   }
-  return d.toISOString().slice(0, 10);
 }
 
 // Run `fn` inside a transaction, handing it a dedicated client.

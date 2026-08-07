@@ -150,7 +150,13 @@ function isExport(customerCountry) {
 function buildLines({ order, items, rate, exportSale }) {
   if (!items.length) throw new InvoiceError('That order has no items to invoice', 400, 'NO_LINES');
 
-  const vatRateFor = item => (exportSale ? 0 : (item.vat_rate ?? STANDARD_VAT_RATE));
+  // Zero-rating applies to EXPORTED GOODS. A service is taxed where it is
+  // performed, so joinery or software work done in Iceland stays at the standard
+  // rate even when the customer is abroad — VSK act art. 12 enumerates the narrow
+  // cases where a service to a non-resident is zero-rated, and blanket-zeroing them
+  // under-declares output VAT. `order_items` carries no per-item rate today, so
+  // goods take the standard rate unless exported.
+  const vatRateFor = item => (exportSale && !item.is_service ? 0 : STANDARD_VAT_RATE);
 
   // Gross per line in the ORDER's currency and minor units.
   const grossMinor = items.map(it =>
@@ -169,19 +175,34 @@ function buildLines({ order, items, rate, exportSale }) {
   const parts = grossMinor.slice();
   if (shippingMinor > 0) parts.push(shippingMinor);
 
-  // Translate every part plus the order total in one go, so the parts are
-  // reconciled to the total rather than each rounded independently.
+  // THE authoritative figure is what the customer actually paid, translated once:
+  // round(order.total × rate). Everything else is fitted around it.
+  //
+  // Anchoring instead on round((total + discount) × rate) and subtracting a
+  // separately rounded round(discount × rate) is off by up to a króna, because
+  // round(a + b) − round(b) ≠ round(a). That króna made the invoice disagree with
+  // the payment, so it could never settle and eventually read "overdue".
   const orderTotalMinor = assertIntegerIsk(order.total, 'order.total');
-  const { lines: iskParts, total: iskTotal } = convertLinesToIsk(
+  const iskInvoiceTotal = convertLinesToIsk([orderTotalMinor], order.currency, rate).lines[0];
+
+  // Pre-discount line grosses, translated. Their sum is only a starting point —
+  // the discount allocation below is what makes them reconcile to the total.
+  const { lines: iskParts } = convertLinesToIsk(
     parts, order.currency, rate, orderTotalMinor + discountMinor
   );
+  const iskPartsTotal = iskParts.reduce((a, b) => a + b, 0);
 
-  // Allocate the order-level discount across the ISK line grosses. Weighting by
-  // line size keeps each line's effective rate the same as the order's, so the
-  // per-rate VAT split stays honest.
-  const iskDiscount = discountMinor > 0
-    ? convertLinesToIsk([discountMinor], order.currency, rate).lines[0]
-    : 0;
+  // The discount is whatever it takes to bring the translated parts down to the
+  // authoritative total — derived, not translated independently, so the two can
+  // never disagree. Allocated by line size so each line keeps its effective rate
+  // and the per-rate VAT split stays honest.
+  const iskDiscount = iskPartsTotal - iskInvoiceTotal;
+  if (iskDiscount < 0) {
+    throw new InvoiceError(
+      `Order ${order.order_number} totals more than the sum of its lines; refusing to issue an invoice that does not reconcile`,
+      500, 'RECONCILIATION_FAILED'
+    );
+  }
   const discountAlloc = iskDiscount > 0
     ? allocateProportional(iskDiscount, iskParts)
     : iskParts.map(() => 0);
@@ -240,10 +261,9 @@ function buildLines({ order, items, rate, exportSale }) {
   // invoice is wrong and it is better to refuse than to issue a document that
   // disagrees with what the customer paid.
   const grossSum = built.reduce((a, l) => a + l.line_gross, 0);
-  const expected = iskTotal - iskDiscount;
-  if (grossSum !== expected) {
+  if (grossSum !== iskInvoiceTotal) {
     throw new InvoiceError(
-      `Invoice lines total ${grossSum} ISK but the order totals ${expected} ISK — refusing to issue a document that does not reconcile`,
+      `Invoice lines total ${grossSum} ISK but the order totals ${iskInvoiceTotal} ISK — refusing to issue a document that does not reconcile`,
       500, 'RECONCILIATION_FAILED'
     );
   }
@@ -317,7 +337,10 @@ async function createFromOrder(client, orderId, opts = {}) {
     );
   }
 
-  const seller = await Setting.getBookkeepingSettings();
+  // Read through the caller's client: this runs inside a transaction that already
+  // holds a pool connection and a FOR UPDATE lock on the order, so a pool read here
+  // would both break isolation and, under concurrency, deadlock on connections.
+  const seller = await Setting.getBookkeepingSettings(client);
   if (!seller.seller_complete) {
     // Refusing outright rather than issuing with placeholders: an invoice without a
     // real kennitala and VSK number is not legally valid, and the customer cannot
@@ -358,7 +381,7 @@ async function createFromOrder(client, orderId, opts = {}) {
        subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
        zero_rate_reason, note, status, created_by
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,'issued',$26)
+               $19,$20,$21,$22,$23,$24,$25,'draft',$26)
      RETURNING *`,
     [
       series, invoiceNumber, order.id, order.user_id,
@@ -373,9 +396,16 @@ async function createFromOrder(client, orderId, opts = {}) {
       seller.invoice_note, createdBy,
     ]
   );
-  const invoice = invRows[0];
+  await insertLines(client, invRows[0].id, totals.lines);
 
-  await insertLines(client, invoice.id, totals.lines);
+  // Flip to 'issued' only once the lines exist. The database refuses line inserts
+  // into an issued invoice, so from this statement on its content is final and the
+  // only way to change what the customer owes is a credit note.
+  const { rows: issuedRows } = await client.query(
+    `UPDATE invoices SET status = 'issued' WHERE id = $1 RETURNING *`,
+    [invRows[0].id]
+  );
+  const invoice = issuedRows[0];
 
   const entry = await ledger.postEntry(client, {
     entryDate: issuedAt,
@@ -442,22 +472,32 @@ async function insertLines(client, invoiceId, lines) {
 // ── Payments ─────────────────────────────────────────────────────────────────
 
 /**
- * Record a payment against an invoice.
+ * Record money moving between the customer and the business.
  *
- * Idempotency is by an explicit caller-supplied key, NOT by a time window over
- * amount+method. The system this replaces deduped on "same amount, same method,
- * received_at within 10 seconds", using the CALLER'S timestamp — so two genuine
- * transfers of the same amount recorded with the same received_at silently became
- * one, returning HTTP 200 and a "payment recorded" message for money that was
- * never booked. A key makes a retry idempotent and two real payments distinct.
+ * `direction: 'in'` is a payment; `'out'` is a refund disbursement. Both share
+ * this path because they are the same kind of fact with opposite signs, and the
+ * idempotency, immutability and audit machinery should not be duplicated.
+ *
+ * Idempotency is by an explicit caller-supplied key scoped TO THE INVOICE, not by
+ * a time window over amount+method. Two things this avoids:
+ *   - the previous system's 10-second window over the CALLER'S own timestamp,
+ *     which silently swallowed the second of two genuine identical transfers;
+ *   - a globally unique key, where a caller reusing a key across invoices matched
+ *     the first invoice's payment and returned a cheerful 200 for money never
+ *     booked against the second.
+ * A key that has been used on a DIFFERENT invoice is an error, not a no-op.
  */
-async function recordPayment(client, invoiceId, opts = {}) {
+async function recordSettlement(client, invoiceId, opts = {}) {
   const {
-    amount, method, receivedAt, reference = '', idempotencyKey, createdBy, requestId = null,
+    amount, method, receivedAt, reference = '', idempotencyKey, createdBy,
+    requestId = null, direction = 'in',
   } = opts;
-  if (!createdBy) throw new InvoiceError('recordPayment requires createdBy', 500);
+  if (!createdBy) throw new InvoiceError('recordSettlement requires createdBy', 500);
   if (!idempotencyKey || !String(idempotencyKey).trim()) {
-    throw new InvoiceError('recordPayment requires an idempotencyKey', 500);
+    throw new InvoiceError('recordSettlement requires an idempotencyKey', 500);
+  }
+  if (direction !== 'in' && direction !== 'out') {
+    throw new InvoiceError(`Unknown settlement direction: ${direction}`, 500);
   }
   if (!Object.prototype.hasOwnProperty.call(PAYMENT_ACCOUNTS, method)) {
     throw new InvoiceError(
@@ -466,78 +506,119 @@ async function recordPayment(client, invoiceId, opts = {}) {
     );
   }
   const value = assertIntegerIsk(amount, 'amount');
-  if (value <= 0) throw new InvoiceError('A payment must be greater than zero', 400, 'BAD_AMOUNT');
+  if (value <= 0) throw new InvoiceError('An amount must be greater than zero', 400, 'BAD_AMOUNT');
 
-  // A retry of the same request is a no-op that reports the invoice unchanged.
-  const { rows: dup } = await client.query(
-    `SELECT p.id, p.invoice_id FROM payments p WHERE p.idempotency_key = $1`,
-    [String(idempotencyKey)]
-  );
-  if (dup.length) {
-    const invoice = await findById(client, dup[0].invoice_id);
-    return { invoice, payment_id: dup[0].id, created: false };
-  }
-
+  // Lock the invoice FIRST, then check the key. Checking before the lock let two
+  // concurrent retries of the same request both pass, and the loser hit the unique
+  // index as a raw 23505 — a 500 in exactly the situation idempotency exists for.
   const { rows: invRows } = await client.query(
     `SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [String(invoiceId)]
   );
   const invoice = invRows[0];
   if (!invoice) throw new InvoiceError('Invoice not found', 404, 'NOT_FOUND');
+
+  const { rows: dup } = await client.query(
+    `SELECT id, direction, amount FROM payments
+      WHERE invoice_id = $1 AND idempotency_key = $2`,
+    [invoice.id, String(idempotencyKey)]
+  );
+  if (dup.length) {
+    return { invoice: await findById(client, invoice.id), payment_id: dup[0].id, created: false };
+  }
+  // The same key against a different invoice means the caller is generating keys
+  // per batch rather than per settlement. Refusing loudly is the only way that
+  // mistake surfaces before money goes missing.
+  const { rows: elsewhere } = await client.query(
+    `SELECT p.id, i.invoice_number FROM payments p
+       JOIN invoices i ON i.id = p.invoice_id
+      WHERE p.idempotency_key = $1 AND p.invoice_id <> $2 LIMIT 1`,
+    [String(idempotencyKey), invoice.id]
+  );
+  if (elsewhere.length) {
+    throw new InvoiceError(
+      `That idempotency key was already used on invoice ${elsewhere[0].invoice_number}; use a fresh key per settlement`,
+      409, 'KEY_REUSED'
+    );
+  }
+
   if (invoice.status === 'cancelled') {
-    throw new InvoiceError('That invoice is cancelled; it cannot take a payment', 409, 'INVALID_STATE');
+    throw new InvoiceError('That invoice is cancelled; it cannot be settled', 409, 'INVALID_STATE');
   }
   if (invoice.status === 'draft') {
     throw new InvoiceError('That invoice has not been issued yet', 409, 'INVALID_STATE');
   }
 
-  const outstanding = Number(invoice.total_gross) - Number(invoice.amount_paid) - Number(invoice.amount_credited);
-  if (value > outstanding) {
-    throw new InvoiceError(
-      `Payment of ${value} ISK exceeds the ${outstanding} ISK still outstanding on invoice ${invoice.invoice_number}`,
-      422, 'OVERPAYMENT'
-    );
+  if (direction === 'in') {
+    const outstanding = outstandingOf(invoice);
+    if (value > outstanding) {
+      throw new InvoiceError(
+        `Payment of ${value} ISK exceeds the ${outstanding} ISK still outstanding on invoice ${invoice.invoice_number}`,
+        422, 'OVERPAYMENT'
+      );
+    }
+  } else {
+    // You cannot hand back more than you actually received.
+    const refundable = Number(invoice.amount_paid) - Number(invoice.amount_refunded);
+    if (value > refundable) {
+      throw new InvoiceError(
+        `Refund of ${value} ISK exceeds the ${refundable} ISK received on invoice ${invoice.invoice_number}`,
+        422, 'OVERREFUND'
+      );
+    }
   }
 
   const paidOn = receivedAt
     ? assertAccountingDate(receivedAt, 'received_at')
     : todayIso();
-  // A payment cannot land before the invoice existed.
+  // Money cannot move before the invoice existed.
   if (paidOn < toIsoDate(invoice.issued_at)) {
     throw new InvoiceError(
-      `Payment date ${paidOn} is before invoice ${invoice.invoice_number} was issued (${toIsoDate(invoice.issued_at)})`,
+      `Date ${paidOn} is before invoice ${invoice.invoice_number} was issued (${toIsoDate(invoice.issued_at)})`,
       400, 'BAD_DATE'
     );
   }
 
   const { rows: payRows } = await client.query(
-    `INSERT INTO payments (invoice_id, amount, method, received_at, reference, idempotency_key, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [invoice.id, value, method, paidOn, String(reference).slice(0, 200), String(idempotencyKey), createdBy]
+    `INSERT INTO payments (invoice_id, direction, amount, method, received_at, reference, idempotency_key, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [invoice.id, direction, value, method, paidOn,
+      String(reference).slice(0, 200), String(idempotencyKey), createdBy]
   );
   const paymentId = payRows[0].id;
 
-  // Money in, receivable down. The debit account depends on the method — a card
-  // payment lands in the acquirer clearing account, not the bank.
+  // Money in: Dr cash-or-clearing / Cr AR. Money out: the mirror. The cash-side
+  // account depends on the method — a card settlement lands in the acquirer
+  // clearing account, not the bank, or the bank reconciliation cannot be done.
+  const cashAccount = PAYMENT_ACCOUNTS[method];
   const entry = await ledger.postEntry(client, {
     entryDate: paidOn,
-    memo: `Innborgun á reikning ${invoice.invoice_number}`,
+    memo: direction === 'in'
+      ? `Innborgun á reikning ${invoice.invoice_number}`
+      : `Endurgreiðsla á reikning ${invoice.invoice_number}`,
     sourceType: 'payment',
     sourceId: paymentId,
     createdBy,
-    lines: [
-      { accountCode: PAYMENT_ACCOUNTS[method], debit: value, memo: `Innborgun (${method})` },
-      { accountCode: AR_ACCOUNT, credit: value, memo: 'Viðskiptakrafa greidd' },
-    ],
+    lines: direction === 'in'
+      ? [
+        { accountCode: cashAccount, debit: value, memo: `Innborgun (${method})` },
+        { accountCode: AR_ACCOUNT, credit: value, memo: 'Viðskiptakrafa greidd' },
+      ]
+      : [
+        { accountCode: AR_ACCOUNT, debit: value, memo: 'Endurgreiðsla til viðskiptavinar' },
+        { accountCode: cashAccount, credit: value, memo: `Endurgreiðsla (${method})` },
+      ],
   });
 
   const { rows: updated } = await client.query(
-    `UPDATE invoices SET amount_paid = amount_paid + $2 WHERE id = $1 RETURNING *`,
+    direction === 'in'
+      ? `UPDATE invoices SET amount_paid = amount_paid + $2 WHERE id = $1 RETURNING *`
+      : `UPDATE invoices SET amount_refunded = amount_refunded + $2 WHERE id = $1 RETURNING *`,
     [invoice.id, value]
   );
 
   await audit.record(client, {
     actorId: createdBy,
-    action: 'payment.recorded',
+    action: direction === 'in' ? 'payment.recorded' : 'payment.refunded',
     entityType: 'invoice',
     entityId: invoice.id,
     requestId,
@@ -545,14 +626,41 @@ async function recordPayment(client, invoiceId, opts = {}) {
       invoice_number: Number(invoice.invoice_number),
       amount: value,
       method,
+      direction,
       received_at: paidOn,
       journal_entry_number: entry.entry_number,
     },
   });
 
-  logger.info({ invoiceId: invoice.id, paymentId, method, period: entry.period }, 'payment recorded');
+  logger.info(
+    { invoiceId: invoice.id, paymentId, method, direction, period: entry.period },
+    direction === 'in' ? 'payment recorded' : 'refund recorded'
+  );
   return { invoice: updated[0], payment_id: paymentId, created: true, journal_entry: entry };
 }
+
+// What the customer still owes: the invoice, less what was credited, less what was
+// paid, plus anything handed back.
+function outstandingOf(invoice) {
+  return Number(invoice.total_gross)
+    - Number(invoice.amount_credited)
+    - Number(invoice.amount_paid)
+    + Number(invoice.amount_refunded);
+}
+
+const recordPayment = (client, invoiceId, opts = {}) =>
+  recordSettlement(client, invoiceId, { ...opts, direction: 'in' });
+
+/**
+ * Record money going back to the customer.
+ *
+ * This is the SECOND half of a refund and is deliberately separate from the credit
+ * note: the credit note reverses the sale (revenue and output VAT), this records
+ * the cash leaving. Doing only one of the two leaves either a receivable that will
+ * never be collected or VAT owed on a sale that was undone.
+ */
+const recordRefund = (client, invoiceId, opts = {}) =>
+  recordSettlement(client, invoiceId, { ...opts, direction: 'out' });
 
 // ── Credit notes ─────────────────────────────────────────────────────────────
 
@@ -625,11 +733,30 @@ async function issueCreditNote(client, invoiceId, opts = {}) {
     vat: Number(r.vat),
     gross: Number(r.gross),
   }));
-  const shares = allocateProportional(value, buckets.map(b => b.gross));
+  const invoiceGross = buckets.reduce((a, b) => a + b.gross, 0);
+  const isFullCredit = alreadyCredited + value >= invoiceGross;
+
+  // The net/VAT split of a credit comes from the amounts the invoice ACTUALLY
+  // RECORDED, apportioned — never re-derived from the credited gross.
+  //
+  // Re-deriving loses the invoice's own rounding: two lines of 101 ISK charge
+  // round(101×24/124) twice = 40 ISK VAT, but splitVatInclusive(202) gives 39. A
+  // "full" credit would leave 1 ISK of output VAT standing on a sale that no
+  // longer exists — and that króna flows straight into the VSK return. A full
+  // credit therefore reverses the recorded figures exactly; a partial one
+  // apportions them and the residual stays with the uncredited remainder.
+  const grossShares = allocateProportional(value, buckets.map(b => b.gross));
   const creditByRate = buckets.map((b, i) => {
-    const grossShare = shares[i];
-    const split = splitVatInclusive(grossShare, b.rate);
-    return { rate: b.rate, gross: grossShare, net: split.net, vat: split.vat };
+    const grossShare = grossShares[i];
+    if (grossShare === 0) return { rate: b.rate, gross: 0, net: 0, vat: 0 };
+    if (isFullCredit && alreadyCredited === 0) {
+      // Reverse this rate bucket exactly as it was booked.
+      return { rate: b.rate, gross: b.gross, net: b.net, vat: b.vat };
+    }
+    // Apportion the RECORDED vat for this bucket by the credited share of it,
+    // then let net absorb the remainder so net + vat === gross holds exactly.
+    const vatShare = b.gross === 0 ? 0 : Math.round((b.vat * grossShare) / b.gross);
+    return { rate: b.rate, gross: grossShare, net: grossShare - vatShare, vat: vatShare };
   }).filter(b => b.gross > 0);
 
   const creditNet = creditByRate.reduce((a, b) => a + b.net, 0);
@@ -684,7 +811,7 @@ async function issueCreditNote(client, invoiceId, opts = {}) {
     lines: legs,
   });
 
-  const fullyCredited = alreadyCredited + value >= Number(invoice.total_gross);
+  const fullyCredited = isFullCredit;
   const { rows: updated } = await client.query(
     `UPDATE invoices
         SET amount_credited = amount_credited + $2,
@@ -727,6 +854,9 @@ async function findById(client, id) {
 module.exports = {
   InvoiceError,
   recordPayment,
+  recordRefund,
+  recordSettlement,
+  outstandingOf,
   issueCreditNote,
   findById,
   PAYMENT_ACCOUNTS,

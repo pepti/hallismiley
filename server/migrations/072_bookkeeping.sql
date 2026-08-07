@@ -5,11 +5,10 @@
 --   Reglugerd 505/2013 gr. 16 -> gapless number series per document type
 --   Bokhaldslog 145/1994 gr. 10a -> books kept in ISK (BIGINT minor units)
 --
--- Authoritative copy lives in server/config/schema.js; this file is for
--- human reference and manual psql application. Generated from that array,
--- so if the two ever disagree, schema.js wins.
+-- Authoritative copy lives in server/config/schema.js; this file is for human
+-- reference and manual psql application. It is GENERATED from that array — do
+-- not hand-edit it, and if the two ever disagree, schema.js wins.
 
-CREATE TABLE IF NOT EXISTS ledger_accounts (
 CREATE TABLE IF NOT EXISTS ledger_accounts (
         id                 TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
         code               TEXT        NOT NULL UNIQUE,
@@ -114,6 +113,11 @@ CREATE TABLE IF NOT EXISTS invoices (
         shipping_gross        BIGINT      NOT NULL DEFAULT 0 CHECK (shipping_gross >= 0),
         amount_paid           BIGINT      NOT NULL DEFAULT 0 CHECK (amount_paid >= 0),
         amount_credited       BIGINT      NOT NULL DEFAULT 0 CHECK (amount_credited >= 0),
+        -- Money returned to the customer. A refund is TWO separate facts and needs
+        -- two counters: the credit note reverses the SALE (amount_credited), and
+        -- the disbursement records the CASH leaving (amount_refunded). Collapsing
+        -- them makes a paid-then-refunded invoice unrepresentable.
+        amount_refunded       BIGINT      NOT NULL DEFAULT 0 CHECK (amount_refunded >= 0),
         zero_rate_reason      TEXT,
         note                  TEXT        NOT NULL DEFAULT '',
         status                TEXT        NOT NULL DEFAULT 'issued'
@@ -123,8 +127,15 @@ CREATE TABLE IF NOT EXISTS invoices (
         updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         CONSTRAINT invoices_totals_consistent
           CHECK (subtotal_net + vat_total = total_gross),
-        CONSTRAINT invoices_settled_within_total
-          CHECK (amount_paid + amount_credited <= total_gross),
+        -- Each counter is bounded by its own meaning rather than by a combined sum.
+        -- The obvious-looking "paid + credited <= total" is
+        -- WRONG: a fully paid invoice that is then fully refunded legitimately has
+        -- both at the full amount, and that constraint made the entire refund flow
+        -- impossible (the credit note wrote its rows, then the invoice UPDATE
+        -- violated the CHECK and rolled the whole transaction back).
+        CONSTRAINT invoices_paid_within_total    CHECK (amount_paid <= total_gross),
+        CONSTRAINT invoices_credited_within_total CHECK (amount_credited <= total_gross),
+        CONSTRAINT invoices_refund_within_paid   CHECK (amount_refunded <= amount_paid),
         CONSTRAINT invoices_fx_audit
           CHECK ((original_currency = 'ISK') = (original_total_gross IS NULL)),
         CONSTRAINT invoices_due_after_issue CHECK (due_at >= issued_at)
@@ -188,15 +199,24 @@ CREATE INDEX IF NOT EXISTS idx_invoice_lines_vat_rate ON invoice_lines (invoice_
 CREATE TABLE IF NOT EXISTS payments (
         id               TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
         invoice_id       TEXT        NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+        -- 'in'  = money received from the customer
+        -- 'out' = money returned to them (a refund disbursement)
+        -- One settlement ledger with a direction, rather than a second table:
+        -- both sides share the same idempotency, immutability and audit machinery,
+        -- and the amount stays positive so the CHECK still means what it says.
+        direction        TEXT        NOT NULL DEFAULT 'in' CHECK (direction IN ('in','out')),
         amount           BIGINT      NOT NULL CHECK (amount > 0),
         method           TEXT        NOT NULL
                                      CHECK (method IN ('bank_transfer','cash','card','stripe','other')),
         received_at      TIMESTAMPTZ NOT NULL,
         reference        TEXT        NOT NULL DEFAULT '',
-        idempotency_key  TEXT        NOT NULL UNIQUE,
+        idempotency_key  TEXT        NOT NULL,
         created_by       TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_payments_invoice_idempotency
+         ON payments (invoice_id, idempotency_key);
 
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments (invoice_id, received_at);
 
@@ -536,14 +556,25 @@ CREATE OR REPLACE FUNCTION books_forbid_posted_line_mutation()
        RETURNS TRIGGER AS $$
        DECLARE v_posted TIMESTAMPTZ;
        BEGIN
+         IF TG_OP = 'UPDATE' AND NEW.entry_id IS DISTINCT FROM OLD.entry_id THEN
+           RAISE EXCEPTION 'A journal line cannot be moved between entries (Reglugerd 505/2013 gr. 9)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
          SELECT posted_at INTO v_posted FROM journal_entries
-           WHERE id = COALESCE(OLD.entry_id, NEW.entry_id);
+           WHERE id = OLD.entry_id;
          IF v_posted IS NOT NULL THEN
            RAISE EXCEPTION 'Lines of a posted journal entry cannot be altered or deleted (Reglugerd 505/2013 gr. 9)'
              USING ERRCODE = 'restrict_violation';
          END IF;
-         IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-         RETURN NEW;
+         IF TG_OP = 'UPDATE' THEN
+           SELECT posted_at INTO v_posted FROM journal_entries WHERE id = NEW.entry_id;
+           IF v_posted IS NOT NULL THEN
+             RAISE EXCEPTION 'A journal line cannot be attached to a posted entry (Reglugerd 505/2013 gr. 9)'
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+           RETURN NEW;
+         END IF;
+         RETURN OLD;
        END; $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_journal_lines_append_only ON journal_lines;
@@ -551,6 +582,24 @@ DROP TRIGGER IF EXISTS trg_journal_lines_append_only ON journal_lines;
 CREATE TRIGGER trg_journal_lines_append_only
          BEFORE UPDATE OR DELETE ON journal_lines
          FOR EACH ROW EXECUTE FUNCTION books_forbid_posted_line_mutation();
+
+CREATE OR REPLACE FUNCTION books_forbid_line_insert_into_posted()
+       RETURNS TRIGGER AS $$
+       DECLARE v_posted TIMESTAMPTZ;
+       BEGIN
+         SELECT posted_at INTO v_posted FROM journal_entries WHERE id = NEW.entry_id;
+         IF v_posted IS NOT NULL THEN
+           RAISE EXCEPTION 'Lines cannot be added to a posted journal entry (Reglugerd 505/2013 gr. 9)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_journal_lines_no_insert_posted ON journal_lines;
+
+CREATE TRIGGER trg_journal_lines_no_insert_posted
+         BEFORE INSERT ON journal_lines
+         FOR EACH ROW EXECUTE FUNCTION books_forbid_line_insert_into_posted();
 
 CREATE OR REPLACE FUNCTION books_assert_entry_balanced()
        RETURNS TRIGGER AS $$
@@ -636,21 +685,37 @@ CREATE OR REPLACE FUNCTION books_protect_issued_invoice()
            END IF;
            RETURN OLD;
          END IF;
-         IF OLD.status = 'draft' THEN RETURN NEW; END IF;
+         IF OLD.status = 'draft' THEN
+           -- The only way out of 'draft' is issuance. Anything else is a typo.
+           IF NEW.status NOT IN ('draft', 'issued', 'cancelled') THEN
+             RAISE EXCEPTION 'A draft invoice can only become issued or cancelled, not %', NEW.status
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+           RETURN NEW;
+         END IF;
+         -- Issued: status may only move FORWARD. Without a transition whitelist an
+         -- invoice could be laundered back to 'draft', edited freely, and re-issued
+         -- — three statements that defeat everything below.
+         IF NEW.status NOT IN ('issued', 'credited', 'cancelled') THEN
+           RAISE EXCEPTION 'Invoice % cannot return to %; it has been issued (Reglugerd 505/2013 gr. 9)', OLD.invoice_number, NEW.status
+             USING ERRCODE = 'restrict_violation';
+         END IF;
          -- Issued: only settlement and status may move.
-         IF (NEW.series, NEW.invoice_number, NEW.order_id,
+         IF (NEW.series, NEW.invoice_number, NEW.order_id, NEW.user_id,
              NEW.seller_name, NEW.seller_kennitala, NEW.seller_vat_number, NEW.seller_address,
              NEW.customer_name, NEW.customer_kennitala, NEW.customer_email, NEW.customer_address,
              NEW.customer_country, NEW.issued_at, NEW.due_at, NEW.terms_days,
              NEW.currency, NEW.original_currency, NEW.original_total_gross, NEW.fx_rate,
+             NEW.zero_rate_reason,
              NEW.subtotal_net, NEW.vat_total, NEW.total_gross, NEW.discount_total,
              NEW.shipping_gross, NEW.note, NEW.created_by)
             IS DISTINCT FROM
-            (OLD.series, OLD.invoice_number, OLD.order_id,
+            (OLD.series, OLD.invoice_number, OLD.order_id, OLD.user_id,
              OLD.seller_name, OLD.seller_kennitala, OLD.seller_vat_number, OLD.seller_address,
              OLD.customer_name, OLD.customer_kennitala, OLD.customer_email, OLD.customer_address,
              OLD.customer_country, OLD.issued_at, OLD.due_at, OLD.terms_days,
              OLD.currency, OLD.original_currency, OLD.original_total_gross, OLD.fx_rate,
+             OLD.zero_rate_reason,
              OLD.subtotal_net, OLD.vat_total, OLD.total_gross, OLD.discount_total,
              OLD.shipping_gross, OLD.note, OLD.created_by)
          THEN
@@ -670,8 +735,12 @@ CREATE OR REPLACE FUNCTION books_protect_issued_invoice_line()
        RETURNS TRIGGER AS $$
        DECLARE v_status TEXT; v_number BIGINT;
        BEGIN
+         IF TG_OP = 'UPDATE' AND NEW.invoice_id IS DISTINCT FROM OLD.invoice_id THEN
+           RAISE EXCEPTION 'An invoice line cannot be moved between invoices (Reglugerd 505/2013 gr. 9)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
          SELECT status, invoice_number INTO v_status, v_number FROM invoices
-           WHERE id = COALESCE(OLD.invoice_id, NEW.invoice_id);
+           WHERE id = OLD.invoice_id;
          -- No row: the parent draft is being deleted in this transaction.
          IF v_status IS NOT NULL AND v_status <> 'draft' THEN
            RAISE EXCEPTION 'Lines of issued invoice % cannot be altered or deleted (Reglugerd 505/2013 gr. 9)', v_number
@@ -686,6 +755,25 @@ DROP TRIGGER IF EXISTS trg_invoice_lines_immutable ON invoice_lines;
 CREATE TRIGGER trg_invoice_lines_immutable
          BEFORE UPDATE OR DELETE ON invoice_lines
          FOR EACH ROW EXECUTE FUNCTION books_protect_issued_invoice_line();
+
+CREATE OR REPLACE FUNCTION books_forbid_invoice_line_insert_into_issued()
+       RETURNS TRIGGER AS $$
+       DECLARE v_status TEXT; v_number BIGINT;
+       BEGIN
+         SELECT status, invoice_number INTO v_status, v_number FROM invoices
+           WHERE id = NEW.invoice_id;
+         IF v_status IS NOT NULL AND v_status <> 'draft' THEN
+           RAISE EXCEPTION 'Lines cannot be added to issued invoice % (Reglugerd 505/2013 gr. 9)', v_number
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_invoice_lines_no_insert_issued ON invoice_lines;
+
+CREATE TRIGGER trg_invoice_lines_no_insert_issued
+         BEFORE INSERT ON invoice_lines
+         FOR EACH ROW EXECUTE FUNCTION books_forbid_invoice_line_insert_into_issued();
 
 CREATE OR REPLACE FUNCTION books_forbid_any_mutation()
        RETURNS TRIGGER AS $$

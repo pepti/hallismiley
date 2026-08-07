@@ -286,9 +286,10 @@ describe('append-only enforcement (Reglugerð 505/2013 gr. 9)', () => {
     )).rejects.toThrow(/cannot be altered/);
   });
 
-  it('refuses an unbalanced entry written by raw SQL, bypassing the service', async () => {
-    // Defence in depth: the deferred constraint trigger is the backstop for any
-    // future writer that does not go through postEntry.
+  it('refuses to attach a line to an already-posted entry, even by raw SQL', async () => {
+    // The first line of defence, and the reason postEntry builds a draft and only
+    // then flips it: if entries could be born posted, appending a BALANCED PAIR of
+    // lines afterwards would rewrite posted history and pass every other check.
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
@@ -296,14 +297,54 @@ describe('append-only enforcement (Reglugerð 505/2013 gr. 9)', () => {
         `INSERT INTO journal_entries (entry_number, entry_date, memo, source_type, posted_at, created_by)
          VALUES (990001, '2026-07-26', 'raw', 'manual', NOW(), $1) RETURNING id`, [adminId]);
       const acct = await client.query(`SELECT id FROM ledger_accounts WHERE code = '1100'`);
+      await expect(client.query(
+        `INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES ($1, $2, 500, 0)`,
+        [rows[0].id, acct.rows[0].id]
+      )).rejects.toThrow(/cannot be added to a posted/i);
+    } finally {
+      await client.query('ROLLBACK').catch(() => {});
+      client.release();
+    }
+  });
+
+  it('refuses to POST an unbalanced draft written by raw SQL, bypassing the service', async () => {
+    // Second line of defence: the deferred constraint trigger, which is the
+    // backstop for any future writer that does not go through postEntry.
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `INSERT INTO journal_entries (entry_date, memo, source_type, created_by)
+         VALUES ('2026-07-26', 'raw draft', 'manual', $1) RETURNING id`, [adminId]);
+      const acct = await client.query(`SELECT id FROM ledger_accounts WHERE code = '1100'`);
       await client.query(
         `INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES ($1, $2, 500, 0)`,
         [rows[0].id, acct.rows[0].id]);
+      await client.query(
+        `UPDATE journal_entries SET posted_at = NOW(), entry_number = 990002 WHERE id = $1`,
+        [rows[0].id]);
       await expect(client.query('COMMIT')).rejects.toThrow(/unbalanced/i);
     } finally {
       await client.query('ROLLBACK').catch(() => {});
       client.release();
     }
+  });
+
+  it('refuses to move a journal line between entries', async () => {
+    // Reparenting was the subtler half of the same hole: moving a balanced PAIR
+    // out of a draft and into a posted entry left the target balanced, so only a
+    // check on the DESTINATION parent catches it.
+    const posted = await ledger.withTransaction(client => ledger.postEntry(client, {
+      entryDate: '2026-07-26', memo: 'target', sourceType: 'manual', createdBy: adminId,
+      lines: [{ accountCode: '1100', debit: 1000 }, { accountCode: '4110', credit: 1000 }],
+    }));
+    const draft = await ledger.withTransaction(client => ledger.createDraft(client, {
+      entryDate: '2026-07-26', memo: 'source', createdBy: adminId,
+      lines: [{ accountCode: '1100', debit: 500 }, { accountCode: '4110', credit: 500 }],
+    }));
+    await expect(db.query(
+      `UPDATE journal_lines SET entry_id = $1 WHERE entry_id = $2`, [posted.id, draft.id]
+    )).rejects.toThrow(/cannot be moved between entries/i);
   });
 });
 

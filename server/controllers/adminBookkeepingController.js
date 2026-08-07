@@ -217,29 +217,67 @@ async function createInvoiceFromOrder(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// Shared by the payment and refund endpoints — same request shape, opposite
+// direction of travel.
+function parseSettlementBody(req) {
+  const body = req.body || {};
+  const amount = parseAmount(body.amount, 'amount');
+  const method = parseEnum(body.method, PAYMENT_METHODS, 'method');
+  if (!method) throw new BadRequest(`method must be one of: ${PAYMENT_METHODS.join(', ')}`);
+  const receivedAt = body.received_at
+    ? assertAccountingDate(body.received_at, 'received_at') : todayIso();
+  const reference = parseText(body.reference, 'reference', { maxLen: 200 });
+  // The client supplies the key so a retried request is a no-op. Without one we
+  // cannot tell a retry from a second genuine payment of the same amount — so it
+  // is required rather than defaulted.
+  const idempotencyKey = parseText(body.idempotency_key, 'idempotency_key',
+    { maxLen: 100, required: true });
+  return { amount, method, receivedAt, reference, idempotencyKey };
+}
+
 async function recordPayment(req, res, next) {
   try {
     const id = parseId(req.params.id, 'invoice id');
-    const body = req.body || {};
-    const amount = parseAmount(body.amount, 'amount');
-    const method = parseEnum(body.method, PAYMENT_METHODS, 'method');
-    if (!method) throw new BadRequest(`method must be one of: ${PAYMENT_METHODS.join(', ')}`);
-    const receivedAt = body.received_at
-      ? assertAccountingDate(body.received_at, 'received_at') : todayIso();
-    const reference = parseText(body.reference, 'reference', { maxLen: 200 });
-    // The client supplies the key so a retried request is a no-op. Without one we
-    // cannot tell a retry from a second genuine payment of the same amount — so
-    // it is required rather than defaulted.
-    const idempotencyKey = parseText(body.idempotency_key, 'idempotency_key',
-      { maxLen: 100, required: true });
+    const settlement = parseSettlementBody(req);
 
     const result = await ledger.withTransaction(client =>
       invoiceService.recordPayment(client, id, {
-        amount, method, receivedAt, reference, idempotencyKey,
+        ...settlement,
         createdBy: req.user.id, requestId: req.requestId || null,
       })
     );
-    securityLogger.adminAction(req.user.id, 'books.payment.record', id, { method, created: result.created });
+    securityLogger.adminAction(req.user.id, 'books.payment.record', id, {
+      method: settlement.method, created: result.created,
+    });
+    res.status(result.created ? 201 : 200).json({
+      invoice: await Invoice.findById(id),
+      created: result.created,
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Record money going back to the customer.
+ *
+ * This is only HALF of a refund: it books the cash leaving. The sale itself is
+ * reversed by a credit note. The UI issues both, but they are separate endpoints
+ * because they are separate facts — a chargeback is a refund with no credit note,
+ * and a goodwill credit is a credit note with no refund.
+ */
+async function recordRefund(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'invoice id');
+    const settlement = parseSettlementBody(req);
+
+    const result = await ledger.withTransaction(client =>
+      invoiceService.recordRefund(client, id, {
+        ...settlement,
+        createdBy: req.user.id, requestId: req.requestId || null,
+      })
+    );
+    securityLogger.adminAction(req.user.id, 'books.payment.refund', id, {
+      method: settlement.method, created: result.created,
+    });
     res.status(result.created ? 201 : 200).json({
       invoice: await Invoice.findById(id),
       created: result.created,
@@ -301,15 +339,19 @@ async function getSettings(req, res, next) {
 async function updateSettings(req, res, next) {
   try {
     const settings = await Setting.updateBookkeepingSettings(req.body || {});
+    // Log the ACCEPTED field names, not the raw body keys — otherwise an admin can
+    // flood the security log with arbitrary strings up to the body limit.
     securityLogger.adminAction(req.user.id, 'books.settings.update', null, {
-      fields: Object.keys(req.body || {}),
+      fields: Object.keys(settings).filter(k => Object.prototype.hasOwnProperty.call(req.body || {}, k)),
     });
     logger.info({ actorId: req.user.id }, 'bookkeeping settings updated');
     res.json({ settings });
   } catch (err) {
-    // Setting.updateBookkeepingSettings throws plain Errors for validation; they
-    // are our own messages and safe to show, but must not become 500s.
-    if (err && !err.status) err.status = 400;
+    // Only OUR validation errors become 400s. Blanket-stamping every error as a
+    // client mistake echoed pg failures ("connect ECONNREFUSED 10.x.x.x:5432",
+    // constraint names) straight to the browser AND hid genuine outages from the
+    // central handler and Sentry, because fail() returns instead of calling next().
+    if (err instanceof Setting.SettingValidationError) err.status = 400;
     fail(res, err, next);
   }
 }
@@ -322,15 +364,25 @@ async function setFxRate(req, res, next) {
     const rate = Number(body.rate);
     if (!Number.isFinite(rate) || rate <= 0) throw new BadRequest('rate must be a positive number');
 
-    const row = await FxRate.set({ rateDate, currency, rate, source: 'manual', createdBy: req.user.id });
-    await ledger.withTransaction(client => audit.record(client, {
-      actorId: req.user.id,
-      action: 'fx.rate_set',
-      entityType: 'fx_rate',
-      entityId: `${currency}:${rateDate}`,
-      requestId: req.requestId || null,
-      summary: { currency, rate_date: rateDate, rate },
-    }));
+    // Rate and audit row in ONE transaction. Written separately, a failed audit
+    // write left a live rate with no record of who set it — and this rate scales
+    // the ISK total of every EUR invoice, so it is exactly the value that must be
+    // attributable.
+    const row = await ledger.withTransaction(async (client) => {
+      const saved = await FxRate.set(
+        { rateDate, currency, rate, source: 'manual', createdBy: req.user.id }, client
+      );
+      await audit.record(client, {
+        actorId: req.user.id,
+        action: 'fx.rate_set',
+        entityType: 'fx_rate',
+        entityId: `${currency}:${rateDate}`,
+        requestId: req.requestId || null,
+        summary: { currency, rate_date: rateDate, rate },
+      });
+      return saved;
+    });
+    securityLogger.adminAction(req.user.id, 'books.fx.set', `${currency}:${rateDate}`, { rate });
     res.status(201).json({ fx_rate: { ...row, rate: Number(row.rate), rate_date: toIsoDate(row.rate_date) } });
   } catch (err) { fail(res, err, next); }
 }
@@ -341,11 +393,12 @@ module.exports = {
   getInvoice,
   createInvoiceFromOrder,
   recordPayment,
+  recordRefund,
   createCreditNote,
   getInvoicePdf,
   getSettings,
   updateSettings,
   setFxRate,
-  // exported for unit tests
+  // Request-parsing helpers, unit-tested in tests/unit/bookscontrollerParse.test.js.
   _internals: { parsePagination, parseRange, parseAmount, parseEnum, parseId, parseText },
 };

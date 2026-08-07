@@ -117,6 +117,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // the modulus-11 check digit is validated in updateBookkeepingSettings.
 const KENNITALA_RE = /^\d{10}$/;
 
+// Validation failures the caller can act on and can safely be shown. Having a
+// distinct type is what lets the controller return a 400 for these without
+// blanket-stamping infrastructure errors as client mistakes and echoing pg
+// internals to the browser.
+class SettingValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'SettingValidationError';
+    this.status = 400;
+  }
+}
+
 class Setting {
   // Single value by key. Falls back to the baked-in default (or null) when no
   // row exists yet. pg parses JSONB columns to native JS values automatically.
@@ -127,8 +139,12 @@ class Setting {
   }
 
   // Map of { key: value } for the given keys, each falling back to its default.
-  static async getMany(keys) {
-    const { rows } = await db.query(
+  // `client` lets a caller inside a transaction read through ITS connection.
+  // Reading via the pool while the caller holds a pool client and row locks is a
+  // pool-exhaustion deadlock: with max=10, ten concurrent invoicings each hold a
+  // client and then all wait for an eleventh that never comes.
+  static async getMany(keys, client = db) {
+    const { rows } = await client.query(
       'SELECT key, value FROM app_settings WHERE key = ANY($1)',
       [keys]
     );
@@ -243,13 +259,13 @@ class Setting {
   // The seller block that goes on every invoice, plus the policy values the books
   // read. Every value is coerced here so a malformed row cannot reach a statutory
   // document or a tax calculation.
-  static async getBookkeepingSettings() {
+  static async getBookkeepingSettings(client = db) {
     const v = await this.getMany([
       KEYS.bkSellerName, KEYS.bkSellerKennitala, KEYS.bkSellerVatNumber, KEYS.bkSellerAddress,
       KEYS.bkPaymentTermsDays, KEYS.bkInvoiceNote, KEYS.bkMunicipality,
       KEYS.bkCorporateTaxRate, KEYS.bkAccountantName, KEYS.bkAccountantEmail,
       KEYS.bkCoaConfirmedAt,
-    ]);
+    ], client);
     const str = (val, dflt = '') => (typeof val === 'string' ? val : dflt);
     const terms = Number(v[KEYS.bkPaymentTermsDays]);
     const taxRate = Number(v[KEYS.bkCorporateTaxRate]);
@@ -284,10 +300,10 @@ class Setting {
     const textField = async (field, key, { maxLen = 200, required = false } = {}) => {
       if (!has(field)) return;
       const raw = patch[field];
-      if (typeof raw !== 'string') throw new Error(`${field} must be a string`);
+      if (typeof raw !== 'string') throw new SettingValidationError(`${field} must be a string`);
       const value = raw.trim();
-      if (required && !value) throw new Error(`${field} is required`);
-      if (value.length > maxLen) throw new Error(`${field} must be ${maxLen} characters or fewer`);
+      if (required && !value) throw new SettingValidationError(`${field} is required`);
+      if (value.length > maxLen) throw new SettingValidationError(`${field} must be ${maxLen} characters or fewer`);
       await this.set(key, value);
     };
 
@@ -298,10 +314,10 @@ class Setting {
     if (has('seller_kennitala')) {
       const digits = String(patch.seller_kennitala || '').replace(/\D/g, '');
       if (digits && !KENNITALA_RE.test(digits)) {
-        throw new Error('seller_kennitala must be 10 digits');
+        throw new SettingValidationError('seller_kennitala must be 10 digits');
       }
       if (digits && !isValidKennitala(digits)) {
-        throw new Error('seller_kennitala failed its check-digit validation — check for a typo');
+        throw new SettingValidationError('seller_kennitala failed its check-digit validation — check for a typo');
       }
       await this.set(KEYS.bkSellerKennitala, digits);
     }
@@ -309,7 +325,7 @@ class Setting {
       // VSK numbers are 5 or 6 digits (RSK issues them sequentially).
       const digits = String(patch.seller_vat_number || '').replace(/\D/g, '');
       if (digits && !/^\d{5,6}$/.test(digits)) {
-        throw new Error('seller_vat_number must be 5 or 6 digits');
+        throw new SettingValidationError('seller_vat_number must be 5 or 6 digits');
       }
       await this.set(KEYS.bkSellerVatNumber, digits);
     }
@@ -322,20 +338,20 @@ class Setting {
     if (has('payment_terms_days')) {
       const n = Number(patch.payment_terms_days);
       if (!Number.isInteger(n) || n < 0 || n > 365) {
-        throw new Error('payment_terms_days must be a whole number of days between 0 and 365');
+        throw new SettingValidationError('payment_terms_days must be a whole number of days between 0 and 365');
       }
       await this.set(KEYS.bkPaymentTermsDays, n);
     }
     if (has('corporate_tax_rate')) {
       const n = Number(patch.corporate_tax_rate);
       if (!Number.isFinite(n) || n < 0 || n >= 1) {
-        throw new Error('corporate_tax_rate must be a fraction between 0 and 1 (0.20 for 20%)');
+        throw new SettingValidationError('corporate_tax_rate must be a fraction between 0 and 1 (0.20 for 20%)');
       }
       await this.set(KEYS.bkCorporateTaxRate, n);
     }
     if (has('accountant_email')) {
       const e = String(patch.accountant_email || '').trim();
-      if (e && !EMAIL_RE.test(e)) throw new Error('accountant_email must be a valid email address');
+      if (e && !EMAIL_RE.test(e)) throw new SettingValidationError('accountant_email must be a valid email address');
       await this.set(KEYS.bkAccountantEmail, e);
     }
     if (has('coa_confirmed_at')) {
@@ -344,7 +360,7 @@ class Setting {
         await this.set(KEYS.bkCoaConfirmedAt, null);
       } else {
         const d = new Date(String(raw));
-        if (Number.isNaN(d.getTime())) throw new Error('coa_confirmed_at must be a valid date');
+        if (Number.isNaN(d.getTime())) throw new SettingValidationError('coa_confirmed_at must be a valid date');
         await this.set(KEYS.bkCoaConfirmedAt, d.toISOString().slice(0, 10));
       }
     }
@@ -367,6 +383,7 @@ function isValidKennitala(digits) {
   return check === Number(digits[8]);
 }
 
+Setting.SettingValidationError = SettingValidationError;
 Setting.KEYS = KEYS;
 Setting.isValidKennitala = isValidKennitala;
 Setting.DEFAULTS = DEFAULTS;

@@ -8,14 +8,13 @@
 // breakout. escHtml(t(...)) is the house rule here.
 import { escHtml } from '../utils/escHtml.js';
 import { t } from '../i18n/i18n.js';
+import { formatMoney } from '../services/cart.js';
 
-// ISK has no subunit. Formatted with the Icelandic thousands separator and " kr."
-// so the numbers read the way they do on a bank statement.
+// ISK amounts, formatted the same way as everywhere else in the app. Delegates to
+// the shop's formatter rather than carrying a third implementation — the books are
+// ISK-only, so the currency is fixed here.
 export function isk(amount) {
-  const n = Math.round(Number(amount) || 0);
-  const sign = n < 0 ? '-' : '';
-  const digits = String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${sign}${digits} kr.`;
+  return formatMoney(Math.round(Number(amount) || 0), 'ISK');
 }
 
 // A derived status, never a stored one — see server/models/Invoice.js.

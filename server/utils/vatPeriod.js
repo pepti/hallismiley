@@ -10,6 +10,8 @@
 // with naive date math produces a date that is right most years and quietly
 // wrong in the years that matter.
 
+const { toIsoDate } = require('./booksDate');
+
 const PERIODS_PER_YEAR = 6;
 const MIN_YEAR = 2000;
 const MAX_YEAR = 2100;
@@ -29,14 +31,23 @@ function periodKey(year, index) {
   return `${year}-P${index}`;
 }
 
-// Which period does this date fall in? Accepts a Date or an ISO 'YYYY-MM-DD'.
+// Which period does this date fall in? Accepts a Date, an ISO 'YYYY-MM-DD', or a
+// timestamp string.
+//
+// Goes through toIsoDate rather than reading UTC parts off a Date. node-postgres
+// hands back DATE columns as Date objects at LOCAL midnight, so `getUTCMonth()` on
+// a server at a positive offset reports the PREVIOUS day — which at a period
+// boundary silently files a transaction under the wrong VSK return.
 function periodForDate(date) {
-  const d = date instanceof Date ? date : new Date(String(date));
-  if (Number.isNaN(d.getTime())) throw new PeriodError(`Invalid date: ${date}`);
-  // Iceland runs on UTC+0 all year, so UTC parts and local parts agree. Using
-  // UTC explicitly keeps the boundary stable if the server is ever elsewhere.
-  const year = d.getUTCFullYear();
-  const month = d.getUTCMonth(); // 0-11
+  let iso;
+  try {
+    iso = toIsoDate(date);
+  } catch (err) {
+    throw new PeriodError(`Invalid date: ${date}`);
+  }
+  if (!iso) throw new PeriodError(`Invalid date: ${date}`);
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7)) - 1; // 0-11
   return periodKey(year, Math.floor(month / 2) + 1);
 }
 

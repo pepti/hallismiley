@@ -104,10 +104,35 @@ function readRateFile(filePath) {
 
 // ── Mode 3: configured feed ───────────────────────────────────────────────────
 
+// Hard caps on a response we do not control: a hung feed must not wedge a cron
+// job forever, and an unbounded body must not exhaust memory.
+const FEED_TIMEOUT_MS = 15000;
+const FEED_MAX_BYTES = 2 * 1024 * 1024;
+
 async function fetchFromFeed(url) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`Rate feed returned HTTP ${res.status} ${res.statusText}`);
-  const body = await res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  let text;
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+      redirect: 'error', // a redirect off the configured host is not the feed
+    });
+    if (!res.ok) throw new Error(`Rate feed returned HTTP ${res.status} ${res.statusText}`);
+    text = await res.text();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Rate feed did not respond within ${FEED_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (text.length > FEED_MAX_BYTES) {
+    throw new Error(`Rate feed returned more than ${FEED_MAX_BYTES} bytes; refusing to parse it`);
+  }
+  const body = JSON.parse(text);
   // Accept either a bare array or a { rates: [...] } envelope, since the exact
   // feed is operator-supplied.
   const list = Array.isArray(body) ? body : body.rates;
@@ -213,7 +238,11 @@ async function main() {
       return 2;
     }
     entries = await fetchFromFeed(url);
-    source = 'cbi';
+    // Recorded as operator-supplied, NOT as 'cbi'. Nothing here can verify that
+    // the configured URL really is the Central Bank, and a rate carrying an
+    // official provenance it did not earn is worse than one honestly labelled —
+    // the plausibility band is wide enough to hide a ~3x move.
+    source = 'manual';
     console.log(`Fetched ${entries.length} row(s) from the configured feed`);
   } else {
     usage();

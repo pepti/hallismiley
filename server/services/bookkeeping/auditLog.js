@@ -22,7 +22,7 @@ const logger = require('../../logger');
 // not create a silent second category that nobody ever queries.
 const ACTIONS = [
   'invoice.issued', 'invoice.cancelled', 'invoice.credited',
-  'payment.recorded',
+  'payment.recorded', 'payment.refunded',
   'credit_note.issued',
   'expense.created', 'expense.updated',
   'journal.posted', 'journal.reversed', 'journal.draft_posted',

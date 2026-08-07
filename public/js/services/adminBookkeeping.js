@@ -52,6 +52,11 @@ export const issueInvoiceForOrder = (orderId) =>
 export const recordPayment = (invoiceId, body) =>
   send('POST', `/invoices/${encodeURIComponent(invoiceId)}/payments`, body);
 
+// The cash half of undoing a sale. The credit note (below) is the other half —
+// see the note in AdminInvoiceDetailView for when you want one, the other, or both.
+export const recordRefund = (invoiceId, body) =>
+  send('POST', `/invoices/${encodeURIComponent(invoiceId)}/refunds`, body);
+
 export const issueCreditNote = (invoiceId, body) =>
   send('POST', `/invoices/${encodeURIComponent(invoiceId)}/credit-notes`, body);
 

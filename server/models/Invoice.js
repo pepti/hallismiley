@@ -29,14 +29,18 @@ const DISPLAY_STATUSES = ['draft', 'issued', 'paid', 'part_paid', 'overdue', 'cr
 function displayStatusExpr(alias = 'i') {
   return `CASE
     WHEN ${alias}.status IN ('cancelled','credited','draft') THEN ${alias}.status
-    WHEN ${alias}.amount_paid + ${alias}.amount_credited >= ${alias}.total_gross THEN 'paid'
+    WHEN ${alias}.total_gross - ${alias}.amount_credited - ${alias}.amount_paid
+         + ${alias}.amount_refunded <= 0 THEN 'paid'
     WHEN ${alias}.due_at < NOW() THEN 'overdue'
     WHEN ${alias}.amount_paid > 0 THEN 'part_paid'
     ELSE 'issued'
   END`;
 }
 
-const OUTSTANDING = 'i.total_gross - i.amount_paid - i.amount_credited';
+// What the customer still owes. A refund puts money back on the clock, so it adds
+// to the balance rather than subtracting: invoice, less credited, less paid, plus
+// anything handed back. Mirrors invoiceService.outstandingOf().
+const OUTSTANDING = 'i.total_gross - i.amount_credited - i.amount_paid + i.amount_refunded';
 
 // Normalise a row for the API: bigint columns arrive as strings from pg (they can
 // exceed JS's safe integer range), and DATE/TIMESTAMPTZ arrive as Date objects.
@@ -82,9 +86,16 @@ class Invoice {
     // Search matches a customer name or email fragment, plus the invoice number
     // when the query looks numeric.
     if (q) {
-      params.push(`%${q}%`);
+      // Escape LIKE metacharacters. Left raw, `%` matches everything and a
+      // `%a%a%a…` pattern drives Postgres's backtracking matcher over every row —
+      // twice, since the count query repeats the same WHERE.
+      const escaped = String(q).replace(/[\\%_]/g, ch => `\\${ch}`);
+      params.push(`%${escaped}%`);
       const like = `$${params.length}`;
-      const clauses = [`i.customer_name ILIKE ${like}`, `i.customer_email ILIKE ${like}`];
+      const clauses = [
+        `i.customer_name ILIKE ${like} ESCAPE '\\'`,
+        `i.customer_email ILIKE ${like} ESCAPE '\\'`,
+      ];
       const digits = String(q).replace(/\D/g, '');
       // invoice_number is BIGINT, but keep the guard: a query of 30 digits would
       // otherwise raise a numeric-out-of-range from Postgres and surface as a 500
@@ -102,7 +113,12 @@ class Invoice {
     if (to) add('i.issued_at < ($?::date + INTERVAL \'1 day\')', to);
     if (status) add(`${displayStatusExpr()} = $?`, status);
 
-    const sortCol = SORTABLE[sort] || SORTABLE.issued;
+    // hasOwnProperty, not a bare lookup: SORTABLE['constructor'] would otherwise
+    // return an inherited function whose source lands in the ORDER BY clause. The
+    // controller allowlists `sort` today, but this method is exported and a second
+    // caller should not be able to reach that.
+    const sortCol = Object.prototype.hasOwnProperty.call(SORTABLE, sort)
+      ? SORTABLE[sort] : SORTABLE.issued;
     const sortDir = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
     params.push(limit, offset);
@@ -202,32 +218,48 @@ class Invoice {
     if (to) { params.push(to); range.push(`i.issued_at < ($${params.length}::date + INTERVAL '1 day')`); }
     const rangeSql = range.length ? `AND ${range.join(' AND ')}` : '';
 
+    // Credit notes are SUBTRACTED, and cancelled invoices excluded, so the
+    // dashboard ties to the ledger. Counting a fully refunded sale at full value —
+    // which `status <> 'draft'` alone does — overstates revenue and output VAT from
+    // the first refund onwards, and nothing on the screen would show why.
     const { rows } = await client.query(
       `SELECT
          COUNT(*)::int AS invoices_issued,
-         COALESCE(SUM(i.subtotal_net), 0)::bigint AS revenue_net,
-         COALESCE(SUM(i.vat_total), 0)::bigint AS output_vat,
-         COALESCE(SUM(i.total_gross), 0)::bigint AS invoiced_gross
+         COALESCE(SUM(i.subtotal_net), 0)::bigint AS revenue_gross_net,
+         COALESCE(SUM(i.vat_total), 0)::bigint AS output_vat_gross,
+         COALESCE(SUM(i.total_gross), 0)::bigint AS invoiced_gross,
+         COALESCE(SUM(c.credited_net), 0)::bigint AS credited_net,
+         COALESCE(SUM(c.credited_vat), 0)::bigint AS credited_vat,
+         COALESCE(SUM(c.credited_gross), 0)::bigint AS credited_gross
        FROM invoices i
-      WHERE i.status <> 'draft' AND i.series = 'invoice' ${rangeSql}`,
+       LEFT JOIN LATERAL (
+         SELECT SUM(cn.amount_net) AS credited_net,
+                SUM(cn.amount_vat) AS credited_vat,
+                SUM(cn.amount_gross) AS credited_gross
+           FROM credit_notes cn WHERE cn.invoice_id = i.id
+       ) c ON TRUE
+      WHERE i.status IN ('issued','credited') AND i.series = 'invoice' ${rangeSql}`,
       params
     );
 
     // Receivables are a position, not a flow: always "as of now", never windowed.
+    // Same series filter as the headline figures — a receipt-series document
+    // otherwise appeared in AR but not in the revenue it came from.
     const { rows: ar } = await client.query(
       `SELECT
          COALESCE(SUM(${OUTSTANDING}), 0)::bigint AS outstanding,
          COALESCE(SUM(CASE WHEN i.due_at < NOW() THEN ${OUTSTANDING} ELSE 0 END), 0)::bigint AS overdue,
          COUNT(*) FILTER (WHERE i.due_at < NOW())::int AS overdue_count
        FROM invoices i
-      WHERE i.status = 'issued' AND ${OUTSTANDING} > 0`
+      WHERE i.status = 'issued' AND i.series = 'invoice' AND ${OUTSTANDING} > 0`
     );
 
     return {
       invoices_issued: rows[0].invoices_issued,
-      revenue_net: Number(rows[0].revenue_net),
-      output_vat: Number(rows[0].output_vat),
-      invoiced_gross: Number(rows[0].invoiced_gross),
+      revenue_net: Number(rows[0].revenue_gross_net) - Number(rows[0].credited_net),
+      output_vat: Number(rows[0].output_vat_gross) - Number(rows[0].credited_vat),
+      invoiced_gross: Number(rows[0].invoiced_gross) - Number(rows[0].credited_gross),
+      credited_gross: Number(rows[0].credited_gross),
       ar_outstanding: Number(ar[0].outstanding),
       ar_overdue: Number(ar[0].overdue),
       ar_overdue_count: ar[0].overdue_count,
@@ -242,7 +274,7 @@ class Invoice {
               SUM(i.total_gross)::bigint AS gross,
               SUM(i.vat_total)::bigint AS vat
          FROM invoices i
-        WHERE i.status <> 'draft'
+        WHERE i.status IN ('issued','credited') AND i.series = 'invoice'
           AND i.issued_at >= $1::date
           AND i.issued_at < ($2::date + INTERVAL '1 day')
         GROUP BY 1 ORDER BY 1`,

@@ -8,6 +8,7 @@ const ledger = require('../../server/services/bookkeeping/ledgerService');
 const invoices = require('../../server/services/bookkeeping/invoiceService');
 const Setting = require('../../server/models/Setting');
 const FxRate = require('../../server/models/FxRate');
+const Invoice = require('../../server/models/Invoice');
 const { createTestAdminUser, reseedBooksReferenceData } = require('../helpers');
 
 let adminId;
@@ -293,6 +294,24 @@ describe('shipping and discounts', () => {
     expect(Number(invoice.total_gross)).toBe(13640);
   });
 
+  it('keeps a SERVICE at the standard rate on an export order', async () => {
+    // Zero-rating applies to exported goods. A service is taxed where it is
+    // performed, so joinery or software work done in Iceland stays at 24% even when
+    // the customer is abroad — blanket-zeroing it under-declares output VAT.
+    const order = await makeOrder({
+      country: 'DE',
+      items: [{ productId: serviceProductId, price: 24800, qty: 1, name: 'Ráðgjöf' }],
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    const [line] = await linesOf(invoice.id);
+    expect(line.vat_rate).toBe(24);
+    expect(Number(invoice.vat_total)).toBe(4800);
+    expect(await legsFor('invoice', invoice.id)).toEqual({
+      1100: 24800, 4110: -20000, 2200: -4800,
+    });
+  });
+
   it('zero-rates shipping on an export, so it follows the goods', async () => {
     const order = await makeOrder({ shipping: 1240, country: 'DE' });
     const { invoice } = await ledger.withTransaction(c =>
@@ -384,6 +403,36 @@ describe('EUR orders', () => {
       invoices.createFromOrder(c, order.id, { createdBy: adminId }));
     const lines = await linesOf(invoice.id);
     expect(lines.reduce((a, l) => a + l.line_gross, 0)).toBe(Number(invoice.total_gross));
+  });
+
+  it('totals exactly what the customer paid, with a discount in play', async () => {
+    // The anchor bug: targeting round((total + discount) × rate) and subtracting a
+    // separately rounded round(discount × rate) is off by a króna, because
+    // round(a+b) − round(b) ≠ round(a). The invoice then never settled — it sat one
+    // króna outstanding forever and eventually read "overdue".
+    await FxRate.set({ rateDate: '2026-07-15', currency: 'EUR', rate: 150.37, source: 'manual' });
+    const order = await makeOrder({
+      currency: 'EUR',
+      items: [{ productId, price: 999, qty: 1 }],
+      shipping: 499,
+      discount: 300,
+      paidAt: '2026-07-15',
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+
+    // 1198 cents at 150.37 = 1801.43 -> 1801 ISK, and that is what the invoice says.
+    const expected = Math.round((1198 * 150.37) / 100);
+    expect(Number(invoice.total_gross)).toBe(expected);
+
+    // Which means the payment settles it exactly, with nothing left over.
+    const { invoice: after } = await ledger.withTransaction(c =>
+      invoices.recordPayment(c, invoice.id, {
+        amount: expected, method: 'card', receivedAt: '2026-07-20',
+        idempotencyKey: `fx-settle-${invoice.id}`, createdBy: adminId,
+      }));
+    expect(Number(after.total_gross) - Number(after.amount_paid)).toBe(0);
+    await FxRate.set({ rateDate: '2026-07-15', currency: 'EUR', rate: 150, source: 'manual' });
   });
 
   it('refuses to invoice a EUR order when no rate is available', async () => {
@@ -625,6 +674,124 @@ describe('credit notes', () => {
     expect(Number(rows[0].credit_note_number)).toBeGreaterThan(0);
   });
 });
+
+describe('refunds — the flagship flow', () => {
+  async function paidInvoice() {
+    const order = await makeOrder({ items: [{ productId, price: 12400, qty: 1 }] });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    await ledger.withTransaction(c => invoices.recordPayment(c, invoice.id, {
+      amount: 12400, method: 'card', receivedAt: '2026-07-20',
+      idempotencyKey: `paid-${invoice.id}`, createdBy: adminId,
+    }));
+    return invoice;
+  }
+
+  it('credits a PAID invoice — the case that used to fail outright', async () => {
+    // The regression that mattered most: `creditable` ignored amount_paid while the
+    // DB CHECK counted it, so crediting a paid invoice wrote its rows and then blew
+    // up on the invoice UPDATE, rolling the whole refund back as a 500. Refunds are
+    // issued almost exclusively against paid invoices.
+    const invoice = await paidInvoice();
+    const { invoice: after } = await ledger.withTransaction(c =>
+      invoices.issueCreditNote(c, invoice.id, {
+        amountGross: 12400, reason: 'Vara skilað', issuedAt: '2026-07-25', createdBy: adminId,
+      }));
+    expect(after.status).toBe('credited');
+    expect(Number(after.amount_credited)).toBe(12400);
+  });
+
+  it('books the cash leg separately, and only then is the customer square', async () => {
+    const invoice = await paidInvoice();
+    await ledger.withTransaction(c => invoices.issueCreditNote(c, invoice.id, {
+      amountGross: 12400, reason: 'Vara skilað', issuedAt: '2026-07-25', createdBy: adminId,
+    }));
+    // After the credit note alone the customer is owed money back: the sale is
+    // reversed but the cash is still with us.
+    const mid = await Invoice.findById(invoice.id);
+    expect(mid.outstanding).toBe(-12400);
+
+    const { invoice: after } = await ledger.withTransaction(c =>
+      invoices.recordRefund(c, invoice.id, {
+        amount: 12400, method: 'card', receivedAt: '2026-07-26',
+        idempotencyKey: `refund-${invoice.id}`, createdBy: adminId,
+      }));
+    expect(Number(after.amount_refunded)).toBe(12400);
+    expect((await Invoice.findById(invoice.id)).outstanding).toBe(0);
+  });
+
+  it('books the refund out of the account the money came into', async () => {
+    // Paid by card, so the refund leaves the acquirer clearing account (1400) —
+    // not the bank, which never held it.
+    const invoice = await paidInvoice();
+    await ledger.withTransaction(c => invoices.recordRefund(c, invoice.id, {
+      amount: 5000, method: 'card', receivedAt: '2026-07-26',
+      idempotencyKey: `refund-legs-${invoice.id}`, createdBy: adminId,
+    }));
+    const { rows } = await db.query(
+      `SELECT id FROM payments WHERE invoice_id = $1 AND direction = 'out'`, [invoice.id]);
+    expect(await legsFor('payment', rows[0].id)).toEqual({ 1100: 5000, 1400: -5000 });
+  });
+
+  it('refuses to hand back more than was received', async () => {
+    const invoice = await paidInvoice();
+    await expect(ledger.withTransaction(c => invoices.recordRefund(c, invoice.id, {
+      amount: 99999, method: 'card', idempotencyKey: `over-refund-${invoice.id}`, createdBy: adminId,
+    }))).rejects.toMatchObject({ code: 'OVERREFUND', status: 422 });
+  });
+
+  it('refuses a refund on an invoice that was never paid', async () => {
+    const order = await makeOrder();
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    await expect(ledger.withTransaction(c => invoices.recordRefund(c, invoice.id, {
+      amount: 100, method: 'card', idempotencyKey: `unpaid-refund-${invoice.id}`, createdBy: adminId,
+    }))).rejects.toMatchObject({ code: 'OVERREFUND' });
+  });
+
+  it('leaves output VAT at exactly zero after a full credit, even with per-line rounding', async () => {
+    // Two lines of 101 ISK charge round(101×24/124) twice = 40 VAT, but re-deriving
+    // from the credited gross gives splitVatInclusive(202) = 39 — leaving 1 ISK of
+    // output VAT standing on a sale that no longer exists, which then flows into
+    // the VSK return. A full credit must reverse the RECORDED figures.
+    const order = await makeOrder({
+      items: [
+        { productId, price: 101, qty: 1, name: 'A' },
+        { productId, price: 101, qty: 1, name: 'B' },
+      ],
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    expect(Number(invoice.vat_total)).toBe(40);
+
+    await ledger.withTransaction(c => invoices.issueCreditNote(c, invoice.id, {
+      amountGross: 202, reason: 'Fullt skil', issuedAt: '2026-07-25', createdBy: adminId,
+    }));
+    const { rows } = await db.query(
+      `SELECT amount_vat::bigint AS vat, amount_net::bigint AS net FROM credit_notes WHERE invoice_id = $1`,
+      [invoice.id]);
+    expect(Number(rows[0].vat)).toBe(40);
+    expect(Number(rows[0].net)).toBe(162);
+
+    // And the ledger nets to zero on both the VAT and the revenue account.
+    expect(await accountBalanceForInvoice('2200', invoice.id)).toBe(0);
+    expect(await accountBalanceForInvoice('4100', invoice.id)).toBe(0);
+  });
+});
+
+async function accountBalanceForInvoice(code, invoiceId) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(SUM(jl.debit - jl.credit), 0)::bigint AS bal
+       FROM journal_entries je
+       JOIN journal_lines jl ON jl.entry_id = je.id
+       JOIN ledger_accounts la ON la.id = jl.account_id
+      WHERE la.code = $1
+        AND (je.source_id = $2
+             OR je.source_id IN (SELECT id FROM credit_notes WHERE invoice_id = $2)
+             OR je.source_id IN (SELECT id FROM payments WHERE invoice_id = $2))`,
+    [code, invoiceId]);
+  return Number(rows[0].bal);
+}
 
 describe('immutability of an issued invoice', () => {
   let invoice;

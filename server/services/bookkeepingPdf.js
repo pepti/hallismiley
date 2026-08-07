@@ -191,11 +191,16 @@ function drawInvoice(doc, invoice) {
 
   if (invoice.amount_credited > 0) totalRow('Kreditnóta', `-${isk(invoice.amount_credited)}`);
   if (invoice.amount_paid > 0) totalRow('Greitt', `-${isk(invoice.amount_paid)}`);
+  if (invoice.amount_refunded > 0) totalRow('Endurgreitt', isk(invoice.amount_refunded));
   const outstanding = Number(invoice.outstanding ?? 0);
   if (!isReceipt && outstanding > 0) {
     totalRow('Ógreitt', isk(outstanding), { bold: true });
   }
-  if (isReceipt || outstanding === 0) {
+  // "GREITT" means money was actually received — not merely that nothing is owed.
+  // An invoice settled entirely by credit note owes nothing and was never paid,
+  // and stamping it paid would misrepresent the document.
+  const netPaid = Number(invoice.amount_paid || 0) - Number(invoice.amount_refunded || 0);
+  if (netPaid > 0 && outstanding <= 0) {
     doc.font('Helvetica-Bold').fontSize(10).fillColor(INK)
       .text('GREITT', COL.total, y, { width: colWidths.total, align: 'right' });
     y = doc.y + 6;
@@ -227,12 +232,27 @@ function drawInvoice(doc, invoice) {
   }
 }
 
-/** Stream one invoice as a complete PDF into `res`. */
+/**
+ * Stream one invoice as a complete PDF into `res`.
+ *
+ * Once piping starts the response headers are gone, so nothing here may try to
+ * send an error status. A client that aborts mid-download otherwise leaves an
+ * unhandled stream 'error' event, and a throw inside drawInvoice would reach an
+ * error handler that calls res.status() on an already-committed response.
+ */
 function streamInvoice(res, { invoice }) {
   const doc = new PDFDocument({ size: 'A4', margin: MARGIN });
+  doc.on('error', () => { try { res.destroy(); } catch { /* already gone */ } });
+  res.on('close', () => doc.destroy());
   doc.pipe(res);
-  drawInvoice(doc, invoice);
-  doc.end();
+  try {
+    drawInvoice(doc, invoice);
+    doc.end();
+  } catch (err) {
+    doc.destroy();
+    res.destroy();
+    throw err;
+  }
 }
 
 module.exports = { streamInvoice, drawInvoice, isk, kennitalaDisplay };

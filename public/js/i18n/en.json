@@ -1579,5 +1579,11 @@
   "adminBooks.warn.sellerIncomplete": "The seller name, ID number and VAT number are missing. Invoices cannot be issued until they are set.",
   "adminBooks.warn.coaUnconfirmed": "The chart of accounts has not been confirmed by an accountant.",
   "adminBooks.warn.fxStale": "The latest EUR rate is {days} days old. Update it before invoicing in EUR.",
-  "adminBooks.warn.fxMissing": "No EUR exchange rate stored. EUR invoices will be blocked."
+  "adminBooks.warn.fxMissing": "No EUR exchange rate stored. EUR invoices will be blocked.",
+  "adminBooks.detail.refunded": "Refunded",
+  "adminBooks.detail.recordRefund": "Record refund",
+  "adminBooks.detail.refundHint": "Records money going back out. It does not reverse the sale — use a credit note for that.",
+  "adminBooks.detail.refundRecorded": "Refund recorded.",
+  "adminBooks.detail.confirmRefund": "Record this refund? It cannot be deleted, only reversed.",
+  "adminBooks.audit.payment.refunded": "Refund recorded"
 }

@@ -1579,5 +1579,11 @@
   "adminBooks.warn.sellerIncomplete": "Nafn, kennitala og VSK-númer útgefanda vantar. Ekki er hægt að gefa út reikninga fyrr en það er skráð.",
   "adminBooks.warn.coaUnconfirmed": "Bókhaldslykill hefur ekki verið staðfestur af bókara.",
   "adminBooks.warn.fxStale": "Nýjasta EUR-gengi er {days} daga gamalt. Uppfærðu áður en reikningur í EUR er gefinn út.",
-  "adminBooks.warn.fxMissing": "Ekkert EUR-gengi skráð. Reikningar í EUR verða stöðvaðir."
+  "adminBooks.warn.fxMissing": "Ekkert EUR-gengi skráð. Reikningar í EUR verða stöðvaðir.",
+  "adminBooks.detail.refunded": "Endurgreitt",
+  "adminBooks.detail.recordRefund": "Skrá endurgreiðslu",
+  "adminBooks.detail.refundHint": "Skráir peninga sem fóru til baka. Bakfærir ekki söluna — notaðu kreditnótu til þess.",
+  "adminBooks.detail.refundRecorded": "Endurgreiðsla skráð.",
+  "adminBooks.detail.confirmRefund": "Skrá endurgreiðslu? Þessu verður ekki eytt, aðeins bakfært.",
+  "adminBooks.audit.payment.refunded": "Endurgreiðsla skráð"
 }

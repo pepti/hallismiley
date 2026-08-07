@@ -88,6 +88,8 @@ export class AdminInvoicesView {
         this._load();
         return;
       }
+      // Let a real link handle itself (modifier-click, middle-click, new tab).
+      if (e.target.closest('a')) return;
       const row = e.target.closest('[data-invoice-id]');
       if (row) navigate(href(`/admin/books/invoices/${row.dataset.invoiceId}`));
     });
@@ -131,9 +133,14 @@ export class AdminInvoicesView {
     if (!invoices.length) {
       return `<p class="admin-shop__hint">${escHtml(t('adminBooks.invoices.empty'))}</p>`;
     }
+    // The invoice number is a real link, so the row works with the keyboard,
+    // middle-click and open-in-new-tab. The whole row stays clickable as a
+    // convenience on top of that, not instead of it — a focusable <tr> that Enter
+    // does nothing on is worse than no affordance at all.
     const rows = invoices.map(inv => `
-      <tr data-invoice-id="${escHtml(inv.id)}" tabindex="0">
-        <td>${escHtml(String(inv.invoice_number))}</td>
+      <tr data-invoice-id="${escHtml(inv.id)}">
+        <td><a href="${escHtml(href(`/admin/books/invoices/${inv.id}`))}"
+               >${escHtml(String(inv.invoice_number))}</a></td>
         <td>${escHtml(inv.issued_at || '')}</td>
         <td>${escHtml(inv.customer_name || '')}</td>
         <td class="num">${escHtml(isk(inv.total_gross))}</td>
@@ -150,9 +157,9 @@ export class AdminInvoicesView {
       <div class="books-pager">
         <span>${escHtml(t('adminBooks.invoices.showing', { from, to, total: this._state.total }))}</span>
         <button type="button" class="btn btn--ghost" data-page="${prev}"
-          ${this._state.offset === 0 ? 'disabled' : ''}>${escHtml(t('pagination.prev'))}</button>
+          ${this._state.offset === 0 ? 'disabled' : ''}>${escHtml(t('form.previous'))}</button>
         <button type="button" class="btn btn--ghost" data-page="${next}"
-          ${next >= this._state.total ? 'disabled' : ''}>${escHtml(t('pagination.next'))}</button>
+          ${next >= this._state.total ? 'disabled' : ''}>${escHtml(t('form.next'))}</button>
       </div>`;
 
     return `
