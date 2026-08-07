@@ -10,11 +10,15 @@
 const db = require('../config/database');
 const logger = require('../logger');
 const Invoice = require('../models/Invoice');
+const Expense = require('../models/Expense');
 const FxRate = require('../models/FxRate');
 const Setting = require('../models/Setting');
 const ledger = require('../services/bookkeeping/ledgerService');
 const invoiceService = require('../services/bookkeeping/invoiceService');
+const expenseService = require('../services/bookkeeping/expenseService');
+const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
+const { toCsv, csvHeaders } = require('../utils/csv');
 const bookkeepingPdf = require('../services/bookkeepingPdf');
 const securityLogger = require('../observability/securityLogger');
 const { toIsoDate, todayIso, assertAccountingDate, addDays, DateError } = require('../utils/booksDate');
@@ -387,8 +391,296 @@ async function setFxRate(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// ── Expenses ─────────────────────────────────────────────────────────────────
+
+async function listExpenses(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    const vatCode = parseEnum(req.query.vat_code, expenseService.VAT_CODES, 'vat_code');
+    const sort = parseEnum(req.query.sort, Object.keys(Expense.SORTABLE), 'sort') || 'date';
+    const dir = parseEnum(req.query.dir, ['asc', 'desc'], 'dir') || 'desc';
+    const q = req.query.q ? parseText(req.query.q, 'q', { maxLen: 100 }) : null;
+    const missingDocument = req.query.missing_document === 'true';
+    const deductible = req.query.deductible === undefined
+      ? null : req.query.deductible === 'true';
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    if (from && to && from > to) throw new BadRequest(`from (${from}) is after to (${to})`);
+
+    const result = await Expense.list({
+      q, from, to, vatCode, missingDocument, deductible, sort, dir, limit, offset,
+    });
+    res.json({ ...result, limit, offset });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getExpense(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'expense id');
+    const expense = await Expense.findById(id);
+    if (!expense) return res.status(404).json({ error: 'Expense not found', code: 404 });
+    const history = await audit.forEntity(db, 'expense', id, 50);
+    res.json({ expense, history });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function createExpense(req, res, next) {
+  try {
+    const body = req.body || {};
+    const payload = {
+      supplierName: parseText(body.supplier_name, 'supplier_name', { maxLen: 200, required: true }),
+      supplierKennitala: body.supplier_kennitala
+        ? parseText(body.supplier_kennitala, 'supplier_kennitala', { maxLen: 20 }) : null,
+      supplierVatNumber: parseText(body.supplier_vat_number, 'supplier_vat_number', { maxLen: 20 }),
+      supplierCountry: parseText(body.supplier_country, 'supplier_country', { maxLen: 3 }) || 'IS',
+      supplierInvoiceNo: body.supplier_invoice_no
+        ? parseText(body.supplier_invoice_no, 'supplier_invoice_no', { maxLen: 100 }) : null,
+      description: parseText(body.description, 'description', { maxLen: 500 }),
+      expenseDate: assertAccountingDate(body.expense_date, 'expense_date'),
+      amountGross: parseAmount(body.amount_gross, 'amount_gross'),
+      currency: parseEnum(body.currency || 'ISK', ['ISK', 'EUR', 'USD', 'GBP', 'DKK'], 'currency'),
+      vatCode: parseEnum(body.vat_code || 'input_24', expenseService.VAT_CODES, 'vat_code'),
+      accountCode: parseText(body.account_code, 'account_code', { maxLen: 20, required: true }),
+      documentId: body.document_id ? parseId(body.document_id, 'document_id') : null,
+      allowDuplicate: body.allow_duplicate === true,
+      createdBy: req.user.id,
+      requestId: req.requestId || null,
+    };
+
+    const result = await ledger.withTransaction(client =>
+      expenseService.createExpense(client, payload));
+    securityLogger.adminAction(req.user.id, 'books.expense.create', result.expense.id, {
+      account: payload.accountCode, deductible: result.verdict.deductible,
+    });
+    res.status(201).json({
+      expense: await Expense.findById(result.expense.id),
+      verdict: result.verdict,
+    });
+  } catch (err) {
+    // A suspected duplicate is a 409 the UI turns into a confirm-and-resubmit,
+    // so the candidate rows travel with the error rather than being looked up again.
+    if (err && err.code === 'POSSIBLE_DUPLICATE') {
+      return res.status(409).json({ error: err.message, code: 409, duplicates: err.duplicates || [] });
+    }
+    return fail(res, err, next);
+  }
+}
+
+// The VAT verdict for a purchase, WITHOUT saving it. Lets the form tell the user
+// "input VAT is not deductible on this, because…" while they are still typing,
+// rather than after they have committed the entry.
+async function previewExpenseVat(req, res, next) {
+  try {
+    const body = req.body || {};
+    const accountCode = parseText(body.account_code, 'account_code', { maxLen: 20, required: true });
+    const account = await ledger.accountByCode(accountCode);
+    const verdict = expenseService.assessVat({
+      vatCode: parseEnum(body.vat_code || 'input_24', expenseService.VAT_CODES, 'vat_code'),
+      account,
+      supplierCountry: parseText(body.supplier_country, 'supplier_country', { maxLen: 3 }) || 'IS',
+      supplierVatNumber: parseText(body.supplier_vat_number, 'supplier_vat_number', { maxLen: 20 }),
+    });
+    res.json({ verdict, account: { code: account.code, name: account.name, type: account.type } });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function attachExpenseDocument(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'expense id');
+    const documentId = req.body && req.body.document_id
+      ? parseId(req.body.document_id, 'document_id') : null;
+    await ledger.withTransaction(client =>
+      expenseService.attachDocument(client, id, {
+        documentId, createdBy: req.user.id, requestId: req.requestId || null,
+      }));
+    res.json({ expense: await Expense.findById(id) });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getMissingDocuments(req, res, next) {
+  try {
+    res.json(await Expense.missingDocuments({ limit: req.query.limit }));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getSuppliers(req, res, next) {
+  try {
+    res.json({ suppliers: await Expense.recentSuppliers({ limit: req.query.limit }) });
+  } catch (err) { fail(res, err, next); }
+}
+
+// The chart of accounts, for the expense form's account picker. Includes the
+// input_vat_blocked flag so the form can warn before the entry is submitted.
+async function getAccounts(req, res, next) {
+  try {
+    const { all } = await ledger.loadAccounts();
+    res.json({
+      accounts: all
+        .filter(a => a.is_active)
+        .map(a => ({
+          code: a.code, name: a.name, name_en: a.name_en, type: a.type,
+          vat_code: a.vat_code, input_vat_blocked: a.input_vat_blocked,
+          // Whether a purchase may be posted here. Control accounts (AR, bank,
+          // cash, input VAT, clearing, suspense) are excluded — they are the
+          // machinery postings move through, not a destination.
+          purchasable: expenseService.isPurchasable(a),
+        })),
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
+// ── Documents ────────────────────────────────────────────────────────────────
+
+async function uploadDocument(req, res, next) {
+  try {
+    const kind = parseEnum(req.body && req.body.kind, documentService.KINDS, 'kind') || 'receipt';
+    const note = parseText(req.body && req.body.note, 'note', { maxLen: 500 });
+    const result = await ledger.withTransaction(client =>
+      documentService.register(client, req.file, {
+        kind, note, createdBy: req.user.id, requestId: req.requestId || null,
+      }));
+    res.status(201).json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getDocument(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'document id');
+    const { document, absolutePath } = await documentService.open(db, id);
+    res.setHeader('Content-Type', document.mime_type);
+    // Fylgiskjöl carry supplier terms and kennitölur — never a shared cache, and
+    // never rendered inline where it could be mistaken for site content.
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${String(document.original_name).replace(/[^\w.-]/g, '_')}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(absolutePath);
+  } catch (err) { fail(res, err, next); }
+}
+
+// ── Receivables ──────────────────────────────────────────────────────────────
+
+async function getAging(req, res, next) {
+  try {
+    res.json(await Invoice.agingByCustomer({ limit: req.query.limit }));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getStatement(req, res, next) {
+  try {
+    const key = parseText(req.params.customerKey, 'customer key', { maxLen: 320, required: true });
+    const { from, to } = req.query.from || req.query.to
+      ? parseRange(req.query, { defaultDays: 3650 })
+      : { from: null, to: null };
+    const statement = await Invoice.statementForCustomer(key, { from, to });
+    if (!statement.lines.length) {
+      return res.status(404).json({ error: 'No transactions for that customer', code: 404 });
+    }
+    res.json({ statement });
+  } catch (err) { fail(res, err, next); }
+}
+
+// ── CSV exports ──────────────────────────────────────────────────────────────
+//
+// Server-side and unbounded-safe. The client-side "export all" pattern that
+// re-requested a page and called it a full export silently truncated at the
+// server's page cap, handing the accountant a file that looked complete.
+
+async function exportInvoicesCsv(req, res, next) {
+  try {
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    if (from && to && from > to) throw new BadRequest(`from (${from}) is after to (${to})`);
+    const status = parseEnum(req.query.status, Invoice.DISPLAY_STATUSES, 'status');
+
+    const rows = [];
+    // Paged internally rather than one unbounded query, so a long history streams
+    // instead of materialising in memory.
+    const PAGE = 500;
+    for (let offset = 0; ; offset += PAGE) {
+      const page = await Invoice.list({ from, to, status, limit: PAGE, offset, sort: 'number', dir: 'asc' });
+      rows.push(...page.invoices);
+      if (page.invoices.length < PAGE || rows.length >= page.total) break;
+    }
+
+    csvHeaders(res, `reikningar-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Nr.', 'Dagsetning', 'Gjalddagi', 'Viðskiptavinur', 'Netto', 'VSK', 'Samtals', 'Greitt', 'Kreditfært', 'Ógreitt', 'Staða'],
+      rows.map(i => [
+        i.invoice_number, i.issued_at, i.due_at, i.customer_name,
+        i.subtotal_net, i.vat_total, i.total_gross,
+        i.amount_paid, i.amount_credited, i.outstanding, i.display_status,
+      ])
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportExpensesCsv(req, res, next) {
+  try {
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    if (from && to && from > to) throw new BadRequest(`from (${from}) is after to (${to})`);
+
+    const rows = [];
+    const PAGE = 500;
+    for (let offset = 0; ; offset += PAGE) {
+      const page = await Expense.list({ from, to, limit: PAGE, offset, sort: 'date', dir: 'asc' });
+      rows.push(...page.expenses);
+      if (page.expenses.length < PAGE || rows.length >= page.total) break;
+    }
+
+    csvHeaders(res, `kostnadur-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Dagsetning', 'Seljandi', 'Kennitala', 'Reikn.nr.', 'Lykill', 'Netto', 'VSK', 'Samtals',
+        'VSK-meðferð', 'Innskattur frádráttarbær', 'Fylgiskjal'],
+      rows.map(e => [
+        e.expense_date, e.supplier_name, e.supplier_kennitala || '', e.supplier_invoice_no || '',
+        e.account_code, e.amount_net, e.amount_vat, e.amount_gross,
+        e.vat_code, e.vat_deductible ? 'já' : 'nei', e.document_name || '',
+      ])
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportAgingCsv(req, res, next) {
+  try {
+    const { customers, totals } = await Invoice.agingByCustomer({ limit: 500 });
+    csvHeaders(res, `skuldalisti-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Viðskiptavinur', 'Tölvupóstur', 'Reikningar', 'Elsti gjalddagi', 'Ógjaldfallið', '1-30', '31-60', '61-90', '90+', 'Samtals'],
+      [
+        ...customers.map(c => [
+          c.customer_name, c.customer_email || '', c.open_invoices, c.oldest_due_at,
+          c.current, c.d1_30, c.d31_60, c.d61_90, c.d90_plus, c.total,
+        ]),
+        ['SAMTALS', '', '', '', totals.current, totals.d1_30, totals.d31_60, totals.d61_90, totals.d90_plus, totals.total],
+      ]
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
 module.exports = {
   getDashboard,
+  listExpenses,
+  getExpense,
+  createExpense,
+  previewExpenseVat,
+  attachExpenseDocument,
+  getMissingDocuments,
+  getSuppliers,
+  getAccounts,
+  uploadDocument,
+  getDocument,
+  getAging,
+  getStatement,
+  exportInvoicesCsv,
+  exportExpensesCsv,
+  exportAgingCsv,
   listInvoices,
   getInvoice,
   createInvoiceFromOrder,

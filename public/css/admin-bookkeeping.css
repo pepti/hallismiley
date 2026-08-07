@@ -179,3 +179,45 @@
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* ── Phase 4: expense form, checkboxes, ok banner ─────────────────────────── */
+
+.books-banner--ok {
+  background: rgba(80, 180, 120, 0.12);
+  border-color: rgba(80, 180, 120, 0.4);
+  color: #7ac89a;
+}
+
+.books-form--wide { max-width: none; }
+.books-form__grid {
+  display: grid;
+  /* auto-fit so the form collapses to one column on a phone without a breakpoint
+     per field count. */
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0 1rem;
+}
+.books-form__wide { grid-column: 1 / -1; }
+.books-form small {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.books-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.books-check input { width: auto; margin: 0; }
+
+.btn--sm { padding: 0.2rem 0.5rem; font-size: 0.78rem; }
+
+.books-table tfoot td {
+  border-top: 1px solid var(--border-dim);
+  font-variant-numeric: tabular-nums;
+}

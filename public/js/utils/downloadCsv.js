@@ -3,8 +3,15 @@
 
 export function toCsvString(header, rows) {
   const esc = (v) => {
-    const s = String(v == null ? '' : v);
-    return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    let s = String(v == null ? '' : v);
+    // Neutralise spreadsheet formulas before quoting. Excel/LibreOffice/Sheets
+    // evaluate any cell starting with = + - @ (or a tab/CR that leaves one of
+    // those first), so an exported value like =HYPERLINK(...) built from customer
+    // input becomes live in the recipient's spreadsheet. A leading apostrophe
+    // forces literal text and is not itself displayed.
+    // Mirrors server/utils/csv.js — keep the two in step.
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",;\n\r\t]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   return [header, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
 }

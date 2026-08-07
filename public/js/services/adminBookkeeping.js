@@ -62,6 +62,82 @@ export const issueCreditNote = (invoiceId, body) =>
 
 export const invoicePdfUrl = (id) => `${BASE}/invoices/${encodeURIComponent(id)}/pdf`;
 
+// ── Expenses ─────────────────────────────────────────────────────────────────
+
+export const fetchExpenses = (params) => get('/expenses', params);
+export const fetchExpense = (id) => get(`/expenses/${encodeURIComponent(id)}`);
+export const fetchSuppliers = () => get('/expenses/suppliers');
+export const fetchAccounts = () => get('/expenses/accounts');
+export const fetchMissingDocuments = (params) => get('/expenses/missing-documents', params);
+
+// Asks the server what the VAT treatment WOULD be, without saving. Lets the form
+// explain a refused input-VAT deduction while the user is still filling it in.
+export const previewExpenseVat = (body) => send('POST', '/expenses/preview-vat', body);
+
+// Throws with `err.duplicates` attached on a 409, so the caller can show what it
+// thinks the entry duplicates and offer to save anyway.
+export async function createExpense(body) {
+  const res = await fetch(`${BASE}/expenses`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: await csrfHeaders(),
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Beiðni mistókst');
+    if (Array.isArray(data.duplicates)) err.duplicates = data.duplicates;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export const attachExpenseDocument = (expenseId, documentId) =>
+  send('PATCH', `/expenses/${encodeURIComponent(expenseId)}/document`, { document_id: documentId });
+
+// ── Documents ────────────────────────────────────────────────────────────────
+
+// multipart, so no Content-Type header — the browser sets the boundary itself.
+export async function uploadDocument(file, { kind = 'receipt', note = '' } = {}) {
+  const token = await getCSRFToken();
+  const form = new FormData();
+  form.append('file', file);
+  form.append('kind', kind);
+  form.append('note', note);
+  const res = await fetch(`${BASE}/documents`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { 'X-CSRF-Token': token } : {},
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Upphleðsla mistókst');
+  return data;
+}
+
+export const documentUrl = (id) => `${BASE}/documents/${encodeURIComponent(id)}`;
+
+// ── Receivables ──────────────────────────────────────────────────────────────
+
+export const fetchAging = (params) => get('/ar', params);
+export const fetchStatement = (customerKey, params) =>
+  get(`/ar/${encodeURIComponent(customerKey)}`, params);
+
+// ── CSV exports (server-side, so they are never silently truncated) ──────────
+
+export const invoicesCsvUrl = (params = {}) => withQuery(`${BASE}/invoices/export.csv`, params);
+export const expensesCsvUrl = (params = {}) => withQuery(`${BASE}/expenses/export.csv`, params);
+export const agingCsvUrl = () => `${BASE}/ar/export.csv`;
+
+function withQuery(url, params) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v);
+  }
+  return qs.toString() ? `${url}?${qs}` : url;
+}
+
 // crypto.randomUUID is available in every browser this app supports; the fallback
 // keeps a non-secure-context dev server working.
 export function newIdempotencyKey() {

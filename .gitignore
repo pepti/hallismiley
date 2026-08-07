@@ -53,3 +53,7 @@ public/assets/party/[0-9]*-*
 public/assets/products/
 public/assets/content/
 public/assets/responsive-screenshots/
+
+# Bookkeeping fylgiskjol (receipts, supplier invoices) — private upload root,
+# never statically served. Local-disk fallback for BOOKS_UPLOAD_ROOT.
+private-uploads/

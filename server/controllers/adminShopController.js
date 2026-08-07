@@ -56,10 +56,10 @@ const PRODUCT_CSV_HEADER = ['SKU', 'Name', 'Variant', 'Barcode', 'BIN', 'Price I
 const PRODUCT_IMPORT_FIELDS = ['bin', 'price_isk', 'price_eur', 'stock', 'active'];
 const MAX_IMPORT_ROWS = 5000;
 
-function csvCell(v) {
-  const s = String(v == null ? '' : v);
-  return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
+// Was a local copy that quoted correctly but did NOT neutralise leading
+// = + - @, so a product name or variant attribute beginning with one of those
+// became a live formula in the exported sheet. Now shared with the books exports.
+const { csvCell } = require('../utils/csv');
 
 function formatVariantAttrs(attrs) {
   if (!attrs || typeof attrs !== 'object') return '';

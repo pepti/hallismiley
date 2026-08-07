@@ -3219,6 +3219,98 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        ON CONFLICT (kind, period, due_on) DO NOTHING`,
     ],
   },
+  {
+    // Phase 4: expenses (the input-VAT side) and fylgiskjöl.
+    //
+    // The tables themselves ship in 072; this adds the protections that make an
+    // expense a primary accounting document rather than an editable row, plus the
+    // indexes the new screens actually query.
+    name: '073_books_expenses',
+    statements: [
+      // An expense posts a journal entry the moment it is created, so its
+      // financial content falls under the same gr. 9 rule as everything else:
+      // correct it by reversing, not by editing.
+      //
+      // Three fields stay writable, and they are the point of the design:
+      //   document_id  — the receipt is very often attached LATER. The whole
+      //                  "missing documents" queue exists to chase exactly that,
+      //                  so freezing it would break the feature it supports.
+      //   description  — free-text note about what the purchase was for.
+      //   note-ish     — likewise. Neither affects the ledger.
+      `CREATE OR REPLACE FUNCTION books_protect_expense()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           RAISE EXCEPTION 'Expense % cannot be deleted; it is posted to the ledger (Reglugerd 505/2013 gr. 9). Reverse its journal entry instead', OLD.id
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF (NEW.supplier_name, NEW.supplier_kennitala, NEW.supplier_country,
+             NEW.supplier_invoice_no, NEW.expense_date,
+             NEW.amount_net, NEW.amount_vat, NEW.amount_gross,
+             NEW.vat_code, NEW.vat_deductible, NEW.account_id,
+             NEW.original_currency, NEW.original_amount_gross, NEW.fx_rate,
+             NEW.created_by)
+            IS DISTINCT FROM
+            (OLD.supplier_name, OLD.supplier_kennitala, OLD.supplier_country,
+             OLD.supplier_invoice_no, OLD.expense_date,
+             OLD.amount_net, OLD.amount_vat, OLD.amount_gross,
+             OLD.vat_code, OLD.vat_deductible, OLD.account_id,
+             OLD.original_currency, OLD.original_amount_gross, OLD.fx_rate,
+             OLD.created_by)
+         THEN
+           RAISE EXCEPTION 'Expense % is posted; its financial content cannot be altered (Reglugerd 505/2013 gr. 9). Only the attached document and description may change.', OLD.id
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_expenses_immutable ON expenses`,
+      `CREATE TRIGGER trg_expenses_immutable
+         BEFORE UPDATE OR DELETE ON expenses
+         FOR EACH ROW EXECUTE FUNCTION books_protect_expense()`,
+
+      // A document is evidence; once attached to an expense it must stay
+      // retrievable for seven years. Detaching is allowed (expenses.document_id
+      // is SET NULL), replacing the FILE is not.
+      `CREATE OR REPLACE FUNCTION books_protect_document()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           RAISE EXCEPTION 'Supporting documents cannot be deleted — they are the 7-year evidence trail (bokhaldslog 145/1994 gr. 20)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF (NEW.file_path, NEW.checksum_sha256, NEW.byte_size, NEW.mime_type, NEW.created_by)
+            IS DISTINCT FROM
+            (OLD.file_path, OLD.checksum_sha256, OLD.byte_size, OLD.mime_type, OLD.created_by)
+         THEN
+           RAISE EXCEPTION 'The stored file behind a supporting document cannot be swapped; upload a new document instead'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_books_documents_immutable ON books_documents`,
+      `CREATE TRIGGER trg_books_documents_immutable
+         BEFORE UPDATE OR DELETE ON books_documents
+         FOR EACH ROW EXECUTE FUNCTION books_protect_document()`,
+
+      // Re-uploading the identical file is almost always a double-entry attempt
+      // rather than a second genuine receipt. Not UNIQUE — the same PDF can
+      // legitimately support two periods' entries — but indexed so the duplicate
+      // check is cheap.
+      `CREATE INDEX IF NOT EXISTS idx_books_documents_checksum
+         ON books_documents (checksum_sha256)`,
+
+      // Backs the supplier-history lookup on the expense form and the
+      // "same supplier, same invoice number" duplicate warning.
+      `CREATE INDEX IF NOT EXISTS idx_expenses_supplier
+         ON expenses (LOWER(supplier_name), expense_date DESC)`,
+
+      // Backs the AR aging and statement queries, which group by the customer key
+      // (user_id when known, else the lowercased email).
+      `CREATE INDEX IF NOT EXISTS idx_invoices_customer_key
+         ON invoices (COALESCE(user_id, LOWER(customer_email)))
+         WHERE status IN ('issued','credited')`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

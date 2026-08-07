@@ -42,6 +42,9 @@ import { AdminBinsView }         from './views/AdminBinsView.js';
 import { AdminBooksView }        from './views/AdminBooksView.js';
 import { AdminInvoicesView }     from './views/AdminInvoicesView.js';
 import { AdminInvoiceDetailView } from './views/AdminInvoiceDetailView.js';
+import { AdminExpensesView }     from './views/AdminExpensesView.js';
+import { AdminARView }           from './views/AdminARView.js';
+import { AdminStatementView }    from './views/AdminStatementView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
 import {
   SUPPORTED_LOCALES,
@@ -70,6 +73,9 @@ const ROUTES = [
   { pattern: '/admin/bins',      factory: ()  => (isAuthenticated() && canSeeView('bins')) ? new AdminBinsView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
+  { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
+  { pattern: '/admin/books/ar/:customerKey', factory: (p) => (isAuthenticated() && canSeeView('ar')) ? new AdminStatementView(p.customerKey) : new HomeView() },
+  { pattern: '/admin/books/ar', factory: () => (isAuthenticated() && canSeeView('ar')) ? new AdminARView() : new HomeView() },
   { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
   { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
@@ -235,6 +241,8 @@ export class Router {
       '/admin/customers':  'customers',
       '/admin/books':      'books',
       '/admin/books/invoices': 'invoices',
+      '/admin/books/expenses': 'expenses',
+      '/admin/books/ar':       'ar',
     };
     if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
       navigateReplace('/' + getLocale() + '/');

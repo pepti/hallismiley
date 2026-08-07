@@ -19,6 +19,7 @@ const { requireView } = require('../auth/requireView');
 const { requireRole } = require('../auth/roles');
 const { csrfProtect } = require('../middleware/csrf');
 const { docLimiter } = require('../middleware/booksLimiters');
+const documentService = require('../services/bookkeeping/documentService');
 
 router.use(requireAuth);
 
@@ -48,6 +49,42 @@ router.post('/invoices/:id/payments', requireRole('admin'), csrfProtect, books.r
 // with no credit note, and a goodwill credit is a credit note with no refund.
 router.post('/invoices/:id/refunds', requireRole('admin'), csrfProtect, books.recordRefund);
 router.post('/invoices/:id/credit-notes', requireRole('admin'), csrfProtect, books.createCreditNote);
+
+// Server-side CSV export, paged internally so a long history streams rather than
+// being silently truncated at a page cap. Read-only, so no CSRF; docLimiter
+// because building one is real work.
+router.get('/invoices/export.csv', docLimiter, requireView('invoices'), books.exportInvoicesCsv);
+
+// ── Expenses (view: expenses) ────────────────────────────────────────────────
+// Literal paths first, and export.csv before any ':id' could swallow it.
+router.get('/expenses/export.csv', docLimiter, requireView('expenses'), books.exportExpensesCsv);
+router.get('/expenses/missing-documents', requireView('expenses'), books.getMissingDocuments);
+router.get('/expenses/suppliers', requireView('expenses'), books.getSuppliers);
+router.get('/expenses/accounts', requireView('expenses'), books.getAccounts);
+// A dry-run VAT verdict so the form can explain a refused deduction while the user
+// is still typing. Read-only in effect, but a POST because it takes a body.
+router.post('/expenses/preview-vat', requireView('expenses'), csrfProtect, books.previewExpenseVat);
+
+router.get('/expenses', requireView('expenses'), books.listExpenses);
+router.get('/expenses/:id', requireView('expenses'), books.getExpense);
+router.post('/expenses', requireRole('admin'), csrfProtect, books.createExpense);
+router.patch('/expenses/:id/document', requireRole('admin'), csrfProtect, books.attachExpenseDocument);
+
+// ── Documents (view: expenses) ───────────────────────────────────────────────
+// multer runs BEFORE csrfProtect because the token arrives as a header, not a
+// body field — csrf-csrf reads req.headers, so ordering is safe either way, but
+// parsing multipart first gives a clean 400 on an oversized file instead of a
+// confusing CSRF failure.
+router.post('/documents', requireRole('admin'),
+  documentService.createDocumentUpload().single('file'), csrfProtect, books.uploadDocument);
+// Streamed through an authenticated route on purpose: these files live outside the
+// statically-served tree, so this is the ONLY way to read them.
+router.get('/documents/:id', requireView('expenses'), docLimiter, books.getDocument);
+
+// ── Receivables (view: ar) ───────────────────────────────────────────────────
+router.get('/ar/export.csv', docLimiter, requireView('ar'), books.exportAgingCsv);
+router.get('/ar', requireView('ar'), books.getAging);
+router.get('/ar/:customerKey', requireView('ar'), books.getStatement);
 
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than
