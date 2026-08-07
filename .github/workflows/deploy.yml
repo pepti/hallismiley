@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
@@ -71,7 +71,7 @@ jobs:
       # The default docker driver can't export a build cache; the
       # docker-container driver can, which is what makes cache-to below work.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       # GHA layer cache so unchanged layers (notably the ~200 MB `npm ci`
       # node_modules layer) are reused across deploys instead of rebuilt and
@@ -166,7 +166,14 @@ jobs:
     needs: [deploy]
     # Only when the deploy job actually RAN and failed (not when it was skipped
     # because CI was red — that case is covered by alert-ci-blocked above).
-    if: ${{ needs.deploy.result == 'failure' }}
+    #
+    # always() is load-bearing, not decoration. An `if:` that contains no status
+    # function still has the implicit success() gate applied to `needs`, so a
+    # failed deploy SKIPS this job and the alert never fires — which is exactly
+    # what happened on 2026-08-07, when a registry 504 failed the deploy of
+    # 112d5a8 in silence. always() lifts that gate so the result check is
+    # actually reached.
+    if: ${{ always() && needs.deploy.result == 'failure' }}
     steps:
       - name: Email deploy-failed alert (Resend)
         env:

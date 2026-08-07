@@ -2,7 +2,7 @@ import { isAuthenticated, canEdit, getUser, logout, updateProfile, hasAnyAdminVi
 import { escHtml } from '../utils/escHtml.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
-import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
+import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES, forcedLocaleFor } from '../i18n/i18n.js';
 import { navigate } from '../navigate.js';
 
 const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
@@ -126,11 +126,26 @@ export class NavBar {
                           aria-pressed="${lc === current}"
                           aria-label="${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}">${lc.toUpperCase()}</button>`)
       .join('');
+    // `hidden` when the first render lands directly on a locale-locked route
+    // (party) — otherwise the toggle would paint before syncLocaleLock runs.
+    const locked = forcedLocaleFor() ? ' hidden' : '';
     return `
       <div class="lol-nav__lang" role="group"
-           aria-label="${t('nav.languageSwitcher')}">
+           aria-label="${t('nav.languageSwitcher')}"${locked}>
         ${buttons}
       </div>`;
+  }
+
+  /** Show or hide the language switcher for `pathname`. Locale-locked routes
+   *  (the Icelandic-only party pages) publish one language, so offering a
+   *  switch there would promise something the router immediately undoes.
+   *  Called by the Router on every navigation — the NavBar outlives views. */
+  syncLocaleLock(pathname = window.location.pathname) {
+    if (!this._nav) return;
+    const locked = !!forcedLocaleFor(pathname);
+    this._nav.querySelectorAll('.lol-nav__lang').forEach(group => {
+      group.hidden = locked;
+    });
   }
 
   _bindLangSwitcher(nav) {

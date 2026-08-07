@@ -23,10 +23,16 @@ module.exports = {
   // Run test files serially — avoids DB race conditions between suites
   maxWorkers:       1,
   verbose:          true,
-  // Transform ESM-only packages (lucia, oslo, @lucia-auth, @oslojs/* deps)
-  // so Jest can require() them in the CJS test environment.
+  // Transform ESM-only packages so Jest can require() them in the CJS test
+  // environment. Two families live here:
+  //  • lucia / oslo — auth stack, ESM-only since we adopted it.
+  //  • htmlparser2 and its dom* / entities deps — pulled in by sanitize-html.
+  //    sanitize-html 2.17.5+ moved to htmlparser2 12, which ships ESM only.
+  //    Without these entries every suite that loads the sanitize middleware
+  //    (i.e. anything requiring server/app.js) dies with
+  //    "Cannot use import statement outside a module".
   transformIgnorePatterns: [
-    'node_modules/(?!(lucia|@lucia-auth|oslo|@oslojs)/)',
+    'node_modules/(?!(lucia|@lucia-auth|oslo|@oslojs|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities)/)',
   ],
   // Coverage configuration
   collectCoverageFrom: [

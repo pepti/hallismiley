@@ -412,7 +412,7 @@ function normaliseDate(value) {
   if (value === undefined || value === null) return todayIso();
   try {
     return toIsoDate(value);
-  } catch (err) {
+  } catch (_err) {
     throw new LedgerError(`Invalid accounting date: ${value}`, 400, 'INVALID_DATE');
   }
 }

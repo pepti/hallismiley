@@ -472,6 +472,53 @@ describe('period locking', () => {
     expect(posted.period).toBe('2026-P4');
   });
 
+  it('honours the lock at the DB trigger even if a second period overlaps the date', async () => {
+    // The trigger used to read `SELECT status INTO v_status` for the covering
+    // period. SELECT ... INTO takes the first of however many rows match and
+    // discards the rest, so with an open period and a locked one both covering
+    // the date, whether the posting was refused depended on row order — probing
+    // it produced both answers on different runs. ensureFiscalPeriod only ever
+    // writes canonical non-overlapping VSK periods, so this needs raw SQL to set
+    // up, but a statutory control should not rest on that.
+    await db.query(
+      `INSERT INTO fiscal_periods (period, starts_on, ends_on, status, locked_at, locked_by)
+       VALUES ('OVERLAP-TEST', '2026-08-05', '2026-08-09', 'locked', NOW(), $1)`,
+      [adminId]
+    );
+    try {
+      // 2026-P4 (2026-07-01..08-31) is open and also covers this date.
+      const p4 = await db.query(`SELECT status FROM fiscal_periods WHERE period = '2026-P4'`);
+      expect(p4.rows[0].status).toBe('open');
+
+      // Build a genuinely balanced draft first, so the ONLY thing that can
+      // reject the posting is the period lock — an entry with no lines is
+      // refused by the balance trigger instead, which would pass for the
+      // wrong reason.
+      const accs = await db.query(
+        `SELECT id, code FROM ledger_accounts WHERE code IN ('1900','4110') ORDER BY code`);
+      const [a4110, a1900] = [accs.rows.find(r => r.code === '4110'), accs.rows.find(r => r.code === '1900')];
+      await db.query(
+        `INSERT INTO journal_entries (id, entry_date, memo, source_type, is_correction, created_by)
+         VALUES ('overlap-probe', '2026-08-07', 'straight at the trigger', 'manual', false, $1)`,
+        [adminId]
+      );
+      await db.query(
+        `INSERT INTO journal_lines (id, entry_id, account_id, debit, credit, memo, sort_order)
+         VALUES ('overlap-l1','overlap-probe',$1,100,0,'d',0),
+                ('overlap-l2','overlap-probe',$2,0,100,'c',1)`,
+        [a1900.id, a4110.id]
+      );
+      await expect(db.query(
+        `UPDATE journal_entries SET posted_at = NOW(), entry_number = 987654321
+          WHERE id = 'overlap-probe'`
+      )).rejects.toThrow(/is locked/);
+    } finally {
+      await db.query(`DELETE FROM journal_lines WHERE entry_id = 'overlap-probe'`);
+      await db.query(`DELETE FROM journal_entries WHERE id = 'overlap-probe'`);
+      await db.query(`DELETE FROM fiscal_periods WHERE period = 'OVERLAP-TEST'`);
+    }
+  });
+
   it('creates a fiscal period on demand for a year that was never seeded', async () => {
     // A year boundary must never be a hard stop, so ensureFiscalPeriod inserts.
     await db.query(`DELETE FROM fiscal_periods WHERE period = '2031-P3'`);

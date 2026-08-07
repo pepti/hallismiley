@@ -657,12 +657,15 @@ CREATE CONSTRAINT TRIGGER trg_journal_entries_balanced
 
 CREATE OR REPLACE FUNCTION books_assert_period_open()
        RETURNS TRIGGER AS $$
-       DECLARE v_status TEXT;
        BEGIN
          IF NEW.posted_at IS NULL THEN RETURN NEW; END IF;
-         SELECT status INTO v_status FROM fiscal_periods
-           WHERE NEW.entry_date BETWEEN starts_on AND ends_on;
-         IF v_status = 'locked' THEN
+         -- "Is ANY covering period locked", not "what is the status of the
+         -- covering period". SELECT ... INTO takes the first of however many rows
+         -- match and discards the rest, so with two overlapping rows the lock
+         -- check silently depended on row order.
+         IF EXISTS (SELECT 1 FROM fiscal_periods
+                     WHERE NEW.entry_date BETWEEN starts_on AND ends_on
+                       AND status = 'locked') THEN
            RAISE EXCEPTION 'Accounting period covering % is locked; post the correction into the open period instead', NEW.entry_date
              USING ERRCODE = 'restrict_violation';
          END IF;

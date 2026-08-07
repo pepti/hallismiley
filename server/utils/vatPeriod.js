@@ -42,7 +42,7 @@ function periodForDate(date) {
   let iso;
   try {
     iso = toIsoDate(date);
-  } catch (err) {
+  } catch (_err) {
     throw new PeriodError(`Invalid date: ${date}`);
   }
   if (!iso) throw new PeriodError(`Invalid date: ${date}`);
