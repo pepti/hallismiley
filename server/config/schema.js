@@ -3318,6 +3318,30 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          WHERE status IN ('issued','credited')`,
     ],
   },
+  {
+    // Per-product VAT rate.
+    //
+    // Until now every invoice line was hardcoded to 24% (or 0% on an export),
+    // which made the whole per-rate apparatus — the 4200/2210 accounts, the
+    // multi-bucket VSK return, the per-rate credit-note split — unreachable code.
+    // That matters because the 11% band is a CLOSED statutory list and one of the
+    // things on it is books and printed matter: the moment a catalogue or a book is
+    // sold, charging 24% on it is simply the wrong tax.
+    //
+    // The rate is snapshotted onto invoice_lines at issue (already the case), so
+    // changing a product's rate later never rewrites a historical invoice.
+    name: '074_product_vat_rate',
+    statements: [
+      `ALTER TABLE products
+         ADD COLUMN IF NOT EXISTS vat_rate SMALLINT NOT NULL DEFAULT 24`,
+      // Same closed set as invoice_lines and server/utils/vat.js — the three rates
+      // Iceland actually has.
+      `DO $$ BEGIN
+         ALTER TABLE products
+           ADD CONSTRAINT products_vat_rate_check CHECK (vat_rate IN (0, 11, 24));
+       EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

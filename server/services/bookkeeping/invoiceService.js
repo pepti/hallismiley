@@ -25,10 +25,10 @@ const FxRate = require('../../models/FxRate');
 const ledger = require('./ledgerService');
 const audit = require('./auditLog');
 const {
-  splitVatInclusive, allocateProportional, summariseByRate, assertIntegerIsk,
+  splitVatInclusive, allocateProportional, summariseByRate, assertIntegerIsk, resolveVatRate,
   STANDARD_VAT_RATE, REDUCED_VAT_RATE,
 } = require('../../utils/vat');
-const { convertLinesToIsk } = require('../../utils/fx');
+const { convertLinesToIsk, assertPlausibleRate } = require('../../utils/fx');
 const { toIsoDate, addDays, assertAccountingDate, todayIso } = require('../../utils/booksDate');
 
 class InvoiceError extends Error {
@@ -95,7 +95,8 @@ async function readOrderForInvoicing(client, orderId) {
 
   const { rows: items } = await client.query(
     `SELECT oi.id, oi.product_id, oi.product_name_snapshot, oi.product_price_snapshot,
-            oi.quantity, oi.currency, p.sku, COALESCE(p.is_bookable, FALSE) AS is_service
+            oi.quantity, oi.currency, p.sku, COALESCE(p.is_bookable, FALSE) AS is_service,
+            p.vat_rate
        FROM order_items oi
        LEFT JOIN products p ON p.id = oi.product_id
       WHERE oi.order_id = $1
@@ -150,30 +151,48 @@ function isExport(customerCountry) {
 function buildLines({ order, items, rate, exportSale }) {
   if (!items.length) throw new InvoiceError('That order has no items to invoice', 400, 'NO_LINES');
 
+  // Per-line VAT rate, from the product.
+  //
   // Zero-rating applies to EXPORTED GOODS. A service is taxed where it is
   // performed, so joinery or software work done in Iceland stays at the standard
   // rate even when the customer is abroad — VSK act art. 12 enumerates the narrow
   // cases where a service to a non-resident is zero-rated, and blanket-zeroing them
-  // under-declares output VAT. `order_items` carries no per-item rate today, so
-  // goods take the standard rate unless exported.
-  const vatRateFor = item => (exportSale && !item.is_service ? 0 : STANDARD_VAT_RATE);
+  // under-declares output VAT.
+  //
+  // Otherwise the product's own rate applies. The 11% band is a closed statutory
+  // list, and books and printed matter are on it — charging 24% on a catalogue is
+  // the wrong tax, not a rounding preference.
+  const vatRateFor = (item) => {
+    if (exportSale && !item.is_service) return 0;
+    // resolveVatRate rather than a bare ?? default: a product row carrying a rate
+    // outside {0,11,24} should stop the invoice, not be quietly normalised.
+    return item.vat_rate === null || item.vat_rate === undefined
+      ? STANDARD_VAT_RATE : resolveVatRate(item.vat_rate);
+  };
 
-  // Gross per line in the ORDER's currency and minor units.
-  const grossMinor = items.map(it =>
-    assertIntegerIsk(it.product_price_snapshot, 'product_price_snapshot')
-    * assertIntegerIsk(it.quantity, 'quantity'));
+  // UNIT prices are what get translated, not line totals.
+  //
+  // Reglugerð 50/1993 requires quantity and unit price on the line, which means a
+  // reader must be able to multiply them and arrive at the total. Translating the
+  // line total and dividing it back by the quantity does not survive that: 3 × EUR
+  // 3.33 at 1.5 gives a 1,499 ISK line whose unit price rounds to 500, and the
+  // document then claims 3 × 500 = 1,499. Translating the unit price and
+  // multiplying makes the arithmetic on the page true by construction.
+  const orderCurrency = order.currency;
+  const unitIsk = items.map(it => convertLinesToIsk(
+    [assertIntegerIsk(it.product_price_snapshot, 'product_price_snapshot')], orderCurrency, rate
+  ).lines[0]);
+  const grossBefore = items.map((it, i) =>
+    unitIsk[i] * assertIntegerIsk(it.quantity, 'quantity'));
 
   const shippingMinor = Math.max(
     0,
     assertIntegerIsk(order.shipping || 0, 'shipping')
     - assertIntegerIsk(order.shipping_discount || 0, 'shipping_discount')
   );
-  const discountMinor = assertIntegerIsk(order.discount_amount || 0, 'discount_amount');
-
-  // Shipping is a taxable supply that follows the goods: standard-rated at home,
-  // zero-rated on an export.
-  const parts = grossMinor.slice();
-  if (shippingMinor > 0) parts.push(shippingMinor);
+  const shippingIsk = shippingMinor > 0
+    ? convertLinesToIsk([shippingMinor], orderCurrency, rate).lines[0] : 0;
+  if (shippingIsk > 0) grossBefore.push(shippingIsk);
 
   // THE authoritative figure is what the customer actually paid, translated once:
   // round(order.total × rate). Everything else is fitted around it.
@@ -183,34 +202,27 @@ function buildLines({ order, items, rate, exportSale }) {
   // round(a + b) − round(b) ≠ round(a). That króna made the invoice disagree with
   // the payment, so it could never settle and eventually read "overdue".
   const orderTotalMinor = assertIntegerIsk(order.total, 'order.total');
-  const iskInvoiceTotal = convertLinesToIsk([orderTotalMinor], order.currency, rate).lines[0];
+  const iskInvoiceTotal = convertLinesToIsk([orderTotalMinor], orderCurrency, rate).lines[0];
 
-  // Pre-discount line grosses, translated. Their sum is only a starting point —
-  // the discount allocation below is what makes them reconcile to the total.
-  const { lines: iskParts } = convertLinesToIsk(
-    parts, order.currency, rate, orderTotalMinor + discountMinor
-  );
-  const iskPartsTotal = iskParts.reduce((a, b) => a + b, 0);
-
-  // The discount is whatever it takes to bring the translated parts down to the
-  // authoritative total — derived, not translated independently, so the two can
-  // never disagree. Allocated by line size so each line keeps its effective rate
-  // and the per-rate VAT split stays honest.
-  const iskDiscount = iskPartsTotal - iskInvoiceTotal;
-  if (iskDiscount < 0) {
-    throw new InvoiceError(
-      `Order ${order.order_number} totals more than the sum of its lines; refusing to issue an invoice that does not reconcile`,
-      500, 'RECONCILIATION_FAILED'
-    );
-  }
-  const discountAlloc = iskDiscount > 0
-    ? allocateProportional(iskDiscount, iskParts)
-    : iskParts.map(() => 0);
+  // Whatever it takes to bring the translated lines down to the authoritative
+  // total — derived, never translated independently, so the two cannot disagree.
+  // Allocated by line size so each line keeps its effective rate and the per-rate
+  // VAT split stays honest. Shown separately on the line, so unit × qty still reads
+  // correctly with the discount stated beneath it.
+  const spread = grossBefore.reduce((a, b) => a + b, 0) - iskInvoiceTotal;
+  const discountAlloc = spread > 0
+    ? allocateProportional(spread, grossBefore)
+    : grossBefore.map(() => 0);
+  // A NEGATIVE spread means unit-price rounding left the lines a króna or two short
+  // of what was actually paid. That difference is real money and has to appear, so
+  // it becomes an explicit rounding line (sléttun) rather than being smeared into a
+  // unit price and breaking the arithmetic this function exists to protect.
+  const roundingIsk = spread < 0 ? -spread : 0;
 
   const built = [];
   items.forEach((item, i) => {
     const vatRate = vatRateFor(item);
-    const before = iskParts[i];
+    const before = grossBefore[i];
     const discount = Math.min(discountAlloc[i], before);
     const gross = before - discount;
     const split = splitVatInclusive(gross, vatRate);
@@ -219,9 +231,10 @@ function buildLines({ order, items, rate, exportSale }) {
       sku: item.sku || null,
       description: item.product_name_snapshot,
       quantity: Number(item.quantity),
-      // Unit price is the price the customer was actually shown, translated —
-      // the discount is reported separately rather than hidden inside it.
-      unit_price_gross: Math.round(before / Number(item.quantity)),
+      // unit × quantity === gross_before_discount, exactly, by construction. The
+      // discount is reported on its own line beneath, never folded into the price
+      // the customer was quoted.
+      unit_price_gross: unitIsk[i],
       vat_rate: vatRate,
       gross_before_discount: before,
       discount_gross: discount,
@@ -233,10 +246,13 @@ function buildLines({ order, items, rate, exportSale }) {
     });
   });
 
-  if (shippingMinor > 0) {
-    const i = parts.length - 1;
+  if (shippingIsk > 0) {
+    // Shipping is the last entry in grossBefore/discountAlloc — see where it was
+    // pushed above. Standard-rated at home, zero-rated on an export, because it
+    // follows the goods it carries.
+    const i = grossBefore.length - 1;
     const vatRate = exportSale ? 0 : STANDARD_VAT_RATE;
-    const before = iskParts[i];
+    const before = grossBefore[i];
     const discount = Math.min(discountAlloc[i], before);
     const gross = before - discount;
     const split = splitVatInclusive(gross, vatRate);
@@ -254,6 +270,31 @@ function buildLines({ order, items, rate, exportSale }) {
       line_gross: gross,
       revenue_account: exportSale ? '4300' : '4100',
       is_shipping: true,
+    });
+  }
+
+  // Sléttun. Only ever a couple of krónur, and only on a translated order, but it
+  // is money the customer actually paid so it is stated rather than hidden. Taxed
+  // at the rate of the largest line so it does not distort the per-rate split.
+  if (roundingIsk > 0) {
+    const dominant = built.reduce((best, l) => (l.line_gross > best.line_gross ? l : best), built[0]);
+    const vatRate = dominant ? dominant.vat_rate : STANDARD_VAT_RATE;
+    const split = splitVatInclusive(roundingIsk, vatRate);
+    built.push({
+      product_id: null,
+      sku: null,
+      description: 'Sléttun',
+      quantity: 1,
+      unit_price_gross: roundingIsk,
+      vat_rate: vatRate,
+      gross_before_discount: roundingIsk,
+      discount_gross: 0,
+      line_net: split.net,
+      line_vat: split.vat,
+      line_gross: roundingIsk,
+      revenue_account: dominant ? dominant.revenue_account : '4100',
+      is_shipping: false,
+      is_rounding: true,
     });
   }
 
@@ -362,8 +403,16 @@ async function createFromOrder(client, orderId, opts = {}) {
   const exportSale = isExport(customer.country);
 
   // FX at the invoice's own date, never "today".
+  // fxRateOverride exists for the backfill script, which invoices historical orders
+  // and may be handed the rate that applied then. It goes through the same
+  // plausibility band as a stored rate — an override is still a rate nobody has
+  // validated, and a decimal-place slip here misstates the whole invoice.
   const fx = opts.fxRateOverride !== undefined
-    ? { rate: Number(opts.fxRateOverride), rate_date: issuedAt, source: 'manual' }
+    ? {
+      rate: assertPlausibleRate(order.currency, opts.fxRateOverride),
+      rate_date: issuedAt,
+      source: 'manual',
+    }
     : await FxRate.forDate(order.currency, issuedAt, client);
 
   const totals = buildLines({ order, items, rate: fx.rate, exportSale });

@@ -1708,5 +1708,9 @@
   "adminBooks.statement.kind.credit_note": "Kreditnóta",
   "adminBooks.audit.expense.created": "Kostnaður skráður",
   "adminBooks.audit.expense.updated": "Kostnaði breytt",
-  "adminBooks.audit.document.uploaded": "Fylgiskjali hlaðið upp"
+  "adminBooks.audit.document.uploaded": "Fylgiskjali hlaðið upp",
+  "adminProducts.vatRateLabel": "VSK-þrep",
+  "adminProducts.vatRate24": "24% (almennt)",
+  "adminProducts.vatRate11": "11% (bækur, matvæli o.fl.)",
+  "adminProducts.vatRate0": "0% (undanþegið)"
 }

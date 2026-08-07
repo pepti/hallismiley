@@ -1708,5 +1708,9 @@
   "adminBooks.statement.kind.credit_note": "Credit note",
   "adminBooks.audit.expense.created": "Expense recorded",
   "adminBooks.audit.expense.updated": "Expense updated",
-  "adminBooks.audit.document.uploaded": "Receipt uploaded"
+  "adminBooks.audit.document.uploaded": "Receipt uploaded",
+  "adminProducts.vatRateLabel": "VAT rate",
+  "adminProducts.vatRate24": "24% (standard)",
+  "adminProducts.vatRate11": "11% (books, food, etc.)",
+  "adminProducts.vatRate0": "0% (exempt)"
 }

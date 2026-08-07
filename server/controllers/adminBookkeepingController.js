@@ -252,7 +252,7 @@ async function recordPayment(req, res, next) {
     const result = await ledger.withTransaction(client =>
       invoiceService.recordPayment(client, id, {
         ...settlement,
-        createdBy: req.user.id, requestId: req.requestId || null,
+        ...audit.actorOf(req),
       })
     );
     securityLogger.adminAction(req.user.id, 'books.payment.record', id, {
@@ -281,7 +281,7 @@ async function recordRefund(req, res, next) {
     const result = await ledger.withTransaction(client =>
       invoiceService.recordRefund(client, id, {
         ...settlement,
-        createdBy: req.user.id, requestId: req.requestId || null,
+        ...audit.actorOf(req),
       })
     );
     securityLogger.adminAction(req.user.id, 'books.payment.refund', id, {
@@ -306,7 +306,7 @@ async function createCreditNote(req, res, next) {
     const result = await ledger.withTransaction(client =>
       invoiceService.issueCreditNote(client, id, {
         amountGross, reason, issuedAt,
-        createdBy: req.user.id, requestId: req.requestId || null,
+        ...audit.actorOf(req),
       })
     );
     securityLogger.adminAction(req.user.id, 'books.credit_note.issue', id, { created: result.created });
@@ -498,7 +498,7 @@ async function attachExpenseDocument(req, res, next) {
       ? parseId(req.body.document_id, 'document_id') : null;
     await ledger.withTransaction(client =>
       expenseService.attachDocument(client, id, {
-        documentId, createdBy: req.user.id, requestId: req.requestId || null,
+        documentId, ...audit.actorOf(req),
       }));
     res.json({ expense: await Expense.findById(id) });
   } catch (err) { fail(res, err, next); }
@@ -544,7 +544,7 @@ async function uploadDocument(req, res, next) {
     const note = parseText(req.body && req.body.note, 'note', { maxLen: 500 });
     const result = await ledger.withTransaction(client =>
       documentService.register(client, req.file, {
-        kind, note, createdBy: req.user.id, requestId: req.requestId || null,
+        kind, note, ...audit.actorOf(req),
       }));
     res.status(201).json(result);
   } catch (err) { fail(res, err, next); }
@@ -696,6 +696,6 @@ module.exports = {
   getSettings,
   updateSettings,
   setFxRate,
-  // Request-parsing helpers, unit-tested in tests/unit/bookscontrollerParse.test.js.
+  // Request-parsing helpers, unit-tested in tests/unit/booksControllerParse.test.js.
   _internals: { parsePagination, parseRange, parseAmount, parseEnum, parseId, parseText },
 };

@@ -66,12 +66,17 @@ async function record(client, { actorId = null, action, entityType, entityId = n
   logger.info({ action, entityType, entityId, actorId, requestId }, 'books audit');
 }
 
-// Convenience wrapper for controllers: pulls actor and request id off req.
-function fromRequest(req) {
-  return {
-    actorId: req.user ? req.user.id : null,
-    requestId: req.requestId || null,
-  };
+/**
+ * Actor + correlation id off a request, for the services that take them.
+ *
+ * Spread into a service call: `{ ...actorOf(req), amount }`. The services want
+ * `createdBy` (it lands in a NOT NULL column) while record() above wants
+ * `actorId`, so both names are returned rather than making every call site
+ * remember which one applies.
+ */
+function actorOf(req) {
+  const id = req.user ? req.user.id : null;
+  return { actorId: id, createdBy: id, requestId: req.requestId || null };
 }
 
 // History for one entity, newest first. Used by the "who touched this" panel on
@@ -91,4 +96,4 @@ async function forEntity(client, entityType, entityId, limit = 50) {
   return rows;
 }
 
-module.exports = { ACTIONS, record, fromRequest, forEntity };
+module.exports = { ACTIONS, record, actorOf, forEntity };
