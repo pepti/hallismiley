@@ -2,6 +2,7 @@ const crypto    = require('crypto');
 const db        = require('../server/config/database');
 const { lucia } = require('../server/auth/lucia');
 const UserRole  = require('../server/models/UserRole');
+const ledgerService = require('../server/services/bookkeeping/ledgerService');
 const { Scrypt } = require('oslo/password');
 
 const scrypt = new Scrypt();
@@ -193,10 +194,40 @@ async function cleanTables() {
             ('other',    NULL, '📦', 5, TRUE)
      ON CONFLICT (key) DO NOTHING`
   );
+  // Every bookkeeping table FKs to users (created_by / filed_by / locked_by), so
+  // the same CASCADE sweeps the whole of migration 072's reference data: the chart
+  // of accounts, the document counters, and the fiscal periods. None of it is
+  // written by tests — it is seeded by the migration — so it has to be restored
+  // here or the first cleanTables() call leaves the books unable to post anything
+  // ("Unknown ledger account code", "Document counter is missing"), and a
+  // period-lock test silently passes because the period row it locked is gone.
+  await reseedBooksReferenceData();
+
+  // The chart of accounts is cached per process by ledgerService; the re-seed
+  // above hands out fresh row ids, so a stale cache would point at accounts that
+  // no longer exist.
+  ledgerService.invalidateAccountCache();
+
   // user_roles is cleared via the users CASCADE above; also drop the in-process
   // per-user role cache so a fresh DB starts with a fresh cache (tests mutate
   // users.role directly, bypassing the model's own invalidation).
   UserRole.invalidateAll();
+}
+
+/**
+ * Restore the reference rows migration 072 seeds. Re-runs the migration's own
+ * statements rather than a hand-copied duplicate, so the two can never drift —
+ * the failure mode of a copy would be tests passing against a chart of accounts
+ * that no longer matches production.
+ */
+async function reseedBooksReferenceData() {
+  const { migrations } = require('../server/config/schema');
+  const books = migrations.find(m => m.name === '072_bookkeeping');
+  if (!books) return;
+  const seeds = books.statements.filter(s => /^\s*INSERT INTO/i.test(s));
+  for (const stmt of seeds) {
+    await db.query(stmt);
+  }
 }
 
 /** A minimal valid project body for POST requests. */
@@ -231,6 +262,7 @@ module.exports = {
   createTestPendingGuest,
   getTestSessionCookie,
   cleanTables,
+  reseedBooksReferenceData,
   validProject,
   validArticle,
 };

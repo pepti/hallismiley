@@ -1,0 +1,181 @@
+/* Bókhald screens.
+
+   Uses the project theme tokens from variables.css (--bg-surface, --border-dim,
+   --text-muted, --accent-amber, --bg-hover), which themes.css re-defines per
+   theme. Do NOT introduce a parallel --admin-* namespace: no such tokens exist,
+   so every var() would silently fall back to its literal and the screens would
+   ignore the theme switcher entirely. */
+
+.admin-books__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.books-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ── Standing warnings ─────────────────────────────────────────────────────── */
+
+.books-banner {
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+.books-banner ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+.books-banner li { margin: 0.2rem 0; }
+.books-banner--warn {
+  background: rgba(214, 158, 46, 0.12);
+  border-color: rgba(214, 158, 46, 0.4);
+  color: #e0b155;
+}
+.books-banner--error {
+  background: rgba(220, 80, 80, 0.12);
+  border-color: rgba(220, 80, 80, 0.4);
+  color: #e88;
+}
+
+/* ── Stat tiles ────────────────────────────────────────────────────────────── */
+
+.books-stats {
+  display: grid;
+  /* auto-fit rather than fixed columns so the row reflows on a phone without a
+     media query per breakpoint. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1.75rem;
+}
+
+.books-stat {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 0.95rem 1rem;
+}
+.books-stat--warn { border-color: rgba(214, 158, 46, 0.45); }
+.books-stat__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.books-stat__value {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0.3rem 0 0.25rem;
+  /* Tabular figures so a column of amounts lines up on the decimal. */
+  font-variant-numeric: tabular-nums;
+}
+.books-stat__hint {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* ── Sections and columns ──────────────────────────────────────────────────── */
+
+.books-section { margin-bottom: 1.75rem; }
+.books-section__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.books-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────────── */
+
+.books-table { width: 100%; }
+.books-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.books-table--clickable tbody tr { cursor: pointer; }
+.books-table--clickable tbody tr:hover,
+.books-table--clickable tbody tr:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.books-muted { color: var(--text-muted); font-size: 0.8rem; }
+
+.books-sort {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.books-sort.is-active { color: var(--accent-amber); }
+
+.books-totals table { max-width: 420px; margin-left: auto; }
+.books-totals__grand td { font-weight: 600; border-top: 1px solid var(--border-dim); }
+
+/* ── Status pills ──────────────────────────────────────────────────────────── */
+
+.books-pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+.books-pill--ok    { background: rgba(80, 180, 120, 0.15); border-color: rgba(80, 180, 120, 0.4); color: #7ac89a; }
+.books-pill--warn  { background: rgba(214, 158, 46, 0.15); border-color: rgba(214, 158, 46, 0.4); color: #e0b155; }
+.books-pill--info  { background: rgba(90, 140, 220, 0.15); border-color: rgba(90, 140, 220, 0.4); color: #8fb2e8; }
+.books-pill--muted { background: rgba(255, 255, 255, 0.06); border-color: var(--border-dim); color: var(--text-muted); }
+
+/* ── Filters, forms, pager ─────────────────────────────────────────────────── */
+
+.books-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+.books-filters input[type='search'] { flex: 1 1 260px; }
+
+.books-form {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 1rem;
+}
+.books-form h3 { margin: 0 0 0.75rem; font-size: 0.95rem; }
+.books-form label {
+  display: block;
+  margin-bottom: 0.7rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.books-form input,
+.books-form select { width: 100%; margin-top: 0.25rem; }
+
+.books-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+.books-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
