@@ -16,6 +16,7 @@ const Setting = require('../models/Setting');
 const ledger = require('../services/bookkeeping/ledgerService');
 const invoiceService = require('../services/bookkeeping/invoiceService');
 const expenseService = require('../services/bookkeeping/expenseService');
+const vatService = require('../services/bookkeeping/vatService');
 const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
 const { toCsv, csvHeaders } = require('../utils/csv');
@@ -586,6 +587,110 @@ async function getStatement(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// ── VSK returns ──────────────────────────────────────────────────────────────
+
+async function listVatPeriods(req, res, next) {
+  try {
+    const periods = await vatService.listPeriods(db, { limit: req.query.limit });
+    res.json({ periods, current_period: vatService.currentPeriod() });
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * One period: the derived figures, the preflight review, and — if it has been filed
+ * — the snapshot exactly as reported.
+ *
+ * Both are returned together on purpose. A filed period shows what WAS reported
+ * alongside what the ledger says NOW, which is how you notice that something was
+ * back-dated into a closed period.
+ */
+async function getVatPeriod(req, res, next) {
+  try {
+    const period = parseText(req.params.period, 'period', { maxLen: 12, required: true });
+    const [filed, review] = await Promise.all([
+      vatService.getFiledReturn(db, period),
+      vatService.preflight(db, period),
+    ]);
+    res.json({
+      period,
+      filed,
+      derived: review.derived,
+      findings: review.findings,
+      can_file: review.can_file,
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function fileVatReturn(req, res, next) {
+  try {
+    const period = parseText(req.params.period, 'period', { maxLen: 12, required: true });
+    const body = req.body || {};
+    const note = parseText(body.note, 'note', { maxLen: 1000 });
+    // Overriding a blocker is allowed but never the default, and the reason is
+    // recorded in the snapshot's preflight blob so "why was this filed with three
+    // warnings outstanding" stays answerable a year later.
+    const overrideBlockers = body.override_blockers === true;
+    if (overrideBlockers && !note) {
+      throw new BadRequest('Filing over a blocker requires a note explaining why');
+    }
+
+    const result = await ledger.withTransaction(client =>
+      vatService.fileReturn(client, period, {
+        ...audit.actorOf(req), filedBy: req.user.id, note, overrideBlockers,
+      })
+    );
+    securityLogger.adminAction(req.user.id, 'books.vat.file', period, {
+      payable: result.derived.box_f_payable, overridden: overrideBlockers,
+    });
+    res.status(201).json({
+      filed: await vatService.getFiledReturn(db, period),
+      findings: result.findings,
+    });
+  } catch (err) {
+    if (err && err.code === 'PREFLIGHT_BLOCKED') {
+      return res.status(409).json({ error: err.message, code: 409, findings: err.findings || [] });
+    }
+    return fail(res, err, next);
+  }
+}
+
+async function unlockVatPeriod(req, res, next) {
+  try {
+    const period = parseText(req.params.period, 'period', { maxLen: 12, required: true });
+    const reason = parseText((req.body || {}).reason, 'reason', { maxLen: 300, required: true });
+    const result = await ledger.withTransaction(client =>
+      vatService.unlockPeriod(client, period, { ...audit.actorOf(req), reason })
+    );
+    securityLogger.adminAction(req.user.id, 'books.vat.unlock', period, {
+      discarded_return: result.discarded,
+    });
+    res.json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportVatCsv(req, res, next) {
+  try {
+    const periods = await vatService.listPeriods(db, { limit: 60 });
+    csvHeaders(res, `vsk-uppgjor-${todayIso()}.csv`);
+    const rows = [];
+    for (const p of periods) {
+      const filed = await vatService.getFiledReturn(db, p.period);
+      const figures = filed || await vatService.deriveReturn(db, p.period);
+      rows.push([
+        p.period, p.starts_on, p.ends_on,
+        figures.box_a_net_24, figures.box_b_net_11, figures.box_c_net_zero,
+        figures.box_d_output, figures.box_e_input, figures.box_f_payable,
+        filed ? 'skilað' : 'óskilað', p.due_on || '',
+      ]);
+    }
+    res.send(toCsv(
+      ['Tímabil', 'Frá', 'Til', 'A (24% velta)', 'B (11% velta)', 'C (0% velta)',
+        'D (útskattur)', 'E (innskattur)', 'F (til greiðslu)', 'Staða', 'Skiladagur'],
+      rows
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
 // ── CSV exports ──────────────────────────────────────────────────────────────
 //
 // Server-side and unbounded-safe. The client-side "export all" pattern that
@@ -683,6 +788,11 @@ module.exports = {
   getDocument,
   getAging,
   getStatement,
+  listVatPeriods,
+  getVatPeriod,
+  fileVatReturn,
+  unlockVatPeriod,
+  exportVatCsv,
   exportInvoicesCsv,
   exportExpensesCsv,
   exportAgingCsv,

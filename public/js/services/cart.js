@@ -214,7 +214,17 @@ function _mergeGuestBasketInto(owner) {
 
 export function formatMoney(amount, currency = getCurrency()) {
   if (currency === 'ISK') {
-    return `${Number(amount).toLocaleString('is-IS')} kr.`;
+    // Grouped explicitly rather than via toLocaleString('is-IS').
+    //
+    // Icelandic uses "." as the thousands separator and ISK has no subunit — both
+    // fixed facts. But locale data is not guaranteed: a runtime built without full
+    // ICU falls back to en-US and renders "220,000 kr.", which reads as a decimal
+    // comma to an Icelandic reader. That was observable in the embedded browser
+    // while Node on the same machine formatted it correctly, so the bug only shows
+    // up for some users — the worst kind. Deterministic beats idiomatic here.
+    const n = Math.round(Number(amount) || 0);
+    const sign = n < 0 ? '-' : '';
+    return `${sign}${String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} kr.`;
   }
   if (currency === 'EUR') {
     return `€${(Number(amount) / 100).toFixed(2)}`;

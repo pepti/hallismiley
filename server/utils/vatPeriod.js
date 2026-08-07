@@ -126,7 +126,19 @@ function periodsInYear(year) {
   return Array.from({ length: PERIODS_PER_YEAR }, (_, i) => periodKey(y, i + 1));
 }
 
+// Cheap shape check, for callers that take a period from a request and want a clean
+// 400 rather than a thrown PeriodError from deeper in.
+function isValidPeriod(period) {
+  try {
+    parsePeriod(period);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
+  isValidPeriod,
   PERIODS_PER_YEAR,
   MAX_PERIODS,
   PeriodError,

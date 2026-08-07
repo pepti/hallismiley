@@ -146,3 +146,32 @@ export function newIdempotencyKey() {
   }
   return `k-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+// ── VSK returns ──────────────────────────────────────────────────────────────
+
+export const fetchVatPeriods = () => get('/vat');
+export const fetchVatPeriod = (period) => get(`/vat/${encodeURIComponent(period)}`);
+
+// Throws with `err.findings` attached on a 409, so the caller can show exactly what
+// is blocking rather than a bare message.
+export async function fileVatReturn(period, body) {
+  const res = await fetch(`${BASE}/vat/${encodeURIComponent(period)}/file`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: await csrfHeaders(),
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Beiðni mistókst');
+    if (Array.isArray(data.findings)) err.findings = data.findings;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export const unlockVatPeriod = (period, body) =>
+  send('POST', `/vat/${encodeURIComponent(period)}/unlock`, body);
+
+export const vatCsvUrl = () => `${BASE}/vat/export.csv`;

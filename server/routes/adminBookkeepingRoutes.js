@@ -86,6 +86,17 @@ router.get('/ar/export.csv', docLimiter, requireView('ar'), books.exportAgingCsv
 router.get('/ar', requireView('ar'), books.getAging);
 router.get('/ar/:customerKey', requireView('ar'), books.getStatement);
 
+// ── VSK returns (view: vat) ──────────────────────────────────────────────────
+router.get('/vat/export.csv', docLimiter, requireView('vat'), books.exportVatCsv);
+router.get('/vat', requireView('vat'), books.listVatPeriods);
+router.get('/vat/:period', requireView('vat'), books.getVatPeriod);
+// Filing reports a figure to Skatturinn and locks the period. Hard admin-only —
+// not delegable through a custom role, whatever else that role can see.
+router.post('/vat/:period/file', requireRole('admin'), csrfProtect, books.fileVatReturn);
+// Re-opening a filed period discards its snapshot. Admin-only, reason required,
+// and audited with the figures the discarded return held.
+router.post('/vat/:period/unlock', requireRole('admin'), csrfProtect, books.unlockVatPeriod);
+
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than
 // falling through to the /api/v1/admin catch-all router. Note what this does and

@@ -408,6 +408,73 @@ async function postDraft(client, draftId, { createdBy } = {}) {
 // evening transaction into the next day and sometimes into the next VSK period.
 // One conversion, used everywhere, is the only way the app and the DB triggers
 // agree on which period a document belongs to.
+/**
+ * Close a fiscal period.
+ *
+ * Takes `FOR UPDATE` on the period row before flipping it. The posting trigger reads
+ * fiscal_periods without a lock, so without this a transaction that started posting
+ * while the period looked open could commit after the lock landed — putting an entry
+ * inside a period whose figures had already been reported. Locking the row here
+ * makes the two serialise on it.
+ *
+ * Asserts a row actually changed: `UPDATE ... WHERE status = 'open'` silently does
+ * nothing on an already-locked period, and a lock that quietly did not happen is
+ * worse than an error.
+ */
+async function lockPeriod(client, period, { lockedBy } = {}) {
+  if (!lockedBy) throw new LedgerError('lockPeriod requires lockedBy', 500);
+  const { rows: locked } = await client.query(
+    `SELECT period, status FROM fiscal_periods WHERE period = $1 FOR UPDATE`, [period]
+  );
+  if (!locked.length) {
+    throw new LedgerError(`No such accounting period: ${period}`, 404, 'NO_SUCH_PERIOD');
+  }
+  if (locked[0].status === 'locked') {
+    throw new LedgerError(`Period ${period} is already locked`, 409, 'ALREADY_LOCKED');
+  }
+  const { rowCount } = await client.query(
+    `UPDATE fiscal_periods
+        SET status = 'locked', locked_at = NOW(), locked_by = $2
+      WHERE period = $1 AND status = 'open'`,
+    [period, lockedBy]
+  );
+  if (rowCount !== 1) {
+    throw new LedgerError(`Failed to lock period ${period}`, 409, 'LOCK_FAILED');
+  }
+  logger.info({ period, lockedBy }, 'accounting period locked');
+  return { period, status: 'locked' };
+}
+
+/**
+ * Re-open a locked period.
+ *
+ * Exists because "filed by mistake, before actually submitting" is a real situation
+ * and the alternative is someone editing fiscal_periods by hand. The reason is
+ * required and the caller is expected to audit it — vatService.unlockPeriod does.
+ */
+async function unlockPeriod(client, period, { unlockedBy, reason } = {}) {
+  if (!unlockedBy) throw new LedgerError('unlockPeriod requires unlockedBy', 500);
+  if (!reason || !String(reason).trim()) {
+    throw new LedgerError('unlockPeriod requires a reason', 400, 'REASON_REQUIRED');
+  }
+  const { rows } = await client.query(
+    `SELECT period, status FROM fiscal_periods WHERE period = $1 FOR UPDATE`, [period]
+  );
+  if (!rows.length) {
+    throw new LedgerError(`No such accounting period: ${period}`, 404, 'NO_SUCH_PERIOD');
+  }
+  if (rows[0].status !== 'locked') {
+    throw new LedgerError(`Period ${period} is not locked`, 409, 'NOT_LOCKED');
+  }
+  await client.query(
+    `UPDATE fiscal_periods SET status = 'open', locked_at = NULL, locked_by = NULL
+      WHERE period = $1`,
+    [period]
+  );
+  logger.warn({ period, unlockedBy, reason: String(reason).slice(0, 200) }, 'accounting period unlocked');
+  return { period, status: 'open' };
+}
+
 function normaliseDate(value) {
   if (value === undefined || value === null) return todayIso();
   try {
@@ -443,6 +510,8 @@ module.exports = {
   ensureFiscalPeriod,
   periodStatus,
   assertPeriodOpen,
+  lockPeriod,
+  unlockPeriod,
   postEntry,
   reverseEntry,
   createDraft,

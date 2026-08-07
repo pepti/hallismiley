@@ -19,7 +19,8 @@
     "test:e2e:ui": "playwright test --ui",
     "lint": "eslint .",
     "check:i18n": "node scripts/check-i18n-keys.js",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "seed:books": "node server/scripts/seed-books-demo.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

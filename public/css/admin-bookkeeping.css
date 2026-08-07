@@ -221,3 +221,30 @@
   border-top: 1px solid var(--border-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Phase 5: VSK return ──────────────────────────────────────────────────── */
+
+/* The RSK box letter, so the screen maps visibly onto the paper form. */
+.books-vat__box {
+  width: 2.2rem;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--accent-amber);
+  text-align: center;
+  vertical-align: top;
+}
+.books-vat__boxes td { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+
+.books-table--clickable tbody tr.is-selected {
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 0 var(--accent-amber);
+}
+
+.books-banner--info {
+  background: rgba(90, 140, 220, 0.12);
+  border-color: rgba(90, 140, 220, 0.4);
+  color: #8fb2e8;
+}
+/* Sub-lines under a box, for the reverse-charge split. */
+.books-vat__sub td { padding-top: 0.15rem; padding-bottom: 0.15rem; font-size: 0.85rem; }
+.books-vat__sub td:nth-child(2) { padding-left: 1.2rem; color: var(--text-muted); }

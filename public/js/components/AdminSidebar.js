@@ -49,6 +49,7 @@ export const ADMIN_NAV = [
     { id: 'invoices', route: '/admin/books/invoices', labelKey: 'admin.nav.invoices', icon: 'receipt' },
     { id: 'expenses', route: '/admin/books/expenses', labelKey: 'admin.nav.expenses', icon: 'inbox' },
     { id: 'ar',       route: '/admin/books/ar',       labelKey: 'admin.nav.ar',       icon: 'clock' },
+    { id: 'vat',      route: '/admin/books/vat',      labelKey: 'admin.nav.vat',      icon: 'percent' },
   ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
