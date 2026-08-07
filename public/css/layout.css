@@ -87,6 +87,11 @@
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.25);
 }
+/* Locale-locked routes (the Icelandic-only party pages) hide the toggle via
+   the `hidden` attribute — NavBar.syncLocaleLock. Needs to be spelled out:
+   the `display` above would otherwise beat the UA stylesheet's [hidden] rule
+   and the toggle would stay visible. */
+.lol-nav__lang[hidden] { display: none; }
 .lol-nav__lang-opt {
   min-width: 32px;
   padding: 4px 10px;

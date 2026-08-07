@@ -1,11 +1,13 @@
 'use strict';
 // Locale detection middleware — sets req.locale for every request.
 // Priority (highest first):
+//   0. Locale-locked PAGE routes (forcedLocaleFor) — the party pages are
+//      Icelandic-only and ignore every signal below.
 //   1. ?locale= query param (used by SPA API calls)
 //   2. X-Locale request header
 //   3. locale_choice cookie (the user's EXPLICIT switcher choice)
 //   4. Logged-in user's saved preferred_locale
-//   5. Party-route default ('is' for /party, /party/admin, /api/v1/party/*)
+//   5. Party-route default ('is' for /party* and /api/v1/party/*)
 //   6. Accept-Language header (first supported language)
 //   7. DEFAULT_LOCALE
 //
@@ -14,17 +16,24 @@
 // can still browse /en/* or fetch ?locale=en content without their saved
 // preference overriding the URL they're actually on.
 //
+// The page lock (0) sits above all of them — that's the point of a lock. A
+// guest with locale_choice=en who opens a party magic link still gets the
+// Icelandic page, so the SSR <head> and the SPA can never disagree about it.
+//
+// The party API is deliberately NOT locked (see config/i18n.js): its ?locale=
+// selects which content row to read/write, so locking it would let a stray
+// ?locale=en overwrite the Icelandic source copy. It keeps step 5 instead —
+// the long-standing Icelandic default for visitors who never chose a language.
+//
 // The locale_choice cookie is written ONLY by the client's explicit language
 // switcher (public/js/i18n/i18n.js persistLocaleChoice) — never for
 // auto-resolved fallbacks. The old 'preferred_locale' cookie used to mirror
 // every resolved locale (fallbacks included), which polluted stored state and
 // defeated the party default below; it is deliberately ignored, not migrated.
-//
-// The party-route default sits between saved-preference signals and
-// Accept-Language so that visitors who never explicitly chose a language land
-// on the birthday page in Icelandic, even if their browser advertises English.
 
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_DEFAULT_LOCALE, isPartyPath } = require('../config/i18n');
+const {
+  DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_FORCED_LOCALE, isPartyPath, forcedLocaleFor,
+} = require('../config/i18n');
 
 function pickFromAcceptLanguage(header) {
   if (!header) return null;
@@ -41,6 +50,9 @@ function pickFromAcceptLanguage(header) {
 // first pass. Calling this again post-auth lets the saved preferred_locale
 // participate in resolution without trampling explicit per-request signals.
 function resolveLocale(req) {
+  const forced = forcedLocaleFor(req.path);
+  if (forced) return forced;
+
   const candidates = [
     req.query?.locale,
     req.headers['x-locale'],
@@ -52,7 +64,7 @@ function resolveLocale(req) {
     if (c && SUPPORTED_LOCALES.includes(c)) return c;
   }
 
-  if (isPartyPath(req.path)) return PARTY_DEFAULT_LOCALE;
+  if (isPartyPath(req.path)) return PARTY_FORCED_LOCALE;
 
   return pickFromAcceptLanguage(req.headers['accept-language']) || DEFAULT_LOCALE;
 }

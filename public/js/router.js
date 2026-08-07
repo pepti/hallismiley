@@ -42,7 +42,7 @@ import { AdminBinsView }         from './views/AdminBinsView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
 import {
   SUPPORTED_LOCALES,
-  loadLocale, getLocale, getPreferredLocale,
+  loadLocale, getLocale, getPreferredLocale, forcedLocaleFor,
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
 import { trackPageView } from './services/usage.js';
@@ -202,6 +202,18 @@ export class Router {
       return;
     }
 
+    // Locale-locked routes (the Icelandic-only party pages) reject any other
+    // locale prefix. The server 301s these on a cold load, so this only fires
+    // for in-SPA navigation and Back/Forward — but without it, history entries
+    // from before the lock (or a hand-edited URL) would render the party page
+    // with English chrome.
+    const lockedLocale = forcedLocaleFor(raw);
+    if (lockedLocale && pathLocale !== lockedLocale) {
+      const { path: unprefixed } = parsePath(raw, window.location.search);
+      navigateReplace('/' + lockedLocale + unprefixed + window.location.search);
+      return;
+    }
+
     // Load locale if it changed (triggers re-render with new strings).
     if (pathLocale !== getLocale()) {
       await loadLocale(pathLocale);
@@ -209,6 +221,10 @@ export class Router {
     }
 
     const { path, qs } = parsePath(raw, window.location.search);
+
+    // Show/hide the language switcher for this route (locked routes offer no
+    // choice). Runs before render so the control never flashes in and out.
+    this.navBar.syncLocaleLock(raw);
 
     // Guard admin routes
     if (path === '/admin' && !isAuthenticated()) {
