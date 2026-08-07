@@ -166,7 +166,14 @@ jobs:
     needs: [deploy]
     # Only when the deploy job actually RAN and failed (not when it was skipped
     # because CI was red — that case is covered by alert-ci-blocked above).
-    if: ${{ needs.deploy.result == 'failure' }}
+    #
+    # always() is load-bearing, not decoration. An `if:` that contains no status
+    # function still has the implicit success() gate applied to `needs`, so a
+    # failed deploy SKIPS this job and the alert never fires — which is exactly
+    # what happened on 2026-08-07, when a registry 504 failed the deploy of
+    # 112d5a8 in silence. always() lifts that gate so the result check is
+    # actually reached.
+    if: ${{ always() && needs.deploy.result == 'failure' }}
     steps:
       - name: Email deploy-failed alert (Resend)
         env:
