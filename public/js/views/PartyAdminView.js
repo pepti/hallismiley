@@ -33,7 +33,8 @@ export class PartyAdminView {
   }
 
   async _loadAndRender() {
-    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, catsRes, todosRes] = await Promise.all([
+    const [rsvpsRes, infoRes, pendingRes, healthRes, guestsRes, logisticsRes, catsRes, todosRes,
+      planRes, phasesRes] = await Promise.all([
       fetch('/api/v1/party/rsvps',            { credentials: 'include' }),
       fetch('/api/v1/party/info',             { credentials: 'include' }),
       fetch('/api/v1/party/pending-requests', { credentials: 'include' }),
@@ -42,6 +43,8 @@ export class PartyAdminView {
       fetch('/api/v1/party/logistics',        { credentials: 'include' }),
       fetch('/api/v1/party/logistics/categories', { credentials: 'include' }),
       fetch('/api/v1/party/todos',            { credentials: 'include' }),
+      fetch('/api/v1/party/plan',             { credentials: 'include' }),
+      fetch('/api/v1/party/plan/phases',      { credentials: 'include' }),
     ]);
     const rsvps     = await rsvpsRes.json();
     const info      = await infoRes.json();
@@ -51,6 +54,8 @@ export class PartyAdminView {
     const logistics = logisticsRes.ok ? await logisticsRes.json() : [];
     const cats      = catsRes.ok ? await catsRes.json() : [];
     const todos     = todosRes.ok ? await todosRes.json() : [];
+    const plan      = planRes.ok ? await planRes.json() : [];
+    const phases    = phasesRes.ok ? await phasesRes.json() : [];
 
     this._rsvps           = Array.isArray(rsvps) ? rsvps : [];
     this._pendingRequests = Array.isArray(pending) ? pending : [];
@@ -59,6 +64,8 @@ export class PartyAdminView {
     this._logistics     = Array.isArray(logistics) ? logistics : [];
     this._logisticsCats = Array.isArray(cats) ? cats : [];
     this._todos         = Array.isArray(todos) ? todos : [];
+    this._plan          = Array.isArray(plan) ? plan : [];
+    this._planPhases    = Array.isArray(phases) ? phases : [];
     this._peopleNames   = this._collectPeopleNames();
     const parsed   = (() => { try { return JSON.parse(info.rsvp_form || 'null'); } catch { return null; } })();
     this._rsvpForm = Array.isArray(parsed) ? parsed : [];
@@ -96,13 +103,13 @@ export class PartyAdminView {
           <a href="${href('/party')}" class="lol-btn lol-btn--ghost">← ${t('party.backToParty')}</a>
         </div>
 
+        ${this._renderPlanSection()}
         ${this._renderAcceptedAndPending()}
         ${this._renderAddGuestSection()}
         ${this._renderDeclinedGuests()}
         ${this._renderLogistics()}
         ${this._renderTodoSection()}
         ${this._renderCostSection()}
-        ${this._renderOwnerInviteSection()}
         ${this._renderStats()}
         ${this._renderAnswerTallies()}
         ${this._renderHelpersList()}
@@ -621,15 +628,24 @@ export class PartyAdminView {
     return parts.length ? parts.join(' ') : '—';
   }
 
-  // The RSVP form's attendance-timing radio field. The canonical `attend_when`
-  // id wins outright; the label heuristic is only a fallback for forms that
-  // renamed the id. (A single find() with an OR would let an *earlier*
-  // radio-group whose label merely mentions "dag"/"kvöld" — e.g. "Verður þú í
-  // kvöldmat?" — hijack the column even though attend_when exists.)
+  // The RSVP form's attendance-timing field. The canonical `attend_when` id
+  // wins outright; the id/label heuristic is only a fallback for forms that
+  // renamed it. (A single find() with an OR would let an *earlier* field whose
+  // label merely mentions "dag"/"kvöld" — e.g. "Verður þú í kvöldmat?" —
+  // hijack the column even though attend_when exists.) Checkbox-groups qualify
+  // too — the live form's attendance field ("attend", label "Svar") is one,
+  // still semantically single-choice — but radio-groups are tried first so an
+  // unrelated multi-pick that mentions a time can't steal the column. The
+  // heuristic tests the id as well as the label because "Svar" says nothing
+  // while the id "attend" does.
   _attendField() {
-    const radios = (this._rsvpForm || []).filter(f => f.type === 'radio-group');
-    return radios.find(f => f.id === 'attend_when')
-      || radios.find(f => /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(f.label || ''))
+    const groups = (this._rsvpForm || []).filter(f =>
+      f.type === 'radio-group' || f.type === 'checkbox-group');
+    const canonical = groups.find(f => f.id === 'attend_when');
+    if (canonical) return canonical;
+    const heur = (f) => /attend|when|day|evening|hvenær|mæt|dag|kvöld/i.test(`${f.id} ${f.label || ''}`);
+    return groups.filter(f => f.type === 'radio-group').find(heur)
+      || groups.filter(f => f.type === 'checkbox-group').find(heur)
       || null;
   }
 
@@ -643,14 +659,21 @@ export class PartyAdminView {
   // Status of a STORED answer label. The admin's declared status on a matching
   // form option is authoritative; answers from another locale (or a renamed
   // option) aren't in the form at all, so they fall back to phrase matching —
-  // the same shape as _deriveRsvpStatus on the server.
+  // the same shape as _deriveRsvpStatus on the server. Bare-string options
+  // carry no declaration (only the radio editor upgrades them to objects), so
+  // they use the phrase fallback too — otherwise the live checkbox form's
+  // "Get ekki mætt." / "Kannski" would classify as going just for existing.
+  // The decline phrases stay ANCHORED TO A VERB OF ATTENDING ("ekki mætt",
+  // not a bare "get ekki") — Icelandic "get ekki beðið" ("can't wait!") is an
+  // enthusiastic YES, and a looser pattern would bucket it as a decline and
+  // drop that option out of the timing select entirely.
   _answerStatus(label) {
     if (typeof label !== 'string') return 'going';
     const opt = (this._attendField()?.options || []).find(o => this._optLabel(o) === label);
-    if (opt) return this._optStatus(opt);
+    if (opt && typeof opt === 'object') return this._optStatus(opt);
     const s = label.normalize('NFC');
-    if (/can'?t|sorry|kemst ekki|kem ekki|afþakka|\bnei\b/i.test(s)) return 'declined';
-    if (/\bmaybe\b|kannski|óvíst/i.test(s))                          return 'maybe';
+    if (/can'?t|sorry|kemst ekki|kem ekki|ekki mætt|afþakka|\bnei\b/i.test(s)) return 'declined';
+    if (/\bmaybe\b|kannski|óvíst/i.test(s))                                    return 'maybe';
     return 'going';
   }
 
@@ -683,6 +706,15 @@ export class PartyAdminView {
     return this._answerStatus(label) === 'going' ? this._timingBucket(label) : null;
   }
 
+  // A radio-group answer is a string; a checkbox-group answer is an array of
+  // checked labels. Everything downstream of the attend field treats both as
+  // a list of candidate labels.
+  _answerLabels(ans) {
+    if (typeof ans === 'string') return ans ? [ans] : [];
+    if (Array.isArray(ans)) return ans.filter(v => typeof v === 'string' && v);
+    return [];
+  }
+
   // The timing choices offered by the current form, one per bucket (first
   // option wins). Only 'going' options qualify — a maybe/decline must never
   // back a timing slot, or picking it would flip the guest's status. `value` is
@@ -692,7 +724,9 @@ export class PartyAdminView {
     if (!f) return [];
     const byBucket = {};
     for (const o of (f.options || [])) {
-      if (this._optStatus(o) !== 'going') continue;
+      // _answerStatus (not _optStatus) so a BARE-STRING decline/maybe worded
+      // with a timing phrase can't become a selectable option either.
+      if (this._answerStatus(this._optLabel(o)) !== 'going') continue;
       const label = this._optLabel(o);
       const b = this._timingBucket(label);
       if (b && !byBucket[b]) byBucket[b] = label;
@@ -714,9 +748,15 @@ export class PartyAdminView {
     const field   = this._attendField();
     const options = this._timingOptions();
     if (!field || !options.length) return `<td>—</td>`;
-    const raw   = typeof g.rsvp_answers?.[field.id] === 'string' ? g.rsvp_answers[field.id] : '';
-    const match = options.find(o => o.value === raw)
-      || (raw ? options.find(o => o.bucket === this._answerTimingBucket(raw)) : undefined);
+    // A checkbox-group attend field stores an ARRAY of labels; treat every
+    // checked label as a candidate — exact option match first, then by bucket
+    // (first label that buckets wins, mirroring the single-answer path).
+    const labels = this._answerLabels(g.rsvp_answers?.[field.id]);
+    let match = options.find(o => labels.includes(o.value));
+    if (!match) {
+      const bucket = labels.map(l => this._answerTimingBucket(l)).find(Boolean);
+      if (bucket) match = options.find(o => o.bucket === bucket);
+    }
     // data-current mirrors the SELECTED OPTION's value (not the raw stored
     // label) so the no-op guard in the change handler compares like with like.
     const current = match ? match.value : '';
@@ -931,17 +971,21 @@ export class PartyAdminView {
       drinks: 'party.admin.logisticsCatDrinks',
       other:  'party.admin.logisticsCatOther',
     };
+    // Per-builtin icon fallback, mirroring the label rule: a NULL icon means
+    // "default", and food's default is 🍽️, not the generic 📦 — otherwise
+    // clearing the icon in the rename form would "restore" the wrong one.
+    const BUILTIN_ICON = { food: '🍽️', drinks: '🥤', other: '📦' };
     const rows = (this._logisticsCats || []).length
       ? this._logisticsCats
       : [
-        { key: 'food',   label: null, icon: '🍽️', is_builtin: true },
-        { key: 'drinks', label: null, icon: '🥤', is_builtin: true },
-        { key: 'other',  label: null, icon: '📦', is_builtin: true },
+        { key: 'food',   label: null, icon: null, is_builtin: true },
+        { key: 'drinks', label: null, icon: null, is_builtin: true },
+        { key: 'other',  label: null, icon: null, is_builtin: true },
       ];
     return rows.map(c => ({
       key: c.key,
       label: c.label || (BUILTIN_LABEL[c.key] ? t(BUILTIN_LABEL[c.key]) : c.key),
-      icon: c.icon || '📦',
+      icon: c.icon || BUILTIN_ICON[c.key] || '📦',
       isBuiltin: !!c.is_builtin,
     }));
   }
@@ -1172,13 +1216,11 @@ export class PartyAdminView {
       </section>`;
   }
 
-  // Owner-initiated invites: paste emails you already have (one per line, or
-  // "Name <email>"); each becomes a pre-approved guest and gets a magic-link
-  // invite immediately.
-  // Add a guest who accepted verbally — straight into the attendance list,
-  // no invite email. Email is optional (use the invite box below to send a
-  // magic link if you do have one). Its own section so a partial re-render of
-  // the attendance table (sort/filter) never wipes half-typed input.
+  // Add a guest straight into the attendance list. Email is optional (someone
+  // who accepted verbally may not have one); when an email IS given, "send
+  // invite" also mails them a magic link, which is what folds the old paste-many
+  // invite box into this one form. Its own section so a partial re-render of the
+  // attendance table (sort/filter) never wipes half-typed input.
   _renderAddGuestSection() {
     const statusOpts = [
       ['going',   `✅ ${t('party.admin.statusGoing')}`],
@@ -1202,25 +1244,12 @@ export class PartyAdminView {
                   aria-label="${escHtml(t('adminOrders.status'))}">
             ${statusOpts.map(([v, l]) => `<option value="${v}"${v === 'going' ? ' selected' : ''}>${l}</option>`).join('')}
           </select>
+          <label class="party-admin__add-guest-invite">
+            <input type="checkbox" id="party-admin-add-guest-invite" />
+            ${t('party.admin.addGuestSendInvite')}
+          </label>
           <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.addGuestBtn')}</button>
           <span class="party-admin__add-guest-status" id="party-admin-add-guest-status-msg" aria-live="polite"></span>
-        </form>
-      </section>`;
-  }
-
-  _renderOwnerInviteSection() {
-    return `
-      <section class="party-admin__section party-admin__invite">
-        <h2 class="party-admin__section-title">${t('party.admin.ownerInviteTitle')}</h2>
-        <p class="party-admin__invite-help">${t('party.admin.ownerInviteHelp')}</p>
-        <form class="party-admin__invite-form" id="party-admin-owner-invite-form">
-          <textarea id="party-admin-owner-invite-input" class="lol-input" rows="4"
-                    placeholder="${escHtml(t('party.admin.ownerInvitePlaceholder'))}"
-                    aria-label="${t('party.admin.ownerInviteTitle')}"></textarea>
-          <div class="party-admin__invite-actions">
-            <button type="submit" class="lol-btn lol-btn--primary">${t('party.admin.ownerInviteSend')}</button>
-            <span class="party-admin__invite-status" id="party-admin-owner-invite-status" aria-live="polite"></span>
-          </div>
         </form>
       </section>`;
   }
@@ -1229,7 +1258,7 @@ export class PartyAdminView {
     const rsvps = this._rsvps;
     const headcount = rsvps.filter(r => r.attending).length;
 
-    // Try to derive day/evening/both from a radio-group field that looks like attendance timing
+    // Try to derive day/evening/both from a field that looks like attendance timing
     const attendField = this._attendField();
 
     let breakdownCards = '';
@@ -1237,8 +1266,9 @@ export class PartyAdminView {
       const tally = {};
       (attendField.options || []).forEach(opt => { tally[this._optLabel(opt)] = 0; });
       rsvps.forEach(r => {
-        const a = r.answers?.[attendField.id];
-        if (typeof a === 'string') tally[a] = (tally[a] || 0) + 1;
+        for (const label of this._answerLabels(r.answers?.[attendField.id])) {
+          tally[label] = (tally[label] || 0) + 1;
+        }
       });
       // Collect EVERY tally label matching `pred`, not just the first hit. Two
       // reasons: cross-locale answers ("Já, aðeins á daginn" + "☀️ Daytime
@@ -1259,7 +1289,7 @@ export class PartyAdminView {
       // exactly the guests the number claims.
       const breakdownCard = (match, labelHtml, title, modifierClass = '') => {
         const dataAttrs = match.labels.length
-          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}" data-stat-multi="false"`
+          ? `data-stat-key="field:${escHtml(attendField.id)}" data-stat-field="${escHtml(attendField.id)}" data-stat-values="${escHtml(JSON.stringify(match.labels))}" data-stat-title="${escHtml(title)}"`
           : `data-stat-key="empty"`;
         const cls = 'party-admin__stat party-admin__stat--sm' + (modifierClass ? ' ' + modifierClass : '');
         return `
@@ -1409,13 +1439,11 @@ export class PartyAdminView {
           tally[ans] = (tally[ans] || 0) + 1;
         }
       });
-      const multi = g.type === 'checkbox-group';
       const items = Object.entries(tally).map(([name, count]) => `
         <button type="button" class="party-admin__stat party-admin__stat--sm"
                 data-stat-key="field:${escHtml(g.id)}:${escHtml(name)}"
                 data-stat-field="${escHtml(g.id)}"
                 data-stat-value="${escHtml(name)}"
-                data-stat-multi="${multi}"
                 aria-label="${escHtml(name)}: ${count}. ${t('party.admin.statClickHint')}">
           <span class="party-admin__stat-num">${count}</span>
           <span class="party-admin__stat-label">${escHtml(name)}</span>
@@ -1503,13 +1531,13 @@ export class PartyAdminView {
 
   _bind() {
     this._bindAddGuest();
-    this._bindOwnerInvite();
     this._bindPendingRequests();
     this._bindInvitedGuests();
     this._bindGuestsSort();
     this._bindLogistics();
     this._bindCosts();
     this._bindTodos();
+    this._bindPlan();
     this._bindStatCards();
     this._bindEmailGoing();
     this._bindRsvpSort();
@@ -1825,7 +1853,6 @@ export class PartyAdminView {
         title = t('party.admin.totalHeadcount');
       } else if (key.startsWith('field:')) {
         const fieldId = card.dataset.statField;
-        const multi   = card.dataset.statMulti === 'true';
         // Bucket cards (the timing breakdown) carry every label they counted in
         // data-stat-values; plain option cards carry a single data-stat-value.
         let values;
@@ -1834,12 +1861,13 @@ export class PartyAdminView {
             ? JSON.parse(card.dataset.statValues)
             : [card.dataset.statValue];
         } catch { values = [card.dataset.statValue]; }
-        rsvps = this._rsvps.filter(r => {
-          const a = r.answers?.[fieldId];
-          return multi
-            ? Array.isArray(a) && values.some(v => a.includes(v))
-            : values.includes(a);
-        });
+        // Match on the NORMALIZED label list rather than branching on the
+        // field's declared type: a radio answer is a string, a checkbox answer
+        // an array, and a field whose type was changed after guests replied
+        // holds both. The cards tally through the same helper, so this is what
+        // keeps the modal's rows consistent with the number that opened it.
+        rsvps = this._rsvps.filter(r =>
+          this._answerLabels(r.answers?.[fieldId]).some(l => values.includes(l)));
         title = card.dataset.statTitle || values[0];
       } else {
         return;
@@ -2301,6 +2329,12 @@ export class PartyAdminView {
       items: (this._logistics || [])
         .filter(i => (i.category || 'other') === c.key)
         .map(i => ({
+          // id + quantity + unit_price ride along so the card can edit and
+          // delete lines in place — the card is a second editing surface over
+          // the same logistics rows, not a separate store.
+          id: i.id,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
           name: i.name || '',
           detail: this._costDetail(i),
           cost: this._lineCost(i),
@@ -2347,11 +2381,41 @@ export class PartyAdminView {
         if (b.cost == null) return -1;
         return b.cost - a.cost;
       });
-      const rows = sorted.map(x => `
+      // Todos lines stay read-only (a todo is a task, edited in its own
+      // section); logistics-backed lines are editable in place. The amount is
+      // only editable on lump sums — qty 1 or unpriced — because on a
+      // "100 × ISK 45" row an amount edit would be ambiguous (change qty?
+      // price?); those keep the computed total and are edited in the 🛒 table.
+      const rows = sorted.map(x => {
+        if (!g.addable) return `
             <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
               <span>${escHtml(x.name)}${x.detail ? ` <small>${escHtml(x.detail)}</small>` : ''}</span>
               <span>${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>
-            </li>`).join('');
+            </li>`;
+        const id = escHtml(String(x.id));
+        const amountEditable = x.quantity == null || Number(x.quantity) === 1;
+        const amount = amountEditable ? `
+              <input type="number" min="0" step="1" class="party-admin__cost-item-input party-admin__cost-item-amount"
+                     data-cost-item-id="${id}" data-cost-field="amount"
+                     value="${x.unit_price == null ? '' : escHtml(String(x.unit_price))}" placeholder="—"
+                     aria-label="${t('party.admin.costItemAmount')}" />`
+          : `<span class="party-admin__cost-item-total">${x.cost == null ? '—' : this._fmtIsk(x.cost)}</span>`;
+        return `
+            <li class="party-admin__cost-item${x.cost == null ? ' party-admin__cost-item--unpriced' : ''}">
+              <span class="party-admin__cost-item-main">
+                <input type="text" class="party-admin__cost-item-input party-admin__cost-item-name"
+                       data-cost-item-id="${id}" data-cost-field="name"
+                       value="${escHtml(x.name)}" maxlength="200" required
+                       aria-label="${t('party.admin.costItemName')}" />
+                ${x.detail ? `<small>${escHtml(x.detail)}</small>` : ''}
+              </span>
+              ${amount}
+              <button type="button" class="party-admin__cost-del" data-cost-item-del="${id}"
+                      data-cost-item-name="${escHtml(x.name)}"
+                      title="${t('party.admin.costItemDel')}"
+                      aria-label="${escHtml(t('party.admin.costItemDelAria', { name: x.name }))}">✕</button>
+            </li>`;
+      }).join('');
       // A manual line writes a real logistics item, so it shows up in the 🛒
       // tables too — one cost lives in exactly one place.
       const addForm = g.addable ? `
@@ -2374,9 +2438,17 @@ export class PartyAdminView {
                     title="${t('party.admin.costDelSection')}"
                     aria-label="${escHtml(t('party.admin.costDelSectionAria', { name: g.label }))}">✕</button>` : '';
 
+      // Rename works on built-ins too: a saved label overrides the i18n name
+      // (the planner asked for that exact text), and clearing it hands the
+      // name back to i18n. See _openCostRename.
+      const rename = g.addable ? `
+            <button type="button" class="party-admin__cost-rename" data-cost-rename="${escHtml(g.key)}"
+                    title="${t('party.admin.costRenameSection')}"
+                    aria-label="${escHtml(t('party.admin.costRenameSectionAria', { name: g.label }))}">✎</button>` : '';
+
       return `
         <div class="party-admin__cost-group">
-          <h3>${escHtml(g.icon)} ${escHtml(g.label)} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
+          <h3 data-cost-head="${escHtml(g.key)}">${escHtml(g.icon)} ${escHtml(g.label)}${rename} <span>${this._fmtIsk(groupSum(g))}</span>${del}</h3>
           ${g.items.length ? `<ol class="party-admin__cost-list">${rows}</ol>` : `<p class="party-empty">${t('party.admin.logisticsNoItems')}</p>`}
           ${missing > 0 ? `<p class="party-admin__cost-missing">${t('party.admin.costNoPrice', { n: missing })}</p>` : ''}
           ${addForm}
@@ -2409,13 +2481,44 @@ export class PartyAdminView {
 
   // Replace-in-place. The section carries its own forms now, so the fresh node
   // has to be re-bound — a plain replaceWith would leave dead buttons behind.
+  //
+  // Focus survives the rebuild: cost-line inputs are identified by a stable
+  // (item id, field) pair, so if the admin is mid-edit when a save — theirs or
+  // a logistics-table one — triggers this, the same input is refocused in the
+  // fresh DOM. The row may still jump visually (cards sort cost-descending);
+  // the id-based lookup follows it. An open rename form is NOT preserved — it
+  // is ephemeral by design and a concurrent rebuild simply discards it.
   _rerenderCosts() {
     const old = this._el.querySelector('#party-admin-costs');
     if (!old) return;
+    const focus = this._captureCostFocus();
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderCostSection();
     old.replaceWith(tmp.firstElementChild);
     this._bindCosts();
+    this._restoreCostFocus(focus);
+  }
+
+  // Captured at rebuild time (not save-start): a blur-triggered save can
+  // resolve while the admin is already typing in the NEXT input, and it's
+  // that input — the currently focused one — that must survive.
+  _captureCostFocus() {
+    const el = document.activeElement;
+    if (!el || !this._el.contains(el) || !el.dataset?.costItemId) return null;
+    return {
+      id: el.dataset.costItemId, field: el.dataset.costField,
+      start: el.selectionStart, end: el.selectionEnd,
+    };
+  }
+
+  _restoreCostFocus(f) {
+    if (!f) return;
+    const el = this._el.querySelector(
+      `input[data-cost-item-id="${CSS.escape(f.id)}"][data-cost-field="${CSS.escape(f.field)}"]`);
+    if (!el) return; // line was deleted or became read-only — nothing to restore
+    el.focus();
+    // Number inputs throw on setSelectionRange in some browsers.
+    try { if (f.start != null) el.setSelectionRange(f.start, f.end); } catch { /* ignore */ }
   }
 
   _bindCosts() {
@@ -2534,6 +2637,912 @@ export class PartyAdminView {
         }
       });
     });
+
+    // Inline edit of a cost line (name always; amount on lump sums only).
+    // Enter commits without waiting for blur; preventDefault is belt-and-braces
+    // (the inputs live in an <li>, not a form, so Enter can't submit anything).
+    section.querySelectorAll('input[data-cost-item-id]').forEach(input => {
+      input.addEventListener('change', () => this._saveCostLine(input));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); this._saveCostLine(input); }
+      });
+    });
+
+    // Delete a cost line — the same logistics item the 🛒 table would delete,
+    // so the confirm + failure strings are the table's own.
+    section.querySelectorAll('[data-cost-item-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id   = btn.dataset.costItemDel;
+        const name = btn.dataset.costItemName || '';
+        if (!confirm(t('party.admin.logisticsConfirmDelete', { name }))) return;
+        btn.disabled = true;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+            method: 'DELETE', credentials: 'include', headers,
+          });
+          if (!res.ok && res.status !== 204) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || t('party.admin.logisticsDeleteFailed'));
+          }
+          this._logistics = (this._logistics || []).filter(i => String(i.id) !== String(id));
+          this._rerenderLogistics();
+        } catch (err) {
+          showToast(err.message || t('party.admin.logisticsDeleteFailed'), 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Rename a section (label + icon) — wires the PATCH endpoint that has
+    // existed since 068 but had no UI.
+    section.querySelectorAll('[data-cost-rename]').forEach(btn => {
+      btn.addEventListener('click', () => this._openCostRename(btn.dataset.costRename));
+    });
+  }
+
+  // Save a cost-card line edit. Mirrors _saveLogisticsCell: badInput guard,
+  // lastSaved no-op check, save token against overlapping spinner-step saves.
+  // The amount field writes unit_price; on a previously unpriced line it also
+  // sets quantity to 1, so a bare name added in the 🛒 table can be priced as
+  // a lump sum from the card. Clearing the amount nulls unit_price only — the
+  // line goes partial and the "{n} without a price" hint surfaces it.
+  async _saveCostLine(input) {
+    const field  = input.dataset.costField;
+    const isAmt  = field === 'amount';
+    if (isAmt && input.validity && input.validity.badInput) {
+      // '' value while junk is displayed — revert rather than silently null.
+      input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+      return;
+    }
+    const value = input.value.trim();
+    const last  = input.dataset.lastSaved !== undefined
+      ? input.dataset.lastSaved
+      : (input.defaultValue ?? '');
+    if (value === last) return;
+    if (isAmt && value !== '' && !Number.isFinite(Number(value))) {
+      input.value = last;
+      return;
+    }
+    if (field === 'name' && value === '') {
+      // Server rejects empty names; match the table idiom and revert locally.
+      input.value = last;
+      return;
+    }
+
+    const id = input.dataset.costItemId;
+    const item = (this._logistics || []).find(i => String(i.id) === String(id));
+    if (!item) return; // deleted concurrently — the pending rebuild will drop this input
+
+    input.dataset.lastSaved = value;
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
+    const body = field === 'name'
+      ? { name: value }
+      : value === ''
+        ? { unit_price: null }
+        : { unit_price: Math.round(Number(value)), ...(item.quantity == null ? { quantity: 1 } : {}) };
+
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/logistics/${encodeURIComponent(id)}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('party.admin.logisticsUpdateFailed'));
+      }
+      const updated = await res.json();
+      if (Number(input.dataset.saveToken) !== token) return; // superseded
+      this._logistics = (this._logistics || []).map(i =>
+        String(i.id) === String(updated.id) ? updated : i
+      );
+      // Full logistics rebuild: the 🛒 table renders its inputs' value= from
+      // _logistics, so this one call syncs name/price/line-cost/subtotal there
+      // AND cascades into _rerenderCosts, whose focus capture keeps the admin
+      // in this input (found again by its stable id+field).
+      this._rerenderLogistics();
+    } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return; // a newer save owns the input
+      input.value = last;
+      input.dataset.lastSaved = last;
+      showToast(err.message || t('party.admin.logisticsUpdateFailed'), 'error');
+    }
+  }
+
+  // Swap a cost card's heading for an icon+label edit form. Explicit
+  // Save/Cancel (+ Enter/Escape) — no save-on-blur, because two inputs and two
+  // buttons would make blur-commit fire on every internal tab.
+  //
+  // Built-ins open with an empty label input and the translated name as
+  // placeholder: emptiness visibly means "default". Saving a label on a
+  // built-in stores that literal text (overrides i18n in BOTH locales, since
+  // the planner asked for that exact name); clearing it sends label:null,
+  // which hands the name back to i18n. A custom section with an emptied label
+  // just refocuses — the server would 400 on a nameless section.
+  _openCostRename(key) {
+    // Need the RAW DB row (literal label or null), not the resolved display
+    // row — resolving would bake the translated name into a built-in's label.
+    const cat = (this._logisticsCats || []).find(c => c.key === key);
+    if (!cat) { showToast(t('party.admin.costRenameFailed'), 'error'); return; }
+    const resolved = this._logisticsCategories().find(c => c.key === key);
+    const h3 = this._el.querySelector(`[data-cost-head="${CSS.escape(key)}"]`);
+    if (!h3) return;
+
+    h3.innerHTML = `
+          <form class="party-admin__cost-rename-form" novalidate>
+            <input type="text" class="lol-input party-admin__cost-section-icon"
+                   value="${escHtml(cat.icon || '')}" maxlength="8" placeholder="📦"
+                   aria-label="${t('party.admin.costSectionIcon')}" />
+            <input type="text" class="lol-input party-admin__cost-rename-label"
+                   value="${escHtml(cat.label || '')}" maxlength="60"
+                   placeholder="${escHtml(resolved?.label || key)}"
+                   ${cat.is_builtin ? `title="${escHtml(t('party.admin.costRenameBuiltinHint'))}"` : ''}
+                   aria-label="${t('party.admin.costSectionName')}" />
+            <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.costRenameSave')}</button>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm" data-rename-cancel>${t('party.admin.costRenameCancel')}</button>
+            <span class="party-admin__logistics-status" aria-live="polite"></span>
+          </form>`;
+
+    const form    = h3.querySelector('form');
+    const iconEl  = form.querySelector('.party-admin__cost-section-icon');
+    const labelEl = form.querySelector('.party-admin__cost-rename-label');
+    const status  = form.querySelector('.party-admin__logistics-status');
+
+    // Binding on the ephemeral form (outside _bindCosts) is safe: any rebuild
+    // discards the form wholesale, listeners and all.
+    const close = () => {
+      this._rerenderCosts(); // cheapest correct restore of the pristine h3
+      this._el.querySelector(`[data-cost-rename="${CSS.escape(key)}"]`)?.focus();
+    };
+    form.querySelector('[data-rename-cancel]').addEventListener('click', close);
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const label = (labelEl.value || '').trim();
+      const icon  = (iconEl.value || '').trim();
+      if (!label && !cat.is_builtin) { labelEl.focus(); return; }
+
+      if (status) status.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch(`/api/v1/party/logistics/categories/${encodeURIComponent(key)}`, {
+          method:      'PATCH',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({ label: label || null, icon: icon || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || t('party.admin.costRenameFailed'));
+        }
+        const updated = await res.json();
+        this._logisticsCats = (this._logisticsCats || []).map(c => c.key === key ? updated : c);
+        // Name/icon appear in the logistics heading + table aria-label, the
+        // cost heading, and the stat tiles — the cascade covers all four.
+        this._rerenderLogistics();
+        this._el.querySelector(`[data-cost-rename="${CSS.escape(key)}"]`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.costRenameFailed');
+      }
+    });
+
+    labelEl.focus();
+    labelEl.select();
+  }
+
+  // ── Project plan ───────────────────────────────────────────────────────────
+  // The party as an operation: what gets picked up, set up, minded during the
+  // party, and packed away afterwards. Each task carries an estimate in minutes
+  // and the number of helpers it needs; the section sums those per phase so the
+  // planners can see how many hands each stage takes before they start asking
+  // people. Where the ✅ to-do list is about individuals, this is about the job.
+
+  // Phases resolved for display. Same rule as _logisticsCategories: a row with
+  // no label is a built-in whose name follows the EN/IS toggle, a row WITH a
+  // label shows that literal text. The fallback keeps the section usable if the
+  // phases fetch failed — degrading to the five built-ins beats vanishing.
+  _planPhases_() {
+    const BUILTIN_LABEL = {
+      pickup:   'party.admin.planPhasePickup',
+      setup:    'party.admin.planPhaseSetup',
+      during:   'party.admin.planPhaseDuring',
+      teardown: 'party.admin.planPhaseTeardown',
+      other:    'party.admin.planPhaseOther',
+    };
+    const BUILTIN_ICON = { pickup: '🚗', setup: '🔨', during: '🎉', teardown: '🧹', other: '📦' };
+    const rows = (this._planPhases || []).length
+      ? this._planPhases
+      : Object.keys(BUILTIN_LABEL).map(key => ({ key, label: null, icon: null, is_builtin: true }));
+    return rows.map(p => ({
+      key: p.key,
+      label: p.label || (BUILTIN_LABEL[p.key] ? t(BUILTIN_LABEL[p.key]) : p.key),
+      icon: p.icon || BUILTIN_ICON[p.key] || '📋',
+      isBuiltin: !!p.is_builtin,
+    }));
+  }
+
+  _planTasksIn(phaseKey) {
+    return (this._plan || []).filter(task => (task.phase || 'other') === phaseKey);
+  }
+
+  // "1 klst 30 mín". Unestimated tasks read as an em dash rather than "0 mín" —
+  // not knowing yet and knowing it takes no time are different answers.
+  _formatPlanMinutes(min) {
+    if (min == null) return '—';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    if (h === 0) return t('party.admin.planTimeFmtM', { m });
+    if (m === 0) return t('party.admin.planTimeFmtH', { h });
+    return t('party.admin.planTimeFmtHM', { h, m });
+  }
+
+  // Totals for one phase (or the whole plan). Time sums every task, done or
+  // not: the estimate is what the phase costs to run, and shrinking it as
+  // people tick things off would destroy the staffing answer mid-party.
+  // People is the MAX, not the sum — tasks in a phase run in parallel with the
+  // same crew, so three 2-person jobs need 2 helpers on site, not 6.
+  _planTotals(tasks) {
+    const minutes = tasks.reduce((s, x) => s + (x.time_minutes ?? 0), 0);
+    const people  = tasks.reduce((m, x) => Math.max(m, x.people_needed ?? 0), 0);
+    return {
+      minutes: tasks.some(x => x.time_minutes != null) ? minutes : null,
+      people:  tasks.some(x => x.people_needed != null) ? people : null,
+      done:    tasks.filter(x => x.done).length,
+      total:   tasks.length,
+    };
+  }
+
+  _renderPlanSection() {
+    // Expand/collapse state lives on the view, not the DOM, so it survives the
+    // full-section re-render every mutation triggers. Tasks start collapsed (the
+    // dense overview is the point); phases start open.
+    this._planExpanded = this._planExpanded || new Set();
+    this._planCollapsed = this._planCollapsed || new Set();
+
+    const phases = this._planPhases_();
+    const all    = this._plan || [];
+    const grand  = this._planTotals(all);
+
+    const tile = (num, label, extraCls = '') => `
+          <div class="party-admin__stat party-admin__stat--sm${extraCls ? ' ' + extraCls : ''}">
+            <span class="party-admin__stat-num">${num}</span>
+            <span class="party-admin__stat-label">${label}</span>
+          </div>`;
+
+    // The staffing strip: one chip per phase that has work in it, so "how many
+    // helpers do I need at set-up" is answered without scrolling the groups.
+    const staffing = phases
+      .map(p => ({ p, tasks: this._planTasksIn(p.key) }))
+      .filter(x => x.tasks.length > 0)
+      .map(({ p, tasks }) => {
+        const s = this._planTotals(tasks);
+        return `
+          <button type="button" class="party-admin__plan-chip" data-plan-jump="${escHtml(p.key)}">
+            <span>${escHtml(p.icon)} ${escHtml(p.label)}</span>
+            <span class="party-admin__plan-chip-num">⏱ ${this._formatPlanMinutes(s.minutes)}</span>
+            <span class="party-admin__plan-chip-num">👥 ${s.people ?? '—'}</span>
+          </button>`;
+      }).join('');
+
+    // One toggle for the whole plan: if anything is open, collapse everything;
+    // otherwise open everything. Label reflects the action it will take.
+    const anyOpen = phases.some(p => !this._planCollapsed.has(p.key));
+    const collapseAll = all.length ? `
+        <div class="party-admin__plan-toolbar">
+          <button type="button" class="party-admin__plan-collapse-all" data-plan-collapse-all>
+            ${anyOpen ? '▾' : '▸'} ${anyOpen ? t('party.admin.planCollapseAll') : t('party.admin.planExpandAll')}
+          </button>
+        </div>` : '';
+
+    return `
+      <section class="party-admin__section" id="party-admin-plan">
+        <h2 class="party-admin__section-title">📋 ${t('party.admin.planTitle')}</h2>
+        <p class="party-admin__logistics-help">${t('party.admin.planHelp')}</p>
+
+        ${all.length ? `
+        <div class="party-admin__stats party-admin__stats--compact">
+          ${tile(grand.total, t('party.admin.planSummaryTasks'))}
+          ${tile(grand.done, t('party.admin.planSummaryDone'))}
+          ${tile(this._formatPlanMinutes(grand.minutes), t('party.admin.planSummaryTime'), 'party-admin__stat--gold')}
+          ${tile(grand.people ?? '—', t('party.admin.planSummaryPeople'))}
+        </div>
+        <div class="party-admin__plan-summary">${staffing}</div>` : `<p class="party-empty">${t('party.admin.planEmpty')}</p>`}
+
+        ${collapseAll}
+        <div class="party-admin__plan-groups">
+          ${phases.map(p => this._renderPlanPhaseGroup(p)).join('')}
+        </div>
+
+        <form class="party-admin__cost-add-section" id="party-admin-plan-phase-add" novalidate>
+          <input type="text" class="lol-input party-admin__plan-phase-icon"
+                 placeholder="🎈" maxlength="8"
+                 aria-label="${t('party.admin.planPhaseIcon')}" />
+          <input type="text" class="lol-input party-admin__plan-phase-label"
+                 placeholder="${escHtml(t('party.admin.planPhaseNamePh'))}"
+                 maxlength="60"
+                 aria-label="${t('party.admin.planPhaseName')}" />
+          <button type="submit" class="lol-btn lol-btn--primary lol-btn--sm">${t('party.admin.planAddPhase')}</button>
+          <span class="party-admin__logistics-status" id="party-admin-plan-phase-status" aria-live="polite"></span>
+        </form>
+      </section>`;
+  }
+
+  // Initials for the read-only assignee avatars on a collapsed row.
+  _initials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    const first = parts[0][0];
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase();
+  }
+
+  // Compact assignee display for the collapsed row — up to three initials plus
+  // a "+N" overflow. The full editable chip list lives in the expanded editor.
+  _planAssigneeSummary(assignees) {
+    const list = assignees || [];
+    if (!list.length) return '';
+    const shown = list.slice(0, 3).map(n =>
+      `<span class="party-admin__plan-av" title="${escHtml(n)}">${escHtml(this._initials(n))}</span>`).join('');
+    const extra = list.length > 3
+      ? `<span class="party-admin__plan-av party-admin__plan-av--more">+${list.length - 3}</span>` : '';
+    return `<span class="party-admin__plan-avs" aria-hidden="true">${shown}${extra}</span>`;
+  }
+
+  _renderPlanPhaseGroup(phase) {
+    const key       = escHtml(phase.key);
+    const tasks     = this._planTasksIn(phase.key);
+    const s         = this._planTotals(tasks);
+    const collapsed = this._planCollapsed.has(phase.key);
+
+    // Built-ins have no delete button: 'other' is where a deleted phase's tasks
+    // land, and the other four anchor the i18n names.
+    const del = phase.isBuiltin ? '' : `
+            <button type="button" class="party-admin__cost-del" data-plan-phase-del="${key}"
+                    title="${t('party.admin.planPhaseDelete')}"
+                    aria-label="${escHtml(t('party.admin.planPhaseDeleteAria', { name: phase.label }))}">✕</button>`;
+
+    const body = collapsed ? '' : `
+        <div class="party-admin__plan-group-body">
+          <div class="party-admin__plan-list" data-plan-list="${key}">
+            ${tasks.length
+    ? tasks.map(task => this._renderPlanTaskCard(task, phase)).join('')
+    : `<p class="party-empty">${t('party.admin.planPhaseEmpty')}</p>`}
+          </div>
+          <form class="party-admin__plan-add" data-plan-add="${key}" novalidate>
+            <input type="text" class="lol-input party-admin__plan-add-input"
+                   placeholder="${escHtml(t('party.admin.planAddPh'))}" maxlength="200"
+                   aria-label="${t('party.admin.planTaskTitleLabel')}" />
+            <button type="submit" class="lol-btn lol-btn--ghost lol-btn--sm">${t('party.admin.planAdd')}</button>
+            <span class="party-admin__logistics-status" data-plan-status="${key}" aria-live="polite"></span>
+          </form>
+        </div>`;
+
+    return `
+      <div class="party-admin__plan-group${collapsed ? ' party-admin__plan-group--collapsed' : ''}" data-plan-group="${key}">
+        <div class="party-admin__plan-group-head">
+          <button type="button" class="party-admin__plan-caret" data-plan-phase-toggle="${key}"
+                  aria-expanded="${collapsed ? 'false' : 'true'}"
+                  aria-label="${escHtml(t('party.admin.planTogglePhase', { name: phase.label }))}">▾</button>
+          <span class="party-admin__plan-group-icon">${escHtml(phase.icon)}</span>
+          <input type="text" class="party-admin__plan-group-name"
+                 data-plan-phase-rename="${key}" value="${escHtml(phase.label)}" maxlength="60"
+                 aria-label="${escHtml(t('party.admin.planPhaseRenameAria', { name: phase.label }))}" />
+          <span class="party-admin__plan-totals">
+            ⏱ ${this._formatPlanMinutes(s.minutes)} · 👥 ${s.people ?? '—'} · ${s.done}/${s.total}
+          </span>
+          ${del}
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  // A task is one dense row (title + time + helpers + assignee initials) with a
+  // caret that reveals the full editor (phase, assignees, to-do link, notes,
+  // delete). Keeping the heavy controls behind the caret is what restores the
+  // overview the stacked cards had buried.
+  _renderPlanTaskCard(task, phase) {
+    const id     = escHtml(String(task.id));
+    const open   = this._planExpanded.has(String(task.id));
+    const phases = this._planPhases_();
+    const todo   = task.linked_todo_id != null
+      ? (this._todos || []).find(td => String(td.id) === String(task.linked_todo_id))
+      : null;
+
+    const phaseOpts = phases.map(p => `
+                <option value="${escHtml(p.key)}" ${p.key === phase.key ? 'selected' : ''}>${escHtml(p.icon)} ${escHtml(p.label)}</option>`).join('');
+
+    // Linked → a chip that jumps to the TODO and shows whether it is done, so
+    // the plan reflects real progress. Unlinked → spawn a TODO, or adopt one
+    // that already exists (the planner often wrote it there first).
+    const link = todo ? `
+              <button type="button" class="party-admin__plan-linked${todo.done ? ' party-admin__plan-linked--done' : ''}"
+                      data-plan-goto-todo="${escHtml(String(todo.id))}"
+                      title="${escHtml(t('party.admin.planGoToTodo'))}">
+                ${todo.done ? '✅' : '⬜'} ${escHtml(todo.title || '')}
+              </button>
+              <button type="button" class="party-admin__cost-del" data-plan-unlink="${id}"
+                      title="${t('party.admin.planUnlink')}" aria-label="${t('party.admin.planUnlink')}">✕</button>`
+      : `
+              <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm" data-plan-create-todo="${id}">
+                ➕ ${t('party.admin.planCreateTodo')}
+              </button>
+              <select class="party-admin__plan-link-select" data-plan-link="${id}"
+                      aria-label="${t('party.admin.planLinkTodo')}">
+                <option value="">${escHtml(t('party.admin.planLinkTodoPh'))}</option>
+                ${(this._todos || []).map(td => `<option value="${escHtml(String(td.id))}">${escHtml(td.title || '')}</option>`).join('')}
+              </select>`;
+
+    return `
+      <div class="party-admin__plan-task${task.done ? ' party-admin__plan-task--done' : ''}${open ? ' party-admin__plan-task--open' : ''}"
+           data-plan-card="${id}" draggable="true">
+        <div class="party-admin__plan-row">
+          <span class="party-admin__plan-handle" title="${t('party.admin.planReorderHandle')}"
+                aria-label="${t('party.admin.planReorderHandle')}">⋮⋮</span>
+          <input type="checkbox" class="party-admin__todo-done" data-plan-done="${id}"
+                 ${task.done ? 'checked' : ''} aria-label="${t('party.admin.planMarkDone')}" />
+          <input type="text" class="party-admin__plan-title-input"
+                 data-plan-field="title" data-plan-id="${id}"
+                 value="${escHtml(task.title || '')}" maxlength="200"
+                 aria-label="${t('party.admin.planTaskTitleLabel')}" />
+          <span class="party-admin__plan-cell">
+            <input type="number" min="0" step="5" class="party-admin__plan-time-input"
+                   data-plan-field="time_minutes" data-plan-id="${id}"
+                   value="${escHtml(String(task.time_minutes ?? ''))}" placeholder="—"
+                   aria-label="${t('party.admin.planTime')}" />
+            <span class="party-admin__plan-unit">${t('party.admin.planTime')}</span>
+          </span>
+          <span class="party-admin__plan-cell">
+            <span aria-hidden="true">👥</span>
+            <input type="number" min="0" step="1" class="party-admin__plan-people-input"
+                   data-plan-field="people_needed" data-plan-id="${id}"
+                   value="${escHtml(String(task.people_needed ?? ''))}" placeholder="—"
+                   aria-label="${t('party.admin.planPeople')}" />
+          </span>
+          ${this._planAssigneeSummary(task.assignees)}
+          <button type="button" class="party-admin__plan-expand" data-plan-expand="${id}"
+                  aria-expanded="${open ? 'true' : 'false'}"
+                  aria-label="${escHtml(t('party.admin.planToggleTask', { name: task.title || '' }))}">▾</button>
+        </div>
+
+        <div class="party-admin__plan-editor" data-plan-editor="${id}"${open ? '' : ' hidden'}>
+          <div class="party-admin__plan-editor-row">
+            <label class="party-admin__plan-field">
+              <span>${t('party.admin.planPhaseLabel')}</span>
+              <select class="party-admin__plan-phase-select" data-plan-field="phase" data-plan-id="${id}"
+                      aria-label="${t('party.admin.planPhaseLabel')}">${phaseOpts}
+              </select>
+            </label>
+            <button type="button" class="lol-btn lol-btn--ghost lol-btn--sm"
+                    data-plan-delete="${id}" data-plan-name="${escHtml(task.title || '')}">
+              ${t('party.admin.planDelete')}
+            </button>
+          </div>
+
+          ${this._renderAssigneeControl('plan', task.id, null, task.assignees)}
+
+          <div class="party-admin__plan-link">
+            <span class="party-admin__assignees-label">${t('party.admin.planTodoLabel')}</span>
+            ${link}
+          </div>
+
+          <textarea class="party-admin__todo-notes" data-plan-field="notes" data-plan-id="${id}"
+                    placeholder="${escHtml(t('party.admin.planNotesPh'))}"
+                    maxlength="2000" rows="2">${escHtml(task.notes || '')}</textarea>
+        </div>
+      </div>`;
+  }
+
+  _bindPlan() {
+    const section = this._el.querySelector('#party-admin-plan');
+    if (!section) return;
+
+    // Add a task — one form per phase, so a new task lands where it belongs
+    // without a follow-up edit.
+    section.querySelectorAll('form[data-plan-add]').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const phase  = form.dataset.planAdd;
+        const input  = form.querySelector('.party-admin__plan-add-input');
+        const status = form.querySelector(`[data-plan-status="${CSS.escape(phase)}"]`);
+        const title  = (input?.value || '').trim();
+        if (!title) { input?.focus(); return; }
+        if (status) status.textContent = t('form.saving');
+        try {
+          const created = await this._todoApi('POST', '/api/v1/party/plan', { title, phase });
+          this._plan = [...(this._plan || []), created];
+          this._rerenderPlan();
+          this._el.querySelector(`form[data-plan-add="${CSS.escape(phase)}"] .party-admin__plan-add-input`)?.focus();
+        } catch (err) {
+          if (status) status.textContent = err.message || t('party.admin.planSaveFailed');
+        }
+      });
+    });
+
+    // Add a phase. The server derives the key from the label, as with sections.
+    const phaseForm = section.querySelector('#party-admin-plan-phase-add');
+    phaseForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const iconEl  = phaseForm.querySelector('.party-admin__plan-phase-icon');
+      const labelEl = phaseForm.querySelector('.party-admin__plan-phase-label');
+      const status  = phaseForm.querySelector('#party-admin-plan-phase-status');
+      const label = (labelEl?.value || '').trim();
+      if (!label) { labelEl?.focus(); return; }
+      if (status) status.textContent = t('form.saving');
+      try {
+        const phase = await this._todoApi('POST', '/api/v1/party/plan/phases', {
+          label, icon: (iconEl?.value || '').trim() || null,
+        });
+        this._planPhases = [...(this._planPhases || []), phase];
+        this._rerenderPlan();
+        this._el.querySelector(`form[data-plan-add="${CSS.escape(phase.key)}"] .party-admin__plan-add-input`)?.focus();
+      } catch (err) {
+        if (status) status.textContent = err.message || t('party.admin.planSaveFailed');
+      }
+    });
+
+    // Delegated change: done toggles, inline field edits, phase moves, the
+    // link-an-existing-todo select, and assignee names typed into a chip input.
+    section.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.matches?.('[data-plan-done]'))             return void this._togglePlanDone(el);
+      if (el.matches?.('[data-plan-phase-rename]'))     return void this._savePlanPhaseName(el);
+      if (el.matches?.('[data-plan-field]'))            return void this._savePlanField(el);
+      if (el.matches?.('[data-plan-link]'))             return void this._linkPlanTodo(el);
+      if (el.matches?.('.party-admin__assignee-input')) return void this._addAssignee(el);
+    });
+
+    section.addEventListener('click', (e) => {
+      const expand = e.target.closest?.('[data-plan-expand]');
+      if (expand) return void this._togglePlanExpand(expand.dataset.planExpand);
+      const ptoggle = e.target.closest?.('[data-plan-phase-toggle]');
+      if (ptoggle) return void this._togglePlanPhase(ptoggle.dataset.planPhaseToggle);
+      if (e.target.closest?.('[data-plan-collapse-all]')) return void this._togglePlanCollapseAll();
+      const jump = e.target.closest?.('[data-plan-jump]');
+      if (jump) {
+        // A collapsed target phase can't be scrolled to usefully — open it first.
+        this._planCollapsed.delete(jump.dataset.planJump);
+        this._rerenderPlan();
+        return void this._el.querySelector(`[data-plan-group="${CSS.escape(jump.dataset.planJump)}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      const goto = e.target.closest?.('[data-plan-goto-todo]');
+      if (goto) return void this._scrollToTodo(goto.dataset.planGotoTodo);
+      const del = e.target.closest?.('[data-plan-delete]');
+      if (del) return void this._deletePlanTask(del);
+      const pdel = e.target.closest?.('[data-plan-phase-del]');
+      if (pdel) return void this._deletePlanPhase(pdel);
+      const create = e.target.closest?.('[data-plan-create-todo]');
+      if (create) return void this._createTodoFromPlan(create);
+      const unlink = e.target.closest?.('[data-plan-unlink]');
+      if (unlink) return void this._unlinkPlanTodo(unlink);
+      const chip = e.target.closest?.('[data-chip-remove]');
+      if (chip) return void this._removeAssignee(chip);
+    });
+
+    // Enter in the assignee input adds a chip (the control isn't a <form>).
+    section.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const asg = e.target.closest?.('.party-admin__assignee-input');
+      if (asg) { e.preventDefault(); this._addAssignee(asg); }
+    });
+
+    this._bindPlanDrag(section);
+  }
+
+  _patchPlanLocal(taskId, patch, rerender) {
+    this._plan = (this._plan || []).map(task =>
+      String(task.id) === String(taskId) ? { ...task, ...patch } : task);
+    if (rerender) this._rerenderPlan();
+  }
+
+  // Row editor open/close. State is a Set on the view so it survives the
+  // re-render (and so the same task stays open across an unrelated save).
+  _togglePlanExpand(id) {
+    const key = String(id);
+    if (this._planExpanded.has(key)) this._planExpanded.delete(key);
+    else this._planExpanded.add(key);
+    this._rerenderPlan();
+  }
+
+  _togglePlanPhase(key) {
+    if (this._planCollapsed.has(key)) this._planCollapsed.delete(key);
+    else this._planCollapsed.add(key);
+    this._rerenderPlan();
+  }
+
+  // Collapse everything if anything is open, else open everything.
+  _togglePlanCollapseAll() {
+    const keys = this._planPhases_().map(p => p.key);
+    const anyOpen = keys.some(k => !this._planCollapsed.has(k));
+    this._planCollapsed = new Set(anyOpen ? keys : []);
+    this._rerenderPlan();
+  }
+
+  // Inline title/notes/time/people/phase edit. Mirrors _saveTodoText: no-op when
+  // unchanged, reverts on failure, badInput guard on the number fields.
+  async _savePlanField(input) {
+    const field = input.dataset.planField;   // title | notes | time_minutes | people_needed | phase
+    const id    = input.dataset.planId;
+    const isNum = field === 'time_minutes' || field === 'people_needed';
+    let value;
+    if (isNum) {
+      // badInput: the number input displays junk but reports value === '' —
+      // reverting protects the saved estimate instead of silently clearing it.
+      if (input.validity && input.validity.badInput) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
+      const raw = input.value.trim();
+      if (raw !== '' && !Number.isFinite(Number(raw))) {
+        input.value = input.dataset.lastSaved ?? input.defaultValue ?? '';
+        return;
+      }
+      value = raw === '' ? null : Math.round(Number(raw));
+    } else {
+      value = input.value.trim();
+      if (field === 'title' && value === '') {
+        input.value = input.dataset.lastSaved ?? input.defaultValue;
+        return;
+      }
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    const cur = value == null ? '' : String(value);
+    if (cur === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = cur;
+    // The number inputs fire 'change' per spinner step — the token stops a
+    // stale response from overwriting a newer save.
+    const token = (Number(input.dataset.saveToken) || 0) + 1;
+    input.dataset.saveToken = String(token);
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, { [field]: value });
+      if (Number(input.dataset.saveToken) !== token) return; // superseded
+      // Estimates feed the phase totals and a phase change moves the card into
+      // another group, so both need the section rebuilt; a title/notes edit
+      // does not, and rebuilding would yank focus out of the field being typed.
+      this._patchPlanLocal(id, { [field]: updated[field] }, isNum || field === 'phase');
+      if (field === 'title') {
+        const btn = input.closest('[data-plan-card]')?.querySelector('[data-plan-delete]');
+        if (btn) btn.dataset.planName = value;
+      }
+    } catch (err) {
+      if (Number(input.dataset.saveToken) !== token) return;
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _togglePlanDone(cb) {
+    const id = cb.dataset.planDone;
+    const next = cb.checked;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, { done: next });
+      this._patchPlanLocal(id, { done: updated.done }, true);
+    } catch (err) {
+      cb.checked = !next;
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _deletePlanTask(btn) {
+    const id   = btn.dataset.planDelete;
+    const name = btn.dataset.planName || '';
+    if (!confirm(t('party.admin.planDeleteConfirm', { name }))) return;
+    btn.disabled = true;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/plan/${encodeURIComponent(id)}`);
+      this._plan = (this._plan || []).filter(task => String(task.id) !== String(id));
+      this._rerenderPlan();
+    } catch (err) {
+      showToast(err.message || t('party.admin.planDeleteFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  // Rename a phase inline. Clearing the field on a built-in hands its name back
+  // to i18n; on a custom phase an empty name is meaningless, so it reverts.
+  async _savePlanPhaseName(input) {
+    const key = input.dataset.planPhaseRename;
+    const row = (this._planPhases || []).find(p => p.key === key);
+    const value = input.value.trim();
+    if (!value && !row?.is_builtin) {
+      input.value = input.dataset.lastSaved ?? input.defaultValue;
+      return;
+    }
+    const lastRaw = input.dataset.lastSaved !== undefined ? input.dataset.lastSaved : input.defaultValue;
+    if (value === (lastRaw ?? '')) return;
+    input.dataset.lastSaved = value;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/phases/${encodeURIComponent(key)}`, {
+        label: value || null,
+      });
+      this._planPhases = (this._planPhases || []).map(p => p.key === key ? updated : p);
+      this._rerenderPlan();
+      this._el.querySelector(`[data-plan-phase-rename="${CSS.escape(key)}"]`)?.focus();
+    } catch (err) {
+      input.value = lastRaw ?? '';
+      input.dataset.lastSaved = lastRaw ?? '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Delete a phase. Its tasks are NOT deleted — the FK sweeps them into "other"
+  // (069), so the confirm says so rather than implying the work goes with it.
+  async _deletePlanPhase(btn) {
+    const key   = btn.dataset.planPhaseDel;
+    const phase = this._planPhases_().find(p => p.key === key);
+    const name  = phase?.label || key;
+    const n     = this._planTasksIn(key).length;
+    const msg = n > 0
+      ? t('party.admin.planPhaseDeleteConfirmTasks', { name, n })
+      : t('party.admin.planPhaseDeleteConfirm', { name });
+    if (!confirm(msg)) return;
+    try {
+      await this._todoApi('DELETE', `/api/v1/party/plan/phases/${encodeURIComponent(key)}`);
+      this._planPhases = (this._planPhases || []).filter(p => p.key !== key);
+      // Mirror the FK's ON DELETE SET DEFAULT locally so the tasks reappear
+      // under Other without a refetch.
+      this._plan = (this._plan || [])
+        .map(task => ((task.phase || 'other') === key ? { ...task, phase: 'other' } : task));
+      this._rerenderPlan();
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Spawn a TODO from this task. The plan says the party needs the job done;
+  // the ✅ list is where a named person picks it up, so both sections refresh.
+  async _createTodoFromPlan(btn) {
+    const id = btn.dataset.planCreateTodo;
+    btn.disabled = true;
+    try {
+      const res = await this._todoApi('POST', `/api/v1/party/plan/${encodeURIComponent(id)}/create-todo`);
+      this._todos = [...(this._todos || []), res.todo];
+      this._patchPlanLocal(id, { linked_todo_id: res.task.linked_todo_id }, false);
+      this._rerenderTodos();          // cascades into _rerenderPlan
+      showToast(t('party.admin.planCreatedTodo'), 'success');
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+      btn.disabled = false;
+    }
+  }
+
+  async _linkPlanTodo(select) {
+    const id = select.dataset.planLink;
+    const raw = select.value;
+    if (!raw) return;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, {
+        linked_todo_id: Number(raw),
+      });
+      this._patchPlanLocal(id, { linked_todo_id: updated.linked_todo_id }, true);
+    } catch (err) {
+      select.value = '';
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  async _unlinkPlanTodo(btn) {
+    const id = btn.dataset.planUnlink;
+    try {
+      const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(id)}`, {
+        linked_todo_id: null,
+      });
+      this._patchPlanLocal(id, { linked_todo_id: updated.linked_todo_id }, true);
+    } catch (err) {
+      showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+    }
+  }
+
+  // Jump to the linked TODO's card in the ✅ section and flash it, so the click
+  // lands somewhere obvious rather than dumping the planner mid-page.
+  _scrollToTodo(todoId) {
+    const card = this._el.querySelector(`[data-todo-card="${CSS.escape(String(todoId))}"]`)
+      || this._el.querySelector('#party-admin-todos');
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('party-admin__todo-card--flash');
+    setTimeout(() => card.classList.remove('party-admin__todo-card--flash'), 1600);
+  }
+
+  // Drag-to-reorder within one phase. Moving a task to another phase is the
+  // phase <select> on the card, not a cross-group drag: dropping between groups
+  // means a move plus a reorder, two writes with two ways to half-fail, and
+  // drag is unreliable on the phone the planner is actually holding.
+  _bindPlanDrag(section) {
+    let draggedId = null;
+
+    const clearMarks = () => {
+      section.querySelectorAll('.party-admin__plan-task--drop-above, .party-admin__plan-task--drop-below')
+        .forEach(c => c.classList.remove('party-admin__plan-task--drop-above', 'party-admin__plan-task--drop-below'));
+    };
+    const listKeyOf = (el) => el?.closest('[data-plan-list]')?.dataset.planList;
+
+    section.addEventListener('dragstart', (e) => {
+      const handle = e.target.closest?.('.party-admin__plan-handle');
+      if (!handle) {
+        // Cards are draggable so the handle works, which also lets the card
+        // body ghost-drag. Cancel that, but only inside a card — a text
+        // selection dragged out of an input elsewhere is nobody's business.
+        if (e.target.closest?.('[data-plan-card]')) e.preventDefault();
+        return;
+      }
+      const card = handle.closest('[data-plan-card]');
+      if (!card) { e.preventDefault(); return; }
+      draggedId = card.dataset.planCard;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggedId); } catch { /* ignore */ }
+      card.classList.add('party-admin__plan-task--dragging');
+    });
+
+    section.addEventListener('dragend', (e) => {
+      e.target.closest?.('[data-plan-card]')?.classList.remove('party-admin__plan-task--dragging');
+      clearMarks();
+      draggedId = null;
+    });
+
+    section.addEventListener('dragover', (e) => {
+      if (!draggedId) return;
+      const card = e.target.closest('[data-plan-card]');
+      if (!card || card.dataset.planCard === draggedId) return;
+      const from = this._el.querySelector(`[data-plan-card="${CSS.escape(draggedId)}"]`);
+      if (listKeyOf(card) !== listKeyOf(from)) return;   // same phase only
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isBefore = (e.clientY - rect.top) < (rect.height / 2);
+      clearMarks();
+      card.classList.add(isBefore ? 'party-admin__plan-task--drop-above' : 'party-admin__plan-task--drop-below');
+    });
+
+    section.addEventListener('drop', async (e) => {
+      if (!draggedId) return;
+      e.preventDefault();
+      const card = e.target.closest('[data-plan-card]');
+      if (!card || card.dataset.planCard === draggedId) { clearMarks(); return; }
+      const targetId = card.dataset.planCard;
+      const isAbove  = card.classList.contains('party-admin__plan-task--drop-above');
+      clearMarks();
+      const moved = draggedId;
+      draggedId = null;
+
+      const tasks   = this._plan || [];
+      const dragged = tasks.find(x => String(x.id) === String(moved));
+      if (!dragged) return;
+      const without = tasks.filter(x => String(x.id) !== String(moved));
+      const idx     = without.findIndex(x => String(x.id) === String(targetId));
+      if (idx < 0) return;
+      const insertAt  = isAbove ? idx : idx + 1;
+      const reordered = [...without.slice(0, insertAt), dragged, ...without.slice(insertAt)];
+
+      const previous = this._plan;
+      this._plan = reordered;
+      this._rerenderPlan();
+      try {
+        await this._todoApi('POST', '/api/v1/party/plan/reorder', { ids: reordered.map(x => x.id) });
+      } catch (err) {
+        this._plan = previous;
+        this._rerenderPlan();
+        showToast(err.message || t('party.admin.planSaveFailed'), 'error');
+      }
+    });
+  }
+
+  _rerenderPlan() {
+    const old = this._el.querySelector('#party-admin-plan');
+    if (!old) return;
+    // Which rows/phases are open is tracked on the view (_planExpanded /
+    // _planCollapsed), so the fresh markup already reflects it — no DOM state to
+    // carry across, unlike the old <details> approach.
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this._renderPlanSection();
+    old.replaceWith(tmp.firstElementChild);
+    this._bindPlan();
   }
 
   // ── To-do list ─────────────────────────────────────────────────────────────
@@ -2553,6 +3562,7 @@ export class PartyAdminView {
       (td.assignees || []).forEach(add);
       (td.subtasks  || []).forEach(s => (s.assignees || []).forEach(add));
     }
+    for (const task of (this._plan || [])) (task.assignees || []).forEach(add);
     return [...names].sort((a, b) => a.localeCompare(b));
   }
 
@@ -2678,12 +3688,16 @@ export class PartyAdminView {
       </div>`;
   }
 
-  // Assignee chip control, reused for both TODOs and subtasks. The container's
-  // data-* attributes tell the delegated handlers which entity to PATCH.
+  // Assignee chip control, reused for TODOs, subtasks and plan tasks. The
+  // container's data-* attributes tell the delegated handlers which entity to
+  // PATCH. Plan tasks pass their own id in the todoId slot — the three scopes
+  // share this markup, they just resolve `current` from different stores.
   _renderAssigneeControl(scope, todoId, subtaskId, assignees) {
     const attrs = scope === 'subtask'
       ? `data-assignee-scope="subtask" data-todo-id="${escHtml(String(todoId))}" data-subtask-id="${escHtml(String(subtaskId))}"`
-      : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
+      : scope === 'plan'
+        ? `data-assignee-scope="plan" data-todo-id="${escHtml(String(todoId))}"`
+        : `data-assignee-scope="todo" data-todo-id="${escHtml(String(todoId))}"`;
     const chips = (assignees || []).map(n => `
         <span class="party-admin__chip">${escHtml(n)}<button type="button" class="party-admin__chip-remove" data-chip-remove="${escHtml(n)}" aria-label="${t('party.admin.todoRemoveAssignee')}">×</button></span>`).join('');
     return `
@@ -2945,8 +3959,13 @@ export class PartyAdminView {
     const scope     = container.dataset.assigneeScope;
     const todoId    = container.dataset.todoId;
     const subtaskId = container.dataset.subtaskId;
-    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
     let current = [];
+    if (scope === 'plan') {
+      const task = (this._plan || []).find(x => String(x.id) === String(todoId));
+      current = task?.assignees || [];
+      return { scope, todoId, subtaskId, current: [...current] };
+    }
+    const td = (this._todos || []).find(x => String(x.id) === String(todoId));
     if (scope === 'subtask') {
       const s = td?.subtasks?.find(x => String(x.id) === String(subtaskId));
       current = s?.assignees || [];
@@ -2975,6 +3994,13 @@ export class PartyAdminView {
 
   async _saveAssignees(scope, todoId, subtaskId, assignees) {
     try {
+      if (scope === 'plan') {
+        const updated = await this._todoApi('PATCH', `/api/v1/party/plan/${encodeURIComponent(todoId)}`, { assignees });
+        this._patchPlanLocal(todoId, { assignees: updated.assignees }, false);
+        this._peopleNames = this._collectPeopleNames();
+        this._rerenderPlan();
+        return;
+      }
       if (scope === 'subtask') {
         const updated = await this._todoApi('PATCH', `/api/v1/party/todos/${encodeURIComponent(todoId)}/subtasks/${encodeURIComponent(subtaskId)}`, { assignees });
         this._patchSubtaskLocal(todoId, subtaskId, { assignees: updated.assignees }, false);
@@ -3088,6 +4114,10 @@ export class PartyAdminView {
     old.replaceWith(next);
     this._bindTodos();
     this._rerenderCosts();
+    // Plan tasks show their linked TODO's title and done state, so any change
+    // here can stale those chips. One-directional on purpose: _rerenderPlan
+    // never calls back into this, or the two would ping-pong forever.
+    this._rerenderPlan();
   }
 
   _bindInvitedGuests() {
@@ -3227,8 +4257,12 @@ export class PartyAdminView {
         sel.disabled = true;
         try {
           const headers = await getCsrfHeaders();
+          // Keep the stored shape the guest's own form expects: checkbox-group
+          // answers are arrays. (Replaces the whole array — the admin's pick is
+          // the definitive attendance.)
+          const multi = this._attendField()?.type === 'checkbox-group';
           const body = value
-            ? { answers: { [fieldId]: value } }
+            ? { answers: { [fieldId]: multi ? [value] : value } }
             : { answers: {}, clear: [fieldId] };
           const res = await fetch(`/api/v1/party/guests/${encodeURIComponent(userId)}/answers`, {
             method: 'PATCH', credentials: 'include', headers, body: JSON.stringify(body),
@@ -3450,34 +4484,31 @@ export class PartyAdminView {
     }
   }
 
-  // Parse the owner-invite textarea: one entry per line, "email" or "Name <email>".
-  _parseInviteLines(raw) {
-    return String(raw)
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(line => {
-        const m = line.match(/^(.*?)<([^>]+)>$/);
-        if (m) return { name: m[1].trim(), email: m[2].trim() };
-        return { email: line };
-      });
-  }
-
   _bindAddGuest() {
     const form = this._el.querySelector('#party-admin-add-guest-form');
     if (!form) return;
     const nameEl   = form.querySelector('#party-admin-add-guest-name');
     const emailEl  = form.querySelector('#party-admin-add-guest-email');
     const statusEl = form.querySelector('#party-admin-add-guest-status');
+    const inviteEl = form.querySelector('#party-admin-add-guest-invite');
     const msgEl    = form.querySelector('#party-admin-add-guest-status-msg');
     const btn      = form.querySelector('[type="submit"]');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = (nameEl?.value || '').trim();
+      const name  = (nameEl?.value || '').trim();
+      const email = (emailEl?.value || '').trim();
       if (!name) {
         msgEl.textContent = t('party.admin.addGuestNameRequired');
         nameEl?.focus();
+        return;
+      }
+      // The invite is an email — refuse the combination that can't work rather
+      // than silently adding the guest with no link sent.
+      const invite = !!inviteEl?.checked;
+      if (invite && !email) {
+        msgEl.textContent = t('party.admin.addGuestInviteNeedsEmail');
+        emailEl?.focus();
         return;
       }
 
@@ -3491,52 +4522,35 @@ export class PartyAdminView {
           headers,
           body: JSON.stringify({
             name,
-            email:  (emailEl?.value || '').trim() || undefined,
+            email:  email || undefined,
             status: statusEl?.value || 'going',
+            invite,
           }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || t('party.admin.addGuestFailed'));
-        showToast(t('party.admin.addGuestAdded', { name }), 'success');
+        // Report what actually happened: the server only claims `invited` once
+        // the magic link is on its way. An invite that was asked for and didn't
+        // send is a warning — the guest is on the list either way, but nobody
+        // told them, and only this toast would say so.
+        if (invite && !data.invited) {
+          // 'error' for the accent colour — the add succeeded, but a silently
+          // unsent invite is the failure the admin has to act on.
+          showToast(t('party.admin.addGuestInviteFailed', { name }), 'error');
+        } else {
+          showToast(
+            data.invited
+              ? t('party.admin.addGuestAddedInvited', { name })
+              : t('party.admin.addGuestAdded', { name }),
+            'success'
+          );
+        }
         // Reload so the new guest appears in the attendance table with the
         // right status, and the pills/headcount update.
         await this._loadAndRender();
       } catch (err) {
         btn.disabled = false;
         msgEl.textContent = err.message || t('party.admin.addGuestFailed');
-      }
-    });
-  }
-
-  _bindOwnerInvite() {
-    const form = this._el.querySelector('#party-admin-owner-invite-form');
-    if (!form) return;
-    const input  = form.querySelector('#party-admin-owner-invite-input');
-    const status = form.querySelector('#party-admin-owner-invite-status');
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const invites = this._parseInviteLines(input?.value || '');
-      if (!invites.length) {
-        status.textContent = t('party.admin.ownerInviteEmpty');
-        return;
-      }
-      status.textContent = t('form.saving');
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch('/api/v1/party/owner-invite', {
-          method:      'POST',
-          credentials: 'include',
-          headers,
-          body:        JSON.stringify({ invites }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Send failed');
-        status.textContent = '';
-        showToast(t('party.admin.inviteSent', { n: data.invited ?? invites.length }), 'success');
-        if (input) input.value = '';
-      } catch (err) {
-        status.textContent = err.message;
       }
     });
   }

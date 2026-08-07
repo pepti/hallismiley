@@ -29,6 +29,7 @@ const adminNavRoutes = require('./routes/adminNavRoutes');
 const adminRolesRoutes = require('./routes/adminRolesRoutes');
 const adminBinsRoutes = require('./routes/adminBinsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
+const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -80,6 +81,12 @@ app.use(helmet({
       scriptSrc:  ["'self'", 'https://www.googletagmanager.com'],
       styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc:     ["'self'", 'data:', 'https:'],
+      // blob: is needed for the party album's client-side video poster-frame
+      // capture (the picked file is loaded into a <video> via
+      // URL.createObjectURL, then drawn to canvas). Photos use
+      // createImageBitmap and never touch the DOM, so imgSrc needs no blob:.
+      // Explicit allowlist extension, not a defaultSrc relaxation.
+      mediaSrc:   ["'self'", 'blob:'],
       connectSrc: ["'self'", 'https://www.google-analytics.com', 'https://analytics.google.com'],
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
       objectSrc:  ["'none'"],
@@ -208,6 +215,14 @@ app.use('/api/v1/projects', (req, res, next) => {
   next();
 });
 app.use('/api/v1/party', (req, res, next) => {
+  // EXEMPT: POST /photos (album upload). Guests bulk-upload whole camera rolls
+  // after the party — 90 writes/15 min would stall a batch after ~90 files.
+  // The album is fully PUBLIC by owner decision (2026-07-26) — no auth on the
+  // route — so the dedicated abuse backstop (partyUploadLimiter, 1000/15 min,
+  // in partyRoutes.js) plus CSRF are the only gates. DELETE /photos/:id
+  // deliberately stays under writeLimiter — deletes are rare and need no bulk
+  // allowance.
+  if (req.method === 'POST' && req.path === '/photos') return next();
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }
@@ -240,10 +255,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Redirect HTTP → HTTPS in production (skip /health so internal probes aren't redirected)
+// Redirect HTTP → HTTPS in production (skip the probes so internal health checks
+// aren't redirected — the canonical-host middleware below exempts the same two)
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
-    if (req.path === '/health') return next();
+    if (req.path === '/health' || req.path === '/ready') return next();
     if (req.headers['x-forwarded-proto'] !== 'https') {
       return res.redirect(301, `https://${req.headers.host}${req.url}`);
     }
@@ -470,6 +486,7 @@ app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1
 app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);

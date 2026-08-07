@@ -1,5 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
+const archiver = require('archiver');
 const db   = require('../config/database');
 const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
@@ -57,7 +58,16 @@ function _partyNotifyRecipients(adminEmails) {
   )];
 }
 
-const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB (hero cover image only)
+
+// Album originals are kept at full quality — the image cap is a sanity bound,
+// not a compression nudge; videos have no cap here at all (multer's 2 GB limit
+// in partyRoutes.js is the only ceiling). Thumbs are browser-generated ~640px
+// previews, so anything past 2 MB means the client misbehaved — drop the thumb,
+// keep the original.
+const MAX_PARTY_IMAGE_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_PARTY_THUMB_SIZE = 2 * 1024 * 1024;  // 2 MB
+const PARTY_VIDEO_MIMES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 // DEFAULT_PARTY_INFO / LOCALE_NEUTRAL_INFO_KEYS / readPartyInfo moved to
 // services/partyInfo.js so the welcome email (services/partyApproval.js) can
@@ -302,6 +312,62 @@ function _normalizeAssignees(v) {
   if (out.length > TODO_MAX_ASSIGNEES) return { ok: false, tooMany: true };
   return { ok: true, value: out };
 }
+
+// ── Project plan validation helpers (069) ─────────────────────────────────────
+// Phases mirror logistics categories: seeded built-ins that resolve their name
+// from i18n and cannot be deleted ('other' backs the ON DELETE SET DEFAULT that
+// keeps tasks alive when a phase is removed), plus whatever the planner adds.
+const BUILTIN_PLAN_PHASES = ['pickup', 'setup', 'during', 'teardown', 'other'];
+const PLAN_PHASE_LABEL_MAX = 60;
+const PLAN_PHASE_ICON_MAX = 8;
+
+// A week of minutes and a thousand helpers — far past anything a birthday needs,
+// but low enough that a fat-fingered paste can't wreck the phase totals.
+const PLAN_MAX_MINUTES = 10_080;
+const PLAN_MAX_PEOPLE = 1000;
+
+// Estimated duration in whole minutes: null/'' clears (an unestimated task is a
+// real planning state and stays out of the totals rather than counting as zero).
+function _normalizePlanMinutes(v) {
+  if (v == null || v === '') return { ok: true, value: null };
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > PLAN_MAX_MINUTES) return { ok: false };
+  return { ok: true, value: v };
+}
+
+// How many helpers the task needs at once. Same null-means-unknown rule.
+function _normalizePlanPeople(v) {
+  if (v == null || v === '') return { ok: true, value: null };
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > PLAN_MAX_PEOPLE) return { ok: false };
+  return { ok: true, value: v };
+}
+
+// Does this phase key exist? Same rationale as _categoryExists — the FK would
+// reject a bad key as a driver 500; this turns it into a readable 400.
+async function _planPhaseExists(key) {
+  if (typeof key !== 'string') return false;
+  const { rows } = await db.query(`SELECT 1 FROM party_plan_phases WHERE key = $1`, [key]);
+  return rows.length > 0;
+}
+
+// Free phase key derived from the planner's label. Deliberately a small clone of
+// _freeCategoryKey rather than a shared helper parameterized by table name —
+// interpolating an identifier into SQL to save six lines is a bad trade.
+async function _freePlanPhaseKey(label) {
+  const base = _slugifyCategoryKey(label) || 'phase';
+  const { rows } = await db.query(
+    `SELECT key FROM party_plan_phases WHERE key = $1 OR key LIKE $2`,
+    [base, `${base}-%`]
+  );
+  const taken = new Set(rows.map(r => r.key));
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
+const PLAN_TASK_COLUMNS = `id, title, notes, done, phase, time_minutes, people_needed,
+                           assignees, linked_todo_id, sort_order, created_by, created_at, updated_at`;
 
 // ── Invite management (admin only) ────────────────────────────────────────────
 
@@ -596,14 +662,18 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
-  // POST /api/v1/party/guests  { name, email?, status? }
-  // Admin-only. Manually add a guest who accepted VERBALLY — creates a
-  // passwordless, pre-approved account and drops them straight into the
-  // attendance list. Distinct from owner-invite: no magic-link email is sent
-  // (that's owner-invite's job) and email is optional. A guest with no email
-  // gets a placeholder so the NOT NULL/UNIQUE constraint holds. `status`
-  // (default 'going' — they said yes) seeds an admin RSVP override; the row is
-  // created with answers=NULL so it never counts as a submitted RSVP.
+  // POST /api/v1/party/guests  { name, email?, status?, invite? }
+  // Admin-only. Manually add a guest — creates a passwordless, pre-approved
+  // account and drops them straight into the attendance list. Email is optional
+  // (someone who accepted verbally may not have one); a guest without one gets a
+  // placeholder so the NOT NULL/UNIQUE constraint holds. `status` (default
+  // 'going' — they said yes) seeds an admin RSVP override; the row is created
+  // with answers=NULL so it never counts as a submitted RSVP.
+  //
+  // `invite: true` also issues a magic-login token and emails the link — the
+  // single-guest counterpart to ownerInvite's bulk paste. It needs a real email,
+  // so with a placeholder the flag is refused up front rather than reported as
+  // an invite that never left.
   async addGuest(req, res, next) {
     try {
       const name = String(req.body?.name || '').trim();
@@ -618,6 +688,10 @@ const partyController = {
       // synthesize a unique undeliverable placeholder.
       const rawEmail  = req.body?.email;
       const hasEmail  = rawEmail != null && String(rawEmail).trim() !== '';
+      const invite    = req.body?.invite === true;
+      if (invite && !hasEmail) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.inviteNeedsEmail'), code: 400 });
+      }
       let email;
       if (hasEmail) {
         email = String(rawEmail).trim().toLowerCase();
@@ -659,7 +733,32 @@ const partyController = {
         );
       }
 
-      res.status(201).json({ id: userId, status, hasEmail });
+      // Magic link, only when asked for. The account is already approved with
+      // party_access above; approveGuest's job here is issuing the token. Await
+      // the send so `invited` reflects a mail that actually went out — the admin
+      // adds one guest at a time here, so there's no batch to keep unblocked.
+      let invited = false;
+      if (invite) {
+        const result = await approveGuest(userId, { approvedBy: req.user.id });
+        if (result) {
+          try {
+            await emailService.sendPartyInviteEmail({
+              to:     result.user.email,
+              name:   result.user.display_name || name,
+              token:  result.magicToken,
+              locale: result.user.preferred_locale || PARTY_DEFAULT_LOCALE,
+            });
+            invited = true;
+          } catch (err) {
+            // The guest exists and holds a working magic token; only the mail
+            // failed. Keep the 201 and report invited:false so the admin knows
+            // to chase it rather than losing the row to a rollback.
+            logger.error({ err, userId }, 'addGuest: invite email failed');
+          }
+        }
+      }
+
+      res.status(201).json({ id: userId, status, hasEmail, invited });
     } catch (err) { next(err); }
   },
 
@@ -1694,6 +1793,369 @@ const partyController = {
     } catch (err) { next(err); }
   },
 
+  // ── Project plan phases (admin/moderator) ────────────────────────────────────
+  // The stages a party runs through — pick up, set up, during, pack up — plus
+  // whatever the planner adds. Data rather than an enum for the same reason
+  // logistics categories are (069 mirrors 068).
+
+  async listPlanPhases(_req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, key, label, icon, sort_order, is_builtin, created_at, updated_at
+           FROM party_plan_phases
+          ORDER BY sort_order ASC, id ASC`
+      );
+      res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  // Body: { label, icon? }. Key derived server-side so the client can't collide
+  // with a built-in or smuggle in a value the FK would reject.
+  async addPlanPhase(req, res, next) {
+    try {
+      const { label, icon = null } = req.body || {};
+      if (typeof label !== 'string' || label.trim().length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseLabelRequired'), code: 400 });
+      }
+      if (label.trim().length > PLAN_PHASE_LABEL_MAX) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseLabelTooLong', { n: PLAN_PHASE_LABEL_MAX }), code: 400 });
+      }
+      if (icon != null && (typeof icon !== 'string' || [...icon].length > PLAN_PHASE_ICON_MAX)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseIconTooLong', { n: PLAN_PHASE_ICON_MAX }), code: 400 });
+      }
+
+      const key = await _freePlanPhaseKey(label.trim());
+      try {
+        const { rows } = await db.query(
+          `INSERT INTO party_plan_phases (key, label, icon, sort_order, is_builtin, created_by)
+           VALUES ($1, $2, $3,
+             COALESCE((SELECT MAX(sort_order) FROM party_plan_phases), 0) + 1,
+             FALSE, $4)
+           RETURNING id, key, label, icon, sort_order, is_builtin, created_at, updated_at`,
+          [key, label.trim(), icon ? icon.trim() || null : null, req.user.id]
+        );
+        res.status(201).json(rows[0]);
+      } catch (err) {
+        // Two planners adding the same phase name at once — _freePlanPhaseKey
+        // read a key that the other INSERT then took.
+        if (err.code === '23505') {
+          return res.status(409).json({ error: t(req.locale, 'errors.party.planPhaseExists'), code: 409 });
+        }
+        throw err;
+      }
+    } catch (err) { next(err); }
+  },
+
+  // Body: { label?, icon? }. Renaming a built-in writes a literal label, opting
+  // that phase out of EN/IS translation; clearing it (null) hands it back.
+  async updatePlanPhase(req, res, next) {
+    try {
+      const key = req.params.key;
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'label')) {
+        let v = req.body.label;
+        if (v != null) {
+          if (typeof v !== 'string' || v.trim().length === 0) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseLabelRequired'), code: 400 });
+          }
+          if (v.trim().length > PLAN_PHASE_LABEL_MAX) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseLabelTooLong', { n: PLAN_PHASE_LABEL_MAX }), code: 400 });
+          }
+          v = v.trim();
+        }
+        sets.push(`label = $${idx++}`);
+        values.push(v);
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'icon')) {
+        const v = req.body.icon;
+        if (v != null && (typeof v !== 'string' || [...v].length > PLAN_PHASE_ICON_MAX)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseIconTooLong', { n: PLAN_PHASE_ICON_MAX }), code: 400 });
+        }
+        sets.push(`icon = $${idx++}`);
+        values.push(v ? v.trim() || null : null);
+      }
+      if (sets.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planNoFields'), code: 400 });
+      }
+
+      values.push(key);
+      const { rows } = await db.query(
+        `UPDATE party_plan_phases
+            SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE key = $${idx}
+          RETURNING id, key, label, icon, sort_order, is_builtin, created_at, updated_at`,
+        values
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.planPhaseNotFound'), code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  // Tasks in a deleted phase are NOT deleted — the FK's ON DELETE SET DEFAULT
+  // sweeps them into 'other', so an hour of estimating can't vanish because a
+  // phase was tidied away. Built-ins are undeletable: 'other' is the sweep
+  // target itself, and the other four anchor i18n keys.
+  async deletePlanPhase(req, res, next) {
+    try {
+      const key = req.params.key;
+      if (BUILTIN_PLAN_PHASES.includes(key)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseBuiltinLocked'), code: 400 });
+      }
+      const { rows } = await db.query(
+        `DELETE FROM party_plan_phases WHERE key = $1 RETURNING key`,
+        [key]
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.planPhaseNotFound'), code: 404 });
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // ── Project plan tasks (admin/moderator) ─────────────────────────────────────
+  // The party as an operation: each task carries an estimate in minutes and the
+  // number of helpers it needs, which the admin view sums per phase so planners
+  // can see how many hands each stage takes. Grouping by phase happens client
+  // side — one flat ordered list keeps reordering a single sort_order sequence.
+
+  async listPlanTasks(_req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `SELECT ${PLAN_TASK_COLUMNS} FROM party_plan_tasks ORDER BY sort_order ASC, id ASC`
+      );
+      res.json(rows);
+    } catch (err) { next(err); }
+  },
+
+  async addPlanTask(req, res, next) {
+    try {
+      const {
+        title, notes = null, phase = 'other',
+        time_minutes = null, people_needed = null, assignees = [],
+      } = req.body || {};
+
+      if (typeof title !== 'string' || title.trim().length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planTitleRequired'), code: 400 });
+      }
+      if (title.length > 200) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planTitleTooLong', { n: 200 }), code: 400 });
+      }
+      if (notes != null && (typeof notes !== 'string' || notes.length > 2000)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planNotesTooLong', { n: 2000 }), code: 400 });
+      }
+      if (!await _planPhaseExists(phase)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseInvalid'), code: 400 });
+      }
+      const mins = _normalizePlanMinutes(time_minutes);
+      if (!mins.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.planTimeInvalid', { n: PLAN_MAX_MINUTES }), code: 400 });
+      const people = _normalizePlanPeople(people_needed);
+      if (!people.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.planPeopleInvalid', { n: PLAN_MAX_PEOPLE }), code: 400 });
+      const asg = _normalizeAssignees(assignees);
+      if (!asg.ok) {
+        const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
+        return res.status(400).json({ error: t(req.locale, key, { n: TODO_MAX_ASSIGNEES }), code: 400 });
+      }
+
+      const { rows } = await db.query(
+        `INSERT INTO party_plan_tasks
+           (title, notes, phase, time_minutes, people_needed, assignees, sort_order, created_by)
+         VALUES (
+           $1, $2, $3, $4, $5, $6::jsonb,
+           COALESCE((SELECT MAX(sort_order) FROM party_plan_tasks), 0) + 1,
+           $7
+         )
+         RETURNING ${PLAN_TASK_COLUMNS}`,
+        [title.trim(), notes ? notes.trim() : null, phase, mins.value, people.value,
+          JSON.stringify(asg.value), req.user.id]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async updatePlanTask(req, res, next) {
+    try {
+      const body = req.body || {};
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      if (Object.prototype.hasOwnProperty.call(body, 'title')) {
+        const v = body.title;
+        if (typeof v !== 'string' || v.trim().length === 0) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.planTitleRequired'), code: 400 });
+        }
+        if (v.length > 200) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.planTitleTooLong', { n: 200 }), code: 400 });
+        }
+        sets.push(`title = $${idx++}`); values.push(v.trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'notes')) {
+        const v = body.notes;
+        if (v != null && (typeof v !== 'string' || v.length > 2000)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.planNotesTooLong', { n: 2000 }), code: 400 });
+        }
+        sets.push(`notes = $${idx++}`); values.push(v ? v.trim() : null);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'done')) {
+        if (typeof body.done !== 'boolean') {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.fieldMustBeBoolean', { name: 'done' }), code: 400 });
+        }
+        sets.push(`done = $${idx++}`); values.push(body.done);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'phase')) {
+        if (!await _planPhaseExists(body.phase)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.party.planPhaseInvalid'), code: 400 });
+        }
+        sets.push(`phase = $${idx++}`); values.push(body.phase);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'time_minutes')) {
+        const mins = _normalizePlanMinutes(body.time_minutes);
+        if (!mins.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.planTimeInvalid', { n: PLAN_MAX_MINUTES }), code: 400 });
+        sets.push(`time_minutes = $${idx++}`); values.push(mins.value);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'people_needed')) {
+        const people = _normalizePlanPeople(body.people_needed);
+        if (!people.ok) return res.status(400).json({ error: t(req.locale, 'errors.party.planPeopleInvalid', { n: PLAN_MAX_PEOPLE }), code: 400 });
+        sets.push(`people_needed = $${idx++}`); values.push(people.value);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'assignees')) {
+        const asg = _normalizeAssignees(body.assignees);
+        if (!asg.ok) {
+          const key = asg.tooMany ? 'errors.party.todoTooManyAssignees' : 'errors.party.todoAssigneeInvalid';
+          return res.status(400).json({ error: t(req.locale, key, { n: TODO_MAX_ASSIGNEES }), code: 400 });
+        }
+        sets.push(`assignees = $${idx++}::jsonb`); values.push(JSON.stringify(asg.value));
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'linked_todo_id')) {
+        const v = body.linked_todo_id;
+        if (v == null || v === '') {
+          sets.push(`linked_todo_id = $${idx++}`); values.push(null);
+        } else {
+          if (!Number.isInteger(v)) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.planTodoNotFound'), code: 400 });
+          }
+          const { rows: todo } = await db.query(`SELECT 1 FROM party_todos WHERE id = $1`, [v]);
+          if (!todo[0]) {
+            return res.status(400).json({ error: t(req.locale, 'errors.party.planTodoNotFound'), code: 400 });
+          }
+          sets.push(`linked_todo_id = $${idx++}`); values.push(v);
+        }
+      }
+
+      if (sets.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.planNoFields'), code: 400 });
+      }
+
+      values.push(req.params.id);
+      const { rows } = await db.query(
+        `UPDATE party_plan_tasks SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE id = $${idx}
+          RETURNING ${PLAN_TASK_COLUMNS}`,
+        values
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.planNotFound'), code: 404 });
+      res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  async deletePlanTask(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        `DELETE FROM party_plan_tasks WHERE id = $1 RETURNING id`,
+        [req.params.id]
+      );
+      if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.planNotFound'), code: 404 });
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // Reorder plan tasks. Body { ids: [...] } is the whole list in its new order
+  // (all phases concatenated), written as sequential sort_order 1..N in one
+  // transaction — same contract as reorderTodos.
+  async reorderPlanTasks(req, res, next) {
+    try {
+      const { ids } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsRequired'), code: 400 });
+      }
+      if (!ids.every(n => Number.isInteger(n))) {
+        return res.status(400).json({ error: t(req.locale, 'errors.party.reorderIdsIntegers'), code: 400 });
+      }
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (let i = 0; i < ids.length; i++) {
+          await client.query(
+            `UPDATE party_plan_tasks SET sort_order = $1, updated_at = NOW() WHERE id = $2`,
+            [i + 1, ids[i]]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      res.status(204).send();
+    } catch (err) { next(err); }
+  },
+
+  // Spawn a TODO from a plan task and link the two. The plan answers "what the
+  // party needs"; the to-do list is where an individual picks the job up, so
+  // this is the handoff between them. Title, notes and assignees carry over.
+  // Both writes share a transaction — a task pointing at a TODO that was never
+  // committed would render as a broken link the planner cannot clear.
+  async createTodoFromPlanTask(req, res, next) {
+    try {
+      const { rows: taskRows } = await db.query(
+        `SELECT id, title, notes, assignees, linked_todo_id FROM party_plan_tasks WHERE id = $1`,
+        [req.params.id]
+      );
+      const task = taskRows[0];
+      if (!task) return res.status(404).json({ error: t(req.locale, 'errors.party.planNotFound'), code: 404 });
+
+      // Only block on a link that still resolves — a TODO deleted out from under
+      // the task leaves linked_todo_id NULL via the FK, but guard anyway so a
+      // stale pointer can never wedge the button.
+      if (task.linked_todo_id != null) {
+        const { rows: existing } = await db.query(
+          `SELECT 1 FROM party_todos WHERE id = $1`, [task.linked_todo_id]
+        );
+        if (existing[0]) {
+          return res.status(409).json({ error: t(req.locale, 'errors.party.planAlreadyLinked'), code: 409 });
+        }
+      }
+
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: todoRows } = await client.query(
+          `INSERT INTO party_todos (title, notes, assignees, sort_order, created_by)
+           VALUES ($1, $2, $3::jsonb,
+             COALESCE((SELECT MAX(sort_order) FROM party_todos), 0) + 1, $4)
+           RETURNING id, title, notes, done, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+                     cost, assignees, sort_order, created_by, created_at, updated_at`,
+          [task.title, task.notes, JSON.stringify(task.assignees || []), req.user.id]
+        );
+        const { rows: updated } = await client.query(
+          `UPDATE party_plan_tasks SET linked_todo_id = $1, updated_at = NOW()
+            WHERE id = $2
+            RETURNING ${PLAN_TASK_COLUMNS}`,
+          [todoRows[0].id, task.id]
+        );
+        await client.query('COMMIT');
+        res.status(201).json({ task: updated[0], todo: { ...todoRows[0], subtasks: [] } });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) { next(err); }
+  },
+
   // ── Guestbook ─────────────────────────────────────────────────────────────────
 
   async postGuestbook(req, res, next) {
@@ -1749,49 +2211,140 @@ const partyController = {
   // ── Photos ────────────────────────────────────────────────────────────────────
 
   async uploadPhoto(req, res, next) {
+    const file  = req.files?.file?.[0] || null;
+    const thumb = req.files?.thumb?.[0] || null;
     try {
-      if (!req.file) {
+      if (!file) {
+        if (thumb) _tryUnlink(`/assets/party/${thumb.filename}`);
         return res.status(400).json({ error: t(req.locale, 'errors.user.noFileUploaded'), code: 400 });
       }
 
-      if (req.file.size > MAX_PHOTO_SIZE) {
-        _tryUnlink(`/assets/party/${req.file.filename}`);
-        return res.status(400).json({ error: t(req.locale, 'errors.party.photoTooLarge'), code: 400 });
+      const mediaType = PARTY_VIDEO_MIMES.includes(file.mimetype) ? 'video' : 'image';
+
+      if (mediaType === 'image' && file.size > MAX_PARTY_IMAGE_SIZE) {
+        _tryUnlink(`/assets/party/${file.filename}`);
+        if (thumb) _tryUnlink(`/assets/party/${thumb.filename}`);
+        return res.status(400).json({ error: t(req.locale, 'errors.party.imageTooLarge'), code: 400 });
+      }
+
+      // The thumb is an optimization, never a reason to fail the original.
+      let thumbPath = null;
+      if (thumb) {
+        if (thumb.size > MAX_PARTY_THUMB_SIZE) {
+          _tryUnlink(`/assets/party/${thumb.filename}`);
+        } else {
+          thumbPath = `/assets/party/${thumb.filename}`;
+        }
       }
 
       const caption  = req.body.caption || null;
-      const filePath = `/assets/party/${req.file.filename}`;
+      const filePath = `/assets/party/${file.filename}`;
 
+      // The route is public — req.user is only set when a session cookie came
+      // along. NULL user_id marks an anonymous upload (migration 071).
       const { rows } = await db.query(
-        `INSERT INTO party_photos (user_id, file_path, caption) VALUES ($1, $2, $3)
+        `INSERT INTO party_photos (user_id, file_path, thumb_path, media_type, caption)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [req.user.id, filePath, caption]
+        [req.user?.id ?? null, filePath, thumbPath, mediaType, caption]
       );
       res.status(201).json(rows[0]);
     } catch (err) {
-      if (req.file) _tryUnlink(`/assets/party/${req.file.filename}`);
+      if (file) _tryUnlink(`/assets/party/${file.filename}`);
+      if (thumb) _tryUnlink(`/assets/party/${thumb.filename}`);
       next(err);
     }
   },
 
   async getPhotos(req, res, next) {
     try {
-      const { rows } = await db.query(
-        `SELECT p.id, p.file_path, p.caption, p.created_at,
-                u.username, u.display_name, u.avatar,
-                p.user_id
-         FROM party_photos p
-         JOIN users u ON u.id = p.user_id
-         ORDER BY p.created_at DESC`
-      );
-      res.json(rows);
+      // Sort keys map to whitelisted ORDER BY clauses — user input never
+      // reaches the SQL string directly.
+      const ORDER_BY = {
+        newest:   'p.created_at DESC, p.id DESC',
+        oldest:   'p.created_at ASC, p.id ASC',
+        // NULLS LAST puts anonymous uploads after named uploaders.
+        uploader: 'LOWER(COALESCE(u.display_name, u.username)) ASC NULLS LAST, p.created_at DESC, p.id DESC',
+        // 'video' > 'image' alphabetically, so DESC = videos first.
+        videos:   'p.media_type DESC, p.created_at DESC, p.id DESC',
+        photos:   'p.media_type ASC, p.created_at DESC, p.id DESC',
+        // Seeded shuffle: hashing id+seed gives a random-looking but
+        // DETERMINISTIC order for a given seed, so limit/offset paging stays
+        // stable while the client scrolls — plain random() would duplicate and
+        // drop rows across pages. The seed is a bind parameter, not SQL.
+        shuffle:  'md5(p.id::text || $3), p.id',
+      };
+      const sort    = ORDER_BY[req.query.sort] ? req.query.sort : 'newest';
+      const orderBy = ORDER_BY[sort];
+      const limit   = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 100);
+      const offset  = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+      const params  = [limit, offset];
+      if (sort === 'shuffle') {
+        params.push(String(req.query.seed || '').slice(0, 32));
+      }
+
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        db.query(
+          `SELECT p.id, p.file_path, p.thumb_path, p.media_type, p.caption, p.created_at,
+                  u.username, u.display_name, u.avatar,
+                  p.user_id
+           FROM party_photos p
+           LEFT JOIN users u ON u.id = p.user_id
+           ORDER BY ${orderBy}
+           LIMIT $1 OFFSET $2`,
+          params
+        ),
+        db.query('SELECT COUNT(*)::int AS total FROM party_photos'),
+      ]);
+      res.json({ photos: rows, total: countRows[0].total });
     } catch (err) { next(err); }
+  },
+
+  // Streams every album original as a store-only (uncompressed) zip — photos
+  // and videos are already compressed formats, so store keeps CPU near zero
+  // and the download starts immediately. Thumbnails are excluded.
+  async downloadArchive(req, res, next) {
+    try {
+      const { rows } = await db.query(
+        'SELECT file_path FROM party_photos ORDER BY created_at ASC, id ASC'
+      );
+      if (!rows.length) {
+        return res.status(404).json({ error: t(req.locale, 'errors.party.albumEmpty'), code: 404 });
+      }
+
+      const partyDir = path.join(UPLOAD_ROOT, 'party');
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="afmaeli-halla-myndir.zip"');
+
+      const archive = archiver('zip', { store: true });
+      archive.on('warning', (err) => logger.warn({ err }, 'party album archive warning'));
+      archive.on('error', (err) => {
+        // Headers are already sent once streaming starts — all we can do is
+        // log and cut the connection so the client sees a failed download
+        // rather than a silently truncated zip.
+        logger.error({ err }, 'party album archive failed');
+        res.destroy(err);
+      });
+      archive.pipe(res);
+
+      for (const row of rows) {
+        // file_path is server-generated, but basename() keeps any future bad
+        // row from ever reaching outside the party upload dir.
+        const name = path.basename(row.file_path);
+        const abs  = path.join(partyDir, name);
+        if (fs.existsSync(abs)) archive.file(abs, { name });
+      }
+      await archive.finalize();
+    } catch (err) {
+      if (res.headersSent) { res.destroy(); return; }
+      next(err);
+    }
   },
 
   async deletePhoto(req, res, next) {
     try {
       const { rows } = await db.query(
-        'SELECT user_id, file_path FROM party_photos WHERE id = $1',
+        'SELECT user_id, file_path, thumb_path FROM party_photos WHERE id = $1',
         [req.params.id]
       );
       if (!rows[0]) return res.status(404).json({ error: t(req.locale, 'errors.party.photoNotFound'), code: 404 });
@@ -1803,6 +2356,7 @@ const partyController = {
 
       await db.query('DELETE FROM party_photos WHERE id = $1', [req.params.id]);
       _tryUnlink(rows[0].file_path);
+      _tryUnlink(rows[0].thumb_path);
       res.status(204).send();
     } catch (err) { next(err); }
   },

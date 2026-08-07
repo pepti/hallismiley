@@ -12,10 +12,22 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Default every job to read-only; the deploy job's own permissions block
+# grants the OIDC id-token it needs and overrides this at job level.
+permissions:
+  contents: read
+
+# Two deploys must never interleave (each ends in a webapp restart); queue
+# them instead of cancelling — a cancelled deploy would strand main un-shipped.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     # Fail closed: deploy only fires when CI succeeded for this SHA, or
     # when a human explicitly dispatched the workflow. Any CI failure
@@ -38,12 +50,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v3
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
@@ -59,7 +71,7 @@ jobs:
       # The default docker driver can't export a build cache; the
       # docker-container driver can, which is what makes cache-to below work.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # GHA layer cache so unchanged layers (notably the ~200 MB `npm ci`
       # node_modules layer) are reused across deploys instead of rebuilt and
@@ -69,7 +81,7 @@ jobs:
       # an attestation child) would change what the weekly ACR purge sees and
       # what App Service pulls.
       - name: Build and push Docker image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
@@ -81,7 +93,7 @@ jobs:
             hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
 
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
           app-name: hallismiley-app
           images: hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
@@ -106,10 +118,12 @@ jobs:
   alert-ci-blocked:
     name: Alert — CI red on main (deploy skipped)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Fires only when CI completed on main WITHOUT success — i.e. the exact
     # moment the deploy is being skipped. A manual workflow_dispatch never
-    # reaches this branch.
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' }}
+    # reaches this branch. `cancelled` is excluded: CI only cancels when a run
+    # is superseded (see ci.yml concurrency), which isn't a failure to alert on.
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.conclusion != 'cancelled' }}
     steps:
       - name: Email deploy-blocked alert (Resend)
         env:
@@ -148,6 +162,7 @@ jobs:
   alert-deploy-failed:
     name: Alert — Azure deploy failed
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [deploy]
     # Only when the deploy job actually RAN and failed (not when it was skipped
     # because CI was red — that case is covered by alert-ci-blocked above).
