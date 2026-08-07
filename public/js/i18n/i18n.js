@@ -78,6 +78,17 @@ export function forcedLocaleFor(pathname = window.location.pathname) {
 export function getPreferredLocale() {
   const forced = forcedLocaleFor(window.location.pathname);
   if (forced) return forced;
+  return resolveUserLocale();
+}
+
+/** The visitor's OWN locale, ignoring any route lock: ?locale= → explicit saved
+ *  choice → Accept-Language → default.
+ *
+ *  Split out from getPreferredLocale because the lock and the preference answer
+ *  different questions. "What locale does this page render in?" is the lock;
+ *  "what locale does this visitor read the site in?" is this. On a locked page
+ *  the two disagree, and href() below needs the second one. */
+function resolveUserLocale() {
   const fromQuery = getLocaleFromQuery();
   if (fromQuery) return fromQuery;
   const saved = localStorage.getItem('locale_choice');
@@ -201,9 +212,17 @@ export function switchLocale(newLocale) {
  *  '/en/projects' — consumable by <a href> and history.pushState alike.
  *  Locale-locked routes get their own locale rather than the active one, so
  *  the NavBar's party link reads /is/party even while browsing in English —
- *  the link lands on its final URL instead of bouncing through a redirect. */
+ *  the link lands on its final URL instead of bouncing through a redirect.
+ *
+ *  The reverse case matters just as much: while the visitor is ON a locked
+ *  page, `_locale` is that page's forced locale, not theirs. Building unlocked
+ *  links from it would rewrite the whole NavBar to /is/* and strand an English
+ *  reader on the Icelandic site the moment they looked at the party page. So
+ *  links leaving a locked page resolve against the visitor's own preference. */
 export function href(route) {
-  const locale = forcedLocaleFor(route) || _locale || DEFAULT_LOCALE;
+  const targetLock = forcedLocaleFor(route);
+  const locale = targetLock
+    || (forcedLocaleFor() ? resolveUserLocale() : (_locale || DEFAULT_LOCALE));
   return '/' + locale + (route.startsWith('/') ? route : '/' + route);
 }
 

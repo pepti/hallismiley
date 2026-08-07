@@ -746,7 +746,7 @@ const partyController = {
               to:     result.user.email,
               name:   result.user.display_name || name,
               token:  result.magicToken,
-              locale: result.user.preferred_locale || PARTY_DEFAULT_LOCALE,
+              locale: result.user.preferred_locale || PARTY_FORCED_LOCALE,
             });
             invited = true;
           } catch (err) {
