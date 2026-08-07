@@ -65,7 +65,7 @@ function getClient() {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   if (cachedClient && cachedKey === key) return cachedClient;
-  // eslint-disable-next-line global-require
+
   const AnthropicMod = require('@anthropic-ai/sdk');
   const Ctor = AnthropicMod.default || AnthropicMod.Anthropic || AnthropicMod;
   cachedClient = new Ctor({ apiKey: key });
@@ -271,7 +271,7 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
-    } catch (err) {
+    } catch (_err) {
       logger.warn({ preview: cleaned.slice(0, 200) }, 'translator.batch JSON parse failed');
       return null;
     }

@@ -10,7 +10,7 @@
     if (THEMES.indexOf(theme) !== -1 && theme !== 'classic') {
       document.documentElement.setAttribute('data-theme', theme);
     }
-  } catch (e) {
+  } catch (_e) {
     /* storage blocked — fall back to the default theme */
   }
 })();

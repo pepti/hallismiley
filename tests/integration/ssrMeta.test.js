@@ -175,23 +175,64 @@ describe('SSR meta-injection — SPA catch-all', () => {
       expect(res.text).not.toContain('Verkefnasafn Halla');
     });
 
-    test('/en/party sets the English party description, not the site bio', async () => {
-      const res = await request(app).get('/en/party');
-      expect(res.status).toBe(200);
-      expect(res.text).toContain("You're invited to Halli's 40th birthday");
-      expect(res.text).not.toContain('Portfolio of Halli');
-    });
-
     test('/is/party keeps its party title', async () => {
       const res = await request(app).get('/is/party');
       expect(res.text).toMatch(/<title id="ssr-title">40 ára afmæli Halla<\/title>/);
     });
 
     test('party page emits an absolute og:image URL', async () => {
-      const res = await request(app).get('/en/party');
+      const res = await request(app).get('/is/party');
       // Either the uploaded cover (/assets/party/…) or the default og-image —
       // both are absolute URLs on the canonical host.
       expect(res.text).toMatch(/property="og:image" content="https:\/\/www\.hallismiley\.is\/[^"]+"/);
+    });
+  });
+
+  // ── Party is Icelandic-only ────────────────────────────────────────────────
+  // The page is a birthday landing for an all-Icelandic guest list. English is
+  // not published: see server/config/i18n.js forcedLocaleFor.
+
+  describe('party page — locale lock', () => {
+    test('/en/party permanently redirects to /is/party', async () => {
+      const res = await request(app).get('/en/party');
+      expect(res.status).toBe(301);
+      expect(res.headers.location).toBe('/is/party');
+    });
+
+    test('an unprefixed /party redirects to Icelandic, not the default locale', async () => {
+      const res = await request(app).get('/party');
+      expect(res.status).toBe(301);
+      expect(res.headers.location).toBe('/is/party');
+    });
+
+    test('party sub-routes redirect too, preserving the magic-link token', async () => {
+      const res = await request(app).get('/en/party/login?token=abc123&x=1');
+      expect(res.status).toBe(301);
+      expect(res.headers.location).toBe('/is/party/login?token=abc123&x=1');
+    });
+
+    test('an en locale_choice cookie does not reopen the English party page', async () => {
+      const res = await request(app).get('/en/party').set('Cookie', 'locale_choice=en');
+      expect(res.status).toBe(301);
+      expect(res.headers.location).toBe('/is/party');
+    });
+
+    test('/is/party canonicalises to itself and offers no English alternate', async () => {
+      const res = await request(app).get('/is/party');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/rel="canonical"[^>]*href="https:\/\/www\.hallismiley\.is\/is\/party"/);
+      expect(res.text).toMatch(/hreflang="is"[^>]*href="https:\/\/www\.hallismiley\.is\/is\/party"/);
+      expect(res.text).toMatch(/hreflang="x-default"[^>]*href="https:\/\/www\.hallismiley\.is\/is\/party"/);
+      // The English alternate tag must be gone, not merely repointed.
+      expect(res.text).not.toMatch(/hreflang="en"/);
+    });
+
+    test('non-party pages keep both hreflang alternates', async () => {
+      const res = await request(app).get('/en/projects');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/hreflang="en"[^>]*href="https:\/\/www\.hallismiley\.is\/en\/projects"/);
+      expect(res.text).toMatch(/hreflang="is"[^>]*href="https:\/\/www\.hallismiley\.is\/is\/projects"/);
+      expect(res.text).toMatch(/hreflang="x-default"/);
     });
   });
 

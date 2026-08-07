@@ -111,7 +111,7 @@ export class NewsView {
       this._renderFilterBar();
       this._renderGrid();
       this._renderPagination();
-    } catch (err) {
+    } catch (_err) {
       const grid = this._view.querySelector('#news-grid');
       if (grid) grid.innerHTML = `<p class="news-page__error">Could not load articles — try refreshing.</p>`;
     } finally {

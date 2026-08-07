@@ -497,7 +497,7 @@ async function handleCheckoutCompleted(session) {
 
   // Atomic transition pending→paid + atomic stock decrement per item.
   const client = await db.pool.connect();
-  let transitioned = null;
+  let transitioned;
   let stockLost = false;
   try {
     await client.query('BEGIN');
