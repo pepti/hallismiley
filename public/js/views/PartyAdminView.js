@@ -25,7 +25,7 @@ export class PartyAdminView {
 
     try {
       await this._loadAndRender();
-    } catch (err) {
+    } catch (_err) {
       el.innerHTML = `<div class="party-error"><p>${t('party.admin.loadError')}</p></div>`;
     }
 
@@ -3959,7 +3959,7 @@ export class PartyAdminView {
     const scope     = container.dataset.assigneeScope;
     const todoId    = container.dataset.todoId;
     const subtaskId = container.dataset.subtaskId;
-    let current = [];
+    let current;
     if (scope === 'plan') {
       const task = (this._plan || []).find(x => String(x.id) === String(todoId));
       current = task?.assignees || [];

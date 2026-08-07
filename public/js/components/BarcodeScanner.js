@@ -65,7 +65,7 @@ export class BarcodeScanner {
 
     this._timer = setInterval(async () => {
       if (!this._el || video.readyState < 2) return;
-      let codes = [];
+      let codes;
       try { codes = await detector.detect(video); } catch { return; }
       const raw = codes[0]?.rawValue;
       if (!raw) return;
