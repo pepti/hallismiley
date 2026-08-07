@@ -44,6 +44,15 @@ function resolveVatRate(rate) {
   if (rate === null || rate === undefined || rate === '') {
     throw new VatError('VAT rate is required (pass an explicit 0 for zero-rated turnover)');
   }
+  // Objects and arrays have to go before Number(), for the same reason null does:
+  // Number([]) === 0 and 0 is a valid rate, so `[]` walks straight through the
+  // check above and books the line at 0% VAT — the inherited bug in the header
+  // comment, reached through a JSON array instead of a null. Number([24]) === 24
+  // is the same door: a rate that happens to be right by accident is still a rate
+  // nobody validated. Only numbers and numeric strings are rates.
+  if (typeof rate !== 'number' && typeof rate !== 'string') {
+    throw new VatError(`VAT rate must be a number, got: ${JSON.stringify(rate)}`);
+  }
   const n = Number(rate);
   if (!Number.isInteger(n) || !ALLOWED_RATES.includes(n)) {
     throw new VatError(`Unsupported VAT rate: ${rate} (allowed: ${ALLOWED_RATES.join(', ')})`);
@@ -58,6 +67,12 @@ function assertIntegerIsk(value, label) {
   // resolveVatRate book every counter sale at 0% VAT in the previous system.
   if (value === null || value === undefined || value === '' || typeof value === 'boolean') {
     throw new VatError(`${label} is required and must be a number, got: ${value}`);
+  }
+  // Same trap one type further out: Number([]) === 0 and Number([1000]) === 1000,
+  // so an array slips past every check below and lands in a BIGINT money column
+  // as a figure nobody validated.
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new VatError(`${label} must be a number, got: ${JSON.stringify(value)}`);
   }
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n)) {

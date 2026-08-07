@@ -87,6 +87,11 @@ function parseAmount(value, label) {
   if (value === null || value === undefined || value === '' || typeof value === 'boolean') {
     throw new BadRequest(`${label} is required`);
   }
+  // A JSON body can carry an array where a scalar belongs, and Number([1000]) is
+  // 1000 — it would pass every check below as a value nobody validated.
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new BadRequest(`${label} must be a whole number of ISK`);
+  }
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n)) {
     throw new BadRequest(`${label} must be a whole number of ISK`);

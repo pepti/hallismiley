@@ -123,7 +123,7 @@ async function fetchFromFeed(url) {
     text = await res.text();
   } catch (err) {
     if (err.name === 'AbortError') {
-      throw new Error(`Rate feed did not respond within ${FEED_TIMEOUT_MS / 1000}s`);
+      throw new Error(`Rate feed did not respond within ${FEED_TIMEOUT_MS / 1000}s`, { cause: err });
     }
     throw err;
   } finally {

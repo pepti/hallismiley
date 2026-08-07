@@ -39,6 +39,22 @@ describe('resolveVatRate', () => {
   it.each([7, 20, 25, 1, -24, 24.5, 'abc', NaN, Infinity])('rejects unsupported rate %p', (bad) => {
     expect(() => resolveVatRate(bad)).toThrow(VatError);
   });
+
+  // The same coercion trap as the null case, one type further out: Number([]) is
+  // 0, so an empty array walked past the absent-rate guard above and booked the
+  // line at 0% VAT. Number([24]) === 24 is the other half — a rate that happens
+  // to be correct by accident is still a rate nobody validated.
+  it.each([[[]], [[24]], [['24']], [[0]], [{}], [{ rate: 24 }]])(
+    'refuses non-scalar rate %p rather than coercing it',
+    (bad) => {
+      expect(() => resolveVatRate(bad)).toThrow(VatError);
+    }
+  );
+
+  it('does not let an array rate turn a real sale into zero-rated turnover', () => {
+    // Before the guard: splitVatInclusive(5000, []) returned net 5000, vat 0.
+    expect(() => splitVatInclusive(5000, [])).toThrow(VatError);
+  });
 });
 
 describe('splitVatInclusive', () => {
@@ -184,6 +200,15 @@ describe('assertIntegerIsk', () => {
   it('accepts a numeric string', () => {
     expect(assertIntegerIsk('1200', 'amount')).toBe(1200);
   });
+
+  // Number([]) === 0 and Number([1000]) === 1000, so an array reached the BIGINT
+  // money columns as a figure that passed no check at all.
+  it.each([[[]], [[1000]], [['1000']], [{}], [{ amount: 1000 }]])(
+    'rejects non-scalar %p rather than coercing it to a number',
+    (bad) => {
+      expect(() => assertIntegerIsk(bad, 'amount')).toThrow(VatError);
+    }
+  );
 });
 
 describe('constants', () => {
