@@ -17,6 +17,7 @@ const ledger = require('../services/bookkeeping/ledgerService');
 const invoiceService = require('../services/bookkeeping/invoiceService');
 const expenseService = require('../services/bookkeeping/expenseService');
 const vatService = require('../services/bookkeeping/vatService');
+const reconciliation = require('../services/bookkeeping/reconciliationService');
 const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
 const { toCsv, csvHeaders } = require('../utils/csv');
@@ -691,6 +692,127 @@ async function exportVatCsv(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// ── Reconciliation ───────────────────────────────────────────────────────────
+
+async function getReconciliationStatus(req, res, next) {
+  try {
+    res.json(await reconciliation.reconciliationStatus(db));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function listBankTransactions(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    const state = parseEnum(req.query.state,
+      ['unmatched', 'matched', 'explained', 'ignored'], 'state');
+    const result = await reconciliation.listBankTransactions({ state, limit, offset }, db);
+    res.json({ ...result, limit, offset });
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Import a bank statement.
+ *
+ * Takes the CSV as text in the body rather than as a file upload: a statement is not
+ * a document to retain (the bank keeps it, and the entries it produces carry their own
+ * trail), so there is nothing to store and no reason to touch the document machinery.
+ */
+async function importBankStatement(req, res, next) {
+  try {
+    const csv = (req.body || {}).csv;
+    if (typeof csv !== 'string' || !csv.trim()) {
+      throw new BadRequest('Paste or upload the statement CSV in the `csv` field');
+    }
+    if (csv.length > 4_000_000) throw new BadRequest('That statement is too large (max 4 MB)');
+
+    const parsed = reconciliation.parseBankCsv(csv);
+    if (!parsed.rows.length) {
+      throw new BadRequest(
+        `No usable rows found. ${parsed.problems.length} line(s) could not be read.`
+      );
+    }
+    const result = await ledger.withTransaction(client =>
+      reconciliation.importBankRows(client, {
+        rows: parsed.rows, ...audit.actorOf(req),
+      }));
+    securityLogger.adminAction(req.user.id, 'books.bank.import', result.batch, {
+      imported: result.imported, duplicates: result.duplicates,
+    });
+    res.status(201).json({ ...result, problems: parsed.problems, delimiter: parsed.delimiter });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getBankSuggestions(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'bank line id');
+    res.json(await reconciliation.suggestMatches(db, id));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function resolveBankTransaction(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'bank line id');
+    const body = req.body || {};
+    const kind = parseEnum(body.kind, ['invoice', 'explained', 'suspense', 'ignore'], 'kind');
+    if (!kind) throw new BadRequest('kind must be one of: invoice, explained, suspense, ignore');
+
+    const result = await ledger.withTransaction(client =>
+      reconciliation.resolveBankTransaction(client, id, {
+        kind,
+        invoiceId: body.invoice_id ? parseId(body.invoice_id, 'invoice_id') : null,
+        accountCode: body.account_code
+          ? parseText(body.account_code, 'account_code', { maxLen: 20 }) : null,
+        reason: parseText(body.reason, 'reason', { maxLen: 500 }),
+        ...audit.actorOf(req),
+      }));
+    securityLogger.adminAction(req.user.id, 'books.bank.resolve', id, { kind });
+    res.json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Pull Stripe balance transactions and post them.
+ *
+ * The fetch lives here rather than in the service so the posting logic stays testable
+ * without network access. Paged to Stripe's maximum, newest first, bounded by a
+ * `since` date so a re-sync does not walk the entire account history.
+ */
+async function syncStripe(req, res, next) {
+  try {
+    const since = (req.body || {}).since
+      ? assertAccountingDate(req.body.since, 'since')
+      : addDays(todayIso(), -30);
+
+    const { getStripe } = require('../config/stripe');
+    let stripe;
+    try {
+      stripe = getStripe();
+    } catch {
+      throw new BadRequest('Stripe is not configured on this environment');
+    }
+
+    const created = { gte: Math.floor(Date.parse(`${since}T00:00:00Z`) / 1000) };
+    const collected = [];
+    // autoPagingEach would be neater but is unbounded; an explicit cap keeps a
+    // mis-set `since` from pulling years of history into one request.
+    const MAX_PAGES = 20;
+    let startingAfter;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const batch = await stripe.balanceTransactions.list({
+        limit: 100, created, ...(startingAfter ? { starting_after: startingAfter } : {}),
+      });
+      collected.push(...batch.data);
+      if (!batch.has_more || !batch.data.length) break;
+      startingAfter = batch.data[batch.data.length - 1].id;
+    }
+
+    const result = await ledger.withTransaction(client =>
+      reconciliation.syncStripeTransactions(client, collected, audit.actorOf(req)));
+    securityLogger.adminAction(req.user.id, 'books.stripe.sync', since, result);
+    res.json({ since, ...result });
+  } catch (err) { fail(res, err, next); }
+}
+
 // ── CSV exports ──────────────────────────────────────────────────────────────
 //
 // Server-side and unbounded-safe. The client-side "export all" pattern that
@@ -788,6 +910,12 @@ module.exports = {
   getDocument,
   getAging,
   getStatement,
+  getReconciliationStatus,
+  listBankTransactions,
+  importBankStatement,
+  getBankSuggestions,
+  resolveBankTransaction,
+  syncStripe,
   listVatPeriods,
   getVatPeriod,
   fileVatReturn,

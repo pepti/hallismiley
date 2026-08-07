@@ -50,6 +50,7 @@ export const ADMIN_NAV = [
     { id: 'expenses', route: '/admin/books/expenses', labelKey: 'admin.nav.expenses', icon: 'inbox' },
     { id: 'ar',       route: '/admin/books/ar',       labelKey: 'admin.nav.ar',       icon: 'clock' },
     { id: 'vat',      route: '/admin/books/vat',      labelKey: 'admin.nav.vat',      icon: 'percent' },
+    { id: 'bank',     route: '/admin/books/bank',     labelKey: 'admin.nav.bank',     icon: 'bank' },
   ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
@@ -72,6 +73,7 @@ const ICONS = {
   layers:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
   percent:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   book:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>',
+  bank:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 4l9 6"/><path d="M5 10v9h14v-9"/><line x1="9" y1="19" x2="9" y2="13"/><line x1="15" y1="19" x2="15" y2="13"/></svg>',
   clock:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>',
   ledger:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="7" y1="8" x2="9" y2="8"/><line x1="15" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="17" y2="12"/></svg>',
   till:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10" width="20" height="11" rx="2"/><path d="M6 10V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/><line x1="7" y1="15" x2="11" y2="15"/></svg>',

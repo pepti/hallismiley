@@ -175,3 +175,18 @@ export const unlockVatPeriod = (period, body) =>
   send('POST', `/vat/${encodeURIComponent(period)}/unlock`, body);
 
 export const vatCsvUrl = () => `${BASE}/vat/export.csv`;
+
+// ── Reconciliation ───────────────────────────────────────────────────────────
+
+export const fetchBankStatus = () => get('/bank/status');
+export const fetchBankTransactions = (params) => get('/bank', params);
+export const fetchBankSuggestions = (id) => get(`/bank/${encodeURIComponent(id)}/suggestions`);
+
+// The statement travels as text, not as an upload: it is not a document to retain
+// (the bank keeps it, and the entries it produces carry their own trail).
+export const importBankStatement = (csv) => send('POST', '/bank/import', { csv });
+
+export const resolveBankTransaction = (id, body) =>
+  send('POST', `/bank/${encodeURIComponent(id)}/resolve`, body);
+
+export const syncStripe = (since) => send('POST', '/stripe/sync', since ? { since } : {});

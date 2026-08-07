@@ -23,7 +23,7 @@ const ADMIN_VIEW_IDS = [
   // Note 'expenses' and 'ar' carry supplier and customer detail respectively —
   // granting them is granting sight of that (an accepted decision, see
   // docs/BOOKKEEPING-SYSTEM.md).
-  'books', 'invoices', 'expenses', 'ar', 'vat',
+  'books', 'invoices', 'expenses', 'ar', 'vat', 'bank',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +

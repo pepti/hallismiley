@@ -248,3 +248,24 @@
 /* Sub-lines under a box, for the reverse-charge split. */
 .books-vat__sub td { padding-top: 0.15rem; padding-bottom: 0.15rem; font-size: 0.85rem; }
 .books-vat__sub td:nth-child(2) { padding-left: 1.2rem; color: var(--text-muted); }
+
+/* ── Phase 6: reconciliation ──────────────────────────────────────────────── */
+
+.books-form textarea {
+  width: 100%;
+  margin-top: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+/* The resolve panel is prepended above the table, so it needs to read as a distinct
+   working area rather than another row. */
+.books-resolve { margin-bottom: 1.25rem; }
+.books-resolve__suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.books-resolve .books-form { margin-top: 0.5rem; background: transparent; border: 0; padding: 0; }

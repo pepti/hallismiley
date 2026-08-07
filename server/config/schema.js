@@ -3342,6 +3342,54 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
     ],
   },
+  {
+    // Phase 6: reconciliation gaps found while wiring the Stripe sync.
+    name: '075_books_reconciliation',
+    statements: [
+      // Attribution on a Stripe sync. 072 recorded WHEN a settlement was synced but
+      // not WHO ran it, and Reglugerð 505/2013 gr. 8 wants an identifiable person
+      // behind every entry — including the automated ones, where "which admin
+      // triggered this" is the only answer available.
+      `ALTER TABLE stripe_transactions
+         ADD COLUMN IF NOT EXISTS synced_by TEXT REFERENCES users(id) ON DELETE RESTRICT`,
+
+      // A settled Stripe row and a resolved bank line are both evidence of a posting.
+      // Neither is append-only at the row level — a bank line legitimately moves from
+      // unmatched to matched — but the LINK to the journal entry must not be quietly
+      // repointed at a different entry once set, or the trail from ledger to source
+      // breaks silently.
+      `CREATE OR REPLACE FUNCTION books_freeze_settled_link()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF OLD.journal_entry_id IS NOT NULL
+            AND NEW.journal_entry_id IS DISTINCT FROM OLD.journal_entry_id THEN
+           RAISE EXCEPTION 'This row is already linked to a journal entry; that link cannot be repointed (Reglugerd 505/2013 gr. 8)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_stripe_link_frozen ON stripe_transactions`,
+      `CREATE TRIGGER trg_stripe_link_frozen
+         BEFORE UPDATE ON stripe_transactions
+         FOR EACH ROW EXECUTE FUNCTION books_freeze_settled_link()`,
+
+      // Which invoice a bank receipt settled. 072 recorded the payment id, which is
+      // enough to trace the posting but not enough to answer "which invoice did this
+      // deposit pay" without a join through payments — the question the AR screen and
+      // the operator both actually ask.
+      `ALTER TABLE bank_transactions
+         ADD COLUMN IF NOT EXISTS matched_invoice_id TEXT
+           REFERENCES invoices(id) ON DELETE RESTRICT`,
+
+      // Backs the reconciliation screen's default view and the unmatched count.
+      `CREATE INDEX IF NOT EXISTS idx_bank_transactions_open
+         ON bank_transactions (account_code, booked_on DESC)
+         WHERE match_state = 'unmatched'`,
+      // Backs the "has this Stripe payout already been posted" lookup.
+      `CREATE INDEX IF NOT EXISTS idx_stripe_transactions_payout
+         ON stripe_transactions (payout_id) WHERE payout_id IS NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

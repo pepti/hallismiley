@@ -97,6 +97,15 @@ router.post('/vat/:period/file', requireRole('admin'), csrfProtect, books.fileVa
 // and audited with the figures the discarded return held.
 router.post('/vat/:period/unlock', requireRole('admin'), csrfProtect, books.unlockVatPeriod);
 
+// ── Reconciliation (view: bank) ──────────────────────────────────────────────
+router.get('/bank/status', requireView('bank'), books.getReconciliationStatus);
+router.get('/bank', requireView('bank'), books.listBankTransactions);
+router.get('/bank/:id/suggestions', requireView('bank'), books.getBankSuggestions);
+// Importing and resolving both write to the ledger, so both are admin-only.
+router.post('/bank/import', requireRole('admin'), csrfProtect, books.importBankStatement);
+router.post('/bank/:id/resolve', requireRole('admin'), csrfProtect, books.resolveBankTransaction);
+router.post('/stripe/sync', requireRole('admin'), csrfProtect, books.syncStripe);
+
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than
 // falling through to the /api/v1/admin catch-all router. Note what this does and
