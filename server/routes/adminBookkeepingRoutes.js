@@ -106,6 +106,23 @@ router.post('/bank/import', requireRole('admin'), csrfProtect, books.importBankS
 router.post('/bank/:id/resolve', requireRole('admin'), csrfProtect, books.resolveBankTransaction);
 router.post('/stripe/sync', requireRole('admin'), csrfProtect, books.syncStripe);
 
+// ── Ledger and reports (view: ledger) ────────────────────────────────────────
+// export.csv paths first, so ':code' cannot swallow them.
+router.get('/reports/trial-balance.csv', docLimiter, requireView('ledger'), books.exportTrialBalanceCsv);
+router.get('/reports/journal.csv', docLimiter, requireView('ledger'), books.exportJournalCsv);
+router.get('/reports/trial-balance', requireView('ledger'), books.getTrialBalance);
+router.get('/reports/profit-and-loss', requireView('ledger'), books.getProfitAndLoss);
+router.get('/reports/balance-sheet', requireView('ledger'), books.getBalanceSheet);
+// One read, one moment, one ledger — so the files an accountant receives tie to
+// each other rather than straddling a new posting.
+router.get('/reports/accountant-pack', docLimiter, requireView('ledger'), books.getAccountantPack);
+router.get('/journal', requireView('ledger'), books.getJournal);
+router.get('/accounts/:code/ledger', requireView('ledger'), books.getAccountLedger);
+// Writing directly to the ledger is the sharpest tool in the system: admin-only,
+// CSRF, and a memo/reason is mandatory in the controller.
+router.post('/journal', requireRole('admin'), csrfProtect, books.createManualEntry);
+router.post('/journal/:id/reverse', requireRole('admin'), csrfProtect, books.reverseJournalEntry);
+
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than
 // falling through to the /api/v1/admin catch-all router. Note what this does and

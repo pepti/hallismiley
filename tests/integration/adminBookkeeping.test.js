@@ -362,3 +362,164 @@ describe('dashboard', () => {
     expect(res.body.range.from < res.body.range.to).toBe(true);
   });
 });
+
+// ── Ledger and reports ───────────────────────────────────────────────────────
+
+describe('ledger and reports over HTTP', () => {
+  beforeEach(async () => {
+    await request(app).post(`${BASE}/invoices/from-order/${orderId}`)
+      .set('Cookie', adminCookie).expect(201);
+  });
+
+  it('lets a books reader read every report', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const url of [
+      `${BASE}/reports/trial-balance`,
+      `${BASE}/reports/profit-and-loss`,
+      `${BASE}/reports/balance-sheet`,
+      `${BASE}/journal`,
+      `${BASE}/accounts/1100/ledger?to=${today}`,
+    ]) {
+      await request(app).get(url).set('Cookie', readerCookie).expect(200);
+    }
+  });
+
+  it('does NOT let a books reader post or reverse a journal entry', async () => {
+    // Writing straight to the ledger can put anything anywhere, so it is not
+    // delegable through a read role however many views that role holds.
+    await request(app).post(`${BASE}/journal`)
+      .set('Cookie', readerCookie)
+      .send({ entry_date: '2026-08-01', memo: 'nope', lines: [] })
+      .expect(403);
+    await request(app).post(`${BASE}/journal/00000000-0000-0000-0000-000000000000/reverse`)
+      .set('Cookie', readerCookie).send({ reason: 'nope' })
+      .expect(403);
+  });
+
+  it('reports a trial balance that balances', async () => {
+    const res = await request(app).get(`${BASE}/reports/trial-balance`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(res.body.balanced).toBe(true);
+    expect(res.body.debit_total).toBe(res.body.credit_total);
+    expect(res.body.accounts.length).toBeGreaterThan(0);
+  });
+
+  it('does not silently window the trial balance', async () => {
+    // Unlike the dashboard, this report defaults to EVERYTHING. A quietly-applied
+    // 60-day window would produce a trial balance that does not balance, for no
+    // visible reason.
+    const res = await request(app).get(`${BASE}/reports/trial-balance`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(res.body.range).toEqual({ from: null, to: null });
+  });
+
+  it('posts a manual entry and shows it in the journal', async () => {
+    const res = await request(app).post(`${BASE}/journal`)
+      .set('Cookie', adminCookie)
+      .send({
+        entry_date: new Date().toISOString().slice(0, 10),
+        memo: 'Stofnstaða bankareiknings',
+        lines: [
+          { account_code: '1900', debit: 500000, memo: 'Innborgun' },
+          { account_code: '3100', credit: 500000 },
+        ],
+      })
+      .expect(201);
+    expect(res.body.entry.entry_number).toBeGreaterThan(0);
+
+    const jrn = await request(app).get(`${BASE}/journal?source_type=manual`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(jrn.body.entries.some(e => e.memo === 'Stofnstaða bankareiknings')).toBe(true);
+  });
+
+  it.each([
+    [{ memo: '', lines: [] }, 'no memo'],
+    [{ memo: 'x', lines: [{ account_code: '1900', debit: 1 }] }, 'a single line'],
+    [{ memo: 'x', lines: [{ account_code: '1900', debit: 1, credit: 1 }, { account_code: '3100', credit: 1 }] }, 'both sides on one line'],
+    [{ memo: 'x', lines: [{ account_code: '1900', debit: 1 }, { account_code: '3100', credit: 2 }] }, 'an unbalanced pair'],
+    [{ memo: 'x', lines: [{ account_code: '9999', debit: 1 }, { account_code: '3100', credit: 1 }] }, 'an unknown account'],
+    [{ memo: 'x', lines: [{ account_code: '1900', debit: [1] }, { account_code: '3100', credit: 1 }] }, 'an array where an amount belongs'],
+    [{ memo: 'x', lines: [{ account_code: '1900', debit: 1.5 }, { account_code: '3100', credit: 1.5 }] }, 'fractional ISK'],
+  ])('refuses a manual entry with %#: %s', async (body) => {
+    const res = await request(app).post(`${BASE}/journal`)
+      .set('Cookie', adminCookie)
+      .send({ entry_date: new Date().toISOString().slice(0, 10), ...body });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('requires a reason to reverse, and refuses to reverse twice', async () => {
+    const posted = await request(app).post(`${BASE}/journal`)
+      .set('Cookie', adminCookie)
+      .send({
+        entry_date: new Date().toISOString().slice(0, 10),
+        memo: 'Verður bakfærð',
+        lines: [
+          { account_code: '1900', debit: 1000 },
+          { account_code: '3100', credit: 1000 },
+        ],
+      })
+      .expect(201);
+    const id = posted.body.entry.id;
+
+    await request(app).post(`${BASE}/journal/${id}/reverse`)
+      .set('Cookie', adminCookie).send({}).expect(400);
+
+    const rev = await request(app).post(`${BASE}/journal/${id}/reverse`)
+      .set('Cookie', adminCookie).send({ reason: 'Bókað á vitlausan lykil' })
+      .expect(201);
+    expect(rev.body.entry.entry_number).toBeGreaterThan(posted.body.entry.entry_number);
+
+    // Twice would leave two mirror entries against one original — the ledger would
+    // balance and still be wrong by the amount of the entry.
+    await request(app).post(`${BASE}/journal/${id}/reverse`)
+      .set('Cookie', adminCookie).send({ reason: 'Aftur' })
+      .expect(409);
+  });
+
+  it('404s a report for an account that does not exist', async () => {
+    const res = await request(app).get(`${BASE}/accounts/9999/ledger`)
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ code: 404 });
+  });
+
+  it.each([
+    ['/journal?from=abc', 'unparseable from'],
+    ['/journal?limit=-1', 'negative limit'],
+    ['/journal?source_type=bogus', 'unknown source type'],
+    ['/journal?from=2026-08-01&to=2026-01-01', 'reversed range'],
+    ['/reports/trial-balance?to=2026-13-45', 'impossible date'],
+    ['/reports/profit-and-loss?from=2026-08-01&to=2026-01-01', 'reversed range'],
+  ])('returns 400 for %s (%s)', async (pathAndQs) => {
+    const res = await request(app).get(`${BASE}${pathAndQs}`).set('Cookie', adminCookie);
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 400 });
+  });
+
+  it('serves the CSV exports without letting a route parameter swallow them', async () => {
+    // '/reports/trial-balance.csv' must not be matched as a report named
+    // 'trial-balance.csv', and neither export may be eaten by '/accounts/:code/ledger'.
+    for (const url of [`${BASE}/reports/trial-balance.csv`, `${BASE}/reports/journal.csv`]) {
+      const res = await request(app).get(url).set('Cookie', adminCookie).expect(200);
+      expect(res.headers['content-type']).toMatch(/text\/csv/);
+      expect(res.headers['cache-control']).toMatch(/no-store/);
+      // BOM first, or Excel on Windows mangles every Icelandic character.
+      expect(res.text.charCodeAt(0)).toBe(0xFEFF);
+    }
+  });
+
+  it('builds an accountant pack whose parts agree with each other', async () => {
+    // One read, one moment, one ledger — the reason this is one endpoint rather than
+    // five downloads that could straddle a new posting.
+    const res = await request(app).get(`${BASE}/reports/accountant-pack`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(res.body.trial_balance.balanced).toBe(true);
+    expect(res.body.balance_sheet.balanced).toBe(true);
+    expect(res.body.journal_sample.entries.length).toBeGreaterThan(0);
+    // It states what it is NOT, so nobody mistakes it for finished statutory accounts.
+    expect(res.body.caveats.length).toBeGreaterThan(0);
+    expect(res.body.caveats.join(' ')).toMatch(/retained earnings/i);
+  });
+});

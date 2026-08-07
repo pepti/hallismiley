@@ -190,3 +190,22 @@ export const resolveBankTransaction = (id, body) =>
   send('POST', `/bank/${encodeURIComponent(id)}/resolve`, body);
 
 export const syncStripe = (since) => send('POST', '/stripe/sync', since ? { since } : {});
+
+// ── Ledger and reports ───────────────────────────────────────────────────────
+
+export const fetchJournal = (params) => get('/journal', params);
+export const fetchTrialBalance = (params) => get('/reports/trial-balance', params);
+export const fetchProfitAndLoss = (params) => get('/reports/profit-and-loss', params);
+export const fetchBalanceSheet = (params) => get('/reports/balance-sheet', params);
+export const fetchAccountLedger = (code, params) =>
+  get(`/accounts/${encodeURIComponent(code)}/ledger`, params);
+export const fetchAccountantPack = (params) => get('/reports/accountant-pack', params);
+
+// Posting straight to the ledger. The memo is required by the server, not just by
+// the form — a manual entry with no explanation is unreadable a year later.
+export const postManualEntry = (body) => send('POST', '/journal', body);
+export const reverseJournalEntry = (id, reason) =>
+  send('POST', `/journal/${encodeURIComponent(id)}/reverse`, { reason });
+
+export const trialBalanceCsvUrl = (params = {}) => withQuery(`${BASE}/reports/trial-balance.csv`, params);
+export const journalCsvUrl = (params = {}) => withQuery(`${BASE}/reports/journal.csv`, params);

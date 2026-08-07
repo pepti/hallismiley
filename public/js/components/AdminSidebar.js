@@ -51,6 +51,7 @@ export const ADMIN_NAV = [
     { id: 'ar',       route: '/admin/books/ar',       labelKey: 'admin.nav.ar',       icon: 'clock' },
     { id: 'vat',      route: '/admin/books/vat',      labelKey: 'admin.nav.vat',      icon: 'percent' },
     { id: 'bank',     route: '/admin/books/bank',     labelKey: 'admin.nav.bank',     icon: 'bank' },
+    { id: 'ledger',   route: '/admin/books/ledger',   labelKey: 'admin.nav.ledger',   icon: 'ledger' },
   ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },

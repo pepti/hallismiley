@@ -18,12 +18,12 @@ const ADMIN_VIEW_IDS = [
   //
   // Ids are added as their screens land, never ahead of them — an id here forces a
   // matching sidebar item (parity test), and a sidebar item with no route is a dead
-  // link. Still to come: 'ledger', 'payroll', 'pos'.
+  // link. Still to come: 'payroll', 'pos'.
   //
   // Note 'expenses' and 'ar' carry supplier and customer detail respectively —
   // granting them is granting sight of that (an accepted decision, see
   // docs/BOOKKEEPING-SYSTEM.md).
-  'books', 'invoices', 'expenses', 'ar', 'vat', 'bank',
+  'books', 'invoices', 'expenses', 'ar', 'vat', 'bank', 'ledger',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +

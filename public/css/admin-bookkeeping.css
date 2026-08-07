@@ -269,3 +269,127 @@
   margin: 0.5rem 0 0.75rem;
 }
 .books-resolve .books-form { margin-top: 0.5rem; background: transparent; border: 0; padding: 0; }
+
+/* ── Phase 7: ledger and reports ──────────────────────────────────────────── */
+
+/* Tabs, not four separate screens: the reports are four views of one ledger, and
+   putting them behind one date range is what makes them comparable. */
+.books-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0 0 1rem;
+  border-bottom: 1px solid var(--border-dim);
+}
+.books-tab {
+  padding: 0.5rem 0.9rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.books-tab:hover { color: var(--text-primary); }
+.books-tab.is-active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-amber);
+  font-weight: 600;
+}
+
+/* An account code is a link everywhere it appears, because a figure you cannot open
+   is a figure you have to take on trust. */
+.books-link {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent-amber);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.books-link:hover { text-decoration: underline; }
+
+/* Section headers and subtotals inside a report table. */
+.books-row--head th {
+  padding-top: 0.9rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.books-row--sum th {
+  border-top: 1px solid var(--border-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The journal reads as a list of entries, not a flat list of lines — the entry is
+   the unit that balances, so it is the unit that gets a box. */
+.books-journal { display: flex; flex-direction: column; gap: 0.9rem; }
+.books-entry {
+  padding: 0.7rem 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+}
+.books-entry--correction { border-left: 3px solid var(--accent-amber); }
+.books-entry__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+.books-entry__memo { flex: 1 1 12rem; color: var(--text-muted); }
+.books-entry__by { color: var(--text-muted); font-size: 0.78rem; }
+.books-table--tight td, .books-table--tight th { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+
+/* The manual-entry form is collapsed by default: it is the one control here that can
+   put anything anywhere, so it should take a deliberate click to open. */
+.books-manual {
+  margin-top: 1.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+}
+.books-manual > summary { cursor: pointer; font-weight: 600; }
+.books-manual__line {
+  display: grid;
+  grid-template-columns: minmax(9rem, 2fr) minmax(6rem, 2fr) 7rem 7rem auto;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  align-items: center;
+}
+.books-manual__totals { font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.books-manual__totals.is-ok { color: var(--success); }
+.books-manual__totals.is-warn { color: var(--text-muted); }
+.books-form__row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-end; }
+.books-form__row .grow { flex: 1 1 14rem; }
+
+@media (max-width: 720px) {
+  .books-manual__line { grid-template-columns: 1fr 1fr; }
+}
+
+/* Account drill-down. A modal rather than a route, because it is a detail OF the
+   report you are reading — navigating away and back would lose the range. */
+.books-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+.books-modal__panel {
+  max-width: min(56rem, 100%);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 1.1rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+}

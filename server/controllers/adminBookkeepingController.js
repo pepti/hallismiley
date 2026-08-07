@@ -18,6 +18,7 @@ const invoiceService = require('../services/bookkeeping/invoiceService');
 const expenseService = require('../services/bookkeeping/expenseService');
 const vatService = require('../services/bookkeeping/vatService');
 const reconciliation = require('../services/bookkeeping/reconciliationService');
+const reports = require('../services/bookkeeping/reportService');
 const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
 const { toCsv, csvHeaders } = require('../utils/csv');
@@ -813,6 +814,274 @@ async function syncStripe(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// ── Ledger and reports ───────────────────────────────────────────────────────
+
+async function getJournal(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    const sourceType = parseEnum(req.query.source_type, [
+      'invoice', 'payment', 'credit_note', 'expense', 'manual', 'reversal',
+      'vat_settlement', 'bank', 'stripe', 'payroll', 'pos', 'opening',
+    ], 'source_type');
+    const accountCode = req.query.account_code
+      ? parseText(req.query.account_code, 'account_code', { maxLen: 20 }) : null;
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    if (from && to && from > to) throw new BadRequest(`from (${from}) is after to (${to})`);
+
+    const result = await reports.journal({ from, to, sourceType, accountCode, limit, offset });
+    res.json({ ...result, limit, offset });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getTrialBalance(req, res, next) {
+  try {
+    // No default range: a trial balance is normally wanted for everything to date,
+    // and silently windowing it would make it not balance for no visible reason.
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    if (from && to && from > to) throw new BadRequest(`from (${from}) is after to (${to})`);
+    res.json(await reports.trialBalance({ from, to }));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getProfitAndLoss(req, res, next) {
+  try {
+    const { from, to } = parseRange(req.query, { defaultDays: 365 });
+    res.json(await reports.profitAndLoss({ from, to }));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getBalanceSheet(req, res, next) {
+  try {
+    const to = req.query.to
+      ? assertAccountingDate(req.query.to, 'to', { allowFuture: true })
+      : todayIso();
+    res.json(await reports.balanceSheet({ to }));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getAccountLedger(req, res, next) {
+  try {
+    const accountCode = parseText(req.params.code, 'account code', { maxLen: 20, required: true });
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    res.json(await reports.accountLedger({ accountCode, from, to }));
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Post a manual journal entry.
+ *
+ * The escape hatch every set of books needs — an opening balance, a depreciation
+ * charge, an accountant's adjustment. Deliberately admin-only and deliberately
+ * requiring a memo: a manual entry with no explanation is the hardest thing in a
+ * ledger to understand a year later.
+ */
+async function createManualEntry(req, res, next) {
+  try {
+    const body = req.body || {};
+    const memo = parseText(body.memo, 'memo', { maxLen: 500, required: true });
+    const entryDate = assertAccountingDate(body.entry_date, 'entry_date');
+    if (!Array.isArray(body.lines) || body.lines.length < 2) {
+      throw new BadRequest('A journal entry needs at least two lines');
+    }
+    if (body.lines.length > 100) throw new BadRequest('A journal entry may have at most 100 lines');
+
+    const lines = body.lines.map((l, i) => {
+      const accountCode = parseText(l.account_code, `lines[${i}].account_code`,
+        { maxLen: 20, required: true });
+      const hasDebit = l.debit !== undefined && l.debit !== null && l.debit !== '' && Number(l.debit) !== 0;
+      const hasCredit = l.credit !== undefined && l.credit !== null && l.credit !== '' && Number(l.credit) !== 0;
+      if (hasDebit === hasCredit) {
+        throw new BadRequest(`lines[${i}] must have exactly one of debit or credit`);
+      }
+      return {
+        accountCode,
+        ...(hasDebit ? { debit: parseAmount(l.debit, `lines[${i}].debit`) } : {}),
+        ...(hasCredit ? { credit: parseAmount(l.credit, `lines[${i}].credit`) } : {}),
+        memo: parseText(l.memo, `lines[${i}].memo`, { maxLen: 200 }),
+      };
+    });
+
+    // Both of the checks below are ALSO enforced deeper down — postEntry refuses an
+    // unbalanced entry and an unknown account, and a database trigger refuses an
+    // unbalanced entry even if postEntry were bypassed. But those refusals are 500s
+    // on purpose: for every other caller in this module they mean a programming bug.
+    // This endpoint is the one place where a human types the figures, so the same two
+    // mistakes have to come back as a 400 that says what is wrong.
+    const debitTotal = lines.reduce((a, l) => a + (l.debit || 0), 0);
+    const creditTotal = lines.reduce((a, l) => a + (l.credit || 0), 0);
+    if (debitTotal !== creditTotal) {
+      throw new BadRequest(
+        `The entry does not balance: debits ${debitTotal} ISK against credits ${creditTotal} ISK`
+      );
+    }
+
+    const codes = [...new Set(lines.map(l => l.accountCode))];
+    const { rows: known } = await db.query(
+      `SELECT code, is_active FROM ledger_accounts WHERE code = ANY($1::text[])`, [codes]
+    );
+    const byCode = new Map(known.map(r => [r.code, r]));
+    for (const code of codes) {
+      const account = byCode.get(code);
+      if (!account) throw new BadRequest(`No such ledger account: ${code}`);
+      if (!account.is_active) {
+        throw new BadRequest(`Ledger account ${code} is no longer in use and cannot be posted to`);
+      }
+    }
+
+    const entry = await ledger.withTransaction(async (client) => {
+      const posted = await ledger.postEntry(client, {
+        entryDate, memo, sourceType: 'manual', createdBy: req.user.id, lines,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'journal.posted',
+        entityType: 'journal_entry',
+        entityId: posted.id,
+        summary: {
+          entry_number: posted.entry_number,
+          memo: memo.slice(0, 120),
+          line_count: lines.length,
+          debit_total: lines.reduce((a, l) => a + (l.debit || 0), 0),
+        },
+      });
+      return posted;
+    });
+    securityLogger.adminAction(req.user.id, 'books.journal.manual', entry.id, {
+      entry_number: entry.entry_number,
+    });
+    res.status(201).json({ entry });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function reverseJournalEntry(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'entry id');
+    const reason = parseText((req.body || {}).reason, 'reason', { maxLen: 300, required: true });
+    // reverseEntry returns { reversal, original_period, reversed_entry_number } — the
+    // posted entry is the `reversal` field, not the result itself.
+    const entry = await ledger.withTransaction(async (client) => {
+      const { reversal, reversed_entry_number: reversedNumber } =
+        await ledger.reverseEntry(client, id, { createdBy: req.user.id, reason });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'journal.reversed',
+        entityType: 'journal_entry',
+        entityId: id,
+        summary: {
+          reversed_entry_number: reversedNumber,
+          reversal_entry_number: reversal.entry_number,
+          reason: reason.slice(0, 200),
+        },
+      });
+      return reversal;
+    });
+    securityLogger.adminAction(req.user.id, 'books.journal.reverse', id, {
+      reversal: entry.entry_number,
+    });
+    res.status(201).json({ entry });
+  } catch (err) { fail(res, err, next); }
+}
+
+// ── Accountant export pack ───────────────────────────────────────────────────
+
+/**
+ * Everything an accountant needs for a period, as CSVs in one response.
+ *
+ * One endpoint rather than five downloads, because the point is that the files are
+ * CONSISTENT WITH EACH OTHER — pulled in one read, from the same ledger, at the same
+ * moment. Five separately-timed downloads can straddle a new posting and then not tie.
+ */
+async function getAccountantPack(req, res, next) {
+  try {
+    const { from, to } = parseRange(req.query, { defaultDays: 365 });
+    const [tb, pl, bs, jrn] = await Promise.all([
+      reports.trialBalance({ from, to }),
+      reports.profitAndLoss({ from, to }),
+      reports.balanceSheet({ to }),
+      reports.journal({ from, to, limit: 200, offset: 0 }),
+    ]);
+    const vatPeriods = await vatService.listPeriods(db, { limit: 30 });
+
+    res.json({
+      range: { from, to },
+      generated_at: new Date().toISOString(),
+      trial_balance: tb,
+      profit_and_loss: pl,
+      balance_sheet: bs,
+      journal_sample: jrn,
+      vat_periods: vatPeriods.filter(p => p.entry_count > 0),
+      // Stated explicitly so the recipient knows what they are looking at rather than
+      // assuming it is a finished set of statutory accounts.
+      caveats: [
+        'Figures are derived from the ledger at the moment of generation.',
+        'Retained earnings are computed as revenue less expenses to date; there is no year-end closing entry.',
+        'The chart of accounts has not been confirmed by an accountant unless the settings say otherwise.',
+      ],
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportTrialBalanceCsv(req, res, next) {
+  try {
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    const tb = await reports.trialBalance({ from, to });
+    csvHeaders(res, `hofudbok-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Lykill', 'Heiti', 'Tegund', 'Debet', 'Kredit', 'Staða'],
+      [
+        ...tb.accounts.map(a => [a.code, a.name, a.type, a.debit, a.credit, a.balance]),
+        ['', 'SAMTALS', '', tb.debit_total, tb.credit_total, ''],
+      ]
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportJournalCsv(req, res, next) {
+  try {
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+
+    // One row per LINE, which is the shape every accounting package imports.
+    const rows = [];
+    const PAGE = 200;
+    for (let offset = 0; ; offset += PAGE) {
+      const page = await reports.journal({ from, to, limit: PAGE, offset });
+      for (const e of page.entries) {
+        for (const l of e.lines) {
+          rows.push([
+            e.entry_number, e.entry_date, e.source_type, e.memo,
+            l.account_code, l.account_name, l.debit, l.credit, l.memo || '',
+            l.vat_rate === null ? '' : l.vat_rate,
+            e.is_correction ? 'já' : '', e.created_by_username || '',
+          ]);
+        }
+      }
+      if (page.entries.length < PAGE) break;
+    }
+
+    csvHeaders(res, `dagbok-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Færslunr.', 'Dagsetning', 'Uppruni', 'Skýring', 'Lykill', 'Lykilheiti',
+        'Debet', 'Kredit', 'Línuskýring', 'VSK %', 'Leiðrétting', 'Bókað af'],
+      rows
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
 // ── CSV exports ──────────────────────────────────────────────────────────────
 //
 // Server-side and unbounded-safe. The client-side "export all" pattern that
@@ -910,6 +1179,16 @@ module.exports = {
   getDocument,
   getAging,
   getStatement,
+  getJournal,
+  getTrialBalance,
+  getProfitAndLoss,
+  getBalanceSheet,
+  getAccountLedger,
+  createManualEntry,
+  reverseJournalEntry,
+  getAccountantPack,
+  exportTrialBalanceCsv,
+  exportJournalCsv,
   getReconciliationStatus,
   listBankTransactions,
   importBankStatement,
