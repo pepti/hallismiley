@@ -39,6 +39,9 @@ import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
 import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
 import { AdminRolesView }        from './views/AdminRolesView.js';
 import { AdminBinsView }         from './views/AdminBinsView.js';
+import { AdminBooksView }        from './views/AdminBooksView.js';
+import { AdminInvoicesView }     from './views/AdminInvoicesView.js';
+import { AdminInvoiceDetailView } from './views/AdminInvoiceDetailView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
 import {
   SUPPORTED_LOCALES,
@@ -65,6 +68,9 @@ const ROUTES = [
   { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
   { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
   { pattern: '/admin/bins',      factory: ()  => (isAuthenticated() && canSeeView('bins')) ? new AdminBinsView() : new HomeView() },
+  { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
+  { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
   { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
@@ -227,6 +233,8 @@ export class Router {
       '/admin/feedback':   'feedback',
       '/admin/bins':       'bins',
       '/admin/customers':  'customers',
+      '/admin/books':      'books',
+      '/admin/books/invoices': 'invoices',
     };
     if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
       navigateReplace('/' + getLocale() + '/');

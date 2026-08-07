@@ -40,6 +40,14 @@ export const ADMIN_NAV = [
     { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
     { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
   ] },
+  // Bókhald. Order follows the workflow rather than the alphabet: overview first,
+  // then the documents you create. Receivables, VSK, the ledger, payroll and the
+  // counter-sales screen join this group as they are built — an item here must have
+  // a route in router.js and a matching id in server/auth/adminViews.js.
+  { key: 'books', group: 'admin.navGroup.books', items: [
+    { id: 'books',    route: '/admin/books',          labelKey: 'admin.nav.books',    icon: 'book' },
+    { id: 'invoices', route: '/admin/books/invoices', labelKey: 'admin.nav.invoices', icon: 'receipt' },
+  ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
     { id: 'background', route: '/admin/background',    labelKey: 'admin.nav.background', icon: 'image' },
@@ -60,6 +68,10 @@ const ICONS = {
   tag:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
   layers:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
   percent:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
+  book:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>',
+  clock:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>',
+  ledger:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="7" y1="8" x2="9" y2="8"/><line x1="15" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="17" y2="12"/></svg>',
+  till:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10" width="20" height="11" rx="2"/><path d="M6 10V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/><line x1="7" y1="15" x2="11" y2="15"/></svg>',
   chart:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><line x1="8" y1="17" x2="8" y2="12"/><line x1="13" y1="17" x2="13" y2="7"/><line x1="18" y1="17" x2="18" y2="10"/></svg>',
   activity:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
   image:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
