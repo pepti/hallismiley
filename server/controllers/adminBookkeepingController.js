@@ -19,6 +19,7 @@ const expenseService = require('../services/bookkeeping/expenseService');
 const vatService = require('../services/bookkeeping/vatService');
 const reconciliation = require('../services/bookkeeping/reconciliationService');
 const reports = require('../services/bookkeeping/reportService');
+const payroll = require('../services/bookkeeping/payrollService');
 const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
 const { toCsv, csvHeaders } = require('../utils/csv');
@@ -1082,6 +1083,412 @@ async function exportJournalCsv(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// ── Payroll ──────────────────────────────────────────────────────────────────
+//
+// Note the shape of the errors here. PayrollError already carries a status and a
+// message written for the operator, so most of these handlers do nothing but pass the
+// request through and let fail() surface it. That is deliberate: the refusals are the
+// product (an unconfirmed tax year, an owner below the reiknað endurgjald minimum), and
+// re-wording them at the HTTP layer would either lose the detail or duplicate it.
+
+function parseRate(value, label, { max = 1 } = {}) {
+  if (value === null || value === undefined || value === '') {
+    throw new BadRequest(`${label} is required`);
+  }
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new BadRequest(`${label} must be a decimal rate`);
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) throw new BadRequest(`${label} must be a rate of 0 or more`);
+  if (n > max) {
+    throw new BadRequest(
+      `${label} is ${n}, which reads as ${n * 100}%. Rates are decimals here: 6.35% is 0.0635.`
+    );
+  }
+  return n;
+}
+
+function parseYear(value, label = 'year') {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 2020 || n > 2100) {
+    throw new BadRequest(`${label} must be a year between 2020 and 2100`);
+  }
+  return n;
+}
+
+async function listPayrollYears(req, res, next) {
+  try {
+    res.json({ years: await payroll.listRateYears() });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getPayrollYear(req, res, next) {
+  try {
+    res.json(await payroll.getRateYear(parseYear(req.params.year)));
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Enter or replace a year's statutory figures.
+ *
+ * Every one of these is a number a person read off Skatturinn's published table. The
+ * validation here is about catching a TRANSCRIPTION error before it reaches a payslip —
+ * a percentage typed where a decimal belongs, a band left out, thresholds in the wrong
+ * order. The service checks the same things again and is the real guarantee; this layer
+ * exists so the answer is a 400 with a sentence rather than a 500.
+ */
+async function savePayrollYear(req, res, next) {
+  try {
+    const body = req.body || {};
+    const year = parseYear(req.params.year);
+    if (!Array.isArray(body.bands) || !body.bands.length) {
+      throw new BadRequest('At least one withholding band is required');
+    }
+    if (body.bands.length > 10) throw new BadRequest('A year may have at most 10 bands');
+
+    const bands = body.bands.map((b, i) => ({
+      from: b.from === 0 || b.from === '0' ? 0 : parseAmount(b.from, `bands[${i}].from`),
+      rate: parseRate(b.rate, `bands[${i}].rate`),
+    }));
+    const referenceWages = Array.isArray(body.reference_wages)
+      ? body.reference_wages.map((w, i) => ({
+        category: parseText(w.category, `reference_wages[${i}].category`,
+          { maxLen: 20, required: true }),
+        description: parseText(w.description, `reference_wages[${i}].description`, { maxLen: 200 }),
+        monthly_min: parseAmount(w.monthly_min, `reference_wages[${i}].monthly_min`),
+      }))
+      : [];
+
+    const result = await ledger.withTransaction(async (client) => {
+      const saved = await payroll.upsertRates(client, {
+        year,
+        personalAllowance: parseAmount(body.personal_allowance, 'personal_allowance'),
+        municipalRate: parseRate(body.municipal_rate, 'municipal_rate'),
+        socialSecurity: parseRate(body.social_security, 'social_security'),
+        pensionEmployee: parseRate(body.pension_employee, 'pension_employee'),
+        pensionEmployer: parseRate(body.pension_employer, 'pension_employer'),
+        bands,
+        referenceWages,
+        sourceNote: parseText(body.source_note, 'source_note', { maxLen: 500 }),
+        createdBy: req.user.id,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'payroll.rates_saved',
+        entityType: 'payroll_rates',
+        entityId: String(year),
+        summary: { year, bands: bands.length, personal_allowance: saved.personal_allowance },
+      });
+      return saved;
+    });
+    securityLogger.adminAction(req.user.id, 'books.payroll.rates', String(year), { year });
+    res.json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Confirm a year's figures against the published table.
+ *
+ * The one action in this module that turns a refusal into permission, so it is the one
+ * that most needs a name attached and a note saying what was checked.
+ */
+async function confirmPayrollYear(req, res, next) {
+  try {
+    const year = parseYear(req.params.year);
+    const sourceNote = parseText((req.body || {}).source_note, 'source_note',
+      { maxLen: 500, required: true });
+    const result = await ledger.withTransaction(async (client) => {
+      const confirmed = await payroll.confirmRates(client, year, {
+        confirmedBy: req.user.id, sourceNote,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'payroll.rates_confirmed',
+        entityType: 'payroll_rates',
+        entityId: String(year),
+        summary: { year, source_note: sourceNote.slice(0, 200) },
+      });
+      return confirmed;
+    });
+    securityLogger.adminAction(req.user.id, 'books.payroll.confirm', String(year), { year });
+    res.json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+async function listEmployees(req, res, next) {
+  try {
+    const includeInactive = req.query.include_inactive === 'true';
+    res.json({ employees: await payroll.listEmployees({ includeInactive }) });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getEmployee(req, res, next) {
+  try {
+    res.json({ employee: await payroll.getEmployee(parseId(req.params.id, 'employee id')) });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function saveEmployee(req, res, next) {
+  try {
+    const body = req.body || {};
+    const id = req.params.id ? parseId(req.params.id, 'employee id') : null;
+    const spec = {
+      id,
+      fullName: parseText(body.full_name, 'full_name', { maxLen: 200, required: true }),
+      kennitala: parseText(body.kennitala, 'kennitala', { maxLen: 20, required: true }),
+      email: parseText(body.email, 'email', { maxLen: 200 }),
+      bankAccount: parseText(body.bank_account, 'bank_account', { maxLen: 40 }),
+      employmentType: parseEnum(body.employment_type, payroll.EMPLOYMENT_TYPES,
+        'employment_type') || 'employee',
+      referenceWageCategory: body.reference_wage_category
+        ? parseText(body.reference_wage_category, 'reference_wage_category', { maxLen: 20 })
+        : null,
+      referenceWageAmount: body.reference_wage_amount === '' || body.reference_wage_amount === null
+        || body.reference_wage_amount === undefined
+        ? null : parseAmount(body.reference_wage_amount, 'reference_wage_amount'),
+      referenceWageConfirmedAt: body.reference_wage_confirmed_at || null,
+      referenceWageConfirmedNote: parseText(body.reference_wage_confirmed_note,
+        'reference_wage_confirmed_note', { maxLen: 500 }) || null,
+      monthlySalary: body.monthly_salary === 0 || body.monthly_salary === '0'
+        ? 0 : parseAmount(body.monthly_salary, 'monthly_salary'),
+      // max 2: persónuafsláttur may be partly transferred from a spouse.
+      allowanceFactor: parseRate(body.allowance_factor ?? 1, 'allowance_factor', { max: 2 }),
+      pensionFund: parseText(body.pension_fund, 'pension_fund', { maxLen: 120 }),
+      // NULL means "use the year's statutory rate", which is a different statement from
+      // 0 — so an empty field is passed through as null rather than coerced.
+      pensionEmployeeRate: body.pension_employee_rate === '' || body.pension_employee_rate === null
+        || body.pension_employee_rate === undefined
+        ? null : parseRate(body.pension_employee_rate, 'pension_employee_rate', { max: 0.5 }),
+      pensionEmployerRate: body.pension_employer_rate === '' || body.pension_employer_rate === null
+        || body.pension_employer_rate === undefined
+        ? null : parseRate(body.pension_employer_rate, 'pension_employer_rate', { max: 0.5 }),
+      extraPensionEmployee: parseRate(body.extra_pension_employee ?? 0,
+        'extra_pension_employee', { max: 0.5 }),
+      extraPensionEmployer: parseRate(body.extra_pension_employer ?? 0,
+        'extra_pension_employer', { max: 0.5 }),
+      unionName: parseText(body.union_name, 'union_name', { maxLen: 120 }),
+      unionRate: parseRate(body.union_rate ?? 0, 'union_rate', { max: 0.2 }),
+      startedOn: body.started_on || null,
+      endedOn: body.ended_on || null,
+      isActive: body.is_active === undefined ? true : Boolean(body.is_active),
+      note: parseText(body.note, 'note', { maxLen: 1000 }),
+      createdBy: req.user.id,
+    };
+
+    const employee = await ledger.withTransaction(async (client) => {
+      const saved = await payroll.upsertEmployee(client, spec);
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: id ? 'payroll.employee_updated' : 'payroll.employee_created',
+        entityType: 'employee',
+        entityId: saved.id,
+        summary: {
+          name: saved.full_name,
+          employment_type: saved.employment_type,
+          monthly_salary: saved.monthly_salary,
+        },
+      });
+      return saved;
+    });
+    securityLogger.adminAction(req.user.id,
+      id ? 'books.payroll.employee.update' : 'books.payroll.employee.create',
+      employee.id, { name: employee.full_name });
+    res.status(id ? 200 : 201).json({ employee });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function listPayrollRuns(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    const [runs, owed] = await Promise.all([
+      payroll.listRuns({ limit, offset }),
+      payroll.liabilities(),
+    ]);
+    res.json({ ...runs, liabilities: owed, limit, offset });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getPayrollRun(req, res, next) {
+  try {
+    res.json(await payroll.getRun(parseId(req.params.id, 'run id')));
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Build a draft run.
+ *
+ * A draft is where the figures can be looked at. It writes payslips but touches no
+ * account, so it is the cheap half of payroll and the half that should be run first.
+ */
+async function createPayrollRun(req, res, next) {
+  try {
+    const body = req.body || {};
+    const period = parseText(body.period, 'period', { maxLen: 7, required: true });
+    const payDate = assertAccountingDate(body.pay_date, 'pay_date', { allowFuture: true });
+    let employeeIds = null;
+    if (Array.isArray(body.employee_ids) && body.employee_ids.length) {
+      if (body.employee_ids.length > 200) throw new BadRequest('Too many employees in one run');
+      employeeIds = body.employee_ids.map((x, i) => parseId(x, `employee_ids[${i}]`));
+    }
+
+    const result = await ledger.withTransaction(async (client) => {
+      const draft = await payroll.createDraftRun(client, {
+        period, payDate, employeeIds,
+        note: parseText(body.note, 'note', { maxLen: 500 }),
+        createdBy: req.user.id,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'payroll.run_drafted',
+        entityType: 'payroll_run',
+        entityId: draft.run.id,
+        summary: {
+          period, pay_date: payDate,
+          gross: draft.run.gross_total,
+          employees: draft.payslips.length,
+          blockers: draft.preflight.blockers.length,
+        },
+      });
+      return draft;
+    });
+    res.status(201).json({ run: result.run, preflight: result.preflight });
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * Post a draft to the ledger.
+ *
+ * On a blocked run the 409 carries the findings, so the screen can show exactly what is
+ * wrong rather than a bare message — and an override, if the operator insists, is a
+ * separate deliberate request carrying a reason.
+ */
+async function postPayrollRun(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'run id');
+    const override = (req.body || {}).override_reason
+      ? parseText(req.body.override_reason, 'override_reason', { maxLen: 500 })
+      : null;
+
+    const result = await ledger.withTransaction(async (client) => {
+      const posted = await payroll.postRun(client, id, {
+        postedBy: req.user.id, overrideBlockers: override,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'payroll.run_posted',
+        entityType: 'payroll_run',
+        entityId: id,
+        summary: {
+          period: posted.run.period,
+          gross: posted.run.gross_total,
+          withholding: posted.run.withholding_total,
+          net: posted.run.net_total,
+          entry_number: posted.entry.entry_number,
+          overridden: override ? override.slice(0, 200) : null,
+        },
+      });
+      return posted;
+    });
+    securityLogger.adminAction(req.user.id, 'books.payroll.post', id, {
+      period: result.run.period, overridden: Boolean(override),
+    });
+    res.json({ run: result.run, entry: result.entry });
+  } catch (err) {
+    // The findings are the useful part of a refusal: they say which employee, and by
+    // how much.
+    if (err && err.code === 'BLOCKED' && Array.isArray(err.findings)) {
+      return res.status(409).json({ error: err.message, code: 409, findings: err.findings });
+    }
+    return fail(res, err, next);
+  }
+}
+
+async function reversePayrollRun(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'run id');
+    const reason = parseText((req.body || {}).reason, 'reason', { maxLen: 500, required: true });
+    const result = await ledger.withTransaction(async (client) => {
+      const reversed = await payroll.reverseRun(client, id, {
+        reversedBy: req.user.id, reason,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'payroll.run_reversed',
+        entityType: 'payroll_run',
+        entityId: id,
+        summary: {
+          period: reversed.run.period,
+          reason: reason.slice(0, 200),
+          reversal_entry_number: reversed.reversal.entry_number,
+        },
+      });
+      return reversed;
+    });
+    securityLogger.adminAction(req.user.id, 'books.payroll.reverse', id, {
+      period: result.run.period,
+    });
+    res.json({ run: result.run });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function payPayrollRun(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'run id');
+    const body = req.body || {};
+    const amount = body.amount === undefined || body.amount === null || body.amount === ''
+      ? null : parseAmount(body.amount, 'amount');
+    const paidOn = assertAccountingDate(body.paid_on || todayIso(), 'paid_on');
+
+    const result = await ledger.withTransaction(async (client) => {
+      const paid = await payroll.recordWagePayment(client, id, {
+        amount, paidOn, createdBy: req.user.id,
+        note: parseText(body.note, 'note', { maxLen: 200 }),
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'payroll.wages_paid',
+        entityType: 'payroll_run',
+        entityId: id,
+        summary: { amount, paid_on: paidOn, entry_number: paid.entry.entry_number },
+      });
+      return paid;
+    });
+    securityLogger.adminAction(req.user.id, 'books.payroll.pay', id, { amount, paid_on: paidOn });
+    res.json({ entry: result.entry });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getPayslipPdf(req, res, next) {
+  try {
+    const slip = await payroll.getPayslip(parseId(req.params.id, 'payslip id'));
+    const settings = await Setting.getBookkeepingSettings();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition',
+      `inline; filename="launasedill-${slip.period}-${slip.employee_kennitala}.pdf"`);
+    // Payslips carry salary detail; keep them out of shared caches.
+    res.setHeader('Cache-Control', 'no-store');
+    bookkeepingPdf.streamPayslip(res, { payslip: slip, seller: settings });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportPayrollCsv(req, res, next) {
+  try {
+    const { runs } = await payroll.listRuns({ limit: 200, offset: 0 });
+    csvHeaders(res, `laun-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Tímabil', 'Útborgunardagur', 'Staða', 'Laun', 'Staðgreiðsla', 'Lífeyrir starfsmanns',
+        'Lífeyrir vinnuveitanda', 'Tryggingagjald', 'Félagsgjöld', 'Útborgað', 'Skattár',
+        'Bókað af'],
+      runs.map(r => [
+        r.period, r.pay_date, r.status, r.gross_total, r.withholding_total,
+        r.pension_employee_total, r.pension_employer_total, r.social_security_total,
+        r.union_total, r.net_total, r.tax_year, r.posted_by_username || '',
+      ])
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
+
 // ── CSV exports ──────────────────────────────────────────────────────────────
 //
 // Server-side and unbounded-safe. The client-side "export all" pattern that
@@ -1189,6 +1596,21 @@ module.exports = {
   getAccountantPack,
   exportTrialBalanceCsv,
   exportJournalCsv,
+  listPayrollYears,
+  getPayrollYear,
+  savePayrollYear,
+  confirmPayrollYear,
+  listEmployees,
+  getEmployee,
+  saveEmployee,
+  listPayrollRuns,
+  getPayrollRun,
+  createPayrollRun,
+  postPayrollRun,
+  reversePayrollRun,
+  payPayrollRun,
+  getPayslipPdf,
+  exportPayrollCsv,
   getReconciliationStatus,
   listBankTransactions,
   importBankStatement,

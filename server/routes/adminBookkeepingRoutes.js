@@ -123,6 +123,45 @@ router.get('/accounts/:code/ledger', requireView('ledger'), books.getAccountLedg
 router.post('/journal', requireRole('admin'), csrfProtect, books.createManualEntry);
 router.post('/journal/:id/reverse', requireRole('admin'), csrfProtect, books.reverseJournalEntry);
 
+// ── Payroll (view: payroll) ──────────────────────────────────────────────────
+//
+// Salary detail is the most sensitive data in these books, so the READ view is its
+// own grantable id rather than folded into 'books' — an accountant can be given the
+// ledger without being given what each person earns.
+//
+// Literal paths before parameterised ones throughout, and export.csv before anything
+// that could read it as a year or an id.
+router.get('/payroll/export.csv', docLimiter, requireView('payroll'), books.exportPayrollCsv);
+
+// The statutory figures for a year. Entering them is admin-only, and CONFIRMING them
+// is the act that lets payroll run at all — see payrollService for why that gate
+// exists rather than a default set of rates.
+router.get('/payroll/years', requireView('payroll'), books.listPayrollYears);
+router.get('/payroll/years/:year', requireView('payroll'), books.getPayrollYear);
+router.put('/payroll/years/:year', requireRole('admin'), csrfProtect, books.savePayrollYear);
+router.post('/payroll/years/:year/confirm', requireRole('admin'), csrfProtect,
+  books.confirmPayrollYear);
+
+router.get('/payroll/employees', requireView('payroll'), books.listEmployees);
+router.get('/payroll/employees/:id', requireView('payroll'), books.getEmployee);
+router.post('/payroll/employees', requireRole('admin'), csrfProtect, books.saveEmployee);
+router.patch('/payroll/employees/:id', requireRole('admin'), csrfProtect, books.saveEmployee);
+
+// A payslip PDF carries one person's salary in full. Same tight limiter as the other
+// document routes, and it runs BEFORE the view check so refused attempts count too.
+router.get('/payroll/payslips/:id/pdf', docLimiter, requireView('payroll'),
+  books.getPayslipPdf);
+
+router.get('/payroll/runs', requireView('payroll'), books.listPayrollRuns);
+router.get('/payroll/runs/:id', requireView('payroll'), books.getPayrollRun);
+// Drafting writes payslips but touches no account; posting creates a liability to
+// Skatturinn. Both are admin-only, because a draft is one click from being posted.
+router.post('/payroll/runs', requireRole('admin'), csrfProtect, books.createPayrollRun);
+router.post('/payroll/runs/:id/post', requireRole('admin'), csrfProtect, books.postPayrollRun);
+router.post('/payroll/runs/:id/reverse', requireRole('admin'), csrfProtect,
+  books.reversePayrollRun);
+router.post('/payroll/runs/:id/pay', requireRole('admin'), csrfProtect, books.payPayrollRun);
+
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than
 // falling through to the /api/v1/admin catch-all router. Note what this does and

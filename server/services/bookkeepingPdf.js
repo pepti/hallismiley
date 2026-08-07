@@ -255,4 +255,160 @@ function streamInvoice(res, { invoice }) {
   }
 }
 
-module.exports = { streamInvoice, drawInvoice, isk, kennitalaDisplay };
+// ── Payslip (launaseðill) ────────────────────────────────────────────────────
+//
+// An employee is entitled to a statement showing what they earned, what was deducted
+// and why. This one is built to be READ rather than filed: the deductions are named,
+// the tax bands that produced the withholding are shown with the rate and the slice
+// they applied to, and the employer's own contributions are printed in a separate block
+// so nobody mistakes them for money taken off the employee — which is the single most
+// common misreading of an Icelandic payslip.
+//
+// Every figure comes from the PAYSLIP ROW, never from live rates or the employee
+// record. That is the point of storing them: reprinting a payslip years later must
+// reproduce the document as issued, not recompute it against today's tax table.
+
+function drawPayslip(doc, { payslip: s, seller }) {
+  const right = doc.page.width - MARGIN;
+  const rates = (s.breakdown && s.breakdown.rates) || {};
+  const bands = (s.breakdown && s.breakdown.bands) || [];
+  const pct = bp => `${(Number(bp || 0) / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
+
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(20).text('LAUNASEÐILL', MARGIN, MARGIN);
+  doc.font('Helvetica').fontSize(10).fillColor(MUTED)
+    .text(`Tímabil ${s.period} · útborgað ${s.pay_date}`, MARGIN, MARGIN + 26);
+
+  // Employer block, from the books settings. Unlike an invoice, a payslip's issuer
+  // block is not snapshotted per row — the employer of record does not change
+  // retrospectively, and the kennitala is the identifier that matters.
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(10)
+    .text(seller.seller_name || '', right - 220, MARGIN, { width: 220, align: 'right' });
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED);
+  if (seller.seller_kennitala) {
+    doc.text(`Kennitala ${kennitalaDisplay(seller.seller_kennitala)}`,
+      right - 220, doc.y, { width: 220, align: 'right' });
+  }
+  if (seller.seller_address) {
+    doc.text(seller.seller_address, right - 220, doc.y, { width: 220, align: 'right' });
+  }
+
+  let y = MARGIN + 70;
+  doc.moveTo(MARGIN, y).lineTo(right, y).strokeColor(RULE).stroke();
+  y += 14;
+
+  doc.fillColor(MUTED).font('Helvetica').fontSize(9).text('LAUNÞEGI', MARGIN, y);
+  y += 12;
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(11).text(s.employee_name || '', MARGIN, y);
+  y += 14;
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+    .text(`Kennitala ${kennitalaDisplay(s.employee_kennitala || '')}`, MARGIN, y);
+  y += 24;
+
+  // ── Earnings and deductions ────────────────────────────────────────────────
+  const row = (label, amount, { bold = false, note = '' } = {}) => {
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(INK);
+    doc.text(label, MARGIN, y, { width: 300 });
+    if (note) {
+      doc.font('Helvetica').fontSize(8).fillColor(MUTED)
+        .text(note, MARGIN + 300, y + 1, { width: 110 });
+    }
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(INK)
+      .text(isk(amount), right - 110, y, { width: 110, align: 'right' });
+    y += 16;
+  };
+
+  doc.fillColor(MUTED).font('Helvetica').fontSize(9).text('LAUN OG FRÁDRÁTTUR', MARGIN, y);
+  y += 14;
+  row('Laun', s.gross, { bold: true });
+  row('Lífeyrissjóður', -s.pension_employee, { note: pct(rates.pension_employee_bp) });
+  if (s.extra_pension_employee) {
+    row('Séreignarsparnaður', -s.extra_pension_employee,
+      { note: pct(rates.extra_pension_employee_bp) });
+  }
+  // Stated explicitly, because "why is the tax not a percentage of my salary" is the
+  // question this line answers: pension comes off before tax.
+  row('Skattstofn', s.taxable_base, { note: 'laun að frádregnum lífeyri' });
+  row('Reiknaður skattur', s.computed_tax);
+  row('Persónuafsláttur', -s.allowance_used, {
+    note: rates.allowance_factor_bp && rates.allowance_factor_bp !== 10_000
+      ? `${pct(rates.allowance_factor_bp)} af afslætti` : '',
+  });
+  row('Staðgreiðsla', -s.withholding, { bold: true });
+  if (s.union_dues) row('Félagsgjöld', -s.union_dues, { note: pct(rates.union_rate_bp) });
+
+  y += 4;
+  doc.moveTo(MARGIN, y).lineTo(right, y).strokeColor(RULE).stroke();
+  y += 10;
+  row('ÚTBORGAÐ', s.net_pay, { bold: true });
+
+  // ── The tax working ────────────────────────────────────────────────────────
+  //
+  // The bands, with the slice each rate applied to. Without this the withholding is a
+  // number the employee has to take on trust; with it, they can check it.
+  if (bands.length) {
+    y += 14;
+    doc.fillColor(MUTED).font('Helvetica').fontSize(9)
+      .text('ÚTREIKNINGUR SKATTS', MARGIN, y);
+    y += 14;
+    for (const b of bands) {
+      const range = b.to
+        ? `${isk(b.from)} – ${isk(b.to)}`
+        : `yfir ${isk(b.from)}`;
+      doc.font('Helvetica').fontSize(9).fillColor(INK)
+        .text(`${range} · ${pct(b.rate_bp)} af ${isk(b.amount)}`, MARGIN, y, { width: 340 });
+      doc.text(isk(b.tax), right - 110, y, { width: 110, align: 'right' });
+      y += 13;
+    }
+  }
+
+  // ── Employer's own contributions ───────────────────────────────────────────
+  //
+  // In its own block, with a sentence saying it is NOT deducted from the employee. This
+  // is the part people misread, and a payslip that lets them misread it is doing harm.
+  y += 14;
+  doc.fillColor(MUTED).font('Helvetica').fontSize(9)
+    .text('FRAMLAG VINNUVEITANDA — EKKI DREGIÐ AF LAUNUM', MARGIN, y);
+  y += 14;
+  row('Tryggingagjald', s.social_security, { note: pct(rates.social_security_bp) });
+  row('Lífeyrisframlag', s.pension_employer, { note: pct(rates.pension_employer_bp) });
+  if (s.extra_pension_employer) {
+    row('Séreignarframlag', s.extra_pension_employer,
+      { note: pct(rates.extra_pension_employer_bp) });
+  }
+  row('Kostnaður vinnuveitanda samtals',
+    Number(s.gross) + Number(s.social_security) + Number(s.pension_employer)
+      + Number(s.extra_pension_employer || 0),
+    { bold: true });
+
+  y += 20;
+  doc.font('Helvetica').fontSize(8).fillColor(MUTED)
+    .text(
+      'Launaseðill úr rafrænu bókhaldskerfi. Fjárhæðir eru í íslenskum krónum. '
+      + `Skattþrep og persónuafsláttur eru fyrir skattár ${(s.breakdown || {}).tax_year || ''}.`,
+      MARGIN, y, { width: right - MARGIN }
+    );
+
+  if (s.run_status === 'draft') {
+    // A draft payslip is not a document anyone should act on, and a PDF that does not
+    // say so will be forwarded as though it were final.
+    doc.fillColor('#b04040').font('Helvetica-Bold').fontSize(9)
+      .text('UPPKAST — EKKI BÓKAÐ', MARGIN, y + 22);
+  }
+}
+
+function streamPayslip(res, { payslip, seller }) {
+  const doc = new PDFDocument({ size: 'A4', margin: MARGIN });
+  doc.on('error', () => { try { res.destroy(); } catch { /* already gone */ } });
+  res.on('close', () => doc.destroy());
+  doc.pipe(res);
+  try {
+    drawPayslip(doc, { payslip, seller: seller || {} });
+    doc.end();
+  } catch (err) {
+    doc.destroy();
+    res.destroy();
+    throw err;
+  }
+}
+
+module.exports = { streamInvoice, drawInvoice, streamPayslip, drawPayslip, isk, kennitalaDisplay };

@@ -209,3 +209,52 @@ export const reverseJournalEntry = (id, reason) =>
 
 export const trialBalanceCsvUrl = (params = {}) => withQuery(`${BASE}/reports/trial-balance.csv`, params);
 export const journalCsvUrl = (params = {}) => withQuery(`${BASE}/reports/journal.csv`, params);
+
+// ── Payroll ──────────────────────────────────────────────────────────────────
+
+export const fetchPayrollYears = () => get('/payroll/years');
+export const fetchPayrollYear = (year) => get(`/payroll/years/${encodeURIComponent(year)}`);
+export const savePayrollYear = (year, body) =>
+  send('PUT', `/payroll/years/${encodeURIComponent(year)}`, body);
+// Confirming is the act that lets payroll run. The note is required by the server, not
+// just by the form: the claim "I checked these" is only worth something if it says
+// against what.
+export const confirmPayrollYear = (year, sourceNote) =>
+  send('POST', `/payroll/years/${encodeURIComponent(year)}/confirm`, { source_note: sourceNote });
+
+export const fetchEmployees = (params) => get('/payroll/employees', params);
+export const fetchEmployee = (id) => get(`/payroll/employees/${encodeURIComponent(id)}`);
+export const createEmployee = (body) => send('POST', '/payroll/employees', body);
+export const updateEmployee = (id, body) =>
+  send('PATCH', `/payroll/employees/${encodeURIComponent(id)}`, body);
+
+export const fetchPayrollRuns = (params) => get('/payroll/runs', params);
+export const fetchPayrollRun = (id) => get(`/payroll/runs/${encodeURIComponent(id)}`);
+export const createPayrollRun = (body) => send('POST', '/payroll/runs', body);
+
+// Throws with `err.findings` attached on a 409, so the caller can show exactly which
+// employee is blocking and by how much rather than a bare message.
+export async function postPayrollRun(id, overrideReason) {
+  const res = await fetch(`${BASE}/payroll/runs/${encodeURIComponent(id)}/post`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: await csrfHeaders(),
+    body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Beiðni mistókst');
+    if (Array.isArray(data.findings)) err.findings = data.findings;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export const reversePayrollRun = (id, reason) =>
+  send('POST', `/payroll/runs/${encodeURIComponent(id)}/reverse`, { reason });
+export const payPayrollRun = (id, body) =>
+  send('POST', `/payroll/runs/${encodeURIComponent(id)}/pay`, body);
+
+export const payslipPdfUrl = (id) => `${BASE}/payroll/payslips/${encodeURIComponent(id)}/pdf`;
+export const payrollCsvUrl = () => `${BASE}/payroll/export.csv`;

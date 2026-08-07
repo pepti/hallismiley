@@ -343,3 +343,71 @@ describe('journal legs', () => {
     expect(lines).toEqual([{ accountCode: '6100', debit: 0, memo: 'Laun' }]);
   });
 });
+
+describe('normaliseBands', () => {
+  // The bug this exists for: migration 072 seeded 2026 with UPPER bounds ("upTo"), the
+  // service computes with LOWER bounds ("from"), and the first version of the loader
+  // defaulted a missing "from" to 0. Every band then started at zero, the slicing
+  // collapsed, and almost the whole salary was taxed at the top rate — while the screen
+  // showed three plausible-looking rates. Nothing failed; the number was just wrong.
+  const SEEDED_2026 = [
+    { upTo: 498_122, rate: 0.3149 },
+    { upTo: 1_398_450, rate: 0.3799 },
+    { upTo: null, rate: 0.4629 },
+  ];
+
+  it('converts upper bounds to lower bounds', () => {
+    expect(payroll.normaliseBands(SEEDED_2026, 2026)).toEqual([
+      { income_from: 0, rate_bp: 3149 },
+      { income_from: 498_122, rate_bp: 3799 },
+      { income_from: 1_398_450, rate_bp: 4629 },
+    ]);
+  });
+
+  it('accepts lower bounds unchanged', () => {
+    expect(payroll.normaliseBands([
+      { from: 0, rate: 0.30 }, { from: 500_000, rate: 0.40 },
+    ], 2099)).toEqual([
+      { income_from: 0, rate_bp: 3000 },
+      { income_from: 500_000, rate_bp: 4000 },
+    ]);
+  });
+
+  it('sorts an out-of-order upper-bound table before converting', () => {
+    const shuffled = [SEEDED_2026[2], SEEDED_2026[0], SEEDED_2026[1]];
+    expect(payroll.normaliseBands(shuffled, 2026).map(b => b.income_from))
+      .toEqual([0, 498_122, 1_398_450]);
+  });
+
+  it('refuses a band that says neither where it starts nor where it stops', () => {
+    // Defaulting to zero here is what hid the bug. A shapeless band is a data problem,
+    // and the only safe response is to say so.
+    expect(() => payroll.normaliseBands([{ rate: 0.3149 }], 2026))
+      .toThrow(/say nothing about where/);
+  });
+
+  it('refuses a table that mixes the two forms', () => {
+    expect(() => payroll.normaliseBands(
+      [{ from: 0, rate: 0.30 }, { upTo: 500_000, rate: 0.40 }], 2026
+    )).toThrow(/mix lower-bound/);
+  });
+
+  it('refuses more than one open-ended band', () => {
+    // Two bands with no ceiling cannot both be the top one, and whichever lost would
+    // silently take a lower bound of the other's.
+    expect(() => payroll.normaliseBands(
+      [{ upTo: null, rate: 0.30 }, { upTo: null, rate: 0.46 }], 2026
+    )).toThrow(/open-ended/);
+  });
+
+  it('taxes a salary in the second band across two slices, not one', () => {
+    // The end-to-end check on the real seeded figures. Under the collapsed-bands bug
+    // this came out as 800.000 × 46.29% = 370.320 instead of 271.542 — a payslip wrong
+    // by nearly 100.000 kr. a month.
+    const bands = payroll.normaliseBands(SEEDED_2026, 2026);
+    const { total, slices } = payroll.computeTax(800_000, bands);
+    expect(slices).toHaveLength(2);
+    expect(total).toBe(271_542);
+    expect(total).toBeLessThan(payroll.applyBp(800_000, 4629));
+  });
+});

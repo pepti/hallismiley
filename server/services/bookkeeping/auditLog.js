@@ -27,7 +27,14 @@ const ACTIONS = [
   'expense.created', 'expense.updated',
   'journal.posted', 'journal.reversed', 'journal.draft_posted',
   'vat.filed', 'period.locked', 'period.unlocked',
-  'payroll.run', 'payroll.settled', 'payroll.rates_confirmed',
+  // Payroll. 'rates_saved' and 'rates_confirmed' are separate on purpose: entering the
+  // year's figures and vouching for them against the published table are different acts
+  // by (potentially) different people, and it is the second that lets payroll run.
+  'payroll.rates_saved', 'payroll.rates_confirmed',
+  'payroll.employee_created', 'payroll.employee_updated',
+  'payroll.run_drafted', 'payroll.run_posted', 'payroll.run_reversed',
+  'payroll.wages_paid',
+  'payroll.run', 'payroll.settled',
   'pos.sale',
   'fx.rate_set',
   'coa.updated',

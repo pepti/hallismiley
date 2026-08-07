@@ -117,6 +117,92 @@ function applyBp(amount, bp) {
   return Math.round((a * bp) / 10_000);
 }
 
+// ── Bands ────────────────────────────────────────────────────────────────────
+
+/**
+ * Normalise a stored bands array into lower-bound form, accepting either shape.
+ *
+ * There are two honest ways to write a band table and both appear in this database:
+ *
+ *   { from: 0, rate: 0.3149 }        the lower bound — what this service computes with
+ *   { upTo: 498122, rate: 0.3149 }   the upper bound — how Skatturinn prints it, and
+ *                                    the shape migration 072 seeded 2026 with
+ *
+ * They must not be mixed up. Reading an upper-bound table as lower bounds makes every
+ * band start at zero, which collapses the slicing and taxes almost the whole salary at
+ * the top rate — a payslip that is wrong by a wide margin while still looking like one.
+ * So a band carrying NEITHER key is refused rather than defaulted to zero: silently
+ * assuming zero is exactly how that failure stayed invisible until a screen showed
+ * three bands all starting at 0 kr.
+ */
+function normaliseBands(raw, year) {
+  const hasLower = raw.some(b => b.from !== undefined || b.income_from !== undefined);
+  const hasUpper = raw.some(b => b.upTo !== undefined || b.up_to !== undefined);
+  if (hasLower && hasUpper) {
+    throw new PayrollError(
+      `${year}'s bands mix lower-bound (from) and upper-bound (upTo) forms. One or the other, not both.`,
+      409, 'BANDS_MIXED'
+    );
+  }
+  if (!hasLower && !hasUpper) {
+    throw new PayrollError(
+      `${year}'s bands say nothing about where each rate starts or stops. Each band needs a "from" or an "upTo".`,
+      409, 'BANDS_SHAPELESS'
+    );
+  }
+
+  if (hasLower) {
+    return raw
+      .map((b, i) => {
+        const from = b.from ?? b.income_from;
+        if (from === undefined || from === null) {
+          throw new PayrollError(
+            `${year}'s bands[${i}] has no "from". A band with no lower bound cannot be placed.`,
+            409, 'BANDS_SHAPELESS'
+          );
+        }
+        return {
+          income_from: assertIntegerIsk(from, `bands[${i}].from`),
+          rate_bp: toBp(b.rate, `bands[${i}].rate`),
+        };
+      })
+      .sort((a, b) => a.income_from - b.income_from);
+  }
+
+  // Upper bounds: sort by ceiling (the open-ended top band sorts last), then each
+  // band's lower bound is the one below it's ceiling.
+  const byCeiling = raw
+    .map((b, i) => {
+      const upTo = b.upTo ?? b.up_to;
+      return {
+        // null/undefined means open-ended, which only the top band may be.
+        upTo: upTo === null || upTo === undefined
+          ? null : assertIntegerIsk(upTo, `bands[${i}].upTo`),
+        rate_bp: toBp(b.rate, `bands[${i}].rate`),
+      };
+    })
+    .sort((a, b) => {
+      if (a.upTo === null) return 1;
+      if (b.upTo === null) return -1;
+      return a.upTo - b.upTo;
+    });
+
+  const openEnded = byCeiling.filter(b => b.upTo === null);
+  if (openEnded.length > 1) {
+    throw new PayrollError(
+      `${year} has ${openEnded.length} open-ended bands. Only the highest band may have no ceiling.`,
+      409, 'BANDS_MULTIPLE_OPEN'
+    );
+  }
+
+  let lower = 0;
+  return byCeiling.map((b) => {
+    const band = { income_from: lower, rate_bp: b.rate_bp };
+    if (b.upTo !== null) lower = b.upTo;
+    return band;
+  });
+}
+
 // ── Tax years ────────────────────────────────────────────────────────────────
 
 /**
@@ -153,12 +239,7 @@ async function loadRates(year, client = db, { requireConfirmed = true } = {}) {
       409, 'BANDS_MISSING'
     );
   }
-  const bands = raw
-    .map((b, i) => ({
-      income_from: assertIntegerIsk(b.from ?? b.income_from ?? 0, `bands[${i}].from`),
-      rate_bp: toBp(b.rate, `bands[${i}].rate`),
-    }))
-    .sort((a, b) => a.income_from - b.income_from);
+  const bands = normaliseBands(raw, y);
 
   // The lowest band must start at zero, or the first slice of income is taxed at no
   // rate at all — silently under-withholding every payslip.
@@ -1072,6 +1153,7 @@ module.exports = {
   EMPLOYMENT_TYPES,
   toBp,
   applyBp,
+  normaliseBands,
   computeTax,
   computePayslip,
   isValidKennitala,

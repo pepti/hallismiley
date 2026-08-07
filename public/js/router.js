@@ -48,6 +48,7 @@ import { AdminStatementView }    from './views/AdminStatementView.js';
 import { AdminVatView }          from './views/AdminVatView.js';
 import { AdminBankView }         from './views/AdminBankView.js';
 import { AdminLedgerView }       from './views/AdminLedgerView.js';
+import { AdminPayrollView }      from './views/AdminPayrollView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
 import {
   SUPPORTED_LOCALES,
@@ -80,6 +81,7 @@ const ROUTES = [
   { pattern: '/admin/books/ar/:customerKey', factory: (p) => (isAuthenticated() && canSeeView('ar')) ? new AdminStatementView(p.customerKey) : new HomeView() },
   { pattern: '/admin/books/bank', factory: () => (isAuthenticated() && canSeeView('bank')) ? new AdminBankView() : new HomeView() },
   { pattern: '/admin/books/ledger', factory: () => (isAuthenticated() && canSeeView('ledger')) ? new AdminLedgerView() : new HomeView() },
+  { pattern: '/admin/books/payroll', factory: () => (isAuthenticated() && canSeeView('payroll')) ? new AdminPayrollView() : new HomeView() },
   { pattern: '/admin/books/vat', factory: () => (isAuthenticated() && canSeeView('vat')) ? new AdminVatView() : new HomeView() },
   { pattern: '/admin/books/ar', factory: () => (isAuthenticated() && canSeeView('ar')) ? new AdminARView() : new HomeView() },
   { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
@@ -268,6 +270,7 @@ export class Router {
       '/admin/books/vat':      'vat',
       '/admin/books/bank':     'bank',
       '/admin/books/ledger':   'ledger',
+      '/admin/books/payroll':  'payroll',
     };
     if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
       navigateReplace('/' + getLocale() + '/');

@@ -30,7 +30,7 @@ let orderId; let productId;
 // Upserted rather than created: `roles` has no FK to `users`, so cleanTables()
 // leaves it standing between tests and a plain INSERT collides on the second run.
 async function makeBooksReaderRole() {
-  const views = ['books', 'invoices', 'ar', 'vat', 'ledger'];
+  const views = ['books', 'invoices', 'ar', 'vat', 'ledger', 'payroll'];
   const { rows } = await db.query(
     `INSERT INTO roles (name, description, view_access, is_system)
      VALUES ('bokari-test', 'Bókari (test) — read-only books access', $1::jsonb, FALSE)
@@ -521,5 +521,148 @@ describe('ledger and reports over HTTP', () => {
     // It states what it is NOT, so nobody mistakes it for finished statutory accounts.
     expect(res.body.caveats.length).toBeGreaterThan(0);
     expect(res.body.caveats.join(' ')).toMatch(/retained earnings/i);
+  });
+});
+
+// ── Payroll ──────────────────────────────────────────────────────────────────
+
+describe('payroll over HTTP', () => {
+  // Its own future year, so nothing here collides with the seeded 2026 figures or with
+  // another suite's ledger history. Nothing is ever posted against it.
+  const YEAR = 2088;
+  const FIGURES = {
+    personal_allowance: 60_000,
+    municipal_rate: 0.145,
+    social_security: 0.0635,
+    pension_employee: 0.04,
+    pension_employer: 0.115,
+    bands: [{ from: 0, rate: 0.30 }, { from: 500_000, rate: 0.40 }],
+    source_note: 'Test figures',
+  };
+
+  it('lets a books reader read, but not enter or confirm figures', async () => {
+    // Salary is the most sensitive data in these books, and 'payroll' is its own view id
+    // for that reason — but holding it still grants reads only.
+    await request(app).get(`${BASE}/payroll/years`).set('Cookie', readerCookie).expect(200);
+    // Employees and runs included: the view id is what grants sight of salaries, and a
+    // bookkeeper who cannot see them cannot reconcile the payroll liabilities.
+    await request(app).get(`${BASE}/payroll/employees`).set('Cookie', readerCookie).expect(200);
+    await request(app).get(`${BASE}/payroll/runs`).set('Cookie', readerCookie).expect(200);
+    await request(app).put(`${BASE}/payroll/years/${YEAR}`)
+      .set('Cookie', readerCookie).send(FIGURES).expect(403);
+    await request(app).post(`${BASE}/payroll/years/${YEAR}/confirm`)
+      .set('Cookie', readerCookie).send({ source_note: 'nope' }).expect(403);
+  });
+
+  it('rejects a stranger outright', async () => {
+    await request(app).get(`${BASE}/payroll/years`).set('Cookie', strangerCookie).expect(403);
+    await request(app).get(`${BASE}/payroll/runs`).set('Cookie', strangerCookie).expect(403);
+  });
+
+  it('saves a year unconfirmed, then confirms it with a note', async () => {
+    const saved = await request(app).put(`${BASE}/payroll/years/${YEAR}`)
+      .set('Cookie', adminCookie).send(FIGURES).expect(200);
+    expect(saved.body.confirmed_at).toBeNull();
+    expect(saved.body.bands).toHaveLength(2);
+
+    // The note is required: "I checked these" is only worth something if it says
+    // against what.
+    await request(app).post(`${BASE}/payroll/years/${YEAR}/confirm`)
+      .set('Cookie', adminCookie).send({}).expect(400);
+
+    const confirmed = await request(app).post(`${BASE}/payroll/years/${YEAR}/confirm`)
+      .set('Cookie', adminCookie).send({ source_note: 'skatturinn.is, checked today' })
+      .expect(200);
+    expect(confirmed.body.confirmed_at).toBeTruthy();
+  });
+
+  it.each([
+    [{ social_security: 6.35 }, 'a percentage where a decimal belongs'],
+    [{ bands: [{ from: 100_000, rate: 0.30 }] }, 'a lowest band above zero'],
+    [{ bands: [] }, 'no bands'],
+    [{ bands: [{ from: 0, rate: 0.10 }] }, 'a band at or below the municipal rate'],
+    [{ personal_allowance: -1 }, 'a negative allowance'],
+    [{ personal_allowance: 'lots' }, 'a non-numeric allowance'],
+  ])('returns 400 for %#: %s', async (over) => {
+    const res = await request(app).put(`${BASE}/payroll/years/${YEAR + 1}`)
+      .set('Cookie', adminCookie).send({ ...FIGURES, ...over });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 400 });
+  });
+
+  it('refuses a run against a year nobody has confirmed', async () => {
+    // The refusal that matters most. It has to come back as a 409 the screen can
+    // explain, not a 500.
+    await request(app).put(`${BASE}/payroll/years/${YEAR + 2}`)
+      .set('Cookie', adminCookie).send(FIGURES).expect(200);
+    const res = await request(app).post(`${BASE}/payroll/runs`)
+      .set('Cookie', adminCookie)
+      .send({ period: `${YEAR + 2}-01`, pay_date: `${YEAR + 2}-01-31` });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/not been confirmed/);
+  });
+
+  it('validates an employee before it reaches the database', async () => {
+    // A wrong kennitala goes onto the payslip and into every remittance, so it is
+    // refused with an explanation rather than surfacing as a constraint violation.
+    const bad = await request(app).post(`${BASE}/payroll/employees`)
+      .set('Cookie', adminCookie)
+      .send({ full_name: 'Rangur', kennitala: '1203994599', monthly_salary: 100_000 });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/kennitala/i);
+
+    // An owner with no reference-wage category cannot be checked against the minimum,
+    // which is the one thing an owner most needs checked.
+    const noCategory = await request(app).post(`${BASE}/payroll/employees`)
+      .set('Cookie', adminCookie)
+      .send({
+        full_name: 'Eigandi', kennitala: '1203894599',
+        employment_type: 'owner', monthly_salary: 100_000,
+      });
+    expect(noCategory.status).toBe(400);
+    expect(noCategory.body.error).toMatch(/category/i);
+  });
+
+  it('does NOT let a books reader post, reverse or pay a run', async () => {
+    // Writing payroll to the ledger creates a liability to Skatturinn. Not delegable.
+    const fakeId = '00000000-0000-0000-0000-000000000000';
+    for (const path of [`/payroll/runs/${fakeId}/post`, `/payroll/runs/${fakeId}/reverse`,
+      `/payroll/runs/${fakeId}/pay`]) {
+      await request(app).post(`${BASE}${path}`)
+        .set('Cookie', readerCookie).send({ reason: 'x' }).expect(403);
+    }
+    await request(app).post(`${BASE}/payroll/runs`)
+      .set('Cookie', readerCookie).send({ period: '2088-01', pay_date: '2088-01-31' })
+      .expect(403);
+  });
+
+  it('404s an unknown run and an unknown employee', async () => {
+    const fakeId = '00000000-0000-0000-0000-000000000000';
+    await request(app).get(`${BASE}/payroll/runs/${fakeId}`)
+      .set('Cookie', adminCookie).expect(404);
+    await request(app).get(`${BASE}/payroll/employees/${fakeId}`)
+      .set('Cookie', adminCookie).expect(404);
+  });
+
+  it('400s a malformed id rather than querying with it', async () => {
+    const res = await request(app).get(`${BASE}/payroll/runs/not-an-id`)
+      .set('Cookie', adminCookie);
+    expect(res.status).toBe(400);
+  });
+
+  it('serves the CSV export without a route parameter swallowing it', async () => {
+    const res = await request(app).get(`${BASE}/payroll/export.csv`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.headers['cache-control']).toMatch(/no-store/);
+    expect(res.text.charCodeAt(0)).toBe(0xFEFF);
+  });
+
+  it('reports what is owed alongside the runs', async () => {
+    const res = await request(app).get(`${BASE}/payroll/runs`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(Array.isArray(res.body.liabilities)).toBe(true);
+    expect(res.body.liabilities.map(l => l.code))
+      .toEqual(expect.arrayContaining(['2300', '2310', '2320', '2350']));
   });
 });

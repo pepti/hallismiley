@@ -393,3 +393,35 @@
   border: 1px solid var(--border-dim);
   border-radius: 10px;
 }
+
+/* ── Phase 8: payroll ─────────────────────────────────────────────────────── */
+
+/* A band row in the tax-year form. Two numbers and a remove button; the labels stay
+   because "0" and "30" are indistinguishable without them. */
+.books-band__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin-bottom: 0.5rem;
+}
+
+/* The preflight findings on a run. Colour carries the severity, but the text says it
+   too — a blocker that reads as a warning gets clicked past. */
+.books-findings {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+.books-findings li { margin-bottom: 0.3rem; }
+.books-findings li.is-blocker { color: var(--error); }
+.books-findings li.is-warning { color: var(--accent-amber); }
+.books-findings li.is-info { color: var(--text-muted); }
+
+/* An inactive employee is still on record — anyone with a posted payslip has to be —
+   so the row is dimmed rather than hidden. */
+.books-table tr.is-muted td { opacity: 0.55; }
+
+@media (max-width: 720px) {
+  .books-band__row { grid-template-columns: 1fr 1fr; }
+}
