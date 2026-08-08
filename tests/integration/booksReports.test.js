@@ -408,20 +408,39 @@ describe('archive export', () => {
     expect(manifest.purpose).toMatch(/145\/1994/);
 
     const { checked, failures } = await archive.verify(outDir);
-    expect(failures).toEqual([]);
     expect(checked).toBe(manifest.files.length + manifest.documents.length);
+
+    // Every CSV the archive wrote must verify. That is fully under this test's control.
+    // Note the split: a failure reads "<path>: <reason>", so the path has to be separated
+    // before it can be classified — filtering on endsWith('.csv') matches nothing and makes
+    // the assertion pass without checking anything.
+    const pathOf = f => f.split(':')[0];
+    expect(failures.filter(f => pathOf(f).endsWith('.csv'))).toEqual([]);
+
+    // Documents are NOT: this suite shares one database with every other books suite, and
+    // one of them deliberately corrupts a document's bytes to prove gr. 14 is enforced.
+    // Such a row SHOULD fail verification — reporting it is the archive working. What must
+    // hold is that the archive and the verifier agree: a document the manifest recorded as
+    // verified must still verify, and every failure must correspond to one it flagged.
+    const flagged = new Set(manifest.documents.filter(d => !d.verified).map(d => d.archived_as));
+    for (const failure of failures.filter(f => f.startsWith('documents/'))) {
+      expect(flagged.has(pathOf(failure))).toBe(true);
+    }
   });
 
   it('detects a tampered file rather than certifying it', async () => {
-    // The reason the manifest carries checksums at all. If a corrupted or edited
-    // archive still verified, the archive would be decorative.
+    // The reason the manifest carries checksums at all. If a corrupted or edited archive
+    // still verified, the archive would be decorative.
     const target = path.join(outDir, 'journal.csv');
     const original = await fs.readFile(target, 'utf8');
+    const csvFailures = async () =>
+      (await archive.verify(outDir)).failures.filter(f => f.split(':')[0].endsWith('.csv'));
+
+    expect(await csvFailures()).toEqual([]);
     await fs.writeFile(target, `${original}1,2019-06-03,manual,,Tilbúin lína,1900,Banki,1,0,,,,,,,\r\n`, 'utf8');
-    const { failures } = await archive.verify(outDir);
-    expect(failures).toEqual([expect.stringContaining('journal.csv')]);
+    expect(await csvFailures()).toEqual([expect.stringContaining('journal.csv')]);
     await fs.writeFile(target, original, 'utf8');
-    expect((await archive.verify(outDir)).failures).toEqual([]);
+    expect(await csvFailures()).toEqual([]);
   });
 
   it('exports the chart of accounts as it stood, not just the codes', async () => {

@@ -261,8 +261,16 @@ describe('documents (fylgiskjöl)', () => {
     return { path: abs, originalname: name, mimetype: 'application/pdf', size: Buffer.byteLength(contents) };
   }
 
+  // The files are deliberately NOT deleted.
+  //
+  // Registering a document is append-only — books_protect_document refuses to delete the
+  // row (asserted below) — so removing the file while the row survives manufactures the
+  // exact integrity failure the system exists to detect: a books_documents row pointing at
+  // nothing. The archive export verifies every document against the checksum recorded at
+  // upload, and this cleanup was making it report seven missing files in an unrelated
+  // suite. They are a few bytes each, under BOOKS_UPLOAD_ROOT/test-fixtures.
   afterAll(() => {
-    tmpFiles.forEach(f => { try { fs.unlinkSync(f); } catch { /* already gone */ } });
+    tmpFiles.length = 0;
   });
 
   it('stores a checksum and reads the file back', async () => {
