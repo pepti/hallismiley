@@ -21,7 +21,8 @@
     "check:i18n": "node scripts/check-i18n-keys.js",
     "prepare": "husky || true",
     "seed:books": "node server/scripts/seed-books-demo.js",
-    "books:archive": "node server/scripts/books-archive-export.js"
+    "books:archive": "node server/scripts/books-archive-export.js",
+    "books:backfill": "node server/scripts/books-backfill-orders.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

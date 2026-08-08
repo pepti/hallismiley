@@ -187,6 +187,126 @@ For a low-traffic portfolio this is a once-a-year chore at most.
 
 ---
 
+## Bókhald (the books)
+
+Full design notes: `docs/BOOKKEEPING-SYSTEM.md`. Open accountant questions:
+`docs/ACCOUNTANT-QUESTIONS.md`. This section is the operational half only.
+
+### First-run setup (in this order)
+
+The books refuse to issue documents until the seller identity is set, and every books
+screen shows a standing warning until each step is done. That is the mechanism, not a
+nag.
+
+1. **`/admin/books` → settings**: seller name, kennitala, VSK number, address. Nothing
+   can be invoiced without these — an invoice without them is not a valid sales document
+   under Reglugerð 50/1993.
+2. **Confirm the chart of accounts.** Clears the `coa_confirmed_at` warning. Take the
+   chart to the accountant first; changing an account code after entries exist is
+   expensive, because history cannot be re-pointed.
+3. **EUR rate**, if invoicing in EUR: `npm run books:fx -- --date=YYYY-MM-DD --rate=NNN.NN`.
+   An EUR invoice is **blocked** with no rate on file rather than guessing one.
+4. **Payroll**, if running it: enter the year's figures and **confirm** them. Payroll
+   refuses to compute against an unconfirmed year.
+5. **Opening balances**, if the business existed before these books: post the changeover
+   trial balance as one manual entry at `/admin/books/ledger`.
+
+### Every two months: the VSK return
+
+1. `/admin/books/vat` → pick the period. The figures are derived from the ledger; there is
+   no separate VAT total to reconcile against.
+2. Work the **preflight**. Blockers mean the return would be knowably wrong. They can be
+   overridden, but the reason is stored with the return.
+3. File. This snapshots the figures and **locks the period** — nothing can be posted into
+   it afterwards without an explicit unlock.
+4. Pay Skatturinn, then record it: the settlement moves `2290 Virðisaukaskattur til
+   greiðslu` against the bank.
+
+**Unlocking a filed period** is audited and reverses the settlement entry on its own date.
+Do it only to correct a real error, and expect the correction to be visible in the journal
+as a correction — that is the point.
+
+### Every year: the archive (this is the compliance step)
+
+Bókhaldslög 145/1994 gr. 20 requires seven years of records **kept in Iceland**. This
+application runs on Azure, and **Azure has no Iceland region** — the nearest are North
+Europe (Dublin) and West Europe (Amsterdam). The archive export is therefore not a
+convenience; it is the only route to compliance.
+
+```bash
+npm run books:archive -- --out=/path/to/archive/2026 --year=2026
+npm run books:archive -- --verify-only --out=/path/to/archive/2026
+```
+
+Then copy the directory to media **physically in Iceland** and keep it. Run the verify
+afterwards, from the copy: a backup nobody has ever read back is a hope, not a record.
+
+The manifest carries a SHA-256 per file and, for each document, **both** the checksum
+recorded at upload and the one computed now. A mismatch is reported and the exit code is
+non-zero — it is never quietly re-recorded, because the recorded checksum is the only
+evidence that a file has not changed since it was filed.
+
+The export also fails loudly if the trial balance does not balance. That means the books
+are wrong, not the archive.
+
+### Every January: the payroll rates
+
+Skatturinn re-sets the withholding bands, persónuafsláttur, tryggingagjald and the pension
+percentages. Payroll **will not run** until someone enters the new year's figures and
+confirms them with a note saying what they checked against.
+
+There is a `rates_review` deadline seeded in `tax_deadlines` for this.
+
+Two things to get right, both of which produce a believable wrong number:
+
+- The band rate is the **combined** figure (tekjuskattur + útsvar) as published. Entering
+  tekjuskattur alone under-withholds by roughly a third. The system refuses a band at or
+  below the municipal rate for exactly this reason.
+- `municipal_rate` should be **this business's registered municipality**, not the national
+  average that is currently in there.
+
+### Common books incidents
+
+**"Cannot issue invoices yet"** — seller name, kennitala or VSK number missing. Books
+settings.
+
+**An EUR invoice is refused** — no exchange rate on file for the issue date, or the newest
+one is stale. `npm run books:fx`. The refusal is deliberate: a guessed rate silently
+misstates revenue.
+
+**"Payroll figures have not been confirmed"** — working as designed. Enter and confirm the
+year.
+
+**A payroll run is blocked on an owner's salary** — below the RSK reiknað endurgjald
+minimum for their category. Either raise the salary or override with a written reason,
+which is stored on the run.
+
+**A period is locked** — it has a filed VSK return. Unlock it deliberately, with a reason,
+or post to the next period.
+
+**The trial balance does not balance** — this should be impossible; a deferred constraint
+trigger enforces per-entry balance. If it happens, it is a bug in the ledger and not a
+data-entry mistake. Do not trust any other report until it is resolved.
+
+**A user cannot be deleted** — they have posted an accounting entry, and
+`journal_entries.created_by` is `ON DELETE RESTRICT` because Reglugerð 505/2013 gr. 8
+requires an identifiable person behind every entry. Deactivate them instead.
+
+**A document will not open** — `documentService` re-checks the SHA-256 on every read and
+refuses a file that no longer matches what was stored. That is a real integrity failure;
+restore the file from an archive rather than clearing the checksum.
+
+### Do not
+
+- **Do not edit a migration that has been applied anywhere.** Add a new one. Editing 072
+  after the dev database had it cost a full drop-and-re-migrate of ~21 tables.
+- **Do not UPDATE posted accounting rows** to fix something. The triggers will refuse, and
+  they are right to. Reverse, or credit-note.
+- **Do not add a second set of totals.** If a figure is needed, derive it from
+  `journal_lines`.
+- **Do not seed payroll rates for a future year from memory.** Four authoritative-looking
+  numbers nobody has checked is precisely what the confirmation gate exists to prevent.
+
 ## Common Incidents
 
 ### "Web App is stopped" (HTTP 403, Azure platform page)
