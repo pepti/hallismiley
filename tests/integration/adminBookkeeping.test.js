@@ -312,6 +312,21 @@ describe('invoice lifecycle over HTTP', () => {
     expect(res.body.slice(0, 5).toString()).toBe('%PDF-');
   });
 
+  it('serves the invoices CSV export — the route was shadowed by :id and unreachable', async () => {
+    // '/invoices/export.csv' was declared AFTER '/invoices/:id', so it matched getInvoice
+    // with id "export.csv" and 400'd. Every other resource orders these correctly.
+    await request(app).post(`${BASE}/invoices/from-order/${orderId}`)
+      .set('Cookie', adminCookie).expect(201);
+    const res = await request(app).get(`${BASE}/invoices/export.csv`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.headers['cache-control']).toMatch(/no-store/);
+    expect(res.text.charCodeAt(0)).toBe(0xFEFF);
+    // The status filter is honoured, so the download matches what the screen shows.
+    await request(app).get(`${BASE}/invoices/export.csv?status=paid`)
+      .set('Cookie', adminCookie).expect(200);
+  });
+
   it('blocks issuing while the seller block is incomplete', async () => {
     await Setting.updateBookkeepingSettings({ seller_kennitala: '', seller_vat_number: '' });
     const res = await request(app).post(`${BASE}/invoices/from-order/${orderId}`)
@@ -522,6 +537,28 @@ describe('ledger and reports over HTTP', () => {
     expect(res.body.caveats.length).toBeGreaterThan(0);
     expect(res.body.caveats.join(' ')).toMatch(/retained earnings/i);
   });
+
+  it('makes the pack’s trial balance TIE with its balance sheet', async () => {
+    // The bug: the pack windowed the trial balance ({from,to}) but left the balance
+    // sheet cumulative ({to}), so an account with prior-period activity showed two
+    // different figures across the two files. Both are cumulative now, so every balance
+    // -sheet account's amount equals its trial-balance "Staða" for the same account.
+    const res = await request(app).get(`${BASE}/reports/accountant-pack`)
+      .set('Cookie', adminCookie).expect(200);
+    const tbByCode = Object.fromEntries(
+      res.body.trial_balance.accounts.map(a => [a.code, a.balance])
+    );
+    const bsAccounts = [
+      ...res.body.balance_sheet.assets,
+      ...res.body.balance_sheet.liabilities,
+      ...res.body.balance_sheet.equity,
+    ];
+    for (const a of bsAccounts) {
+      expect(tbByCode[a.code]).toBe(a.amount);
+    }
+    // And the trial balance is genuinely cumulative, not period-scoped.
+    expect(res.body.trial_balance.range).toEqual({ from: null, to: expect.any(String) });
+  });
 });
 
 // ── Payroll ──────────────────────────────────────────────────────────────────
@@ -574,6 +611,59 @@ describe('payroll over HTTP', () => {
       .set('Cookie', adminCookie).send({ source_note: 'skatturinn.is, checked today' })
       .expect(200);
     expect(confirmed.body.confirmed_at).toBeTruthy();
+  });
+
+  it('runs the whole payroll flow over HTTP — confirm, employee, draft, post, payslip, CSV', async () => {
+    // The success path the block otherwise skips: everything below the refusals. Also the
+    // only test that the payslip PDF renders at all, and that the payroll CSV's columns
+    // line up with its rows.
+    await request(app).put(`${BASE}/payroll/years/${YEAR}`)
+      .set('Cookie', adminCookie).send(FIGURES).expect(200);
+    await request(app).post(`${BASE}/payroll/years/${YEAR}/confirm`)
+      .set('Cookie', adminCookie).send({ source_note: 'checked' }).expect(200);
+
+    const emp = await request(app).post(`${BASE}/payroll/employees`)
+      .set('Cookie', adminCookie)
+      .send({
+        full_name: 'Launþegi Prófsson', kennitala: '1203894599',
+        monthly_salary: 600_000, pension_fund: 'Gildi',
+      })
+      .expect(201);
+    expect(emp.body.employee.full_name).toBe('Launþegi Prófsson');
+
+    const draft = await request(app).post(`${BASE}/payroll/runs`)
+      .set('Cookie', adminCookie)
+      .send({ period: `${YEAR}-06`, pay_date: `${YEAR}-06-28` })
+      .expect(201);
+    expect(draft.body.run.status).toBe('draft');
+    expect(draft.body.run.gross_total).toBe(600_000);
+
+    const posted = await request(app).post(`${BASE}/payroll/runs/${draft.body.run.id}/post`)
+      .set('Cookie', adminCookie).send({}).expect(200);
+    expect(posted.body.run.status).toBe('posted');
+
+    // The payslip PDF actually renders, downloads (attachment), and is a real PDF.
+    const detail = await request(app).get(`${BASE}/payroll/runs/${draft.body.run.id}`)
+      .set('Cookie', adminCookie).expect(200);
+    const slipId = detail.body.payslips[0].id;
+    const pdf = await request(app).get(`${BASE}/payroll/payslips/${slipId}/pdf`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(pdf.headers['content-type']).toMatch(/application\/pdf/);
+    expect(pdf.headers['content-disposition']).toMatch(/^attachment/);
+    expect(pdf.headers['cache-control']).toMatch(/no-store/);
+    expect(pdf.body.slice(0, 5).toString()).toBe('%PDF-');
+
+    // The CSV: header and row must be the same width, and the run must be in it.
+    const csv = await request(app).get(`${BASE}/payroll/export.csv`)
+      .set('Cookie', adminCookie).expect(200);
+    const body = csv.text.charCodeAt(0) === 0xFEFF ? csv.text.slice(1) : csv.text;
+    const lines = body.trim().split('\r\n');
+    const header = lines[0].split(',');
+    expect(header).toContain('Séreign starfsmanns');
+    const row = lines.find(l => l.startsWith(`${YEAR}-06`)).split(',');
+    expect(row).toHaveLength(header.length);
+    // Column alignment: 'Laun' (gross) reads 600000 at its header's position.
+    expect(row[header.indexOf('Laun')]).toBe('600000');
   });
 
   it.each([
@@ -702,6 +792,27 @@ describe('counter sales over HTTP', () => {
     expect(Number(res.body.receipt.amount_paid)).toBe(12_400);
   });
 
+  it('returns the first receipt (200, duplicate) when the same idempotency key is retried', async () => {
+    // A double-tap or a retry after a lost response must not ring up a second sale. The
+    // retry comes back 200 with duplicate: true and the SAME receipt, not a fresh 201.
+    const key = `http-key-${Math.random().toString(36).slice(2)}`;
+    const first = await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', adminCookie)
+      .send({ tender: 'cash', idempotency_key: key,
+        lines: [{ description: 'Vara', unit_price_gross: 6_200, vat_rate: 24 }] })
+      .expect(201);
+    expect(first.body.duplicate).toBe(false);
+
+    const retry = await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', adminCookie)
+      .send({ tender: 'cash', idempotency_key: key,
+        lines: [{ description: 'Vara', unit_price_gross: 6_200, vat_rate: 24 }] })
+      .expect(200);
+    expect(retry.body.duplicate).toBe(true);
+    expect(retry.body.receipt.id).toBe(first.body.receipt.id);
+    expect(retry.body.receipt.invoice_number).toBe(first.body.receipt.invoice_number);
+  });
+
   it('serves the receipt through the same PDF route as an invoice', async () => {
     // A receipt is a row in the same sales ledger, so it prints through the same
     // endpoint — the renderer switches its heading on the series.
@@ -753,11 +864,29 @@ describe('counter sales over HTTP', () => {
     for (const r of res.body.by_rate) expect(r.gross).toBe(r.net + r.vat);
   });
 
-  it('offers only products a till can sell', async () => {
+  it('offers only priced products that carry a VAT rate', async () => {
+    // vat_rate is NOT NULL today, so every product has one — the catalogue's job is to
+    // exclude the un-priced and inactive, and to surface the rate the till needs so it
+    // never has to guess (a book at 24% is the wrong tax).
+    const { rows: sellable } = await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, sku, vat_rate, active)
+       VALUES ('cat-ok','Sölhilla','',5000,32,9,'CAT-OK',24,TRUE)
+       ON CONFLICT (slug) DO UPDATE SET vat_rate = 24, price_isk = 5000, active = TRUE RETURNING id`
+    );
+    const { rows: inactive } = await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, sku, vat_rate, active)
+       VALUES ('cat-off','Afskráð vara','',5000,32,9,'CAT-OFF',24,FALSE)
+       ON CONFLICT (slug) DO UPDATE SET active = FALSE, price_isk = 5000 RETURNING id`
+    );
+
     const res = await request(app).get(`${BASE}/pos/catalogue`)
       .set('Cookie', adminCookie).expect(200);
+    const ids = res.body.products.map(p => p.id);
+    expect(ids).toContain(sellable[0].id);
+    expect(ids).not.toContain(inactive[0].id);
     for (const p of res.body.products) {
       expect(p.price_isk).toBeGreaterThan(0);
+      expect(p.vat_rate).not.toBeNull();
     }
   });
 

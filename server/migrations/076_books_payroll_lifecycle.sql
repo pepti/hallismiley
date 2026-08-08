@@ -12,7 +12,8 @@
 --   liability. Refusing is the correct behaviour, so this migration seeds NO rates.
 --
 --   Reglugerd 505/2013 gr. 9 -> a posted run and its payslips are append-only
---   Amounts are whole ISK (BIGINT); rates are basis points (31.49% = 3149).
+--   Amounts are whole ISK (BIGINT); rates are stored as NUMERIC decimals (0.3149),
+--   and converted to integer basis points in payrollService only for the arithmetic.
 --
 -- Authoritative copy lives in server/config/schema.js; this file is for human
 -- reference and manual psql application. It is GENERATED from that array — do

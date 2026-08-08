@@ -36,6 +36,11 @@ router.post('/invoices/from-order/:orderId', requireRole('admin'), csrfProtect,
   books.createInvoiceFromOrder);
 
 router.get('/invoices', requireView('invoices'), books.listInvoices);
+// Server-side CSV export, paged internally so a long history streams rather than
+// being silently truncated at a page cap. MUST precede '/invoices/:id', or a GET to
+// '/invoices/export.csv' is read as an invoice with id "export.csv" and 400s — which is
+// what shipped, leaving the export unreachable.
+router.get('/invoices/export.csv', docLimiter, requireView('invoices'), books.exportInvoicesCsv);
 router.get('/invoices/:id', requireView('invoices'), books.getInvoice);
 // PDF generation is synchronous pdfkit work in-request, so it gets its own tighter
 // limiter — nothing else in this app rate-limits document generation. The limiter
@@ -49,11 +54,6 @@ router.post('/invoices/:id/payments', requireRole('admin'), csrfProtect, books.r
 // with no credit note, and a goodwill credit is a credit note with no refund.
 router.post('/invoices/:id/refunds', requireRole('admin'), csrfProtect, books.recordRefund);
 router.post('/invoices/:id/credit-notes', requireRole('admin'), csrfProtect, books.createCreditNote);
-
-// Server-side CSV export, paged internally so a long history streams rather than
-// being silently truncated at a page cap. Read-only, so no CSRF; docLimiter
-// because building one is real work.
-router.get('/invoices/export.csv', docLimiter, requireView('invoices'), books.exportInvoicesCsv);
 
 // ── Expenses (view: expenses) ────────────────────────────────────────────────
 // Literal paths first, and export.csv before any ':id' could swallow it.

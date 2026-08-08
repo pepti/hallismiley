@@ -99,7 +99,12 @@ async function attachedDocument() {
 }
 
 // Account balance straight from the ledger — the figure the return must agree with.
-async function accountBalance(code, { to = null } = {}) {
+// Scoped to a period WINDOW (from..to), not cumulative-to-`to`. The VSK return derives
+// per period, so comparing it against a cumulative balance only held while this suite was
+// the sole writer of these accounts — which stopped being true once counter sales (a
+// different suite, a different year, still ≤ this period's end) also credited 2200. A
+// period-scoped balance is what the derived return should actually equal.
+async function accountBalance(code, { from = null, to = null } = {}) {
   const { rows } = await db.query(
     `SELECT COALESCE(SUM(jl.debit - jl.credit), 0)::bigint AS bal
        FROM journal_entries je
@@ -107,8 +112,9 @@ async function accountBalance(code, { to = null } = {}) {
        JOIN ledger_accounts la ON la.id = jl.account_id
       WHERE la.code = $1 AND je.posted_at IS NOT NULL
         AND je.source_type <> 'vat_settlement'
-        AND ($2::date IS NULL OR je.entry_date <= $2::date)`,
-    [code, to]
+        AND ($2::date IS NULL OR je.entry_date >= $2::date)
+        AND ($3::date IS NULL OR je.entry_date <= $3::date)`,
+    [code, from, to]
   );
   return Number(rows[0].bal);
 }
@@ -153,13 +159,16 @@ describe('deriving the return from the ledger', () => {
     // The whole design claim in one assertion: the return is what the ledger says.
     await issueInvoice();
     const derived = await vat.deriveReturn(db, PERIOD);
-    const { ends_on: to } = require('../../server/utils/vatPeriod').periodBounds(PERIOD);
+    const { starts_on: from, ends_on: to } =
+      require('../../server/utils/vatPeriod').periodBounds(PERIOD);
 
-    // Output VAT is a liability, so a credit balance shows as negative here.
-    expect(derived.box_d_output).toBe(-(await accountBalance('2200', { to })
-      + await accountBalance('2210', { to })));
+    // Output VAT is a liability, so a credit balance shows as negative here. Scoped to the
+    // period window so it equals the period-derived return regardless of what other
+    // suites posted to these accounts in other periods.
+    expect(derived.box_d_output).toBe(-(await accountBalance('2200', { from, to })
+      + await accountBalance('2210', { from, to })));
     // Input VAT is an asset: a debit balance.
-    expect(derived.box_e_input).toBe(await accountBalance('1310', { to }));
+    expect(derived.box_e_input).toBe(await accountBalance('1310', { from, to }));
     expect(derived.box_f_payable).toBe(derived.box_d_output - derived.box_e_input);
   });
 

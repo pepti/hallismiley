@@ -79,3 +79,15 @@ export function statTile({ label, value, hint = '', tone = '' }) {
 export function errorBanner(message) {
   return `<div class="books-banner books-banner--error" role="alert">${escHtml(message)}</div>`;
 }
+
+// Today and the year's first day, in ISO form, for date-input defaults. Local calendar
+// components (not toISOString, which would shift a day at a positive UTC offset). Shared
+// by the ledger and payroll screens rather than copied into each.
+export function isoToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function yearStart() {
+  return `${new Date().getFullYear()}-01-01`;
+}

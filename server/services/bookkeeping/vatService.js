@@ -30,7 +30,7 @@ const logger = require('../../logger');
 const ledger = require('./ledgerService');
 const audit = require('./auditLog');
 const { periodBounds, periodForDate, isValidPeriod } = require('../../utils/vatPeriod');
-const { todayIso } = require('../../utils/booksDate');
+const { todayIso, toIsoDate } = require('../../utils/booksDate');
 
 class VatReturnError extends Error {
   constructor(message, status = 400, code) {
@@ -187,7 +187,7 @@ async function preflight(client, period) {
   );
   if (filed.length) {
     add('blocker', 'ALREADY_FILED',
-      `Period ${period} was already filed on ${filed[0].filed_at.toISOString().slice(0, 10)}. `
+      `Period ${period} was already filed on ${toIsoDate(filed[0].filed_at)}. `
       + 'A filed return is a write-once snapshot — correct it through the next period, '
       + 'or unlock the period first if it has not actually been submitted yet.');
     return { period, findings, can_file: false };
@@ -298,7 +298,7 @@ async function preflight(client, period) {
     `SELECT due_on FROM tax_deadlines WHERE kind = 'vsk' AND period = $1 LIMIT 1`, [period]
   );
   if (deadline.length) {
-    const dueOn = deadline[0].due_on.toISOString().slice(0, 10);
+    const dueOn = toIsoDate(deadline[0].due_on);
     const daysLeft = Math.round(
       (Date.parse(`${dueOn}T00:00:00Z`) - Date.parse(`${todayIso()}T00:00:00Z`)) / 86400000
     );
@@ -578,15 +578,15 @@ async function listPeriods(client, { limit = 24 } = {}) {
   );
   return rows.map(r => ({
     period: r.period,
-    starts_on: r.starts_on.toISOString().slice(0, 10),
-    ends_on: r.ends_on.toISOString().slice(0, 10),
+    starts_on: toIsoDate(r.starts_on),
+    ends_on: toIsoDate(r.ends_on),
     status: r.status,
     locked_at: r.locked_at,
     filed: Boolean(r.return_id),
     filed_at: r.filed_at,
     filed_by: r.filed_by_username,
     payable: r.box_f_payable === null ? null : Number(r.box_f_payable),
-    due_on: r.due_on ? r.due_on.toISOString().slice(0, 10) : null,
+    due_on: r.due_on ? toIsoDate(r.due_on) : null,
     entry_count: r.entry_count,
   }));
 }

@@ -326,7 +326,7 @@ async function reverseEntry(client, entryId, { createdBy, reason, entryDate = ne
   }
 
   const { rows: lines } = await client.query(
-    `SELECT la.code AS account_code, jl.debit, jl.credit, jl.memo
+    `SELECT la.code AS account_code, jl.debit, jl.credit, jl.memo, jl.vat_rate
        FROM journal_lines jl
        JOIN ledger_accounts la ON la.id = jl.account_id
       WHERE jl.entry_id = $1
@@ -347,12 +347,15 @@ async function reverseEntry(client, entryId, { createdBy, reason, entryDate = ne
     createdBy,
     reversesEntryId: original.id,
     isCorrection: reversal_period !== original_period,
-    // Debit becomes credit and vice versa.
+    // Debit becomes credit and vice versa. vat_rate is carried through: a reversal of a
+    // VAT leg is still a VAT leg, and dropping it left the mirror lines blank — the same
+    // NULL-vat_rate class of bug the original INSERT had.
     lines: lines.map(l => ({
       accountCode: l.account_code,
       debit: Number(l.credit),
       credit: Number(l.debit),
       memo: l.memo,
+      vatRate: l.vat_rate,
     })),
   });
 

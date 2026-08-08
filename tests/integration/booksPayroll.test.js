@@ -396,6 +396,38 @@ describe('posting a run', () => {
     expect(preflight.blockers).toEqual([]);
   });
 
+  it('posts séreignarsparnaður to its own liability account, apart from the mandatory fund', async () => {
+    // End-to-end proof of the M1 fix: an employee contributing 4% séreign with a 2%
+    // employer match. The séreign lands in 2330; 2320 holds only the mandatory 4%/11.5%.
+    await makeEmployee({
+      monthlySalary: 600_000, extraPensionEmployee: 0.04, extraPensionEmployer: 0.02,
+    });
+    const { run, payDate } = await draftAndPost();
+    const range = { from: payDate, to: payDate };
+    // Mandatory: employee 24.000 + employer 69.000 = 93.000 in 2320.
+    expect(await liabilityBalance('2320', range)).toBe(24_000 + 69_000);
+    // Séreign: employee 24.000 + employer match 12.000 = 36.000 in 2330.
+    expect(await liabilityBalance('2330', range)).toBe(24_000 + 12_000);
+    // The run row carries the split, and normaliseRun coerces it.
+    const { run: stored } = await payroll.getRun(run.id);
+    expect(stored.extra_pension_employee_total).toBe(24_000);
+    expect(stored.extra_pension_employer_total).toBe(12_000);
+    expect(stored.pension_employee_total).toBe(24_000);   // mandatory only
+  });
+
+  it('refuses to post a run with no wages', async () => {
+    // Everyone on zero salary: the only leg would be 6100 at zero, which postEntry
+    // rejects as a 500. Refused with an explanation instead.
+    await makeEmployee({ monthlySalary: 0 });
+    const { period, payDate } = freshMonth();
+    const { run } = await ledger.withTransaction(c => payroll.createDraftRun(c, {
+      period, payDate, createdBy: adminId,
+    }));
+    await expect(ledger.withTransaction(c => payroll.postRun(c, run.id, {
+      postedBy: adminId,
+    }))).rejects.toMatchObject({ code: 'ZERO_RUN' });
+  });
+
   it('refuses a second posted run for the same month', async () => {
     // Two posted runs would double every remittance for the month.
     await makeEmployee();
@@ -500,6 +532,41 @@ describe('append-only, once posted', () => {
     await expect(db.query(
       `UPDATE payslips SET net_pay = net_pay + 1 WHERE run_id = $1`, [postedRunId]
     )).rejects.toThrow(/final|net_pay/i);
+  });
+
+  it('refuses to REPARENT a payslip off a posted run', async () => {
+    // The hole a review found: moving a posted run's payslip onto a throwaway draft run
+    // slipped past the guard (it resolved the parent as the NEW draft), and deleting the
+    // draft then CASCADEd the payslip away — a posted run left resting on nothing. The
+    // guard now refuses reparenting outright.
+    const { rows: draft } = await db.query(
+      `INSERT INTO payroll_runs (period, pay_date, tax_year, gross_total, withholding_total,
+         pension_employee_total, pension_employer_total, social_security_total, union_total,
+         net_total, status, created_by)
+       VALUES ('2020-09','2020-09-28',2020,0,0,0,0,0,0,0,'draft',$1) RETURNING id`,
+      [adminId]
+    );
+    await expect(db.query(
+      `UPDATE payslips SET run_id = $1 WHERE run_id = $2`, [draft[0].id, postedRunId]
+    )).rejects.toThrow(/cannot be moved/i);
+    // The payslip is still attached to the posted run.
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::int AS n FROM payslips WHERE run_id = $1`, [postedRunId]
+    );
+    expect(rows[0].n).toBeGreaterThan(0);
+    await db.query(`DELETE FROM payroll_runs WHERE id = $1`, [draft[0].id]);
+  });
+
+  it('refuses to rewrite a posted run’s pension totals or its preflight', async () => {
+    // The run-guard gaps: the pension/union totals (what the journal credited) and the
+    // preflight (the record of why an override happened) were editable after posting.
+    await expect(db.query(
+      `UPDATE payroll_runs SET pension_employee_total = pension_employee_total + 1 WHERE id = $1`,
+      [postedRunId]
+    )).rejects.toThrow(/final/i);
+    await expect(db.query(
+      `UPDATE payroll_runs SET preflight = '{}'::jsonb WHERE id = $1`, [postedRunId]
+    )).rejects.toThrow(/final/i);
   });
 
   it('still allows the PDF to be attached afterwards', async () => {
@@ -631,6 +698,47 @@ describe('paying the wages', () => {
     await expect(ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
       amount: 500_000, paidOn: payDate, createdBy: adminId,
     }))).rejects.toMatchObject({ code: 'OVER_NET' });
+  });
+
+  it('will not pay a run in full twice', async () => {
+    // The critical bug: each payment was checked against net alone, never against what
+    // was already paid. Pay the full net, the run flips to 'settled', pay it again — and
+    // the second passed because it too was ≤ net. Cash would leave the bank twice and
+    // 2350 would go negative.
+    const { run, payDate } = await draftAndPost();
+    await ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
+      amount: 455_600, paidOn: payDate, createdBy: adminId,
+    }));
+    expect((await payroll.getRun(run.id)).run.status).toBe('settled');
+    await expect(ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
+      amount: 455_600, paidOn: payDate, createdBy: adminId,
+    }))).rejects.toMatchObject({ code: 'OVER_NET' });
+    // Defaulting the amount (pay "the rest") on a settled run is also refused, not a
+    // second full payment.
+    await expect(ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
+      paidOn: payDate, createdBy: adminId,
+    }))).rejects.toThrow();
+    // The bank was debited exactly once.
+    expect(await runBalance('2350', run.id)).toBe(0);
+    expect(await runBalance('1900', run.id)).toBe(455_600);
+  });
+
+  it('caps cumulative part payments at the net', async () => {
+    // Two part payments that each fit under net but together exceed it: the second is
+    // refused against the OUTSTANDING remainder, not the whole net.
+    const { run, payDate } = await draftAndPost();
+    await ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
+      amount: 300_000, paidOn: payDate, createdBy: adminId,
+    }));
+    await expect(ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
+      amount: 300_000, paidOn: payDate, createdBy: adminId,
+    }))).rejects.toMatchObject({ code: 'OVER_NET' });
+    // The exact remainder is accepted and settles the run.
+    await ledger.withTransaction(c => payroll.recordWagePayment(c, run.id, {
+      amount: 155_600, paidOn: payDate, createdBy: adminId,
+    }));
+    expect((await payroll.getRun(run.id)).run.status).toBe('settled');
+    expect(await runBalance('2350', run.id)).toBe(0);
   });
 
   it('refuses to pay against a draft', async () => {

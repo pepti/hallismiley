@@ -60,11 +60,19 @@ const db = require('../config/database');
 const logger = require('../logger');
 const { BOOKS_UPLOAD_ROOT } = require('../config/paths');
 const { toCsv, csvCell } = require('../utils/csv');
+const { toIsoDate } = require('../utils/booksDate');
 
 // Rows are streamed to disk in pages rather than assembled in memory: an archive is
 // the one operation guaranteed to touch every row in the books, and a seven-year-old
 // set of books is exactly the case where "it all fits in memory" stops being true.
 const PAGE = 2000;
+
+// Every read goes through `reader`. During an export it is a single client inside a
+// REPEATABLE READ transaction, so all the CSVs are one consistent snapshot of the books —
+// an entry posted mid-export cannot land in the trial balance and not the journal, which
+// for a legal retention copy is the worst way to be wrong. Outside an export it is the
+// pool (verify-only reads nothing from the DB).
+let reader = db;
 
 function parseArgs(argv) {
   const args = { out: null, year: null, documents: true, verifyOnly: false, force: false };
@@ -96,9 +104,13 @@ async function sha256File(absPath) {
   return hash.digest('hex');
 }
 
+// DATE columns, via the shared helper that reads local calendar components. Calling
+// toISOString().slice here — as an earlier version did — shifts every date back a day
+// when this runs from a machine at a positive UTC offset, which for an archive meant to
+// be run from anywhere (a laptop, a drawer) is exactly the wrong place for it.
 function isoDay(value) {
   if (!value) return '';
-  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  return toIsoDate(value);
 }
 
 function isoStamp(value) {
@@ -160,7 +172,7 @@ function journalLinesExport(range) {
     const params = [];
     const where = ['je.posted_at IS NOT NULL', ...dateFilter('je.entry_date', range, params)];
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT je.entry_number, je.entry_date, je.source_type, je.source_id, je.memo,
               la.code, la.name, jl.debit, jl.credit, jl.memo AS line_memo, jl.vat_rate,
               je.is_correction, je.reverses_entry_id, u.username, je.posted_at, je.document_id
@@ -191,7 +203,7 @@ function journalEntriesExport(range) {
     const params = [];
     const where = ['je.posted_at IS NOT NULL', ...dateFilter('je.entry_date', range, params)];
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT je.id, je.entry_number, je.entry_date, je.source_type, je.source_id, je.memo,
               je.is_correction, je.reverses_entry_id, je.document_id, je.posted_at,
               u.username,
@@ -224,7 +236,7 @@ function invoicesExport(range) {
     const params = [];
     const where = ["i.status <> 'draft'", ...dateFilter('i.issued_at', range, params)];
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT i.series, i.invoice_number, i.issued_at, i.due_at, i.status,
               i.customer_name, i.customer_kennitala, i.customer_address, i.customer_email,
               i.customer_country, i.currency, i.original_currency, i.original_total_gross,
@@ -260,7 +272,7 @@ function invoiceLinesExport(range) {
     const params = [];
     const where = ["i.status <> 'draft'", ...dateFilter('i.issued_at', range, params)];
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT i.invoice_number, il.sort_order, il.sku, il.description, il.quantity,
               il.unit_price_gross, il.vat_rate, il.gross_before_discount, il.discount_gross,
               il.line_net, il.line_vat, il.line_gross, il.revenue_account, il.product_id
@@ -290,7 +302,7 @@ function settlementsExport(range) {
     const pw = dateFilter('p.received_at', range, params);
     const cw = dateFilter('cn.issued_at', range, params);
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT * FROM (
          SELECT i.invoice_number, p.received_at AS happened_at,
                 CASE WHEN p.direction = 'out' THEN 'endurgreiðsla' ELSE 'greiðsla' END AS kind,
@@ -306,7 +318,7 @@ function settlementsExport(range) {
            FROM credit_notes cn JOIN invoices i ON i.id = cn.invoice_id
           ${cw.length ? `WHERE ${cw.join(' AND ')}` : ''}
        ) s
-       ORDER BY s.happened_at, s.invoice_number
+       ORDER BY s.happened_at, s.invoice_number, s.id
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -327,7 +339,7 @@ function expensesExport(range) {
     const params = [];
     const where = dateFilter('e.expense_date', range, params);
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT e.expense_date, e.supplier_name, e.supplier_kennitala, e.supplier_country,
               e.supplier_invoice_no, e.description,
               e.amount_gross, e.amount_net, e.amount_vat, e.vat_code,
@@ -338,7 +350,7 @@ function expensesExport(range) {
          LEFT JOIN ledger_accounts la ON la.id = e.account_id
          LEFT JOIN users u ON u.id = e.created_by
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY e.expense_date, e.created_at
+        ORDER BY e.expense_date, e.created_at, e.id
         LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -363,7 +375,7 @@ const VAT_HEADERS = ['Tímabil', 'A netto 24%', 'B netto 11%', 'C núllskatt',
 // re-derived itself at export time would not be evidence of what was reported.
 function vatReturnsExport() {
   return async (offset, limit) => {
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT vr.period, vr.box_a_net_24, vr.box_b_net_11, vr.box_c_net_zero,
               vr.box_d_output, vr.box_e_input, vr.box_f_payable,
               vr.detail, vr.preflight, vr.filed_at, vr.note, u.username
@@ -398,7 +410,7 @@ const ACCOUNT_HEADERS = ['Lykill', 'Heiti', 'Heiti (EN)', 'Tegund', 'VSK-kóði'
 // numbers against codes whose meaning has been edited since.
 function accountsExport() {
   return async (offset, limit) => {
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT code, name, name_en, type, vat_code, input_vat_blocked, description,
               is_active, sort
          FROM ledger_accounts ORDER BY sort, code LIMIT $1 OFFSET $2`,
@@ -420,13 +432,13 @@ function auditExport(range) {
     const params = [];
     const where = dateFilter('a.created_at', range, params);
     params.push(limit, offset);
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT a.created_at, a.action, a.entity_type, a.entity_id, a.summary,
               u.username, a.request_id
          FROM books_audit_log a
          LEFT JOIN users u ON u.id = a.actor_id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY a.created_at
+        ORDER BY a.created_at, a.id
         LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -442,7 +454,8 @@ function auditExport(range) {
 // second implementation that could drift from it.
 async function trialBalanceExport(outDir, range) {
   const reports = require('../services/bookkeeping/reportService');
-  const tb = await reports.trialBalance({ from: range.from, to: range.to });
+  // Through `reader` so it reads the same snapshot as every other file in the archive.
+  const tb = await reports.trialBalance({ from: range.from, to: range.to }, reader);
   const abs = path.join(outDir, 'trial-balance.csv');
   await fsp.writeFile(abs, toCsv(
     ['Lykill', 'Heiti', 'Tegund', 'Debet', 'Kredit', 'Staða'],
@@ -480,7 +493,7 @@ async function exportDocuments(outDir) {
   const documents = [];
   const problems = [];
   for (let offset = 0; ; offset += PAGE) {
-    const { rows } = await db.query(
+    const { rows } = await reader.query(
       `SELECT id, kind, original_name, file_path, mime_type, byte_size,
               checksum_sha256, note, created_at
          FROM books_documents ORDER BY created_at LIMIT $1 OFFSET $2`,
@@ -578,25 +591,42 @@ async function exportArchive(args) {
 
   const range = yearRange(args.year);
   const files = [];
-  files.push(await writeCsv(outDir, 'journal.csv', JOURNAL_HEADERS, journalLinesExport(range)));
-  files.push(await writeCsv(outDir, 'journal-entries.csv', ENTRY_HEADERS, journalEntriesExport(range)));
-  files.push(await writeCsv(outDir, 'invoices.csv', INVOICE_HEADERS, invoicesExport(range)));
-  files.push(await writeCsv(outDir, 'invoice-lines.csv', LINE_HEADERS, invoiceLinesExport(range)));
-  files.push(await writeCsv(outDir, 'settlements.csv', SETTLEMENT_HEADERS, settlementsExport(range)));
-  files.push(await writeCsv(outDir, 'expenses.csv', EXPENSE_HEADERS, expensesExport(range)));
-  files.push(await writeCsv(outDir, 'vat-returns.csv', VAT_HEADERS, vatReturnsExport()));
-  files.push(await writeCsv(outDir, 'accounts.csv', ACCOUNT_HEADERS, accountsExport()));
-  files.push(await writeCsv(outDir, 'audit-log.csv', AUDIT_HEADERS, auditExport(range)));
-
-  const tb = await trialBalanceExport(outDir, range);
-  files.push(tb.entry);
-
   let documents = [];
   let problems = [];
-  if (args.documents) {
-    const result = await exportDocuments(outDir);
-    documents = result.documents;
-    problems = result.problems;
+  let tb;
+
+  // One client, one snapshot, for the whole export. Everything below reads through
+  // `reader`, so a posting that commits while the archive is being written cannot appear
+  // in one file and not another — the journal always reproduces its own trial balance.
+  const client = await db.pool.connect();
+  reader = client;
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    files.push(await writeCsv(outDir, 'journal.csv', JOURNAL_HEADERS, journalLinesExport(range)));
+    files.push(await writeCsv(outDir, 'journal-entries.csv', ENTRY_HEADERS, journalEntriesExport(range)));
+    files.push(await writeCsv(outDir, 'invoices.csv', INVOICE_HEADERS, invoicesExport(range)));
+    files.push(await writeCsv(outDir, 'invoice-lines.csv', LINE_HEADERS, invoiceLinesExport(range)));
+    files.push(await writeCsv(outDir, 'settlements.csv', SETTLEMENT_HEADERS, settlementsExport(range)));
+    files.push(await writeCsv(outDir, 'expenses.csv', EXPENSE_HEADERS, expensesExport(range)));
+    files.push(await writeCsv(outDir, 'vat-returns.csv', VAT_HEADERS, vatReturnsExport()));
+    files.push(await writeCsv(outDir, 'accounts.csv', ACCOUNT_HEADERS, accountsExport()));
+    files.push(await writeCsv(outDir, 'audit-log.csv', AUDIT_HEADERS, auditExport(range)));
+
+    tb = await trialBalanceExport(outDir, range);
+    files.push(tb.entry);
+
+    if (args.documents) {
+      const result = await exportDocuments(outDir);
+      documents = result.documents;
+      problems = result.problems;
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    reader = db;
+    client.release();
   }
 
   const manifest = {

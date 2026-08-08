@@ -19,10 +19,18 @@
 
 const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
 const NEEDS_QUOTING = /[",;\n\r\t]/;
+// A plain number, including a negative one: -500, 1234, -12.5. These are the accounting
+// figures the exports are full of, and they must stay numeric so a spreadsheet imports
+// them as numbers rather than text.
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 
 function csvCell(value) {
   let s = String(value === null || value === undefined ? '' : value);
-  if (FORMULA_TRIGGER.test(s)) s = `'${s}`;
+  // Neutralise a formula-leading cell UNLESS it is a plain number. A leading '-' on a
+  // number (a negative figure) is not injection — Excel evaluates =-500 to -500 anyway —
+  // but prefixing it turned every negative balance into the text '-500 and broke numeric
+  // import. '=', '+', '@' and control chars are still neutralised whatever follows.
+  if (FORMULA_TRIGGER.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`;
   return NEEDS_QUOTING.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

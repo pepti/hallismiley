@@ -28,7 +28,7 @@ import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
-import { isk, statTile, errorBanner } from './booksShared.js';
+import { isk, statTile, errorBanner, isoToday, yearStart } from './booksShared.js';
 
 const TABS = ['trial', 'pl', 'bs', 'journal'];
 const PAGE_SIZE = 25;
@@ -39,14 +39,6 @@ const SOURCE_TYPES = [
   'invoice', 'payment', 'credit_note', 'expense', 'manual', 'reversal',
   'vat_settlement', 'bank', 'stripe', 'payroll', 'pos', 'opening',
 ];
-
-function isoToday() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function yearStart() {
-  return `${new Date().getFullYear()}-01-01`;
-}
 
 export class AdminLedgerView {
   constructor() {
@@ -189,7 +181,11 @@ export class AdminLedgerView {
 
   async _buildTab() {
     const { from, to } = this._range;
-    if (this._tab === 'trial') return this._trialHtml(await fetchTrialBalance({ from, to }));
+    // The trial balance is CUMULATIVE to the end of the range, not period movement — so
+    // its "Staða" column ties with the balance sheet and with the drill-down modal's
+    // closing balance (both cumulative). Windowing it with `from` showed a different
+    // figure for the same account the moment there was prior-period activity.
+    if (this._tab === 'trial') return this._trialHtml(await fetchTrialBalance({ to }));
     if (this._tab === 'pl') return this._plHtml(await fetchProfitAndLoss({ from, to }));
     if (this._tab === 'bs') return this._bsHtml(await fetchBalanceSheet({ to }));
     return this._journalHtml(await fetchJournal({

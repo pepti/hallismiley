@@ -32,13 +32,9 @@ import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
-import { isk, statTile, errorBanner } from './booksShared.js';
+import { isk, statTile, errorBanner, isoToday } from './booksShared.js';
 
 const EMPLOYMENT_TYPES = ['employee', 'owner', 'contractor'];
-
-function isoToday() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // Percent in the form, decimal on the wire. One place for the conversion, so a field
 // added later cannot get it the other way round.
@@ -840,6 +836,20 @@ export class AdminPayrollView {
           ? null : pctToRate(num('pension_employee_rate')),
         is_active: f.elements.is_active.checked,
       };
+      // The save is a full replace on the server, and this form does not expose every
+      // column. On an edit, carry the un-shown fields from the cached record so saving
+      // does not wipe an email, bank account, employment date or note set elsewhere.
+      if (e) {
+        body.email = e.email || '';
+        body.bank_account = e.bank_account || '';
+        body.started_on = e.started_on || null;
+        body.ended_on = e.ended_on || null;
+        body.note = e.note || '';
+        body.reference_wage_amount = e.reference_wage_amount ?? null;
+        body.reference_wage_confirmed_at = e.reference_wage_confirmed_at || null;
+        body.reference_wage_confirmed_note = e.reference_wage_confirmed_note || null;
+        body.pension_employer_rate = e.pension_employer_rate ?? null;
+      }
       try {
         if (id) await updateEmployee(id, body);
         else await createEmployee(body);

@@ -1003,15 +1003,27 @@ async function reverseJournalEntry(req, res, next) {
  * moment. Five separately-timed downloads can straddle a new posting and then not tie.
  */
 async function getAccountantPack(req, res, next) {
+  const client = await db.pool.connect();
   try {
     const { from, to } = parseRange(req.query, { defaultDays: 365 });
+    // One snapshot, one client. The whole point of this endpoint is that the files tie
+    // to each other, so the reads run in a single REPEATABLE READ transaction — a
+    // posting mid-fan-out cannot land in one report and not another. (The previous
+    // Promise.all on the pool gave each query its own snapshot, defeating the guarantee
+    // the doc comment makes.)
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    // The trial balance and the balance sheet are BOTH cumulative-to-`to`, so they tie
+    // with each other; only the P&L is period-scoped, which is what a P&L is. Passing
+    // {from,to} to the trial balance made it show period movement while the balance
+    // sheet showed cumulative — the same account, two different figures.
     const [tb, pl, bs, jrn] = await Promise.all([
-      reports.trialBalance({ from, to }),
-      reports.profitAndLoss({ from, to }),
-      reports.balanceSheet({ to }),
-      reports.journal({ from, to, limit: 200, offset: 0 }),
+      reports.trialBalance({ from: null, to }, client),
+      reports.profitAndLoss({ from, to }, client),
+      reports.balanceSheet({ to }, client),
+      reports.journal({ from, to, limit: 200, offset: 0 }, client),
     ]);
-    const vatPeriods = await vatService.listPeriods(db, { limit: 30 });
+    const vatPeriods = await vatService.listPeriods(client, { limit: 30 });
+    await client.query('COMMIT');
 
     res.json({
       range: { from, to },
@@ -1029,7 +1041,12 @@ async function getAccountantPack(req, res, next) {
         'The chart of accounts has not been confirmed by an accountant unless the settings say otherwise.',
       ],
     });
-  } catch (err) { fail(res, err, next); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    fail(res, err, next);
+  } finally {
+    client.release();
+  }
 }
 
 async function exportTrialBalanceCsv(req, res, next) {
@@ -1057,11 +1074,15 @@ async function exportJournalCsv(req, res, next) {
     if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
     if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
 
-    // One row per LINE, which is the shape every accounting package imports.
+    // One row per LINE, which is the shape every accounting package imports. Paged in
+    // ASCENDING entry order: the entry number is a gapless counter assigned at posting,
+    // so new rows always append at the tail and OFFSET pages never shift. Paging the
+    // default newest-first order would duplicate the boundary row whenever a posting
+    // landed mid-export.
     const rows = [];
     const PAGE = 200;
     for (let offset = 0; ; offset += PAGE) {
-      const page = await reports.journal({ from, to, limit: PAGE, offset });
+      const page = await reports.journal({ from, to, limit: PAGE, offset, order: 'asc' });
       for (const e of page.entries) {
         for (const l of e.lines) {
           rows.push([
@@ -1463,10 +1484,14 @@ async function getPayslipPdf(req, res, next) {
   try {
     const slip = await payroll.getPayslip(parseId(req.params.id, 'payslip id'));
     const settings = await Setting.getBookkeepingSettings();
+    // attachment, not inline, and the filename scrubbed — same as the invoice and
+    // document routes. A payslip carries a person's full salary and kennitala; it should
+    // download, not render in a shared tab, and no interpolated segment reaches the
+    // header raw even though period/kennitala are already validated upstream.
+    const filename = `launasedill-${slip.period}-${slip.employee_kennitala}.pdf`
+      .replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition',
-      `inline; filename="launasedill-${slip.period}-${slip.employee_kennitala}.pdf"`);
-    // Payslips carry salary detail; keep them out of shared caches.
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-store');
     bookkeepingPdf.streamPayslip(res, { payslip: slip, seller: settings });
   } catch (err) { fail(res, err, next); }
@@ -1474,16 +1499,31 @@ async function getPayslipPdf(req, res, next) {
 
 async function exportPayrollCsv(req, res, next) {
   try {
-    const { runs } = await payroll.listRuns({ limit: 200, offset: 0 });
+    // Paged to completion like every other export, rather than a single 200-row page
+    // that silently dropped run 201+. listRuns orders by period DESC, but a payroll run
+    // is immutable once posted and rows only append, so a stable snapshot is not at risk
+    // here the way the journal/pos exports are.
+    const rows = [];
+    const PAGE = 200;
+    for (let offset = 0; ; offset += PAGE) {
+      const { runs } = await payroll.listRuns({ limit: PAGE, offset });
+      rows.push(...runs);
+      if (runs.length < PAGE) break;
+    }
     csvHeaders(res, `laun-${todayIso()}.csv`);
+    // Mandatory pension and séreign are separate columns — folding them, as an earlier
+    // version did, hid the séreign figure and overstated the mandatory one.
     res.send(toCsv(
-      ['Tímabil', 'Útborgunardagur', 'Staða', 'Laun', 'Staðgreiðsla', 'Lífeyrir starfsmanns',
-        'Lífeyrir vinnuveitanda', 'Tryggingagjald', 'Félagsgjöld', 'Útborgað', 'Skattár',
-        'Bókað af'],
-      runs.map(r => [
+      ['Tímabil', 'Útborgunardagur', 'Staða', 'Laun', 'Staðgreiðsla',
+        'Lífeyrir starfsmanns', 'Lífeyrir vinnuveitanda',
+        'Séreign starfsmanns', 'Séreign vinnuveitanda',
+        'Tryggingagjald', 'Félagsgjöld', 'Útborgað', 'Skattár', 'Bókað af'],
+      rows.map(r => [
         r.period, r.pay_date, r.status, r.gross_total, r.withholding_total,
-        r.pension_employee_total, r.pension_employer_total, r.social_security_total,
-        r.union_total, r.net_total, r.tax_year, r.posted_by_username || '',
+        r.pension_employee_total, r.pension_employer_total,
+        r.extra_pension_employee_total, r.extra_pension_employer_total,
+        r.social_security_total, r.union_total, r.net_total, r.tax_year,
+        r.posted_by_username || '',
       ])
     ));
   } catch (err) { fail(res, err, next); }
@@ -1537,32 +1577,46 @@ async function createPosSale(req, res, next) {
           ? parseText(body.customer_kennitala, 'customer_kennitala', { maxLen: 20 })
           : null,
         note: parseText(body.note, 'note', { maxLen: 300 }),
+        // A per-attempt token from the till, so a double-tap or a retry after a lost
+        // response returns the first receipt rather than ringing up a second sale.
+        idempotencyKey: body.idempotency_key
+          ? parseText(body.idempotency_key, 'idempotency_key', { maxLen: 80 })
+          : null,
         createdBy: req.user.id,
       });
-      await audit.record(client, {
-        ...audit.actorOf(req),
-        action: 'pos.sale',
-        entityType: 'invoice',
-        entityId: sale.receipt.id,
-        summary: {
-          receipt_number: sale.receipt.invoice_number,
-          tender,
-          gross: sale.totals.total_gross,
-          vat: sale.totals.vat_total,
-          lines: sale.lines.length,
-          entry_number: sale.entry.entry_number,
-        },
-      });
+      // A duplicate (a retry carrying an already-used key) rang up no new sale and
+      // posted no entry, so it is not a fresh pos.sale to audit — it just returns the
+      // first receipt. `sale.entry` is absent in that case.
+      if (!sale.duplicate) {
+        await audit.record(client, {
+          ...audit.actorOf(req),
+          action: 'pos.sale',
+          entityType: 'invoice',
+          entityId: sale.receipt.id,
+          summary: {
+            receipt_number: sale.receipt.invoice_number,
+            tender,
+            gross: sale.totals.total_gross,
+            vat: sale.totals.vat_total,
+            lines: sale.lines.length,
+            entry_number: sale.entry.entry_number,
+          },
+        });
+      }
       return sale;
     });
-    securityLogger.adminAction(req.user.id, 'books.pos.sale', result.receipt.id, {
-      receipt_number: result.receipt.invoice_number, gross: result.totals.total_gross,
-    });
-    res.status(201).json({
+    if (!result.duplicate) {
+      securityLogger.adminAction(req.user.id, 'books.pos.sale', result.receipt.id, {
+        receipt_number: result.receipt.invoice_number, gross: result.totals.total_gross,
+      });
+    }
+    // A duplicate returns 200 (nothing new happened); a fresh sale returns 201.
+    res.status(result.duplicate ? 200 : 201).json({
       receipt: result.receipt,
       lines: result.lines,
       totals: result.totals,
       tender: result.tender,
+      duplicate: Boolean(result.duplicate),
     });
   } catch (err) { fail(res, err, next); }
 }
@@ -1611,7 +1665,12 @@ async function getPosCatalogue(req, res, next) {
   try {
     const search = parseText(req.query.q, 'q', { maxLen: 80 });
     const params = [];
-    const where = ['p.active', 'p.price_isk IS NOT NULL', 'p.price_isk > 0'];
+    // vat_rate is NOT NULL DEFAULT 24 today, so the IS NOT NULL clause is defence in
+    // depth rather than a live filter — it keeps the promise the doc comment makes even
+    // if that column constraint is ever relaxed, so a rate-less product could never reach
+    // the till and be defaulted to 24% (the wrong tax on a book).
+    const where = ['p.active', 'p.price_isk IS NOT NULL', 'p.price_isk > 0',
+      'p.vat_rate IS NOT NULL'];
     if (search) {
       params.push(`%${search}%`);
       where.push(`(p.name ILIKE $${params.length} OR p.sku ILIKE $${params.length})`);
@@ -1644,10 +1703,12 @@ async function exportPosCsv(req, res, next) {
     if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
     if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
 
+    // Ascending order so appends land at the tail and OFFSET pages do not shift under a
+    // concurrent sale (see listReceipts).
     const rows = [];
     const PAGE = 500;
     for (let offset = 0; ; offset += PAGE) {
-      const page = await posService.listReceipts({ limit: PAGE, offset, from, to });
+      const page = await posService.listReceipts({ limit: PAGE, offset, from, to, order: 'asc' });
       rows.push(...page.receipts);
       if (page.receipts.length < PAGE) break;
     }

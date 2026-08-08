@@ -5,7 +5,7 @@
 // exactly how an "export all" that only held 200 rows came to look complete in the
 // system this replaces.
 import { isAuthenticated, canSeeView } from '../services/auth.js';
-import { fetchInvoices } from '../services/adminBookkeeping.js';
+import { fetchInvoices, invoicesCsvUrl } from '../services/adminBookkeeping.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigate, navigateReplace } from '../navigate.js';
@@ -36,6 +36,11 @@ export class AdminInvoicesView {
         <div>
           <h1 class="admin-title">${escHtml(t('adminBooks.invoices.title'))}</h1>
           <p class="admin-shop__hint">${escHtml(t('adminBooks.invoices.subtitle'))}</p>
+        </div>
+        <div class="books-actions">
+          <a class="btn btn--ghost" id="inv-csv" href="${escHtml(invoicesCsvUrl())}">
+            ${escHtml(t('adminBooks.exportCsv'))}
+          </a>
         </div>
       </div>
       <div class="books-filters">
@@ -102,6 +107,10 @@ export class AdminInvoicesView {
     const generation = ++this._generation;
     const body = this._el.querySelector('#inv-body');
     body.innerHTML = `<div class="admin-loading">${escHtml(t('form.loading'))}</div>`;
+    // Keep the CSV export in step with the status filter on screen, so a download
+    // matches what the user is looking at rather than silently exporting everything.
+    const csv = this._el.querySelector('#inv-csv');
+    if (csv) csv.href = invoicesCsvUrl({ status: this._state.status });
     try {
       const data = await fetchInvoices({
         q: this._state.q,

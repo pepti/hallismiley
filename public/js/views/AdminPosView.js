@@ -17,6 +17,7 @@
 import { isAuthenticated, canSeeView, isAdmin } from '../services/auth.js';
 import {
   fetchPosCatalogue, fetchPosDay, fetchPosReceipts, ringUpSale, receiptPdfUrl, posCsvUrl,
+  newIdempotencyKey,
 } from '../services/adminBookkeeping.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
@@ -27,10 +28,6 @@ import { isk, statTile, errorBanner } from './booksShared.js';
 
 const TENDERS = ['cash', 'card'];
 const VAT_RATES = [24, 11, 0];
-
-function isoToday() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // The same extraction the server does. Integer arithmetic, rounded once — matching
 // server/utils/vat.js splitVatInclusive so the preview cannot drift by a króna.
@@ -55,6 +52,8 @@ export class AdminPosView {
     this._receipts = [];
     this._lastReceipt = null;
     this._nextKey = 1;
+    // One idempotency token per basket, minted on first submit and retired on success.
+    this._saleKey = null;
   }
 
   async render() {
@@ -445,10 +444,17 @@ export class AdminPosView {
     this._busy = true;
     const button = form.querySelector('#pos-finish-btn');
     if (button) button.disabled = true;
+    // One token per attempt, generated here and reused if this submit is retried, so a
+    // double-tap or a lost response cannot ring up the sale twice. Minted once per basket
+    // so a genuine retry of THIS sale carries the same key.
+    if (!this._saleKey) this._saleKey = newIdempotencyKey();
     try {
       const { receipt } = await ringUpSale({
         tender: form.elements.tender.value,
-        sold_at: isoToday(),
+        // No sold_at: the server stamps the date, so a browser a few timezones off cannot
+        // book the sale to the wrong day (or, west of UTC late in the evening, to a
+        // "future" date the server then refuses).
+        idempotency_key: this._saleKey,
         customer_name: form.elements.customer_name.value.trim(),
         customer_kennitala: form.elements.customer_kennitala.value.trim() || null,
         lines: this._basket.map(l => ({
@@ -461,8 +467,10 @@ export class AdminPosView {
         })),
       });
       // Cleared only after the server has confirmed. Clearing optimistically would lose
-      // the basket if the request failed, with a customer standing there.
+      // the basket if the request failed, with a customer standing there. The sale key is
+      // retired here too, so the NEXT sale gets a fresh one.
       this._basket = [];
+      this._saleKey = null;
       this._lastReceipt = {
         id: receipt.id,
         invoice_number: receipt.invoice_number,

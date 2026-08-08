@@ -19,12 +19,14 @@
 const db = require('../../config/database');
 const { toIsoDate } = require('../../utils/booksDate');
 
-// Reports are read-only, so a bad range is the only failure mode worth typing.
+// Reports are read-only, so a bad range is the only failure mode worth typing. Takes the
+// same (message, status, code) shape as every other books error class.
 class ReportError extends Error {
-  constructor(message, status = 400) {
+  constructor(message, status = 400, code = null) {
     super(message);
     this.name = 'ReportError';
     this.status = status;
+    if (code) this.code = code;
   }
 }
 
@@ -46,7 +48,7 @@ function naturalBalance(type, debit, credit) {
  */
 async function journal({
   from = null, to = null, sourceType = null, accountCode = null,
-  limit = 50, offset = 0,
+  limit = 50, offset = 0, order = 'desc',
 } = {}, client = db) {
   const where = ['je.posted_at IS NOT NULL'];
   const params = [];
@@ -68,7 +70,8 @@ async function journal({
        FROM journal_entries je
        LEFT JOIN users u ON u.id = je.created_by
       WHERE ${where.join(' AND ')}
-      ORDER BY je.entry_date DESC, je.entry_number DESC
+      ORDER BY je.entry_date ${order === 'asc' ? 'ASC' : 'DESC'},
+               je.entry_number ${order === 'asc' ? 'ASC' : 'DESC'}
       LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );

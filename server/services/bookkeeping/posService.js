@@ -31,7 +31,7 @@ const db = require('../../config/database');
 const ledger = require('./ledgerService');
 const invoiceService = require('./invoiceService');
 const Setting = require('../../models/Setting');
-const { assertAccountingDate, todayIso } = require('../../utils/booksDate');
+const { assertAccountingDate, todayIso, toIsoDate } = require('../../utils/booksDate');
 const {
   assertIntegerIsk, resolveVatRate, splitVatInclusive, STANDARD_VAT_RATE,
 } = require('../../utils/vat');
@@ -41,7 +41,7 @@ class PosError extends Error {
     super(message);
     this.name = 'PosError';
     this.status = status;
-    this.code = code;
+    if (code) this.code = code;
   }
 }
 
@@ -227,12 +227,14 @@ function saleJournalLines({ totals, lines, tender }) {
  *   customerName optional, for a buyer who wants their name on the receipt
  *   customerKennitala optional, for a business buyer claiming input VAT
  *   note         optional
+ *   idempotencyKey optional, per-attempt token; a retry with the same one returns the
+ *                first sale instead of ringing up a second
  *   createdBy    required
  */
 async function sell(client, opts = {}) {
   const {
     lines: requested, tender = 'cash', soldAt = null, customerName = '',
-    customerKennitala = null, note = '', createdBy,
+    customerKennitala = null, note = '', idempotencyKey = null, createdBy,
   } = opts;
   if (!createdBy) throw new PosError('sell requires createdBy', 500);
   if (!TENDERS.includes(tender)) {
@@ -240,6 +242,16 @@ async function sell(client, opts = {}) {
       `A counter sale is settled in cash or by card, not by ${tender}. A bank transfer should be an invoice, so it can be reconciled against the bank line.`,
       400, 'BAD_TENDER'
     );
+  }
+
+  // Idempotency, so a double-tap or a retried-after-lost-response sale does not ring up
+  // a second one. The key is stored under a 'client:' prefix on the payment; the unique
+  // index (migration 079) is the real guard — the pre-check here just skips the work when
+  // the answer is already known.
+  const paymentKey = idempotencyKey ? `client:${String(idempotencyKey).trim()}` : `pos-`;
+  if (idempotencyKey) {
+    const existing = await findByClientKey(client, paymentKey);
+    if (existing) return existing;
   }
 
   // Not future-dated, ever: a receipt is evidence that money changed hands, and it
@@ -304,16 +316,44 @@ async function sell(client, opts = {}) {
   // own journal entry — the sale entry above already moved the cash, and a second one
   // would double the takings. That is why this inserts directly rather than calling
   // recordSettlement, which exists to post the cash leg for an invoice.
-  await client.query(
-    `INSERT INTO payments
-       (invoice_id, direction, amount, method, received_at, reference, idempotency_key, created_by)
-     VALUES ($1,'in',$2,$3,$4::date,$5,$6,$7)`,
-    [receipt.id, totals.total_gross, tender, issuedAt,
-      `Kassasala ${number}`, `pos-${receipt.id}`, createdBy]
-  );
+  // A client key is stored as-is (already 'client:'-prefixed and unique across POS
+  // sales); without one the auto 'pos-<id>' key is unique per receipt and dedupes
+  // nothing, which is the pre-079 behaviour for callers that do not send a token.
+  const storedKey = idempotencyKey ? paymentKey : `pos-${receipt.id}`;
+  try {
+    await client.query(
+      `INSERT INTO payments
+         (invoice_id, direction, amount, method, received_at, reference, idempotency_key, created_by)
+       VALUES ($1,'in',$2,$3,$4::date,$5,$6,$7)`,
+      [receipt.id, totals.total_gross, tender, issuedAt,
+        `Kassasala ${number}`, storedKey, createdBy]
+    );
+  } catch (err) {
+    // A concurrent retry with the same client key that got past the pre-check collides
+    // here on uniq_payments_client_key. This whole transaction rolls back — the counter
+    // number with it — so the series stays gapless; the caller re-runs and the pre-check
+    // then returns the winner's receipt.
+    if (err.code === '23505' && idempotencyKey) {
+      throw new PosError('This sale is already being rung up', 409, 'IN_PROGRESS');
+    }
+    throw err;
+  }
 
   return {
-    receipt: { ...receipt, invoice_number: Number(receipt.invoice_number) },
+    // Coerced like listReceipts does, so the caller sees whole ISK numbers and ISO
+    // dates rather than the pg string/timestamp shapes on the freshly-inserted row.
+    receipt: {
+      ...receipt,
+      invoice_number: Number(receipt.invoice_number),
+      subtotal_net: Number(receipt.subtotal_net),
+      vat_total: Number(receipt.vat_total),
+      total_gross: Number(receipt.total_gross),
+      amount_paid: Number(receipt.amount_paid),
+      discount_total: Number(receipt.discount_total),
+      shipping_gross: Number(receipt.shipping_gross),
+      issued_at: toIsoDate(receipt.issued_at),
+      due_at: receipt.due_at ? toIsoDate(receipt.due_at) : null,
+    },
     lines,
     totals,
     entry,
@@ -332,13 +372,18 @@ async function dayTotals({ from = null, to = null } = {}, client = db) {
   const day = from || todayIso();
   const until = to || day;
 
+  // Money in AND money back out, per tender. Refunds are cash (or a card reversal) that
+  // physically leaves the drawer, so `gross` is takings NET of refunds — the figure that
+  // should match the count at closing. `refunded` is broken out beside it so the two
+  // facts (a smaller day vs a day with a refund) stay distinct.
   const { rows: byTender } = await client.query(
     `SELECT p.method,
-            COUNT(*)::int AS sales,
-            COALESCE(SUM(p.amount), 0)::bigint AS gross
+            COUNT(*) FILTER (WHERE p.direction = 'in')::int AS sales,
+            COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'in'), 0)::bigint AS taken,
+            COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'out'), 0)::bigint AS refunded
        FROM payments p
        JOIN invoices i ON i.id = p.invoice_id
-      WHERE i.series = 'receipt' AND p.direction = 'in'
+      WHERE i.series = 'receipt'
         AND i.issued_at >= $1::date AND i.issued_at <= $2::date
       GROUP BY p.method
       ORDER BY p.method`,
@@ -371,25 +416,94 @@ async function dayTotals({ from = null, to = null } = {}, client = db) {
   return {
     range: { from: day, to: until },
     by_tender: byTender.map(r => ({
-      method: r.method, sales: r.sales, gross: Number(r.gross),
+      method: r.method,
+      sales: r.sales,
+      // `gross` stays the net-of-refunds figure the drawer should hold; `taken` and
+      // `refunded` are the two halves for anyone who wants them.
+      gross: Number(r.taken) - Number(r.refunded),
+      taken: Number(r.taken),
+      refunded: Number(r.refunded),
     })),
     by_rate: byRate.map(r => ({
       rate: r.vat_rate, net: Number(r.net), vat: Number(r.vat), gross: Number(r.gross),
     })),
-    // Shown separately rather than netted off: a refunded sale and a smaller day are
-    // different facts, and the drawer needs to know money went back out.
+    // The credit-note total (the sale being reversed on paper). Distinct from the cash
+    // `refunded` above: a goodwill credit note has no refund, and a chargeback has a
+    // refund with no credit note.
     credited: Number(credited[0].gross),
-    total_gross: byTender.reduce((a, r) => a + Number(r.gross), 0),
+    total_gross: byTender.reduce((a, r) => a + (Number(r.taken) - Number(r.refunded)), 0),
   };
 }
 
-async function listReceipts({ limit = 50, offset = 0, from = null, to = null } = {}, client = db) {
+/**
+ * Reconstruct a completed sale from a stored client idempotency key.
+ *
+ * Returns the same shape sell() returns, so a retry is indistinguishable from the first
+ * call to the caller — except for the `duplicate: true` flag, which lets it say "already
+ * rung up" rather than pretending it just happened.
+ */
+async function findByClientKey(client, storedKey) {
+  const { rows } = await client.query(
+    `SELECT p.invoice_id, p.method FROM payments p
+      WHERE p.idempotency_key = $1 LIMIT 1`,
+    [storedKey]
+  );
+  if (!rows.length) return null;
+  const invoiceId = rows[0].invoice_id;
+  const tender = rows[0].method;
+
+  const { rows: inv } = await client.query(`SELECT * FROM invoices WHERE id = $1`, [invoiceId]);
+  const receipt = inv[0];
+  const { rows: lineRows } = await client.query(
+    `SELECT product_id, sku, description, quantity, unit_price_gross, vat_rate,
+            gross_before_discount, discount_gross, line_net, line_vat, line_gross,
+            revenue_account
+       FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order`,
+    [invoiceId]
+  );
+  const lines = lineRows.map(l => ({
+    ...l,
+    quantity: Number(l.quantity),
+    unit_price_gross: Number(l.unit_price_gross),
+    vat_rate: Number(l.vat_rate),
+    gross_before_discount: Number(l.gross_before_discount),
+    discount_gross: Number(l.discount_gross),
+    line_net: Number(l.line_net),
+    line_vat: Number(l.line_vat),
+    line_gross: Number(l.line_gross),
+  }));
+  return {
+    receipt: {
+      ...receipt,
+      invoice_number: Number(receipt.invoice_number),
+      subtotal_net: Number(receipt.subtotal_net),
+      vat_total: Number(receipt.vat_total),
+      total_gross: Number(receipt.total_gross),
+      amount_paid: Number(receipt.amount_paid),
+      discount_total: Number(receipt.discount_total),
+      shipping_gross: Number(receipt.shipping_gross),
+      issued_at: toIsoDate(receipt.issued_at),
+      due_at: receipt.due_at ? toIsoDate(receipt.due_at) : null,
+    },
+    lines,
+    totals: totalsOf(lines),
+    tender,
+    duplicate: true,
+  };
+}
+
+async function listReceipts(
+  { limit = 50, offset = 0, from = null, to = null, order = 'desc' } = {}, client = db
+) {
   const params = [];
   const where = ["i.series = 'receipt'"];
   if (from) { params.push(from); where.push(`i.issued_at >= $${params.length}::date`); }
   if (to) { params.push(to); where.push(`i.issued_at <= $${params.length}::date`); }
   params.push(limit, offset);
 
+  // The receipt number is a gapless counter, so ascending order makes new rows append at
+  // the tail — the shape a paged CSV export needs to avoid a boundary row being emitted
+  // twice when a sale lands mid-export. The screen wants newest first, hence the option.
   const { rows } = await client.query(
     `SELECT i.id, i.invoice_number, i.issued_at, i.customer_name, i.subtotal_net,
             i.vat_total, i.total_gross, i.amount_credited, i.note,
@@ -399,7 +513,7 @@ async function listReceipts({ limit = 50, offset = 0, from = null, to = null } =
        FROM invoices i
        LEFT JOIN users u ON u.id = i.created_by
       WHERE ${where.join(' AND ')}
-      ORDER BY i.invoice_number DESC
+      ORDER BY i.invoice_number ${order === 'asc' ? 'ASC' : 'DESC'}
       LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
@@ -412,7 +526,7 @@ async function listReceipts({ limit = 50, offset = 0, from = null, to = null } =
     receipts: rows.map(r => ({
       ...r,
       invoice_number: Number(r.invoice_number),
-      issued_at: r.issued_at.toISOString().slice(0, 10),
+      issued_at: toIsoDate(r.issued_at),
       subtotal_net: Number(r.subtotal_net),
       vat_total: Number(r.vat_total),
       total_gross: Number(r.total_gross),

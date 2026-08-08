@@ -62,7 +62,7 @@ class PayrollError extends Error {
     super(message);
     this.name = 'PayrollError';
     this.status = status;
-    this.code = code;
+    if (code) this.code = code;
   }
 }
 
@@ -173,9 +173,21 @@ function normaliseBands(raw, year) {
   // band's lower bound is the one below it's ceiling.
   const byCeiling = raw
     .map((b, i) => {
+      // Presence of the KEY is what distinguishes a deliberate open-ended top band
+      // ({upTo: null}) from a band that simply forgot its ceiling. Coercing an absent
+      // key to null silently promotes a shapeless band to the top rate — the exact
+      // "defaulting hid the bug" failure this function exists to refuse, one shape over.
+      const hasKey = Object.prototype.hasOwnProperty.call(b, 'upTo')
+        || Object.prototype.hasOwnProperty.call(b, 'up_to');
+      if (!hasKey) {
+        throw new PayrollError(
+          `${year}'s bands[${i}] has no "upTo". A band with no ceiling must say so explicitly with upTo: null.`,
+          409, 'BANDS_SHAPELESS'
+        );
+      }
       const upTo = b.upTo ?? b.up_to;
       return {
-        // null/undefined means open-ended, which only the top band may be.
+        // Explicit null means open-ended, which only the top band may be.
         upTo: upTo === null || upTo === undefined
           ? null : assertIntegerIsk(upTo, `bands[${i}].upTo`),
         rate_bp: toBp(b.rate, `bands[${i}].rate`),
@@ -701,6 +713,8 @@ function normaliseRun(row) {
     withholding_total: Number(row.withholding_total),
     pension_employee_total: Number(row.pension_employee_total),
     pension_employer_total: Number(row.pension_employer_total),
+    extra_pension_employee_total: Number(row.extra_pension_employee_total || 0),
+    extra_pension_employer_total: Number(row.extra_pension_employer_total || 0),
     social_security_total: Number(row.social_security_total),
     union_total: Number(row.union_total),
     net_total: Number(row.net_total),
@@ -833,28 +847,38 @@ async function createDraftRun(client, { period, payDate, employeeIds = null, not
 
   const check = await preflight(client, { period: p, staff, rates, payDate: date });
 
+  // Mandatory and supplementary (séreign) pension are kept APART, both sides. They are
+  // owed to different custodians — the mandatory fund and the séreign provider — so they
+  // credit different liability accounts (2320 vs 2330). Folding them, as an earlier
+  // version did, overstated 2320 and left 2330 permanently zero, so the séreign
+  // remittance could never be reconciled against its own account.
   const totals = staff.reduce((a, { payslip: s }) => ({
     gross: a.gross + s.gross,
     withholding: a.withholding + s.withholding,
-    pensionEmployee: a.pensionEmployee + s.pension_employee + s.extra_pension_employee,
-    pensionEmployer: a.pensionEmployer + s.pension_employer + s.extra_pension_employer,
+    pensionEmployee: a.pensionEmployee + s.pension_employee,
+    pensionEmployer: a.pensionEmployer + s.pension_employer,
+    extraPensionEmployee: a.extraPensionEmployee + s.extra_pension_employee,
+    extraPensionEmployer: a.extraPensionEmployer + s.extra_pension_employer,
     union: a.union + s.union_dues,
     socialSecurity: a.socialSecurity + s.social_security,
     net: a.net + s.net_pay,
   }), {
     gross: 0, withholding: 0, pensionEmployee: 0, pensionEmployer: 0,
+    extraPensionEmployee: 0, extraPensionEmployer: 0,
     union: 0, socialSecurity: 0, net: 0,
   });
 
   const { rows: runRows } = await client.query(
     `INSERT INTO payroll_runs
        (period, pay_date, tax_year, gross_total, withholding_total,
-        pension_employee_total, pension_employer_total, social_security_total,
-        union_total, net_total, status, preflight, note, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft',$11::jsonb,$12,$13)
+        pension_employee_total, pension_employer_total,
+        extra_pension_employee_total, extra_pension_employer_total,
+        social_security_total, union_total, net_total, status, preflight, note, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft',$13::jsonb,$14,$15)
      RETURNING *`,
     [p, date, rates.year, totals.gross, totals.withholding, totals.pensionEmployee,
-      totals.pensionEmployer, totals.socialSecurity, totals.union, totals.net,
+      totals.pensionEmployer, totals.extraPensionEmployee, totals.extraPensionEmployer,
+      totals.socialSecurity, totals.union, totals.net,
       JSON.stringify(check), String(note || ''), createdBy]
   );
   const run = runRows[0];
@@ -888,18 +912,25 @@ async function createDraftRun(client, { period, payDate, employeeIds = null, not
  * the ledger is for.
  */
 function runJournalLines(run) {
+  const extraEmployee = run.extra_pension_employee_total || 0;
+  const extraEmployer = run.extra_pension_employer_total || 0;
   const lines = [{ accountCode: ACCOUNTS.WAGES, debit: run.gross_total, memo: 'Laun' }];
   const push = (accountCode, side, amount, memo) => {
     if (amount > 0) lines.push({ accountCode, [side]: amount, memo });
   };
   push(ACCOUNTS.SOCIAL_SECURITY, 'debit', run.social_security_total, 'Tryggingagjald');
-  push(ACCOUNTS.PENSION_EMPLOYER, 'debit', run.pension_employer_total,
+  // The employer's pension EXPENSE is the whole employer contribution — mandatory plus
+  // any séreign match. The split into two custodians happens on the liability side only.
+  push(ACCOUNTS.PENSION_EMPLOYER, 'debit', run.pension_employer_total + extraEmployer,
     'Lífeyrisframlag atvinnurekanda');
   push(ACCOUNTS.WITHHOLDING_PAYABLE, 'credit', run.withholding_total, 'Staðgreiðsla launa');
   push(ACCOUNTS.SOCIAL_SECURITY_PAYABLE, 'credit', run.social_security_total,
     'Tryggingagjald til greiðslu');
+  // 2320 = mandatory fund (both sides); 2330 = séreign custodian (both sides).
   push(ACCOUNTS.PENSION_PAYABLE, 'credit',
     run.pension_employee_total + run.pension_employer_total, 'Lífeyrissjóður');
+  push(ACCOUNTS.EXTRA_PENSION_PAYABLE, 'credit', extraEmployee + extraEmployer,
+    'Séreignarsparnaður');
   push(ACCOUNTS.UNION_PAYABLE, 'credit', run.union_total, 'Félagsgjöld');
   push(ACCOUNTS.WAGES_PAYABLE, 'credit', run.net_total, 'Ógreidd laun');
   return lines;
@@ -924,13 +955,23 @@ async function postRun(client, runId, { postedBy, overrideBlockers = null }) {
     throw new PayrollError(`This run is already ${run.status}`, 409, 'NOT_DRAFT');
   }
 
+  // e.* is aliased away from p.id so the join's `id` columns do not collide (pg keeps
+  // the last, silently making p.id the employee id). The payslip id is not needed here.
   const { rows: slips } = await client.query(
-    `SELECT p.id, p.employee_id, p.gross, e.*
+    `SELECT p.employee_id, p.gross, e.*
        FROM payslips p JOIN employees e ON e.id = p.employee_id
       WHERE p.run_id = $1`,
     [run.id]
   );
   if (!slips.length) throw new PayrollError('This run has no payslips', 400, 'EMPTY_RUN');
+  // A run that comes to nothing — everyone on zero salary — has no balanced entry to
+  // post (only the single 6100 leg at zero), so postEntry would reject it as a 500.
+  // Refused here with an explanation instead.
+  if (run.gross_total <= 0) {
+    throw new PayrollError(
+      'This run has no wages to post — every employee is on zero salary', 400, 'ZERO_RUN'
+    );
+  }
 
   // Re-checked rather than trusting the stored preflight: the draft may be days old,
   // and an employee record or the period lock may have changed since.
@@ -1034,13 +1075,32 @@ async function recordWagePayment(client, runId, { amount, paidOn, createdBy, not
   if (run.status !== 'posted' && run.status !== 'settled') {
     throw new PayrollError('Wages can only be paid against a posted run', 409, 'NOT_POSTED');
   }
+  // What has ALREADY been paid against this run, read from the ledger: every wage
+  // payment debits 2350 for this run. Checking the new amount against net alone let a
+  // run be paid in full twice — pay the net, the run flips to 'settled', pay it again,
+  // and the second passed because it too was ≤ net. The cap has to be cumulative.
+  const { rows: paidRows } = await client.query(
+    `SELECT COALESCE(SUM(jl.debit), 0)::bigint AS paid
+       FROM journal_entries je
+       JOIN journal_lines jl ON jl.entry_id = je.id
+       JOIN ledger_accounts la ON la.id = jl.account_id
+      WHERE je.source_type = 'payroll' AND je.source_id = $1
+        AND la.code = $2 AND jl.debit > 0 AND je.posted_at IS NOT NULL`,
+    [run.id, ACCOUNTS.WAGES_PAYABLE]
+  );
+  const alreadyPaid = Number(paidRows[0].paid);
+  const outstanding = run.net_total - alreadyPaid;
+
   const value = assertIntegerIsk(
-    amount === null || amount === undefined ? run.net_total : amount, 'amount'
+    amount === null || amount === undefined ? outstanding : amount, 'amount'
   );
   if (value <= 0) throw new PayrollError('An amount must be greater than zero', 400, 'BAD_AMOUNT');
-  if (value > run.net_total) {
+  if (value > outstanding) {
     throw new PayrollError(
-      `Paying ${value} ISK against a run whose net is ${run.net_total} ISK`, 400, 'OVER_NET'
+      alreadyPaid > 0
+        ? `Paying ${value} ISK against a run with only ${outstanding} ISK still outstanding (net ${run.net_total}, already paid ${alreadyPaid})`
+        : `Paying ${value} ISK against a run whose net is ${run.net_total} ISK`,
+      400, 'OVER_NET'
     );
   }
   const date = assertAccountingDate(paidOn, 'paid_on');
@@ -1057,10 +1117,10 @@ async function recordWagePayment(client, runId, { amount, paidOn, createdBy, not
     ],
   });
 
-  // 'settled' is 072's own word for a run whose wages have gone out. Only marked when
-  // the whole net has been paid — a part payment leaves the run posted and the
-  // remainder visibly outstanding.
-  if (value === run.net_total && run.status === 'posted') {
+  // 'settled' is 072's own word for a run whose wages have gone out. Marked once the
+  // CUMULATIVE payments reach the net — so several part payments settle it, and a single
+  // full payment settles it, but nothing over-pays.
+  if (alreadyPaid + value === run.net_total && run.status === 'posted') {
     await client.query(`UPDATE payroll_runs SET status = 'settled' WHERE id = $1`, [run.id]);
   }
   return { entry };

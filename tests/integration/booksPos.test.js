@@ -399,3 +399,57 @@ describe('the receipt list', () => {
     }
   });
 });
+
+describe('idempotency', () => {
+  it('returns the first receipt for a repeated key instead of ringing up a second sale', async () => {
+    // A double-tap or a retry after a lost response must not create a second sale. The
+    // pre-079 key was derived from the receipt's own fresh UUID, so it could never dedupe.
+    const key = `test-${Math.random().toString(36).slice(2)}`;
+    const first = await ring({ lines: [{ productId }], tender: 'cash', idempotencyKey: key });
+    const second = await ring({ lines: [{ productId }], tender: 'cash', idempotencyKey: key });
+
+    expect(second.duplicate).toBe(true);
+    expect(second.receipt.id).toBe(first.receipt.id);
+    expect(second.receipt.invoice_number).toBe(first.receipt.invoice_number);
+    // Exactly one receipt and one payment exist for that key.
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::int AS n FROM payments WHERE idempotency_key = $1`,
+      [`client:${key}`]
+    );
+    expect(rows[0].n).toBe(1);
+    // And the gapless series advanced by exactly one, not two.
+    const third = await ring({ lines: [{ productId }], tender: 'cash' });
+    expect(third.receipt.invoice_number).toBe(first.receipt.invoice_number + 1);
+  });
+
+  it('rings up a genuinely different sale under a different key', async () => {
+    const a = await ring({ lines: [{ productId }], tender: 'cash', idempotencyKey: `a-${Date.now()}` });
+    const b = await ring({ lines: [{ productId }], tender: 'cash', idempotencyKey: `b-${Date.now()}` });
+    expect(b.receipt.id).not.toBe(a.receipt.id);
+    expect(b.duplicate).toBeUndefined();
+  });
+});
+
+describe('the day’s takings with a refund', () => {
+  it('nets a cash refund out of the drawer figure, and reports it separately', async () => {
+    // A refunded cash sale: the credit note reverses the sale on paper AND a cash refund
+    // leaves the drawer. The drawer figure (gross) must drop by the refund, or the day
+    // never ties to the physical count — which is how the earlier bug was noticed.
+    const day = '2018-07-02';
+    await ledger.withTransaction(c => ledger.ensureFiscalPeriod(c, day));
+    const { receipt } = await ring({ lines: [{ productId }], tender: 'cash', soldAt: day });
+    // The cash going back out.
+    await ledger.withTransaction(c => invoices.recordRefund(c, receipt.id, {
+      amount: 12_400, method: 'cash', receivedAt: day,
+      idempotencyKey: `ref-${Math.random().toString(36).slice(2, 9)}`, createdBy: adminId,
+    }));
+
+    const totals = await pos.dayTotals({ from: day, to: day });
+    const cash = totals.by_tender.find(t => t.method === 'cash');
+    // Took 12.400, refunded 12.400, so the drawer nets to zero — and both halves show.
+    expect(cash.taken).toBe(12_400);
+    expect(cash.refunded).toBe(12_400);
+    expect(cash.gross).toBe(0);
+    expect(totals.total_gross).toBe(0);
+  });
+});

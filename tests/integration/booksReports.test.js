@@ -408,7 +408,13 @@ describe('archive export', () => {
     expect(manifest.purpose).toMatch(/145\/1994/);
 
     const { checked, failures } = await archive.verify(outDir);
-    expect(checked).toBe(manifest.files.length + manifest.documents.length);
+    // verify() counts a file only if its bytes are on disk to hash. Every CSV is, and so
+    // is every document that HAD a source file at export time. A document whose source was
+    // already missing gets an `error` in the manifest and no copy, so it is not counted —
+    // and other suites share this database, so which documents are in that state is not
+    // under this test's control. The count therefore excludes the errored ones.
+    const verifiableDocs = manifest.documents.filter(d => !d.error).length;
+    expect(checked).toBe(manifest.files.length + verifiableDocs);
 
     // Every CSV the archive wrote must verify. That is fully under this test's control.
     // Note the split: a failure reads "<path>: <reason>", so the path has to be separated

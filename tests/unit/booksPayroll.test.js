@@ -334,13 +334,38 @@ describe('journal legs', () => {
 
   it('omits legs that would be zero', () => {
     // A zero-amount leg violates the one-side CHECK on journal_lines, so an empty run
-    // must produce no such legs rather than a row of noughts.
+    // must produce no such legs rather than a row of noughts. (Posting such a run is
+    // refused earlier — see the integration test — so this only proves the leg shape.)
     const lines = payroll.runJournalLines({
       ...run,
       gross_total: 0, withholding_total: 0, pension_employee_total: 0,
       pension_employer_total: 0, union_total: 0, social_security_total: 0, net_total: 0,
     });
     expect(lines).toEqual([{ accountCode: '6100', debit: 0, memo: 'Laun' }]);
+  });
+
+  it('credits séreignarsparnaður to 2330, apart from the mandatory fund in 2320', () => {
+    // The bug this pins: folding séreign into the mandatory total credited it all to
+    // 2320 and left 2330 permanently zero, so the séreign custodian's remittance could
+    // never be reconciled. Employee séreign 24.000, employer match 12.000.
+    const withExtra = {
+      ...run,
+      extra_pension_employee_total: 24_000,
+      extra_pension_employer_total: 12_000,
+      // The employee's séreign comes off the net too, so a consistent run reduces net by
+      // the employee's 24.000 (455.600 − 24.000). Otherwise the entry cannot balance.
+      net_total: 455_600 - 24_000,
+    };
+    const lines = payroll.runJournalLines(withExtra);
+    const byAccount = Object.fromEntries(lines.map(l => [l.accountCode, l]));
+    expect(byAccount['2320'].credit).toBe(24_000 + 69_000);   // mandatory only, both sides
+    expect(byAccount['2330'].credit).toBe(24_000 + 12_000);   // séreign only, both sides
+    // The employer's pension EXPENSE (6120) still carries its whole contribution.
+    expect(byAccount['6120'].debit).toBe(69_000 + 12_000);
+    // And it still balances.
+    const debit = lines.reduce((a, l) => a + (l.debit || 0), 0);
+    const credit = lines.reduce((a, l) => a + (l.credit || 0), 0);
+    expect(debit).toBe(credit);
   });
 });
 
@@ -398,6 +423,23 @@ describe('normaliseBands', () => {
     expect(() => payroll.normaliseBands(
       [{ upTo: null, rate: 0.30 }, { upTo: null, rate: 0.46 }], 2026
     )).toThrow(/open-ended/);
+  });
+
+  it('refuses a HALF-shapeless upper-bound table (a band that forgot its upTo)', () => {
+    // The failure one shape over from the one above: an upper-bound table where one band
+    // has no upTo KEY at all was coerced to null and silently promoted to the open-ended
+    // top rate. An explicit upTo: null is a deliberate top band; an absent key is a
+    // mistake, and the two must not be conflated.
+    expect(() => payroll.normaliseBands(
+      [{ upTo: 500_000, rate: 0.3149 }, { rate: 0.4629 }], 2026
+    )).toThrow(/no "upTo"/);
+    // The explicit-null top band is still accepted.
+    expect(payroll.normaliseBands(
+      [{ upTo: 500_000, rate: 0.3149 }, { upTo: null, rate: 0.4629 }], 2026
+    )).toEqual([
+      { income_from: 0, rate_bp: 3149 },
+      { income_from: 500_000, rate_bp: 4629 },
+    ]);
   });
 
   it('taxes a salary in the second band across two slices, not one', () => {
