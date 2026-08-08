@@ -53,6 +53,7 @@ export const ADMIN_NAV = [
     { id: 'bank',     route: '/admin/books/bank',     labelKey: 'admin.nav.bank',     icon: 'bank' },
     { id: 'ledger',   route: '/admin/books/ledger',   labelKey: 'admin.nav.ledger',   icon: 'ledger' },
     { id: 'payroll',  route: '/admin/books/payroll',  labelKey: 'admin.nav.payroll',  icon: 'users' },
+    { id: 'pos',      route: '/admin/books/pos',      labelKey: 'admin.nav.pos',      icon: 'till' },
   ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },

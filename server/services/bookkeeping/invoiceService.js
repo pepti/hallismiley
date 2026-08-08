@@ -916,6 +916,7 @@ module.exports = {
   pickCustomer,
   buildLines,
   invoiceJournalLines,
+  insertLines,
   readOrderForInvoicing,
   createFromOrder,
 };

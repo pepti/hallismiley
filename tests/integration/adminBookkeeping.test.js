@@ -30,7 +30,7 @@ let orderId; let productId;
 // Upserted rather than created: `roles` has no FK to `users`, so cleanTables()
 // leaves it standing between tests and a plain INSERT collides on the second run.
 async function makeBooksReaderRole() {
-  const views = ['books', 'invoices', 'ar', 'vat', 'ledger', 'payroll'];
+  const views = ['books', 'invoices', 'ar', 'vat', 'ledger', 'payroll', 'pos'];
   const { rows } = await db.query(
     `INSERT INTO roles (name, description, view_access, is_system)
      VALUES ('bokari-test', 'Bókari (test) — read-only books access', $1::jsonb, FALSE)
@@ -664,5 +664,112 @@ describe('payroll over HTTP', () => {
     expect(Array.isArray(res.body.liabilities)).toBe(true);
     expect(res.body.liabilities.map(l => l.code))
       .toEqual(expect.arrayContaining(['2300', '2310', '2320', '2350']));
+  });
+});
+
+// ── Counter sales ────────────────────────────────────────────────────────────
+
+describe('counter sales over HTTP', () => {
+  it('lets a pos reader see the day but not ring up a sale', async () => {
+    // Someone on the till needs the day's figures; issuing a statutory sales document
+    // and posting to the books is a different kind of act.
+    await request(app).get(`${BASE}/pos/day`).set('Cookie', readerCookie).expect(200);
+    await request(app).get(`${BASE}/pos/receipts`).set('Cookie', readerCookie).expect(200);
+    await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', readerCookie)
+      .send({ tender: 'cash', lines: [{ description: 'x', unit_price_gross: 100, vat_rate: 24 }] })
+      .expect(403);
+  });
+
+  it('rejects a stranger', async () => {
+    await request(app).get(`${BASE}/pos/day`).set('Cookie', strangerCookie).expect(403);
+  });
+
+  it('rings up a sale, extracting VAT from the price', async () => {
+    // 12.400 at 24% → net 10.000, VAT 2.400. Adding VAT on top would produce a receipt
+    // for 15.376, which is money the customer never handed over.
+    const res = await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', adminCookie)
+      .send({
+        tender: 'cash',
+        lines: [{ description: 'Eikarborð', unit_price_gross: 12_400, vat_rate: 24 }],
+      })
+      .expect(201);
+    expect(res.body.totals).toMatchObject({
+      total_gross: 12_400, subtotal_net: 10_000, vat_total: 2_400,
+    });
+    expect(res.body.receipt.series).toBe('receipt');
+    expect(Number(res.body.receipt.amount_paid)).toBe(12_400);
+  });
+
+  it('serves the receipt through the same PDF route as an invoice', async () => {
+    // A receipt is a row in the same sales ledger, so it prints through the same
+    // endpoint — the renderer switches its heading on the series.
+    const sale = await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', adminCookie)
+      .send({ tender: 'card', lines: [{ description: 'Hilla', unit_price_gross: 6_200, vat_rate: 24 }] })
+      .expect(201);
+    const pdf = await request(app).get(`${BASE}/invoices/${sale.body.receipt.id}/pdf`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(pdf.headers['content-type']).toMatch(/application\/pdf/);
+    expect(pdf.headers['cache-control']).toMatch(/no-store/);
+  });
+
+  it.each([
+    [{ tender: 'bank_transfer', lines: [{ description: 'x', unit_price_gross: 100, vat_rate: 24 }] },
+      'a bank transfer at the till'],
+    [{ tender: 'cash', lines: [] }, 'an empty sale'],
+    [{ tender: 'cash', lines: [{ description: 'x', unit_price_gross: 100 }] },
+      'a free-text line with no VAT rate'],
+    [{ tender: 'cash', lines: [{ description: 'x', unit_price_gross: 100, vat_rate: 15 }] },
+      'a rate outside the statutory set'],
+    [{ tender: 'cash', lines: [{ description: '', unit_price_gross: 100, vat_rate: 24 }] },
+      'no description'],
+    [{ tender: 'cash', lines: [{ description: 'x', unit_price_gross: -100, vat_rate: 24 }] },
+      'a negative price'],
+    [{ tender: 'cash', lines: [{ description: 'x', unit_price_gross: [100], vat_rate: 24 }] },
+      'an array where an amount belongs'],
+    [{ lines: [{ description: 'x', unit_price_gross: 100, vat_rate: 24 }] }, 'no tender'],
+  ])('returns 4xx for %#: %s', async (body) => {
+    const res = await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', adminCookie).send(body);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('reports the day split by tender and by rate', async () => {
+    await request(app).post(`${BASE}/pos/sales`)
+      .set('Cookie', adminCookie)
+      .send({ tender: 'cash', lines: [{ description: 'Bók', unit_price_gross: 2_220, vat_rate: 11 }] })
+      .expect(201);
+
+    const res = await request(app).get(`${BASE}/pos/day`)
+      .set('Cookie', adminCookie).expect(200);
+    // Split by tender because that is how a drawer is counted; a single total answers
+    // neither the cash question nor the card one.
+    expect(res.body.by_tender.length).toBeGreaterThan(0);
+    expect(res.body.by_rate.map(r => r.rate)).toEqual(expect.arrayContaining([11]));
+    for (const r of res.body.by_rate) expect(r.gross).toBe(r.net + r.vat);
+  });
+
+  it('offers only products a till can sell', async () => {
+    const res = await request(app).get(`${BASE}/pos/catalogue`)
+      .set('Cookie', adminCookie).expect(200);
+    for (const p of res.body.products) {
+      expect(p.price_isk).toBeGreaterThan(0);
+    }
+  });
+
+  it('400s a malformed date rather than scanning everything', async () => {
+    await request(app).get(`${BASE}/pos/day?date=abc`).set('Cookie', adminCookie).expect(400);
+    await request(app).get(`${BASE}/pos/receipts?limit=-1`).set('Cookie', adminCookie).expect(400);
+  });
+
+  it('serves the CSV export without a route parameter swallowing it', async () => {
+    const res = await request(app).get(`${BASE}/pos/export.csv`)
+      .set('Cookie', adminCookie).expect(200);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.text.charCodeAt(0)).toBe(0xFEFF);
   });
 });

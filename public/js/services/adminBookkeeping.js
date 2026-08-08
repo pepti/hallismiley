@@ -258,3 +258,15 @@ export const payPayrollRun = (id, body) =>
 
 export const payslipPdfUrl = (id) => `${BASE}/payroll/payslips/${encodeURIComponent(id)}/pdf`;
 export const payrollCsvUrl = () => `${BASE}/payroll/export.csv`;
+
+// ── Counter sales ────────────────────────────────────────────────────────────
+
+export const fetchPosCatalogue = (q) => get('/pos/catalogue', q ? { q } : {});
+export const fetchPosDay = (params) => get('/pos/day', params);
+export const fetchPosReceipts = (params) => get('/pos/receipts', params);
+export const ringUpSale = (body) => send('POST', '/pos/sales', body);
+export const posCsvUrl = (params = {}) => withQuery(`${BASE}/pos/export.csv`, params);
+
+// A receipt is a row in the same sales ledger as an invoice, so it prints through the
+// same endpoint — the PDF renderer switches its own heading on the series.
+export const receiptPdfUrl = (id) => invoicePdfUrl(id);

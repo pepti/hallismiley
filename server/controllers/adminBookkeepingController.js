@@ -20,6 +20,7 @@ const vatService = require('../services/bookkeeping/vatService');
 const reconciliation = require('../services/bookkeeping/reconciliationService');
 const reports = require('../services/bookkeeping/reportService');
 const payroll = require('../services/bookkeeping/payrollService');
+const posService = require('../services/bookkeeping/posService');
 const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
 const { toCsv, csvHeaders } = require('../utils/csv');
@@ -1489,6 +1490,181 @@ async function exportPayrollCsv(req, res, next) {
 }
 
 
+// ── Counter sales ────────────────────────────────────────────────────────────
+
+/**
+ * Ring up a sale.
+ *
+ * One request, one transaction, one receipt. There is deliberately no "start a sale"
+ * endpoint: a half-open transaction at a till is a receipt printed with no entry posted,
+ * or cash in the drawer against no document, and at a counter nobody goes back to check.
+ */
+async function createPosSale(req, res, next) {
+  try {
+    const body = req.body || {};
+    const tender = parseEnum(body.tender, posService.TENDERS, 'tender');
+    if (!tender) throw new BadRequest(`tender must be one of: ${posService.TENDERS.join(', ')}`);
+
+    if (!Array.isArray(body.lines) || !body.lines.length) {
+      throw new BadRequest('A sale needs at least one line');
+    }
+    if (body.lines.length > posService.MAX_LINES) {
+      throw new BadRequest(`A sale may have at most ${posService.MAX_LINES} lines`);
+    }
+    const lines = body.lines.map((l, i) => ({
+      productId: l.product_id ? parseId(l.product_id, `lines[${i}].product_id`) : null,
+      description: parseText(l.description, `lines[${i}].description`, { maxLen: 300 }),
+      quantity: l.quantity === undefined ? 1 : parseAmount(l.quantity, `lines[${i}].quantity`),
+      // A zero price is legitimate on one line of a basket (a freebie alongside a sale),
+      // so it is allowed here and only the SALE total is required to be positive.
+      unitPriceGross: l.unit_price_gross === undefined || l.unit_price_gross === null
+        || l.unit_price_gross === ''
+        ? null
+        : (Number(l.unit_price_gross) === 0
+          ? 0 : parseAmount(l.unit_price_gross, `lines[${i}].unit_price_gross`)),
+      vatRate: l.vat_rate === undefined || l.vat_rate === null || l.vat_rate === ''
+        ? null : Number(l.vat_rate),
+      isService: Boolean(l.is_service),
+    }));
+
+    const result = await ledger.withTransaction(async (client) => {
+      const sale = await posService.sell(client, {
+        lines,
+        tender,
+        soldAt: body.sold_at || null,
+        customerName: parseText(body.customer_name, 'customer_name', { maxLen: 200 }),
+        customerKennitala: body.customer_kennitala
+          ? parseText(body.customer_kennitala, 'customer_kennitala', { maxLen: 20 })
+          : null,
+        note: parseText(body.note, 'note', { maxLen: 300 }),
+        createdBy: req.user.id,
+      });
+      await audit.record(client, {
+        ...audit.actorOf(req),
+        action: 'pos.sale',
+        entityType: 'invoice',
+        entityId: sale.receipt.id,
+        summary: {
+          receipt_number: sale.receipt.invoice_number,
+          tender,
+          gross: sale.totals.total_gross,
+          vat: sale.totals.vat_total,
+          lines: sale.lines.length,
+          entry_number: sale.entry.entry_number,
+        },
+      });
+      return sale;
+    });
+    securityLogger.adminAction(req.user.id, 'books.pos.sale', result.receipt.id, {
+      receipt_number: result.receipt.invoice_number, gross: result.totals.total_gross,
+    });
+    res.status(201).json({
+      receipt: result.receipt,
+      lines: result.lines,
+      totals: result.totals,
+      tender: result.tender,
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function listPosReceipts(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+    if (from && to && from > to) throw new BadRequest(`from (${from}) is after to (${to})`);
+    const result = await posService.listReceipts({ limit, offset, from, to });
+    res.json({ ...result, limit, offset });
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * The day's takings.
+ *
+ * Split by tender because that is how a drawer is counted at closing: the cash figure
+ * should equal what is physically there and the card figure should equal what the
+ * acquirer says it will settle. A single total answers neither question.
+ */
+async function getPosDay(req, res, next) {
+  try {
+    const day = req.query.date
+      ? assertAccountingDate(req.query.date, 'date', { allowFuture: true })
+      : todayIso();
+    const to = req.query.to
+      ? assertAccountingDate(req.query.to, 'to', { allowFuture: true })
+      : day;
+    if (day > to) throw new BadRequest(`date (${day}) is after to (${to})`);
+    res.json(await posService.dayTotals({ from: day, to }));
+  } catch (err) { fail(res, err, next); }
+}
+
+/**
+ * What the till can sell.
+ *
+ * Only what has a price and a VAT rate, because a till cannot ask questions. A product
+ * with no rate would default to 24% somewhere downstream, and defaulting a book to 24%
+ * is the wrong tax rather than a rounding preference.
+ */
+async function getPosCatalogue(req, res, next) {
+  try {
+    const search = parseText(req.query.q, 'q', { maxLen: 80 });
+    const params = [];
+    const where = ['p.active', 'p.price_isk IS NOT NULL', 'p.price_isk > 0'];
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(p.name ILIKE $${params.length} OR p.sku ILIKE $${params.length})`);
+    }
+    const { rows } = await db.query(
+      `SELECT p.id, p.name, p.sku, p.price_isk, p.vat_rate, p.is_bookable
+         FROM products p
+        WHERE ${where.join(' AND ')}
+        ORDER BY p.name
+        LIMIT 200`,
+      params
+    );
+    res.json({
+      products: rows.map(p => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price_isk: Number(p.price_isk),
+        vat_rate: p.vat_rate === null ? null : Number(p.vat_rate),
+        is_service: Boolean(p.is_bookable),
+      })),
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function exportPosCsv(req, res, next) {
+  try {
+    let from = null;
+    let to = null;
+    if (req.query.from) from = assertAccountingDate(req.query.from, 'from', { allowFuture: true });
+    if (req.query.to) to = assertAccountingDate(req.query.to, 'to', { allowFuture: true });
+
+    const rows = [];
+    const PAGE = 500;
+    for (let offset = 0; ; offset += PAGE) {
+      const page = await posService.listReceipts({ limit: PAGE, offset, from, to });
+      rows.push(...page.receipts);
+      if (page.receipts.length < PAGE) break;
+    }
+    csvHeaders(res, `kassasala-${todayIso()}.csv`);
+    res.send(toCsv(
+      ['Kvittun nr.', 'Dagsetning', 'Greiðslumáti', 'Viðskiptavinur', 'Án VSK', 'VSK',
+        'Með VSK', 'Kreditfært', 'Athugasemd', 'Afgreitt af'],
+      rows.map(r => [
+        r.invoice_number, r.issued_at, r.tender || '', r.customer_name,
+        r.subtotal_net, r.vat_total, r.total_gross, r.amount_credited,
+        r.note || '', r.created_by_username || '',
+      ])
+    ));
+  } catch (err) { fail(res, err, next); }
+}
+
+
 // ── CSV exports ──────────────────────────────────────────────────────────────
 //
 // Server-side and unbounded-safe. The client-side "export all" pattern that
@@ -1611,6 +1787,11 @@ module.exports = {
   payPayrollRun,
   getPayslipPdf,
   exportPayrollCsv,
+  createPosSale,
+  listPosReceipts,
+  getPosDay,
+  getPosCatalogue,
+  exportPosCsv,
   getReconciliationStatus,
   listBankTransactions,
   importBankStatement,

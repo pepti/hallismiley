@@ -425,3 +425,85 @@
 @media (max-width: 720px) {
   .books-band__row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Phase 9: the till ────────────────────────────────────────────────────── */
+
+/* Catalogue on the left, the sale on the right. The sale sticks, because at a counter
+   the total is what both people are looking at. */
+.books-pos {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+.books-pos__search { display: block; margin-bottom: 0.6rem; }
+.books-pos__search input { width: 100%; }
+
+/* Tiles rather than a list: a till is used by touch and by glance, and a row of text
+   is neither. */
+.books-pos__products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+.books-pos__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.books-pos__tile:hover { border-color: var(--accent-amber); }
+.books-pos__tile-name { font-size: 0.85rem; line-height: 1.25; }
+.books-pos__tile-price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.books-pos__tile-vat { font-size: 0.72rem; color: var(--text-muted); }
+
+.books-pos__freeform {
+  margin-top: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+}
+.books-pos__freeform > summary { cursor: pointer; font-size: 0.9rem; }
+
+.books-pos__basket {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  padding: 0.85rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+}
+.books-pos__rate { margin-left: 0.4rem; font-size: 0.72rem; color: var(--text-muted); }
+.books-pos__qty {
+  width: 1.5rem;
+  padding: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.books-pos__vat th { font-weight: 400; color: var(--text-muted); font-size: 0.85rem; }
+/* The figure the customer is about to hand over. Nothing else on the screen competes. */
+.books-pos__total th {
+  border-top: 2px solid var(--accent-amber);
+  padding-top: 0.4rem;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 900px) {
+  .books-pos { grid-template-columns: 1fr; }
+  .books-pos__basket { position: static; }
+}

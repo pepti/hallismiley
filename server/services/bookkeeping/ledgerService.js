@@ -252,15 +252,21 @@ async function postEntry(client, entry) {
   const created = rows[0];
 
   // One multi-row INSERT rather than a loop.
+  //
+  // vat_rate is in this list deliberately. It was prepared above and then dropped from
+  // the INSERT, so the column was null on every line ever written — invoices, expenses
+  // and all. The VSK return survived that because it derives from each account's
+  // vat_code rather than from the line, but the journal export's "VSK %" column was
+  // always blank, and anything added later that trusted the line would have been wrong.
   const values = [];
   const params = [];
   prepared.forEach((line, i) => {
-    const b = i * 6;
-    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`);
-    params.push(created.id, line.accountId, line.debit, line.credit, line.memo, i);
+    const b = i * 7;
+    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7})`);
+    params.push(created.id, line.accountId, line.debit, line.credit, line.memo, i, line.vatRate);
   });
   await client.query(
-    `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order)
+    `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order, vat_rate)
      VALUES ${values.join(', ')}`,
     params
   );
@@ -370,9 +376,10 @@ async function createDraft(client, { entryDate, memo, sourceType = 'manual', cre
   for (const [i, line] of lines.entries()) {
     const account = await accountByCode(line.accountCode, client);
     await client.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [draft.id, account.id, line.debit || 0, line.credit || 0, line.memo || '', i]
+      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order, vat_rate)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [draft.id, account.id, line.debit || 0, line.credit || 0, line.memo || '', i,
+        line.vatRate === undefined ? null : line.vatRate]
     );
   }
   return draft;

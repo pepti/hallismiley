@@ -162,6 +162,17 @@ router.post('/payroll/runs/:id/reverse', requireRole('admin'), csrfProtect,
   books.reversePayrollRun);
 router.post('/payroll/runs/:id/pay', requireRole('admin'), csrfProtect, books.payPayrollRun);
 
+// ── Counter sales (view: pos) ────────────────────────────────────────────────
+//
+// Reads are gated by the "pos" view so someone on the till can see the day without
+// being given the ledger. RINGING UP a sale is admin-only like every other money
+// write: it issues a statutory sales document and posts to the books.
+router.get('/pos/export.csv', docLimiter, requireView('pos'), books.exportPosCsv);
+router.get('/pos/catalogue', requireView('pos'), books.getPosCatalogue);
+router.get('/pos/day', requireView('pos'), books.getPosDay);
+router.get('/pos/receipts', requireView('pos'), books.listPosReceipts);
+router.post('/pos/sales', requireRole('admin'), csrfProtect, books.createPosSale);
+
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than
 // falling through to the /api/v1/admin catch-all router. Note what this does and

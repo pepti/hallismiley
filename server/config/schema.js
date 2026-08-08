@@ -3681,6 +3681,46 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       // published table; until then payroll refuses to run, and says why.
     ],
   },
+  {
+    // ── 077: counter sales ───────────────────────────────────────────────────
+    //
+    // A counter sale is a SALE, so it belongs in the sales ledger with everything else.
+    // This migration adds almost nothing, and that is the design: migration 072 already
+    // has an `invoices.series` of ('invoice','receipt') and a gapless 'receipt' counter
+    // beside the invoice one, so a till sale is a receipt-series row in `invoices`.
+    //
+    // The alternative — a separate pos_sales table — would give the business two sales
+    // ledgers that have to be added together to answer "what did we sell", and the VSK
+    // return would have to read both. One of them would eventually be forgotten.
+    //
+    // What a counter sale does NOT do is go through receivables. An invoice creates a
+    // debt and the payment settles it later; at a till the sale and the money are the
+    // same event, so the entry debits cash (or the card clearing account) directly. A
+    // POS sale that debited 1100 and immediately credited it back would put two legs in
+    // the ledger that describe nothing.
+    name: '077_books_pos',
+    statements: [
+      // 'pos' as a journal source. Without it every till entry fails the source_type
+      // CHECK — the counter is the last thing in these books that posts.
+      `ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS journal_entries_source_type_check`,
+      `ALTER TABLE journal_entries
+         ADD CONSTRAINT journal_entries_source_type_check
+         CHECK (source_type IN ('invoice','payment','credit_note','expense',
+                                'payroll','vat_settlement','opening','manual',
+                                'reversal','stripe','bank','pos'))`,
+
+      // A counter sale has no customer to bill, so customer_name carries a standing
+      // label rather than a person. Nothing to migrate — noted here because a reader
+      // finding 'Almenn sala' in the invoices table should know it is deliberate and
+      // not a placeholder somebody forgot to fill in.
+
+      // Backs the till's own history view and the day's takings, without making the
+      // invoice register's index do double duty.
+      `CREATE INDEX IF NOT EXISTS idx_invoices_receipts
+         ON invoices (issued_at DESC, invoice_number DESC)
+         WHERE series = 'receipt'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
