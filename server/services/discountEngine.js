@@ -26,12 +26,29 @@ function fail(status, reason, params) {
   return { error: { status, reason, message: MESSAGES[reason] || 'Invalid discount code.', params } };
 }
 
+// A discount created without an explicit start date gets `starts_at` from the
+// DATABASE clock (`DEFAULT NOW()`), but these gates run against the NODE clock. The
+// two are read microseconds apart from different sources, so `starts_at` can land a
+// millisecond or two in the future — and a brand-new code would then tell the first
+// customer to try it "this discount code is not active yet".
+//
+// A one-second grace closes it. Nothing legitimate depends on sub-second precision
+// here: a discount scheduled to start at a particular moment is set to the minute at
+// best, and starting it one second early is not a business risk. The mirror-image
+// gate on `ends_at` gets the same treatment for symmetry — expiring one second late
+// is likewise harmless, and the alternative is the same race in reverse.
+const CLOCK_SKEW_GRACE_MS = 1000;
+
 // Ordered validation gates shared by code + automatic paths. Returns an error
 // object (from fail()) or null when the discount passes.
 function runGates(d, { subtotal, currency }) {
   const now = Date.now();
-  if (d.starts_at && new Date(d.starts_at).getTime() > now) return fail(422, 'scheduled');
-  if (d.ends_at   && new Date(d.ends_at).getTime()  <= now) return fail(422, 'expired');
+  if (d.starts_at && new Date(d.starts_at).getTime() > now + CLOCK_SKEW_GRACE_MS) {
+    return fail(422, 'scheduled');
+  }
+  if (d.ends_at && new Date(d.ends_at).getTime() <= now - CLOCK_SKEW_GRACE_MS) {
+    return fail(422, 'expired');
+  }
   if (d.usage_limit != null && Number(d.used_count) >= Number(d.usage_limit)) {
     return fail(409, 'usageLimitReached');
   }

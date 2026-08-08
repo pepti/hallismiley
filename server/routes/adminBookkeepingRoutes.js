@@ -19,6 +19,7 @@ const { requireView } = require('../auth/requireView');
 const { requireRole } = require('../auth/roles');
 const { csrfProtect } = require('../middleware/csrf');
 const { docLimiter } = require('../middleware/booksLimiters');
+const documentService = require('../services/bookkeeping/documentService');
 
 router.use(requireAuth);
 
@@ -35,6 +36,11 @@ router.post('/invoices/from-order/:orderId', requireRole('admin'), csrfProtect,
   books.createInvoiceFromOrder);
 
 router.get('/invoices', requireView('invoices'), books.listInvoices);
+// Server-side CSV export, paged internally so a long history streams rather than
+// being silently truncated at a page cap. MUST precede '/invoices/:id', or a GET to
+// '/invoices/export.csv' is read as an invoice with id "export.csv" and 400s — which is
+// what shipped, leaving the export unreachable.
+router.get('/invoices/export.csv', docLimiter, requireView('invoices'), books.exportInvoicesCsv);
 router.get('/invoices/:id', requireView('invoices'), books.getInvoice);
 // PDF generation is synchronous pdfkit work in-request, so it gets its own tighter
 // limiter — nothing else in this app rate-limits document generation. The limiter
@@ -48,6 +54,124 @@ router.post('/invoices/:id/payments', requireRole('admin'), csrfProtect, books.r
 // with no credit note, and a goodwill credit is a credit note with no refund.
 router.post('/invoices/:id/refunds', requireRole('admin'), csrfProtect, books.recordRefund);
 router.post('/invoices/:id/credit-notes', requireRole('admin'), csrfProtect, books.createCreditNote);
+
+// ── Expenses (view: expenses) ────────────────────────────────────────────────
+// Literal paths first, and export.csv before any ':id' could swallow it.
+router.get('/expenses/export.csv', docLimiter, requireView('expenses'), books.exportExpensesCsv);
+router.get('/expenses/missing-documents', requireView('expenses'), books.getMissingDocuments);
+router.get('/expenses/suppliers', requireView('expenses'), books.getSuppliers);
+router.get('/expenses/accounts', requireView('expenses'), books.getAccounts);
+// A dry-run VAT verdict so the form can explain a refused deduction while the user
+// is still typing. Read-only in effect, but a POST because it takes a body.
+router.post('/expenses/preview-vat', requireView('expenses'), csrfProtect, books.previewExpenseVat);
+
+router.get('/expenses', requireView('expenses'), books.listExpenses);
+router.get('/expenses/:id', requireView('expenses'), books.getExpense);
+router.post('/expenses', requireRole('admin'), csrfProtect, books.createExpense);
+router.patch('/expenses/:id/document', requireRole('admin'), csrfProtect, books.attachExpenseDocument);
+
+// ── Documents (view: expenses) ───────────────────────────────────────────────
+// multer runs BEFORE csrfProtect because the token arrives as a header, not a
+// body field — csrf-csrf reads req.headers, so ordering is safe either way, but
+// parsing multipart first gives a clean 400 on an oversized file instead of a
+// confusing CSRF failure.
+router.post('/documents', requireRole('admin'),
+  documentService.createDocumentUpload().single('file'), csrfProtect, books.uploadDocument);
+// Streamed through an authenticated route on purpose: these files live outside the
+// statically-served tree, so this is the ONLY way to read them.
+router.get('/documents/:id', requireView('expenses'), docLimiter, books.getDocument);
+
+// ── Receivables (view: ar) ───────────────────────────────────────────────────
+router.get('/ar/export.csv', docLimiter, requireView('ar'), books.exportAgingCsv);
+router.get('/ar', requireView('ar'), books.getAging);
+router.get('/ar/:customerKey', requireView('ar'), books.getStatement);
+
+// ── VSK returns (view: vat) ──────────────────────────────────────────────────
+router.get('/vat/export.csv', docLimiter, requireView('vat'), books.exportVatCsv);
+router.get('/vat', requireView('vat'), books.listVatPeriods);
+router.get('/vat/:period', requireView('vat'), books.getVatPeriod);
+// Filing reports a figure to Skatturinn and locks the period. Hard admin-only —
+// not delegable through a custom role, whatever else that role can see.
+router.post('/vat/:period/file', requireRole('admin'), csrfProtect, books.fileVatReturn);
+// Re-opening a filed period discards its snapshot. Admin-only, reason required,
+// and audited with the figures the discarded return held.
+router.post('/vat/:period/unlock', requireRole('admin'), csrfProtect, books.unlockVatPeriod);
+
+// ── Reconciliation (view: bank) ──────────────────────────────────────────────
+router.get('/bank/status', requireView('bank'), books.getReconciliationStatus);
+router.get('/bank', requireView('bank'), books.listBankTransactions);
+router.get('/bank/:id/suggestions', requireView('bank'), books.getBankSuggestions);
+// Importing and resolving both write to the ledger, so both are admin-only.
+router.post('/bank/import', requireRole('admin'), csrfProtect, books.importBankStatement);
+router.post('/bank/:id/resolve', requireRole('admin'), csrfProtect, books.resolveBankTransaction);
+router.post('/stripe/sync', requireRole('admin'), csrfProtect, books.syncStripe);
+
+// ── Ledger and reports (view: ledger) ────────────────────────────────────────
+// export.csv paths first, so ':code' cannot swallow them.
+router.get('/reports/trial-balance.csv', docLimiter, requireView('ledger'), books.exportTrialBalanceCsv);
+router.get('/reports/journal.csv', docLimiter, requireView('ledger'), books.exportJournalCsv);
+router.get('/reports/trial-balance', requireView('ledger'), books.getTrialBalance);
+router.get('/reports/profit-and-loss', requireView('ledger'), books.getProfitAndLoss);
+router.get('/reports/balance-sheet', requireView('ledger'), books.getBalanceSheet);
+// One read, one moment, one ledger — so the files an accountant receives tie to
+// each other rather than straddling a new posting.
+router.get('/reports/accountant-pack', docLimiter, requireView('ledger'), books.getAccountantPack);
+router.get('/journal', requireView('ledger'), books.getJournal);
+router.get('/accounts/:code/ledger', requireView('ledger'), books.getAccountLedger);
+// Writing directly to the ledger is the sharpest tool in the system: admin-only,
+// CSRF, and a memo/reason is mandatory in the controller.
+router.post('/journal', requireRole('admin'), csrfProtect, books.createManualEntry);
+router.post('/journal/:id/reverse', requireRole('admin'), csrfProtect, books.reverseJournalEntry);
+
+// ── Payroll (view: payroll) ──────────────────────────────────────────────────
+//
+// Salary detail is the most sensitive data in these books, so the READ view is its
+// own grantable id rather than folded into 'books' — an accountant can be given the
+// ledger without being given what each person earns.
+//
+// Literal paths before parameterised ones throughout, and export.csv before anything
+// that could read it as a year or an id.
+router.get('/payroll/export.csv', docLimiter, requireView('payroll'), books.exportPayrollCsv);
+
+// The statutory figures for a year. Entering them is admin-only, and CONFIRMING them
+// is the act that lets payroll run at all — see payrollService for why that gate
+// exists rather than a default set of rates.
+router.get('/payroll/years', requireView('payroll'), books.listPayrollYears);
+router.get('/payroll/years/:year', requireView('payroll'), books.getPayrollYear);
+router.put('/payroll/years/:year', requireRole('admin'), csrfProtect, books.savePayrollYear);
+router.post('/payroll/years/:year/confirm', requireRole('admin'), csrfProtect,
+  books.confirmPayrollYear);
+
+router.get('/payroll/employees', requireView('payroll'), books.listEmployees);
+router.get('/payroll/employees/:id', requireView('payroll'), books.getEmployee);
+router.post('/payroll/employees', requireRole('admin'), csrfProtect, books.saveEmployee);
+router.patch('/payroll/employees/:id', requireRole('admin'), csrfProtect, books.saveEmployee);
+
+// A payslip PDF carries one person's salary in full. Same tight limiter as the other
+// document routes, and it runs BEFORE the view check so refused attempts count too.
+router.get('/payroll/payslips/:id/pdf', docLimiter, requireView('payroll'),
+  books.getPayslipPdf);
+
+router.get('/payroll/runs', requireView('payroll'), books.listPayrollRuns);
+router.get('/payroll/runs/:id', requireView('payroll'), books.getPayrollRun);
+// Drafting writes payslips but touches no account; posting creates a liability to
+// Skatturinn. Both are admin-only, because a draft is one click from being posted.
+router.post('/payroll/runs', requireRole('admin'), csrfProtect, books.createPayrollRun);
+router.post('/payroll/runs/:id/post', requireRole('admin'), csrfProtect, books.postPayrollRun);
+router.post('/payroll/runs/:id/reverse', requireRole('admin'), csrfProtect,
+  books.reversePayrollRun);
+router.post('/payroll/runs/:id/pay', requireRole('admin'), csrfProtect, books.payPayrollRun);
+
+// ── Counter sales (view: pos) ────────────────────────────────────────────────
+//
+// Reads are gated by the "pos" view so someone on the till can see the day without
+// being given the ledger. RINGING UP a sale is admin-only like every other money
+// write: it issues a statutory sales document and posts to the books.
+router.get('/pos/export.csv', docLimiter, requireView('pos'), books.exportPosCsv);
+router.get('/pos/catalogue', requireView('pos'), books.getPosCatalogue);
+router.get('/pos/day', requireView('pos'), books.getPosDay);
+router.get('/pos/receipts', requireView('pos'), books.listPosReceipts);
+router.post('/pos/sales', requireRole('admin'), csrfProtect, books.createPosSale);
 
 // ── Catch-all ────────────────────────────────────────────────────────────────
 // Anything under /bookkeeping that matched no route above ends here rather than

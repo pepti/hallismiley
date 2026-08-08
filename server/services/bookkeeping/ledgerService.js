@@ -252,15 +252,21 @@ async function postEntry(client, entry) {
   const created = rows[0];
 
   // One multi-row INSERT rather than a loop.
+  //
+  // vat_rate is in this list deliberately. It was prepared above and then dropped from
+  // the INSERT, so the column was null on every line ever written — invoices, expenses
+  // and all. The VSK return survived that because it derives from each account's
+  // vat_code rather than from the line, but the journal export's "VSK %" column was
+  // always blank, and anything added later that trusted the line would have been wrong.
   const values = [];
   const params = [];
   prepared.forEach((line, i) => {
-    const b = i * 6;
-    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`);
-    params.push(created.id, line.accountId, line.debit, line.credit, line.memo, i);
+    const b = i * 7;
+    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7})`);
+    params.push(created.id, line.accountId, line.debit, line.credit, line.memo, i, line.vatRate);
   });
   await client.query(
-    `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order)
+    `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order, vat_rate)
      VALUES ${values.join(', ')}`,
     params
   );
@@ -320,7 +326,7 @@ async function reverseEntry(client, entryId, { createdBy, reason, entryDate = ne
   }
 
   const { rows: lines } = await client.query(
-    `SELECT la.code AS account_code, jl.debit, jl.credit, jl.memo
+    `SELECT la.code AS account_code, jl.debit, jl.credit, jl.memo, jl.vat_rate
        FROM journal_lines jl
        JOIN ledger_accounts la ON la.id = jl.account_id
       WHERE jl.entry_id = $1
@@ -341,12 +347,15 @@ async function reverseEntry(client, entryId, { createdBy, reason, entryDate = ne
     createdBy,
     reversesEntryId: original.id,
     isCorrection: reversal_period !== original_period,
-    // Debit becomes credit and vice versa.
+    // Debit becomes credit and vice versa. vat_rate is carried through: a reversal of a
+    // VAT leg is still a VAT leg, and dropping it left the mirror lines blank — the same
+    // NULL-vat_rate class of bug the original INSERT had.
     lines: lines.map(l => ({
       accountCode: l.account_code,
       debit: Number(l.credit),
       credit: Number(l.debit),
       memo: l.memo,
+      vatRate: l.vat_rate,
     })),
   });
 
@@ -370,9 +379,10 @@ async function createDraft(client, { entryDate, memo, sourceType = 'manual', cre
   for (const [i, line] of lines.entries()) {
     const account = await accountByCode(line.accountCode, client);
     await client.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [draft.id, account.id, line.debit || 0, line.credit || 0, line.memo || '', i]
+      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, memo, sort_order, vat_rate)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [draft.id, account.id, line.debit || 0, line.credit || 0, line.memo || '', i,
+        line.vatRate === undefined ? null : line.vatRate]
     );
   }
   return draft;
@@ -408,6 +418,73 @@ async function postDraft(client, draftId, { createdBy } = {}) {
 // evening transaction into the next day and sometimes into the next VSK period.
 // One conversion, used everywhere, is the only way the app and the DB triggers
 // agree on which period a document belongs to.
+/**
+ * Close a fiscal period.
+ *
+ * Takes `FOR UPDATE` on the period row before flipping it. The posting trigger reads
+ * fiscal_periods without a lock, so without this a transaction that started posting
+ * while the period looked open could commit after the lock landed — putting an entry
+ * inside a period whose figures had already been reported. Locking the row here
+ * makes the two serialise on it.
+ *
+ * Asserts a row actually changed: `UPDATE ... WHERE status = 'open'` silently does
+ * nothing on an already-locked period, and a lock that quietly did not happen is
+ * worse than an error.
+ */
+async function lockPeriod(client, period, { lockedBy } = {}) {
+  if (!lockedBy) throw new LedgerError('lockPeriod requires lockedBy', 500);
+  const { rows: locked } = await client.query(
+    `SELECT period, status FROM fiscal_periods WHERE period = $1 FOR UPDATE`, [period]
+  );
+  if (!locked.length) {
+    throw new LedgerError(`No such accounting period: ${period}`, 404, 'NO_SUCH_PERIOD');
+  }
+  if (locked[0].status === 'locked') {
+    throw new LedgerError(`Period ${period} is already locked`, 409, 'ALREADY_LOCKED');
+  }
+  const { rowCount } = await client.query(
+    `UPDATE fiscal_periods
+        SET status = 'locked', locked_at = NOW(), locked_by = $2
+      WHERE period = $1 AND status = 'open'`,
+    [period, lockedBy]
+  );
+  if (rowCount !== 1) {
+    throw new LedgerError(`Failed to lock period ${period}`, 409, 'LOCK_FAILED');
+  }
+  logger.info({ period, lockedBy }, 'accounting period locked');
+  return { period, status: 'locked' };
+}
+
+/**
+ * Re-open a locked period.
+ *
+ * Exists because "filed by mistake, before actually submitting" is a real situation
+ * and the alternative is someone editing fiscal_periods by hand. The reason is
+ * required and the caller is expected to audit it — vatService.unlockPeriod does.
+ */
+async function unlockPeriod(client, period, { unlockedBy, reason } = {}) {
+  if (!unlockedBy) throw new LedgerError('unlockPeriod requires unlockedBy', 500);
+  if (!reason || !String(reason).trim()) {
+    throw new LedgerError('unlockPeriod requires a reason', 400, 'REASON_REQUIRED');
+  }
+  const { rows } = await client.query(
+    `SELECT period, status FROM fiscal_periods WHERE period = $1 FOR UPDATE`, [period]
+  );
+  if (!rows.length) {
+    throw new LedgerError(`No such accounting period: ${period}`, 404, 'NO_SUCH_PERIOD');
+  }
+  if (rows[0].status !== 'locked') {
+    throw new LedgerError(`Period ${period} is not locked`, 409, 'NOT_LOCKED');
+  }
+  await client.query(
+    `UPDATE fiscal_periods SET status = 'open', locked_at = NULL, locked_by = NULL
+      WHERE period = $1`,
+    [period]
+  );
+  logger.warn({ period, unlockedBy, reason: String(reason).slice(0, 200) }, 'accounting period unlocked');
+  return { period, status: 'open' };
+}
+
 function normaliseDate(value) {
   if (value === undefined || value === null) return todayIso();
   try {
@@ -443,6 +520,8 @@ module.exports = {
   ensureFiscalPeriod,
   periodStatus,
   assertPeriodOpen,
+  lockPeriod,
+  unlockPeriod,
   postEntry,
   reverseEntry,
   createDraft,

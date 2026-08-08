@@ -9,6 +9,7 @@ const invoices = require('../../server/services/bookkeeping/invoiceService');
 const Setting = require('../../server/models/Setting');
 const FxRate = require('../../server/models/FxRate');
 const Invoice = require('../../server/models/Invoice');
+const Product = require('../../server/models/Product');
 const { createTestAdminUser, reseedBooksReferenceData } = require('../helpers');
 
 let adminId;
@@ -236,7 +237,182 @@ describe('issuing an invoice from an order', () => {
   });
 });
 
+describe('quantity and unit price on the document', () => {
+  // Reglugerð 50/1993 requires quantity and unit price on the line, which means a
+  // reader must be able to multiply them and get the total. Translating the LINE
+  // total and dividing it back by quantity does not survive that.
+  it('makes quantity × unit price equal the line total, exactly', async () => {
+    const order = await makeOrder({ items: [{ productId, price: 4990, qty: 3 }] });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    const [line] = await linesOf(invoice.id);
+    expect(line.quantity).toBe(3);
+    expect(line.unit_price_gross * line.quantity).toBe(line.gross_before_discount);
+    expect(Number(invoice.total_gross)).toBe(14970);
+  });
+
+  it('holds that even on a translated order, where rounding used to break it', async () => {
+    // 3 × EUR 3.33 at 150 translates to 1,499 ISK; the old code divided that back
+    // and printed "3 × 500 = 1.499", an invoice whose own arithmetic was false.
+    const order = await makeOrder({
+      currency: 'EUR', items: [{ productId, price: 333, qty: 3 }], paidAt: '2026-07-15',
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    const lines = await linesOf(invoice.id);
+    for (const l of lines) {
+      expect(l.unit_price_gross * l.quantity).toBe(l.gross_before_discount);
+    }
+    // And the invoice still totals exactly what the customer paid.
+    expect(lines.reduce((a, l) => a + l.line_gross, 0)).toBe(Number(invoice.total_gross));
+    expect(Number(invoice.total_gross)).toBe(Math.round((999 * 150) / 100));
+  });
+
+  it('states an unavoidable rounding difference as its own line rather than hiding it', async () => {
+    // When unit-price rounding leaves the lines a króna short of what was actually
+    // paid, that króna is real money. It becomes an explicit "Sléttun" line instead
+    // of being smeared into a unit price and breaking the arithmetic above.
+    await FxRate.set({ rateDate: '2026-07-15', currency: 'EUR', rate: 142.75, source: 'manual' });
+    const order = await makeOrder({
+      currency: 'EUR', items: [{ productId, price: 1799, qty: 7 }], paidAt: '2026-07-15',
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+    const lines = await linesOf(invoice.id);
+
+    const product = lines.filter(l => l.description !== 'Sléttun');
+    for (const l of product) {
+      expect(l.unit_price_gross * l.quantity).toBe(l.gross_before_discount);
+    }
+    expect(lines.reduce((a, l) => a + l.line_gross, 0)).toBe(Number(invoice.total_gross));
+    expect(Number(invoice.total_gross)).toBe(Math.round((1799 * 7 * 142.75) / 100));
+    await FxRate.set({ rateDate: '2026-07-15', currency: 'EUR', rate: 150, source: 'manual' });
+  });
+});
+
 describe('per-rate VAT', () => {
+  it('charges a product its OWN rate and books it to the right accounts', async () => {
+    // The 11% band is a closed statutory list and books are on it. Until products
+    // carried a rate this whole path — account 4200, output VAT 2210, the
+    // multi-bucket return — was unreachable code.
+    const { rows: book } = await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, sku, vat_rate)
+       VALUES ('handverksbok','Handverksbók','',11100, 7900, 5, 'SKU-BOOK-11', 11)
+       ON CONFLICT (slug) DO UPDATE SET vat_rate = 11, price_isk = EXCLUDED.price_isk RETURNING id`
+    );
+    const order = await makeOrder({
+      items: [{ productId: book[0].id, price: 11100, qty: 1, name: 'Handverksbók' }],
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+
+    const [line] = await linesOf(invoice.id);
+    expect(line.vat_rate).toBe(11);
+    expect(line.line_vat).toBe(1100);          // 11,100 at 11% inclusive
+    expect(line.revenue_account).toBe('4200'); // Sala 11%
+    expect(await legsFor('invoice', invoice.id)).toEqual({
+      1100: 11100, 4200: -10000, 2210: -1100, // output VAT 11% has its OWN account
+    });
+  });
+
+  it('separates a genuinely mixed-rate invoice by rate', async () => {
+    const { rows: book } = await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, sku, vat_rate)
+       VALUES ('bok-mixed','Bók','',11100, 7900, 5, 'SKU-BOOK-MIX', 11)
+       ON CONFLICT (slug) DO UPDATE SET vat_rate = 11 RETURNING id`
+    );
+    const order = await makeOrder({
+      items: [
+        { productId, price: 12400, qty: 1, name: 'Eikarborð' },
+        { productId: book[0].id, price: 11100, qty: 1, name: 'Bók' },
+      ],
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+
+    const detail = await Invoice.findDetail(invoice.id);
+    // Two buckets, each with its own net and VAT — this is what RSK 10.01 boxes
+    // A, B and D are built from.
+    expect(detail.vat_by_rate).toEqual([
+      { rate: 11, net: 10000, vat: 1100, gross: 11100 },
+      { rate: 24, net: 10000, vat: 2400, gross: 12400 },
+    ]);
+    expect(await legsFor('invoice', invoice.id)).toEqual({
+      1100: 23500, 4100: -10000, 4200: -10000, 2200: -2400, 2210: -1100,
+    });
+  });
+
+  it('splits a partial credit on a mixed-rate invoice across both rates', async () => {
+    // The path whose own comment warns that getting it wrong sends the VSK return
+    // wrong in both directions — previously unreachable, so untested.
+    const { rows: book } = await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, sku, vat_rate)
+       VALUES ('bok-credit','Bók','',11100, 7900, 5, 'SKU-BOOK-CR', 11)
+       ON CONFLICT (slug) DO UPDATE SET vat_rate = 11 RETURNING id`
+    );
+    const order = await makeOrder({
+      items: [
+        { productId, price: 12400, qty: 1, name: 'Eikarborð' },
+        { productId: book[0].id, price: 11100, qty: 1, name: 'Bók' },
+      ],
+    });
+    const { invoice } = await ledger.withTransaction(c =>
+      invoices.createFromOrder(c, order.id, { createdBy: adminId }));
+
+    // Credit the whole thing: VAT must come back at BOTH rates, exactly as charged.
+    await ledger.withTransaction(c => invoices.issueCreditNote(c, invoice.id, {
+      amountGross: 23500, reason: 'Allt skilað', issuedAt: '2026-07-25', createdBy: adminId,
+    }));
+    const { rows } = await db.query(
+      `SELECT amount_vat::bigint AS vat FROM credit_notes WHERE invoice_id = $1`, [invoice.id]);
+    expect(Number(rows[0].vat)).toBe(3500); // 2400 + 1100, the recorded figures
+
+    // Both output-VAT accounts net to zero.
+    expect(await accountBalanceForInvoice('2200', invoice.id)).toBe(0);
+    expect(await accountBalanceForInvoice('2210', invoice.id)).toBe(0);
+  });
+
+  it('round-trips a product VAT rate through create and update', async () => {
+    // The column is only useful if it can actually be set, so the whole path is
+    // exercised: Product.create defaults it, update validates it, and a bad value
+    // is a 400 rather than a raw constraint violation.
+    const created = await Product.create({
+      slug: `vat-roundtrip-${Date.now()}`, name: 'Bók', price_isk: 11100, price_eur: 7900, vat_rate: 11,
+    });
+    expect(created.vat_rate).toBe(11);
+
+    const defaulted = await Product.create({
+      slug: `vat-default-${Date.now()}`, name: 'Borð', price_isk: 12400, price_eur: 8900,
+    });
+    expect(defaulted.vat_rate).toBe(24);
+
+    const updated = await Product.update(created.id, { vat_rate: 0 });
+    expect(updated.vat_rate).toBe(0);
+
+    await expect(Product.update(created.id, { vat_rate: 7 }))
+      .rejects.toMatchObject({ status: 400 });
+  });
+
+  it('refuses a product carrying a rate Iceland does not have', async () => {
+    // A bad rate must stop the invoice, not be quietly normalised to 24%.
+    expect(() => invoices.buildLines({
+      order: { currency: 'ISK', total: 1000, shipping: 0, shipping_discount: 0, discount_amount: 0, order_number: 'X' },
+      items: [{ product_price_snapshot: 1000, quantity: 1, product_name_snapshot: 'A', vat_rate: 7 }],
+      rate: 1,
+      exportSale: false,
+    })).toThrow(/Unsupported VAT rate/);
+  });
+
+  it('still defaults to the standard rate when a product row has none', async () => {
+    const built = invoices.buildLines({
+      order: { currency: 'ISK', total: 12400, shipping: 0, shipping_discount: 0, discount_amount: 0, order_number: 'X' },
+      items: [{ product_price_snapshot: 12400, quantity: 1, product_name_snapshot: 'A', vat_rate: null }],
+      rate: 1,
+      exportSale: false,
+    });
+    expect(built.lines[0].vat_rate).toBe(24);
+  });
+
   it('keeps a mixed-rate invoice separated by rate, as RSK 10.01 requires', async () => {
     // Boxes A (24% turnover), B (11% turnover) and D (total output VAT) can only be
     // produced if VAT was tracked per rate. One aggregate VAT leg makes the return
@@ -486,6 +662,44 @@ describe('payments', () => {
     const legs = await legsFor('payment', rows[0].id);
     expect(legs).toEqual({ 1400: 12400, 1100: -12400 });
     expect(legs['1900']).toBeUndefined();
+  });
+
+  it.each([
+    ['cash', '1910'],          // Sjóður
+    ['stripe', '1400'],        // same acquirer clearing account as a card
+    ['other', '1990'],         // Óvissureikningur — parked visibly, not guessed at
+  ])('books a %s payment to account %s', async (method, account) => {
+    // Every method's destination is pinned, not just the two obvious ones. A typo
+    // in the mapping or a renumbered chart of accounts would otherwise pass.
+    const invoice = await issued();
+    await ledger.withTransaction(c => invoices.recordPayment(c, invoice.id, {
+      amount: 12400, method, receivedAt: '2026-07-20',
+      idempotencyKey: `method-${method}-${invoice.id}`, createdBy: adminId,
+    }));
+    const { rows } = await db.query(
+      `SELECT id FROM payments WHERE invoice_id = $1`, [invoice.id]);
+    expect(await legsFor('payment', rows[0].id)).toEqual({ [account]: 12400, 1100: -12400 });
+  });
+
+  it('REFUSES the same idempotency key on a different invoice', async () => {
+    // The failure this guards against: a caller generating one key per batch rather
+    // than per settlement. Under a globally-unique key that silently matched the
+    // FIRST invoice's payment and returned a cheerful 200 for money never booked
+    // against the second. Refusing loudly is the only way that mistake surfaces
+    // before the money goes missing — so this is a 409, not a no-op and not a
+    // second payment.
+    const a = await issued();
+    const b = await issued();
+    const key = `shared-batch-key-${a.id}`;
+    await ledger.withTransaction(c => invoices.recordPayment(c, a.id, {
+      amount: 100, method: 'cash', receivedAt: '2026-07-20', idempotencyKey: key, createdBy: adminId,
+    }));
+    await expect(ledger.withTransaction(c => invoices.recordPayment(c, b.id, {
+      amount: 200, method: 'cash', receivedAt: '2026-07-20', idempotencyKey: key, createdBy: adminId,
+    }))).rejects.toMatchObject({ code: 'KEY_REUSED', status: 409 });
+
+    // And invoice B is genuinely untouched — no partial write.
+    expect(Number((await Invoice.findById(b.id)).amount_paid)).toBe(0);
   });
 
   it('treats a retried request as a no-op via the idempotency key', async () => {

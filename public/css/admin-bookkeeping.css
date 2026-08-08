@@ -179,3 +179,331 @@
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* ── Phase 4: expense form, checkboxes, ok banner ─────────────────────────── */
+
+.books-banner--ok {
+  background: rgba(80, 180, 120, 0.12);
+  border-color: rgba(80, 180, 120, 0.4);
+  color: #7ac89a;
+}
+
+.books-form--wide { max-width: none; }
+.books-form__grid {
+  display: grid;
+  /* auto-fit so the form collapses to one column on a phone without a breakpoint
+     per field count. */
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0 1rem;
+}
+.books-form__wide { grid-column: 1 / -1; }
+.books-form small {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.books-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.books-check input { width: auto; margin: 0; }
+
+.btn--sm { padding: 0.2rem 0.5rem; font-size: 0.78rem; }
+
+.books-table tfoot td {
+  border-top: 1px solid var(--border-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Phase 5: VSK return ──────────────────────────────────────────────────── */
+
+/* The RSK box letter, so the screen maps visibly onto the paper form. */
+.books-vat__box {
+  width: 2.2rem;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--accent-amber);
+  text-align: center;
+  vertical-align: top;
+}
+.books-vat__boxes td { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+
+.books-table--clickable tbody tr.is-selected {
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 0 var(--accent-amber);
+}
+
+.books-banner--info {
+  background: rgba(90, 140, 220, 0.12);
+  border-color: rgba(90, 140, 220, 0.4);
+  color: #8fb2e8;
+}
+/* Sub-lines under a box, for the reverse-charge split. */
+.books-vat__sub td { padding-top: 0.15rem; padding-bottom: 0.15rem; font-size: 0.85rem; }
+.books-vat__sub td:nth-child(2) { padding-left: 1.2rem; color: var(--text-muted); }
+
+/* ── Phase 6: reconciliation ──────────────────────────────────────────────── */
+
+.books-form textarea {
+  width: 100%;
+  margin-top: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+/* The resolve panel is prepended above the table, so it needs to read as a distinct
+   working area rather than another row. */
+.books-resolve { margin-bottom: 1.25rem; }
+.books-resolve__suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.books-resolve .books-form { margin-top: 0.5rem; background: transparent; border: 0; padding: 0; }
+
+/* ── Phase 7: ledger and reports ──────────────────────────────────────────── */
+
+/* Tabs, not four separate screens: the reports are four views of one ledger, and
+   putting them behind one date range is what makes them comparable. */
+.books-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0 0 1rem;
+  border-bottom: 1px solid var(--border-dim);
+}
+.books-tab {
+  padding: 0.5rem 0.9rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.books-tab:hover { color: var(--text-primary); }
+.books-tab.is-active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-amber);
+  font-weight: 600;
+}
+
+/* An account code is a link everywhere it appears, because a figure you cannot open
+   is a figure you have to take on trust. */
+.books-link {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent-amber);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.books-link:hover { text-decoration: underline; }
+
+/* Section headers and subtotals inside a report table. */
+.books-row--head th {
+  padding-top: 0.9rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.books-row--sum th {
+  border-top: 1px solid var(--border-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The journal reads as a list of entries, not a flat list of lines — the entry is
+   the unit that balances, so it is the unit that gets a box. */
+.books-journal { display: flex; flex-direction: column; gap: 0.9rem; }
+.books-entry {
+  padding: 0.7rem 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+}
+.books-entry--correction { border-left: 3px solid var(--accent-amber); }
+.books-entry__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+.books-entry__memo { flex: 1 1 12rem; color: var(--text-muted); }
+.books-entry__by { color: var(--text-muted); font-size: 0.78rem; }
+.books-table--tight td, .books-table--tight th { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+
+/* The manual-entry form is collapsed by default: it is the one control here that can
+   put anything anywhere, so it should take a deliberate click to open. */
+.books-manual {
+  margin-top: 1.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+}
+.books-manual > summary { cursor: pointer; font-weight: 600; }
+.books-manual__line {
+  display: grid;
+  grid-template-columns: minmax(9rem, 2fr) minmax(6rem, 2fr) 7rem 7rem auto;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  align-items: center;
+}
+.books-manual__totals { font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.books-manual__totals.is-ok { color: var(--success); }
+.books-manual__totals.is-warn { color: var(--text-muted); }
+.books-form__row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-end; }
+.books-form__row .grow { flex: 1 1 14rem; }
+
+@media (max-width: 720px) {
+  .books-manual__line { grid-template-columns: 1fr 1fr; }
+}
+
+/* Account drill-down. A modal rather than a route, because it is a detail OF the
+   report you are reading — navigating away and back would lose the range. */
+.books-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+.books-modal__panel {
+  max-width: min(56rem, 100%);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 1.1rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+}
+
+/* ── Phase 8: payroll ─────────────────────────────────────────────────────── */
+
+/* A band row in the tax-year form. Two numbers and a remove button; the labels stay
+   because "0" and "30" are indistinguishable without them. */
+.books-band__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin-bottom: 0.5rem;
+}
+
+/* The preflight findings on a run. Colour carries the severity, but the text says it
+   too — a blocker that reads as a warning gets clicked past. */
+.books-findings {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+.books-findings li { margin-bottom: 0.3rem; }
+.books-findings li.is-blocker { color: var(--error); }
+.books-findings li.is-warning { color: var(--accent-amber); }
+.books-findings li.is-info { color: var(--text-muted); }
+
+/* An inactive employee is still on record — anyone with a posted payslip has to be —
+   so the row is dimmed rather than hidden. */
+.books-table tr.is-muted td { opacity: 0.55; }
+
+@media (max-width: 720px) {
+  .books-band__row { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Phase 9: the till ────────────────────────────────────────────────────── */
+
+/* Catalogue on the left, the sale on the right. The sale sticks, because at a counter
+   the total is what both people are looking at. */
+.books-pos {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+.books-pos__search { display: block; margin-bottom: 0.6rem; }
+.books-pos__search input { width: 100%; }
+
+/* Tiles rather than a list: a till is used by touch and by glance, and a row of text
+   is neither. */
+.books-pos__products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+.books-pos__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.books-pos__tile:hover { border-color: var(--accent-amber); }
+.books-pos__tile-name { font-size: 0.85rem; line-height: 1.25; }
+.books-pos__tile-price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.books-pos__tile-vat { font-size: 0.72rem; color: var(--text-muted); }
+
+.books-pos__freeform {
+  margin-top: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+}
+.books-pos__freeform > summary { cursor: pointer; font-size: 0.9rem; }
+
+.books-pos__basket {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  padding: 0.85rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+}
+.books-pos__rate { margin-left: 0.4rem; font-size: 0.72rem; color: var(--text-muted); }
+.books-pos__qty {
+  width: 1.5rem;
+  padding: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.books-pos__vat th { font-weight: 400; color: var(--text-muted); font-size: 0.85rem; }
+/* The figure the customer is about to hand over. Nothing else on the screen competes. */
+.books-pos__total th {
+  border-top: 2px solid var(--accent-amber);
+  padding-top: 0.4rem;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 900px) {
+  .books-pos { grid-template-columns: 1fr; }
+  .books-pos__basket { position: static; }
+}

@@ -450,6 +450,11 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
           <label>${t('adminProducts.priceEURLabel')}
             <input type="number" name="price_eur" required min="1" step="1" value="${existing?.price_eur ?? ''}"/>
           </label>
+          <label>${t('adminProducts.vatRateLabel')}
+            <select name="vat_rate">
+              ${[24, 11, 0].map(r => `<option value="${r}"${(existing?.vat_rate ?? 24) === r ? ' selected' : ''}>${t(`adminProducts.vatRate${r}`)}</option>`).join('')}
+            </select>
+          </label>
         </div>
         <div class="admin-shop__form-row">
           <label>${t('adminProducts.stock')}
@@ -602,6 +607,9 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
       description_is: descIs || null,
       price_isk:      Number(fd.get('price_isk')),
       price_eur:      Number(fd.get('price_eur')),
+      // VSK rate charged on this product. 11% is a closed statutory list (books,
+      // printed matter, food...) — see server/utils/vat.js.
+      vat_rate:       Number(fd.get('vat_rate') ?? 24),
       stock:          Number(fd.get('stock') || 0),
       active:         fd.get('active') === 'on',
       // Shop redesign step 1 — language-neutral taxonomy + service fields.

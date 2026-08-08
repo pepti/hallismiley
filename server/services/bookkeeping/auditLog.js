@@ -27,7 +27,14 @@ const ACTIONS = [
   'expense.created', 'expense.updated',
   'journal.posted', 'journal.reversed', 'journal.draft_posted',
   'vat.filed', 'period.locked', 'period.unlocked',
-  'payroll.run', 'payroll.settled', 'payroll.rates_confirmed',
+  // Payroll. 'rates_saved' and 'rates_confirmed' are separate on purpose: entering the
+  // year's figures and vouching for them against the published table are different acts
+  // by (potentially) different people, and it is the second that lets payroll run.
+  'payroll.rates_saved', 'payroll.rates_confirmed',
+  'payroll.employee_created', 'payroll.employee_updated',
+  'payroll.run_drafted', 'payroll.run_posted', 'payroll.run_reversed',
+  'payroll.wages_paid',
+  'payroll.run', 'payroll.settled',
   'pos.sale',
   'fx.rate_set',
   'coa.updated',
@@ -66,12 +73,17 @@ async function record(client, { actorId = null, action, entityType, entityId = n
   logger.info({ action, entityType, entityId, actorId, requestId }, 'books audit');
 }
 
-// Convenience wrapper for controllers: pulls actor and request id off req.
-function fromRequest(req) {
-  return {
-    actorId: req.user ? req.user.id : null,
-    requestId: req.requestId || null,
-  };
+/**
+ * Actor + correlation id off a request, for the services that take them.
+ *
+ * Spread into a service call: `{ ...actorOf(req), amount }`. The services want
+ * `createdBy` (it lands in a NOT NULL column) while record() above wants
+ * `actorId`, so both names are returned rather than making every call site
+ * remember which one applies.
+ */
+function actorOf(req) {
+  const id = req.user ? req.user.id : null;
+  return { actorId: id, createdBy: id, requestId: req.requestId || null };
 }
 
 // History for one entity, newest first. Used by the "who touched this" panel on
@@ -91,4 +103,4 @@ async function forEntity(client, entityType, entityId, limit = 50) {
   return rows;
 }
 
-module.exports = { ACTIONS, record, fromRequest, forEntity };
+module.exports = { ACTIONS, record, actorOf, forEntity };

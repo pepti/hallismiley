@@ -375,6 +375,30 @@ describe('reverseEntry', () => {
     expect(rows[0].memo).toContain('Rangur viðtakandi');
   });
 
+  it('carries vat_rate onto the mirror VAT leg', async () => {
+    // The reversal's SELECT dropped jl.vat_rate, so every reversed VAT leg came back
+    // blank — the same NULL-vat_rate class of bug the original INSERT had. The VSK return
+    // derives from vat_code so it survived, but the journal export's VSK% column did not.
+    const original = await ledger.withTransaction(client => ledger.postEntry(client, {
+      entryDate: '2026-07-27', memo: 'vat leg', sourceType: 'invoice', createdBy: adminId,
+      lines: [
+        { accountCode: '1100', debit: 12400 },
+        { accountCode: '4110', credit: 10000 },
+        { accountCode: '2200', credit: 2400, vatRate: 24 },
+      ],
+    }));
+    const { reversal } = await ledger.withTransaction(client => ledger.reverseEntry(
+      client, original.id, { createdBy: adminId, reason: 'Bakfærsla', entryDate: '2026-07-28' }
+    ));
+    const { rows } = await db.query(
+      `SELECT jl.vat_rate FROM journal_lines jl
+         JOIN ledger_accounts la ON la.id = jl.account_id
+        WHERE jl.entry_id = $1 AND la.code = '2200'`,
+      [reversal.id]
+    );
+    expect(rows[0].vat_rate).toBe(24);
+  });
+
   it('nets to zero against the original, leaving no balance behind', async () => {
     const original = await ledger.withTransaction(client => ledger.postEntry(client, {
       entryDate: '2026-07-27', memo: 'net to zero', sourceType: 'manual', createdBy: adminId,

@@ -159,6 +159,23 @@ describe('POST /api/v1/shop/discounts/validate', () => {
     expect(res.body.valid).toBe(false);
   });
 
+  test('a code created moments ago is usable immediately', async () => {
+    // Regression. `starts_at` defaults to the DATABASE clock (DEFAULT NOW()) while
+    // the gates run against the NODE clock, so a brand-new code could read as
+    // starting a millisecond or two in the future and tell the first customer it was
+    // "not active yet". Flaky by nature — this ran green roughly five times in six —
+    // so it is asserted in a loop rather than once.
+    for (let i = 0; i < 8; i += 1) {
+      const created = await createDiscount({ code: `FRESH${i}`, value: 10 });
+      expect(created.status).toBe(201);
+      const res = await request(app)
+        .post('/api/v1/shop/discounts/validate')
+        .send({ code: `FRESH${i}`, subtotal: 10000, currency: 'ISK' });
+      expect(res.body.reason).not.toBe('scheduled');
+      expect(res.status).toBe(200);
+    }
+  });
+
   test('expired code → 422', async () => {
     await createDiscount({ code: 'EXPIRED', ends_at: '2000-01-01T00:00:00.000Z' });
     const res = await request(app)

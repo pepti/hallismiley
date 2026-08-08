@@ -40,10 +40,18 @@ function toIsoDate(value) {
     // A full timestamp string: take the date part as written, without re-parsing,
     // so no timezone conversion can move the day.
     const m = /^(\d{4}-\d{2}-\d{2})[T ]/.exec(trimmed);
-    if (m) return m[1];
-    const parsed = new Date(trimmed);
-    if (Number.isNaN(parsed.getTime())) throw new DateError(`Not a valid date: ${value}`);
-    return fromLocalParts(parsed);
+    if (m) {
+      assertRealCalendarDate(m[1]);
+      return m[1];
+    }
+    // Anything else is REFUSED rather than handed to new Date(), whose heuristic
+    // parsing resolves ambiguity by guessing. "01/02/2026" is 1 February to an
+    // Icelandic reader and 2 January to V8 — silently picking one puts the
+    // transaction in the wrong month, and sometimes the wrong VSK period, with
+    // nothing on screen to show it happened. ISO or nothing.
+    throw new DateError(
+      `Not a valid date: ${value}. Use ISO format (YYYY-MM-DD) — other formats are ambiguous.`
+    );
   }
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) throw new DateError('Not a valid date: Invalid Date');

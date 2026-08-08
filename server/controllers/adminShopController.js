@@ -56,10 +56,10 @@ const PRODUCT_CSV_HEADER = ['SKU', 'Name', 'Variant', 'Barcode', 'BIN', 'Price I
 const PRODUCT_IMPORT_FIELDS = ['bin', 'price_isk', 'price_eur', 'stock', 'active'];
 const MAX_IMPORT_ROWS = 5000;
 
-function csvCell(v) {
-  const s = String(v == null ? '' : v);
-  return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
+// Was a local copy that quoted correctly but did NOT neutralise leading
+// = + - @, so a product name or variant attribute beginning with one of those
+// became a live formula in the exported sheet. Now shared with the books exports.
+const { csvCell } = require('../utils/csv');
 
 function formatVariantAttrs(attrs) {
   if (!attrs || typeof attrs !== 'object') return '';
@@ -214,7 +214,7 @@ const adminShopController = {
         slug, name, description,
         name_is, description_is,
         price_isk, price_eur, stock, weight_grams, shape, capacity_litres, active,
-        sku, barcode,
+        sku, barcode, vat_rate,
         category, subcategory, duration_minutes, delivery_format, is_bookable,
       } = req.body;
       if (typeof slug === 'string' && RESERVED_SHOP_SLUGS.has(slug)) {
@@ -255,6 +255,9 @@ const adminShopController = {
         name_is:        name_is        || null,
         description_is: description_is || null,
         price_isk: priceIsk,
+        // VSK rate charged on this product. Defaults to the standard 24%; 11% is a
+        // closed statutory list (books, printed matter, food) — server/utils/vat.js.
+        vat_rate: vat_rate === undefined ? 24 : Number(vat_rate),
         price_eur: priceEur,
         stock: Number(stock) || 0,
         weight_grams: weight_grams != null ? Number(weight_grams) : null,

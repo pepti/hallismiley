@@ -54,6 +54,14 @@ describe('toIsoDate', () => {
   it.each(['not-a-date', {}, 42, true])('rejects unusable input %p', (bad) => {
     expect(() => toIsoDate(bad)).toThrow(DateError);
   });
+
+  it.each(['01/02/2026', '1.2.2026', 'Feb 1 2026', '2026/02/01'])(
+    'refuses the ambiguous format %s rather than guessing', (bad) => {
+      // "01/02/2026" is 1 February to an Icelandic reader and 2 January to V8.
+      // Guessing puts the transaction in the wrong month — sometimes the wrong VSK
+      // period — with nothing on screen to show it happened.
+      expect(() => toIsoDate(bad)).toThrow(/ambiguous|not a valid date/i);
+    });
 });
 
 describe('assertRealCalendarDate', () => {

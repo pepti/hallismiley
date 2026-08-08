@@ -3226,6 +3226,693 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        ON CONFLICT (kind, period, due_on) DO NOTHING`,
     ],
   },
+  {
+    // Phase 4: expenses (the input-VAT side) and fylgiskjöl.
+    //
+    // The tables themselves ship in 072; this adds the protections that make an
+    // expense a primary accounting document rather than an editable row, plus the
+    // indexes the new screens actually query.
+    name: '073_books_expenses',
+    statements: [
+      // An expense posts a journal entry the moment it is created, so its
+      // financial content falls under the same gr. 9 rule as everything else:
+      // correct it by reversing, not by editing.
+      //
+      // Three fields stay writable, and they are the point of the design:
+      //   document_id  — the receipt is very often attached LATER. The whole
+      //                  "missing documents" queue exists to chase exactly that,
+      //                  so freezing it would break the feature it supports.
+      //   description  — free-text note about what the purchase was for.
+      //   note-ish     — likewise. Neither affects the ledger.
+      `CREATE OR REPLACE FUNCTION books_protect_expense()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           RAISE EXCEPTION 'Expense % cannot be deleted; it is posted to the ledger (Reglugerd 505/2013 gr. 9). Reverse its journal entry instead', OLD.id
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF (NEW.supplier_name, NEW.supplier_kennitala, NEW.supplier_country,
+             NEW.supplier_invoice_no, NEW.expense_date,
+             NEW.amount_net, NEW.amount_vat, NEW.amount_gross,
+             NEW.vat_code, NEW.vat_deductible, NEW.account_id,
+             NEW.original_currency, NEW.original_amount_gross, NEW.fx_rate,
+             NEW.created_by)
+            IS DISTINCT FROM
+            (OLD.supplier_name, OLD.supplier_kennitala, OLD.supplier_country,
+             OLD.supplier_invoice_no, OLD.expense_date,
+             OLD.amount_net, OLD.amount_vat, OLD.amount_gross,
+             OLD.vat_code, OLD.vat_deductible, OLD.account_id,
+             OLD.original_currency, OLD.original_amount_gross, OLD.fx_rate,
+             OLD.created_by)
+         THEN
+           RAISE EXCEPTION 'Expense % is posted; its financial content cannot be altered (Reglugerd 505/2013 gr. 9). Only the attached document and description may change.', OLD.id
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_expenses_immutable ON expenses`,
+      `CREATE TRIGGER trg_expenses_immutable
+         BEFORE UPDATE OR DELETE ON expenses
+         FOR EACH ROW EXECUTE FUNCTION books_protect_expense()`,
+
+      // A document is evidence; once attached to an expense it must stay
+      // retrievable for seven years. Detaching is allowed (expenses.document_id
+      // is SET NULL), replacing the FILE is not.
+      `CREATE OR REPLACE FUNCTION books_protect_document()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           RAISE EXCEPTION 'Supporting documents cannot be deleted — they are the 7-year evidence trail (bokhaldslog 145/1994 gr. 20)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF (NEW.file_path, NEW.checksum_sha256, NEW.byte_size, NEW.mime_type, NEW.created_by)
+            IS DISTINCT FROM
+            (OLD.file_path, OLD.checksum_sha256, OLD.byte_size, OLD.mime_type, OLD.created_by)
+         THEN
+           RAISE EXCEPTION 'The stored file behind a supporting document cannot be swapped; upload a new document instead'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_books_documents_immutable ON books_documents`,
+      `CREATE TRIGGER trg_books_documents_immutable
+         BEFORE UPDATE OR DELETE ON books_documents
+         FOR EACH ROW EXECUTE FUNCTION books_protect_document()`,
+
+      // Re-uploading the identical file is almost always a double-entry attempt
+      // rather than a second genuine receipt. Not UNIQUE — the same PDF can
+      // legitimately support two periods' entries — but indexed so the duplicate
+      // check is cheap.
+      `CREATE INDEX IF NOT EXISTS idx_books_documents_checksum
+         ON books_documents (checksum_sha256)`,
+
+      // Backs the supplier-history lookup on the expense form and the
+      // "same supplier, same invoice number" duplicate warning.
+      `CREATE INDEX IF NOT EXISTS idx_expenses_supplier
+         ON expenses (LOWER(supplier_name), expense_date DESC)`,
+
+      // Backs the AR aging and statement queries, which group by the customer key
+      // (user_id when known, else the lowercased email).
+      `CREATE INDEX IF NOT EXISTS idx_invoices_customer_key
+         ON invoices (COALESCE(user_id, LOWER(customer_email)))
+         WHERE status IN ('issued','credited')`,
+    ],
+  },
+  {
+    // Per-product VAT rate.
+    //
+    // Until now every invoice line was hardcoded to 24% (or 0% on an export),
+    // which made the whole per-rate apparatus — the 4200/2210 accounts, the
+    // multi-bucket VSK return, the per-rate credit-note split — unreachable code.
+    // That matters because the 11% band is a CLOSED statutory list and one of the
+    // things on it is books and printed matter: the moment a catalogue or a book is
+    // sold, charging 24% on it is simply the wrong tax.
+    //
+    // The rate is snapshotted onto invoice_lines at issue (already the case), so
+    // changing a product's rate later never rewrites a historical invoice.
+    name: '074_product_vat_rate',
+    statements: [
+      `ALTER TABLE products
+         ADD COLUMN IF NOT EXISTS vat_rate SMALLINT NOT NULL DEFAULT 24`,
+      // Same closed set as invoice_lines and server/utils/vat.js — the three rates
+      // Iceland actually has.
+      `DO $$ BEGIN
+         ALTER TABLE products
+           ADD CONSTRAINT products_vat_rate_check CHECK (vat_rate IN (0, 11, 24));
+       EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    ],
+  },
+  {
+    // Phase 6: reconciliation gaps found while wiring the Stripe sync.
+    name: '075_books_reconciliation',
+    statements: [
+      // Attribution on a Stripe sync. 072 recorded WHEN a settlement was synced but
+      // not WHO ran it, and Reglugerð 505/2013 gr. 8 wants an identifiable person
+      // behind every entry — including the automated ones, where "which admin
+      // triggered this" is the only answer available.
+      `ALTER TABLE stripe_transactions
+         ADD COLUMN IF NOT EXISTS synced_by TEXT REFERENCES users(id) ON DELETE RESTRICT`,
+
+      // A settled Stripe row and a resolved bank line are both evidence of a posting.
+      // Neither is append-only at the row level — a bank line legitimately moves from
+      // unmatched to matched — but the LINK to the journal entry must not be quietly
+      // repointed at a different entry once set, or the trail from ledger to source
+      // breaks silently.
+      `CREATE OR REPLACE FUNCTION books_freeze_settled_link()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF OLD.journal_entry_id IS NOT NULL
+            AND NEW.journal_entry_id IS DISTINCT FROM OLD.journal_entry_id THEN
+           RAISE EXCEPTION 'This row is already linked to a journal entry; that link cannot be repointed (Reglugerd 505/2013 gr. 8)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_stripe_link_frozen ON stripe_transactions`,
+      `CREATE TRIGGER trg_stripe_link_frozen
+         BEFORE UPDATE ON stripe_transactions
+         FOR EACH ROW EXECUTE FUNCTION books_freeze_settled_link()`,
+
+      // Which invoice a bank receipt settled. 072 recorded the payment id, which is
+      // enough to trace the posting but not enough to answer "which invoice did this
+      // deposit pay" without a join through payments — the question the AR screen and
+      // the operator both actually ask.
+      `ALTER TABLE bank_transactions
+         ADD COLUMN IF NOT EXISTS matched_invoice_id TEXT
+           REFERENCES invoices(id) ON DELETE RESTRICT`,
+
+      // Backs the reconciliation screen's default view and the unmatched count.
+      `CREATE INDEX IF NOT EXISTS idx_bank_transactions_open
+         ON bank_transactions (account_code, booked_on DESC)
+         WHERE match_state = 'unmatched'`,
+      // Backs the "has this Stripe payout already been posted" lookup.
+      `CREATE INDEX IF NOT EXISTS idx_stripe_transactions_payout
+         ON stripe_transactions (payout_id) WHERE payout_id IS NOT NULL`,
+    ],
+  },
+  {
+    // ── 076: payroll, made runnable ──────────────────────────────────────────
+    //
+    // Migration 072 laid down the payroll SHAPE and got the important decision right:
+    // every statutory rate is effective-dated data in payroll_rates, with confirmed_at
+    // and confirmed_by, because Iceland re-sets the bands, persónuafsláttur,
+    // tryggingagjald and pension percentages each January, and a hardcoded rate is a
+    // guaranteed annual bug. This migration builds on that rather than beside it —
+    // there must be exactly one payroll schema in this database.
+    //
+    // What 072 left out is the LIFECYCLE of a run:
+    //
+    //   * no draft state, so figures could not be reviewed before becoming money owed
+    //     to Skatturinn
+    //   * no link from a run to the journal entry it posted, so the ledger and the
+    //     payroll register were two sets of numbers with no way to tie them
+    //   * no reversal, so a mistake could only be fixed by editing history
+    //   * no append-only enforcement, so a posted run was editable
+    //   * `period` was UNIQUE outright, which does one job right (a second POSTED run
+    //     for a month would double every remittance) and one wrong (a draft alongside
+    //     a posted run is exactly how a correction gets prepared)
+    //
+    // It also capped allowance_factor at 1, which is wrong: persónuafsláttur can be
+    // partly transferred from a spouse, so above the standard credit is legal.
+    name: '076_books_payroll_lifecycle',
+    statements: [
+      // ── Employees ────────────────────────────────────────────────────────────
+
+      // 'owner' is what turns on the reiknað endurgjald check. Paying yourself below
+      // the RSK minimum for your category is the commonest mistake a one-person ehf.
+      // makes, and nothing about the payslip looks wrong at the time.
+      `ALTER TABLE employees
+         ADD COLUMN IF NOT EXISTS employment_type TEXT NOT NULL DEFAULT 'employee'`,
+      `ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_employment_type_check`,
+      `ALTER TABLE employees
+         ADD CONSTRAINT employees_employment_type_check
+         CHECK (employment_type IN ('employee','owner','contractor'))`,
+
+      // An owner with no category cannot be checked against the minimum, which is the
+      // one thing an owner most needs checked.
+      `ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_owner_has_category`,
+      `ALTER TABLE employees
+         ADD CONSTRAINT employees_owner_has_category
+         CHECK (employment_type <> 'owner' OR reference_wage_category IS NOT NULL)`,
+
+      // Employment dates, so a payslip for someone who left in March is a warning
+      // rather than something nobody notices until the annual return.
+      `ALTER TABLE employees ADD COLUMN IF NOT EXISTS started_on DATE`,
+      `ALTER TABLE employees ADD COLUMN IF NOT EXISTS ended_on DATE`,
+      `ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_dates_ordered`,
+      `ALTER TABLE employees
+         ADD CONSTRAINT employees_dates_ordered
+         CHECK (ended_on IS NULL OR started_on IS NULL OR ended_on >= started_on)`,
+      `ALTER TABLE employees ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT ''`,
+
+      // Per-employee pension rates. NULL means "use the statutory rate for the year",
+      // which is a different statement from 0 — hence nullable rather than defaulted.
+      // A collective agreement can be more generous than the statutory minimum, so an
+      // override that is LOWER is flagged by the preflight rather than refused here.
+      `ALTER TABLE employees
+         ADD COLUMN IF NOT EXISTS pension_employee_rate NUMERIC(6,4)`,
+      `ALTER TABLE employees
+         ADD COLUMN IF NOT EXISTS pension_employer_rate NUMERIC(6,4)`,
+      `ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pension_rates_sane`,
+      `ALTER TABLE employees
+         ADD CONSTRAINT employees_pension_rates_sane
+         CHECK ((pension_employee_rate IS NULL OR pension_employee_rate BETWEEN 0 AND 0.5)
+            AND (pension_employer_rate IS NULL OR pension_employer_rate BETWEEN 0 AND 0.5))`,
+
+      // 072 capped the personal-credit factor at 1. Persónuafsláttur can be partly
+      // transferred from a spouse, so a factor above 1 is legitimate, and capping it
+      // silently over-withholds for the households it was meant to help.
+      `ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_allowance_factor_check`,
+      `ALTER TABLE employees
+         ADD CONSTRAINT employees_allowance_factor_check
+         CHECK (allowance_factor BETWEEN 0 AND 2)`,
+
+      // ── Runs ─────────────────────────────────────────────────────────────────
+
+      // draft -> posted -> reversed, with 'settled' kept from 072 for a run whose wages
+      // have gone out. The draft is the point: payroll figures should be looked at
+      // before they become a liability to Skatturinn.
+      `ALTER TABLE payroll_runs DROP CONSTRAINT IF EXISTS payroll_runs_status_check`,
+      `ALTER TABLE payroll_runs
+         ADD CONSTRAINT payroll_runs_status_check
+         CHECK (status IN ('draft','posted','settled','reversed'))`,
+      `ALTER TABLE payroll_runs ALTER COLUMN status SET DEFAULT 'draft'`,
+
+      // The UNIQUE on period was doing two jobs and getting one wrong. Replaced with a
+      // partial index so only a POSTED (or settled) run is exclusive per month.
+      `ALTER TABLE payroll_runs DROP CONSTRAINT IF EXISTS payroll_runs_period_key`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_payroll_posted_period
+         ON payroll_runs (period) WHERE status IN ('posted','settled')`,
+
+      // The link to the ledger.
+      `ALTER TABLE payroll_runs
+         ADD COLUMN IF NOT EXISTS journal_entry_id TEXT
+           REFERENCES journal_entries(id) ON DELETE RESTRICT`,
+      `ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ`,
+      `ALTER TABLE payroll_runs
+         ADD COLUMN IF NOT EXISTS posted_by TEXT REFERENCES users(id) ON DELETE RESTRICT`,
+      // The preflight as it stood at posting, including any override and its reason. A
+      // year later, "why was this posted with the owner below the minimum" is a
+      // question the record can answer.
+      `ALTER TABLE payroll_runs
+         ADD COLUMN IF NOT EXISTS preflight JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE payroll_runs
+         ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+      `DROP TRIGGER IF EXISTS trg_payroll_runs_updated_at ON payroll_runs`,
+      `CREATE TRIGGER trg_payroll_runs_updated_at
+         BEFORE UPDATE ON payroll_runs
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+
+      // A posted run without a journal entry would be a liability recorded nowhere.
+      `ALTER TABLE payroll_runs DROP CONSTRAINT IF EXISTS payroll_posted_has_entry`,
+      `ALTER TABLE payroll_runs
+         ADD CONSTRAINT payroll_posted_has_entry
+         CHECK (status = 'draft' OR (journal_entry_id IS NOT NULL AND posted_at IS NOT NULL))`,
+
+      // ── Payslips ─────────────────────────────────────────────────────────────
+
+      // Identity as it stood on the day, because a payslip is a document, not a view
+      // over the employees table. Renaming someone must not rewrite their old payslips.
+      `ALTER TABLE payslips ADD COLUMN IF NOT EXISTS employee_name TEXT`,
+      `ALTER TABLE payslips ADD COLUMN IF NOT EXISTS employee_kennitala TEXT`,
+      // The filed PDF. Deliberately separate from the figures — the trigger below
+      // allows it to be attached after posting for exactly that reason.
+      `ALTER TABLE payslips
+         ADD COLUMN IF NOT EXISTS document_id TEXT
+           REFERENCES books_documents(id) ON DELETE RESTRICT`,
+      `CREATE INDEX IF NOT EXISTS idx_payslips_employee
+         ON payslips (employee_id, created_at DESC)`,
+
+      // The identity that makes a payslip checkable at rest, rather than only by
+      // re-running the code that produced it. If a new deduction type is ever added,
+      // this constraint has to be extended with it — which is the point: a deduction
+      // the net does not account for cannot be stored.
+      `ALTER TABLE payslips DROP CONSTRAINT IF EXISTS payslip_net_adds_up`,
+      `ALTER TABLE payslips
+         ADD CONSTRAINT payslip_net_adds_up
+         CHECK (net_pay = gross - withholding - pension_employee - extra_pension_employee - union_dues)`,
+      // Withholding is the computed tax less the credit, so it can never exceed it.
+      `ALTER TABLE payslips DROP CONSTRAINT IF EXISTS payslip_withholding_within_tax`,
+      `ALTER TABLE payslips
+         ADD CONSTRAINT payslip_withholding_within_tax
+         CHECK (withholding <= computed_tax)`,
+      // 072 used ON DELETE RESTRICT, which would leave payslips behind when a DRAFT run
+      // is discarded. CASCADE is right here: a draft's payslips are part of the draft,
+      // and the trigger below is what stops a POSTED run being deleted at all.
+      `ALTER TABLE payslips DROP CONSTRAINT IF EXISTS payslips_run_id_fkey`,
+      `ALTER TABLE payslips
+         ADD CONSTRAINT payslips_run_id_fkey
+         FOREIGN KEY (run_id) REFERENCES payroll_runs(id) ON DELETE CASCADE`,
+
+      // ── Append-only, once posted ─────────────────────────────────────────────
+      //
+      // Reglugerð 505/2013 gr. 9, the same rule the journal follows. Correcting a
+      // posted run means reversing it and posting a new one, so the mistake and the
+      // fix are both on record.
+      `CREATE OR REPLACE FUNCTION books_protect_payroll_run()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           IF OLD.status <> 'draft' THEN
+             RAISE EXCEPTION 'Payroll run % has been posted and cannot be deleted; reverse it instead (Reglugerd 505/2013 gr. 9)', OLD.period
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+           RETURN OLD;
+         END IF;
+         IF OLD.status IN ('posted','settled')
+            AND NEW.status NOT IN ('posted','settled','reversed') THEN
+           RAISE EXCEPTION 'A posted payroll run can only be settled or reversed, not returned to %', NEW.status
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.status = 'reversed' AND NEW.status <> 'reversed' THEN
+           RAISE EXCEPTION 'A reversed payroll run is final'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.status <> 'draft' AND (
+              NEW.period <> OLD.period OR NEW.pay_date <> OLD.pay_date
+              OR NEW.gross_total <> OLD.gross_total
+              OR NEW.withholding_total <> OLD.withholding_total
+              OR NEW.net_total <> OLD.net_total
+              OR NEW.social_security_total <> OLD.social_security_total
+              OR NEW.tax_year <> OLD.tax_year
+              OR NEW.journal_entry_id IS DISTINCT FROM OLD.journal_entry_id) THEN
+           RAISE EXCEPTION 'The figures on posted payroll run % are final (Reglugerd 505/2013 gr. 9)', OLD.period
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_payroll_run_protected ON payroll_runs`,
+      `CREATE TRIGGER trg_payroll_run_protected
+         BEFORE UPDATE OR DELETE ON payroll_runs
+         FOR EACH ROW EXECUTE FUNCTION books_protect_payroll_run()`,
+
+      // The payslip guard is not redundant with the run guard. Without it, the run
+      // guard could be sidestepped: delete the payslips, and a posted run's totals rest
+      // on no document at all.
+      `CREATE OR REPLACE FUNCTION books_protect_payslip()
+       RETURNS TRIGGER AS $$
+       DECLARE v_status TEXT;
+       BEGIN
+         SELECT status INTO v_status FROM payroll_runs
+          WHERE id = COALESCE(NEW.run_id, OLD.run_id);
+         -- A parent that no longer exists means its DELETE was permitted, so it was a
+         -- draft; let the cascade through rather than blocking on a missing row.
+         IF v_status IS NULL OR v_status = 'draft' THEN
+           RETURN COALESCE(NEW, OLD);
+         END IF;
+         -- Attaching the PDF afterwards is the one permitted change: the document is
+         -- evidence OF the payslip, not part of its figures.
+         IF TG_OP = 'UPDATE'
+            AND NEW.run_id = OLD.run_id
+            AND NEW.employee_id = OLD.employee_id
+            AND NEW.gross = OLD.gross AND NEW.taxable_base = OLD.taxable_base
+            AND NEW.withholding = OLD.withholding AND NEW.net_pay = OLD.net_pay
+            AND NEW.pension_employee = OLD.pension_employee
+            AND NEW.pension_employer = OLD.pension_employer
+            AND NEW.social_security = OLD.social_security
+            AND NEW.union_dues = OLD.union_dues
+            AND OLD.document_id IS NULL AND NEW.document_id IS NOT NULL THEN
+           RETURN NEW;
+         END IF;
+         RAISE EXCEPTION 'Payslips on a posted payroll run are final (Reglugerd 505/2013 gr. 9)'
+           USING ERRCODE = 'restrict_violation';
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_payslip_protected ON payslips`,
+      `CREATE TRIGGER trg_payslip_protected
+         BEFORE UPDATE OR DELETE ON payslips
+         FOR EACH ROW EXECUTE FUNCTION books_protect_payslip()`,
+
+      // ── The year's figures are final once used ───────────────────────────────
+      //
+      // Un-confirming or editing a year that a posted run has used would leave that run
+      // resting on rates the system now says nobody has checked, and its payslips would
+      // no longer be reproducible from the year's figures.
+      `CREATE OR REPLACE FUNCTION books_protect_payroll_rates()
+       RETURNS TRIGGER AS $$
+       DECLARE v_runs INT;
+       BEGIN
+         SELECT COUNT(*) INTO v_runs FROM payroll_runs
+          WHERE tax_year = OLD.tax_year AND status <> 'draft';
+         IF v_runs > 0 THEN
+           IF TG_OP = 'DELETE' THEN
+             RAISE EXCEPTION 'Tax year % has been used by % posted payroll run(s) and cannot be deleted', OLD.tax_year, v_runs
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+           IF NEW.confirmed_at IS NULL
+              OR NEW.bands::text <> OLD.bands::text
+              OR NEW.personal_allowance <> OLD.personal_allowance
+              OR NEW.social_security <> OLD.social_security
+              OR NEW.pension_employee <> OLD.pension_employee
+              OR NEW.pension_employer <> OLD.pension_employer THEN
+             RAISE EXCEPTION 'Tax year % has been used by % posted payroll run(s); its figures are final', OLD.tax_year, v_runs
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+         END IF;
+         RETURN COALESCE(NEW, OLD);
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_payroll_rates_protected ON payroll_rates`,
+      `CREATE TRIGGER trg_payroll_rates_protected
+         BEFORE UPDATE OR DELETE ON payroll_rates
+         FOR EACH ROW EXECUTE FUNCTION books_protect_payroll_rates()`,
+
+      // ── Reiknað endurgjald, per year and category ────────────────────────────
+      //
+      // 072 put the reference wage on the EMPLOYEE, which records what was agreed with
+      // an adviser but cannot answer "is this still the published minimum". RSK
+      // republishes the table every year, so the minimum belongs to the year. The
+      // employee keeps the category; the amount is looked up.
+      `CREATE TABLE IF NOT EXISTS payroll_reference_wages (
+        id            TEXT     PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        tax_year      SMALLINT NOT NULL REFERENCES payroll_rates(tax_year) ON DELETE CASCADE,
+        category      TEXT     NOT NULL,
+        description   TEXT     NOT NULL DEFAULT '',
+        monthly_min   BIGINT   NOT NULL CHECK (monthly_min >= 0),
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (tax_year, category)
+      )`,
+
+      // ── No seeded rates ─────────────────────────────────────────────────────
+      //
+      // Deliberately none, and 072 seeded none either. Entering a year's bands from
+      // memory would put four authoritative-looking numbers into the database that
+      // nobody has checked, and the whole design here is that such numbers must not
+      // exist. The screen walks the owner through entering them from Skatturinn's
+      // published table; until then payroll refuses to run, and says why.
+    ],
+  },
+  {
+    // ── 077: counter sales ───────────────────────────────────────────────────
+    //
+    // A counter sale is a SALE, so it belongs in the sales ledger with everything else.
+    // This migration adds almost nothing, and that is the design: migration 072 already
+    // has an `invoices.series` of ('invoice','receipt') and a gapless 'receipt' counter
+    // beside the invoice one, so a till sale is a receipt-series row in `invoices`.
+    //
+    // The alternative — a separate pos_sales table — would give the business two sales
+    // ledgers that have to be added together to answer "what did we sell", and the VSK
+    // return would have to read both. One of them would eventually be forgotten.
+    //
+    // What a counter sale does NOT do is go through receivables. An invoice creates a
+    // debt and the payment settles it later; at a till the sale and the money are the
+    // same event, so the entry debits cash (or the card clearing account) directly. A
+    // POS sale that debited 1100 and immediately credited it back would put two legs in
+    // the ledger that describe nothing.
+    name: '077_books_pos',
+    statements: [
+      // 'pos' as a journal source. Without it every till entry fails the source_type
+      // CHECK — the counter is the last thing in these books that posts.
+      `ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS journal_entries_source_type_check`,
+      `ALTER TABLE journal_entries
+         ADD CONSTRAINT journal_entries_source_type_check
+         CHECK (source_type IN ('invoice','payment','credit_note','expense',
+                                'payroll','vat_settlement','opening','manual',
+                                'reversal','stripe','bank','pos'))`,
+
+      // A counter sale has no customer to bill, so customer_name carries a standing
+      // label rather than a person. Nothing to migrate — noted here because a reader
+      // finding 'Almenn sala' in the invoices table should know it is deliberate and
+      // not a placeholder somebody forgot to fill in.
+
+      // Backs the till's own history view and the day's takings, without making the
+      // invoice register's index do double duty.
+      `CREATE INDEX IF NOT EXISTS idx_invoices_receipts
+         ON invoices (issued_at DESC, invoice_number DESC)
+         WHERE series = 'receipt'`,
+    ],
+  },
+  {
+    // ── 078: payroll integrity hardening ─────────────────────────────────────
+    //
+    // Three holes a review of PR #117 found in the 076 payroll triggers, plus the two
+    // columns the corrected séreign posting needs. All CREATE OR REPLACE, because 076 is
+    // applied and must not be edited.
+    //
+    //   1. A posted payslip could be edited or destroyed by REPARENTING it onto a
+    //      throwaway draft run — books_protect_payslip resolved the parent as
+    //      COALESCE(NEW.run_id, OLD.run_id), i.e. the NEW (draft) run, hit its
+    //      draft early-return, and let the move through; deleting the draft then
+    //      CASCADEd the payslip away, leaving a posted run resting on nothing. The
+    //      journal-line and invoice-line guards already check BOTH parents and refuse
+    //      reparenting; this one now does too.
+    //   2. The run "figures are final" check compared only some columns — the pension,
+    //      séreign and union totals (exactly what the journal credited), the preflight
+    //      (the stored answer to "why was this overridden"), and posted_by/posted_at
+    //      (gr. 8 attribution) were all editable after posting.
+    //   3. The rates "final once used" check omitted municipal_rate, source_note and
+    //      confirmed_by, so a used year's provenance could be rewritten.
+    name: '078_books_payroll_integrity',
+    statements: [
+      // Séreignarsparnaður totals, kept apart from the mandatory-fund totals so 2320 and
+      // 2330 can be credited separately. Default 0; historical rows keep their old
+      // folded figures (they are append-only and not re-posted).
+      `ALTER TABLE payroll_runs
+         ADD COLUMN IF NOT EXISTS extra_pension_employee_total BIGINT NOT NULL DEFAULT 0
+           CHECK (extra_pension_employee_total >= 0)`,
+      `ALTER TABLE payroll_runs
+         ADD COLUMN IF NOT EXISTS extra_pension_employer_total BIGINT NOT NULL DEFAULT 0
+           CHECK (extra_pension_employer_total >= 0)`,
+
+      // ── Run: freeze every figure, not just some ──────────────────────────────
+      `CREATE OR REPLACE FUNCTION books_protect_payroll_run()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           IF OLD.status <> 'draft' THEN
+             RAISE EXCEPTION 'Payroll run % has been posted and cannot be deleted; reverse it instead (Reglugerd 505/2013 gr. 9)', OLD.period
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+           RETURN OLD;
+         END IF;
+         IF OLD.status IN ('posted','settled')
+            AND NEW.status NOT IN ('posted','settled','reversed') THEN
+           RAISE EXCEPTION 'A posted payroll run can only be settled or reversed, not returned to %', NEW.status
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.status = 'reversed' AND NEW.status <> 'reversed' THEN
+           RAISE EXCEPTION 'A reversed payroll run is final'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         -- Once out of draft, only status (posted->settled->reversed), note (reverseRun
+         -- appends to it) and updated_at may change. Every figure, the attribution and
+         -- the preflight are frozen.
+         IF OLD.status <> 'draft' AND (
+              NEW.period <> OLD.period OR NEW.pay_date <> OLD.pay_date
+              OR NEW.tax_year <> OLD.tax_year
+              OR NEW.gross_total <> OLD.gross_total
+              OR NEW.withholding_total <> OLD.withholding_total
+              OR NEW.pension_employee_total <> OLD.pension_employee_total
+              OR NEW.pension_employer_total <> OLD.pension_employer_total
+              OR NEW.extra_pension_employee_total <> OLD.extra_pension_employee_total
+              OR NEW.extra_pension_employer_total <> OLD.extra_pension_employer_total
+              OR NEW.social_security_total <> OLD.social_security_total
+              OR NEW.union_total <> OLD.union_total
+              OR NEW.net_total <> OLD.net_total
+              OR NEW.journal_entry_id IS DISTINCT FROM OLD.journal_entry_id
+              OR NEW.posted_at IS DISTINCT FROM OLD.posted_at
+              OR NEW.posted_by IS DISTINCT FROM OLD.posted_by
+              OR NEW.created_by IS DISTINCT FROM OLD.created_by
+              OR NEW.preflight::text <> OLD.preflight::text) THEN
+           RAISE EXCEPTION 'The figures on posted payroll run % are final (Reglugerd 505/2013 gr. 9)', OLD.period
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_payroll_run_protected ON payroll_runs`,
+      `CREATE TRIGGER trg_payroll_run_protected
+         BEFORE UPDATE OR DELETE ON payroll_runs
+         FOR EACH ROW EXECUTE FUNCTION books_protect_payroll_run()`,
+
+      // ── Payslip: check BOTH parents, refuse reparenting, tighten the carve-out ─
+      `CREATE OR REPLACE FUNCTION books_protect_payslip()
+       RETURNS TRIGGER AS $$
+       DECLARE v_old_status TEXT; v_new_status TEXT;
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           SELECT status INTO v_old_status FROM payroll_runs WHERE id = OLD.run_id;
+           -- A parent that no longer exists means its own DELETE was permitted, so it
+           -- was a draft; let the cascade through.
+           IF v_old_status IS NULL OR v_old_status = 'draft' THEN
+             RETURN OLD;
+           END IF;
+           RAISE EXCEPTION 'Payslips on a posted payroll run are final (Reglugerd 505/2013 gr. 9)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+
+         SELECT status INTO v_old_status FROM payroll_runs WHERE id = OLD.run_id;
+         SELECT status INTO v_new_status FROM payroll_runs WHERE id = NEW.run_id;
+
+         -- Reparenting is refused outright: a payslip cannot move between runs. Moving
+         -- it OFF a posted run (onto a draft, then deleting the draft) was the way the
+         -- posted-run guard got sidestepped.
+         IF NEW.run_id <> OLD.run_id THEN
+           RAISE EXCEPTION 'A payslip cannot be moved to another payroll run (Reglugerd 505/2013 gr. 9)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+
+         -- Both parents are the same run now. If it is a draft, the payslip is editable.
+         IF v_old_status IS NULL OR v_old_status = 'draft' THEN
+           RETURN NEW;
+         END IF;
+
+         -- Posted run: the ONLY permitted change is attaching the PDF for the first
+         -- time. Every figure and the snapshotted identity must be byte-identical.
+         IF NEW.employee_id = OLD.employee_id
+            AND NEW.employee_name = OLD.employee_name
+            AND NEW.employee_kennitala = OLD.employee_kennitala
+            AND NEW.gross = OLD.gross AND NEW.taxable_base = OLD.taxable_base
+            AND NEW.computed_tax = OLD.computed_tax
+            AND NEW.allowance_used = OLD.allowance_used
+            AND NEW.withholding = OLD.withholding AND NEW.net_pay = OLD.net_pay
+            AND NEW.pension_employee = OLD.pension_employee
+            AND NEW.pension_employer = OLD.pension_employer
+            AND NEW.extra_pension_employee = OLD.extra_pension_employee
+            AND NEW.extra_pension_employer = OLD.extra_pension_employer
+            AND NEW.social_security = OLD.social_security
+            AND NEW.union_dues = OLD.union_dues
+            AND NEW.breakdown::text = OLD.breakdown::text
+            AND OLD.document_id IS NULL AND NEW.document_id IS NOT NULL THEN
+           RETURN NEW;
+         END IF;
+         RAISE EXCEPTION 'Payslips on a posted payroll run are final (Reglugerd 505/2013 gr. 9)'
+           USING ERRCODE = 'restrict_violation';
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_payslip_protected ON payslips`,
+      `CREATE TRIGGER trg_payslip_protected
+         BEFORE UPDATE OR DELETE ON payslips
+         FOR EACH ROW EXECUTE FUNCTION books_protect_payslip()`,
+
+      // ── Rates: freeze the provenance too, once a year is used ─────────────────
+      `CREATE OR REPLACE FUNCTION books_protect_payroll_rates()
+       RETURNS TRIGGER AS $$
+       DECLARE v_runs INT;
+       BEGIN
+         SELECT COUNT(*) INTO v_runs FROM payroll_runs
+          WHERE tax_year = OLD.tax_year AND status <> 'draft';
+         IF v_runs > 0 THEN
+           IF TG_OP = 'DELETE' THEN
+             RAISE EXCEPTION 'Tax year % has been used by % posted payroll run(s) and cannot be deleted', OLD.tax_year, v_runs
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+           IF NEW.confirmed_at IS NULL
+              OR NEW.bands::text <> OLD.bands::text
+              OR NEW.personal_allowance <> OLD.personal_allowance
+              OR NEW.municipal_rate <> OLD.municipal_rate
+              OR NEW.social_security <> OLD.social_security
+              OR NEW.pension_employee <> OLD.pension_employee
+              OR NEW.pension_employer <> OLD.pension_employer
+              OR NEW.source_note <> OLD.source_note
+              OR NEW.confirmed_by IS DISTINCT FROM OLD.confirmed_by THEN
+             RAISE EXCEPTION 'Tax year % has been used by % posted payroll run(s); its figures are final', OLD.tax_year, v_runs
+               USING ERRCODE = 'restrict_violation';
+           END IF;
+         END IF;
+         RETURN COALESCE(NEW, OLD);
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_payroll_rates_protected ON payroll_rates`,
+      `CREATE TRIGGER trg_payroll_rates_protected
+         BEFORE UPDATE OR DELETE ON payroll_rates
+         FOR EACH ROW EXECUTE FUNCTION books_protect_payroll_rates()`,
+    ],
+  },
+  {
+    // ── 079: counter-sale idempotency ────────────────────────────────────────
+    //
+    // A double-tap of "complete the sale" at the till, or a retry after a lost
+    // response, rang up a SECOND full sale: the POS payment key was derived from the
+    // receipt's own fresh UUID, so it could never collide with anything. This lets the
+    // client send a per-attempt token; a retry carrying the same token collides on this
+    // index, the second transaction rolls back whole (its counter number with it, so the
+    // series stays gapless), and the caller is handed the receipt the first attempt made.
+    //
+    // Partial, on the 'client:' prefix, so it constrains only caller-supplied POS tokens
+    // and never the auto 'pos-<id>' keys or the invoice payment keys.
+    name: '079_books_pos_idempotency',
+    statements: [
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_payments_client_key
+         ON payments (idempotency_key) WHERE idempotency_key LIKE 'client:%'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
