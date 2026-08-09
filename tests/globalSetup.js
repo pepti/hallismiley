@@ -19,7 +19,7 @@ const SETUP_LOCK_KEY = 1751215212; // 0x68616c6c — "hall" as int32
 
 module.exports = async function globalSetup() {
   const dbUrl = process.env.TEST_DATABASE_URL
-    || 'postgresql://postgres:postgres@localhost:5432/hallismiley_test';
+    || 'postgresql://postgres:postgres@localhost:5432/orangesmiley_test';
 
   const url    = new URL(dbUrl);
   const dbName = url.pathname.replace(/^\//, '');

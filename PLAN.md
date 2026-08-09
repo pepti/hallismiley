@@ -1,46 +1,42 @@
-# Orange Smiley — migration plan (https://www.hallismiley.is → custom Node app)
+# Orange Smiley public site — build plan
 
-**Status:** Draft. **Created:** 2026-08-09 by site-factory. Base: `C:\Users\Notandi\claude\HalliProjects` @ `562c637`.
+**Status:** Job 1 done, Job 2 in progress. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\HalliProjects` @ `562c637`.
 
-## Phases
+Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `C:\Users\Notandi\claude\Projects\orange smiley\CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `ORANGE-SMILEY-PLAN.md` (same folder).
 
-### Phase 0 — Capture & extract (read-only, done in Cowork)
+## Job 1 — Scaffold with ALL features (done 2026-08-09)
 
-1. Frontend audit of https://www.hallismiley.is (logged in if gated) → `docs/frontend-audit.md`: theme tokens, page structure, money pages, missing UX, app-specific data (pack sizes, MOQ) that exports won't contain.
-2. Backend/admin audit (READ-ONLY browsing) → `docs/<platform>-audit.md`: data shapes, order workflow, installed apps = feature checklist.
-3. Data export → `data/import/` (gitignored): API token preferred, CSV fallback; exports may email to the owner.
+- Scaffolded via site-factory, base rev `562c637`, secret scan clean.
+- **`/strip-base` deliberately NOT run** (Halli's instruction — every module stays; see CLAUDE.md).
+- `.env`: local dev values; `EMAIL_FROM=info@orangesmiley.is` placeholder (base gotcha fixed).
+- `.env.example`: added missing `STRIPE_*`, `RESEND_API_KEY`, `DEFAULT_LOCALE` entries (BASE-SYNC gap).
+- `tests/env.js` fallback DB → `orangesmiley_test`; dev DB `orangesmiley` created.
+- Acceptance: dev boots, `npm test` / `lint` / `check:i18n` green, base SHA in CLAUDE.md, first commit.
 
-### Phase 1 — Scaffold
+## Job 2 — Re-skin + re-organize (presentation/navigation, not capability)
 
-`scaffold.js` done. Then `/strip-base`: remove portfolio (projects/news/party/bio), **keep commerce + admin**, rewire app.js/router/NavBar/ssrMeta/sitemap. Acceptance: `npm run dev` boots with an empty catalog and admin intact. Note: inherited portfolio DB tables get dropped in Phase 2; inherited tests adapted in Phase 5.
+One branch + worktree per chunk, lint + i18n + tests green per chunk, merge to main (Halli reviews history post-hoc — his call 2026-08-09). Chunk order:
 
-### Phase 2 — Data model & importer
+1. **B `feat/is-default-locale`** — `PUBLIC_DEFAULT_LOCALE='is'` for the visitor-facing role only; `DEFAULT_LOCALE='en'` stays as content-fallback/storage dimension (party module depends on it).
+2. **A `feat/orange-brand`** — retoken `:root` values (orange ~#F97316, warm neutrals, one dark accent), `lava` theme → orange-dark variant, wordmark + smiley SVG, favicon/og-image.
+3. **C `feat/business-ia`** — routes `/thjonusta`, `/verkefni` (projects module repurposed as case studies), `/um-okkur`, `/hafa-samband`, `/personuvernd`; new home hero "Allt kerfið þitt á einum stað" (static, video removed); NavBar → business links; IS-first DRAFT copy.
+4. **D `feat/hide-portfolio-surfaces`** — `server/config/publicSurface.js` single source of truth; noindex on hidden routes (`/party`, `/halli`, `/news`, `/shop`, …); sitemap = business routes only; specs assert "hidden from nav, still functional".
+5. **E `feat/lead-capture`** — contact plumbing extended (name, company, email, phone, current platform, message), pino instead of console.log, notification email, limiter 5/hr/IP. Leads DB table + admin view deferred to Job 3.
+6. **F `feat/seo-jsonld`** — Organization + Service JSON-LD, index.html baked meta, `/personuvernd` copy, Lighthouse ≥90 on `/` + `/thjonusta`.
+7. **G `feat/e2e-business-routes`** — Playwright spec walking the six business routes in both locales; final acceptance sweep.
 
-`/import-data`: migrations appended to `server/config/schema.js` (with a reference `.sql` copy under `server/migrations/`) for what the base schema still lacks (product_variants, companies/locations, price_tiers, order history…) — much commerce schema already exists in the base, so focus on the customer-specific gaps — then an idempotent `server/scripts/import-<platform>.js`; images to `public/assets/products/`. Acceptance: run the importer twice → identical row counts.
+## Job 3 — ENHANCEMENTS.md → STOP for Halli
 
-### Phase 3 — Re-theme + key pages
+Numbered proposals (what / why / effort S·M·L / risk / now-vs-later), categorized quick-wins / architectural-now / later. Evaluate the brief's 9 seeds + build findings. **Implement nothing without approval.**
 
-`/clone-ui https://www.hallismiley.is`: theme tokens → re-skin SPA; rebuild customer's key pages on base components.
+## Known intentional oddities
 
-### Phase 4 — Customer workflows
+- `--url`/canonical references to hallismiley.is remain until orangesmiley.is is registered (kennitala pending) — not an oversight.
+- Stripe/OAuth/Resend env vars blank in dev: shop browsable, checkout/OAuth/email inert until configured — features preserved, not removed.
+- Deploy: company Azure tenant, **do not provision** until kennitala lands.
 
-From the audits: checkout type (invoice/card), approval queues, reorder, admin workflows. Server-side gating first.
+## Open questions for Halli
 
-### Phase 5 — Verify
-
-Adapt Jest/Playwright; seed from real import; `/security-check` + `/pre-deploy`.
-
-Then the go-live gate:
-- `/test-plan` — generate `TEST-PLAN.md` + the role × route Playwright walkthrough. Must pass **twice in a row without a DB reset**.
-- Fill in `docs/SLO.md` (scaffolded as a skeleton — every `TODO` resolved) and confirm the observability it claims is actually live, not just wired.
-- `/audit` — parallel read-only audit → scorecard → **GO / CONDITIONAL GO / NO-GO**. Work the P0 list before cutover.
-
-## Open questions
-
-1. Pricing model (single list vs per-customer tiers)?
-2. Payment workflow (card, invoice, both)? Stripe is already wired in the base — reuse or replace?
-3. Stock semantics (blocking or advisory)?
-4. Which base theme to start from, or fully custom tokens? Which RBAC roles does this customer need?
-5. AI auto-translation on or off for this customer?
-6. Deployment target and environment model — a single tier, or TEST/eval + PROD with promotion? (The Icelandic Store engagement built a two-tier Azure kit — `docs/environments.md`, `azure-env.md`, `azure-monitoring.md`, `DEPLOYMENT.md` in that project — worth reading as reference before designing this one.)
-7. (add per customer)
+1. Confirm tier pricing (39–79 þ.kr./mán is DRAFT).
+2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
+3. ENHANCEMENTS.md decisions after Job 3.
