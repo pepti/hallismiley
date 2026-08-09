@@ -1,74 +1,62 @@
 :root {
   color-scheme: dark;
 
-  /* ── Orange Smiley "classic" — deep warm dark, orange-led ───────────────────
-     The design language is the hallismiley/LoL lineage the base was built
-     around — near-black warm surfaces, a luminous accent metal, sharp corners,
-     glows — with the gold swapped for an orange ramp. Token NAMES are
-     inherited (incl. the legacy --gold/--teal aliases) so every var()
-     reference resolves without component edits; only the VALUES are branded.
+  /* ── Orange Smiley "classic" = ASH — quiet warm charcoal, softened embers ──
+     Halli tested the ten-theme exploration set in the picker and chose Ash
+     (2026-08-09): calm, professional, ember-warm rather than ember-loud.
+     These are the Ash tokens promoted to the default. Token NAMES are
+     inherited from the base (incl. the legacy --gold/--teal aliases) so
+     every var() reference resolves without component edits.
 
-     Palette discipline (Halli's design rules, 2026-08-09): ONE dominant
-     colour + ONE sharp accent + neutrals. Dominant = the orange ramp; the
-     sharp accent = glacial cyan (--teal), used RARELY — fire above, ice
-     below. Iceland in two hues, and the heritage accent of the base.
+     Palette discipline (design rules): dominant = the softened orange ramp
+       #F3B577  --gold-light   highlights, hovers
+       #E8853D  --gold         THE accent — icons, links, price numerals
+       #B45309  --gold-dark    borders, gradient tails, pressed
+     sharp accent = warm ivory (--teal), used sparingly; neutrals = warm
+     charcoals + warm off-white ink. */
 
-     The orange ramp, light → dark:
-       #FDBA74  --gold-light   headings, hovers, highlights
-       #F97316  --gold         THE brand orange — primary accent, icons, links
-       #C2410C  --gold-dark    burnt orange — borders, gradients, pressed
-       #9A3412  (in gradients) rust — gradient tails, deep glows
-     Sharp accent:
-       #22D3EE  --teal         glacial cyan — sparing highlights only        */
+  /* Warm charcoal surfaces */
+  --bg-base:     #161412;
+  --bg-base-rgb: 22, 20, 18;
+  --bg-surface:  #1C1916;
+  --bg-elevated: #23201B;
+  --bg-nav:      #100F0D;
+  --bg-nav-rgb:  16, 15, 13;
+  --bg-hover:    #2A2620;
+  /* Ash is deliberately pattern-free — no tint layer behind content. The
+     ambient drift in main.css still breathes, but through Ash's soft glow
+     values it is barely-there, which is the point. */
+  --bg-tint:     none;
 
-  /* Warm near-black surfaces */
-  --bg-base:     #100D0A;
-  --bg-base-rgb: 16, 13, 10;
-  --bg-surface:  #17130E;
-  --bg-elevated: #1E1812;
-  --bg-nav:      #0B0907;
-  --bg-nav-rgb:  11, 9, 7;
-  --bg-hover:    #251C14;
-  /* Ambient two-stop tint layered over solid bases: ember above, a faint
-     glacial wash below — fire and ice. The animated body backdrop in
-     main.css builds on the same pairing. */
-  --bg-tint:
-    radial-gradient(ellipse at top, rgba(249, 115, 22, 0.10), transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(34, 211, 238, 0.05), transparent 60%);
+  --border:       rgba(217, 119, 6, 0.42);
+  --border-dim:   rgba(217, 119, 6, 0.22);
+  --border-light: rgba(217, 119, 6, 0.10);
 
-  --border:       rgba(194, 65, 12, 0.60);
-  --border-dim:   rgba(194, 65, 12, 0.30);
-  --border-light: rgba(249, 115, 22, 0.18);
+  /* The softened orange ramp */
+  --gold:         #E8853D;
+  --gold-light:   #F3B577;
+  --gold-dark:    #B45309;
+  --gold-glow:    rgba(217, 119, 6, 0.10);
+  --glow-around:  0 0 30px rgba(217, 119, 6, 0.14);
+  /* The sharp accent — warm ivory, rare by design */
+  --teal:         #D6CDC2;
+  --teal-dim:     rgba(214, 205, 194, 0.08);
 
-  /* Primary accent — the orange ramp */
-  --gold:         #F97316;
-  --gold-light:   #FDBA74;
-  --gold-dark:    #C2410C;
-  --gold-glow:    rgba(249, 115, 22, 0.15);
-  --glow-around:  0 0 60px rgba(249, 115, 22, 0.20), 0 0 20px rgba(249, 115, 22, 0.13);
-  /* The sharp accent — glacial cyan against the ember ramp */
-  --teal:         #22D3EE;
-  --teal-dim:     rgba(34, 211, 238, 0.10);
-
-  /* Accent gradients — shared by CTAs, the hero title, and section rules so
-     every "metal" surface uses the same ramp instead of ad-hoc hexes. */
-  --accent-gradient:     linear-gradient(135deg, #FDBA74 0%, #F97316 55%, #C2410C 100%);
-  --accent-gradient-dim: linear-gradient(135deg, rgba(249, 115, 22, 0.30), rgba(154, 52, 18, 0.30));
-  --hero-title-glow:
-    0 0 80px rgba(249, 115, 22, 0.55),
-    0 2px 4px rgba(0, 0, 0, 0.9),
-    0 0 200px rgba(249, 115, 22, 0.22);
+  /* Accent gradients — shared by CTAs and the hero title fill */
+  --accent-gradient:     linear-gradient(135deg, #F3B577 0%, #D97706 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(243, 181, 119, 0.18), rgba(217, 119, 6, 0.18));
+  --hero-title-glow: none;
 
   /* Legacy aliases used in components */
-  --accent-amber:     #F97316;
-  --accent-amber-dim: rgba(249, 115, 22, 0.13);
-  --accent-blue:      #22D3EE;
-  --accent-blue-dim:  rgba(34, 211, 238, 0.10);
+  --accent-amber:     #E8853D;
+  --accent-amber-dim: rgba(232, 133, 61, 0.10);
+  --accent-blue:      #D6CDC2;
+  --accent-blue-dim:  rgba(214, 205, 194, 0.08);
 
-  /* Warm ivory ink — the original base's cream, warmed toward the orange */
-  --text-primary:   #F5EDE2;
-  --text-secondary: #CBB59F;
-  --text-muted:     #97826F;
+  /* Warm ink */
+  --text-primary:   #EFE8DF;
+  --text-secondary: #BFB2A2;
+  --text-muted:     #8F8474;
 
   --success: #4caf78;
   --error:   #e0635c;
@@ -88,24 +76,23 @@
   --sp-7:  48px;
   --sp-8:  64px;
 
-  /* Typography — Cinzel carries the display voice (the LoL-lineage serif the
-     base was designed around); Barlow does the reading. Both self-hosted, so
-     the fallbacks are pure safety nets — deliberately generic families, no
-     named default fonts (design rule: Inter/Roboto/system-ui are banned). */
-  --font-display: 'Cinzel', serif;
+  /* Typography — Barlow carries Ash's quiet voice; Cinzel remains available
+     to the alternate themes (editorial). Fallback stacks end in bare generic
+     families — no named default fonts (design rule). */
+  --font-display: 'Barlow', sans-serif;
   --font-sans:    'Barlow', 'Barlow Condensed', sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
 
-  /* Sharp corners — the LoL aesthetic */
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 3px;
-  --radius-xl: 4px;
+  /* Soft corners — Ash rounds gently where Ember was sharp */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  /* Shadows — deep blacks with an ember rim */
-  --shadow-card:  0 4px 24px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.4);
-  --shadow-modal: 0 16px 64px rgba(0, 0, 0, 0.85);
-  --shadow-gold:  0 0 24px rgba(249, 115, 22, 0.22);
+  /* Shadows — low, matte */
+  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.75);
+  --shadow-gold:  0 0 20px rgba(217, 119, 6, 0.18);
 
   /* Transitions */
   --transition: 200ms ease;

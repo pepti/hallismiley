@@ -1,7 +1,7 @@
 {
   "themeSwitcher.open": "Site theme",
   "themeSwitcher.title": "Theme",
-  "themeSwitcher.theme.classic": "Ember (default)",
+  "themeSwitcher.theme.classic": "Ash (default)",
   "themeSwitcher.testMode": "TEST mode",
   "themeSwitcher.testModeNote": "This browser only",
   "changeRequest.badge": "TEST",
@@ -2123,6 +2123,5 @@
   "themeSwitcher.theme.bauhaus": "Poster",
   "themeSwitcher.theme.magma": "Magma",
   "themeSwitcher.theme.neon": "Neon",
-  "themeSwitcher.theme.industrial": "Workshop",
-  "themeSwitcher.theme.ash": "Ash"
+  "themeSwitcher.theme.industrial": "Workshop"
 }

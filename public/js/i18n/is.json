@@ -1,7 +1,7 @@
 {
   "themeSwitcher.open": "Þema síðu",
   "themeSwitcher.title": "Þema",
-  "themeSwitcher.theme.classic": "Glóð (sjálfgefið)",
+  "themeSwitcher.theme.classic": "Aska (sjálfgefið)",
   "themeSwitcher.testMode": "TEST-hamur",
   "themeSwitcher.testModeNote": "Aðeins þessi vafri",
   "changeRequest.badge": "TEST",
@@ -2123,6 +2123,5 @@
   "themeSwitcher.theme.bauhaus": "Plakat",
   "themeSwitcher.theme.magma": "Kvika",
   "themeSwitcher.theme.neon": "Neon",
-  "themeSwitcher.theme.industrial": "Verkstæði",
-  "themeSwitcher.theme.ash": "Aska"
+  "themeSwitcher.theme.industrial": "Verkstæði"
 }

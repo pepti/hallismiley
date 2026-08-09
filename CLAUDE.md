@@ -37,8 +37,8 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 ## Design rules (Halli, 2026-08-09 — binding for all UI work)
 
 - **Banned defaults.** Fonts: Inter, Roboto, Open Sans, Arial, system-ui, Space Grotesk — not even in fallback stacks (use bare `serif`/`sans-serif`/`monospace` tails behind the self-hosted faces). Colors: purple/indigo/violet gradients, timid evenly-spread palettes, default Tailwind blue. Layout: centered hero + dual CTAs + three identical feature cards — the cookie-cutter SaaS shell.
-- **Palette discipline.** One dominant color + one sharp accent + neutrals, all through the CSS token system. Here: the orange ramp dominates (`--gold-light/--gold/--gold-dark`), glacial cyan `--teal` is the sharp accent used sparingly, warm near-blacks and ivory are the neutrals.
-- **Make unexpected, context-specific choices.** This site's look is the dark hallismiley/LoL lineage — Cinzel display, sharp corners, ember glows, the moving video hero — not a generic template. Vary light/dark, density and structure across projects rather than reusing one shell; when a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
+- **Palette discipline.** One dominant color + one sharp accent + neutrals, all through the CSS token system. Here (the **Ash** default, Halli's pick from the ten-theme exploration set): the softened orange ramp dominates (`--gold-light/--gold/--gold-dark` = #F3B577/#E8853D/#B45309), warm ivory `--teal` is the sharp accent used sparingly, warm charcoals are the neutrals.
+- **Make unexpected, context-specific choices.** The default is Ash — quiet warm charcoal, softened embers, Barlow voice, the waterfall video hero under a dark veil, the 4.1 emblem mark. Nine orange-and-black alternates live in the theme picker (`themes.css`) for comparison until a final cull; Halli picks themes by testing them live, so keep the picker healthy. When a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
 
 ## Factory commands
 
