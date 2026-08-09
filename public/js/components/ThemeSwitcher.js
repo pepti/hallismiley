@@ -20,7 +20,10 @@ const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none
 // are orange-and-black (Halli's exploration set, 2026-08-09), so each swatch
 // hints at its personality — slab, scanline, grid, horizon — not a hue.
 const SWATCH_COLORS = {
-  classic:    'linear-gradient(135deg, #FDBA74 0%, #C2410C 55%, #100D0A 100%)',
+  // classic IS Ash — Halli's pick from the exploration set, promoted to the
+  // :root default (2026-08-09). The former default (Molten Ember) is gone;
+  // the remaining nine alternates stay for comparison until a final cull.
+  classic:    'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
   brutal:     'linear-gradient(135deg, #F97316 0%, #F97316 48%, #000 48%, #000 100%)',
   terminal:   'repeating-linear-gradient(0deg, #170D05 0 2px, #050403 2px 4px)',
   blueprint:  'repeating-linear-gradient(90deg, #1D1004 0 1px, #0A0806 1px 6px)',
@@ -30,7 +33,6 @@ const SWATCH_COLORS = {
   magma:      'radial-gradient(circle at 28% 72%, #F97316 0%, #C2410C 38%, #0F0906 78%)',
   neon:       'linear-gradient(135deg, #030303 60%, #FB923C 100%)',
   industrial: 'linear-gradient(90deg, #F97316 0 22%, #111110 22%)',
-  ash:        'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
 };
 
 function esc(s) {

@@ -385,46 +385,6 @@ html[data-theme="industrial"] {
   --bg-gradient:  none;
 }
 
-/* ── 10 · Ash — quiet warm charcoal, softened embers, the calm one ── */
-html[data-theme="ash"] {
-  color-scheme: dark;
-  --bg-base:     #161412;
-  --bg-base-rgb: 22, 20, 18;
-  --bg-surface:  #1C1916;
-  --bg-elevated: #23201B;
-  --bg-nav:      #100F0D;
-  --bg-nav-rgb:  16, 15, 13;
-  --bg-hover:    #2A2620;
-  --bg-tint:     none;
-  --border:       rgba(217, 119, 6, 0.42);
-  --border-dim:   rgba(217, 119, 6, 0.22);
-  --border-light: rgba(217, 119, 6, 0.10);
-  --gold:         #E8853D;
-  --gold-light:   #F3B577;
-  --gold-dark:    #B45309;
-  --gold-glow:    rgba(217, 119, 6, 0.10);
-  --glow-around:  0 0 30px rgba(217, 119, 6, 0.14);
-  --teal:         #D6CDC2;
-  --teal-dim:     rgba(214, 205, 194, 0.08);
-  --accent-gradient:     linear-gradient(135deg, #F3B577 0%, #D97706 100%);
-  --accent-gradient-dim: linear-gradient(135deg, rgba(243, 181, 119, 0.18), rgba(217, 119, 6, 0.18));
-  --hero-title-glow: none;
-  --accent-amber:     #E8853D;
-  --accent-amber-dim: rgba(232, 133, 61, 0.10);
-  --accent-blue:      #D6CDC2;
-  --accent-blue-dim:  rgba(214, 205, 194, 0.08);
-  --text-primary:   #EFE8DF;
-  --text-secondary: #BFB2A2;
-  --text-muted:     #8F8474;
-  --font-display: 'Barlow', sans-serif;
-  --font-sans:    'Barlow', sans-serif;
-  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 12px;
-  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
-  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.75);
-  --shadow-gold:  0 0 20px rgba(217, 119, 6, 0.18);
-  --bg-gradient:  none;
-}
-
 /* ── Shared theme plumbing ────────────────────────────────────────────────────
    The backdrop hook: themes carry their page backdrop in --bg-gradient
    (grid, scanlines, horizon, blobs — or none for the flat ones). classic

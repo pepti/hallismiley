@@ -4,8 +4,8 @@
   "description": "Allt kerfið þitt á einum stað — vefur, verslun, lager og reikningar í einu íslensku kerfi.",
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#F97316",
-  "background_color": "#100D0A",
+  "theme_color": "#E8853D",
+  "background_color": "#161412",
   "icons": [
     {
       "src": "/favicon.svg",
