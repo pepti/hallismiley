@@ -31,12 +31,17 @@ test.describe('Signup flow', () => {
     await expect(page.locator('#req-number')).toHaveClass(/req--met/);
   });
 
+  // The site is Icelandic by default (Accept-Language no longer switches the
+  // locale), so the status copy is Icelandic. "Lykilorðin stemma" is a prefix of
+  // "Lykilorðin stemma ekki", so assert the full text plus the status class.
   test('mismatched confirm password shows error status', async ({ page }) => {
     await page.goto('/#/signup');
     await page.fill('#signup-password', 'ValidPass1');
     await page.fill('#signup-confirm', 'DifferentPass1');
 
-    await expect(page.locator('#confirm-status')).toContainText(/do not match/i);
+    const status = page.locator('#confirm-status');
+    await expect(status).toHaveText('✗ Lykilorðin stemma ekki');
+    await expect(status).toHaveClass(/status--err/);
   });
 
   test('matching confirm password shows positive status', async ({ page }) => {
@@ -44,7 +49,9 @@ test.describe('Signup flow', () => {
     await page.fill('#signup-password', 'ValidPass1');
     await page.fill('#signup-confirm', 'ValidPass1');
 
-    await expect(page.locator('#confirm-status')).toContainText(/match/i);
+    const status = page.locator('#confirm-status');
+    await expect(status).toHaveText('✓ Lykilorðin stemma');
+    await expect(status).toHaveClass(/status--ok/);
   });
 
   test('weak password on submit shows validation error', async ({ page }) => {
@@ -66,7 +73,8 @@ test.describe('Signup flow', () => {
     await page.fill('#signup-confirm', 'Different1');
     await page.click('#signup-btn');
 
-    await expect(page.locator('#signup-error')).toContainText(/do not match/i);
+    // Icelandic by default — the submit-time error is the same i18n string.
+    await expect(page.locator('#signup-error')).toContainText('Lykilorðin stemma ekki');
   });
 
   test('duplicate username shows server-side error', async ({ page }) => {

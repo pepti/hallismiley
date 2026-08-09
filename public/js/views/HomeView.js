@@ -235,7 +235,7 @@ export class HomeView {
     }
     const overlay = bg.mode === 'plain' ? '' : `<div class="lol-hero__overlay" aria-hidden="true" style="opacity:${veil / 100}"></div>`;
     return `
-    <section class="lol-hero" id="main-content" aria-label="Introduction">
+    <section class="lol-hero" id="main-content" aria-label="${t('home.heroAriaLabel')}">
       ${bgEl}
       ${overlay}
 
@@ -249,7 +249,7 @@ export class HomeView {
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
-        <span>Scroll</span>
+        <span>${t('home.scrollHint')}</span>
         <div class="lol-hero__scroll-line"></div>
       </div>
     </section>`;

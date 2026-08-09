@@ -8,9 +8,17 @@
 //   3. locale_choice cookie (the user's EXPLICIT switcher choice)
 //   4. Logged-in user's saved preferred_locale
 //   5. Party-route default ('is' for /party* and /api/v1/party/*)
-//   6. Accept-Language header (first supported language)
-//   7. PUBLIC_DEFAULT_LOCALE ('is' — the visitor-facing default; distinct
+//   6. PUBLIC_DEFAULT_LOCALE ('is' — the visitor-facing default; distinct
 //      from DEFAULT_LOCALE, the content-fallback dimension)
+//
+// Accept-Language is deliberately NOT consulted. This is an Icelandic
+// company selling to Icelandic businesses, and a large share of Icelandic
+// users run an English-language OS or browser — so `Accept-Language: en-US`
+// says almost nothing about which language the visitor wants to read the
+// site in, while confidently overriding the Icelandic default for most of
+// the target market. English is one click away in the header and is
+// remembered (locale_choice) once chosen, so nobody is stranded. Only an
+// EXPLICIT signal moves a visitor off Icelandic.
 //
 // Explicit per-request signals (query / header / cookie) win over the
 // account-level preference so that an admin whose users.preferred_locale='is'
@@ -36,15 +44,6 @@ const {
   PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_FORCED_LOCALE, isPartyPath, forcedLocaleFor,
 } = require('../config/i18n');
 
-function pickFromAcceptLanguage(header) {
-  if (!header) return null;
-  for (const part of header.split(',')) {
-    const code = part.split(';')[0].trim().toLowerCase().split('-')[0];
-    if (SUPPORTED_LOCALES.includes(code)) return code;
-  }
-  return null;
-}
-
 // Resolve the active locale from a request using the documented priority.
 // Exported so the auth middleware can re-run resolution after req.user is set
 // — the global middleware runs before auth, so req.user is undefined on that
@@ -67,7 +66,7 @@ function resolveLocale(req) {
 
   if (isPartyPath(req.path)) return PARTY_FORCED_LOCALE;
 
-  return pickFromAcceptLanguage(req.headers['accept-language']) || PUBLIC_DEFAULT_LOCALE;
+  return PUBLIC_DEFAULT_LOCALE;
 }
 
 function localeMiddleware(req, _res, next) {

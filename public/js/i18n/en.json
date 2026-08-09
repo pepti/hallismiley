@@ -2115,5 +2115,9 @@
   "contact.phone": "Phone",
   "contact.phonePlaceholder": "+354 ...",
   "contact.currentPlatform": "Current system",
-  "contact.builtWithPrefill": "Hi — I would like to hear more about the platform and what a migration would involve."
+  "contact.builtWithPrefill": "Hi — I would like to hear more about the platform and what a migration would involve.",
+  "nav.skipToContent": "Skip to main content",
+  "home.heroAriaLabel": "Introduction",
+  "home.scrollHint": "Scroll",
+  "contact.formAriaLabel": "Inquiry form"
 }

@@ -17,19 +17,36 @@
     npm run dev:up        # start
     npm run dev:down      # stop now
     npm run dev:status    # is it running? when would it auto-stop?
-    powershell -File scripts/dev-server.ps1 -Action start -Hours 8 -Port 3001
+    powershell -File scripts/dev-server.ps1 -Action start -Hours 8 -Port 8080
+
+  The port defaults to PORT from .env (falling back to 3000) so the bind check
+  and the stop step always target the port the app really listens on.
 #>
 [CmdletBinding()]
 param(
   [ValidateSet('start', 'stop', 'restart', 'status')]
   [string]$Action = 'start',
   [double]$Hours = 12,
-  [int]$Port = 3001,
+  [int]$Port = 0,          # 0 = read PORT from .env (see below)
   [switch]$Sweep
 )
 
 $ErrorActionPreference = 'Stop'
 $ProjectDir  = Split-Path -Parent $PSScriptRoot           # scripts/ -> project root
+
+# The port has to match the one the app actually binds, which comes from PORT
+# in .env. Hard-coding a different default made `dev:up` report "server did not
+# bind" on a server that had started perfectly, and made `dev:down` a silent
+# no-op that left the old build serving — which is a genuinely confusing bug to
+# chase, because the site keeps answering with stale code.
+if ($Port -le 0) {
+  $envFile = Join-Path $ProjectDir '.env'
+  if (Test-Path $envFile) {
+    $portLine = Select-String -Path $envFile -Pattern '^\s*PORT\s*=\s*(\d+)' | Select-Object -First 1
+    if ($portLine) { $Port = [int]$portLine.Matches[0].Groups[1].Value }
+  }
+  if ($Port -le 0) { $Port = 3000 }   # server/server.js default
+}
 $ProjectName = Split-Path -Leaf $ProjectDir
 $StateFile   = Join-Path $env:TEMP "$ProjectName-dev.json"
 $OutLog      = Join-Path $env:TEMP "$ProjectName-dev.out.log"

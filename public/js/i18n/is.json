@@ -2115,5 +2115,9 @@
   "contact.phone": "Sími",
   "contact.phonePlaceholder": "+354 ...",
   "contact.currentPlatform": "Núverandi kerfi",
-  "contact.builtWithPrefill": "Sæl(l) — mig langar að heyra meira um kerfið og hvernig flutningur myndi ganga fyrir sig."
+  "contact.builtWithPrefill": "Sæl(l) — mig langar að heyra meira um kerfið og hvernig flutningur myndi ganga fyrir sig.",
+  "nav.skipToContent": "Fara í meginmál",
+  "home.heroAriaLabel": "Kynning",
+  "home.scrollHint": "Skruna",
+  "contact.formAriaLabel": "Fyrirspurnarform"
 }

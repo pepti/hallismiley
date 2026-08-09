@@ -2,8 +2,9 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Navigation — basic page loads', () => {
 
-  // The browser sends Accept-Language: en-US, which correctly beats the
-  // Icelandic no-signal default — so assert each locale at its own URL.
+  // The site is Icelandic by default: Accept-Language no longer switches the
+  // locale, so a Playwright browser (en-US) still lands on Icelandic. English
+  // lives at /en/ — assert each locale at its own explicit URL.
   test('homepage shows the business value proposition in Icelandic', async ({ page }) => {
     await page.goto('/is/');
     await expect(page.locator('.lol-hero__title')).toContainText('Allt kerfið þitt');
@@ -28,17 +29,19 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.project-card').first()).toBeVisible({ timeout: 10_000 });
   });
 
+  // The card's aria-label is Icelandic by default ("Skoða verkefni: <title>"),
+  // so match on the project title, which is the same in both locales.
   test('project detail page loads for Stofan Bakhús', async ({ page }) => {
     await page.goto('/#/verkefni');
     await page.waitForSelector('.project-card', { timeout: 10_000 });
-    await page.getByRole('button', { name: /View project: Stofan Bakhús/i }).click();
+    await page.getByRole('button', { name: /Stofan Bakhús/i }).click();
     await expect(page.locator('.pd-hero__title')).toContainText('Stofan Bakhús');
   });
 
   test('project detail page shows gallery images', async ({ page }) => {
     await page.goto('/#/verkefni');
     await page.waitForSelector('.project-card', { timeout: 10_000 });
-    await page.getByRole('button', { name: /View project: Stofan Bakhús/i }).click();
+    await page.getByRole('button', { name: /Stofan Bakhús/i }).click();
     await expect(page.locator('.gallery-grid')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('.gallery-grid__item').first()).toBeVisible();
   });

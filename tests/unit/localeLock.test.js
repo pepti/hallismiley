@@ -136,12 +136,19 @@ describe('resolveLocale — ordinary routes are untouched', () => {
     path, query: {}, headers: {}, cookies: {}, ...extra,
   });
 
-  test('still honours every signal off the party routes', () => {
-    expect(resolveLocale(req('/projects', { query: { locale: 'is' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { cookies: { locale_choice: 'is' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { user: { preferred_locale: 'is' } }))).toBe('is');
+  test('still honours every EXPLICIT signal off the party routes', () => {
+    expect(resolveLocale(req('/projects', { query: { locale: 'en' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { headers: { 'x-locale': 'en' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { cookies: { locale_choice: 'en' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { user: { preferred_locale: 'en' } }))).toBe('en');
+  });
+
+  // The whole point of the Icelandic default: an en-US browser is the norm in
+  // Iceland, so it must not be mistaken for "this visitor wants English".
+  test('Accept-Language never moves a visitor off Icelandic', () => {
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))).toBe('is');
     expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'is-IS,is;q=0.9' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'de-DE' } }))).toBe('is');
   });
 
   test('no signal at all falls back to PUBLIC_DEFAULT_LOCALE (is)', () => {
