@@ -3,6 +3,8 @@ import { ProjectsView }       from './views/ProjectsView.js';
 import { ProjectDetailView }  from './views/ProjectDetailView.js';
 import { HalliView }          from './views/HalliView.js';
 import { ContactView }        from './views/ContactView.js';
+import { ThjonustaView }      from './views/ThjonustaView.js';
+import { UmOkkurView }        from './views/UmOkkurView.js';
 import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
 import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
@@ -61,6 +63,14 @@ import { trackPageView } from './services/usage.js';
 // More specific patterns must come before generic ones
 const ROUTES = [
   { pattern: '/',                factory: ()  => new HomeView() },
+  // ── Business IA (canonical Icelandic slugs). The legacy portfolio routes
+  // below stay functional — hidden from nav/SSR/sitemap, never deleted. ──
+  { pattern: '/thjonusta',       factory: ()  => new ThjonustaView() },
+  { pattern: '/verkefni/:id',    factory: (p) => new ProjectDetailView(p.id) },
+  { pattern: '/verkefni',        factory: ()  => new ProjectsView() },
+  { pattern: '/um-okkur',        factory: ()  => new UmOkkurView() },
+  { pattern: '/hafa-samband',    factory: ()  => new ContactView() },
+  { pattern: '/personuvernd',    factory: ()  => new PrivacyView() },
   { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
   { pattern: '/projects',        factory: ()  => new ProjectsView() },
   { pattern: '/news/:slug',      factory: (p) => new ArticleView(p.slug) },

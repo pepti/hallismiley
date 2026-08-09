@@ -94,15 +94,11 @@ export class NavBar {
 
       <!-- Center: Navigation links + (on mobile) language toggle + auth CTAs -->
       <div class="lol-nav__center" id="nav-menu">
-        <a href="${navHref('/')}"        class="lol-nav__link" data-route="/"        data-i18n="nav.home">${t('nav.home')}</a>
-        <a href="${navHref('/projects')}" class="lol-nav__link" data-route="/projects" data-i18n="nav.projects">${t('nav.projects')}</a>
-        <a href="${navHref('/shop')}"     class="lol-nav__link" data-route="/shop"     data-i18n="nav.shop">${t('nav.shop')}</a>
-        <a href="${navHref('/news')}"     class="lol-nav__link" data-route="/news"     data-i18n="nav.news">${t('nav.news')}</a>
-        <a href="${navHref('/halli')}"    class="lol-nav__link" data-route="/halli"    data-i18n="nav.halli">${t('nav.halli')}</a>
-        <a href="${navHref('/contact')}"  class="lol-nav__link" data-route="/contact"  data-i18n="nav.contact">${t('nav.contact')}</a>
-        <a href="${navHref('/party')}"    class="lol-nav__link lol-nav__party-link" data-route="/party"
-           id="nav-party-link" aria-label="${t('nav.partyAriaLabel')}" data-i18n-aria="nav.partyAriaLabel"
-           data-i18n="nav.party">${t('nav.party')}</a>
+        <a href="${navHref('/')}"             class="lol-nav__link" data-route="/"             data-i18n="nav.home">${t('nav.home')}</a>
+        <a href="${navHref('/thjonusta')}"    class="lol-nav__link" data-route="/thjonusta"    data-i18n="nav.thjonusta">${t('nav.thjonusta')}</a>
+        <a href="${navHref('/verkefni')}"     class="lol-nav__link" data-route="/verkefni"     data-i18n="nav.projects">${t('nav.projects')}</a>
+        <a href="${navHref('/um-okkur')}"     class="lol-nav__link" data-route="/um-okkur"     data-i18n="nav.umOkkur">${t('nav.umOkkur')}</a>
+        <a href="${navHref('/hafa-samband')}" class="lol-nav__link" data-route="/hafa-samband" data-i18n="nav.hafaSamband">${t('nav.hafaSamband')}</a>
         <div class="lol-nav__mobile-extras">
           ${this._langSwitcherHtml()}
           <div class="lol-nav__auth" id="nav-auth-mobile"></div>

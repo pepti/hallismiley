@@ -55,7 +55,7 @@ export class ProjectDetailView {
       this._view.innerHTML = `
         <div class="pd-error">
           <p>${t('projectDetail.notFound')}</p>
-          <a href="${href('/projects')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToProjects')}</a>
+          <a href="${href('/verkefni')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToProjects')}</a>
         </div>`;
     }
 
@@ -137,7 +137,7 @@ export class ProjectDetailView {
         <div class="pd-hero__bg" style="background-image:url('${escHtml(heroImg)}')"></div>
         <div class="pd-hero__overlay"></div>
         <div class="pd-hero__content">
-          <a href="${href('/projects')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
+          <a href="${href('/verkefni')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
           <div class="pd-hero__meta">
             <span class="badge badge--${escHtml(p.category)}">${escHtml(p.category)}</span>
             <span class="pd-hero__year">${p.year}</span>
@@ -196,7 +196,7 @@ export class ProjectDetailView {
           ${videoPosition === 'below_gallery' ? videoBlock : ''}
 
           <div class="pd-back-wrap">
-            <a href="${href('/projects')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToAllProjects')}</a>
+            <a href="${href('/verkefni')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToAllProjects')}</a>
           </div>
 
         </div>
@@ -237,7 +237,7 @@ export class ProjectDetailView {
         <div class="pd-hero__bg" style="background-image:url('${escHtml(heroImg)}')"></div>
         <div class="pd-hero__overlay"></div>
         <div class="pd-hero__content">
-          <a href="${href('/projects')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
+          <a href="${href('/verkefni')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
           <div class="pd-hero__meta" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <select class="pd-edit-select" id="pd-edit-category" name="category">
               <option value="carpentry" ${p.category === 'carpentry' ? 'selected' : ''}>${t('projectDetail.carpentry')}</option>
@@ -353,7 +353,7 @@ export class ProjectDetailView {
           ${videoPosition === 'below_gallery' ? videoEditBlock : ''}
 
           <div class="pd-back-wrap">
-            <a href="${href('/projects')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToAllProjects')}</a>
+            <a href="${href('/verkefni')}" class="pd-back-btn">&#x2190; ${t('projectDetail.backToAllProjects')}</a>
           </div>
 
         </div>
