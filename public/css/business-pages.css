@@ -139,7 +139,9 @@
 }
 .tier-card__unit {
   font-size: 0.85rem; font-weight: 600;
-  color: var(--text-muted);
+  /* --text-secondary, not --text-muted: "þ.kr./mán" is part of the price, and
+     at 13.6px the muted ink only reaches 3.84:1 against the card. */
+  color: var(--text-secondary);
   margin-left: var(--sp-1);
 }
 
@@ -196,7 +198,7 @@
 
 .thjonusta-setup-note {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-align: center;
 }
 

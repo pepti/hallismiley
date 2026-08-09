@@ -2,6 +2,10 @@
 // Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
 const { t }      = require('../i18n');
+// New senders log through pino (stack invariant). The older senders in this
+// file still use console.log — converting all of them is proposed separately
+// rather than folded into an unrelated change.
+const logger     = require('../logger');
 
 const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
 // Send from the real owner mailbox (a verified Google Workspace address) rather
@@ -978,7 +982,7 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
 
 async function sendLeadNotification({ submissionId, name, email, message, company, phone, platform, locale = 'is' }) {
   if (!isConfigured()) {
-    console.log('[EmailService] Resend not configured — lead notification skipped');
+    logger.warn({ submissionId }, 'Resend not configured — lead notification skipped');
     return;
   }
 
@@ -1008,7 +1012,7 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
 
   const { data, error } = await getClient().emails.send({ from: FROM, to, replyTo: email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Lead notification sent: submission=${submissionId} id=${data.id}`);
+  logger.info({ submissionId, messageId: data.id }, 'lead notification sent');
 }
 
 module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured };
