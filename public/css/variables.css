@@ -1,59 +1,77 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* ── Orange Smiley "classic" — light warm neutrals, orange-led ──────────────
-     Token NAMES are inherited from the base (incl. the legacy --gold/--teal
-     aliases) so every var() reference across the CSS resolves without
-     component edits; only the VALUES are branded. --gold carries the primary
-     orange; --teal carries the single dark accent. */
+  /* ── Orange Smiley "classic" — deep warm dark, orange-led ───────────────────
+     The design language is the hallismiley/LoL lineage the base was built
+     around — near-black warm surfaces, a luminous accent metal, sharp corners,
+     glows — with the gold swapped for an orange ramp. Token NAMES are
+     inherited (incl. the legacy --gold/--teal aliases) so every var()
+     reference resolves without component edits; only the VALUES are branded.
 
-  /* Warm neutral surfaces */
-  --bg-base:     #FDF8F3;
-  --bg-base-rgb: 253, 248, 243;
-  --bg-surface:  #FFFFFF;
-  --bg-elevated: #FAF0E6;
-  --bg-nav:      #FFFFFF;
-  --bg-nav-rgb:  255, 255, 255;
-  --bg-hover:    #F6EADD;
-  /* Subtle warm glow used to break up flat surfaces — orange at top, faint
-     rust at bottom. Layered over a solid base color via
-     `background-image: var(--bg-tint); background-color: var(--bg-base);`. */
+     Palette discipline (Halli's design rules, 2026-08-09): ONE dominant
+     colour + ONE sharp accent + neutrals. Dominant = the orange ramp; the
+     sharp accent = glacial cyan (--teal), used RARELY — fire above, ice
+     below. Iceland in two hues, and the heritage accent of the base.
+
+     The orange ramp, light → dark:
+       #FDBA74  --gold-light   headings, hovers, highlights
+       #F97316  --gold         THE brand orange — primary accent, icons, links
+       #C2410C  --gold-dark    burnt orange — borders, gradients, pressed
+       #9A3412  (in gradients) rust — gradient tails, deep glows
+     Sharp accent:
+       #22D3EE  --teal         glacial cyan — sparing highlights only        */
+
+  /* Warm near-black surfaces */
+  --bg-base:     #100D0A;
+  --bg-base-rgb: 16, 13, 10;
+  --bg-surface:  #17130E;
+  --bg-elevated: #1E1812;
+  --bg-nav:      #0B0907;
+  --bg-nav-rgb:  11, 9, 7;
+  --bg-hover:    #251C14;
+  /* Ambient two-stop tint layered over solid bases: ember above, a faint
+     glacial wash below — fire and ice. The animated body backdrop in
+     main.css builds on the same pairing. */
   --bg-tint:
-    radial-gradient(ellipse at top, rgba(249, 115, 22, 0.07), transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(124, 45, 18, 0.04), transparent 60%);
+    radial-gradient(ellipse at top, rgba(249, 115, 22, 0.10), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(34, 211, 238, 0.05), transparent 60%);
 
-  --border:       rgba(124, 45, 18, 0.28);
-  --border-dim:   rgba(124, 45, 18, 0.15);
-  --border-light: rgba(124, 45, 18, 0.08);
+  --border:       rgba(194, 65, 12, 0.60);
+  --border-dim:   rgba(194, 65, 12, 0.30);
+  --border-light: rgba(249, 115, 22, 0.18);
 
-  /* Primary accent — brand orange (#F97316 family).
-     --gold is the INTERACTIVE orange: it carries white button text and is
-     used for small text on light surfaces, so it must clear WCAG AA both
-     ways. #C2410C is 5.18:1 against white in both directions; the vivid
-     #F97316 manages only 3.56:1, so it lives on as --gold-light for hovers,
-     glows and large display text where 3:1 is the bar. */
-  --gold:         #C2410C;
-  --gold-light:   #F97316;
-  --gold-dark:    #9A3412;
-  --gold-glow:    rgba(249, 115, 22, 0.14);
-  --glow-around:  0 0 40px rgba(249, 115, 22, 0.12), 0 0 14px rgba(249, 115, 22, 0.08);
-  /* Secondary accent — the one dark accent: deep rust-brown */
-  --teal:         #7C2D12;
-  --teal-dim:     rgba(124, 45, 18, 0.10);
+  /* Primary accent — the orange ramp */
+  --gold:         #F97316;
+  --gold-light:   #FDBA74;
+  --gold-dark:    #C2410C;
+  --gold-glow:    rgba(249, 115, 22, 0.15);
+  --glow-around:  0 0 60px rgba(249, 115, 22, 0.20), 0 0 20px rgba(249, 115, 22, 0.13);
+  /* The sharp accent — glacial cyan against the ember ramp */
+  --teal:         #22D3EE;
+  --teal-dim:     rgba(34, 211, 238, 0.10);
+
+  /* Accent gradients — shared by CTAs, the hero title, and section rules so
+     every "metal" surface uses the same ramp instead of ad-hoc hexes. */
+  --accent-gradient:     linear-gradient(135deg, #FDBA74 0%, #F97316 55%, #C2410C 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(249, 115, 22, 0.30), rgba(154, 52, 18, 0.30));
+  --hero-title-glow:
+    0 0 80px rgba(249, 115, 22, 0.55),
+    0 2px 4px rgba(0, 0, 0, 0.9),
+    0 0 200px rgba(249, 115, 22, 0.22);
 
   /* Legacy aliases used in components */
-  --accent-amber:     #C2410C;
-  --accent-amber-dim: rgba(234, 88, 12, 0.10);
-  --accent-blue:      #7C2D12;
-  --accent-blue-dim:  rgba(124, 45, 18, 0.10);
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.13);
+  --accent-blue:      #22D3EE;
+  --accent-blue-dim:  rgba(34, 211, 238, 0.10);
 
-  /* Warm ink */
-  --text-primary:   #241A12;
-  --text-secondary: rgba(36, 26, 18, 0.74);
-  --text-muted:     rgba(36, 26, 18, 0.55);
+  /* Warm ivory ink — the original base's cream, warmed toward the orange */
+  --text-primary:   #F5EDE2;
+  --text-secondary: #CBB59F;
+  --text-muted:     #97826F;
 
-  --success: #1c7c54;
-  --error:   #c0392b;
+  --success: #4caf78;
+  --error:   #e0635c;
 
   /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
   --test-blue:     #2f6fed;
@@ -70,22 +88,24 @@
   --sp-7:  48px;
   --sp-8:  64px;
 
-  /* Typography — Barlow everywhere (self-hosted; the base's Cinzel display
-     serif is retired for the business look, files remain unused) */
-  --font-display: 'Barlow', 'Inter', system-ui, sans-serif;
-  --font-sans:    'Barlow', 'Inter', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  /* Typography — Cinzel carries the display voice (the LoL-lineage serif the
+     base was designed around); Barlow does the reading. Both self-hosted, so
+     the fallbacks are pure safety nets — deliberately generic families, no
+     named default fonts (design rule: Inter/Roboto/system-ui are banned). */
+  --font-display: 'Cinzel', serif;
+  --font-sans:    'Barlow', 'Barlow Condensed', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
 
-  /* Soft, friendly corners */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  /* Sharp corners — the LoL aesthetic */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 4px;
 
-  /* Shadows — light, warm-tinted */
-  --shadow-card:  0 1px 3px rgba(36, 26, 18, 0.08), 0 1px 2px rgba(36, 26, 18, 0.05);
-  --shadow-modal: 0 16px 48px rgba(36, 26, 18, 0.20);
-  --shadow-gold:  0 0 24px rgba(249, 115, 22, 0.16);
+  /* Shadows — deep blacks with an ember rim */
+  --shadow-card:  0 4px 24px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 16px 64px rgba(0, 0, 0, 0.85);
+  --shadow-gold:  0 0 24px rgba(249, 115, 22, 0.22);
 
   /* Transitions */
   --transition: 200ms ease;

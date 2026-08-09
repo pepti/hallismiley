@@ -14,7 +14,7 @@
 // public/js/theme-boot.js (pre-paint classic script in index.html) duplicates
 // the theme read + admin guard — keep the two in sync.
 
-export const THEMES = ['classic', 'glacier', 'moss', 'lava', 'aurora', 'black-sand'];
+export const THEMES = ['classic', 'brutal', 'terminal', 'blueprint', 'editorial', 'sunset', 'bauhaus', 'magma', 'neon', 'industrial', 'ash'];
 const DEFAULT_THEME = 'classic';
 const THEME_KEY = 'ws_theme';
 const TEST_KEY  = 'ws_test_override';

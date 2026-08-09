@@ -169,8 +169,8 @@
     acceptBtn.textContent = s.accept;
     acceptBtn.style.cssText = [
       'padding:0.4rem 1rem',
-      'background:#c8b882',
-      'color:#111',
+      'background:#F97316',
+      'color:#100D0A',
       'border:none',
       'border-radius:3px',
       'cursor:pointer',

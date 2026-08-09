@@ -1,12 +1,7 @@
 {
   "themeSwitcher.open": "Þema síðu",
   "themeSwitcher.title": "Þema",
-  "themeSwitcher.theme.classic": "Klassískt",
-  "themeSwitcher.theme.glacier": "Jökull",
-  "themeSwitcher.theme.moss": "Mosi",
-  "themeSwitcher.theme.lava": "Hraun",
-  "themeSwitcher.theme.aurora": "Norðurljós",
-  "themeSwitcher.theme.black-sand": "Svartur sandur",
+  "themeSwitcher.theme.classic": "Glóð (sjálfgefið)",
   "themeSwitcher.testMode": "TEST-hamur",
   "themeSwitcher.testModeNote": "Aðeins þessi vafri",
   "changeRequest.badge": "TEST",
@@ -2119,5 +2114,15 @@
   "nav.skipToContent": "Fara í meginmál",
   "home.heroAriaLabel": "Kynning",
   "home.scrollHint": "Skruna",
-  "contact.formAriaLabel": "Fyrirspurnarform"
+  "contact.formAriaLabel": "Fyrirspurnarform",
+  "themeSwitcher.theme.brutal": "Hrátt",
+  "themeSwitcher.theme.terminal": "Skjár",
+  "themeSwitcher.theme.blueprint": "Teikning",
+  "themeSwitcher.theme.editorial": "Ritstjórn",
+  "themeSwitcher.theme.sunset": "Sólarlag",
+  "themeSwitcher.theme.bauhaus": "Plakat",
+  "themeSwitcher.theme.magma": "Kvika",
+  "themeSwitcher.theme.neon": "Neon",
+  "themeSwitcher.theme.industrial": "Verkstæði",
+  "themeSwitcher.theme.ash": "Aska"
 }

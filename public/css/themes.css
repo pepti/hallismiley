@@ -1,195 +1,442 @@
 /* ── Site themes ─────────────────────────────────────────────────────────────
-   Five selectable alternate colour themes (picker:
-   public/js/components/ThemeSwitcher.js). `classic` is Orange Smiley's light
-   warm-neutral orange-led look — the :root default in variables.css, with no
-   data-theme attribute. The attribute lives on <html>, set pre-paint by
-   /js/theme-boot.js and at runtime by services/themePrefs.js.
+   Ten selectable alternate themes (picker: public/js/components/
+   ThemeSwitcher.js), ALL orange & black — Halli's exploration set
+   (2026-08-09): same brand, ten personalities, chosen live via the picker.
+   `classic` is the Molten Ember default — the :root token set in
+   variables.css, with no data-theme attribute. The attribute lives on
+   <html>, set pre-paint by /js/theme-boot.js and at runtime by
+   services/themePrefs.js.
 
-   Component CSS is consistently token-driven, so an alternate theme only has
-   to REDEFINE the tokens below — every tokenized component re-skins
-   automatically. NOTE (Orange Smiley re-brand): classic flipped dark→light;
-   the five alternates below are still dark. The brand mark and nav ride
-   tokens, so no logo-inversion fix is needed, and this base's admin badges
-   are translucent token tints that work on both. `lava` doubles as the
-   orange-dark brand variant. If a component looks wrong ONLY under an
-   alternate theme, fix it here with scoped html[data-theme] rules — never in
-   the component files.
+   Component CSS is token-driven, so a theme is nothing but token overrides:
+   surfaces, the orange values, fonts (display/sans are tokens too), radii,
+   shadows, and the two gradient hooks — --bg-gradient (page backdrop,
+   applied by the html[data-theme] body rule at the bottom) and
+   --accent-gradient (primary buttons + the hero title fill). That is enough
+   to swing from brutalist to editorial without touching a component.
 
-   glacier / moss / lava / aurora are immersive COLOUR themes: a deep tinted
-   surface set + light text + a gradient backdrop + gradient primary buttons.
-   black-sand is a neutral dark with solid backgrounds. html[data-theme="x"]
-   (0,1,1) out-specifies :root (0,1,0); this file is imported last in main.css,
-   so no existing component CSS needs edits. */
+   The previous multi-colour set (glacier/moss/aurora/black-sand) was
+   replaced by this exploration set; a stored preference for a removed name
+   falls back to classic (themePrefs validates against THEMES).
 
-/* ── Glacier — deep fjord navy + ice blue ── */
-html[data-theme="glacier"] {
+   html[data-theme="x"] (0,1,1) out-specifies :root (0,1,0); this file is
+   imported last in main.css, so no component CSS needs edits. */
+
+/* ── 1 · Brutal — pure black, flat orange slabs, condensed shouting type ── */
+html[data-theme="brutal"] {
   color-scheme: dark;
-  --bg-base:     #0B2138;
-  --bg-base-rgb: 11, 33, 56;
-  --bg-surface:  #102C49;
-  --bg-elevated: #16385A;
-  --bg-nav:      #0A1B2E;
-  --bg-nav-rgb:  10, 27, 46;
-  --bg-hover:    #18395B;
-  --border:       rgba(190, 218, 240, 0.18);
-  --border-dim:   rgba(190, 218, 240, 0.12);
-  --border-light: rgba(190, 218, 240, 0.07);
-  --gold:         #5FB4E8;
-  --gold-light:   #82C7F0;
-  --gold-dark:    rgba(95, 180, 232, 0.55);
-  --gold-glow:    rgba(95, 180, 232, 0.16);
-  --teal:         #5FB4E8;
-  --teal-dim:     rgba(95, 180, 232, 0.12);
-  --accent-amber:     #5FB4E8;
-  --accent-amber-dim: rgba(95, 180, 232, 0.12);
-  --accent-blue:      #5FB4E8;
-  --accent-blue-dim:  rgba(95, 180, 232, 0.12);
-  --text-primary:   #EAF3FB;
-  --text-secondary: rgba(234, 243, 251, 0.78);
-  --text-muted:     rgba(234, 243, 251, 0.55);
-  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
-  --bg-gradient: radial-gradient(circle at 78% 10%, rgba(95, 180, 232, 0.18), transparent 46%),
-                 linear-gradient(160deg, #0F2C49 0%, #0A1A2D 55%, #0C2645 100%);
-  --accent-gradient: linear-gradient(135deg, #82C7F0 0%, #3E97D4 100%);
+  --bg-base:     #000000;
+  --bg-base-rgb: 0, 0, 0;
+  --bg-surface:  #0A0A0A;
+  --bg-elevated: #111111;
+  --bg-nav:      #000000;
+  --bg-nav-rgb:  0, 0, 0;
+  --bg-hover:    #1A1A1A;
+  --bg-tint:     none;
+  --border:       #FFFFFF;
+  --border-dim:   rgba(255, 255, 255, 0.55);
+  --border-light: rgba(255, 255, 255, 0.18);
+  --gold:         #F97316;
+  --gold-light:   #FB923C;
+  --gold-dark:    #C2410C;
+  --gold-glow:    rgba(249, 115, 22, 0.0);
+  --glow-around:  6px 6px 0 rgba(255, 255, 255, 0.92);
+  --teal:         #FFFFFF;
+  --teal-dim:     rgba(255, 255, 255, 0.10);
+  --accent-gradient:     #F97316;
+  --accent-gradient-dim: rgba(249, 115, 22, 0.25);
+  --hero-title-glow: none;
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.14);
+  --accent-blue:      #FFFFFF;
+  --accent-blue-dim:  rgba(255, 255, 255, 0.10);
+  --text-primary:   #FFFFFF;
+  --text-secondary: #C9C9C9;
+  --text-muted:     #8F8F8F;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0;
+  --shadow-card:  5px 5px 0 rgba(249, 115, 22, 0.9);
+  --shadow-modal: 10px 10px 0 rgba(249, 115, 22, 0.9);
+  --shadow-gold:  5px 5px 0 rgba(255, 255, 255, 0.9);
+  --bg-gradient:  none;
 }
 
-/* ── Moss — deep forest + mint ── */
-html[data-theme="moss"] {
+/* ── 2 · Terminal — phosphor orange on near-black, mono, scanlines ── */
+html[data-theme="terminal"] {
   color-scheme: dark;
-  --bg-base:     #0F2418;
-  --bg-base-rgb: 15, 36, 24;
-  --bg-surface:  #15311F;
-  --bg-elevated: #1B3C26;
-  --bg-nav:      #0C1E13;
-  --bg-nav-rgb:  12, 30, 19;
-  --bg-hover:    #1D4029;
-  --border:       rgba(198, 232, 206, 0.18);
-  --border-dim:   rgba(198, 232, 206, 0.12);
-  --border-light: rgba(198, 232, 206, 0.07);
-  --gold:         #6FD08E;
-  --gold-light:   #92E0AB;
-  --gold-dark:    rgba(111, 208, 142, 0.55);
-  --gold-glow:    rgba(111, 208, 142, 0.16);
-  --teal:         #6FD08E;
-  --teal-dim:     rgba(111, 208, 142, 0.12);
-  --accent-amber:     #6FD08E;
-  --accent-amber-dim: rgba(111, 208, 142, 0.12);
-  --accent-blue:      #6FD08E;
-  --accent-blue-dim:  rgba(111, 208, 142, 0.12);
-  --text-primary:   #EAF5EC;
-  --text-secondary: rgba(234, 245, 236, 0.78);
-  --text-muted:     rgba(234, 245, 236, 0.55);
-  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
-  --bg-gradient: radial-gradient(circle at 76% 10%, rgba(111, 208, 142, 0.16), transparent 46%),
-                 linear-gradient(160deg, #143620 0%, #0C1D12 55%, #112A1A 100%);
-  --accent-gradient: linear-gradient(135deg, #92E0AB 0%, #4FB575 100%);
+  --bg-base:     #050403;
+  --bg-base-rgb: 5, 4, 3;
+  --bg-surface:  #0A0705;
+  --bg-elevated: #100B07;
+  --bg-nav:      #030202;
+  --bg-nav-rgb:  3, 2, 2;
+  --bg-hover:    #16100A;
+  --bg-tint:     none;
+  --border:       rgba(249, 115, 22, 0.55);
+  --border-dim:   rgba(180, 83, 9, 0.45);
+  --border-light: rgba(180, 83, 9, 0.22);
+  --gold:         #FB923C;
+  --gold-light:   #FDBA74;
+  --gold-dark:    #B45309;
+  --gold-glow:    rgba(249, 115, 22, 0.28);
+  --glow-around:  0 0 24px rgba(249, 115, 22, 0.35), 0 0 6px rgba(249, 115, 22, 0.5);
+  --teal:         #FDBA74;
+  --teal-dim:     rgba(253, 186, 116, 0.10);
+  --accent-gradient:     #FB923C;
+  --accent-gradient-dim: rgba(251, 146, 60, 0.22);
+  --hero-title-glow: 0 0 10px rgba(249, 115, 22, 0.85), 0 0 34px rgba(249, 115, 22, 0.4);
+  --accent-amber:     #FB923C;
+  --accent-amber-dim: rgba(251, 146, 60, 0.12);
+  --accent-blue:      #FDBA74;
+  --accent-blue-dim:  rgba(253, 186, 116, 0.10);
+  --text-primary:   #FDBA74;
+  --text-secondary: #D08A4A;
+  --text-muted:     #8A5A28;
+  --font-display: 'JetBrains Mono', monospace;
+  --font-sans:    'JetBrains Mono', monospace;
+  --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0;
+  --shadow-card:  0 0 0 1px rgba(180, 83, 9, 0.35);
+  --shadow-modal: 0 0 40px rgba(0, 0, 0, 0.9);
+  --shadow-gold:  0 0 18px rgba(249, 115, 22, 0.35);
+  --bg-gradient:  repeating-linear-gradient(0deg, rgba(249, 115, 22, 0.035) 0 1px, transparent 1px 3px);
 }
 
-/* ── Lava — deep ember + molten orange ── */
-html[data-theme="lava"] {
+/* ── 3 · Blueprint — engineering grid, thin orange linework ── */
+html[data-theme="blueprint"] {
   color-scheme: dark;
-  --bg-base:     #221210;
-  --bg-base-rgb: 34, 18, 16;
-  --bg-surface:  #2E1815;
-  --bg-elevated: #3A201A;
-  --bg-nav:      #1C0F0C;
-  --bg-nav-rgb:  28, 15, 12;
-  --bg-hover:    #3D211A;
-  --border:       rgba(245, 215, 200, 0.18);
-  --border-dim:   rgba(245, 215, 200, 0.12);
-  --border-light: rgba(245, 215, 200, 0.07);
-  --gold:         #FF8347;
-  --gold-light:   #FF9E68;
-  --gold-dark:    rgba(255, 131, 71, 0.55);
-  --gold-glow:    rgba(255, 131, 71, 0.18);
-  --teal:         #FF8347;
-  --teal-dim:     rgba(255, 131, 71, 0.12);
-  --accent-amber:     #FF8347;
-  --accent-amber-dim: rgba(255, 131, 71, 0.12);
-  --accent-blue:      #FF8347;
-  --accent-blue-dim:  rgba(255, 131, 71, 0.12);
-  --text-primary:   #F8ECE5;
-  --text-secondary: rgba(248, 236, 229, 0.78);
-  --text-muted:     rgba(248, 236, 229, 0.55);
-  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
-  --bg-gradient: radial-gradient(circle at 80% 8%, rgba(255, 100, 40, 0.22), transparent 48%),
-                 linear-gradient(160deg, #371810 0%, #1B0D0A 55%, #2B1310 100%);
-  --accent-gradient: linear-gradient(135deg, #FF9E68 0%, #E8521C 100%);
+  --bg-base:     #0A0806;
+  --bg-base-rgb: 10, 8, 6;
+  --bg-surface:  #0E0B08;
+  --bg-elevated: #140F0A;
+  --bg-nav:      #080604;
+  --bg-nav-rgb:  8, 6, 4;
+  --bg-hover:    #191209;
+  --bg-tint:     none;
+  --border:       rgba(249, 115, 22, 0.65);
+  --border-dim:   rgba(249, 115, 22, 0.35);
+  --border-light: rgba(249, 115, 22, 0.14);
+  --gold:         #F97316;
+  --gold-light:   #FDBA74;
+  --gold-dark:    #9A3412;
+  --gold-glow:    rgba(249, 115, 22, 0.10);
+  --glow-around:  0 0 0 1px rgba(249, 115, 22, 0.5);
+  --teal:         #FDBA74;
+  --teal-dim:     rgba(253, 186, 116, 0.08);
+  --accent-gradient:     #F97316;
+  --accent-gradient-dim: rgba(249, 115, 22, 0.2);
+  --hero-title-glow: none;
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.10);
+  --accent-blue:      #FDBA74;
+  --accent-blue-dim:  rgba(253, 186, 116, 0.08);
+  --text-primary:   #F0E6DA;
+  --text-secondary: #BFA285;
+  --text-muted:     #8C7355;
+  --font-display: 'Barlow', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0;
+  --shadow-card:  none;
+  --shadow-modal: 0 12px 48px rgba(0, 0, 0, 0.85);
+  --shadow-gold:  0 0 0 1px rgba(249, 115, 22, 0.45);
+  --bg-gradient:
+    linear-gradient(rgba(249, 115, 22, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249, 115, 22, 0.045) 1px, transparent 1px);
 }
 
-/* ── Aurora — deep indigo washed with northern-lights teal/violet ── */
-html[data-theme="aurora"] {
+/* ── 4 · Editorial — warm black, burnt orange, magazine serif ── */
+html[data-theme="editorial"] {
   color-scheme: dark;
-  --bg-base:     #15112E;
-  --bg-base-rgb: 21, 17, 46;
-  --bg-surface:  #1E1740;
-  --bg-elevated: #271E50;
-  --bg-nav:      #120D27;
-  --bg-nav-rgb:  18, 13, 39;
-  --bg-hover:    #2A2056;
-  --border:       rgba(214, 204, 244, 0.18);
-  --border-dim:   rgba(214, 204, 244, 0.12);
-  --border-light: rgba(214, 204, 244, 0.07);
-  --gold:         #B79BF7;
-  --gold-light:   #CDB8FB;
-  --gold-dark:    rgba(183, 155, 247, 0.55);
-  --gold-glow:    rgba(183, 155, 247, 0.18);
-  --teal:         #B79BF7;
-  --teal-dim:     rgba(183, 155, 247, 0.12);
-  --accent-amber:     #B79BF7;
-  --accent-amber-dim: rgba(183, 155, 247, 0.12);
-  --accent-blue:      #B79BF7;
-  --accent-blue-dim:  rgba(183, 155, 247, 0.12);
-  --text-primary:   #EFEAF8;
-  --text-secondary: rgba(239, 234, 248, 0.78);
-  --text-muted:     rgba(239, 234, 248, 0.55);
-  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.6);
-  --bg-gradient: radial-gradient(circle at 72% 12%, rgba(120, 210, 170, 0.14), transparent 46%),
-                 linear-gradient(160deg, #201448 0%, #15102F 42%, #112A41 74%, #123E39 100%);
-  --accent-gradient: linear-gradient(135deg, #CDB8FB 0%, #8A63E0 100%);
+  --bg-base:     #0D0B09;
+  --bg-base-rgb: 13, 11, 9;
+  --bg-surface:  #121008;
+  --bg-elevated: #181410;
+  --bg-nav:      #0A0908;
+  --bg-nav-rgb:  10, 9, 8;
+  --bg-hover:    #1E1913;
+  --bg-tint:     none;
+  --border:       rgba(232, 98, 29, 0.55);
+  --border-dim:   rgba(232, 98, 29, 0.22);
+  --border-light: rgba(232, 98, 29, 0.10);
+  --gold:         #F97316;
+  --gold-light:   #FDBA74;
+  --gold-dark:    #E8621D;
+  --gold-glow:    rgba(232, 98, 29, 0.08);
+  --glow-around:  none;
+  --teal:         #F2E8DC;
+  --teal-dim:     rgba(242, 232, 220, 0.07);
+  --accent-gradient:     #E8621D;
+  --accent-gradient-dim: rgba(232, 98, 29, 0.18);
+  --hero-title-glow: none;
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.08);
+  --accent-blue:      #F2E8DC;
+  --accent-blue-dim:  rgba(242, 232, 220, 0.07);
+  --text-primary:   #F2E8DC;
+  --text-secondary: #B9A48F;
+  --text-muted:     #877362;
+  --font-display: 'Cinzel', serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0;
+  --shadow-card:  none;
+  --shadow-modal: 0 16px 64px rgba(0, 0, 0, 0.9);
+  --shadow-gold:  none;
+  --bg-gradient:  none;
 }
 
-/* ── Black sand — neutral dark (volcanic beach), solid backgrounds ── */
-html[data-theme="black-sand"] {
+/* ── 5 · Sunset — one huge ember horizon, cinematic calm ── */
+html[data-theme="sunset"] {
   color-scheme: dark;
-  --bg-base:     #121212;
-  --bg-base-rgb: 18, 18, 18;
-  --bg-surface:  #1A1A1A;
-  --bg-elevated: #202020;
-  --bg-nav:      #161616;
-  --bg-nav-rgb:  22, 22, 22;
-  --bg-hover:    #242424;
-  --border:       rgba(237, 234, 228, 0.16);
-  --border-dim:   rgba(237, 234, 228, 0.10);
-  --border-light: rgba(237, 234, 228, 0.06);
-  --gold:         #E8C06A;
-  --gold-light:   #F0D08A;
-  --gold-dark:    rgba(232, 192, 106, 0.55);
-  --gold-glow:    rgba(232, 192, 106, 0.08);
-  --teal:         #E8C06A;
-  --teal-dim:     rgba(232, 192, 106, 0.10);
-  --accent-amber:     #E8C06A;
-  --accent-amber-dim: rgba(232, 192, 106, 0.10);
-  --accent-blue:      #E8C06A;
-  --accent-blue-dim:  rgba(232, 192, 106, 0.10);
-  --text-primary:   #EDEAE4;
-  --text-secondary: rgba(237, 234, 228, 0.78);
-  --text-muted:     rgba(237, 234, 228, 0.55);
-  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.65);
+  --bg-base:     #0A0503;
+  --bg-base-rgb: 10, 5, 3;
+  --bg-surface:  rgba(20, 10, 5, 0.72);
+  --bg-elevated: rgba(30, 15, 8, 0.78);
+  --bg-nav:      #0A0503;
+  --bg-nav-rgb:  10, 5, 3;
+  --bg-hover:    rgba(45, 22, 11, 0.8);
+  --bg-tint:     none;
+  --border:       rgba(253, 186, 116, 0.40);
+  --border-dim:   rgba(253, 186, 116, 0.22);
+  --border-light: rgba(253, 186, 116, 0.10);
+  --gold:         #FDBA74;
+  --gold-light:   #FDE68A;
+  --gold-dark:    #C2410C;
+  --gold-glow:    rgba(249, 115, 22, 0.20);
+  --glow-around:  0 0 60px rgba(249, 115, 22, 0.25);
+  --teal:         #FDEDE2;
+  --teal-dim:     rgba(253, 237, 226, 0.08);
+  --accent-gradient:     linear-gradient(135deg, #FDE68A 0%, #F97316 60%, #C2410C 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(253, 230, 138, 0.2), rgba(194, 65, 12, 0.2));
+  --hero-title-glow: 0 2px 24px rgba(0, 0, 0, 0.8);
+  --accent-amber:     #FDBA74;
+  --accent-amber-dim: rgba(253, 186, 116, 0.12);
+  --accent-blue:      #FDEDE2;
+  --accent-blue-dim:  rgba(253, 237, 226, 0.08);
+  --text-primary:   #FDEDE2;
+  --text-secondary: #D9B49A;
+  --text-muted:     #A67C5F;
+  --font-display: 'Barlow', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 18px;
+  --shadow-card:  0 8px 32px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.85);
+  --shadow-gold:  0 0 40px rgba(249, 115, 22, 0.3);
+  --bg-gradient:  radial-gradient(ellipse 120% 85% at 50% 118%, #F97316 -20%, #7C2D12 28%, #1A0D05 62%, #0A0503 100%);
 }
 
-/* ── Immersive backdrop + gradient buttons (colour themes only) ───────────────
-   Only glacier/moss/lava/aurora define --bg-gradient + --accent-gradient.
-   classic (no attribute) keeps variables.css's --bg-tint; black-sand (no
-   gradient vars) falls back to its solid --bg-base. */
+/* ── 6 · Bauhaus — flat poster geometry, orange and white on black ── */
+html[data-theme="bauhaus"] {
+  color-scheme: dark;
+  --bg-base:     #0B0B0B;
+  --bg-base-rgb: 11, 11, 11;
+  --bg-surface:  #151515;
+  --bg-elevated: #1C1C1C;
+  --bg-nav:      #0B0B0B;
+  --bg-nav-rgb:  11, 11, 11;
+  --bg-hover:    #222222;
+  --bg-tint:     none;
+  --border:       #F97316;
+  --border-dim:   rgba(249, 115, 22, 0.5);
+  --border-light: rgba(255, 255, 255, 0.14);
+  --gold:         #F97316;
+  --gold-light:   #FB923C;
+  --gold-dark:    #E8621D;
+  --gold-glow:    rgba(249, 115, 22, 0.0);
+  --glow-around:  none;
+  --teal:         #FFFFFF;
+  --teal-dim:     rgba(255, 255, 255, 0.10);
+  --accent-gradient:     #F97316;
+  --accent-gradient-dim: rgba(249, 115, 22, 0.2);
+  --hero-title-glow: none;
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.12);
+  --accent-blue:      #FFFFFF;
+  --accent-blue-dim:  rgba(255, 255, 255, 0.10);
+  --text-primary:   #F4F4F4;
+  --text-secondary: #BDBDBD;
+  --text-muted:     #8A8A8A;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0;
+  --shadow-card:  0 2px 0 #F97316;
+  --shadow-modal: 0 16px 64px rgba(0, 0, 0, 0.9);
+  --shadow-gold:  0 4px 0 #FFFFFF;
+  --bg-gradient:  radial-gradient(circle 340px at 88% -8%, rgba(249, 115, 22, 0.35), transparent 62%);
+}
+
+/* ── 7 · Magma — molten organic blobs, soft rounded warmth ── */
+html[data-theme="magma"] {
+  color-scheme: dark;
+  --bg-base:     #0F0906;
+  --bg-base-rgb: 15, 9, 6;
+  --bg-surface:  rgba(30, 20, 13, 0.85);
+  --bg-elevated: rgba(40, 26, 16, 0.9);
+  --bg-nav:      #0B0704;
+  --bg-nav-rgb:  11, 7, 4;
+  --bg-hover:    rgba(52, 33, 20, 0.9);
+  --bg-tint:     none;
+  --border:       rgba(249, 115, 22, 0.42);
+  --border-dim:   rgba(249, 115, 22, 0.22);
+  --border-light: rgba(249, 115, 22, 0.10);
+  --gold:         #F97316;
+  --gold-light:   #FDBA74;
+  --gold-dark:    #C2410C;
+  --gold-glow:    rgba(249, 115, 22, 0.22);
+  --glow-around:  0 0 50px rgba(249, 115, 22, 0.28), 0 0 18px rgba(249, 115, 22, 0.16);
+  --teal:         #FFD9B8;
+  --teal-dim:     rgba(255, 217, 184, 0.10);
+  --accent-gradient:     linear-gradient(135deg, #FDBA74 0%, #F97316 50%, #C2410C 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(253, 186, 116, 0.25), rgba(194, 65, 12, 0.25));
+  --hero-title-glow: 0 0 60px rgba(249, 115, 22, 0.5);
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.13);
+  --accent-blue:      #FFD9B8;
+  --accent-blue-dim:  rgba(255, 217, 184, 0.10);
+  --text-primary:   #FFF3E8;
+  --text-secondary: #D9B49A;
+  --text-muted:     #A6805F;
+  --font-display: 'Barlow', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 10px; --radius-md: 14px; --radius-lg: 18px; --radius-xl: 26px;
+  --shadow-card:  0 10px 36px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 28px 90px rgba(0, 0, 0, 0.85);
+  --shadow-gold:  0 0 44px rgba(249, 115, 22, 0.35);
+  --bg-gradient:
+    radial-gradient(closest-side circle at 12% 68%, rgba(249, 115, 22, 0.20), transparent 70%),
+    radial-gradient(closest-side circle at 88% 18%, rgba(194, 65, 12, 0.16), transparent 70%);
+}
+
+/* ── 8 · Neon — glowing hairlines on pitch black, Tron lineage ── */
+html[data-theme="neon"] {
+  color-scheme: dark;
+  --bg-base:     #030303;
+  --bg-base-rgb: 3, 3, 3;
+  --bg-surface:  rgba(20, 12, 7, 0.6);
+  --bg-elevated: rgba(28, 16, 9, 0.7);
+  --bg-nav:      #050505;
+  --bg-nav-rgb:  5, 5, 5;
+  --bg-hover:    rgba(40, 22, 12, 0.7);
+  --bg-tint:     none;
+  --border:       rgba(249, 115, 22, 0.75);
+  --border-dim:   rgba(249, 115, 22, 0.45);
+  --border-light: rgba(249, 115, 22, 0.18);
+  --gold:         #FB923C;
+  --gold-light:   #FDBA74;
+  --gold-dark:    #C2410C;
+  --gold-glow:    rgba(249, 115, 22, 0.4);
+  --glow-around:  0 0 16px rgba(249, 115, 22, 0.5), inset 0 0 12px rgba(249, 115, 22, 0.12);
+  --teal:         #FDBA74;
+  --teal-dim:     rgba(253, 186, 116, 0.1);
+  --accent-gradient:     #FB923C;
+  --accent-gradient-dim: rgba(251, 146, 60, 0.2);
+  --hero-title-glow: 0 0 18px rgba(249, 115, 22, 0.9), 0 0 60px rgba(249, 115, 22, 0.45);
+  --accent-amber:     #FB923C;
+  --accent-amber-dim: rgba(251, 146, 60, 0.10);
+  --accent-blue:      #FDBA74;
+  --accent-blue-dim:  rgba(253, 186, 116, 0.10);
+  --text-primary:   #F5EDE2;
+  --text-secondary: #C9A183;
+  --text-muted:     #8F6A4C;
+  --font-display: 'Barlow', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 2px; --radius-md: 2px; --radius-lg: 3px; --radius-xl: 4px;
+  --shadow-card:  0 0 12px rgba(249, 115, 22, 0.16), inset 0 0 18px rgba(0, 0, 0, 0.7);
+  --shadow-modal: 0 0 60px rgba(249, 115, 22, 0.2);
+  --shadow-gold:  0 0 24px rgba(249, 115, 22, 0.5);
+  --bg-gradient:  radial-gradient(ellipse 70% 40% at 50% 0%, rgba(249, 115, 22, 0.08), transparent 65%);
+}
+
+/* ── 9 · Industrial — matte black, safety-orange machine markings ── */
+html[data-theme="industrial"] {
+  color-scheme: dark;
+  --bg-base:     #111110;
+  --bg-base-rgb: 17, 17, 16;
+  --bg-surface:  #171716;
+  --bg-elevated: #1D1D1B;
+  --bg-nav:      #0A0A09;
+  --bg-nav-rgb:  10, 10, 9;
+  --bg-hover:    #232321;
+  --bg-tint:     none;
+  --border:       #F97316;
+  --border-dim:   rgba(249, 115, 22, 0.4);
+  --border-light: rgba(232, 228, 222, 0.12);
+  --gold:         #F97316;
+  --gold-light:   #FB923C;
+  --gold-dark:    #C2410C;
+  --gold-glow:    rgba(249, 115, 22, 0.0);
+  --glow-around:  none;
+  --teal:         #E8E4DE;
+  --teal-dim:     rgba(232, 228, 222, 0.08);
+  --accent-gradient:     #F97316;
+  --accent-gradient-dim: rgba(249, 115, 22, 0.18);
+  --hero-title-glow: none;
+  --accent-amber:     #F97316;
+  --accent-amber-dim: rgba(249, 115, 22, 0.10);
+  --accent-blue:      #E8E4DE;
+  --accent-blue-dim:  rgba(232, 228, 222, 0.08);
+  --text-primary:   #E8E4DE;
+  --text-secondary: #ABA69E;
+  --text-muted:     #7D7970;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0;
+  --shadow-card:  inset 3px 0 0 #F97316;
+  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.8);
+  --shadow-gold:  inset 3px 0 0 #E8E4DE;
+  --bg-gradient:  none;
+}
+
+/* ── 10 · Ash — quiet warm charcoal, softened embers, the calm one ── */
+html[data-theme="ash"] {
+  color-scheme: dark;
+  --bg-base:     #161412;
+  --bg-base-rgb: 22, 20, 18;
+  --bg-surface:  #1C1916;
+  --bg-elevated: #23201B;
+  --bg-nav:      #100F0D;
+  --bg-nav-rgb:  16, 15, 13;
+  --bg-hover:    #2A2620;
+  --bg-tint:     none;
+  --border:       rgba(217, 119, 6, 0.42);
+  --border-dim:   rgba(217, 119, 6, 0.22);
+  --border-light: rgba(217, 119, 6, 0.10);
+  --gold:         #E8853D;
+  --gold-light:   #F3B577;
+  --gold-dark:    #B45309;
+  --gold-glow:    rgba(217, 119, 6, 0.10);
+  --glow-around:  0 0 30px rgba(217, 119, 6, 0.14);
+  --teal:         #D6CDC2;
+  --teal-dim:     rgba(214, 205, 194, 0.08);
+  --accent-gradient:     linear-gradient(135deg, #F3B577 0%, #D97706 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(243, 181, 119, 0.18), rgba(217, 119, 6, 0.18));
+  --hero-title-glow: none;
+  --accent-amber:     #E8853D;
+  --accent-amber-dim: rgba(232, 133, 61, 0.10);
+  --accent-blue:      #D6CDC2;
+  --accent-blue-dim:  rgba(214, 205, 194, 0.08);
+  --text-primary:   #EFE8DF;
+  --text-secondary: #BFB2A2;
+  --text-muted:     #8F8474;
+  --font-display: 'Barlow', sans-serif;
+  --font-sans:    'Barlow', sans-serif;
+  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 12px;
+  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.75);
+  --shadow-gold:  0 0 20px rgba(217, 119, 6, 0.18);
+  --bg-gradient:  none;
+}
+
+/* ── Shared theme plumbing ────────────────────────────────────────────────────
+   The backdrop hook: themes carry their page backdrop in --bg-gradient
+   (grid, scanlines, horizon, blobs — or none for the flat ones). classic
+   (no attribute) keeps variables.css's --bg-tint instead. */
 html[data-theme] body {
   background-image: var(--bg-gradient, none);
   background-attachment: fixed;
 }
+/* Blueprint's grid and Terminal's scanlines need a tile size; the others
+   stretch. */
+html[data-theme="blueprint"] body { background-size: 26px 26px; }
+html[data-theme="terminal"]  body { background-size: auto; }
+
 html[data-theme] .btn--primary { background: var(--accent-gradient, var(--gold)); }
 html[data-theme] .btn--primary:hover { box-shadow: 0 0 24px var(--gold-glow); }

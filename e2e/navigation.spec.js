@@ -17,11 +17,11 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.lol-hero__title')).toContainText('in one place');
   });
 
-  test('homepage hero is static — no video background by default', async ({ page }) => {
-    // The video/photo background machinery is retained (admin background
-    // settings can still select it); the business default is the plain hero.
+  test('homepage hero has the video background by default', async ({ page }) => {
+    // Halli's re-theme call (2026-08-09): the moving hero is the wow factor,
+    // like hallismiley. Photo/plain modes remain admin-selectable.
     await page.goto('/');
-    await expect(page.locator('video.lol-hero__bg')).toHaveCount(0);
+    await expect(page.locator('video.lol-hero__bg')).toBeAttached();
   });
 
   test('Projects page loads and shows project cards', async ({ page }) => {

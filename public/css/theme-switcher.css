@@ -87,7 +87,7 @@
 /* black-sand swatch — dark fill needs a hint of its gold accent to read as
    "dark theme" rather than a duplicate of classic ink. */
 .theme-switcher__swatch--dark {
-  border: 2px solid #E8C06A;
+  border: 2px solid #F97316;
 }
 
 /* Admin-only TEST-mode row (mounts the change-request widget). */

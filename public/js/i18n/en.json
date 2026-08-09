@@ -1,12 +1,7 @@
 {
   "themeSwitcher.open": "Site theme",
   "themeSwitcher.title": "Theme",
-  "themeSwitcher.theme.classic": "Classic",
-  "themeSwitcher.theme.glacier": "Glacier",
-  "themeSwitcher.theme.moss": "Moss",
-  "themeSwitcher.theme.lava": "Lava",
-  "themeSwitcher.theme.aurora": "Aurora",
-  "themeSwitcher.theme.black-sand": "Black sand",
+  "themeSwitcher.theme.classic": "Ember (default)",
   "themeSwitcher.testMode": "TEST mode",
   "themeSwitcher.testModeNote": "This browser only",
   "changeRequest.badge": "TEST",
@@ -2119,5 +2114,15 @@
   "nav.skipToContent": "Skip to main content",
   "home.heroAriaLabel": "Introduction",
   "home.scrollHint": "Scroll",
-  "contact.formAriaLabel": "Inquiry form"
+  "contact.formAriaLabel": "Inquiry form",
+  "themeSwitcher.theme.brutal": "Brutal",
+  "themeSwitcher.theme.terminal": "Terminal",
+  "themeSwitcher.theme.blueprint": "Blueprint",
+  "themeSwitcher.theme.editorial": "Editorial",
+  "themeSwitcher.theme.sunset": "Sunset",
+  "themeSwitcher.theme.bauhaus": "Poster",
+  "themeSwitcher.theme.magma": "Magma",
+  "themeSwitcher.theme.neon": "Neon",
+  "themeSwitcher.theme.industrial": "Workshop",
+  "themeSwitcher.theme.ash": "Ash"
 }

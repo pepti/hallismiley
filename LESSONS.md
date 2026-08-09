@@ -118,3 +118,16 @@ any JS ran. Anything outside the SPA's translation pass — consent banner,
 skip link, `<html lang>`, `<title>`/OG defaults — needs its own locale
 handling. Fixed by giving consent.js a small two-locale string table and
 re-translating `body > [data-i18n]` in `main.js` after messages load.
+
+### 2026-08-09 — the token system paid for itself on the second re-theme
+
+_(project)_ Halli rejected the light business look ("too generic, like every
+Claude-made page") and asked for the original dark hallismiley/LoL language
+with orange instead of gold, plus the moving-background wow factor. The whole
+visual flip — light SaaS → deep warm dark, sharp corners, Cinzel back,
+gradient-metal headings, glows — took one rewrite of variables.css values,
+~120 lines of hero/card CSS, and re-enabling machinery that job 2 had kept
+instead of deleting (video hero mode, Cinzel woff2 files, glow tokens). The
+"keep capability, change presentation" discipline is what made a same-day
+full re-theme possible. Also: dark + orange clears WCAG AA almost everywhere
+by construction (6.9–16.7:1), where light + orange needed shade surgery.

@@ -42,6 +42,33 @@ body {
   color: var(--text-primary);
 }
 
+/* ── Living backdrop ─────────────────────────────────────────────────────────
+   Two soft ember glows drifting very slowly behind everything — the ambient
+   "the page is alive" layer, deliberately slower and dimmer than anything a
+   visitor should consciously notice. transform/opacity only, so it stays on
+   the compositor; a fixed element (not body background animation) because
+   background-position animation repaints every frame.
+   Killed entirely for prefers-reduced-motion. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 42% 34% at 22% 24%, var(--gold-glow), transparent 70%),
+    radial-gradient(ellipse 36% 30% at 80% 78%, var(--teal-dim), transparent 70%);
+  animation: emberDrift 46s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes emberDrift {
+  from { transform: translate3d(-2.5%, -2%, 0) scale(1); }
+  to   { transform: translate3d(2.5%, 2.5%, 0) scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
 #app { min-height: calc(100vh - 56px); }
 
 .view { animation: fadeIn 300ms ease forwards; }

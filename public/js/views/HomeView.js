@@ -202,9 +202,10 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
-  // ── Load landing background config (admin-configurable; plain is the
-  // default — the static business hero. Video/photo modes remain available
-  // through the admin background settings.) ──
+  // ── Load landing background config (admin-configurable; video is the
+  // default — Halli's call (2026-08-09): the moving hero is the wow factor,
+  // same as hallismiley. Photo/plain modes remain available through the
+  // admin background settings.) ──
   async _loadLandingBg() {
     try {
       const res = await fetch('/api/v1/content/landing_background?locale=en');
@@ -212,14 +213,14 @@ export class HomeView {
         const data = await res.json();
         if (data && typeof data === 'object') { this._landingBg = data; return; }
       }
-    } catch { /* network error — fall through to plain default */ }
-    this._landingBg = { mode: 'plain', photo_url: null, veil_percent: 100 };
+    } catch { /* network error — fall through to video default */ }
+    this._landingBg = { mode: 'video', photo_url: null, veil_percent: 100 };
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
   _hero() {
     const h  = this._heroContent || DEFAULT_HERO_CONTENT.en;
-    const bg = this._landingBg || { mode: 'plain', photo_url: null, veil_percent: 100 };
+    const bg = this._landingBg || { mode: 'video', photo_url: null, veil_percent: 100 };
     const veil = Math.max(0, Math.min(100, Number.isFinite(bg.veil_percent) ? bg.veil_percent : 100));
     // Background: video (default) | photo (a library image) | plain. The photo
     // layer uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
@@ -268,8 +269,9 @@ export class HomeView {
         <h2 class="section__title" id="home-tiers-title">${t('home.tiersTitle')}</h2>
       </div>
       <div class="home-tiers__grid">
-        ${tiers.map(tier => `
-        <a href="${href('/thjonusta')}" class="home-tiers__card">
+        ${tiers.map((tier, i) => `
+        <a href="${href('/thjonusta')}" class="home-tiers__card${i === 1 ? ' home-tiers__card--featured' : ''}">
+          <span class="home-tiers__numeral" aria-hidden="true">${['I', 'II', 'III'][i]}</span>
           <h3 class="home-tiers__name">${tier.name}</h3>
           <p class="home-tiers__desc">${tier.desc}</p>
         </a>`).join('')}
