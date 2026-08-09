@@ -119,4 +119,15 @@ describe('getPreferredLocale', () => {
     browseTo('/projects', { savedChoice: 'en' });
     expect(i18n.getPreferredLocale()).toBe('en');
   });
+
+  test('no saved choice and no matching browser language falls back to Icelandic', () => {
+    // PUBLIC_DEFAULT_LOCALE — the visitor-facing default mirrors the server.
+    browseTo('/projects', { languages: ['de-DE', 'fr'] });
+    expect(i18n.getPreferredLocale()).toBe('is');
+  });
+
+  test('a matching browser language still beats the Icelandic fallback', () => {
+    browseTo('/projects', { languages: ['en-US'] });
+    expect(i18n.getPreferredLocale()).toBe('en');
+  });
 });

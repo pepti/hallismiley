@@ -75,13 +75,13 @@ describe('GET /api/v1/projects', () => {
   test('invalid category query param returns 400', async () => {
     const res = await request(app).get('/api/v1/projects?category=woodworking');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/category/i);
+    expect(res.body.error).toMatch(/flokkur/i);
   });
 
   test('invalid featured value returns 400', async () => {
     const res = await request(app).get('/api/v1/projects?featured=maybe');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/featured/i);
+    expect(res.body.error).toMatch(/útvalið/i);
   });
 
   test('year below 1900 returns 400', async () => {
@@ -136,7 +136,7 @@ describe('GET /api/v1/projects/:id', () => {
   test('returns 404 for a non-existent id', async () => {
     const res = await request(app).get('/api/v1/projects/99999');
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/not found/i);
+    expect(res.body.error).toMatch(/fannst ekki/i);
   });
 });
 
@@ -513,7 +513,7 @@ describe('Project locale-aware SELECTs', () => {
     expect(is.body[0].description).toBe('English only.');
   });
 
-  test('GET /api/v1/projects (no locale) returns English title/description verbatim', async () => {
+  test('GET /api/v1/projects (no locale) resolves the IS default; explicit locale=en returns English verbatim', async () => {
     await request(app)
       .post('/api/v1/projects')
       .set('Cookie', sessionCookie)
@@ -522,7 +522,13 @@ describe('Project locale-aware SELECTs', () => {
         title_is: 'Íslenskur titill',
       }));
 
-    const en = await request(app).get('/api/v1/projects');
+    // No locale signal → PUBLIC_DEFAULT_LOCALE ('is') → IS column is surfaced.
+    const noSignal = await request(app).get('/api/v1/projects');
+    expect(noSignal.status).toBe(200);
+    expect(noSignal.body[0].title).toBe('Íslenskur titill');
+
+    // Explicit EN still returns the primary English column verbatim.
+    const en = await request(app).get('/api/v1/projects?locale=en');
     expect(en.status).toBe(200);
     expect(en.body[0].title).toBe('English Title');
   });

@@ -4,6 +4,18 @@ const DEFAULT_LOCALE    = process.env.DEFAULT_LOCALE    || 'en';
 const SUPPORTED_LOCALES = (process.env.SUPPORTED_LOCALES || 'en,is')
   .split(',').map(l => l.trim()).filter(Boolean);
 
+// The locale a brand-new visitor sees when no signal (URL prefix, cookie,
+// account preference, Accept-Language) resolves one. Orange Smiley is an
+// Icelandic business, so this is 'is'.
+//
+// Deliberately separate from DEFAULT_LOCALE above, which is the CONTENT
+// dimension: the t()/site_content fallback locale and the storage locale for
+// locale-neutral rows (party module, shared images). The base wrote English
+// content first, so that dimension stays 'en' — flipping it would silently
+// re-home stored rows and break the party module's IS-primary/EN-translated
+// contract. Only the visitor-facing default changes.
+const PUBLIC_DEFAULT_LOCALE = process.env.PUBLIC_DEFAULT_LOCALE || 'is';
+
 // The party pages are a birthday landing for an Iceland-based event with an
 // all-Icelandic guest list — they are published in Icelandic ONLY.
 //
@@ -63,6 +75,7 @@ function forcedLocaleFor(pathname) {
 
 module.exports = {
   DEFAULT_LOCALE,
+  PUBLIC_DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
   PARTY_FORCED_LOCALE,
   isPartyPath,

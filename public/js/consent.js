@@ -15,7 +15,9 @@
 
   var STORAGE_KEY = 'cookie_consent';
   var SUPPORTED_LOCALES = ['en', 'is'];
-  var DEFAULT_LOCALE = 'en';
+  // Visitor-facing default for the banner when no signal resolves a locale —
+  // mirrors PUBLIC_DEFAULT_LOCALE in public/js/i18n/i18n.js.
+  var DEFAULT_LOCALE = 'is';
 
   function getConsent() {
     try {

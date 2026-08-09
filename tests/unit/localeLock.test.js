@@ -141,6 +141,10 @@ describe('resolveLocale — ordinary routes are untouched', () => {
     expect(resolveLocale(req('/projects', { cookies: { locale_choice: 'is' } }))).toBe('is');
     expect(resolveLocale(req('/projects', { user: { preferred_locale: 'is' } }))).toBe('is');
     expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'is-IS,is;q=0.9' } }))).toBe('is');
-    expect(resolveLocale(req('/projects'))).toBe('en');
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))).toBe('en');
+  });
+
+  test('no signal at all falls back to PUBLIC_DEFAULT_LOCALE (is)', () => {
+    expect(resolveLocale(req('/projects'))).toBe('is');
   });
 });

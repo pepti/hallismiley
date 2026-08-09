@@ -17,7 +17,7 @@ describe('POST /api/v1/contact — valid submissions', () => {
       .send(validPayload());
 
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/received/i);
+    expect(res.body.message).toMatch(/móttekin/i);
   });
 
   test('accepts message at exactly 10 characters', async () => {
@@ -47,7 +47,7 @@ describe('POST /api/v1/contact — validation errors', () => {
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/name/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/nafn/i)]));
   });
 
   test('missing email returns 400', async () => {
@@ -55,7 +55,7 @@ describe('POST /api/v1/contact — validation errors', () => {
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/email/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/netfang/i)]));
   });
 
   test('invalid email format returns 400', async () => {
@@ -64,7 +64,7 @@ describe('POST /api/v1/contact — validation errors', () => {
       .send({ ...validPayload(), email: 'notanemail' });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/email/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/netfang/i)]));
   });
 
   test('missing message returns 400', async () => {
@@ -72,7 +72,7 @@ describe('POST /api/v1/contact — validation errors', () => {
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/message/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/skilaboð/i)]));
   });
 
   test('message under 10 characters returns 400', async () => {
@@ -81,7 +81,7 @@ describe('POST /api/v1/contact — validation errors', () => {
       .send({ ...validPayload(), message: 'Short' });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/10 characters/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/10 stafir/i)]));
   });
 
   test('name over 100 chars returns 400', async () => {
@@ -128,6 +128,6 @@ describe('POST /api/v1/contact — honeypot', () => {
 
     // Returns 200 so the bot thinks it succeeded
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/received/i);
+    expect(res.body.message).toMatch(/móttekin/i);
   });
 });

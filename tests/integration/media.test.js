@@ -124,7 +124,7 @@ describe('GET /api/v1/projects/:id/media', () => {
   test('returns 404 for a non-existent project id', async () => {
     const res = await request(app).get('/api/v1/projects/99999/media');
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/not found/i);
+    expect(res.body.error).toMatch(/fannst ekki/i);
   });
 
   test('is a public endpoint — no auth required', async () => {
