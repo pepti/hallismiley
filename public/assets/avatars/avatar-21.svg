@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Lightning Bolt -->
+  <polygon points="118,15 62,105 98,105 82,185 138,88 100,88"
+           fill="#F4C542" stroke="#E8A800" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Inner highlight -->
+  <polygon points="112,30 72,105 100,105 88,165 125,100 100,100"
+           fill="#FFE87A" opacity="0.5"/>
+  <!-- Glow effect -->
+  <polygon points="118,15 62,105 98,105 82,185 138,88 100,88"
+           fill="none" stroke="rgba(244,197,66,0.3)" stroke-width="8" stroke-linejoin="round"/>
+</svg>

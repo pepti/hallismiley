@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Dice (d6) in 3D perspective -->
+  <!-- Shadow -->
+  <ellipse cx="105" cy="178" rx="55" ry="12" fill="rgba(0,0,0,0.4)"/>
+  <!-- Left face (darker) -->
+  <polygon points="38,60 38,148 100,170 100,82" fill="#B8C0CC"/>
+  <!-- Top face (lightest) -->
+  <polygon points="38,60 100,38 162,60 100,82" fill="#F0F4FF"/>
+  <!-- Right face (medium) -->
+  <polygon points="162,60 162,148 100,170 100,82" fill="#D0D8E8"/>
+  <!-- Outline -->
+  <polygon points="38,60 100,38 162,60 162,148 100,170 38,148" fill="none" stroke="#8890A0" stroke-width="2"/>
+  <line x1="100" y1="38"  x2="100" y2="82"  stroke="#8890A0" stroke-width="1.5"/>
+  <line x1="100" y1="82"  x2="38"  y2="60"  stroke="#8890A0" stroke-width="1.5"/>
+  <line x1="100" y1="82"  x2="162" y2="60"  stroke="#8890A0" stroke-width="1.5"/>
+  <line x1="100" y1="82"  x2="100" y2="170" stroke="#8890A0" stroke-width="1.5"/>
+  <!-- Top face dots (showing 1) -->
+  <circle cx="100" cy="60" r="7" fill="#E74C3C"/>
+  <!-- Right face dots (showing 3) -->
+  <circle cx="140" cy="88"  r="5" fill="#222"/>
+  <circle cx="130" cy="115" r="5" fill="#222"/>
+  <circle cx="148" cy="134" r="5" fill="#222"/>
+  <!-- Left face dots (showing 5) -->
+  <circle cx="58"  cy="82"  r="5" fill="#222"/>
+  <circle cx="76"  cy="82"  r="5" fill="#222"/>
+  <circle cx="67"  cy="105" r="5" fill="#222"/>
+  <circle cx="58"  cy="128" r="5" fill="#222"/>
+  <circle cx="76"  cy="128" r="5" fill="#222"/>
+</svg>

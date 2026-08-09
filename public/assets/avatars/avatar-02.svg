@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Space Invader -->
+  <g fill="#44FF44" transform="translate(25,40)">
+    <!-- Pixel grid: 11x8 -->
+    <rect x="30" y="0" width="15" height="15"/>
+    <rect x="105" y="0" width="15" height="15"/>
+    <rect x="45" y="15" width="15" height="15"/>
+    <rect x="90" y="15" width="15" height="15"/>
+    <rect x="30" y="30" width="90" height="15"/>
+    <rect x="15" y="45" width="15" height="15"/>
+    <rect x="30" y="45" width="15" height="15"/>
+    <rect x="60" y="45" width="30" height="15"/>
+    <rect x="105" y="45" width="15" height="15"/>
+    <rect x="120" y="45" width="15" height="15"/>
+    <rect x="0"  y="60" width="15" height="15"/>
+    <rect x="30" y="60" width="15" height="15"/>
+    <rect x="45" y="60" width="15" height="15"/>
+    <rect x="90" y="60" width="15" height="15"/>
+    <rect x="105" y="60" width="15" height="15"/>
+    <rect x="135" y="60" width="15" height="15"/>
+    <rect x="0"  y="75" width="15" height="15"/>
+    <rect x="15" y="75" width="15" height="15"/>
+    <rect x="30" y="75" width="15" height="15"/>
+    <rect x="45" y="75" width="15" height="15"/>
+    <rect x="60" y="75" width="30" height="15"/>
+    <rect x="90" y="75" width="15" height="15"/>
+    <rect x="105" y="75" width="15" height="15"/>
+    <rect x="120" y="75" width="15" height="15"/>
+    <rect x="135" y="75" width="15" height="15"/>
+    <rect x="15" y="90" width="30" height="15"/>
+    <rect x="105" y="90" width="30" height="15"/>
+    <rect x="0"  y="105" width="15" height="15"/>
+    <rect x="60" y="105" width="30" height="15"/>
+    <rect x="135" y="105" width="15" height="15"/>
+  </g>
+</svg>

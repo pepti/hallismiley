@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Diamond gem -->
+  <!-- Outer diamond shape -->
+  <polygon points="100,15 168,78 100,185 32,78"
+           fill="#0BC4E3" stroke="#0899BB" stroke-width="2"/>
+  <!-- Facets - top -->
+  <polygon points="100,15 168,78 100,78" fill="#88EEFF" opacity="0.7"/>
+  <polygon points="100,15 32,78  100,78" fill="#44CCEE" opacity="0.7"/>
+  <!-- Facets - left -->
+  <polygon points="32,78 100,78 100,185" fill="#0899BB" opacity="0.9"/>
+  <!-- Facets - right -->
+  <polygon points="168,78 100,78 100,185" fill="#0BC4E3" opacity="0.6"/>
+  <!-- Inner highlights -->
+  <polygon points="100,15 134,78 100,60" fill="rgba(255,255,255,0.35)"/>
+  <polygon points="100,15 66,78  100,60" fill="rgba(255,255,255,0.2)"/>
+  <!-- Shine lines -->
+  <line x1="100" y1="15" x2="100" y2="185" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <line x1="32"  y1="78" x2="168" y2="78"  stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+  <!-- Top facet sparkle -->
+  <circle cx="115" cy="45" r="4" fill="white" opacity="0.6"/>
+</svg>

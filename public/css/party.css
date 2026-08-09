@@ -1,0 +1,3212 @@
+/* ── Party Hub Styles ────────────────────────────────────────────────────────── */
+
+
+/* ── Global party section ─────────────────────────────────────────────────── */
+
+.party-section {
+  padding: var(--sp-8) var(--sp-4);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.1);
+}
+
+.party-section:last-of-type {
+  border-bottom: none;
+}
+
+.party-section__inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.party-section__title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--gold);
+  margin-bottom: var(--sp-6);
+  letter-spacing: 0.05em;
+}
+
+.party-gold {
+  color: var(--gold);
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+
+.party-hero {
+  position: relative;
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.party-hero__bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, #1f0e00 0%, var(--bg-base) 75%);
+  z-index: 0;
+}
+
+.party-hero__bg--photo {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Layered scrim keeps the title and countdown legible on any uploaded photo
+   while still letting the image show through clearly. */
+.party-hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.525) 0%, rgba(0, 0, 0, 0.825) 100%),
+    radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.675) 100%);
+}
+
+.party-hero__content {
+  position: relative;
+  z-index: 1;
+  max-width: 700px;
+}
+
+.party-hero__admin {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  z-index: 11;
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Override the absolute-positioning .party-edit-btn applies by default —
+   inside the hero admin cluster the buttons must lay out in flex flow. */
+.party-hero__admin .party-edit-btn {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
+.party-edit-btn--danger {
+  background: rgba(220, 50, 50, .15);
+  border-color: rgba(220, 50, 50, .5);
+  color: #ff8f8f;
+}
+.party-edit-btn--danger:hover {
+  background: rgba(220, 50, 50, .3);
+  border-color: #ff8f8f;
+}
+
+.party-hero__eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: var(--sp-3);
+}
+
+.party-hero__title {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 10vw, 6rem);
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: var(--sp-3);
+  text-shadow: 0 0 40px rgba(200, 170, 110, 0.3);
+}
+
+.party-hero__title sup {
+  font-size: 0.5em;
+  vertical-align: super;
+}
+
+.party-hero__sub {
+  color: var(--text-secondary);
+  font-size: 1.125rem;
+  margin-bottom: var(--sp-6);
+}
+
+/* ── Countdown ────────────────────────────────────────────────────────────── */
+
+.party-countdown {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.party-countdown__unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 70px;
+  background: rgba(200, 170, 110, 0.08);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.party-countdown__num {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  transition: transform 0.2s ease;
+}
+
+.party-countdown__num.tick {
+  transform: scale(1.15);
+}
+
+.party-countdown__label {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+  margin-top: var(--sp-1);
+}
+
+.party-countdown__sep {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--gold);
+  opacity: 0.5;
+  align-self: flex-start;
+  margin-top: 0.35em;
+}
+
+.party-countdown__party {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--gold);
+  animation: pulse 1s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* ── Venue ─────────────────────────────────────────────────────────────────── */
+
+.party-venue__card {
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--sp-5);
+}
+
+.party-venue__name {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.party-venue__address {
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-4);
+}
+
+.party-venue__rating {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: var(--sp-4);
+}
+
+.party-venue__links {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.party-venue__details {
+  margin-top: var(--sp-5);
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 600px) {
+  .party-venue__details { grid-template-columns: 1fr; }
+}
+
+.party-venue__details-section {
+  background: var(--bg-base);
+  border: 1px solid rgba(200, 170, 110, 0.12);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-4);
+}
+
+.party-venue__details-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.party-venue__details-list {
+  list-style: disc;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+/* ── Venue photo gallery ──────────────────────────────────────────────────── */
+
+.party-venue__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+}
+
+.party-venue__photo-btn {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  overflow: hidden;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.party-venue__photo-btn:hover,
+.party-venue__photo-btn:focus-visible {
+  border-color: var(--gold);
+  transform: scale(1.02);
+  outline: none;
+}
+
+.party-venue__photo {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  transition: opacity 0.2s;
+}
+
+.party-venue__photo-btn:hover .party-venue__photo {
+  opacity: 0.85;
+}
+
+/* ── Timeline / Schedule ──────────────────────────────────────────────────── */
+
+.party-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  /* Column geometry lives here so the timeline line, the dot column and the
+     grid columns all derive from the same numbers and can never drift apart.
+     Overridden in the mobile media query. */
+  --tl-time-w: 88px;
+  --tl-dot-col: 20px;
+  --tl-gap: var(--sp-3);
+}
+
+.party-timeline::before {
+  content: '';
+  position: absolute;
+  /* Sits exactly on the centre of the dot column (see --tl-* above). */
+  left: calc(var(--tl-time-w) + var(--tl-gap) + var(--tl-dot-col) / 2);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: linear-gradient(to bottom, var(--gold), transparent);
+  opacity: 0.3;
+}
+
+.party-timeline__item {
+  display: grid;
+  /* 4th + 5th (auto) columns absorb the admin insert + delete buttons without
+     disturbing the time/dot/event layout; they collapse to 0 width in the
+     public view. */
+  grid-template-columns: var(--tl-time-w) var(--tl-dot-col) minmax(0, 1fr) auto auto;
+  align-items: start;
+  column-gap: var(--tl-gap);
+  padding: var(--sp-3) 0;
+}
+
+.party-timeline__time {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--gold);
+  text-align: right;
+  padding-right: var(--sp-2);
+  /* Long time ranges wrap inside their fixed column instead of shoving the
+     dot/event columns sideways. */
+  overflow-wrap: anywhere;
+}
+
+.party-timeline__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid var(--bg-base);
+  box-shadow: 0 0 6px rgba(200, 170, 110, 0.5);
+  justify-self: center;
+  flex-shrink: 0;
+  /* Nudge down so the dot centres on the first line of text (line-height 1.5)
+     rather than on the middle of a multi-line event. */
+  margin-top: 0.34rem;
+}
+
+.party-timeline__event {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  /* min-width:0 lets the 1fr column shrink so long unbroken strings wrap
+     instead of forcing the whole row to overflow. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* The schedule editor saves contenteditable line breaks as \n (innerText) —
+     render them instead of collapsing, matching .party-rsvp__message. */
+  white-space: pre-line;
+}
+
+/* ── RSVP ──────────────────────────────────────────────────────────────────── */
+
+.party-rsvp__intro {
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-4);
+}
+
+/* Admin-curated paragraph shown above the RSVP form/summary. */
+.party-rsvp__message-block {
+  position: relative;
+  margin-bottom: var(--sp-5);
+}
+
+.party-rsvp__message {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.party-rsvp__message--editing {
+  outline: none;
+  border: 1px solid rgba(200, 155, 60, 0.55);
+  background: rgba(200, 155, 60, 0.08);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: text;
+  min-height: 3em;
+}
+
+.party-rsvp__message--editing:focus {
+  border-color: #C89B3C;
+  background: rgba(200, 155, 60, 0.14);
+}
+
+.party-rsvp__message-placeholder {
+  color: rgba(200, 155, 60, 0.55);
+  font-style: italic;
+}
+
+.party-rsvp__current {
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.party-rsvp__current p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.party-rsvp__status {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: var(--sp-2);
+}
+
+.party-rsvp__status--yes { color: #4caf50; }
+.party-rsvp__status--no  { color: #f44336; }
+
+.party-rsvp__update-btn {
+  align-self: flex-start;
+  margin-top: var(--sp-3);
+}
+
+.party-rsvp__form {
+  max-width: 540px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.party-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.party-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.party-radio-group {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.party-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.party-radio input {
+  accent-color: var(--gold);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.party-rsvp__plusone-fields {
+  padding: var(--sp-3);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+}
+
+.party-form-actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+/* ── Activity cards ────────────────────────────────────────────────────────── */
+
+.party-activities__sub-heading {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+.party-activities__sub-heading--evening {
+  margin-top: var(--sp-6);
+}
+
+.party-activities__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-4);
+}
+
+.party-activity-card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.party-activity-card:hover {
+  border-color: rgba(200, 170, 110, 0.4);
+  box-shadow: 0 4px 20px rgba(200, 170, 110, 0.08);
+}
+
+.party-activity-card .party-edit-row-delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.party-activity-card__name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--gold);
+  margin-bottom: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+.party-activity-card__desc {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+.party-activity-card__rules {
+  /* --text-muted (#5B5A56) on the dark card was too low-contrast — bold
+     "Rules:" rendered thinner than the regular-weight value beside it and
+     looked even darker. Match the description row above so both halves of
+     "Rules: <value>" read at the same brightness. */
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  padding-top: var(--sp-2);
+  margin-top: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+/* ── Locked section (elegant gold ribbon) ──────────────────────────────────── */
+
+.party-locked .party-section__inner {
+  text-align: center;
+}
+
+.party-locked__ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin: var(--sp-2) auto;
+  max-width: 420px;
+}
+
+.party-locked__rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(200, 170, 110, 0.5) 50%,
+    transparent 100%);
+}
+
+.party-locked__ornament {
+  color: var(--gold);
+  font-size: 0.9rem;
+  opacity: 0.75;
+  letter-spacing: 0.2em;
+}
+
+.party-locked__text {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  margin: var(--sp-3) auto;
+  font-style: italic;
+}
+
+.party-locked__signin-link {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font: inherit;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0 0 1px 0;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.4);
+  transition: color 200ms ease, border-color 200ms ease, text-shadow 200ms ease;
+}
+
+.party-locked__signin-link:hover,
+.party-locked__signin-link:focus-visible {
+  color: #e8c878;
+  border-bottom-color: var(--gold);
+  text-shadow: 0 0 12px rgba(200, 170, 110, 0.4);
+  outline: none;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+
+.party-footer {
+  text-align: center;
+  padding: var(--sp-8) var(--sp-4);
+  color: var(--text-muted);
+  font-size: 1.125rem;
+  background: linear-gradient(to top, rgba(200,170,110,0.04), transparent);
+}
+
+/* ── Skeleton loader ───────────────────────────────────────────────────────── */
+
+.party-skeleton {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.skeleton-hero {
+  height: 320px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-elevated) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  margin-bottom: var(--sp-6);
+}
+
+.skeleton-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.skeleton-block {
+  height: 120px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-elevated) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Error states ──────────────────────────────────────────────────────────── */
+
+.party-error {
+  text-align: center;
+  padding: var(--sp-8) var(--sp-4);
+  color: var(--text-secondary);
+}
+
+.party-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: var(--sp-4) 0;
+  text-align: center;
+}
+
+/* ── Status badges ─────────────────────────────────────────────────────────── */
+
+.party-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.party-status--pending  { background: rgba(100,100,100,0.3); color: var(--text-secondary); }
+.party-status--accepted { background: rgba(76,175,80,0.2);   color: #81c784; }
+.party-status--declined { background: rgba(244,67,54,0.2);   color: #e57373; }
+
+/* ── Admin view ────────────────────────────────────────────────────────────── */
+
+.party-admin {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-4);
+}
+
+.party-admin__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+}
+
+.party-admin__title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--gold);
+}
+
+.party-admin__section {
+  margin-bottom: var(--sp-8);
+}
+
+.party-admin__section-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid rgba(200,170,110,0.2);
+}
+
+.party-admin__stats {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.party-admin__stat {
+  background: var(--bg-surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  min-width: 120px;
+  text-align: center;
+}
+
+.party-admin__stat--green { border-color: rgba(76,175,80,0.3);   }
+.party-admin__stat--red   { border-color: rgba(244,67,54,0.3);  }
+.party-admin__stat--muted { border-color: rgba(100,100,100,0.3); }
+.party-admin__stat--gold  { border-color: rgba(200,170,110,0.4); }
+
+.party-admin__stat-num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--gold);
+  line-height: 1;
+  margin-bottom: var(--sp-1);
+}
+
+.party-admin__stat--green .party-admin__stat-num { color: #81c784; }
+.party-admin__stat--red   .party-admin__stat-num { color: #e57373; }
+.party-admin__stat--muted .party-admin__stat-num { color: var(--text-secondary); }
+
+.party-admin__stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+button.party-admin__stat {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+button.party-admin__stat:hover,
+button.party-admin__stat:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(200, 170, 110, 0.5);
+  background: rgba(200, 170, 110, 0.05);
+}
+button.party-admin__stat:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.party-admin__stat-modal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.party-admin__stat-modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+.party-admin__stat-modal-name { color: var(--text-primary); font-weight: 600; }
+.party-admin__stat-modal-email { color: var(--text-muted); font-size: 0.85rem; word-break: break-all; }
+
+.party-admin__helpers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-3);
+}
+.party-admin__helper-card {
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.party-admin__helper-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.party-admin__helper-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.party-admin__helper-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+.party-admin__chip {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(200, 170, 110, 0.12);
+  color: var(--gold, #c9a84c);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+}
+.party-admin__helper-detail {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.party-admin__table-wrap {
+  overflow-x: auto;
+}
+
+.party-admin__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.party-admin__table th,
+.party-admin__table td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: var(--text-primary);
+}
+
+.party-admin__table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  background: var(--bg-elevated);
+}
+
+.party-admin__table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.party-admin__th--sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.party-admin__th--sortable:hover,
+.party-admin__th--sortable:focus-visible {
+  color: var(--text-primary);
+}
+
+.party-admin__th--sortable:focus-visible {
+  outline: 2px solid var(--gold, currentColor);
+  outline-offset: -2px;
+}
+
+.party-admin__sort-arrow {
+  display: inline-block;
+  width: 0.7em;
+  margin-left: 4px;
+  font-size: 0.7em;
+  opacity: 0;
+}
+
+.party-admin__th--active .party-admin__sort-arrow {
+  opacity: 1;
+}
+
+.party-admin__token {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  padding: 2px 6px;
+  border-radius: 3px;
+  max-width: 160px;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.party-admin__export-note {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: var(--sp-3);
+}
+
+.party-admin__export-area {
+  width: 100%;
+  min-height: 180px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+/* ── Nav party link ────────────────────────────────────────────────────────── */
+
+.lol-nav__party-link {
+  color: var(--gold) !important;
+}
+
+.lol-nav__party-link:hover {
+  text-shadow: 0 0 8px rgba(200, 170, 110, 0.5);
+}
+
+/* ── Responsive tweaks ─────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .party-timeline {
+    /* Narrower time column + tighter gap on phones; the line and grid follow
+       these automatically via the calc()s above. */
+    --tl-time-w: 60px;
+    --tl-dot-col: 16px;
+    --tl-gap: var(--sp-2);
+  }
+  .party-timeline__time {
+    font-size: 0.75rem;
+  }
+  .party-countdown__unit {
+    min-width: 56px;
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .party-admin__stats {
+    flex-direction: column;
+  }
+  .party-admin__stat {
+    min-width: unset;
+  }
+  /* Compact pills stay inline and wrap on phones — the column layout above
+     was designed for the old full-size cards. */
+  .party-admin__stats--compact {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Inline Editing (admin) ─────────────────────────────────────────────── */
+
+.party-section { position: relative; }
+
+.party-edit-btn {
+  position: absolute;
+  top: 1.25rem; right: 1.5rem;
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .4rem .85rem;
+  background: rgba(200,155,60,.15);
+  border: 1px solid rgba(200,155,60,.5);
+  border-radius: 4px;
+  color: #C89B3C;
+  font-family: 'Barlow', sans-serif;
+  font-size: .75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  cursor: pointer;
+  z-index: 10;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+.party-edit-btn:hover {
+  background: rgba(200,155,60,.3);
+  border-color: #C89B3C;
+}
+.party-edit-btn--hidden { display: none; }
+
+.party-edit-controls {
+  position: sticky; bottom: 0;
+  display: flex; align-items: center; gap: .75rem;
+  padding: .75rem 1.5rem;
+  background: rgba(10,12,18,.95);
+  border-top: 1px solid rgba(200,155,60,.3);
+  z-index: 10;
+}
+.party-edit-controls--hidden { display: none; }
+
+.party-edit-save,
+.party-edit-cancel {
+  padding: .4rem 1rem;
+  border-radius: 4px;
+  font-family: 'Barlow', sans-serif;
+  font-size: .8rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  cursor: pointer;
+  transition: opacity 200ms ease;
+}
+.party-edit-save {
+  background: #C89B3C; border: 1px solid #C89B3C; color: #010A13;
+}
+.party-edit-save:hover { opacity: .85; }
+.party-edit-cancel {
+  background: transparent; border: 1px solid rgba(255,255,255,.3); color: #ccc;
+}
+.party-edit-cancel:hover { border-color: #fff; color: #fff; }
+
+.party-edit-status {
+  font-size: .8rem; color: #C89B3C; margin-left: .25rem;
+}
+
+/* Editable field styling */
+.party-section--editing [contenteditable="true"] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  cursor: text;
+  min-width: 2ch;
+  padding-bottom: 1px;
+}
+.party-section--editing [contenteditable="true"]:focus {
+  border-bottom-color: #C89B3C;
+}
+.party-section--editing [contenteditable="true"]:empty::before {
+  content: 'Click to edit…';
+  color: rgba(200,155,60,.4);
+  font-style: italic;
+}
+
+/* Activity rules label + value are inline elements; promote both to
+   inline-block in edit mode so min-width applies and gives empty
+   contenteditable areas a clickable surface. The existing
+   :empty::before rule then renders the "Click to edit…" placeholder. */
+.party-section--editing [data-activity="rules-label"][contenteditable="true"],
+.party-section--editing [data-activity="rules-text"][contenteditable="true"] {
+  display: inline-block;
+  min-width: 6ch;
+}
+
+/* Hero is not a .party-section, so it needs its own editable affordance. */
+.party-hero--editing [data-party-hero-field] {
+  outline: none;
+  border-bottom: 2px solid rgba(200,155,60,.55);
+  cursor: text;
+  min-width: 2ch;
+  padding-bottom: 1px;
+}
+.party-hero--editing [data-party-hero-field]:focus {
+  border-bottom-color: #C89B3C;
+}
+
+/* The hero is overflow:hidden, which clips position:sticky from
+   .party-edit-controls. Pin the hero's controls bar to its bottom edge. */
+.party-hero__edit-controls {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+}
+
+/* Schedule/Games add & delete row buttons */
+.party-edit-row-delete {
+  background: rgba(220,50,50,.2);
+  border: 1px solid rgba(220,50,50,.5);
+  color: #e55;
+  border-radius: 50%;
+  width: 24px; height: 24px;
+  font-size: .75rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: .5rem;
+  transition: background 200ms ease;
+  flex-shrink: 0;
+}
+.party-edit-row-delete:hover { background: rgba(220,50,50,.4); }
+.party-edit-row-delete--hidden { display: none; }
+
+.party-edit-row-insert {
+  background: rgba(200,155,60,.15);
+  border: 1px solid rgba(200,155,60,.5);
+  color: #C89B3C;
+  border-radius: 50%;
+  width: 24px; height: 24px;
+  font-size: .9rem; line-height: 1;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: .5rem;
+  transition: background 200ms ease;
+  flex-shrink: 0;
+}
+.party-edit-row-insert:hover { background: rgba(200,155,60,.35); }
+.party-edit-row-insert--hidden { display: none; }
+
+/* Inline-variant edit affordances (used by the RSVP message paragraph). */
+.party-edit-btn--inline {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: .25rem .55rem;
+  font-size: .7rem;
+  letter-spacing: .04em;
+  gap: 0;
+}
+.party-edit-controls--inline {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0;
+  margin-top: var(--sp-2);
+  background: transparent;
+  border-top: none;
+  gap: .5rem;
+}
+.party-edit-controls--inline .party-edit-save,
+.party-edit-controls--inline .party-edit-cancel {
+  padding: .25rem .8rem;
+  font-size: .7rem;
+}
+
+.party-edit-add {
+  display: inline-flex; align-items: center; gap: .3rem;
+  margin-top: 1rem;
+  padding: .4rem 1rem;
+  background: rgba(200,155,60,.15);
+  border: 1px dashed rgba(200,155,60,.5);
+  border-radius: 4px;
+  color: #C89B3C;
+  font-family: 'Barlow', sans-serif;
+  font-size: .8rem; font-weight: 700;
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+.party-edit-add:hover { background: rgba(200,155,60,.3); }
+.party-edit-add--hidden { display: none; }
+
+/* Keep the delete button on the first text line of a multi-line event.
+   (The item layout itself is the grid defined in the Timeline section above —
+   do NOT switch this to flex; that collapses the fixed time/dot columns and
+   the dots stop aligning with the timeline line.) */
+.party-timeline__item .party-edit-row-delete,
+.party-timeline__item .party-edit-row-insert { margin-top: 0.15rem; }
+
+/* ── Checkbox groups (food options, custom questions) ───────────────── */
+
+.party-checkbox-group {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.party-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.party-checkbox input[type="checkbox"],
+.party-checkbox input[type="radio"] {
+  accent-color: var(--gold);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.party-radio-group { flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+
+/* ── RSVP radio option status pill (admin-only, inline edit mode) ────── */
+
+/* Hidden until the parent section enters inline-edit mode. Sits inside the
+ * <label> beside the option text, so visually it reads as part of the row.
+ * pointer-events: none until edit mode prevents accidental clicks toggling
+ * the radio when the admin is just reading the page. */
+.party-rsvp__option-status {
+  display: none;
+  margin-left: var(--sp-2);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 170, 110, 0.4);
+  background: var(--bg-elevated);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+.party-section--editing .party-rsvp__option-status {
+  display: inline-block;
+}
+.party-rsvp__option-status--going    { color: #4ade80; border-color: rgba(74, 222, 128, .4); }
+.party-rsvp__option-status--maybe    { color: #fbbf24; border-color: rgba(251, 191, 36, .4); }
+.party-rsvp__option-status--declined { color: #f87171; border-color: rgba(248, 113, 113, .4); }
+.party-rsvp__option-status:hover     { filter: brightness(1.2); }
+
+/* Structural editor: status dropdown sits next to the option label input. */
+.party-edit-list-item__status {
+  flex: 0 0 auto;
+  max-width: 140px;
+}
+
+/* ── RSVP admin editor (food options / questions) ───────────────────── */
+
+.party-edit-btn--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--gold);
+  cursor: pointer;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  margin-left: var(--sp-2);
+  transition: background 200ms ease;
+}
+.party-edit-btn--inline:hover { background: rgba(200,155,60,.2); }
+
+.party-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.party-edit-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.party-edit-list-item input {
+  flex: 1;
+}
+
+.party-question-block {
+  padding: var(--sp-3);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  margin-bottom: var(--sp-3);
+}
+
+.party-question-block__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.party-question-block__header input {
+  flex: 1;
+  font-weight: 600;
+}
+
+.party-question-block__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-left: var(--sp-3);
+}
+
+.party-edit-add--sm {
+  font-size: .75rem;
+  padding: 4px 10px;
+}
+
+.party-rsvp-questions {
+  margin-top: var(--sp-3);
+  position: relative;
+}
+
+.party-custom-question {
+  margin-bottom: var(--sp-3);
+}
+
+/* ── Button base styles (party page is self-contained for button variants) ───── */
+
+.party-rsvp__form .lol-btn,
+.party-rsvp__submit,
+.party-rsvp__update-btn,
+.party-locked__btn,
+.lol-btn--primary,
+.lol-btn--ghost,
+.lol-btn--danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: .7rem 1.4rem;
+  font-family: 'Barlow', sans-serif;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease, color 200ms ease;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.lol-btn--primary,
+.party-rsvp__submit {
+  background: var(--gold, #C89B3C);
+  color: #010A13;
+  border-color: var(--gold, #C89B3C);
+}
+
+.lol-btn--primary:hover,
+.party-rsvp__submit:hover {
+  background: #D4A843;
+  box-shadow: 0 4px 20px rgba(200, 155, 60, 0.35);
+}
+
+.lol-btn--primary[disabled],
+.party-rsvp__submit[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.lol-btn--ghost,
+.party-rsvp__update-btn {
+  background: transparent;
+  border-color: rgba(200, 170, 110, 0.5);
+  color: var(--gold, #C89B3C);
+}
+
+.lol-btn--ghost:hover,
+.party-rsvp__update-btn:hover {
+  background: rgba(200, 155, 60, 0.1);
+  border-color: var(--gold, #C89B3C);
+}
+
+.lol-btn--danger {
+  background: rgba(220, 50, 50, 0.15);
+  border-color: rgba(220, 50, 50, 0.5);
+  color: #e55;
+}
+
+.lol-btn--danger:hover {
+  background: rgba(220, 50, 50, 0.3);
+  border-color: #e55;
+}
+
+.lol-btn--sm {
+  padding: .35rem .8rem;
+  font-size: .7rem;
+}
+
+/* ── RSVP form builder (admin edit mode) ──────────────────────────────────── */
+
+.party-rsvp-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.party-rsvp-builder__add {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-top: var(--sp-4);
+  border-top: 1px dashed rgba(200, 170, 110, 0.25);
+}
+
+.party-rsvp-builder__add .lol-input {
+  max-width: 180px;
+}
+
+.party-field-block {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.party-field-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.party-field-block__type {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold, #C89B3C);
+  font-weight: 700;
+}
+
+.party-field-block__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 2px solid rgba(200, 170, 110, 0.15);
+}
+
+.party-field-block__placeholder {
+  margin-top: var(--sp-2);
+  font-style: italic;
+  opacity: 0.9;
+}
+
+.party-edit-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.party-edit-list-item .lol-input {
+  flex: 1;
+}
+
+.party-edit-add--sm {
+  padding: .25rem .6rem;
+  font-size: .7rem;
+  align-self: flex-start;
+}
+
+.party-field-block__showif {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed rgba(200, 170, 110, 0.25);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+.party-field-block__showif summary {
+  cursor: pointer;
+  color: var(--gold, #C89B3C);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.party-field-block__showif-row {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  flex-wrap: wrap;
+}
+.party-field-block__showif-row .lol-input { flex: 1; min-width: 140px; }
+
+/* ── Request-to-join form (on locked sections) ─────────────────────────── */
+
+.party-request-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-3) auto 0;
+  max-width: 420px;
+}
+
+.party-request-form__input {
+  width: 100%;
+  text-align: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(201, 168, 76, 0.45);
+  border-radius: 8px;
+  color: #f0ece0;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+.party-request-form__input::placeholder {
+  color: rgba(240, 236, 224, 0.6);
+}
+.party-request-form__input:focus {
+  outline: none;
+  border-color: #c9a84c;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.18);
+}
+
+.party-request-form__submit {
+  align-self: center;
+}
+
+.party-locked__hint {
+  margin-top: var(--sp-2);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.party-locked--invite .party-locked__text {
+  font-style: normal;
+}
+
+/* ── Party Admin: add guest + pending requests ─────────────────────────── */
+
+.party-admin__invite-help {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: var(--sp-2);
+}
+
+/* Manual add-guest form — a single responsive row that wraps on narrow screens. */
+.party-admin__add-guest-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.party-admin__add-guest-form .lol-input { text-transform: none; }
+.party-admin__add-guest-name  { flex: 1 1 12rem; min-width: 9rem; }
+.party-admin__add-guest-email { flex: 1 1 14rem; min-width: 10rem; }
+.party-admin__add-guest-status-sel { flex: 0 0 auto; }
+.party-admin__add-guest-status { font-size: 0.85rem; color: var(--text-secondary); }
+.party-admin__add-guest-invite {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.party-admin__add-guest-invite input { cursor: pointer; }
+
+/* Compact variant (form sits below the table): ~half the footprint. */
+.party-admin__add-guest--compact { max-width: 32rem; }
+.party-admin__add-guest--compact .party-admin__add-guest-form { gap: var(--sp-1, 0.35rem); }
+.party-admin__add-guest--compact .party-admin__add-guest-name  { flex: 1 1 8rem; min-width: 7rem; }
+.party-admin__add-guest--compact .party-admin__add-guest-email { flex: 1 1 9rem; min-width: 7rem; }
+.party-admin__add-guest-title { font-size: 1rem; margin-bottom: 0.25rem; }
+.party-admin__add-guest-help  { font-size: 0.8rem; margin-bottom: var(--sp-2); }
+
+.party-admin__pending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.party-admin__pending-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.party-admin__pending-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.party-admin__pending-name  { font-weight: 600; }
+.party-admin__pending-email { font-size: 0.85rem; color: var(--text-secondary); }
+
+/* Manual-review marker: a previously removed guest asked to rejoin, so the
+   approve button gates access again instead of just re-sending the info email. */
+.party-admin__pending-badge {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 168, 76, 0.5);
+  color: var(--accent, #c9a84c);
+  background: rgba(201, 168, 76, 0.08);
+}
+
+.party-admin__pending-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* ── Email-health status pill ──────────────────────────────────────────── */
+
+.party-admin__health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: help;
+  border: 1px solid transparent;
+}
+
+.party-admin__health-pill--ok {
+  background: rgba(76, 175, 80, 0.12);
+  color: #81c784;
+  border-color: rgba(76, 175, 80, 0.35);
+}
+
+.party-admin__health-pill--bad {
+  background: rgba(244, 67, 54, 0.12);
+  color: #e57373;
+  border-color: rgba(244, 67, 54, 0.4);
+}
+
+/* ── Invited Guests section ─────────────────────────────────────────────── */
+
+.party-admin__invited-summary {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.party-admin__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.party-admin__pill--waiting {
+  background: rgba(200, 170, 110, 0.12);
+  color: #d4b877;
+  border-color: rgba(200, 170, 110, 0.3);
+}
+.party-admin__pill--going {
+  background: rgba(76, 175, 80, 0.12);
+  color: #81c784;
+  border-color: rgba(76, 175, 80, 0.3);
+}
+.party-admin__pill--maybe {
+  background: rgba(255, 167, 38, 0.12);
+  color: #ffb74d;
+  border-color: rgba(255, 167, 38, 0.3);
+}
+.party-admin__pill--declined {
+  background: rgba(120, 120, 120, 0.12);
+  color: #999;
+  border-color: rgba(120, 120, 120, 0.3);
+}
+.party-admin__pill--spouse {
+  background: rgba(100, 181, 246, 0.12);
+  color: #64b5f6;
+  border-color: rgba(100, 181, 246, 0.3);
+}
+.party-admin__pill--kids {
+  background: rgba(186, 104, 200, 0.12);
+  color: #ce93d8;
+  border-color: rgba(186, 104, 200, 0.3);
+}
+
+/* Clickable summary pills: a button styled as a pill, revealing a dropdown of
+   the guest names in that category. */
+.party-admin__pill-wrap {
+  position: relative;
+  display: inline-block;
+}
+.party-admin__pill--btn {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+.party-admin__pill--btn:hover:not(:disabled) {
+  filter: brightness(1.18);
+}
+.party-admin__pill--btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.party-admin__pill--btn[aria-expanded="true"] {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+.party-admin__pill-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: max(100%, 160px);
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.35rem;
+  background: var(--bg-surface, #1c1c1e);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.party-admin__pill-names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.party-admin__pill-names li {
+  padding: 0.3rem 0.55rem;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary, #eee);
+  white-space: nowrap;
+}
+.party-admin__pill-names li:hover {
+  background: rgba(200, 170, 110, 0.1);
+}
+
+.party-admin__status {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.party-admin__status--going    { color: #81c784; }
+.party-admin__status--maybe    { color: #ffb74d; }
+.party-admin__status--declined { color: #999; }
+.party-admin__status--waiting  { color: #d4b877; }
+
+/* Admin inline RSVP editor — a compact select coloured to echo the read-only
+   status pills above, so the column reads the same whether or not it's editable. */
+.party-admin__status-cell { white-space: nowrap; }
+.party-admin__status-select {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border-radius: 6px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, inherit);
+  cursor: pointer;
+  max-width: 100%;
+}
+.party-admin__status-select:disabled { opacity: 0.55; cursor: progress; }
+.party-admin__status-select:focus-visible {
+  outline: 2px solid #d4b877;
+  outline-offset: 1px;
+}
+.party-admin__status-select--going    { color: #81c784; }
+.party-admin__status-select--maybe    { color: #ffb74d; }
+.party-admin__status-select--declined { color: #999; }
+.party-admin__status-select--waiting  { color: #d4b877; }
+/* Options inherit the browser menu colours, not the coloured control text,
+   so they stay legible on the native dropdown background. */
+.party-admin__status-select option { color: initial; }
+
+/* Attendance-timing cell — same compact select styling as the status column. */
+.party-admin__timing-cell { white-space: nowrap; }
+.party-admin__timing-select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border-radius: 6px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, inherit);
+  cursor: pointer;
+  max-width: 100%;
+}
+.party-admin__timing-select:disabled { opacity: 0.55; cursor: progress; }
+.party-admin__timing-select:focus-visible { outline: 2px solid #d4b877; outline-offset: 1px; }
+.party-admin__timing-select option { color: initial; }
+
+/* Admin inline name edit — a text input that sits quietly in the Name cell
+   until focused, so the table still reads like a table. */
+.party-admin__cell-input {
+  font: inherit;
+  width: 100%;
+  min-width: 8ch;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__cell-input:hover  { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__cell-input:focus  {
+  outline: none;
+  border-color: #d4b877;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.party-admin__cell-input:disabled { opacity: 0.55; cursor: progress; }
+
+/* Admin RSVP-answer editor — the expanded detail row's editable form. Keeps a
+   compact, single-column layout so it stays readable inside the table row. */
+.party-admin__answers-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.party-admin__answer-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.party-admin__answer-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.party-admin__answer-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+.party-admin__answer-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 400;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.party-admin__answer-check--clear { opacity: 0.8; font-style: italic; }
+/* Read-only answer given on a different form version (other locale / renamed
+   option): shown so the admin knows it exists, but not editable here. */
+.party-admin__answer-readonly {
+  font-weight: 400;
+  color: var(--text-secondary, #999);
+}
+.party-admin__answer-hint {
+  display: block;
+  font-size: 0.75rem;
+  font-style: italic;
+  opacity: 0.75;
+  margin-top: 0.15rem;
+}
+.party-admin__answers-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.party-admin__answers-status { font-size: 0.85rem; color: var(--text-secondary, #999); }
+
+/* ── RSVP Stýring cell: compact inline companion controls ────────────────── */
+.party-admin__companions-cell {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.party-admin__companions-cell--ro { color: var(--text-secondary); }
+.party-admin__companion-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+.party-admin__companion-kids {
+  width: 3.2rem;
+  font: inherit;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.25));
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__companion-ages {
+  width: 5.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary, inherit);
+}
+.party-admin__companion-ages:hover { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__companion-ages:focus,
+.party-admin__companion-kids:focus {
+  outline: none;
+  border-color: #d4b877;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.party-admin__companions-cell input:disabled { opacity: 0.55; cursor: progress; }
+
+/* ── Guest filter bar ─────────────────────────────────────────────────────── */
+.party-admin__guest-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.party-admin__guest-filter { max-width: 220px; }
+.party-admin__guest-filter-count {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+/* Scroll-mode toggle, pushed to the far right of the filter bar. */
+.party-admin__scroll-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Headcount stat pill — informational, not a button. */
+.party-admin__pill--headcount {
+  background: rgba(212, 184, 119, 0.10);
+  color: var(--text-primary);
+  border-color: rgba(212, 184, 119, 0.35);
+}
+
+/* Active pill = its group filter is applied to the table. */
+.party-admin__pill--active {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+
+/* Caret sub-button that opens the pill's name list. */
+.party-admin__pill-caret {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.3rem;
+  margin-left: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.party-admin__pill-caret:hover:not(:disabled) { color: var(--text-primary); }
+.party-admin__pill-caret:disabled { opacity: 0.45; cursor: default; }
+
+/* ── Column resize grips + sticky header (attendance table) ──────────────── */
+.party-admin__table--invited thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* Sticky needs an internal scroll context: cap the wrap's height so long
+   guest lists scroll under the pinned header. Short lists are unaffected. */
+.party-admin__table-wrap--sticky {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.party-admin__col-grip {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+.party-admin__col-grip:hover,
+.party-admin__table--resizing .party-admin__col-grip {
+  background: linear-gradient(to right, transparent 3px, rgba(212, 184, 119, 0.55) 4px, rgba(212, 184, 119, 0.55) 5px, transparent 6px);
+}
+.party-admin__table--resizing { user-select: none; }
+
+/* Icon-only revoke: small square ghost button, red on hover. */
+.party-admin__actions-cell { width: 2.2rem; text-align: center; }
+.party-admin__revoke-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.party-admin__revoke-btn:hover:not(:disabled) {
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.4);
+  background: rgba(239, 83, 80, 0.08);
+}
+.party-admin__revoke-btn:disabled { opacity: 0.55; cursor: progress; }
+
+.party-admin__invited-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin: 0 0 var(--sp-3);
+}
+.party-admin__invited-toolbar .party-admin__invited-summary {
+  margin: 0;
+}
+
+.party-admin__invited-bringing {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Declined guests — collapsed by default. Click the summary to expand. */
+.party-admin__declined-details {
+  border: 1px solid rgba(120, 120, 120, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(120, 120, 120, 0.04);
+  padding: var(--sp-2) var(--sp-3);
+}
+.party-admin__declined-details[open] {
+  padding-bottom: var(--sp-3);
+}
+.party-admin__declined-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+  user-select: none;
+}
+.party-admin__declined-summary::-webkit-details-marker {
+  display: none;
+}
+.party-admin__declined-summary::before {
+  content: '▸';
+  display: inline-block;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  transition: transform var(--transition);
+}
+.party-admin__declined-details[open] .party-admin__declined-summary::before {
+  transform: rotate(90deg);
+}
+.party-admin__declined-table-wrap {
+  margin-top: var(--sp-3);
+}
+
+/* Email-going modal: simple stacked form fields. */
+.party-admin__email-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.party-admin__email-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.party-admin__email-field span {
+  font-weight: 600;
+}
+.party-admin__email-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.party-admin__email-recipients {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.party-admin__email-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__email-status {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.party-admin__table--invited .party-admin__invited-row {
+  cursor: pointer;
+}
+.party-admin__table--invited .party-admin__invited-row:hover {
+  background: rgba(200, 170, 110, 0.05);
+}
+
+.party-admin__invited-detail-box {
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin: var(--sp-2) 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.party-admin__invited-detail-box strong {
+  color: var(--text-primary);
+}
+.party-admin__no-answers {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.lol-btn--sm {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+/* Logistics tracker — admin-only section under Invited Guests. */
+.party-admin__logistics-help {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0 0 var(--sp-3) 0;
+}
+.party-admin__logistics-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.party-admin__logistics-add .lol-input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.party-admin__logistics-add .party-admin__logistics-qty,
+.party-admin__logistics-add .party-admin__logistics-assigned {
+  flex: 0 1 140px;
+}
+.party-admin__logistics-status {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-left: var(--sp-2);
+}
+.party-admin__logistics-checkcell {
+  text-align: center;
+  white-space: nowrap;
+}
+.party-admin__logistics-checkcell input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  accent-color: #d4b877;
+}
+.party-admin__logistics-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.party-admin__logistics-row--bought td {
+  background: rgba(76, 175, 80, 0.04);
+}
+.party-admin__logistics-row--at-venue td {
+  background: rgba(76, 175, 80, 0.08);
+}
+
+/* Inline-editable text cells: blend into the row by default; only on focus
+ * do they look like inputs (subtle gold underline). */
+.party-admin__logistics-cell-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 0;
+  outline: none;
+  border-radius: 0;
+}
+.party-admin__logistics-cell-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.party-admin__logistics-cell-input:hover {
+  border-bottom-color: rgba(200, 170, 110, 0.25);
+}
+.party-admin__logistics-cell-input:focus {
+  border-bottom-color: var(--gold);
+  background: rgba(200, 170, 110, 0.05);
+}
+.party-admin__logistics-cell-input:invalid {
+  border-bottom-color: #e57373;
+}
+
+/* Toolbar above the logistics table — hide-bought toggle + bulk button. */
+.party-admin__logistics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.party-admin__logistics-hide-bought {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.party-admin__logistics-hide-bought input {
+  accent-color: #d4b877;
+}
+
+/* Drag-to-reorder handle column. */
+.party-admin__logistics-handle {
+  width: 1.5rem;
+  text-align: center;
+  cursor: grab;
+  color: var(--text-muted);
+  user-select: none;
+  font-size: 1rem;
+  line-height: 1;
+}
+.party-admin__logistics-handle:hover { color: var(--gold); }
+.party-admin__logistics-handle:active { cursor: grabbing; }
+.party-admin__logistics-row--dragging td { opacity: 0.4; }
+.party-admin__logistics-row--drop-above td {
+  border-top: 2px solid var(--gold);
+}
+.party-admin__logistics-row--drop-below td {
+  border-bottom: 2px solid var(--gold);
+}
+
+/* Logistics category groups — Food / Drinks / Everything else. */
+.party-admin__logistics-group { margin-top: var(--sp-4, 1.5rem); }
+.party-admin__logistics-cat-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 1.05rem;
+  margin: 0 0 var(--sp-2) 0;
+}
+.party-admin__logistics-cat-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: rgba(200, 170, 110, 0.12);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+}
+
+/* ── To-do list ───────────────────────────────────────────────────────────── */
+.party-admin__todo-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.party-admin__todo-add .lol-input { flex: 1 1 280px; min-width: 0; }
+
+.party-admin__todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.party-admin__todo-card {
+  border: 1px solid rgba(200, 170, 110, 0.18);
+  border-radius: 8px;
+  padding: var(--sp-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.party-admin__todo-card--done { opacity: 0.65; }
+.party-admin__todo-card--done .party-admin__todo-title-input { text-decoration: line-through; }
+
+.party-admin__todo-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.party-admin__todo-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  user-select: none;
+  line-height: 1;
+}
+.party-admin__todo-handle:hover { color: var(--gold); }
+.party-admin__todo-handle:active { cursor: grabbing; }
+
+.party-admin__todo-done,
+.party-admin__subtask-done {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  accent-color: #d4b877;
+  flex: 0 0 auto;
+}
+
+.party-admin__todo-title-input,
+.party-admin__subtask-title-input {
+  flex: 1 1 200px;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 0;
+  outline: none;
+}
+.party-admin__todo-title-input { font-weight: 600; }
+.party-admin__todo-title-input:hover,
+.party-admin__subtask-title-input:hover { border-bottom-color: rgba(200, 170, 110, 0.25); }
+.party-admin__todo-title-input:focus,
+.party-admin__subtask-title-input:focus {
+  border-bottom-color: var(--gold);
+  background: rgba(200, 170, 110, 0.05);
+}
+
+.party-admin__todo-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.party-admin__todo-progress {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.party-admin__todo-due {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__todo-due input[type="date"],
+.party-admin__subtask-due-input {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  color-scheme: dark;
+}
+
+.party-admin__todo-notes {
+  width: 100%;
+  margin-top: var(--sp-2);
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(200, 170, 110, 0.18);
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: var(--sp-2);
+  resize: vertical;
+}
+.party-admin__todo-notes:focus { outline: none; border-color: var(--gold); }
+
+/* Assignee chip control (TODO + subtask). */
+.party-admin__assignees {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}
+.party-admin__assignees-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.party-admin__chips {
+  display: inline-flex;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+.party-admin__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  background: rgba(200, 170, 110, 0.14);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  border-radius: 999px;
+  padding: 0.1rem 0.25rem 0.1rem 0.6rem;
+}
+.party-admin__chip-remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+}
+.party-admin__chip-remove:hover { color: #e57373; }
+.party-admin__assignee-input {
+  flex: 0 1 160px;
+  min-width: 120px;
+  font-size: 0.85rem;
+  padding: 2px 6px;
+}
+
+/* Subtasks — indented under their TODO. */
+.party-admin__subtasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 var(--sp-2) var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 2px solid rgba(200, 170, 110, 0.18);
+}
+.party-admin__subtask {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.party-admin__subtask--done .party-admin__subtask-title-input { opacity: 0.7; text-decoration: line-through; }
+.party-admin__subtask .party-admin__assignees { margin-top: 0; }
+
+.party-admin__subtask-add {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+}
+.party-admin__subtask-add .lol-input { flex: 1 1 220px; min-width: 0; }
+
+/* TODO drag-reorder. */
+.party-admin__todo-card--dragging { opacity: 0.4; }
+.party-admin__todo-card--drop-above { border-top: 2px solid var(--gold); }
+.party-admin__todo-card--drop-below { border-bottom: 2px solid var(--gold); }
+
+/* ── Costs & compaction (063) ─────────────────────────────────────────────── */
+
+/* Compact stat variant — inline pills instead of big tiles. Used by the
+ * Stats row, the answer tallies, and the Cost overview summary. */
+.party-admin__stats--compact { gap: var(--sp-2); }
+.party-admin__stat--sm {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5ch;
+  padding: 0.3rem 0.75rem;
+  min-width: 0;
+  text-align: left;
+}
+.party-admin__stat--sm .party-admin__stat-num {
+  display: inline;
+  font-size: 1.05rem;
+  margin-bottom: 0;
+}
+.party-admin__stat--sm .party-admin__stat-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8rem;
+}
+.party-admin__tally-group { margin-top: var(--sp-3); }
+.party-admin__tally-title {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0 0 var(--sp-2) 0;
+}
+
+/* Logistics cost columns. */
+.party-admin__logistics-qty-cell { white-space: nowrap; }
+.party-admin__logistics-qty-input   { width: 4.5rem; }
+.party-admin__logistics-unit-input  { width: 5.5rem; font-size: 0.8rem; color: var(--text-secondary); }
+.party-admin__logistics-price-input { width: 6rem; text-align: right; }
+.party-admin__logistics-line-cost   { text-align: right; white-space: nowrap; color: var(--gold); }
+.party-admin__logistics-add .party-admin__logistics-add-price { flex: 0 1 110px; }
+.party-admin__logistics-subtotal-row td {
+  border-top: 1px solid rgba(200, 170, 110, 0.25);
+  font-weight: 600;
+}
+
+/* To-do grid (desktop) + per-card cost input + collapsed details panel. */
+@media (min-width: 720px) {
+  .party-admin__todo-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    align-items: start;
+  }
+  /* In the grid, insert-before/after means left/right, not above/below.
+     Box-shadow instead of border so the marker doesn't nudge the layout
+     (the drag logic switches to the horizontal midpoint when the list
+     computes as a grid). */
+  .party-admin__todo-card--drop-above {
+    border-top: 1px solid rgba(200, 170, 110, 0.18);
+    box-shadow: -3px 0 0 0 var(--gold);
+  }
+  .party-admin__todo-card--drop-below {
+    border-bottom: 1px solid rgba(200, 170, 110, 0.18);
+    box-shadow: 3px 0 0 0 var(--gold);
+  }
+}
+.party-admin__todo-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__todo-cost input {
+  width: 6rem;
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  text-align: right;
+}
+.party-admin__todo-more { margin-top: var(--sp-2); }
+.party-admin__todo-more-summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  list-style: none;
+}
+.party-admin__todo-more-summary::-webkit-details-marker { display: none; }
+.party-admin__todo-more-summary::before {
+  content: '▸';
+  transition: transform 150ms ease;
+}
+.party-admin__todo-more[open] > .party-admin__todo-more-summary::before {
+  transform: rotate(90deg);
+}
+
+/* Cost overview section. */
+.party-admin__cost-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.party-admin__cost-group {
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 8px;
+  padding: var(--sp-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.party-admin__cost-group h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 0.95rem;
+  margin: 0 0 var(--sp-2) 0;
+}
+.party-admin__cost-group h3 span { color: var(--gold); white-space: nowrap; }
+.party-admin__cost-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.party-admin__cost-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 0.85rem;
+}
+.party-admin__cost-item small { color: var(--text-muted); }
+.party-admin__cost-item span:last-child { white-space: nowrap; color: var(--gold); }
+.party-admin__cost-item--unpriced,
+.party-admin__cost-item--unpriced span:last-child { color: var(--text-muted); }
+.party-admin__cost-missing {
+  font-size: 0.78rem;
+  color: #e5a973;
+  margin: var(--sp-2) 0 0 0;
+}
+
+/* Manual cost line + section management. The h3 keeps space-between for the
+   two-child (label / total) case; margin-left:auto is what stops a third child
+   — the delete button — from being spread into the middle. */
+.party-admin__cost-group h3 span { margin-left: auto; }
+.party-admin__cost-del {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.party-admin__cost-del:hover,
+.party-admin__cost-del:focus-visible { color: #e57373; }
+.party-admin__cost-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed rgba(200, 170, 110, 0.2);
+}
+.party-admin__cost-add .party-admin__cost-add-name   { flex: 1 1 120px; min-width: 0; }
+.party-admin__cost-add .party-admin__cost-add-amount { flex: 0 1 90px;  min-width: 0; }
+.party-admin__cost-add .party-admin__logistics-status {
+  flex: 1 0 100%;
+  margin-left: 0;
+  font-size: 0.78rem;
+}
+.party-admin__cost-add-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-3);
+}
+.party-admin__cost-add-section .party-admin__cost-section-icon  { flex: 0 0 4.5rem; text-align: center; }
+.party-admin__cost-add-section .party-admin__cost-section-label { flex: 1 1 220px; min-width: 0; }
+
+/* Inline-editable cost lines — inputs sit flush in the li (transparent border)
+   until hovered/focused, mirroring the logistics-table cell idiom. */
+.party-admin__cost-item-main { display: flex; align-items: baseline; gap: 0.35rem; flex: 1 1 auto; min-width: 0; }
+.party-admin__cost-item-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.05rem 0.25rem;
+  min-width: 0;
+}
+.party-admin__cost-item-input:hover { border-color: rgba(200, 170, 110, 0.25); }
+.party-admin__cost-item-input:focus {
+  border-color: var(--gold);
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+.party-admin__cost-item-name   { flex: 1 1 auto; }
+.party-admin__cost-item-amount { flex: 0 0 6rem; text-align: right; color: var(--gold); }
+.party-admin__cost-item-total  { white-space: nowrap; color: var(--gold); }
+
+/* Rename affordance — mirrors .party-admin__cost-del but hovers gold, not red. */
+.party-admin__cost-rename {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.party-admin__cost-rename:hover,
+.party-admin__cost-rename:focus-visible { color: var(--gold); }
+.party-admin__cost-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  flex: 1 1 100%;
+  font-weight: normal;
+}
+/* The h3's descendant span rules (gold, margin-left:auto, nowrap) must not
+   restyle the rename form's status span. */
+.party-admin__cost-rename-form span {
+  margin-left: 0;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+.party-admin__cost-rename-form .party-admin__cost-section-icon  { flex: 0 0 3.5rem; text-align: center; }
+.party-admin__cost-rename-form .party-admin__cost-rename-label  { flex: 1 1 120px; min-width: 0; }
+
+/* ── Project plan (069) ───────────────────────────────────────────────────── */
+
+/* Staffing strip — the "how many helpers at set-up" answer, one chip per phase
+   that has work in it. Chips jump to their group. */
+.party-admin__plan-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.015);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.party-admin__plan-chip:hover,
+.party-admin__plan-chip:focus-visible { border-color: var(--gold); }
+.party-admin__plan-chip-num { color: var(--gold); white-space: nowrap; }
+
+/* Collapse-all toggle above the groups. */
+.party-admin__plan-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-collapse-all {
+  background: none;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 2px 4px;
+}
+.party-admin__plan-collapse-all:hover { color: var(--gold); }
+
+.party-admin__plan-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.party-admin__plan-group {
+  border: 1px solid rgba(200, 170, 110, 0.22);
+  border-radius: 8px;
+  padding: var(--sp-2) var(--sp-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.party-admin__plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+/* Caret buttons (phase collapse + row expand) share one look; rotation encodes
+   open/closed. Default ▾ = open; rotated = closed/collapsed. */
+.party-admin__plan-caret,
+.party-admin__plan-expand {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 2px 3px;
+  transition: transform 120ms ease;
+  flex: 0 0 auto;
+}
+.party-admin__plan-caret:hover,
+.party-admin__plan-expand:hover { color: var(--gold); }
+.party-admin__plan-group--collapsed .party-admin__plan-caret { transform: rotate(-90deg); }
+.party-admin__plan-task--open .party-admin__plan-expand { transform: rotate(180deg); }
+.party-admin__plan-group-icon { flex: 0 0 auto; }
+.party-admin__plan-group-name {
+  flex: 1 1 120px;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.1rem 0.3rem;
+}
+.party-admin__plan-group-name:hover { border-color: rgba(200, 170, 110, 0.25); }
+.party-admin__plan-group-name:focus {
+  border-color: var(--gold);
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+.party-admin__plan-totals {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.party-admin__plan-group-body { margin-top: var(--sp-1); }
+
+.party-admin__plan-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed rgba(200, 170, 110, 0.18);
+}
+.party-admin__plan-add .party-admin__plan-add-input { flex: 1 1 240px; min-width: 0; }
+.party-admin__plan-add .party-admin__logistics-status {
+  flex: 1 0 100%;
+  margin-left: 0;
+  font-size: 0.78rem;
+}
+
+/* Dense rows: one task per line, hairline-separated, no per-task card chrome. */
+.party-admin__plan-list { display: flex; flex-direction: column; }
+.party-admin__plan-task { border-top: 1px solid rgba(200, 170, 110, 0.12); }
+.party-admin__plan-task:first-child { border-top: 0; }
+.party-admin__plan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 0;
+}
+.party-admin__plan-task--done .party-admin__plan-title-input {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.party-admin__plan-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  user-select: none;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.party-admin__plan-handle:hover { color: var(--gold); }
+.party-admin__plan-handle:active { cursor: grabbing; }
+
+.party-admin__plan-title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 0;
+  outline: none;
+}
+.party-admin__plan-title-input:hover { border-bottom-color: rgba(200, 170, 110, 0.25); }
+.party-admin__plan-title-input:focus {
+  border-bottom-color: var(--gold);
+  background: rgba(200, 170, 110, 0.05);
+}
+
+/* Compact time/helpers cells on the row. */
+.party-admin__plan-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.party-admin__plan-unit { color: var(--text-muted); }
+.party-admin__plan-time-input,
+.party-admin__plan-people-input {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 2px 3px;
+  text-align: right;
+  color-scheme: dark;
+}
+.party-admin__plan-time-input   { width: 3.2rem; }
+.party-admin__plan-people-input { width: 2.6rem; }
+
+/* Read-only assignee initials on the collapsed row. */
+.party-admin__plan-avs { display: inline-flex; flex: 0 0 auto; }
+.party-admin__plan-av {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(200, 170, 110, 0.2);
+  color: var(--gold);
+  font-size: 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -5px;
+  border: 1px solid #17110a;
+}
+.party-admin__plan-av:first-child { margin-left: 0; }
+.party-admin__plan-av--more { color: var(--text-secondary); }
+
+/* The expandable editor holds the heavy controls, indented under its row. */
+.party-admin__plan-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3) 26px;
+}
+.party-admin__plan-editor[hidden] { display: none; }
+.party-admin__plan-editor-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.party-admin__plan-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__plan-phase-select,
+.party-admin__plan-link-select {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  color-scheme: dark;
+}
+.party-admin__plan-phase-select { max-width: 14rem; }
+.party-admin__plan-link-select  { max-width: 14rem; }
+
+/* Link to the ✅ to-do list. Green tint once the linked to-do is ticked, so a
+   glance down the plan shows what has actually been done. */
+.party-admin__plan-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.party-admin__plan-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.party-admin__plan-linked:hover,
+.party-admin__plan-linked:focus-visible { border-color: var(--gold); }
+.party-admin__plan-linked--done {
+  border-color: rgba(120, 190, 130, 0.45);
+  color: #8fca9a;
+}
+
+/* Flash the to-do a plan chip jumped to, so the scroll lands somewhere obvious. */
+.party-admin__todo-card--flash {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  transition: outline-color 300ms ease;
+}
+
+/* Plan drag-reorder — always a single column, so above/below is always vertical
+   (unlike the to-do grid, which flips to left/right on desktop). */
+.party-admin__plan-task--dragging { opacity: 0.4; }
+.party-admin__plan-task--drop-above { border-top: 2px solid var(--gold); }
+.party-admin__plan-task--drop-below { border-bottom: 2px solid var(--gold); }
+
+@media (max-width: 560px) {
+  /* Keep the row on one line but let the title shrink; the phase-select and
+     other heavy controls already live in the expander, so the row stays tight. */
+  .party-admin__plan-title-input { flex: 1 1 40%; }
+  .party-admin__plan-editor-row { gap: var(--sp-2); }
+}
+
+/* ── Photo album ─────────────────────────────────────────────────────────────── */
+
+.party-album__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__sort-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-right: var(--sp-1);
+}
+
+.party-album__sort-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  background: rgba(30, 35, 40, 0.6);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.party-album__sort-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.party-album__sort-btn--active {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.party-album__count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.party-album__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.party-album__tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(30, 35, 40, 0.6);
+}
+
+.party-album__open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.party-album__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.party-album__placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgba(30, 35, 40, 0.9);
+}
+
+/* Play badge on video tiles */
+.party-album__tile--video::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(1, 10, 19, 0.65) no-repeat 55% 50% /
+    14px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.party-album__delete {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-dim);
+  border-radius: 50%;
+  background: rgba(1, 10, 19, 0.7);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.party-album__delete:hover { color: var(--gold); border-color: var(--gold); }
+
+/* Upload queue */
+.party-album__queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.party-album__queue-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.party-album__queue-item--error { border-color: var(--danger, #c0392b); }
+
+.party-album__queue-name {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.party-album__queue-size { color: var(--text-secondary); font-family: var(--font-mono); }
+
+.party-album__bar {
+  flex: 1 1 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.party-album__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 200ms ease;
+}
+
+.party-album__queue-error { color: var(--danger, #c0392b); }
+
+.party-album__retry { padding: 2px 10px; font-size: 0.75rem; }
+
+.party-album__more {
+  display: block;
+  margin: var(--sp-4) auto 0;
+}
+
+@media (max-width: 600px) {
+  .party-album__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+  /* Thumb-sized touch target on the delete chip */
+  .party-album__delete { width: 32px; height: 32px; }
+  .party-album__count { flex-basis: 100%; margin-left: 0; }
+}

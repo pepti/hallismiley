@@ -1,0 +1,91 @@
+'use strict';
+
+/**
+ * Dynamic sitemap.xml — served from server/routes/sitemapRoutes.js.
+ * Covers the static list pages plus live news/product/project rows.
+ * Static fixtures are created by tests/globalSetup.js; empty
+ * news/products/projects tables are fine — the static page entries
+ * are always present.
+ */
+const request = require('supertest');
+const app     = require('../../server/app');
+
+describe('GET /sitemap.xml', () => {
+  let res;
+
+  beforeAll(async () => {
+    res = await request(app).get('/sitemap.xml');
+  });
+
+  test('returns 200 with XML content-type', () => {
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/xml/);
+  });
+
+  test('sets CDN-friendly cache headers', () => {
+    expect(res.headers['cache-control']).toMatch(/public.*max-age=600.*stale-while-revalidate/);
+  });
+
+  test('declares the sitemap XML namespace and xhtml namespace for hreflang', () => {
+    expect(res.text).toMatch(/<urlset[^>]*xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9"/);
+    expect(res.text).toMatch(/xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
+  });
+
+  test('includes both locale variants of the static list pages', () => {
+    // Home + 7 other static routes × 2 locales = 16 static entries minimum.
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/projects<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/projects<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/news<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/contact<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/halli<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/privacy<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/terms<\/loc>/);
+  });
+
+  // The party page is Icelandic-only (server/config/i18n.js forcedLocaleFor).
+  // /en/party 301s away, so advertising it here would feed crawlers a URL that
+  // contradicts both the redirect and the page's own canonical.
+  test('party is listed once, in Icelandic only', () => {
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/party<\/loc>/);
+    expect(res.text).not.toMatch(/<loc>https?:\/\/[^<]+\/en\/party<\/loc>/);
+  });
+
+  test('the party entry carries no hreflang alternates', () => {
+    // Isolate the <url> block whose <loc> is /is/party.
+    const block = res.text.match(/ {2}<url>\n {4}<loc>[^<]+\/is\/party<\/loc>[\s\S]*?<\/url>/);
+    expect(block).not.toBeNull();
+    expect(block[0]).not.toMatch(/hreflang/);
+  });
+
+  test('each entry has matching hreflang alternates', () => {
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/projects"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/projects"/);
+  });
+
+  test('home gets an x-default hreflang so search engines know the canonical landing', () => {
+    expect(res.text).toMatch(/hreflang="x-default"/);
+  });
+
+  test('no references to the retired halliprojects.is domain', () => {
+    expect(res.text).not.toMatch(/halliprojects\.is/);
+  });
+
+  // Shop redesign step 2 — section sub-routes get their own entries so each
+  // is independently SEO-indexable, not subsumed by the umbrella /shop.
+  test('includes both locale variants of every shop section sub-route', () => {
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/products<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/products<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/tech<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/tech<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/carpentry<\/loc>/);
+    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/carpentry<\/loc>/);
+  });
+
+  test('shop section sub-routes carry matching hreflang alternates', () => {
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/shop\/tech"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/shop\/tech"/);
+  });
+});

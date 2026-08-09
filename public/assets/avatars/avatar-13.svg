@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Xenomorph silhouette -->
+  <g fill="#0BC4E3">
+    <!-- Elongated head -->
+    <ellipse cx="100" cy="48" rx="22" ry="34" fill="#0BC4E3"/>
+    <ellipse cx="100" cy="30" rx="14" ry="22" fill="#088FAA"/>
+    <!-- Crown/crest -->
+    <path d="M78,40 Q65,10 72,5 Q80,18 86,30 Z" fill="#0BC4E3"/>
+    <path d="M122,40 Q135,10 128,5 Q120,18 114,30 Z" fill="#0BC4E3"/>
+    <!-- Neck -->
+    <rect x="88" y="78" width="24" height="20" rx="4" fill="#0BC4E3"/>
+    <!-- Body/torso -->
+    <path d="M65,95 Q55,130 60,155 L80,155 L80,130 L100,140 L120,130 L120,155 L140,155 Q145,130 135,95 Z" fill="#0BC4E3"/>
+    <!-- Ribs -->
+    <line x1="75" y1="105" x2="90"  y2="108" stroke="#088FAA" stroke-width="2.5"/>
+    <line x1="72" y1="115" x2="88"  y2="118" stroke="#088FAA" stroke-width="2.5"/>
+    <line x1="72" y1="125" x2="88"  y2="127" stroke="#088FAA" stroke-width="2.5"/>
+    <line x1="125" y1="105" x2="110" y2="108" stroke="#088FAA" stroke-width="2.5"/>
+    <line x1="128" y1="115" x2="112" y2="118" stroke="#088FAA" stroke-width="2.5"/>
+    <line x1="128" y1="125" x2="112" y2="127" stroke="#088FAA" stroke-width="2.5"/>
+    <!-- Arms -->
+    <path d="M65,95 Q40,110 35,140 L48,143 Q55,120 75,108 Z" fill="#0BC4E3"/>
+    <path d="M135,95 Q160,110 165,140 L152,143 Q145,120 125,108 Z" fill="#0BC4E3"/>
+    <!-- Tail -->
+    <path d="M100,155 Q95,170 80,178 Q90,182 100,178 Q110,182 120,178 Q105,170 100,155 Z" fill="#0BC4E3"/>
+    <!-- Inner mouth -->
+    <ellipse cx="100" cy="68" rx="8" ry="6" fill="#055A6A"/>
+  </g>
+</svg>

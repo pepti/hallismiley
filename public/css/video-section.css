@@ -1,0 +1,148 @@
+/* ── Project Video Section ────────────────────────────────────────────────── */
+
+.pd-video-section { margin-top: var(--sp-7); }
+
+.pd-video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: var(--sp-5);
+}
+
+@media (max-width: 720px) {
+  .pd-video-grid { grid-template-columns: 1fr; gap: var(--sp-4); }
+}
+
+.pd-video-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  padding: var(--sp-3);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.pd-video-item:hover {
+  border-color: rgba(200, 170, 110, 0.4);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* 16 : 9 responsive wrapper for both <video> and <iframe> */
+.pd-video-item__player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+}
+
+.pd-video-item__player > video,
+.pd-video-item__player > iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.pd-video-item__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Edit-mode controls ─────────────────────────────────────────────────── */
+
+.pd-video-section--edit .pd-video-grid {
+  padding: var(--sp-2);
+  border: 2px dashed rgba(200, 170, 110, 0.18);
+}
+
+.pd-video-grid--empty {
+  min-height: 120px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.pd-video-grid__empty-hint {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.pd-video-item--edit {
+  position: relative;
+}
+
+.pd-video-item__controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+
+.pd-video-item__reorder {
+  display: flex;
+  gap: 4px;
+}
+
+.pd-video-item__title-edit {
+  margin-top: var(--sp-1);
+  font-size: 0.85rem;
+  padding: 6px 10px;
+}
+
+/* Section toolbar — position controls and delete-section button */
+.pd-video-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(200, 170, 110, 0.18);
+}
+
+.pd-video-toolbar__position {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.pd-video-toolbar__label {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.pd-video-toolbar__value {
+  color: var(--gold);
+  font-weight: 600;
+  min-width: 110px;
+  text-align: center;
+}
+
+.pd-video-add-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: center;
+  margin-top: var(--sp-4);
+}

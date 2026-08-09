@@ -1,0 +1,75 @@
+/* Admin analytics dashboard — KPI cards, Chart.js canvases, sortable tables.
+   Mirrors the surface/border/gold tokens used across the admin views. */
+
+.admin-analytics-view { max-width: 1200px; margin: 0 auto; padding: var(--sp-6) var(--sp-4); }
+
+.analytics-loading,
+.analytics-error { padding: var(--sp-8) var(--sp-4); text-align: center; color: var(--text-secondary); }
+.analytics-error { color: var(--error); }
+
+.analytics__header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--sp-4); margin-bottom: var(--sp-6);
+}
+.analytics__title { font-family: var(--font-display); color: var(--gold); margin: 0; }
+
+.analytics__range { display: inline-flex; gap: 0; border: 1px solid var(--border-dim); border-radius: var(--radius-sm); overflow: hidden; }
+.analytics__range-btn {
+  padding: var(--sp-2) var(--sp-4); background: var(--bg-surface); color: var(--text-secondary);
+  border: none; border-left: 1px solid var(--border-dim); cursor: pointer; font-size: 0.875rem;
+  transition: background var(--transition), color var(--transition);
+}
+.analytics__range-btn:first-child { border-left: none; }
+.analytics__range-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.analytics__range-btn.is-active { background: var(--gold); color: #111; font-weight: 600; }
+
+/* KPI cards */
+.analytics__kpis {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4); margin-bottom: var(--sp-6);
+}
+.analytics-kpi {
+  background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: var(--radius-md);
+  padding: var(--sp-5) var(--sp-4); text-align: center; box-shadow: var(--shadow-card);
+}
+.analytics-kpi__value { font-family: var(--font-display); font-size: 2rem; color: var(--gold); line-height: 1.1; }
+.analytics-kpi__label { margin-top: var(--sp-2); color: var(--text-secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Charts */
+.analytics__charts {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); margin-bottom: var(--sp-6);
+}
+.analytics-card {
+  background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: var(--radius-md);
+  padding: var(--sp-4); box-shadow: var(--shadow-card);
+}
+.analytics-card--wide { grid-column: 1 / -1; }
+.analytics-card__title { font-size: 1rem; color: var(--text-primary); margin: 0 0 var(--sp-4); }
+/* The wrapper MUST have an explicit height — Chart.js with
+   maintainAspectRatio:false grows to fill its parent, and an unsized parent
+   makes the canvas expand unbounded. */
+.analytics-chart { position: relative; height: 300px; }
+
+/* Tables */
+.analytics__tables { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }
+.analytics-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.analytics-table th,
+.analytics-table td { padding: var(--sp-2) var(--sp-3); text-align: left; border-bottom: 1px solid var(--border-dim); }
+.analytics-table th { color: var(--text-secondary); font-weight: 600; }
+.analytics-table td { color: var(--text-primary); }
+.analytics-table td:not(.analytics-td--path):not(.analytics-empty) { text-align: right; font-variant-numeric: tabular-nums; }
+.analytics-table th:not(:first-child) { text-align: right; }
+.analytics-td--path { word-break: break-all; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.82rem; }
+.analytics-empty { text-align: center; color: var(--text-muted); padding: var(--sp-5); }
+
+.analytics-th--sortable { cursor: pointer; user-select: none; }
+.analytics-th--sortable:hover { color: var(--text-primary); }
+.analytics-th--active { color: var(--gold); }
+.analytics-sort-arrow { margin-left: var(--sp-1); opacity: 0; font-size: 0.7em; }
+.analytics-th--active .analytics-sort-arrow { opacity: 1; }
+
+@media (max-width: 860px) {
+  .analytics__kpis { grid-template-columns: repeat(2, 1fr); }
+  .analytics__charts,
+  .analytics__tables { grid-template-columns: 1fr; }
+  .analytics-card { grid-column: auto; }
+}

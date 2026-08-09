@@ -1,0 +1,204 @@
+import { getCSRFToken } from '../services/auth.js';
+
+const BASE = '/api/v1/projects';
+
+// Append ?locale= to a URL so the server's locale middleware pins the fetch
+// to the SPA's active locale instead of falling back to the locale_choice
+// cookie / account preference (which can lag URL-driven switches).
+function withLocale(url) {
+  const locale = encodeURIComponent(window.__locale || 'en');
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}locale=${locale}`;
+}
+
+async function request(url, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+
+  const res = await fetch(url, { headers, credentials: 'include', ...options });
+  if (res.status === 204) return null;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// Build headers that include the CSRF token for state-changing requests.
+async function csrfHeaders() {
+  const token = await getCSRFToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'X-CSRF-Token': token } : {}),
+  };
+}
+
+export const projectApi = {
+  getAll:      (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([,v]) => v !== undefined))
+    ).toString();
+    return request(withLocale(`${BASE}${qs ? '?' + qs : ''}`));
+  },
+  getFeatured: ()         => request(withLocale(`${BASE}/featured`)),
+  getOne:      (id)       => request(withLocale(`${BASE}/${id}`)),
+  getMedia:    (id)       => request(withLocale(`${BASE}/${id}/media`)),
+  async create(data) {
+    return request(BASE, { method: 'POST', headers: await csrfHeaders(), body: JSON.stringify(data) });
+  },
+  async update(id, data) {
+    return request(`${BASE}/${id}`, { method: 'PUT', headers: await csrfHeaders(), body: JSON.stringify(data) });
+  },
+  async patch(id, data) {
+    return request(`${BASE}/${id}`, { method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify(data) });
+  },
+  async remove(id) {
+    return request(`${BASE}/${id}`, { method: 'DELETE', headers: await csrfHeaders() });
+  },
+
+  // ── Media management ──────────────────────────────────────────────────────
+
+  // Upload a file (FormData with key "file") or send JSON with file_path + media_type.
+  async addMedia(projectId, payload) {
+    const token = await getCSRFToken();
+    const headers = token ? { 'X-CSRF-Token': token } : {};
+
+    const isFormData = payload instanceof FormData;
+    const res = await fetch(`${BASE}/${projectId}/media`, {
+      method:      'POST',
+      credentials: 'include',
+      headers:     isFormData ? headers : { ...headers, 'Content-Type': 'application/json' },
+      body:        isFormData ? payload : JSON.stringify(payload),
+    });
+    if (res.status === 204) return null;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
+
+  async updateMedia(projectId, mediaId, data) {
+    const headers = await csrfHeaders();
+    const res = await fetch(`${BASE}/${projectId}/media/${mediaId}`, {
+      method: 'PATCH', credentials: 'include', headers, body: JSON.stringify(data),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  async deleteMedia(projectId, mediaId) {
+    const headers = await csrfHeaders();
+    const res = await fetch(`${BASE}/${projectId}/media/${mediaId}`, {
+      method: 'DELETE', credentials: 'include', headers,
+    });
+    if (res.status === 204) return null;
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  async reorderMedia(projectId, order) {
+    const headers = await csrfHeaders();
+    const res = await fetch(`${BASE}/${projectId}/media/reorder`, {
+      method: 'PATCH', credentials: 'include', headers, body: JSON.stringify({ order }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  async setCover(projectId, mediaId) {
+    const headers = await csrfHeaders();
+    const res = await fetch(`${BASE}/${projectId}/cover`, {
+      method: 'PATCH', credentials: 'include', headers,
+      body: JSON.stringify({ media_id: mediaId }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  // ── Sections ──────────────────────────────────────────────────────────────
+
+  getSections: (projectId) => request(withLocale(`${BASE}/${projectId}/sections`)),
+
+  async createSection(projectId, name, description) {
+    const body = { name };
+    if (description !== undefined) body.description = description;
+    return request(`${BASE}/${projectId}/sections`, {
+      method: 'POST', headers: await csrfHeaders(), body: JSON.stringify(body),
+    });
+  },
+
+  async updateSection(projectId, sectionId, patch) {
+    return request(`${BASE}/${projectId}/sections/${sectionId}`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify(patch),
+    });
+  },
+
+  // Backwards-compat alias (older callers did renameSection)
+  async renameSection(projectId, sectionId, name) {
+    return this.updateSection(projectId, sectionId, { name });
+  },
+
+  async reorderSections(projectId, order) {
+    return request(`${BASE}/${projectId}/sections/reorder`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ order }),
+    });
+  },
+
+  async deleteSection(projectId, sectionId) {
+    return request(`${BASE}/${projectId}/sections/${sectionId}`, {
+      method: 'DELETE', headers: await csrfHeaders(),
+    });
+  },
+
+  // ── Videos ────────────────────────────────────────────────────────────────
+
+  getVideos: (projectId) => request(withLocale(`${BASE}/${projectId}/videos`)),
+
+  // payload is either a FormData (file upload) OR a plain object
+  // { url, title? } for a YouTube embed.
+  async addVideo(projectId, payload) {
+    const token = await getCSRFToken();
+    const csrf  = token ? { 'X-CSRF-Token': token } : {};
+    const isFormData = payload instanceof FormData;
+
+    const res = await fetch(`${BASE}/${projectId}/videos`, {
+      method:      'POST',
+      credentials: 'include',
+      headers:     isFormData ? csrf : { ...csrf, 'Content-Type': 'application/json' },
+      body:        isFormData ? payload : JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  async updateVideo(projectId, videoId, patch) {
+    return request(`${BASE}/${projectId}/videos/${videoId}`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify(patch),
+    });
+  },
+
+  async reorderVideos(projectId, order) {
+    return request(`${BASE}/${projectId}/videos/reorder`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ order }),
+    });
+  },
+
+  async deleteVideo(projectId, videoId) {
+    return request(`${BASE}/${projectId}/videos/${videoId}`, {
+      method: 'DELETE', headers: await csrfHeaders(),
+    });
+  },
+
+  async deleteVideoSection(projectId) {
+    return request(`${BASE}/${projectId}/videos`, {
+      method: 'DELETE', headers: await csrfHeaders(),
+    });
+  },
+
+  async setVideoSectionPosition(projectId, position) {
+    return request(`${BASE}/${projectId}/videos/position`, {
+      method: 'PATCH', headers: await csrfHeaders(), body: JSON.stringify({ position }),
+    });
+  },
+};

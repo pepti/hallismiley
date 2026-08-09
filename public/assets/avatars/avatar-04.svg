@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Mario Mushroom -->
+  <g transform="translate(100,108)">
+    <!-- Stem -->
+    <rect x="-28" y="2" width="56" height="48" rx="4" fill="#F5CBA7"/>
+    <rect x="-20" y="2" width="16" height="48" fill="#E8B896"/>
+    <rect x="8"  y="2" width="12" height="48" fill="#E8B896"/>
+    <!-- Cap -->
+    <ellipse cx="0" cy="0" rx="62" ry="52" fill="#E74C3C"/>
+    <!-- White spots -->
+    <circle cx="-26" cy="-16" r="14" fill="white"/>
+    <circle cx="26"  cy="-16" r="14" fill="white"/>
+    <circle cx="0"   cy="-34" r="12" fill="white"/>
+    <!-- Face -->
+    <ellipse cx="-12" cy="8" rx="7" ry="8" fill="white"/>
+    <ellipse cx="12"  cy="8" rx="7" ry="8" fill="white"/>
+    <circle  cx="-12" cy="10" r="4" fill="#222"/>
+    <circle  cx="12"  cy="10" r="4" fill="#222"/>
+    <path d="M-10,22 Q0,30 10,22" stroke="#222" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

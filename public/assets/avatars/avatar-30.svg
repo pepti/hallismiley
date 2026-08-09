@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Wizard Hat -->
+  <!-- Brim -->
+  <ellipse cx="100" cy="158" rx="72" ry="20" fill="#4A2278"/>
+  <ellipse cx="100" cy="152" rx="72" ry="20" fill="#5A2A8A"/>
+  <ellipse cx="100" cy="152" rx="72" ry="20" fill="none" stroke="#C8AA6E" stroke-width="2"/>
+  <!-- Hat cone -->
+  <path d="M100,18 L158,152 L42,152 Z" fill="#5A2A8A"/>
+  <path d="M100,18 L158,152 L42,152 Z" fill="none" stroke="#C8AA6E" stroke-width="1.5"/>
+  <!-- Stars on hat -->
+  <g fill="#FFD700">
+    <polygon points="75,80 77,87 84,87 78,91 80,98 75,93 70,98 72,91 66,87 73,87" transform="scale(0.55) translate(62,88)"/>
+    <polygon points="75,80 77,87 84,87 78,91 80,98 75,93 70,98 72,91 66,87 73,87" transform="scale(0.4) translate(190,50)"/>
+    <polygon points="75,80 77,87 84,87 78,91 80,98 75,93 70,98 72,91 66,87 73,87" transform="scale(0.35) translate(120,210)"/>
+    <!-- Crescent moon -->
+    <path d="M122,62 Q134,58 136,70 Q128,66 122,62 Z" fill="#FFD700"/>
+    <circle cx="132" cy="64" r="7" fill="#5A2A8A"/>
+  </g>
+  <!-- Hat band -->
+  <rect x="42" y="140" width="116" height="14" rx="2" fill="#9B59B6"/>
+  <!-- Band buckle -->
+  <rect x="88" y="140" width="24" height="14" rx="1" fill="#C8AA6E"/>
+  <rect x="91" y="143" width="18" height="8" rx="1" fill="#5A2A8A"/>
+  <!-- Sparkle at tip -->
+  <circle cx="100" cy="20" r="5" fill="#FFD700"/>
+  <line x1="100" y1="10" x2="100" y2="14" stroke="#FFD700" stroke-width="2"/>
+  <line x1="90"  y1="20" x2="94"  y2="20" stroke="#FFD700" stroke-width="2"/>
+  <line x1="106" y1="20" x2="110" y2="20" stroke="#FFD700" stroke-width="2"/>
+  <line x1="93"  y1="13" x2="95"  y2="17" stroke="#FFD700" stroke-width="1.5"/>
+  <line x1="107" y1="13" x2="105" y2="17" stroke="#FFD700" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,28 @@
+# Dependabot: weekly, grouped updates for npm packages and the SHA-pinned
+# GitHub Actions (the github-actions ecosystem updates the pinned SHAs and
+# keeps the `# vN` comments in sync).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Atlantic/Reykjavik
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for all minor+patch bumps — review/merge in a single pass.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    # Majors (express 5, eslint 9+, jest 30…) arrive as individual PRs so each
+    # breaking upgrade is a deliberate decision.
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Atlantic/Reykjavik
+    open-pull-requests-limit: 5

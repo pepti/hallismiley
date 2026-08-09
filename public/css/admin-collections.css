@@ -1,0 +1,6 @@
+/* Collections checklist + inline creator inside the admin product editor
+   (public/js/views/AdminProductsView.js). */
+.admin-shop__coll-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.admin-shop__coll-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
+.admin-shop__coll-new  { display: flex; gap: 8px; margin-top: 10px; }
+.admin-shop__coll-new input { flex: 1; }

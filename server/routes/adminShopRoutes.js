@@ -1,0 +1,79 @@
+const express = require('express');
+const multer  = require('multer');
+const router  = express.Router();
+
+const adminShop                = require('../controllers/adminShopController');
+const { requireAuth }          = require('../auth/middleware');
+const { requireView }          = require('../auth/requireView');
+const { csrfProtect }          = require('../middleware/csrf');
+const { createProductUpload }  = require('../middleware/upload');
+
+// Admin shop routes require auth; per-view access is gated by path below, so a
+// role can be granted (e.g.) orders-only without products. The product editor's
+// "assign collections" (PUT /products/:id/collections) sits under /products.
+router.use(requireAuth);
+router.use('/products',    requireView('products'));
+router.use('/collections', requireView('collections'));
+router.use('/reports',     requireView('sales'));
+router.use('/orders',      requireView('orders'));
+
+// ── Products ────────────────────────────────────────────────────────────────
+router.get('/products',           adminShop.listProducts);
+// CSV round-trip — literal paths before /products/:id so they aren't read as ids.
+// Preview is read-only (no CSRF); apply mutates (CSRF). Both inherit requireView.
+router.get('/products/export.csv',      adminShop.exportProducts);
+router.post('/products/import/preview', adminShop.previewProductImport);
+router.post('/products/import/apply',   csrfProtect, adminShop.applyProductImport);
+router.get('/products/:id',       adminShop.getProduct);
+router.post('/products',          csrfProtect, adminShop.createProduct);
+router.patch('/products/:id',     csrfProtect, adminShop.updateProduct);
+router.delete('/products/:id',    csrfProtect, adminShop.deactivateProduct);
+
+// ── Product images ──────────────────────────────────────────────────────────
+// /products/:id/images/reorder must come BEFORE /images/:imageId so Express
+// doesn't treat the literal "reorder" as an imageId param.
+router.patch('/products/:id/images/reorder',
+  csrfProtect, adminShop.reorderImages);
+
+router.post('/products/:id/images',
+  csrfProtect,
+  (req, res, next) => {
+    const upload = createProductUpload(req.params.id);
+    upload.single('file')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: `Upload error: ${err.message}`, code: 400 });
+      }
+      if (err) return res.status(400).json({ error: err.message, code: 400 });
+      next();
+    });
+  },
+  adminShop.uploadImage);
+
+router.delete('/products/:id/images/:imageId',
+  csrfProtect, adminShop.deleteImage);
+
+// ── Product variants ────────────────────────────────────────────────────────
+router.get('/products/:id/variants',                      adminShop.listVariants);
+router.post('/products/:id/variants',           csrfProtect, adminShop.createVariant);
+router.patch('/products/:id/variants/:variantId',  csrfProtect, adminShop.updateVariant);
+router.delete('/products/:id/variants/:variantId', csrfProtect, adminShop.deactivateVariant);
+
+// ── Collections ───────────────────────────────────────────────────────────────
+router.get('/collections',                      adminShop.listCollections);
+router.post('/collections',        csrfProtect,  adminShop.createCollection);
+router.patch('/collections/:id',   csrfProtect,  adminShop.updateCollection);
+router.put('/products/:id/collections', csrfProtect, adminShop.setProductCollections);
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+router.get('/reports',            adminShop.salesReport);
+
+// ── Orders ──────────────────────────────────────────────────────────────────
+router.get('/orders',             adminShop.listOrders);
+// Literal route before /orders/:id so "bulk" isn't captured as an order id.
+router.get('/orders/bulk/delivery-notes.pdf', adminShop.getBulkDeliveryNotes);
+router.get('/orders/:id',         adminShop.getOrder);
+router.get('/orders/:id/delivery-note', adminShop.deliveryNote);
+router.patch('/orders/:id/status', csrfProtect, adminShop.updateOrderStatus);
+router.patch('/orders/:id/tags',   csrfProtect, adminShop.updateOrderTags);
+
+module.exports = router;

@@ -1,0 +1,331 @@
+import { HomeView }           from './views/HomeView.js';
+import { ProjectsView }       from './views/ProjectsView.js';
+import { ProjectDetailView }  from './views/ProjectDetailView.js';
+import { HalliView }          from './views/HalliView.js';
+import { ContactView }        from './views/ContactView.js';
+import { AdminView }          from './views/AdminView.js';
+import { AdminUsersView }     from './views/AdminUsersView.js';
+import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
+import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
+import { AdminDiscountsView }  from './views/AdminDiscountsView.js';
+import { AdminSalesView }      from './views/AdminSalesView.js';
+import { AdminBackgroundView } from './views/AdminBackgroundView.js';
+import { AdminChangeRequestsView } from './views/AdminChangeRequestsView.js';
+import { NotFoundView }       from './views/NotFoundView.js';
+import { NewsView }           from './views/NewsView.js';
+import { ArticleView }        from './views/ArticleView.js';
+import { PrivacyView }        from './views/PrivacyView.js';
+import { TermsView }          from './views/TermsView.js';
+import { SignupView }         from './views/SignupView.js';
+import { ProfileView }        from './views/ProfileView.js';
+import { VerifyEmailView }    from './views/VerifyEmailView.js';
+import { ForgotPasswordView } from './views/ForgotPasswordView.js';
+import { ResetPasswordView }  from './views/ResetPasswordView.js';
+import { isAuthenticated, isAdmin, canEdit, canSeeView } from './services/auth.js';
+import { PartyView }      from './views/PartyView.js';
+import { PartyAdminView } from './views/PartyAdminView.js';
+import { PartyMagicLoginView } from './views/PartyMagicLoginView.js';
+import { PartyApproveView }    from './views/PartyApproveView.js';
+import { ShopView }              from './views/ShopView.js';
+import { ProductView }           from './views/ProductView.js';
+import { CartView }              from './views/CartView.js';
+import { CheckoutView }          from './views/CheckoutView.js';
+import { CheckoutSuccessView }   from './views/CheckoutSuccessView.js';
+import { CheckoutCancelView }    from './views/CheckoutCancelView.js';
+import { OrderHistoryView }      from './views/OrderHistoryView.js';
+import { AdminProductsView }     from './views/AdminProductsView.js';
+import { AdminOrdersView }       from './views/AdminOrdersView.js';
+import { AdminOrderDetailView }  from './views/AdminOrderDetailView.js';
+import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
+import { AdminRolesView }        from './views/AdminRolesView.js';
+import { AdminBinsView }         from './views/AdminBinsView.js';
+import { AdminBooksView }        from './views/AdminBooksView.js';
+import { AdminInvoicesView }     from './views/AdminInvoicesView.js';
+import { AdminInvoiceDetailView } from './views/AdminInvoiceDetailView.js';
+import { AdminExpensesView }     from './views/AdminExpensesView.js';
+import { AdminARView }           from './views/AdminARView.js';
+import { AdminStatementView }    from './views/AdminStatementView.js';
+import { AdminVatView }          from './views/AdminVatView.js';
+import { AdminBankView }         from './views/AdminBankView.js';
+import { AdminLedgerView }       from './views/AdminLedgerView.js';
+import { AdminPayrollView }      from './views/AdminPayrollView.js';
+import { AdminPosView }          from './views/AdminPosView.js';
+import { AdminCustomersView }    from './views/AdminCustomersView.js';
+import {
+  SUPPORTED_LOCALES,
+  loadLocale, getLocale, getPreferredLocale, forcedLocaleFor,
+} from './i18n/i18n.js';
+import { navigate, navigateReplace } from './navigate.js';
+import { trackPageView } from './services/usage.js';
+
+// More specific patterns must come before generic ones
+const ROUTES = [
+  { pattern: '/',                factory: ()  => new HomeView() },
+  { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
+  { pattern: '/projects',        factory: ()  => new ProjectsView() },
+  { pattern: '/news/:slug',      factory: (p) => new ArticleView(p.slug) },
+  { pattern: '/news',            factory: ()  => new NewsView() },
+  { pattern: '/halli',           factory: ()  => new HalliView() },
+  { pattern: '/about',           factory: ()  => new HalliView() },
+  { pattern: '/contact',         factory: ()  => new ContactView() },
+  { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && canSeeView('users')) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
+  { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
+  { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && canSeeView('discounts')) ? new AdminDiscountsView() : new HomeView() },
+  { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && canSeeView('sales')) ? new AdminSalesView() : new HomeView() },
+  { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
+  { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
+  { pattern: '/admin/bins',      factory: ()  => (isAuthenticated() && canSeeView('bins')) ? new AdminBinsView() : new HomeView() },
+  { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
+  { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
+  { pattern: '/admin/books/ar/:customerKey', factory: (p) => (isAuthenticated() && canSeeView('ar')) ? new AdminStatementView(p.customerKey) : new HomeView() },
+  { pattern: '/admin/books/bank', factory: () => (isAuthenticated() && canSeeView('bank')) ? new AdminBankView() : new HomeView() },
+  { pattern: '/admin/books/ledger', factory: () => (isAuthenticated() && canSeeView('ledger')) ? new AdminLedgerView() : new HomeView() },
+  { pattern: '/admin/books/payroll', factory: () => (isAuthenticated() && canSeeView('payroll')) ? new AdminPayrollView() : new HomeView() },
+  { pattern: '/admin/books/pos', factory: () => (isAuthenticated() && canSeeView('pos')) ? new AdminPosView() : new HomeView() },
+  { pattern: '/admin/books/vat', factory: () => (isAuthenticated() && canSeeView('vat')) ? new AdminVatView() : new HomeView() },
+  { pattern: '/admin/books/ar', factory: () => (isAuthenticated() && canSeeView('ar')) ? new AdminARView() : new HomeView() },
+  { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
+  { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
+  { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
+  { pattern: '/signup',          factory: ()  => new SignupView() },
+  { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
+  { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },
+  { pattern: '/verify-email',    factory: (_, qs) => new VerifyEmailView(qs) },
+  { pattern: '/forgot-password', factory: ()  => new ForgotPasswordView() },
+  { pattern: '/reset-password',  factory: (_, qs) => new ResetPasswordView(qs) },
+  { pattern: '/privacy',         factory: ()  => new PrivacyView() },
+  { pattern: '/terms',           factory: ()  => new TermsView() },
+  { pattern: '/party/admin',     factory: ()  => (isAuthenticated() && canEdit()) ? new PartyAdminView() : new PartyView() },
+  { pattern: '/party/login',     factory: (_, qs) => new PartyMagicLoginView(qs) },
+  { pattern: '/party/approve',   factory: (_, qs) => new PartyApproveView(qs) },
+  { pattern: '/party',           factory: ()  => new PartyView() },
+  // Shop + checkout. Section sub-routes (shop-redesign step 2) must precede
+  // the generic /shop/:slug pattern so they're not matched as product slugs.
+  { pattern: '/shop/products',   factory: (_, qs) => new ShopView({ section: 'products' },  qs) },
+  { pattern: '/shop/tech',       factory: (_, qs) => new ShopView({ section: 'tech' },      qs) },
+  { pattern: '/shop/carpentry',  factory: (_, qs) => new ShopView({ section: 'carpentry' }, qs) },
+  { pattern: '/shop/:slug',      factory: (p) => new ProductView(p.slug) },
+  { pattern: '/shop',            factory: (_, qs) => new ShopView(null, qs) },
+  { pattern: '/cart',            factory: ()  => new CartView() },
+  { pattern: '/checkout/success', factory: (_, qs) => new CheckoutSuccessView(qs) },
+  { pattern: '/checkout/cancel',  factory: ()  => new CheckoutCancelView() },
+  { pattern: '/checkout',        factory: ()  => new CheckoutView() },
+  { pattern: '/orders',          factory: ()  => isAuthenticated() ? new OrderHistoryView() : new HomeView() },
+  { pattern: '/admin/shop/products', factory: () => (isAuthenticated() && canSeeView('products')) ? new AdminProductsView() : new HomeView() },
+  { pattern: '/admin/shop/orders',   factory: () => (isAuthenticated() && canSeeView('orders')) ? new AdminOrdersView() : new HomeView() },
+  { pattern: '/admin/shop/orders/:id', factory: (p) => (isAuthenticated() && canSeeView('orders')) ? new AdminOrderDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/shop/collections', factory: () => (isAuthenticated() && canSeeView('collections')) ? new AdminCollectionsView() : new HomeView() },
+  { pattern: '/admin/customers',     factory: () => (isAuthenticated() && canSeeView('customers')) ? new AdminCustomersView() : new HomeView() },
+];
+
+// ── Path parsing (locale-aware) ───────────────────────────────────────────────
+
+function parsePath(rawPath, rawSearch) {
+  // rawPath: '/en/projects' | '/'  —  rawSearch: '?foo=bar' | ''
+  const pathAndLocale = rawPath || '/';
+  const parts = pathAndLocale.split('/').filter(Boolean);
+
+  let locale = null;
+  let path;
+
+  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) {
+    locale = parts[0];
+    path   = parts.length > 1 ? '/' + parts.slice(1).join('/') : '/';
+  } else {
+    path = pathAndLocale || '/';
+  }
+
+  // Strip leading '?' from search so downstream consumers can split on '&'.
+  const qs = (rawSearch || '').replace(/^\?/, '');
+  return { path, qs, locale };
+}
+
+// Hash routes are legacy. Migrate any '#/...' on first load to a clean URL
+// so existing bookmarks + shared links keep working. Runs exactly once per
+// pageview (the replaceState doesn't trigger popstate).
+function migrateLegacyHash() {
+  if (!window.location.hash.startsWith('#/')) return;
+  const legacy = window.location.hash.slice(1); // drop leading '#'
+  // Preserve any existing ?query on the hash (e.g. #/en/verify-email?token=X)
+  history.replaceState(null, '', legacy);
+}
+
+function matchRoute(path) {
+  const pathParts = path.split('/');
+  for (const route of ROUTES) {
+    const patternParts = route.pattern.split('/');
+    if (patternParts.length !== pathParts.length) continue;
+
+    const params = {};
+    let matched = true;
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i].startsWith(':')) {
+        params[patternParts[i].slice(1)] = pathParts[i];
+      } else if (patternParts[i] !== pathParts[i]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return { factory: route.factory, params, pattern: route.pattern };
+  }
+  return { factory: () => new NotFoundView(), params: {}, pattern: null };
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────
+
+export class Router {
+  constructor(mountEl, navBar) {
+    this.mountEl      = mountEl;
+    this.navBar       = navBar;
+    this._navigate    = this._navigate.bind(this);
+    this._currentView = null;
+    this._navSeq      = 0;
+  }
+
+  init() {
+    migrateLegacyHash();
+    window.addEventListener('popstate',      this._navigate);
+    window.addEventListener('spa:navigate',  this._navigate);
+    window.addEventListener('authchange', () => this._navigate());
+    // Global click interceptor — rewrite same-origin <a> clicks into
+    // pushState navigations so clean URLs behave like a SPA while still
+    // letting middle-click / ⌘-click / target="_blank" open new tabs.
+    document.addEventListener('click', this._onDocumentClick.bind(this));
+    this._navigate();
+  }
+
+  _onDocumentClick(e) {
+    // Respect modifier keys / non-primary button / default-prevented.
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('#') || a.target === '_blank' || a.hasAttribute('download')) return;
+    // Only intercept same-origin absolute paths — leave http(s)://, mailto:, tel: to the browser.
+    if (!href.startsWith('/')) return;
+    // Leave server endpoints to the browser — they need a full-page navigation.
+    if (href.startsWith('/auth/') || href.startsWith('/api/')) return;
+    e.preventDefault();
+    navigate(href);
+  }
+
+  async _navigate() {
+    const seq = ++this._navSeq;
+    const raw = window.location.pathname || '/';
+
+    // If the path has no locale prefix, redirect to the preferred locale root.
+    const { locale: pathLocale } = parsePath(raw, window.location.search);
+    if (!pathLocale) {
+      const preferred = getPreferredLocale();
+      const target = '/' + preferred + (raw === '/' ? '/' : raw);
+      navigateReplace(target + window.location.search);
+      return;
+    }
+
+    // Locale-locked routes (the Icelandic-only party pages) reject any other
+    // locale prefix. The server 301s these on a cold load, so this only fires
+    // for in-SPA navigation and Back/Forward — but without it, history entries
+    // from before the lock (or a hand-edited URL) would render the party page
+    // with English chrome.
+    const lockedLocale = forcedLocaleFor(raw);
+    if (lockedLocale && pathLocale !== lockedLocale) {
+      const { path: unprefixed } = parsePath(raw, window.location.search);
+      navigateReplace('/' + lockedLocale + unprefixed + window.location.search);
+      return;
+    }
+
+    // Load locale if it changed (triggers re-render with new strings).
+    if (pathLocale !== getLocale()) {
+      await loadLocale(pathLocale);
+      this.navBar.updateLocale();
+    }
+
+    const { path, qs } = parsePath(raw, window.location.search);
+
+    // Show/hide the language switcher for this route (locked routes offer no
+    // choice). Runs before render so the control never flashes in and out.
+    this.navBar.syncLocaleLock(raw);
+
+    // Guard admin routes
+    if (path === '/admin' && !isAuthenticated()) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    // Per-view admin guards (the server enforces these too; this is just the
+    // early client-side redirect). Each admin view maps to a role view-id.
+    const VIEW_BY_PATH = {
+      '/admin/users':      'users',
+      '/admin/analytics':  'analytics',
+      '/admin/general':    'general',
+      '/admin/discounts':  'discounts',
+      '/admin/sales':      'sales',
+      '/admin/background': 'background',
+      '/admin/feedback':   'feedback',
+      '/admin/bins':       'bins',
+      '/admin/customers':  'customers',
+      '/admin/books':      'books',
+      '/admin/books/invoices': 'invoices',
+      '/admin/books/expenses': 'expenses',
+      '/admin/books/ar':       'ar',
+      '/admin/books/vat':      'vat',
+      '/admin/books/bank':     'bank',
+      '/admin/books/ledger':   'ledger',
+      '/admin/books/payroll':  'payroll',
+      '/admin/books/pos':      'pos',
+    };
+    if (VIEW_BY_PATH[path] && (!isAuthenticated() || !canSeeView(VIEW_BY_PATH[path]))) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/admin/roles' && (!isAuthenticated() || !isAdmin())) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/profile' && !isAuthenticated()) {
+      navigateReplace('/' + getLocale() + '/login');
+      return;
+    }
+    if (path === '/orders' && !isAuthenticated()) {
+      navigateReplace('/' + getLocale() + '/login');
+      return;
+    }
+    if (path.startsWith('/admin/shop')) {
+      const v = path.startsWith('/admin/shop/products')    ? 'products'
+              : path.startsWith('/admin/shop/collections') ? 'collections'
+              : path.startsWith('/admin/shop/orders')      ? 'orders'
+              : null;
+      if (!isAuthenticated() || (v && !canSeeView(v))) {
+        navigateReplace('/' + getLocale() + '/');
+        return;
+      }
+    }
+
+    const { factory, params, pattern } = matchRoute(path);
+    const view = factory(params, qs);
+    const el   = await view.render();
+
+    if (seq !== this._navSeq) {
+      if (typeof view.destroy === 'function') view.destroy();
+      return;
+    }
+
+    if (this._currentView && typeof this._currentView.destroy === 'function') {
+      this._currentView.destroy();
+    }
+    this._currentView = view;
+
+    this.mountEl.innerHTML = '';
+    this.mountEl.appendChild(el);
+    this.navBar.setActive(pattern || '/');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Anonymous page-view beacon. Placed after the commit point (past the
+    // stale-nav guard and the locale/admin redirects) so it fires exactly once
+    // per rendered view — covering pushState, replaceState, popstate, and the
+    // initial load (init() calls _navigate once).
+    trackPageView();
+  }
+}

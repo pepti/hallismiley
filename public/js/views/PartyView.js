@@ -1,0 +1,2465 @@
+import { isAuthenticated, getUser, isAdmin, canEdit, getCSRFToken } from '../services/auth.js';
+import { getCsrfHeaders } from '../utils/api.js';
+import { showToast }    from '../components/Toast.js';
+import { escHtml }      from '../utils/escHtml.js';
+import { Lightbox }     from '../components/Lightbox.js';
+import { t, getLocale, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+
+const PARTY_DATE = new Date('2026-07-25T14:00:00');
+
+// Mirrors the server-side allowlist in partyRoutes.js. The explicit accept
+// list (instead of image/*) makes iOS transcode HEIC→JPEG at pick time.
+// Module-level const, not a static class field: guests open this page on old
+// phones, and a static field is a parse error on pre-2021 Safari that would
+// take the whole view down.
+const ALBUM_MIMES = ['image/jpeg', 'image/png', 'image/webp',
+                     'video/mp4', 'video/webm', 'video/quicktime'];
+
+// Default party hero content — fallback if the site_content row is missing.
+// Mirrors HomeView's DEFAULT_HERO_CONTENT shape. The IS row uses "ára" instead
+// of a superscript ordinal; the <sup> just shrinks to fit a word naturally.
+const DEFAULT_PARTY_HERO_CONTENT = {
+  en: { title_prefix: "HALLI'S", title_main: '40', title_suffix: 'th',
+        subtitle: "The big four-zero — let's make it legendary" },
+  is: { title_prefix: "HALLI'S", title_main: '40', title_suffix: 'ára',
+        subtitle: 'Stóru fjórir-núll — gerum þetta goðsagnakennt' },
+};
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+// RSVP options are either bare strings (legacy) or `{ label, status }`. The
+// status drives the admin Going/Maybe/Declined bucket; only radio-group fields
+// look at it. Anything other than 'maybe'/'declined' coerces to 'going' so
+// renderers and collectors never have to branch on undefined/unknown values.
+const RSVP_OPTION_STATUSES = ['going', 'maybe', 'declined'];
+function normalizeRsvpOption(opt) {
+  if (typeof opt === 'string') return { label: opt, status: 'going' };
+  const label  = typeof opt?.label === 'string' ? opt.label : '';
+  const status = RSVP_OPTION_STATUSES.includes(opt?.status) ? opt.status : 'going';
+  return { label, status };
+}
+
+export class PartyView {
+  constructor() {
+    this._el            = null;
+    this._timerLoop     = null;
+    this._venueLightbox = null;
+    this._partyInfo     = null;
+    this._partyHero     = null;
+    this._rsvp          = null;
+    this._rsvpCount     = 0;
+    this._requestSubmitted = false;
+
+    // Photo album state. Loaded after first paint (not in _loadAll) so the
+    // page renders without waiting on the grid.
+    this._album         = { photos: [], total: 0, sort: 'newest', loading: false };
+    this._albumLightbox = null;
+    this._albumObserver = null;
+    this._albumStale    = false;
+    this._queue         = [];
+    this._queueActive   = 0;
+  }
+
+  // Gates RSVP + Activities. Admins/moderators bypass; everyone else needs the
+  // party_access flag (granted when the owner approves their request, sends them
+  // an invite, or toggles access in Manage Users).
+  _hasPartyAccess() {
+    if (!isAuthenticated()) return false;
+    if (canEdit()) return true;
+    return !!getUser()?.party_access;
+  }
+
+  async render() {
+    const el = document.createElement('div');
+    el.className = 'view party-view';
+    this._el = el;
+
+    // Render skeleton, then load all data
+    el.innerHTML = this._renderSkeleton();
+
+    try {
+      await this._loadAll();
+      el.innerHTML = this._renderHub();
+      this._bindAll();
+      this._startCountdown();
+    } catch (err) {
+      console.error('[PartyView] render failed:', err);
+      el.innerHTML = `<div class="party-error"><p>${t('party.loadError')}</p></div>`;
+    }
+
+    return el;
+  }
+
+  async _loadAll() {
+    // Party info and hero text are both public; fetch in parallel.
+    // Pass ?locale= so the server returns the row matching the active UI
+    // locale (URL prefix → window.__locale).
+    const [infoRes] = await Promise.all([
+      fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`),
+      this._loadPartyHero(),
+    ]);
+    this._partyInfo = await infoRes.json();
+
+    // Admin-designed RSVP form (list of fields). Fall back to a seeded default
+    // so admins have something to edit on first use.
+    const parsed = this._parseJSON(this._partyInfo.rsvp_form, null);
+    this._rsvpForm = Array.isArray(parsed) && parsed.length ? parsed : this._defaultRsvpForm();
+
+    // RSVP data requires party access (invite code redeemed, or admin)
+    if (this._hasPartyAccess()) {
+      try {
+        const rsvpRes = await fetch('/api/v1/party/rsvp', { credentials: 'include' });
+        if (rsvpRes.ok) this._rsvp = await rsvpRes.json();
+      } catch { /* not accessible */ }
+
+      if (isAdmin()) {
+        const rsvpsRes = await fetch('/api/v1/party/rsvps', { credentials: 'include' });
+        if (rsvpsRes.ok) {
+          const rsvps = await rsvpsRes.json();
+          if (Array.isArray(rsvps)) this._rsvpCount = rsvps.filter(r => r.attending).length;
+        }
+      }
+    }
+  }
+
+  async _loadPartyHero() {
+    try {
+      const res = await fetch(`/api/v1/content/party_hero?locale=${encodeURIComponent(window.__locale || 'en')}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') { this._partyHero = data; return; }
+      }
+    } catch { /* network error — fall through to default */ }
+    const defaults = DEFAULT_PARTY_HERO_CONTENT[getLocale()] || DEFAULT_PARTY_HERO_CONTENT.en;
+    this._partyHero = JSON.parse(JSON.stringify(defaults));
+  }
+
+  // ── Locked section overlay ─────────────────────────────────────────────────
+
+  _renderLockedSection(title, emoji) {
+    // Anyone without access (logged in or not) gets the request-to-join flow.
+    // Editors always have access, so they never reach a locked section. RSVP is
+    // the only gated section — it shows the request form / status.
+    return this._renderRequestLocked(title, emoji);
+  }
+
+  _renderRequestLocked(title, emoji) {
+    const slug    = title.toLowerCase().replace(/\s+/g, '-');
+    const user    = getUser();
+    const pending = isAuthenticated() && user?.approval_status === 'pending';
+
+    // Just signed up this visit: the magic sign-in link is already on its way
+    // (access is granted instantly — see partyController.requestAccess).
+    if (this._requestSubmitted) {
+      return this._lockedShell(slug, title, emoji,
+        `<p class="party-locked__text">${t('party.checkEmail')}</p>`,
+        'party-locked--invite');
+    }
+
+    // Awaiting a decision server-side — only the manual-review path lands
+    // here (a guest whose access was previously declined/removed).
+    if (pending) {
+      return this._lockedShell(slug, title, emoji,
+        `<p class="party-locked__text">${t('party.awaitingApproval')}</p>`,
+        'party-locked--invite');
+    }
+
+    // The request-to-join form. Pre-fill name/email for a logged-in guest who
+    // doesn't yet have access; offer a sign-in link to unauthenticated visitors
+    // who already set a password.
+    const nameVal  = escHtml(user?.display_name || user?.username || '');
+    const emailVal = escHtml(user?.email || '');
+    const signIn   = isAuthenticated() ? '' : `
+      <p class="party-locked__hint">${t('party.alreadyInvited')}
+        <button class="party-locked__signin-link" type="button">${t('nav.signIn')}</button>
+      </p>`;
+
+    return this._lockedShell(slug, title, emoji, `
+      <p class="party-locked__text">${t('party.requestIntro')}</p>
+      <form class="party-request-form" id="party-request-form" novalidate>
+        <input type="text" name="name" id="party-request-name"
+               class="lol-input party-request-form__input"
+               placeholder="${t('party.requestNameLabel')}"
+               maxlength="100" autocomplete="name" required
+               value="${nameVal}" aria-label="${t('party.requestNameLabel')}" />
+        <input type="email" name="email" id="party-request-email"
+               class="lol-input party-request-form__input"
+               placeholder="${t('party.requestEmailLabel')}"
+               maxlength="200" autocomplete="email" required
+               value="${emailVal}" aria-label="${t('party.requestEmailLabel')}" />
+        <button type="submit" class="lol-btn lol-btn--primary party-request-form__submit">${t('party.requestSubmit')}</button>
+      </form>
+      ${signIn}`,
+      'party-locked--invite');
+  }
+
+  // Shared ornamental shell for the locked RSVP / Activities sections.
+  _lockedShell(slug, title, emoji, innerHtml, extraClass = '') {
+    return `
+      <section class="party-section party-locked ${extraClass}" aria-labelledby="locked-${slug}">
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="locked-${slug}">${emoji} ${escHtml(title)}</h2>
+          <div class="party-locked__ribbon" role="note">
+            <span class="party-locked__rule" aria-hidden="true"></span>
+            <span class="party-locked__ornament" aria-hidden="true">✦</span>
+            <span class="party-locked__rule" aria-hidden="true"></span>
+          </div>
+          ${innerHtml}
+          <div class="party-locked__ribbon" aria-hidden="true">
+            <span class="party-locked__rule"></span>
+            <span class="party-locked__ornament">✦</span>
+            <span class="party-locked__rule"></span>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  _renderSkeleton() {
+    return `<div class="party-skeleton">
+      <div class="skeleton-hero"></div>
+      <div class="skeleton-body">
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+      </div>
+    </div>`;
+  }
+
+  // ── Full hub ──────────────────────────────────────────────────────────────────
+
+  _renderHub() {
+    const info       = this._partyInfo || {};
+    const schedule   = this._parseJSON(info.schedule,   []);
+    const activities = this._parseJSON(info.activities, { daytime: [], evening: [] });
+    const unlocked   = this._hasPartyAccess();
+
+    return `
+      ${this._renderHero()}
+      ${this._renderAlbum()}
+      ${unlocked ? this._renderRsvp()              : this._renderLockedSection('RSVP', '🎟')}
+      ${this._renderSchedule(schedule)}
+      ${this._renderVenue(info)}
+      ${this._renderActivities(activities)}`;
+  }
+
+  _renderHero() {
+    const coverUrl = this._partyInfo?.cover_image || '';
+    const bg = coverUrl
+      ? `<div class="party-hero__bg party-hero__bg--photo" style="background-image: url('${escHtml(coverUrl)}')" aria-hidden="true">
+           <div class="party-hero__scrim" aria-hidden="true"></div>
+         </div>`
+      : `<div class="party-hero__bg" aria-hidden="true"></div>`;
+
+    const editor = canEdit();
+    const heroAdmin = editor ? `
+      <div class="party-hero__admin" data-hero-admin>
+        <button class="party-edit-btn" type="button" data-hero-edit-text aria-label="Edit hero text">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          ${t('admin.edit')}
+        </button>
+        <button class="party-edit-btn" type="button" data-hero-change>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          ${coverUrl ? t('party.admin.changeCover') : t('party.admin.uploadCover')}
+        </button>
+        ${coverUrl ? `<button class="party-edit-btn party-edit-btn--danger" type="button" data-hero-remove>${t('party.admin.removeCover')}</button>` : ''}
+        <span class="party-edit-status" data-hero-status aria-live="polite"></span>
+        <input type="file" accept="image/jpeg,image/png,image/webp" data-hero-file hidden>
+      </div>` : '';
+
+    const heroTextControls = editor ? `
+      <div class="party-edit-controls party-hero__edit-controls party-edit-controls--hidden" data-hero-text-controls>
+        ${adminLocaleBadgeHtml()}
+        <button class="party-edit-save" type="button" data-hero-text-save>${t('form.save')}</button>
+        <button class="party-edit-cancel" type="button" data-hero-text-cancel>${t('admin.cancel')}</button>
+        <span class="party-edit-status" data-hero-text-status aria-live="polite"></span>
+      </div>` : '';
+
+    const h = this._partyHero || DEFAULT_PARTY_HERO_CONTENT.en;
+
+    return `
+      <section class="party-hero" aria-label="Party hero">
+        ${bg}
+        ${heroAdmin}
+        <div class="party-hero__content">
+          <p class="party-hero__eyebrow">July 25, 2026</p>
+          <h1 class="party-hero__title"><span data-party-hero-field="title_prefix">${escHtml(h.title_prefix)}</span> <span class="party-gold"><span data-party-hero-field="title_main">${escHtml(h.title_main)}</span><sup data-party-hero-field="title_suffix">${escHtml(h.title_suffix)}</sup></span></h1>
+          <p class="party-hero__sub" data-party-hero-field="subtitle">${escHtml(h.subtitle)}</p>
+          <div class="party-countdown" id="party-countdown" aria-live="polite" aria-label="Countdown to party">
+            <div class="party-countdown__unit">
+              <span class="party-countdown__num" id="cd-days">--</span>
+              <span class="party-countdown__label">${t('party.days')}</span>
+            </div>
+            <span class="party-countdown__sep" aria-hidden="true">:</span>
+            <div class="party-countdown__unit">
+              <span class="party-countdown__num" id="cd-hours">--</span>
+              <span class="party-countdown__label">${t('party.hours')}</span>
+            </div>
+            <span class="party-countdown__sep" aria-hidden="true">:</span>
+            <div class="party-countdown__unit">
+              <span class="party-countdown__num" id="cd-mins">--</span>
+              <span class="party-countdown__label">${t('party.mins')}</span>
+            </div>
+            <span class="party-countdown__sep" aria-hidden="true">:</span>
+            <div class="party-countdown__unit">
+              <span class="party-countdown__num" id="cd-secs">--</span>
+              <span class="party-countdown__label">${t('party.secs')}</span>
+            </div>
+          </div>
+        </div>
+        ${heroTextControls}
+      </section>`;
+  }
+
+  _renderVenue(info) {
+    const venueName    = escHtml(info.venue_name    || 'TBD — details coming soon');
+    const venueAddress = escHtml(info.venue_address || '');
+    const venueLink    = escHtml(info.venue_link    || '');
+    const venueRating  = escHtml(info.venue_rating  || '');
+    const mapsLink     = info.venue_maps_link
+      ? escHtml(info.venue_maps_link)
+      : venueAddress
+        ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address || '')}`
+        : '';
+
+    let detailsHtml = '';
+    if (info.venue_details) {
+      try {
+        const details = typeof info.venue_details === 'string'
+          ? JSON.parse(info.venue_details)
+          : info.venue_details;
+        const hallItems = (details.hall || []).map(d => `<li data-detail="hall">${escHtml(d)}</li>`).join('');
+        const spaItems  = (details.spa  || []).map(d => `<li data-detail="spa">${escHtml(d)}</li>`).join('');
+        detailsHtml = `
+          <div class="party-venue__details">
+            ${hallItems ? `<div class="party-venue__details-section" data-details-group="hall"><h3 class="party-venue__details-title">🏠 Party Hall</h3><ul class="party-venue__details-list">${hallItems}</ul></div>` : ''}
+            ${spaItems  ? `<div class="party-venue__details-section" data-details-group="spa"><h3 class="party-venue__details-title">🛁 SPA</h3><ul class="party-venue__details-list">${spaItems}</ul></div>` : ''}
+          </div>`;
+      } catch { /* ignore malformed details */ }
+    }
+
+    const venuePhotos = [
+      'Mýrarkot_veislusalur.jpg',
+      'Mýrarkot_salur_til_leigu.jpg',
+      'mýrarkot_salur_veislutjald.jpg',
+      'salur_við_bauhaus_mýrarkot.jpg',
+      'Myrarkot_við_bauhaus.jpg',
+      'lambhagi_salur_til_leigu.jpg',
+      'mýrarkot_lambhagi.jpg',
+      'mýrarkot_SPA.jpg',
+      'mýrakot_spa_salur.jpg',
+      'fyrir_gjæsun_SPA_mýrarkot.jpg',
+      'Gæsun_steggjun_myrarkot.jpg',
+      'Steggjun_myrarkot.jpg',
+      'myrarkot_fyrir_hópefli.jpg',
+    ];
+
+    const photoGrid = venuePhotos.map((file, i) => `
+      <button class="party-venue__photo-btn" data-photo-index="${i}"
+              aria-label="View venue photo ${i + 1}">
+        <img class="party-venue__photo"
+             src="/assets/party/venue/${encodeURIComponent(file)}"
+             alt="Mýrarkot venue photo ${i + 1}"
+             loading="lazy" width="400" height="300">
+      </button>`).join('');
+
+    const editBtn = canEdit() ? `
+      <button class="party-edit-btn" data-edit-section="venue" aria-label="Edit venue section">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        ${t('admin.edit')}
+      </button>` : '';
+
+    const editControls = canEdit() ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="venue">
+        ${adminLocaleBadgeHtml()}
+        <button class="party-edit-save" data-save-section="venue">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="venue">${t('admin.cancel')}</button>
+        <span class="party-edit-status" data-status="venue" aria-live="polite"></span>
+      </div>` : '';
+
+    return `
+      <section class="party-section party-venue" aria-labelledby="venue-heading">
+        ${editBtn}
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="venue-heading">📍 ${t('party.venue')}</h2>
+          <div class="party-venue__card">
+            <div class="party-venue__name" data-field="venue_name">${venueName}</div>
+            <div class="party-venue__address" data-field="venue_address">${venueAddress || t('party.addressTbd')}</div>
+            <div class="party-venue__rating" data-field="venue_rating">${venueRating ? `⭐ ${venueRating}` : ''}</div>
+            <div class="party-venue__links">
+              ${mapsLink  ? `<a href="${mapsLink}"  target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">📍 Google Maps</a>` : ''}
+              ${venueLink ? `<a href="${venueLink}" target="_blank" rel="noopener noreferrer" class="lol-btn lol-btn--ghost party-venue__link">🏠 View Venue</a>` : ''}
+            </div>
+            ${detailsHtml}
+          </div>
+          <div class="party-venue__gallery" role="list" aria-label="Venue photos">
+            ${photoGrid}
+          </div>
+        </div>
+        ${editControls}
+      </section>`;
+  }
+
+  _renderSchedule(schedule) {
+    const editor = canEdit();
+    const items = schedule.map((item, i) => `
+      <li class="party-timeline__item" data-schedule-index="${i}">
+        <div class="party-timeline__time" data-sched="time">${escHtml(item.time)}</div>
+        <div class="party-timeline__dot" aria-hidden="true"></div>
+        <div class="party-timeline__event" data-sched="event">${escHtml(item.event)}</div>
+        ${editor ? `<button class="party-edit-row-insert party-edit-row-insert--hidden" data-insert-schedule="${i}" aria-label="Insert event above" title="Insert event above">＋</button>` : ''}
+        ${editor ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-schedule="${i}" aria-label="Remove this event" title="Remove">✕</button>` : ''}
+      </li>`).join('');
+
+    const editBtn = canEdit() ? `
+      <button class="party-edit-btn" data-edit-section="schedule" aria-label="Edit schedule section">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        ${t('admin.edit')}
+      </button>` : '';
+
+    const editControls = canEdit() ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="schedule">
+        ${adminLocaleBadgeHtml()}
+        <button class="party-edit-save" data-save-section="schedule">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="schedule">${t('admin.cancel')}</button>
+        <span class="party-edit-status" data-status="schedule" aria-live="polite"></span>
+      </div>` : '';
+
+    const addBtn = editor ? `<button class="party-edit-add party-edit-add--hidden" data-add-schedule aria-label="Add new event">+ Add Event</button>` : '';
+
+    return `
+      <section class="party-section party-schedule" aria-labelledby="schedule-heading">
+        ${editBtn}
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="schedule-heading">🗓 ${t('party.schedule')}</h2>
+          <ol class="party-timeline" aria-label="Party schedule">
+            ${items}
+          </ol>
+          ${addBtn}
+        </div>
+        ${editControls}
+      </section>`;
+  }
+
+  _defaultRsvpForm() {
+    return [
+      { id: 'heading',     type: 'heading',        label: '🎟  RSVP' },
+      { id: 'intro',       type: 'paragraph',      label: "Let me know if you'll make it and how you'd like to join!" },
+      { id: 'attend_when', type: 'radio-group',    label: 'When will you join?',
+        options: [
+          { label: '☀️ Daytime only (14:00–18:00)', status: 'going'    },
+          { label: '🌙 Evening only (18:00–22:00)', status: 'going'    },
+          { label: '🎉 Both — all day!',             status: 'going'    },
+          { label: '🤔 Maybe',                       status: 'maybe'    },
+          { label: "Sorry, can't make it",          status: 'declined' },
+        ] },
+      { id: 'bringing',    type: 'checkbox-group', label: 'Bringing anyone with you?',
+        options: ['Spouse / partner', 'Kids'] },
+      { id: 'helping',     type: 'checkbox-group', label: 'Want to help out? (totally optional)',
+        options: ['Help with planning', 'Host an activity', 'General help on the day'] },
+      { id: 'activity_details', type: 'textarea',  label: 'What activity would you host?',
+        placeholder: 'A short description — games, music, a talk, anything…',
+        showIf: { fieldId: 'helping', value: 'Host an activity' } },
+      { id: 'message',     type: 'textarea',       label: 'Message to host (optional)',
+        placeholder: 'A note for Halli…' },
+    ];
+  }
+
+  _renderRsvp() {
+    const rsvp         = this._rsvp;
+    const answers      = rsvp?.answers || {};
+    const editor       = canEdit();
+    // Free-form admin-curated paragraph shown above the RSVP form/summary.
+    // Always visible to any guest who can see the RSVP section (before or
+    // after they submit). Admins get an inline edit affordance even when
+    // the message is empty so they can author it.
+    const rsvpMessage      = typeof this._partyInfo?.rsvp_message === 'string' ? this._partyInfo.rsvp_message : '';
+    const hasMessage       = rsvpMessage.trim().length > 0;
+    const showMessageBlock = editor || hasMessage;
+    const messageEditBtn = editor ? `
+        <button class="party-edit-btn party-edit-btn--inline" data-edit-section="rsvpMessage" aria-label="${t('admin.edit')}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>` : '';
+    const messageControls = editor ? `
+        <div class="party-edit-controls party-edit-controls--inline party-edit-controls--hidden" data-controls="rsvpMessage">
+          ${adminLocaleBadgeHtml()}
+          <button class="party-edit-save" data-save-section="rsvpMessage">${t('form.save')}</button>
+          <button class="party-edit-cancel" data-cancel-section="rsvpMessage">${t('admin.cancel')}</button>
+          <span class="party-edit-status" data-status="rsvpMessage" aria-live="polite"></span>
+        </div>` : '';
+    // Placeholder text only shows for admins when the message is empty, so
+    // there's a visible target to click. Non-admins with no message never
+    // see this block.
+    const messageBodyHtml = hasMessage
+      ? escHtml(rsvpMessage).replace(/\n/g, '<br>')
+      : (editor ? `<span class="party-rsvp__message-placeholder">${escHtml(t('party.admin.rsvpMessagePlaceholder'))}</span>` : '');
+    const messageHtml = showMessageBlock ? `
+      <div class="party-rsvp__message-block">
+        <p class="party-rsvp__message" data-rsvp-message>${messageBodyHtml}</p>
+        ${messageEditBtn}
+        ${messageControls}
+      </div>` : '';
+
+    const editBtn = editor ? `
+      <button class="party-edit-btn" data-edit-section="rsvp" aria-label="Edit RSVP form">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        ${t('admin.edit')}
+      </button>` : '';
+
+    const editControls = editor ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="rsvp">
+        ${adminLocaleBadgeHtml()}
+        <button class="party-edit-save" data-save-section="rsvp">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="rsvp">${t('admin.cancel')}</button>
+        <span class="party-edit-status" data-status="rsvp" aria-live="polite"></span>
+      </div>` : '';
+
+    // If user already RSVP'd, show summary + "Update RSVP" toggle.
+    // Each summary line carries data-rsvp-summary-line + data-field-id so
+    // inline-edit mode can make the <strong data-field-label> editable and
+    // mirror changes into the (hidden) form fields below for the same field.
+    const summaryHtml = rsvp ? `
+      <div class="party-rsvp__current">
+        <div class="party-rsvp__status party-rsvp__status--yes">✅ ${t('party.youveRsvpd')}</div>
+        ${this._rsvpForm.filter(f => !['heading','paragraph'].includes(f.type)).map(f => {
+          const a = answers[f.id];
+          if (a == null || (Array.isArray(a) && !a.length) || a === '') return '';
+          const val = Array.isArray(a) ? a.map(x => escHtml(x)).join(', ') : escHtml(a);
+          return `<p data-rsvp-summary-line data-field-id="${escHtml(f.id)}"><strong data-field-label>${escHtml(f.label)}</strong>: ${val}</p>`;
+        }).join('')}
+        <button class="lol-btn lol-btn--ghost party-rsvp__update-btn" id="rsvp-edit-btn">${t('party.updateRsvp')}</button>
+      </div>` : '';
+
+    return `
+      <section class="party-section party-rsvp" aria-labelledby="rsvp-heading" id="rsvp">
+        ${editBtn}
+        <div class="party-section__inner" id="rsvp-inner">
+          ${messageHtml}
+          ${summaryHtml}
+          <div class="party-rsvp__form-wrap" id="rsvp-form-wrap" ${rsvp ? 'hidden' : ''}>
+            ${this._renderRsvpForm(answers, !!rsvp)}
+          </div>
+        </div>
+        ${editControls}
+      </section>`;
+  }
+
+  // Label shown inside the admin-only status pill next to each radio option.
+  // Kept short so it doesn't crowd the form; the pill's aria-label spells it
+  // out for screen readers. Falls back to 'going' for unknown values.
+  _statusPillText(status) {
+    if (status === 'maybe')    return '🤔';
+    if (status === 'declined') return '❌';
+    return '✅';
+  }
+
+  _renderField(field, answers) {
+    const id  = `rsvp-f-${field.id}`;
+    const ans = answers?.[field.id];
+    // data-field-label marks the inline-editable label text for the inline
+    // edit mode; data-option-index does the same for radio/checkbox options.
+    switch (field.type) {
+      case 'heading':
+        return `<h2 class="party-section__title" data-field-id="${escHtml(field.id)}" data-field-label>${escHtml(field.label)}</h2>`;
+      case 'paragraph':
+        return `<p class="party-rsvp__intro" data-field-id="${escHtml(field.id)}" data-field-label>${escHtml(field.label).replace(/\n/g, '<br>')}</p>`;
+      case 'checkbox-group': {
+        const opts = (field.options || []).map((opt, i) => {
+          const { label } = normalizeRsvpOption(opt);
+          return `
+          <label class="party-checkbox">
+            <input type="checkbox" name="f_${escHtml(field.id)}" value="${escHtml(label)}"
+                   ${Array.isArray(ans) && ans.includes(label) ? 'checked' : ''} />
+            <span data-option-index="${i}">${escHtml(label)}</span>
+          </label>`;
+        }).join('');
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="checkbox-group"${this._showIfAttrs(field)}>
+            <label class="party-label" data-field-label>${escHtml(field.label)}</label>
+            <div class="party-checkbox-group">${opts}</div>
+          </div>`;
+      }
+      case 'radio-group': {
+        const editor = canEdit();
+        const opts = (field.options || []).map((opt, i) => {
+          const { label, status } = normalizeRsvpOption(opt);
+          // The status pill only renders for admins. It's hidden via CSS
+          // (party-rsvp__option-status--idle) until inline-edit mode adds
+          // the active class to the section, so non-editing admins don't
+          // see the pill cluttering the form.
+          const pill = editor
+            ? `<button type="button" class="party-rsvp__option-status party-rsvp__option-status--${escHtml(status)}"
+                       data-option-status="${escHtml(status)}" data-option-status-pill
+                       aria-label="Status: ${escHtml(status)}" tabindex="-1">${this._statusPillText(status)}</button>`
+            : '';
+          return `
+          <label class="party-checkbox">
+            <input type="radio" name="f_${escHtml(field.id)}" value="${escHtml(label)}"
+                   ${typeof ans === 'string' && ans === label ? 'checked' : ''} />
+            <span data-option-index="${i}">${escHtml(label)}</span>
+            ${pill}
+          </label>`;
+        }).join('');
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="radio-group"${this._showIfAttrs(field)}>
+            <label class="party-label" data-field-label>${escHtml(field.label)}</label>
+            <div class="party-checkbox-group party-radio-group">${opts}</div>
+          </div>`;
+      }
+      case 'text':
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="text"${this._showIfAttrs(field)}>
+            <label class="party-label" for="${id}" data-field-label>${escHtml(field.label)}</label>
+            <input id="${id}" class="lol-input" type="text" name="f_${escHtml(field.id)}"
+                   placeholder="${escHtml(field.placeholder || '')}"
+                   value="${escHtml(ans || '')}" maxlength="200" />
+          </div>`;
+      case 'textarea':
+        return `
+          <div class="party-form-group" data-field-id="${escHtml(field.id)}" data-field-type="textarea"${this._showIfAttrs(field)}>
+            <label class="party-label" for="${id}" data-field-label>${escHtml(field.label)}</label>
+            <textarea id="${id}" class="lol-input lol-textarea" name="f_${escHtml(field.id)}"
+                      placeholder="${escHtml(field.placeholder || '')}" maxlength="1000">${escHtml(ans || '')}</textarea>
+          </div>`;
+      default:
+        return '';
+    }
+  }
+
+  _showIfAttrs(field) {
+    if (!field.showIf || !field.showIf.fieldId || field.showIf.value == null) return '';
+    return ` data-show-if-field="${escHtml(field.showIf.fieldId)}" data-show-if-value="${escHtml(field.showIf.value)}" style="display:none"`;
+  }
+
+  _renderRsvpForm(answers, isUpdate) {
+    const fields = this._rsvpForm.map(f => this._renderField(f, answers)).join('');
+    return `
+      <form class="party-rsvp__form" id="rsvp-form" novalidate>
+        ${fields}
+        <div class="party-form-actions">
+          <button type="submit" class="lol-btn lol-btn--primary party-rsvp__submit">${t('party.submitRsvp')}</button>
+          ${isUpdate ? `<button type="button" class="lol-btn lol-btn--ghost" id="rsvp-cancel-btn">${t('admin.cancel')}</button>` : ''}
+        </div>
+      </form>`;
+  }
+
+
+  _renderActivities(activities) {
+    const editor = canEdit();
+
+    // Section + subsection headings. Fall back to i18n keys when the admin has
+    // not yet saved a custom value, so existing rows (which predate this field)
+    // keep rendering the static translation.
+    const mainHeading    = activities.heading        ?? t('party.activities');
+    const daytimeHeading = activities.daytimeHeading ?? t('party.daytimeActivities');
+    const eveningHeading = activities.eveningHeading ?? t('party.eveningActivities');
+
+    const renderCards = (list, group) => list.map((g, i) => {
+      // Per-activity editable label. Default to "Rules:" (colon included —
+      // the admin types the punctuation themselves so they can switch to
+      // "Notes —", "Link:", etc.). The whole row hides on the public view
+      // when both label and value are empty, but stays visible in edit mode
+      // so admins can opt back in.
+      const rulesLabel = g.rulesLabel ?? 'Rules:';
+      const rulesValue = g.rules ?? '';
+      const hideRulesRow = !editor && !rulesLabel.trim() && !rulesValue.trim();
+      const rulesRow = hideRulesRow ? '' : `
+        <p class="party-activity-card__rules" data-activity="rules">
+          <strong data-activity="rules-label">${escHtml(rulesLabel)}</strong>
+          <span data-activity="rules-text">${escHtml(rulesValue)}</span>
+        </p>`;
+      return `
+      <div class="party-activity-card" data-activity-index="${i}" data-activity-group="${group}">
+        ${editor ? `<button class="party-edit-row-delete party-edit-row-delete--hidden" data-delete-activity="${group}-${i}" aria-label="Remove this activity" title="Remove">✕</button>` : ''}
+        <h3 class="party-activity-card__name" data-activity="name">${escHtml(g.name)}</h3>
+        <p class="party-activity-card__desc" data-activity="desc">${escHtml(g.description)}</p>${rulesRow}
+      </div>`;
+    }).join('');
+
+    const daytimeCards = renderCards(activities.daytime || [], 'daytime');
+    const eveningCards = renderCards(activities.evening || [], 'evening');
+
+    const addBtn = (group) => editor
+      ? `<button class="party-edit-add party-edit-add--hidden" data-add-activity="${group}" aria-label="Add ${group} activity">+ Add Activity</button>`
+      : '';
+
+    const editBtn = editor ? `
+      <button class="party-edit-btn" data-edit-section="activities" aria-label="Edit activities section">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        ${t('admin.edit')}
+      </button>` : '';
+
+    const editControls = editor ? `
+      <div class="party-edit-controls party-edit-controls--hidden" data-controls="activities">
+        ${adminLocaleBadgeHtml()}
+        <button class="party-edit-save" data-save-section="activities">${t('form.save')}</button>
+        <button class="party-edit-cancel" data-cancel-section="activities">${t('admin.cancel')}</button>
+        <span class="party-edit-status" data-status="activities" aria-live="polite"></span>
+      </div>` : '';
+
+    return `
+      <section class="party-section party-activities" aria-labelledby="activities-heading">
+        ${editBtn}
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="activities-heading">🎯 <span data-activity-heading="main">${escHtml(mainHeading)}</span></h2>
+
+          <h3 class="party-activities__sub-heading">☀️ <span data-activity-heading="daytime">${escHtml(daytimeHeading)}</span></h3>
+          <div class="party-activities__grid" data-activities-grid="daytime">
+            ${daytimeCards}
+          </div>
+          ${addBtn('daytime')}
+
+          <h3 class="party-activities__sub-heading party-activities__sub-heading--evening">🌙 <span data-activity-heading="evening">${escHtml(eveningHeading)}</span></h3>
+          <div class="party-activities__grid" data-activities-grid="evening">
+            ${eveningCards}
+          </div>
+          ${addBtn('evening')}
+        </div>
+        ${editControls}
+      </section>`;
+  }
+
+
+  // ── Photo album ───────────────────────────────────────────────────────────────
+
+  _renderAlbum() {
+    return `
+      <section class="party-section party-album" aria-labelledby="album-heading">
+        <div class="party-section__inner">
+          <h2 class="party-section__title" id="album-heading">📸 ${t('party.album')}</h2>
+          <div class="party-album__toolbar">
+            <button type="button" class="lol-btn lol-btn--primary party-album__upload" data-album-upload>
+              ${t('party.album.upload')}
+            </button>
+            <input type="file" multiple hidden data-album-file
+                   accept="${ALBUM_MIMES.join(',')}">
+            <a class="lol-btn lol-btn--ghost party-album__download-all"
+               href="/api/v1/party/photos/archive" download
+               data-album-download-all hidden>
+              ⭳ ${t('party.album.downloadAll')}
+            </a>
+            <span class="party-album__count" data-album-count aria-live="polite"></span>
+          </div>
+          <div class="party-album__sort" role="group" aria-label="${t('party.album.sortLabel')}">
+            <span class="party-album__sort-label">${t('party.album.sortLabel')}</span>
+            ${[
+              ['newest',   t('party.album.sortNewest')],
+              ['oldest',   t('party.album.sortOldest')],
+              ['uploader', t('party.album.sortUploader')],
+              ['videos',   t('party.album.sortVideos')],
+              ['photos',   t('party.album.sortPhotos')],
+              ['shuffle',  t('party.album.sortShuffle')],
+            ].map(([key, label]) => `
+              <button type="button"
+                      class="party-album__sort-btn${this._album.sort === key ? ' party-album__sort-btn--active' : ''}"
+                      data-album-sort="${key}" aria-pressed="${this._album.sort === key}">
+                ${label}
+              </button>`).join('')}
+          </div>
+          <div class="party-album__queue" data-album-queue hidden></div>
+          <div class="party-album__grid" data-album-grid></div>
+          <p class="party-album__empty" data-album-empty hidden>${t('party.album.empty')}</p>
+          <button type="button" class="lol-btn lol-btn--ghost party-album__more" data-album-more hidden>
+            ${t('party.album.loadMore')}
+          </button>
+        </div>
+      </section>`;
+  }
+
+  _bindAlbum() {
+    const section = this._el.querySelector('.party-album');
+    if (!section) return;
+
+    section.querySelectorAll('[data-album-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.albumSort;
+        // Re-clicking Shuffle deals a fresh order; re-clicking others is a no-op.
+        if (key === this._album.sort && key !== 'shuffle') return;
+        this._album.sort = key;
+        if (key === 'shuffle') {
+          this._album.seed = Math.random().toString(36).slice(2, 10);
+        }
+        section.querySelectorAll('[data-album-sort]').forEach(b => {
+          const active = b === btn;
+          b.classList.toggle('party-album__sort-btn--active', active);
+          b.setAttribute('aria-pressed', String(active));
+        });
+        this._loadAlbumPage(true);
+      });
+    });
+    const moreBtn = section.querySelector('[data-album-more]');
+    moreBtn.addEventListener('click', () => {
+      this._loadAlbumPage(false);
+    });
+
+    // Auto-load the next page when the load-more button scrolls into view, so
+    // guests just keep scrolling. The button stays as a manual fallback for
+    // browsers without IntersectionObserver. _album.loading guards against
+    // duplicate fetches; a hidden button never intersects, so the observer
+    // goes quiet once everything is loaded.
+    if ('IntersectionObserver' in window) {
+      this._albumObserver?.disconnect();
+      this._albumObserver = new IntersectionObserver((entries) => {
+        if (entries.some(e => e.isIntersecting) && !moreBtn.hidden) {
+          this._loadAlbumPage(false);
+        }
+      }, { rootMargin: '600px' });
+      this._albumObserver.observe(moreBtn);
+    }
+
+    const fileInput = section.querySelector('[data-album-file]');
+    section.querySelector('[data-album-upload]').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files?.length) this._enqueueUploads(Array.from(fileInput.files));
+      fileInput.value = '';
+    });
+
+    this._loadAlbumPage(true);
+  }
+
+  async _loadAlbumPage(reset) {
+    if (this._album.loading) return;
+    this._album.loading = true;
+    const offset = reset ? 0 : this._album.photos.length;
+    try {
+      const params = new URLSearchParams({
+        sort: this._album.sort, limit: '100', offset: String(offset),
+      });
+      if (this._album.sort === 'shuffle') params.set('seed', this._album.seed || '');
+      const res = await fetch(`/api/v1/party/photos?${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { photos, total } = await res.json();
+      if (reset) {
+        this._album.photos = photos;
+      } else {
+        // Other visitors may upload while we page, shifting server offsets —
+        // drop any rows we already have so the grid never shows duplicates.
+        const seen = new Set(this._album.photos.map(p => p.id));
+        this._album.photos = [...this._album.photos, ...photos.filter(p => !seen.has(p.id))];
+      }
+      this._album.total = total;
+      this._renderAlbumGrid();
+    } catch (err) {
+      console.error('[PartyView] album load failed:', err);
+      showToast(t('party.loadError'), 'error');
+    } finally {
+      this._album.loading = false;
+    }
+  }
+
+  _renderAlbumGrid() {
+    const section = this._el?.querySelector('.party-album');
+    if (!section) return;
+    const grid    = section.querySelector('[data-album-grid]');
+    const { photos, total } = this._album;
+    const me      = getUser();
+
+    grid.innerHTML = photos.map((p, i) => {
+      const isVideo   = p.media_type === 'video';
+      const canDelete = (me && p.user_id === me.id) || canEdit();
+      const caption   = p.caption || p.display_name || p.username || '';
+      // Never point an <img> at a video file — thumbless videos get a
+      // placeholder tile with the play badge.
+      const media = (isVideo && !p.thumb_path)
+        ? '<span class="party-album__placeholder" aria-hidden="true"></span>'
+        : `<img class="party-album__thumb" src="${escHtml(p.thumb_path || p.file_path)}"
+                alt="${escHtml(caption)}" loading="lazy" decoding="async">`;
+      return `
+        <div class="party-album__tile${isVideo ? ' party-album__tile--video' : ''}">
+          <button type="button" class="party-album__open" data-album-open data-index="${i}"
+                  aria-label="${escHtml(caption) || t('party.album')}">
+            ${media}
+          </button>
+          ${canDelete ? `
+          <button type="button" class="party-album__delete" data-album-delete data-id="${p.id}"
+                  aria-label="${t('form.delete')}">&#x2715;</button>` : ''}
+        </div>`;
+    }).join('');
+
+    section.querySelector('[data-album-empty]').hidden = photos.length > 0;
+    section.querySelector('[data-album-more]').hidden  = photos.length >= total;
+    section.querySelector('[data-album-download-all]').hidden = total === 0;
+    section.querySelector('[data-album-count]').textContent =
+      total > 0 ? t('party.album.count', { shown: photos.length, total }) : '';
+
+    grid.querySelectorAll('[data-album-open]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this._albumLightbox?.open(Number(btn.dataset.index));
+      });
+    });
+    grid.querySelectorAll('[data-album-delete]').forEach(btn => {
+      btn.addEventListener('click', () => this._deleteAlbumPhoto(Number(btn.dataset.id)));
+    });
+
+    this._bindAlbumLightbox();
+  }
+
+  _bindAlbumLightbox() {
+    if (this._albumLightbox) { this._albumLightbox.destroy(); this._albumLightbox = null; }
+    if (!this._album.photos.length) return;
+
+    const items = this._album.photos.map(p => ({
+      file_path:  p.file_path,
+      media_type: p.media_type,
+      caption:    p.caption || p.display_name || p.username || '',
+    }));
+    this._albumLightbox = new Lightbox(items, { download: true });
+    this._albumLightbox.mount();
+  }
+
+  async _deleteAlbumPhoto(id) {
+    if (!window.confirm(t('party.album.deleteConfirm'))) return;
+    try {
+      const res = await fetch(`/api/v1/party/photos/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: await getCsrfHeaders(),
+      });
+      if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+      this._album.photos = this._album.photos.filter(p => p.id !== id);
+      this._album.total  = Math.max(0, this._album.total - 1);
+      this._renderAlbumGrid();
+      showToast(t('party.album.deleted'), 'success');
+    } catch (err) {
+      console.error('[PartyView] delete failed:', err);
+      showToast(t('party.album.uploadFailed'), 'error');
+    }
+  }
+
+  // ── Photo album: upload queue ─────────────────────────────────────────────────
+
+  _enqueueUploads(files) {
+    for (const file of files) {
+      const supported = ALBUM_MIMES.includes(file.type);
+      this._queue.push({
+        id:     `q${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        file,
+        status: supported ? 'pending' : 'error',
+        error:  supported ? null : t('party.album.unsupportedType'),
+        pct:    0,
+        xhr:    null,
+      });
+    }
+    this._renderQueue();
+    this._pumpQueue();
+  }
+
+  _renderQueue() {
+    const container = this._el?.querySelector('[data-album-queue]');
+    if (!container) return;
+    const visible = this._queue.filter(e => e.status !== 'done');
+    container.hidden = visible.length === 0;
+    if (container.hidden) { container.innerHTML = ''; this._queue = []; return; }
+
+    container.innerHTML = visible.map(e => `
+      <div class="party-album__queue-item${e.status === 'error' ? ' party-album__queue-item--error' : ''}"
+           data-queue-id="${e.id}">
+        <span class="party-album__queue-name">${escHtml(e.file.name)}</span>
+        <span class="party-album__queue-size">${this._formatSize(e.file.size)}</span>
+        <span class="party-album__bar"><i style="width:${e.pct}%"></i></span>
+        ${e.status === 'error' ? `
+          <span class="party-album__queue-error">${escHtml(e.error || t('party.album.uploadFailed'))}</span>
+          ${e.error === t('party.album.unsupportedType') ? '' : `
+          <button type="button" class="lol-btn lol-btn--ghost party-album__retry" data-queue-retry="${e.id}">
+            ${t('party.album.retry')}
+          </button>`}` : ''}
+      </div>`).join('');
+
+    container.querySelectorAll('[data-queue-retry]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const entry = this._queue.find(e => e.id === btn.dataset.queueRetry);
+        if (entry) { entry.status = 'pending'; entry.error = null; entry.pct = 0; }
+        this._renderQueue();
+        this._pumpQueue();
+      });
+    });
+  }
+
+  _formatSize(bytes) {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  _pumpQueue() {
+    while (this._queueActive < 2) {
+      const next = this._queue.find(e => e.status === 'pending');
+      if (!next) break;
+      next.status = 'uploading';
+      this._queueActive++;
+      this._uploadOne(next).finally(() => {
+        this._queueActive--;
+        this._pumpQueue();
+      });
+    }
+    // Queue drained: if uploads landed while a non-newest sort was active the
+    // local ordering is unknowable — refetch once instead of guessing.
+    const busy = this._queue.some(e => e.status === 'pending' || e.status === 'uploading');
+    if (!busy) {
+      this._renderQueue();
+      if (this._albumStale) {
+        this._albumStale = false;
+        this._loadAlbumPage(true);
+      }
+    }
+  }
+
+  async _uploadOne(entry) {
+    const thumb = await this._makeThumb(entry.file);
+    const token = await getCSRFToken();
+
+    await new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      entry.xhr = xhr;
+      xhr.open('POST', '/api/v1/party/photos');
+      xhr.withCredentials = true;
+      if (token) xhr.setRequestHeader('X-CSRF-Token', token);
+
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        entry.pct = Math.round((e.loaded / e.total) * 100);
+        const bar = this._el?.querySelector(`[data-queue-id="${entry.id}"] .party-album__bar > i`);
+        if (bar) bar.style.width = `${entry.pct}%`;
+      };
+
+      xhr.onload = () => {
+        entry.xhr = null;
+        if (xhr.status === 201) {
+          entry.status = 'done';
+          try {
+            const row = JSON.parse(xhr.responseText);
+            if (this._album.sort === 'newest') {
+              const me = getUser();
+              this._album.photos.unshift({
+                ...row,
+                display_name: me?.display_name,
+                username:     me?.username,
+              });
+              this._album.total++;
+              this._renderAlbumGrid();
+            } else {
+              this._albumStale = true;
+            }
+          } catch { this._albumStale = true; }
+        } else {
+          let msg = t('party.album.uploadFailed');
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* keep default */ }
+          entry.status = 'error';
+          entry.error  = msg;
+        }
+        this._renderQueue();
+        resolve();
+      };
+
+      xhr.onerror = xhr.onabort = () => {
+        entry.xhr    = null;
+        entry.status = 'error';
+        entry.error  = t('party.album.uploadFailed');
+        this._renderQueue();
+        resolve();
+      };
+
+      const form = new FormData();
+      form.append('file', entry.file);
+      if (thumb) form.append('thumb', thumb.blob, thumb.name);
+      xhr.send(form);
+    });
+  }
+
+  // Browser-side thumbnail: canvas downscale for photos, poster-frame capture
+  // for videos. Best-effort only — any failure (undecodable HEVC, canvas
+  // errors, slow decode) resolves null and the original uploads thumbless.
+  async _makeThumb(file) {
+    const THUMB_EDGE = 640;
+    const work = file.type.startsWith('video/')
+      ? this._makeVideoThumb(file, THUMB_EDGE)
+      : this._makeImageThumb(file, THUMB_EDGE);
+    try {
+      return await Promise.race([
+        work,
+        new Promise(resolve => setTimeout(() => resolve(null), 8000)),
+      ]);
+    } catch { return null; }
+  }
+
+  async _makeImageThumb(file, edge) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const scale  = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/webp', 0.8));
+      return blob ? { blob, name: 'thumb.webp' } : null;
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  _makeVideoThumb(file, edge) {
+    return new Promise((resolve, reject) => {
+      const url   = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      const cleanup = () => { video.src = ''; URL.revokeObjectURL(url); };
+
+      video.onloadedmetadata = () => { video.currentTime = Math.min(0.1, video.duration || 0.1); };
+      video.onseeked = async () => {
+        try {
+          const scale  = Math.min(1, edge / Math.max(video.videoWidth, video.videoHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width  = Math.max(1, Math.round(video.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+          cleanup();
+          resolve(blob ? { blob, name: 'thumb.jpg' } : null);
+        } catch (err) { cleanup(); reject(err); }
+      };
+      video.onerror = () => { cleanup(); resolve(null); };
+      video.src = url;
+    });
+  }
+
+  // ── Binding ───────────────────────────────────────────────────────────────────
+
+  _bindAll() {
+    if (this._hasPartyAccess()) this._bindRsvp();
+    this._bindAlbum();
+    this._bindVenueLightbox();
+    this._bindRequestForm();
+    if (canEdit()) this._bindEditing();
+
+    // Sign-in links on locked sections
+    this._el.querySelectorAll('.party-locked__signin-link').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('nav-auth')?.querySelector('button')?.click();
+      });
+    });
+  }
+
+  _bindRequestForm() {
+    const form = this._el.querySelector('#party-request-form');
+    if (!form) return;
+    const nameInput  = form.querySelector('#party-request-name');
+    const emailInput = form.querySelector('#party-request-email');
+    const btn        = form.querySelector('.party-request-form__submit');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name  = (nameInput?.value  || '').trim();
+      const email = (emailInput?.value || '').trim();
+      if (!name)  { showToast(t('party.requestNameRequired'),  'error'); nameInput?.focus();  return; }
+      if (!email) { showToast(t('party.requestEmailRequired'), 'error'); emailInput?.focus(); return; }
+
+      btn.disabled = true;
+      btn.textContent = t('party.requestSending');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/request-access', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify({ name, email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+
+        // Flip to the "check your email" panel and re-render.
+        this._requestSubmitted = true;
+        showToast(
+          data.status === 'already_member' ? t('party.requestExistingMember') : t('party.requestSubmitted'),
+          'success'
+        );
+        this._el.innerHTML = this._renderHub();
+        this._bindAll();
+        this._startCountdown();
+      } catch (err) {
+        showToast(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = t('party.requestSubmit');
+      }
+    });
+  }
+
+  // ── Inline Editing (admin only) ───────────────────────────────────────────
+
+  _bindEditing() {
+    this._editSnapshots = {};
+
+    this._el.querySelectorAll('[data-edit-section]').forEach(btn => {
+      btn.addEventListener('click', () => this._enterEdit(btn.dataset.editSection));
+    });
+    this._el.querySelectorAll('[data-save-section]').forEach(btn => {
+      btn.addEventListener('click', () => this._saveSection(btn.dataset.saveSection));
+    });
+    this._el.querySelectorAll('[data-cancel-section]').forEach(btn => {
+      btn.addEventListener('click', () => this._cancelEdit(btn.dataset.cancelSection));
+    });
+
+    this._bindHeroEditing();
+    this._initPartyHeroEdit();
+  }
+
+  _bindHeroEditing() {
+    const admin = this._el.querySelector('[data-hero-admin]');
+    if (!admin) return;
+
+    const fileInput = admin.querySelector('[data-hero-file]');
+    const changeBtn = admin.querySelector('[data-hero-change]');
+    const removeBtn = admin.querySelector('[data-hero-remove]');
+
+    changeBtn?.addEventListener('click', () => fileInput?.click());
+
+    fileInput?.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      this._uploadCoverImage(file);
+      fileInput.value = '';
+    });
+
+    removeBtn?.addEventListener('click', () => this._removeCoverImage());
+  }
+
+  async _uploadCoverImage(file) {
+    const status = this._el.querySelector('[data-hero-status]');
+    const setStatus = (msg) => { if (status) status.textContent = msg; };
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setStatus(t('party.admin.coverInvalidType'));
+      showToast(t('party.admin.coverInvalidType'), 'error');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setStatus(t('party.admin.coverTooLarge'));
+      showToast(t('party.admin.coverTooLarge'), 'error');
+      return;
+    }
+
+    setStatus(t('party.admin.coverUploading'));
+    try {
+      const headers = await getCsrfHeaders();
+      // Browser must set Content-Type with the multipart boundary — strip any
+      // JSON Content-Type that getCsrfHeaders includes by default.
+      delete headers['Content-Type'];
+      delete headers['content-type'];
+
+      const fd = new FormData();
+      fd.append('file', file);
+
+      const res = await fetch(`/api/v1/party/cover-image?locale=${encodeURIComponent(window.__locale || 'en')}`, {
+        method:      'POST',
+        credentials: 'include',
+        headers,
+        body:        fd,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Upload failed');
+      }
+      this._partyInfo = await res.json();
+      this._rerenderHero();
+      setStatus(t('party.admin.coverUploaded'));
+      showToast(t('party.admin.coverUploaded'), 'success');
+      setTimeout(() => setStatus(''), 2500);
+    } catch (err) {
+      setStatus(err.message);
+      showToast(err.message, 'error');
+    }
+  }
+
+  async _removeCoverImage() {
+    const status = this._el.querySelector('[data-hero-status]');
+    const setStatus = (msg) => { if (status) status.textContent = msg; };
+
+    setStatus(t('form.saving'));
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body:        JSON.stringify({ cover_image: '' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Save failed');
+      }
+      this._partyInfo = await res.json();
+      this._rerenderHero();
+      setStatus('');
+      showToast(t('form.success'), 'success');
+    } catch (err) {
+      setStatus(err.message);
+      showToast(err.message, 'error');
+    }
+  }
+
+  _rerenderHero() {
+    const heroEl = this._el.querySelector('.party-hero');
+    if (!heroEl) return;
+    heroEl.outerHTML = this._renderHero();
+    if (canEdit()) {
+      this._bindHeroEditing();
+      this._initPartyHeroEdit();
+    }
+    this._startCountdown();
+  }
+
+  // ── Party hero — inline edit for title/subtitle (admin/moderator) ─────────
+  _initPartyHeroEdit() {
+    if (!canEdit()) return;
+    const section = this._el.querySelector('.party-hero');
+    if (!section) return;
+
+    const editBtn  = section.querySelector('[data-hero-edit-text]');
+    const controls = section.querySelector('[data-hero-text-controls]');
+    if (!editBtn || !controls) return;
+
+    let _snapshot = null;
+
+    editBtn.addEventListener('click', () => {
+      _snapshot = JSON.parse(JSON.stringify(this._partyHero));
+      this._enterPartyHeroEdit(section, editBtn, controls);
+    });
+
+    controls.querySelector('[data-hero-text-save]').addEventListener('click', () =>
+      this._savePartyHeroEdit(section, controls)
+    );
+
+    controls.querySelector('[data-hero-text-cancel]').addEventListener('click', () => {
+      this._exitPartyHeroEdit(section, editBtn, controls);
+      if (_snapshot) this._restorePartyHeroEdit(section, _snapshot);
+    });
+  }
+
+  _enterPartyHeroEdit(section, editBtn, controls) {
+    section.classList.add('party-hero--editing');
+    editBtn.classList.add('party-edit-btn--hidden');
+    controls.classList.remove('party-edit-controls--hidden');
+    checkUntranslated('party_hero', controls);
+
+    section.querySelectorAll('[data-party-hero-field]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck      = true;
+    });
+  }
+
+  _exitPartyHeroEdit(section, editBtn, controls) {
+    section.classList.remove('party-hero--editing');
+    editBtn.classList.remove('party-edit-btn--hidden');
+    controls.classList.add('party-edit-controls--hidden');
+    const status = controls.querySelector('[data-hero-text-status]');
+    if (status) status.textContent = '';
+
+    section.querySelectorAll('[data-party-hero-field]').forEach(el => {
+      el.contentEditable = 'false';
+      el.removeAttribute('contenteditable');
+    });
+  }
+
+  _restorePartyHeroEdit(section, snapshot) {
+    const set = (field, value) => {
+      const el = section.querySelector(`[data-party-hero-field="${field}"]`);
+      if (el) el.textContent = value ?? '';
+    };
+    set('title_prefix', snapshot.title_prefix);
+    set('title_main',   snapshot.title_main);
+    set('title_suffix', snapshot.title_suffix);
+    set('subtitle',     snapshot.subtitle);
+    this._partyHero = snapshot;
+  }
+
+  async _savePartyHeroEdit(section, controls) {
+    const status = controls.querySelector('[data-hero-text-status]');
+    if (status) status.textContent = t('form.saving');
+
+    // textContent (not innerText) so any CSS text-transform doesn't bake into values.
+    const read = (field) =>
+      section.querySelector(`[data-party-hero-field="${field}"]`)?.textContent.trim()
+        ?? this._partyHero[field];
+
+    const updated = {
+      title_prefix: read('title_prefix'),
+      title_main:   read('title_main'),
+      title_suffix: read('title_suffix'),
+      subtitle:     read('subtitle'),
+    };
+
+    try {
+      const token = await getCSRFToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
+      };
+
+      // Always target the *active* locale on save. The locale middleware
+      // prefers req.user.preferred_locale, which would otherwise force every
+      // write back to the admin's stored locale regardless of which version
+      // they're looking at on screen.
+      const locale = encodeURIComponent(window.__locale || 'en');
+      const res = await fetch(`/api/v1/content/party_hero?locale=${locale}`, {
+        method: 'PUT', credentials: 'include', headers,
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+
+      this._partyHero = await res.json();
+      if (status) {
+        status.textContent = t('form.success');
+        setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+      }
+    } catch (err) {
+      if (status) status.textContent = `Error: ${err.message}`;
+    }
+  }
+
+  _enterEdit(section) {
+    // RSVP uses a custom form-builder editing flow
+    if (section === 'rsvp') { this._enterEditRsvpForm(); return; }
+    // RSVP message is a free-form paragraph — inline edit handled separately
+    if (section === 'rsvpMessage') { this._enterEditRsvpMessage(); return; }
+
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl) return;
+
+    // Snapshot for cancel
+    this._editSnapshots[section] = sectionEl.querySelector('.party-section__inner').innerHTML;
+
+    // Show controls, hide edit button
+    sectionEl.classList.add('party-section--editing');
+    sectionEl.querySelector(`[data-edit-section="${section}"]`)?.classList.add('party-edit-btn--hidden');
+    sectionEl.querySelector(`[data-controls="${section}"]`)?.classList.remove('party-edit-controls--hidden');
+
+    // Enable contentEditable on data fields
+    const editableSelectors = {
+      venue:      '[data-field], [data-detail]',
+      schedule:   '[data-sched]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"], [data-activity-heading]',
+    };
+    sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck = true;
+    });
+
+    // Show add/delete buttons for schedule
+    if (section === 'schedule') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.remove('party-edit-row-delete--hidden'));
+      sectionEl.querySelectorAll('.party-edit-row-insert').forEach(b => b.classList.remove('party-edit-row-insert--hidden'));
+      sectionEl.querySelector('[data-add-schedule]')?.classList.remove('party-edit-add--hidden');
+      this._bindScheduleAddDelete(sectionEl);
+    }
+
+    // Show add/delete buttons for activities
+    if (section === 'activities') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.remove('party-edit-row-delete--hidden'));
+      sectionEl.querySelectorAll('[data-add-activity]').forEach(b => b.classList.remove('party-edit-add--hidden'));
+      this._bindActivitiesAddDelete(sectionEl);
+    }
+  }
+
+  // ── RSVP form: inline label/option editing (per-locale) ────────────────────
+  //
+  // Default BREYTA flow. Makes every label and option visible in the summary
+  // card + form contentEditable so admins can rename them in place. Save
+  // routes through PUT /api/v1/content/party_rsvp_form?locale=<active>, which
+  // upserts the matching per-locale row and (for EN) auto-translates string
+  // leaves into the IS sibling. Structural edits (add/remove fields, set
+  // show-if) remain reachable via the "+ Manage fields" toggle, which calls
+  // _enterEditRsvpStructural below.
+  _enterEditRsvpForm() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+
+    // Snapshot the form array (not innerHTML) so cancel restores cleanly via
+    // _paintRsvpLabels without rebuilding the section.
+    this._editSnapshots['rsvp'] = JSON.parse(JSON.stringify(this._rsvpForm || []));
+
+    sectionEl.classList.add('party-section--editing');
+    sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.add('party-edit-btn--hidden');
+    const controls = sectionEl.querySelector('[data-controls="rsvp"]');
+    controls?.classList.remove('party-edit-controls--hidden');
+
+    // ⚠ Óþýtt chip: surfaces when the IS row is identical to (or empty vs.) EN.
+    checkUntranslated('party_rsvp_form', controls);
+
+    // Make every label + option editable. data-field-label is on the form
+    // labels AND on the <strong> inside the summary card; data-option-index
+    // is on each option <span>.
+    sectionEl.querySelectorAll('[data-field-label], [data-option-index]').forEach(el => {
+      el.contentEditable = 'true';
+      el.spellcheck = true;
+    });
+
+    // Mirror label edits between summary and form for the same field id —
+    // they share the same logical label, so editing in one place updates
+    // both visually during the edit session.
+    sectionEl.querySelectorAll('[data-field-label]').forEach(el => {
+      el.addEventListener('input', () => this._mirrorFieldLabel(el));
+    });
+
+    // Add a "+ Manage fields" button that swaps into the structural editor
+    // for adding/removing fields. Only inject once per edit session.
+    if (controls && !controls.querySelector('[data-rsvp-manage-fields]')) {
+      const manageBtn = document.createElement('button');
+      manageBtn.type = 'button';
+      manageBtn.className = 'party-edit-add party-edit-add--sm';
+      manageBtn.setAttribute('data-rsvp-manage-fields', '');
+      manageBtn.textContent = '+ Manage fields';
+      manageBtn.addEventListener('click', () => this._enterEditRsvpStructural());
+      controls.appendChild(manageBtn);
+    }
+  }
+
+  // Walk every [data-field-label] in the RSVP section and propagate the
+  // current element's text to its siblings that share the same data-field-id.
+  // The summary <strong> has no data-field-id of its own (the parent <p> does),
+  // so we walk up to find the field id and then sync siblings within the same
+  // section.
+  //
+  // textContent (not innerText) — the radio/checkbox labels have CSS
+  // text-transform: uppercase, which makes innerText return the rendered
+  // uppercase text. We need the raw characters the admin typed.
+  _mirrorFieldLabel(srcEl) {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+    const parent = srcEl.closest('[data-field-id]');
+    const fieldId = parent?.dataset.fieldId;
+    if (!fieldId) return;
+    const text = srcEl.textContent;
+    sectionEl.querySelectorAll(`[data-field-id="${CSS.escape(fieldId)}"] [data-field-label]`).forEach(el => {
+      if (el !== srcEl && el.textContent !== text) el.textContent = text;
+    });
+    // Heading/paragraph have data-field-label ON the field-id element itself —
+    // they need the equality check separately so we don't write to srcEl.
+    const self = sectionEl.querySelector(`[data-field-id="${CSS.escape(fieldId)}"][data-field-label]`);
+    if (self && self !== srcEl && self.textContent !== text) self.textContent = text;
+  }
+
+  // Collect the rsvp_form array from the rendered DOM. Preserves every
+  // structural field (id, type, placeholder, showIf) from this._rsvpForm and
+  // overwrites only label + options[i] strings from the edited DOM. The
+  // summary card and the form share the same field id; we read from the form
+  // label (which always exists), falling back to the summary label if the
+  // form is hidden because the user has RSVP'd and the form-wrap is removed
+  // from view (it's `hidden`, not detached, so it's still in the DOM).
+  _collectRsvpFormInline() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return JSON.parse(JSON.stringify(this._rsvpForm || []));
+    return (this._rsvpForm || []).map(field => {
+      const idSel = CSS.escape(field.id);
+      const labelEl =
+        sectionEl.querySelector(`[data-field-id="${idSel}"][data-field-label]`) ||
+        sectionEl.querySelector(`[data-field-id="${idSel}"] [data-field-label]`);
+      const next = { ...field };
+      if (labelEl) next.label = labelEl.textContent.replace(/\r\n/g, '\n').trim();
+      if (Array.isArray(field.options)) {
+        const isRadio = field.type === 'radio-group';
+        next.options = field.options.map((opt, i) => {
+          const norm = normalizeRsvpOption(opt);
+          const optEl   = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
+          const label   = optEl ? optEl.textContent.trim() : norm.label;
+          if (!isRadio) return label;
+          // The pill sits inside the same <label> as the option <span>; read
+          // its data-option-status (mutated by the cycle handler in
+          // _bindRsvp). Falls back to the stored status when no pill rendered.
+          const pill   = optEl?.closest('label')?.querySelector('[data-option-status-pill]');
+          const status = RSVP_OPTION_STATUSES.includes(pill?.dataset.optionStatus)
+            ? pill.dataset.optionStatus
+            : norm.status;
+          return { label, status };
+        });
+      }
+      return next;
+    });
+  }
+
+  // Repaint summary + form labels/options from this._rsvpForm without
+  // rebuilding the section. Used on save (re-paint with persisted values)
+  // and cancel (re-paint with snapshot values).
+  _paintRsvpLabels() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+    (this._rsvpForm || []).forEach(field => {
+      const idSel = CSS.escape(field.id);
+      const self = sectionEl.querySelector(`[data-field-id="${idSel}"][data-field-label]`);
+      if (self) self.textContent = field.label || '';
+      sectionEl.querySelectorAll(`[data-field-id="${idSel}"] [data-field-label]`).forEach(el => {
+        el.textContent = field.label || '';
+      });
+      if (Array.isArray(field.options)) {
+        const isRadio = field.type === 'radio-group';
+        field.options.forEach((opt, i) => {
+          const { label, status } = normalizeRsvpOption(opt);
+          const optEl = sectionEl.querySelector(`[data-field-id="${idSel}"] [data-option-index="${i}"]`);
+          if (optEl) optEl.textContent = label;
+          if (!isRadio) return;
+          // Sync the status pill so cancel restores the snapshot and save
+          // reflects the persisted shape, even when the admin tabbed back
+          // to inline-edit without leaving the section.
+          const pill = optEl?.closest('label')?.querySelector('[data-option-status-pill]');
+          if (pill) {
+            pill.dataset.optionStatus = status;
+            pill.className = `party-rsvp__option-status party-rsvp__option-status--${status}`;
+            pill.setAttribute('aria-label', `Status: ${status}`);
+            pill.textContent = this._statusPillText(status);
+          }
+        });
+      }
+    });
+  }
+
+  // Tear down the inline-edit state without rebuilding the section.
+  _exitEditRsvpForm() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+    sectionEl.classList.remove('party-section--editing');
+    sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.remove('party-edit-btn--hidden');
+    const controls = sectionEl.querySelector('[data-controls="rsvp"]');
+    controls?.classList.add('party-edit-controls--hidden');
+    sectionEl.querySelectorAll('[data-field-label], [data-option-index]').forEach(el => {
+      el.contentEditable = 'false';
+    });
+    controls?.querySelector('[data-rsvp-manage-fields]')?.remove();
+    const statusEl = sectionEl.querySelector('[data-status="rsvp"]');
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  // ── RSVP form: structural editing (add/remove fields, show-if) ─────────────
+  //
+  // Triggered by the "+ Manage fields" button inside the inline edit controls.
+  // Replaces #rsvp-inner with the form-builder editor exactly as it used to
+  // when BREYTA was the entry point — this preserves the only path admins
+  // have to add/remove fields, change types, or wire up show-if conditions.
+  _enterEditRsvpStructural() {
+    const sectionEl = this._getSectionEl('rsvp');
+    if (!sectionEl) return;
+
+    const inner = sectionEl.querySelector('#rsvp-inner');
+    // Keep the inline snapshot intact if the admin clicked Manage fields
+    // mid-edit (so a subsequent Cancel still works). Only stash the inner
+    // HTML if we have not already snapshotted via _enterEditRsvpForm.
+    if (!Array.isArray(this._editSnapshots['rsvp'])) {
+      this._editSnapshots['rsvp'] = inner.innerHTML;
+    } else {
+      this._editSnapshots['rsvpStructuralInner'] = inner.innerHTML;
+    }
+
+    sectionEl.classList.add('party-section--editing');
+    sectionEl.querySelector('[data-edit-section="rsvp"]')?.classList.add('party-edit-btn--hidden');
+    sectionEl.querySelector('[data-controls="rsvp"]')?.classList.remove('party-edit-controls--hidden');
+
+    // Replace inner content with the form-builder editor
+    inner.innerHTML = `
+      <div class="party-rsvp-builder" id="rsvp-builder">
+        ${this._rsvpForm.map(f => this._renderFieldEditor(f)).join('')}
+      </div>
+      <div class="party-rsvp-builder__add">
+        <label class="party-label" for="rsvp-add-type">Add field:</label>
+        <select id="rsvp-add-type" class="lol-input">
+          <option value="heading">Heading</option>
+          <option value="paragraph">Paragraph</option>
+          <option value="checkbox-group">Checkbox group</option>
+          <option value="radio-group">Radio buttons (single choice)</option>
+          <option value="text">Text input</option>
+          <option value="textarea">Text area</option>
+        </select>
+        <button type="button" class="party-edit-add" id="rsvp-add-field-btn">+ Add Field</button>
+      </div>`;
+
+    this._bindRsvpBuilder();
+  }
+
+  _renderFieldEditor(field) {
+    const id = field.id || ('f' + Date.now() + Math.random().toString(36).slice(2, 6));
+    // Radio options gain a Going/Maybe/Declined status select so admins can
+    // drive the bucket on the /party/admin page without relying on label
+    // regexes. Checkbox groups never look at status, so their rows stay flat.
+    const isRadio = field.type === 'radio-group';
+    const optionsHtml = (field.options || []).map(opt => {
+      const { label, status } = normalizeRsvpOption(opt);
+      const statusSelect = isRadio ? `
+        <select class="lol-input party-edit-list-item__status" data-option-status aria-label="Option status">
+          <option value="going"   ${status === 'going'    ? 'selected' : ''}>✅ Going</option>
+          <option value="maybe"   ${status === 'maybe'    ? 'selected' : ''}>🤔 Maybe</option>
+          <option value="declined"${status === 'declined' ? 'selected' : ''}>❌ Declined</option>
+        </select>` : '';
+      return `
+      <div class="party-edit-list-item" data-option-row>
+        <input class="lol-input" type="text" data-option-input value="${escHtml(label)}" />
+        ${statusSelect}
+        <button class="party-edit-row-delete" type="button" data-delete-option aria-label="Remove option" title="Remove">✕</button>
+      </div>`;
+    }).join('');
+
+    const typeLabels = {
+      'heading':        'Heading',
+      'paragraph':      'Paragraph',
+      'checkbox-group': 'Checkbox group',
+      'radio-group':    'Radio buttons (single choice)',
+      'text':           'Text input',
+      'textarea':       'Text area',
+    };
+
+    const labelPlaceholder = field.type === 'paragraph'
+      ? 'Paragraph text…'
+      : (field.type === 'heading' ? 'Heading text…' : 'Question / field label');
+
+    const showIfFieldId = field.showIf?.fieldId || '';
+    const showIfValue   = field.showIf?.value || '';
+    const supportsShowIf = ['text', 'textarea', 'checkbox-group', 'radio-group'].includes(field.type);
+
+    return `
+      <div class="party-field-block" data-field-block data-field-id="${escHtml(id)}" data-field-type="${escHtml(field.type)}">
+        <div class="party-field-block__header">
+          <span class="party-field-block__type">${typeLabels[field.type] || field.type}</span>
+          <button class="party-edit-row-delete" type="button" data-delete-field aria-label="Delete field" title="Delete field">✕</button>
+        </div>
+        ${field.type === 'paragraph'
+          ? `<textarea class="lol-input" data-field-label rows="3" placeholder="${labelPlaceholder}">${escHtml(field.label || '')}</textarea>`
+          : `<input class="lol-input" type="text" data-field-label value="${escHtml(field.label || '')}" placeholder="${labelPlaceholder}" />`}
+        ${['checkbox-group', 'radio-group'].includes(field.type) ? `
+          <div class="party-field-block__options">
+            ${optionsHtml}
+            <button class="party-edit-add party-edit-add--sm" type="button" data-add-option>+ Add Option</button>
+          </div>` : ''}
+        ${['text','textarea'].includes(field.type) ? `
+          <input class="lol-input party-field-block__placeholder" type="text"
+                 data-field-placeholder value="${escHtml(field.placeholder || '')}" placeholder="Placeholder text (optional)" />` : ''}
+        ${supportsShowIf ? `
+          <details class="party-field-block__showif"${showIfFieldId ? ' open' : ''}>
+            <summary>Show only if…</summary>
+            <div class="party-field-block__showif-row">
+              <input class="lol-input" type="text" data-show-if-field
+                     value="${escHtml(showIfFieldId)}" placeholder="Other field id (e.g. helping)" />
+              <input class="lol-input" type="text" data-show-if-value
+                     value="${escHtml(showIfValue)}" placeholder="Value that must match" />
+            </div>
+          </details>` : ''}
+      </div>`;
+  }
+
+  _bindRsvpBuilder() {
+    const builder = this._el.querySelector('#rsvp-builder');
+    if (!builder) return;
+
+    const bindBlock = (block) => {
+      block.querySelector('[data-delete-field]')?.addEventListener('click', () => block.remove());
+      block.querySelectorAll('[data-delete-option]').forEach(btn => {
+        btn.addEventListener('click', () => btn.closest('[data-option-row]')?.remove());
+      });
+      block.querySelector('[data-add-option]')?.addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'party-edit-list-item';
+        row.setAttribute('data-option-row', '');
+        const isRadio = block.dataset.fieldType === 'radio-group';
+        const statusSelect = isRadio ? `
+          <select class="lol-input party-edit-list-item__status" data-option-status aria-label="Option status">
+            <option value="going" selected>✅ Going</option>
+            <option value="maybe">🤔 Maybe</option>
+            <option value="declined">❌ Declined</option>
+          </select>` : '';
+        row.innerHTML = `
+          <input class="lol-input" type="text" data-option-input value="" placeholder="New option…" />
+          ${statusSelect}
+          <button class="party-edit-row-delete" type="button" data-delete-option aria-label="Remove option" title="Remove">✕</button>`;
+        row.querySelector('[data-delete-option]').addEventListener('click', () => row.remove());
+        block.querySelector('[data-add-option]').before(row);
+        row.querySelector('input')?.focus();
+      });
+    };
+
+    builder.querySelectorAll('[data-field-block]').forEach(bindBlock);
+
+    // Add field
+    this._el.querySelector('#rsvp-add-field-btn')?.addEventListener('click', () => {
+      const type = this._el.querySelector('#rsvp-add-type').value;
+      const defaults = {
+        'heading':        { label: 'New heading' },
+        'paragraph':      { label: 'New paragraph of text' },
+        'checkbox-group': { label: 'New question', options: ['Option 1'] },
+        'radio-group':    { label: 'New question', options: ['Option 1'] },
+        'text':           { label: 'New text field' },
+        'textarea':       { label: 'New text area' },
+      };
+      const field = { id: 'f' + Date.now(), type, ...defaults[type] };
+      const wrap  = document.createElement('div');
+      wrap.innerHTML = this._renderFieldEditor(field);
+      const block = wrap.firstElementChild;
+      builder.appendChild(block);
+      bindBlock(block);
+      block.querySelector('[data-field-label]')?.focus();
+    });
+  }
+
+  _collectRsvpForm() {
+    const fields = [];
+    this._el.querySelectorAll('[data-field-block]').forEach(block => {
+      const id    = block.dataset.fieldId;
+      const type  = block.dataset.fieldType;
+      const label = block.querySelector('[data-field-label]')?.value.trim() || '';
+      const field = { id, type, label };
+      if (type === 'checkbox-group' || type === 'radio-group') {
+        const isRadio = type === 'radio-group';
+        const opts = [];
+        // Iterate rows (not inputs) so each option's status select sits in
+        // the same DOM neighbourhood as its label. Radio rows save as
+        // { label, status }; checkbox rows stay as plain strings since the
+        // backend never looks at status on multi-select fields.
+        block.querySelectorAll('[data-option-row]').forEach(row => {
+          const v = row.querySelector('[data-option-input]')?.value.trim() || '';
+          if (!v) return;
+          if (!isRadio) { opts.push(v); return; }
+          const rawStatus = row.querySelector('[data-option-status]')?.value;
+          const status = RSVP_OPTION_STATUSES.includes(rawStatus) ? rawStatus : 'going';
+          opts.push({ label: v, status });
+        });
+        field.options = opts;
+      }
+      if (type === 'text' || type === 'textarea') {
+        const ph = block.querySelector('[data-field-placeholder]')?.value.trim();
+        if (ph) field.placeholder = ph;
+      }
+      const showIfFieldId = block.querySelector('[data-show-if-field]')?.value.trim() || '';
+      const showIfValue   = block.querySelector('[data-show-if-value]')?.value.trim() || '';
+      if (showIfFieldId && showIfValue) {
+        field.showIf = { fieldId: showIfFieldId, value: showIfValue };
+      }
+      // Keep headings/paragraphs even without label (empty still useful)
+      // Drop option-based fields with no options — they'd be useless
+      if ((type === 'checkbox-group' || type === 'radio-group') && field.options.length === 0) return;
+      fields.push(field);
+    });
+    return fields;
+  }
+
+  // ── RSVP message (admin-curated paragraph above the RSVP form) ────────────
+  // Inline edit on a free-form paragraph. Per-locale, so admins can write
+  // separate EN and IS versions. Visible to anyone with party access.
+
+  _enterEditRsvpMessage() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    if (!msgEl) return;
+    const placeholder = msgEl.querySelector('.party-rsvp__message-placeholder');
+    // Snapshot the saved text (not the placeholder), so cancel restores cleanly.
+    this._editSnapshots.rsvpMessage = placeholder
+      ? ''
+      : this._partyInfo?.rsvp_message || '';
+
+    this._el.querySelector('[data-edit-section="rsvpMessage"]')?.classList.add('party-edit-btn--hidden');
+    this._el.querySelector('[data-controls="rsvpMessage"]')?.classList.remove('party-edit-controls--hidden');
+
+    // Replace any placeholder span with raw text so contentEditable acts on plain text.
+    msgEl.textContent = this._editSnapshots.rsvpMessage;
+    msgEl.contentEditable = 'true';
+    msgEl.spellcheck = true;
+    msgEl.classList.add('party-rsvp__message--editing');
+    msgEl.focus();
+    // Place caret at the end so admin can keep typing where they left off.
+    const range = document.createRange();
+    range.selectNodeContents(msgEl);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  _cancelEditRsvpMessage() {
+    this._renderRsvpMessageBody();
+    this._exitEditRsvpMessage();
+  }
+
+  _exitEditRsvpMessage() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    if (msgEl) {
+      msgEl.contentEditable = 'false';
+      msgEl.classList.remove('party-rsvp__message--editing');
+    }
+    this._el.querySelector('[data-edit-section="rsvpMessage"]')?.classList.remove('party-edit-btn--hidden');
+    this._el.querySelector('[data-controls="rsvpMessage"]')?.classList.add('party-edit-controls--hidden');
+    const statusEl = this._el.querySelector('[data-status="rsvpMessage"]');
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  // Refresh the message paragraph from this._partyInfo. Used after save and
+  // cancel to render the placeholder/text without rebuilding the whole section.
+  _renderRsvpMessageBody() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    if (!msgEl) return;
+    const text = typeof this._partyInfo?.rsvp_message === 'string' ? this._partyInfo.rsvp_message : '';
+    if (text.trim()) {
+      msgEl.innerHTML = escHtml(text).replace(/\n/g, '<br>');
+    } else if (canEdit()) {
+      msgEl.innerHTML = `<span class="party-rsvp__message-placeholder">${escHtml(t('party.admin.rsvpMessagePlaceholder'))}</span>`;
+    } else {
+      msgEl.innerHTML = '';
+    }
+  }
+
+  async _saveRsvpMessage() {
+    const msgEl = this._el.querySelector('[data-rsvp-message]');
+    const statusEl = this._el.querySelector('[data-status="rsvpMessage"]');
+    if (!msgEl) return;
+
+    const raw = msgEl.innerText.replace(/\r\n/g, '\n').trim();
+    if (statusEl) statusEl.textContent = t('form.saving');
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body:        JSON.stringify({ rsvp_message: raw }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Save failed');
+      }
+      this._partyInfo = await res.json();
+      this._renderRsvpMessageBody();
+      this._exitEditRsvpMessage();
+      showToast(t('form.success'), 'success');
+    } catch (err) {
+      if (statusEl) statusEl.textContent = err.message;
+    }
+  }
+
+  _exitEdit(section) {
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl) return;
+
+    sectionEl.classList.remove('party-section--editing');
+    sectionEl.querySelector(`[data-edit-section="${section}"]`)?.classList.remove('party-edit-btn--hidden');
+    sectionEl.querySelector(`[data-controls="${section}"]`)?.classList.add('party-edit-controls--hidden');
+
+    const editableSelectors = {
+      venue:      '[data-field], [data-detail]',
+      schedule:   '[data-sched]',
+      activities: '[data-activity="name"], [data-activity="desc"], [data-activity="rules-label"], [data-activity="rules-text"], [data-activity-heading]',
+    };
+    sectionEl.querySelectorAll(editableSelectors[section] || '[data-field]').forEach(el => {
+      el.contentEditable = 'false';
+    });
+
+    // Hide add/delete buttons
+    if (section === 'schedule') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.add('party-edit-row-delete--hidden'));
+      sectionEl.querySelector('[data-add-schedule]')?.classList.add('party-edit-add--hidden');
+    }
+    if (section === 'activities') {
+      sectionEl.querySelectorAll('.party-edit-row-delete').forEach(b => b.classList.add('party-edit-row-delete--hidden'));
+      sectionEl.querySelectorAll('[data-add-activity]').forEach(b => b.classList.add('party-edit-add--hidden'));
+    }
+
+    // Clear status
+    const statusEl = sectionEl.querySelector(`[data-status="${section}"]`);
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  _cancelEdit(section) {
+    if (section === 'rsvpMessage') { this._cancelEditRsvpMessage(); return; }
+    if (section === 'rsvp') {
+      const snapshot = this._editSnapshots[section];
+      // Inline snapshot (the default — set by _enterEditRsvpForm): restore
+      // the form array from the deep clone. If the structural builder was
+      // also opened mid-session, _editSnapshots.rsvpStructuralInner exists
+      // but is irrelevant — re-rendering from the array covers both modes.
+      if (Array.isArray(snapshot)) {
+        this._rsvpForm = JSON.parse(JSON.stringify(snapshot));
+        delete this._editSnapshots.rsvpStructuralInner;
+        const sectionEl = this._getSectionEl('rsvp');
+        const rsvpEl = sectionEl || this._el.querySelector('.party-rsvp');
+        if (rsvpEl) {
+          rsvpEl.outerHTML = this._renderRsvp();
+          this._bindRsvp();
+          if (canEdit()) this._bindEditing();
+        }
+        return;
+      }
+      // Legacy structural-only path (snapshot is innerHTML string). Kept
+      // for safety in case _enterEditRsvpStructural ever runs as the
+      // entry point — it currently does not, but the fallback is cheap.
+      const sectionEl = this._getSectionEl('rsvp');
+      const inner     = sectionEl?.querySelector('#rsvp-inner');
+      if (inner && typeof snapshot === 'string') {
+        inner.innerHTML = snapshot;
+      }
+      sectionEl?.classList.remove('party-section--editing');
+      sectionEl?.querySelector('[data-edit-section="rsvp"]')?.classList.remove('party-edit-btn--hidden');
+      sectionEl?.querySelector('[data-controls="rsvp"]')?.classList.add('party-edit-controls--hidden');
+      sectionEl?.querySelector('[data-controls="rsvp"] [data-rsvp-manage-fields]')?.remove();
+      this._bindRsvp();
+      return;
+    }
+
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl || !this._editSnapshots[section]) return;
+
+    sectionEl.querySelector('.party-section__inner').innerHTML = this._editSnapshots[section];
+    this._exitEdit(section);
+
+    // Re-bind venue lightbox if venue was cancelled
+    if (section === 'venue') this._bindVenueLightbox();
+  }
+
+  async _saveSection(section) {
+    if (section === 'rsvpMessage') { await this._saveRsvpMessage(); return; }
+    const sectionEl = this._getSectionEl(section);
+    if (!sectionEl) return;
+
+    const statusEl = sectionEl.querySelector(`[data-status="${section}"]`);
+    if (statusEl) statusEl.textContent = t('form.saving');
+
+    const payload = {};
+
+    if (section === 'venue') {
+      const getName = (f) => sectionEl.querySelector(`[data-field="${f}"]`)?.innerText.trim() || '';
+      payload.venue_name    = getName('venue_name');
+      payload.venue_address = getName('venue_address');
+      // Strip the star emoji from rating if present
+      const rawRating = getName('venue_rating');
+      payload.venue_rating  = rawRating.replace(/^⭐\s*/, '').trim();
+
+      // Collect hall + spa detail lists
+      const hall = [];
+      sectionEl.querySelectorAll('[data-detail="hall"]').forEach(li => {
+        const text = li.innerText.trim();
+        if (text) hall.push(text);
+      });
+      const spa = [];
+      sectionEl.querySelectorAll('[data-detail="spa"]').forEach(li => {
+        const text = li.innerText.trim();
+        if (text) spa.push(text);
+      });
+      payload.venue_details = JSON.stringify({ hall, spa });
+    }
+
+    if (section === 'schedule') {
+      const items = [];
+      sectionEl.querySelectorAll('[data-schedule-index]').forEach(li => {
+        items.push({
+          time:  li.querySelector('[data-sched="time"]')?.innerText.trim()  || '',
+          event: li.querySelector('[data-sched="event"]')?.innerText.trim() || '',
+        });
+      });
+      payload.schedule = JSON.stringify(items);
+    }
+
+    if (section === 'activities') {
+      const collect = (group) => {
+        const items = [];
+        sectionEl.querySelectorAll(`[data-activity-group="${group}"]`).forEach(card => {
+          items.push({
+            name:        card.querySelector('[data-activity="name"]')?.innerText.trim()        || '',
+            description: card.querySelector('[data-activity="desc"]')?.innerText.trim()        || '',
+            rulesLabel:  card.querySelector('[data-activity="rules-label"]')?.innerText.trim() || '',
+            rules:       card.querySelector('[data-activity="rules-text"]')?.innerText.trim()  || '',
+          });
+        });
+        return items;
+      };
+      const readHeading = (which) =>
+        sectionEl.querySelector(`[data-activity-heading="${which}"]`)?.innerText.trim() || '';
+      payload.activities = JSON.stringify({
+        heading:        readHeading('main'),
+        daytimeHeading: readHeading('daytime'),
+        eveningHeading: readHeading('evening'),
+        daytime:        collect('daytime'),
+        evening:        collect('evening'),
+      });
+    }
+
+    if (section === 'rsvp') {
+      // Inline mode (default) vs. structural mode (form-builder dialog opened
+      // via "+ Manage fields"). Detect by the presence of the builder element.
+      const isStructural = !!sectionEl.querySelector('#rsvp-builder');
+      const fields = isStructural ? this._collectRsvpForm() : this._collectRsvpFormInline();
+      const locale = window.__locale || 'en';
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch(`/api/v1/content/party_rsvp_form?locale=${encodeURIComponent(locale)}`, {
+          method:      'PUT',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify(fields),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Save failed');
+        }
+        const persisted = await res.json();
+        this._rsvpForm = Array.isArray(persisted) && persisted.length ? persisted : this._defaultRsvpForm();
+        // Mirror the new form into _partyInfo.rsvp_form so any other code
+        // reading it (email previews, admin stats) sees the latest shape.
+        if (this._partyInfo) this._partyInfo.rsvp_form = JSON.stringify(this._rsvpForm);
+
+        if (isStructural) {
+          // Structural edits may add/remove fields — re-render the whole
+          // section so summary, form, and builder state all match.
+          const rsvpSection = this._el.querySelector('.party-rsvp');
+          if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
+          this._bindRsvp();
+          if (canEdit()) this._bindEditing();
+        } else {
+          // Inline edits only changed labels/options — repaint in place so
+          // the user's answers (and any other section state) don't blink.
+          this._paintRsvpLabels();
+          this._exitEditRsvpForm();
+        }
+        showToast(t('form.success'), 'success');
+      } catch (err) {
+        if (statusEl) statusEl.textContent = err.message;
+      }
+      return;
+    }
+
+    try {
+      const headers = await getCsrfHeaders();
+      const res = await fetch(`/api/v1/party/info?locale=${encodeURIComponent(window.__locale || 'en')}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers,
+        body:        JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Save failed');
+      }
+
+      // Update local data
+      const updated = await res.json();
+      this._partyInfo = updated;
+
+      if (statusEl) {
+        statusEl.textContent = t('form.success');
+        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+      }
+      this._exitEdit(section);
+    } catch (err) {
+      if (statusEl) statusEl.textContent = err.message;
+    }
+  }
+
+  // Build a blank, edit-ready schedule <li> (time/event fields + insert/delete
+  // buttons). Buttons are created already-visible since rows are only added
+  // while the section is in edit mode.
+  _makeScheduleRow() {
+    const li = document.createElement('li');
+    li.className = 'party-timeline__item';
+    // Give it the ordering attribute up front so the save collector and
+    // _reindexSchedule (which select on [data-schedule-index]) see it; the
+    // real value is assigned by _reindexSchedule right after insertion.
+    li.dataset.scheduleIndex = '0';
+    li.innerHTML = `
+      <div class="party-timeline__time" data-sched="time" contenteditable="true" spellcheck="true">00:00</div>
+      <div class="party-timeline__dot" aria-hidden="true"></div>
+      <div class="party-timeline__event" data-sched="event" contenteditable="true" spellcheck="true">New event</div>
+      <button class="party-edit-row-insert" data-insert-schedule aria-label="Insert event above" title="Insert event above">＋</button>
+      <button class="party-edit-row-delete" data-delete-schedule aria-label="Remove this event" title="Remove">✕</button>`;
+    return li;
+  }
+
+  // Re-number data-schedule-index across all rows. Cosmetic — save reads DOM
+  // order, not the index value — but keeps the attribute honest after edits.
+  _reindexSchedule(sectionEl) {
+    sectionEl.querySelectorAll('[data-schedule-index]').forEach((li, i) => {
+      li.dataset.scheduleIndex = i;
+    });
+  }
+
+  _bindScheduleAddDelete(sectionEl) {
+    // Delete buttons
+    sectionEl.querySelectorAll('[data-delete-schedule]').forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        newBtn.closest('[data-schedule-index]')?.remove();
+        this._reindexSchedule(sectionEl);
+      });
+    });
+
+    // Insert-above buttons
+    sectionEl.querySelectorAll('[data-insert-schedule]').forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        const targetLi = newBtn.closest('[data-schedule-index]');
+        if (!targetLi) return;
+        const li = this._makeScheduleRow();
+        targetLi.before(li);
+        this._reindexSchedule(sectionEl);
+        this._bindScheduleAddDelete(sectionEl);
+        li.querySelector('[data-sched="time"]')?.focus();
+      });
+    });
+
+    // Add button (appends at the bottom)
+    const addBtn = sectionEl.querySelector('[data-add-schedule]');
+    if (addBtn) {
+      const newAdd = addBtn.cloneNode(true);
+      addBtn.replaceWith(newAdd);
+      newAdd.addEventListener('click', () => {
+        const timeline = sectionEl.querySelector('.party-timeline');
+        if (!timeline) return;
+        const li = this._makeScheduleRow();
+        timeline.appendChild(li);
+        this._reindexSchedule(sectionEl);
+        this._bindScheduleAddDelete(sectionEl);
+        li.querySelector('[data-sched="time"]')?.focus();
+      });
+    }
+  }
+
+  _bindActivitiesAddDelete(sectionEl) {
+    // Delete buttons
+    sectionEl.querySelectorAll('[data-delete-activity]').forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        const card = newBtn.closest('[data-activity-group]');
+        const group = card?.dataset.activityGroup;
+        card?.remove();
+        // Re-index remaining cards in that group
+        sectionEl.querySelectorAll(`[data-activity-group="${group}"]`).forEach((c, i) => {
+          c.dataset.activityIndex = i;
+        });
+      });
+    });
+
+    // Add buttons (one per group)
+    sectionEl.querySelectorAll('[data-add-activity]').forEach(addBtn => {
+      const newAdd = addBtn.cloneNode(true);
+      addBtn.replaceWith(newAdd);
+      newAdd.addEventListener('click', () => {
+        const group = newAdd.dataset.addActivity;
+        const grid = sectionEl.querySelector(`[data-activities-grid="${group}"]`);
+        if (!grid) return;
+        const count = grid.querySelectorAll('[data-activity-group]').length;
+        const card = document.createElement('div');
+        card.className = 'party-activity-card';
+        card.dataset.activityIndex = count;
+        card.dataset.activityGroup = group;
+        card.innerHTML = `
+          <button class="party-edit-row-delete" data-delete-activity="${group}-${count}" aria-label="Remove this activity" title="Remove">✕</button>
+          <h3 class="party-activity-card__name" data-activity="name" contenteditable="true" spellcheck="true">New Activity</h3>
+          <p class="party-activity-card__desc" data-activity="desc" contenteditable="true" spellcheck="true">Description</p>
+          <p class="party-activity-card__rules" data-activity="rules">
+            <strong data-activity="rules-label" contenteditable="true" spellcheck="true">Rules:</strong>
+            <span data-activity="rules-text" contenteditable="true" spellcheck="true">Rules here</span>
+          </p>`;
+        grid.appendChild(card);
+        this._bindActivitiesAddDelete(sectionEl);
+        card.querySelector('[data-activity="name"]')?.focus();
+      });
+    });
+  }
+
+  _getSectionEl(section) {
+    const map = {
+      venue: '.party-venue', schedule: '.party-schedule', activities: '.party-activities',
+      rsvp: '.party-rsvp',
+    };
+    return this._el.querySelector(map[section]);
+  }
+
+  _startCountdown() {
+    if (this._timerLoop) clearInterval(this._timerLoop);
+    this._updateCountdown();
+    this._timerLoop = setInterval(() => this._updateCountdown(), 1000);
+  }
+
+  _updateCountdown() {
+    const now  = Date.now();
+    const diff = PARTY_DATE.getTime() - now;
+
+    if (diff <= 0) {
+      const cd = this._el?.querySelector('#party-countdown');
+      if (cd) cd.innerHTML = `<span class="party-countdown__party">🎉 ${t('party.partyNow')}</span>`;
+      clearInterval(this._timerLoop);
+      return;
+    }
+
+    const totalSecs = Math.floor(diff / 1000);
+    const secs  = totalSecs % 60;
+    const mins  = Math.floor(totalSecs / 60) % 60;
+    const hours = Math.floor(totalSecs / 3600) % 24;
+    const days  = Math.floor(totalSecs / 86400);
+
+    const set = (id, val) => {
+      const el = this._el?.querySelector(`#${id}`);
+      if (el) el.textContent = pad(val);
+    };
+    set('cd-days',  days);
+    set('cd-hours', hours);
+    set('cd-mins',  mins);
+    set('cd-secs',  secs);
+  }
+
+  _bindRsvp() {
+    const editBtn   = this._el.querySelector('#rsvp-edit-btn');
+    const cancelBtn = this._el.querySelector('#rsvp-cancel-btn');
+    const formWrap  = this._el.querySelector('#rsvp-form-wrap');
+    const form      = this._el.querySelector('#rsvp-form');
+
+    // Admin status pill on each radio option cycles going → maybe → declined.
+    // Only acts when the RSVP section is in inline-edit mode so a casual
+    // admin pageview doesn't accidentally retag an option. The visible label
+    // is updated together with the data attribute so _collectRsvpFormInline
+    // can read it back unchanged. preventDefault stops the click from
+    // bubbling into the wrapping <label> and toggling the radio.
+    this._el.querySelectorAll('[data-option-status-pill]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const section = btn.closest('.party-section');
+        if (!section?.classList.contains('party-section--editing')) return;
+        const cur  = btn.dataset.optionStatus;
+        const next = cur === 'going' ? 'maybe' : cur === 'maybe' ? 'declined' : 'going';
+        btn.dataset.optionStatus = next;
+        btn.className = `party-rsvp__option-status party-rsvp__option-status--${next}`;
+        btn.setAttribute('aria-label', `Status: ${next}`);
+        btn.textContent = this._statusPillText(next);
+      });
+    });
+
+    editBtn?.addEventListener('click', () => {
+      if (formWrap) formWrap.hidden = false;
+      const current = editBtn.closest('.party-rsvp__current');
+      if (current) current.hidden = true;
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+      if (formWrap) formWrap.hidden = true;
+      const current = this._el.querySelector('.party-rsvp__current');
+      if (current) current.hidden = false;
+    });
+
+    this._bindConditionalFields(form);
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Collect answers keyed by field id
+      const answers = {};
+      for (const f of this._rsvpForm) {
+        if (f.type === 'heading' || f.type === 'paragraph') continue;
+        // Skip fields hidden by showIf — don't persist stale answers
+        const group = form.querySelector(`.party-form-group[data-field-id="${f.id}"]`);
+        if (group && group.style.display === 'none') continue;
+        if (f.type === 'checkbox-group') {
+          const checked = [...form.querySelectorAll(`[name="f_${f.id}"]:checked`)].map(cb => cb.value);
+          if (checked.length) answers[f.id] = checked;
+        } else if (f.type === 'radio-group') {
+          const sel = form.querySelector(`[name="f_${f.id}"]:checked`);
+          if (sel) answers[f.id] = sel.value;
+        } else {
+          const el = form.querySelector(`[name="f_${f.id}"]`);
+          const v  = el?.value?.trim();
+          if (v) answers[f.id] = v;
+        }
+      }
+
+      const btn = form.querySelector('[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = t('form.saving');
+      try {
+        const headers = await getCsrfHeaders();
+        const res = await fetch('/api/v1/party/rsvp', {
+          method:      'POST',
+          credentials: 'include',
+          headers,
+          body:        JSON.stringify({ answers }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'RSVP failed');
+
+        this._rsvp = result;
+        showToast(t('party.rsvpSubmitted'), 'success');
+        // Re-render RSVP section
+        const rsvpSection = this._el.querySelector('.party-rsvp');
+        if (rsvpSection) rsvpSection.outerHTML = this._renderRsvp();
+        this._bindRsvp();
+        if (canEdit()) this._bindEditing();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = t('party.submitRsvp');
+      }
+    });
+  }
+
+
+  _bindConditionalFields(form) {
+    if (!form) return;
+    const conditionals = form.querySelectorAll('[data-show-if-field]');
+    if (!conditionals.length) return;
+
+    const apply = () => {
+      conditionals.forEach(group => {
+        const targetId = group.dataset.showIfField;
+        const wanted   = group.dataset.showIfValue;
+        const inputs = form.querySelectorAll(`[name="f_${targetId}"]`);
+        let match = false;
+        inputs.forEach(inp => {
+          if ((inp.type === 'checkbox' || inp.type === 'radio')) {
+            if (inp.checked && inp.value === wanted) match = true;
+          } else if (inp.value === wanted) {
+            match = true;
+          }
+        });
+        group.style.display = match ? '' : 'none';
+      });
+    };
+
+    // Listen to changes on any input within the form — cheap enough and robust.
+    form.addEventListener('change', apply);
+    form.addEventListener('input',  apply);
+    apply();
+  }
+
+  _bindVenueLightbox() {
+    if (this._venueLightbox) { this._venueLightbox.destroy(); this._venueLightbox = null; }
+
+    const btns = Array.from(this._el.querySelectorAll('.party-venue__photo-btn'));
+    if (!btns.length) return;
+
+    const items = btns.map(btn => ({
+      file_path:  btn.querySelector('img').src,
+      media_type: 'image',
+      caption:    btn.querySelector('img').alt,
+    }));
+
+    this._venueLightbox = new Lightbox(items);
+    this._venueLightbox.mount();
+
+    btns.forEach((btn, i) => {
+      btn.addEventListener('click', () => this._venueLightbox.open(i));
+    });
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  _parseJSON(str, fallback) {
+    try { return JSON.parse(str); } catch { return fallback; }
+  }
+
+  destroy() {
+    clearInterval(this._timerLoop);
+    if (this._venueLightbox) {
+      this._venueLightbox.destroy();
+      this._venueLightbox = null;
+    }
+    if (this._albumLightbox) {
+      this._albumLightbox.destroy();
+      this._albumLightbox = null;
+    }
+    this._albumObserver?.disconnect();
+    this._albumObserver = null;
+    this._queue.forEach(e => e.xhr?.abort());
+    this._queue = [];
+  }
+}

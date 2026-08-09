@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Pac-Man Ghost -->
+  <g transform="translate(100,105)">
+    <!-- Body -->
+    <path d="M-45,45 L-45,-20 Q-45,-55 0,-55 Q45,-55 45,-20 L45,45 L30,30 L15,45 L0,30 L-15,45 L-30,30 Z" fill="#5588FF"/>
+    <!-- Eyes -->
+    <ellipse cx="-15" cy="-10" rx="11" ry="13" fill="white"/>
+    <ellipse cx="15" cy="-10" rx="11" ry="13" fill="white"/>
+    <ellipse cx="-11" cy="-8" rx="5" ry="7" fill="#001088"/>
+    <ellipse cx="19" cy="-8" rx="5" ry="7" fill="#001088"/>
+  </g>
+</svg>

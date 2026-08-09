@@ -1,0 +1,563 @@
+/* ── Project Edit Mode ────────────────────────────────────────────────────── */
+
+/* Edit toggle button — floats in top-right of the hero content */
+.pd-edit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 14px;
+  background: rgba(200, 170, 110, 0.12);
+  border: 1px solid var(--gold-dark);
+  color: var(--gold);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  font-family: var(--font-sans);
+}
+
+.pd-edit-toggle:hover {
+  background: rgba(200, 170, 110, 0.22);
+  border-color: var(--gold);
+}
+
+.pd-edit-toggle--active {
+  background: rgba(200, 170, 110, 0.25);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.pd-edit-toggle-wrap {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-5);
+  z-index: 10;
+}
+
+/* ── Edit-mode banner ─────────────────────────────────────────────────────── */
+
+.pd-edit-banner {
+  background: rgba(200, 170, 110, 0.08);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.25);
+  padding: var(--sp-3) var(--sp-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.pd-edit-banner__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.pd-edit-banner__actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* ── Edit-mode buttons ────────────────────────────────────────────────────── */
+
+.btn--edit-save {
+  padding: 7px 18px;
+  background: var(--gold-dark);
+  border: 1px solid var(--gold);
+  color: var(--bg-base);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  font-family: var(--font-sans);
+}
+
+.btn--edit-save:hover {
+  background: var(--gold);
+}
+
+.btn--edit-cancel {
+  padding: 7px 18px;
+  background: transparent;
+  border: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+  font-family: var(--font-sans);
+}
+
+.btn--edit-cancel:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+/* ── Inline edit fields ───────────────────────────────────────────────────── */
+
+.pd-edit-field {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: inherit;
+  padding: var(--sp-2) var(--sp-3);
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+  box-sizing: border-box;
+}
+
+.pd-edit-field:focus {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.pd-edit-title {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.pd-edit-description {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.6;
+  font-size: 1.05rem;
+}
+
+.pd-edit-tools {
+  font-size: 0.9rem;
+}
+
+.pd-edit-select,
+.pd-edit-year {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.pd-edit-select:focus,
+.pd-edit-year:focus {
+  border-color: var(--gold);
+}
+
+.pd-edit-select option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.pd-edit-featured {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pd-edit-featured input[type="checkbox"] {
+  accent-color: var(--gold);
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Gallery edit controls ────────────────────────────────────────────────── */
+
+/* Overlay container — always present in DOM, visible only in edit mode */
+.gallery-grid__edit-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: var(--sp-2);
+  gap: var(--sp-1);
+  background: rgba(1, 10, 19, 0);
+  transition: background var(--transition);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.gallery-grid__item:hover .gallery-grid__edit-controls,
+.gallery-grid__item:focus-within .gallery-grid__edit-controls {
+  background: rgba(1, 10, 19, 0.55);
+  pointer-events: none;
+  opacity: 1;
+}
+
+/* Only buttons receive pointer events — overlay stays click-through for drag */
+.gallery-grid__edit-controls .gallery-btn {
+  pointer-events: auto;
+}
+
+/* Individual action buttons on gallery items */
+.gallery-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  pointer-events: auto;
+}
+
+.gallery-btn--cover {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--gold-dark);
+  color: var(--gold);
+}
+
+.gallery-btn--cover:hover {
+  background: rgba(200, 170, 110, 0.3);
+  border-color: var(--gold);
+}
+
+.gallery-btn--delete {
+  background: rgba(200, 50, 50, 0.15);
+  border-color: rgba(200, 50, 50, 0.5);
+  color: #e06060;
+}
+
+.gallery-btn--delete:hover {
+  background: rgba(200, 50, 50, 0.3);
+  border-color: #e06060;
+}
+
+/* Reorder arrows — stacked vertically on the left edge */
+.gallery-grid__reorder {
+  position: absolute;
+  left: var(--sp-1);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 6;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+
+.gallery-grid__item:hover .gallery-grid__reorder,
+.gallery-grid__item:focus-within .gallery-grid__reorder {
+  opacity: 1;
+  pointer-events: none;
+}
+
+/* Only arrow buttons receive pointer events — container stays click-through for drag */
+.gallery-grid__reorder .gallery-btn {
+  pointer-events: auto;
+}
+
+.gallery-btn--order {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(30, 35, 40, 0.85);
+  border: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.gallery-btn--order:hover {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--gold-dark);
+  color: var(--gold);
+}
+
+.gallery-btn--order:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+/* ── Drag-and-drop reorder ────────────────────────────────────────────────── */
+
+.gallery-grid--edit .gallery-grid__item {
+  cursor: grab;
+}
+
+.gallery-grid--edit .gallery-grid__item:active {
+  cursor: grabbing;
+}
+
+.gallery-grid--edit .gallery-grid__item.dragging {
+  opacity: 0.35;
+  outline: 2px dashed var(--gold-dark);
+  outline-offset: -2px;
+}
+
+.gallery-grid--edit .gallery-grid__item.drag-over {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px rgba(200, 170, 110, 0.25);
+}
+
+/* ── Add-media section ────────────────────────────────────────────────────── */
+
+.pd-add-media-wrap {
+  margin-top: var(--sp-4);
+  display: flex;
+  justify-content: center;
+}
+
+.pd-add-media-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 10px 22px;
+  background: transparent;
+  border: 1px dashed rgba(200, 170, 110, 0.4);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+  font-family: var(--font-sans);
+}
+
+.pd-add-media-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(200, 170, 110, 0.07);
+}
+
+.pd-add-media-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Upload progress indicator ────────────────────────────────────────────── */
+
+.pd-upload-status {
+  margin-top: var(--sp-2);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.pd-upload-status--error { color: #e06060; }
+.pd-upload-status--ok    { color: var(--gold); }
+
+/* ── Section toolbar (edit mode) ──────────────────────────────────────────── */
+
+.pd-section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(200, 170, 110, 0.18);
+}
+
+.pd-section-toolbar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.pd-section-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(200, 170, 110, 0.1);
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  color: var(--gold);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.pd-section-chip__name {
+  padding: 0 4px;
+}
+
+.pd-section-chip__move,
+.pd-section-chip__action {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--gold-light);
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition), background var(--transition);
+}
+
+.pd-section-chip__move:hover:not(:disabled),
+.pd-section-chip__action:hover {
+  background: rgba(200, 170, 110, 0.25);
+  color: var(--gold);
+}
+
+.pd-section-chip__move:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.pd-section-chip__action--danger {
+  color: #e06060;
+}
+
+.pd-section-chip__action--danger:hover {
+  background: rgba(200, 50, 50, 0.2);
+  color: #e06060;
+}
+
+.pd-section-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px dashed rgba(200, 170, 110, 0.4);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+
+.pd-section-add-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(200, 170, 110, 0.07);
+}
+
+/* ── Section group in edit mode — drop targets ───────────────────────────── */
+
+.pd-gallery-group--edit {
+  padding: var(--sp-2);
+  border: 2px dashed transparent;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.pd-gallery-group--edit .gallery-grid--edit.drop-active {
+  background: rgba(200, 170, 110, 0.06);
+}
+
+.pd-gallery-group--edit .gallery-grid--edit {
+  min-height: 60px;
+  padding: var(--sp-2);
+  border: 2px dashed rgba(200, 170, 110, 0.18);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.pd-gallery-group--edit .gallery-grid--edit.drop-active {
+  border-color: var(--gold);
+  background: rgba(200, 170, 110, 0.08);
+}
+
+.gallery-grid--empty {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 110px;
+}
+
+.gallery-grid__drop-hint {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* ── Section description textarea (edit mode) ───────────────────────────── */
+
+/* Inline-editable description that sits between the section heading and its
+   grid. In view mode the description is only rendered when non-empty, so there
+   is no matching .pd-gallery-group__description styling to override here. */
+.pd-gallery-group__description-edit {
+  display: block;
+  width: 100%;
+  max-width: 68ch;
+  margin: 0 0 var(--sp-3);
+  resize: vertical;
+  min-height: 44px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(200, 170, 110, 0.25);
+  padding: var(--sp-2) var(--sp-3);
+  box-sizing: border-box;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.pd-gallery-group__description-edit::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.pd-gallery-group__description-edit:hover {
+  border-color: rgba(200, 170, 110, 0.4);
+}
+
+.pd-gallery-group__description-edit:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Upload target dropdown ──────────────────────────────────────────────── */
+
+.pd-add-media-wrap {
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.pd-upload-target-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}

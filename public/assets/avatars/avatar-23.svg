@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Dragon head -->
+  <!-- Neck -->
+  <path d="M80,185 Q75,150 85,130 L115,130 Q125,150 120,185 Z" fill="#2A8A3A"/>
+  <!-- Head -->
+  <ellipse cx="100" cy="110" rx="45" ry="38" fill="#2A8A3A"/>
+  <!-- Snout -->
+  <ellipse cx="100" cy="128" rx="28" ry="18" fill="#3AAA4A"/>
+  <!-- Nostrils -->
+  <ellipse cx="90" cy="130" rx="5" ry="4" fill="#1A6A2A"/>
+  <ellipse cx="110" cy="130" rx="5" ry="4" fill="#1A6A2A"/>
+  <!-- Eyes -->
+  <ellipse cx="78"  cy="100" rx="13" ry="11" fill="#FFD700"/>
+  <ellipse cx="122" cy="100" rx="13" ry="11" fill="#FFD700"/>
+  <ellipse cx="78"  cy="101" rx="5"  ry="8"  fill="#111"/>
+  <ellipse cx="122" cy="101" rx="5"  ry="8"  fill="#111"/>
+  <circle  cx="76"  cy="97"  r="3"   fill="white" opacity="0.8"/>
+  <circle  cx="120" cy="97"  r="3"   fill="white" opacity="0.8"/>
+  <!-- Horns -->
+  <path d="M78,78 Q60,45 68,28 Q78,50 84,72 Z" fill="#1A5A2A"/>
+  <path d="M122,78 Q140,45 132,28 Q122,50 116,72 Z" fill="#1A5A2A"/>
+  <!-- Spines on head -->
+  <polygon points="88,74 84,58 92,72"  fill="#FFD700"/>
+  <polygon points="100,70 100,52 106,70" fill="#FFD700"/>
+  <polygon points="112,74 116,58 108,72" fill="#FFD700"/>
+  <!-- Fire breath -->
+  <path d="M86,142 Q70,160 55,170 Q75,165 80,180 Q90,158 100,148 Q110,158 120,180 Q125,165 145,170 Q130,160 114,142 Z"
+        fill="#FF6600" opacity="0.9"/>
+  <path d="M90,145 Q78,160 68,168 Q84,162 88,174 Q96,155 100,150 Q104,155 112,174 Q116,162 132,168 Q122,160 110,145 Z"
+        fill="#FFD700" opacity="0.8"/>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Crown -->
+  <!-- Base band -->
+  <rect x="28" y="120" width="144" height="48" rx="6" fill="#C8AA6E"/>
+  <rect x="28" y="120" width="144" height="48" rx="6" fill="none" stroke="#E8C870" stroke-width="2"/>
+  <!-- Crown points -->
+  <polygon points="28,120 28,50 58,90 100,30 142,90 172,50 172,120"
+           fill="#C8AA6E" stroke="#E8C870" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Gems on points -->
+  <circle cx="100" cy="38" r="12" fill="#E74C3C"/>
+  <circle cx="100" cy="38" r="6"  fill="#FF8888"/>
+  <circle cx="172" cy="58" r="10" fill="#3498DB"/>
+  <circle cx="172" cy="58" r="5"  fill="#88CCFF"/>
+  <circle cx="28"  cy="58" r="10" fill="#2ECC71"/>
+  <circle cx="28"  cy="58" r="5"  fill="#88FFCC"/>
+  <!-- Band gems -->
+  <circle cx="60"  cy="144" r="9" fill="#9B59B6"/>
+  <circle cx="100" cy="144" r="11" fill="#E74C3C"/>
+  <circle cx="140" cy="144" r="9" fill="#3498DB"/>
+  <!-- Band detail -->
+  <line x1="28" y1="132" x2="172" y2="132" stroke="rgba(255,220,80,0.4)" stroke-width="1.5"/>
+</svg>

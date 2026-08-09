@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" fill="#0A1428"/>
+  <!-- Treasure Chest -->
+  <!-- Shadow -->
+  <ellipse cx="102" cy="188" rx="62" ry="10" fill="rgba(0,0,0,0.4)"/>
+  <!-- Chest bottom -->
+  <rect x="28" y="118" width="144" height="68" rx="6" fill="#6B3A1F"/>
+  <rect x="28" y="118" width="144" height="68" rx="6" fill="none" stroke="#4A2810" stroke-width="2"/>
+  <!-- Chest lid -->
+  <path d="M28,118 L28,88 Q28,65 100,65 Q172,65 172,88 L172,118 Z" fill="#8B4A2A"/>
+  <path d="M28,118 L28,88 Q28,65 100,65 Q172,65 172,88 L172,118 Z" fill="none" stroke="#4A2810" stroke-width="2"/>
+  <!-- Gold bands horizontal -->
+  <rect x="28" y="108" width="144" height="12" fill="#C8AA6E"/>
+  <rect x="28" y="84"  width="144" height="10" fill="#C8AA6E"/>
+  <!-- Gold bands vertical -->
+  <rect x="56"  y="65" width="12" height="121" fill="#C8AA6E"/>
+  <rect x="132" y="65" width="12" height="121" fill="#C8AA6E"/>
+  <!-- Lock -->
+  <rect x="84" y="100" width="32" height="28" rx="4" fill="#C8AA6E"/>
+  <path d="M90,100 Q90,85 100,85 Q110,85 110,100" fill="none" stroke="#C8AA6E" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="100" cy="116" r="6" fill="#8B6914"/>
+  <!-- Coins spilling out -->
+  <ellipse cx="155" cy="130" rx="12" ry="7"  fill="#F4C542" transform="rotate(-20,155,130)"/>
+  <ellipse cx="168" cy="142" rx="11" ry="6"  fill="#E8A800" transform="rotate(15,168,142)"/>
+  <ellipse cx="148" cy="148" rx="10" ry="6"  fill="#F4C542" transform="rotate(-10,148,148)"/>
+  <ellipse cx="38"  cy="135" rx="11" ry="6"  fill="#F4C542" transform="rotate(20,38,135)"/>
+  <ellipse cx="25"  cy="148" rx="10" ry="6"  fill="#E8A800" transform="rotate(-15,25,148)"/>
+  <!-- Gems in chest -->
+  <circle cx="72"  cy="145" r="8" fill="#E74C3C"/>
+  <circle cx="100" cy="148" r="7" fill="#3498DB"/>
+  <circle cx="128" cy="145" r="8" fill="#2ECC71"/>
+</svg>
