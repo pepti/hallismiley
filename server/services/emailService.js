@@ -970,4 +970,45 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
   console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, emailHealthCheck, isConfigured };
+// ── Lead notification to the company inbox ───────────────────────────────────
+// Sent when the business contact form (/hafa-samband) is submitted. Goes to
+// LEAD_NOTIFY_EMAIL, falling back to the configured From address so a lead is
+// never lost to a missing env var. No-ops (like every sender here) when Resend
+// is unconfigured, so dev and test never attempt delivery.
+
+async function sendLeadNotification({ submissionId, name, email, message, company, phone, platform, locale = 'is' }) {
+  if (!isConfigured()) {
+    console.log('[EmailService] Resend not configured — lead notification skipped');
+    return;
+  }
+
+  const to      = (process.env.LEAD_NOTIFY_EMAIL || FROM_ADDR).trim();
+  const subject = t(locale, 'email.lead.subject', { name });
+
+  const row = (label, value) => `
+      <tr>
+        <td style="padding:10px 0;color:#666;font-size:13px;width:150px;border-top:1px solid #1a1a1a;">${escapeHtml(label)}</td>
+        <td style="padding:10px 0;color:#e0e0e0;font-size:14px;border-top:1px solid #1a1a1a;">${escapeHtml(value || '—')}</td>
+      </tr>`;
+
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid #222;">
+      ${row(t(locale, 'email.lead.nameLabel'), name)}
+      ${row(t(locale, 'email.lead.companyLabel'), company)}
+      ${row(t(locale, 'email.lead.emailLabel'), email)}
+      ${row(t(locale, 'email.lead.phoneLabel'), phone)}
+      ${row(t(locale, 'email.lead.platformLabel'), platform)}
+    </table>
+    <p style="margin:0 0 8px;font-size:13px;color:#666;">${escapeHtml(t(locale, 'email.lead.messageLabel'))}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#e0e0e0;line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</p>
+    <p style="margin:0;font-size:12px;color:#555;">${escapeHtml(submissionId)}</p>
+  `, locale);
+
+  const { data, error } = await getClient().emails.send({ from: FROM, to, replyTo: email, subject, html });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+  console.log(`[EmailService] Lead notification sent: submission=${submissionId} id=${data.id}`);
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured };

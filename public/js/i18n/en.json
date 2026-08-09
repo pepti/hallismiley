@@ -2109,5 +2109,11 @@
   "umOkkur.factKennitala": "Registration: pending",
   "umOkkur.factLocation": "Hafnarfjörður, Iceland",
   "umOkkur.factEmail": "info@orangesmiley.is",
-  "footer.companyLine": "Orange Smiley ehf. · Registration pending · Hafnarfjörður, Iceland"
+  "footer.companyLine": "Orange Smiley ehf. · Registration pending · Hafnarfjörður, Iceland",
+  "contact.company": "Company",
+  "contact.companyPlaceholder": "Your company name",
+  "contact.phone": "Phone",
+  "contact.phonePlaceholder": "+354 ...",
+  "contact.currentPlatform": "Current system",
+  "contact.builtWithPrefill": "Hi — I would like to hear more about the platform and what a migration would involve."
 }

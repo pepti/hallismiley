@@ -101,13 +101,15 @@ describe('conversion events', () => {
   test('a valid contact submission records one contact_submit event', async () => {
     const res = await request(app).post('/api/v1/contact').send({
       name: 'Jane Doe', email: 'jane@example.com',
-      message: 'I would love to discuss a project.', topic: 'carpentry',
+      message: 'I would love to discuss a project.', current_platform: 'shopify',
     });
     expect(res.status).toBe(200);
 
     await waitFor(async () => (await countEvents('contact_submit')) === 1);
     const { rows } = await db.query("SELECT props FROM analytics_events WHERE event_type = 'contact_submit'");
-    expect(rows[0].props).toEqual({ topic: 'carpentry' });
+    // The lead form's qualifying dimension — which platform the prospect is
+    // moving off. Never PII: name, company, email and phone stay out of it.
+    expect(rows[0].props).toEqual({ platform: 'shopify' });
   });
 
   test('a honeypot submission records no conversion', async () => {
