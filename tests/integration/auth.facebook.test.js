@@ -121,7 +121,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=invalid_state');
+    expect(res.headers.location).toBe('/is/#/?error=invalid_state');
   });
 
   test('missing state cookie redirects with invalid_state error', async () => {
@@ -129,7 +129,7 @@ describe('GET /auth/facebook/callback', () => {
       .get('/auth/facebook/callback?code=abc&state=test-state-xyz');
     // no Cookie header
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=invalid_state');
+    expect(res.headers.location).toBe('/is/#/?error=invalid_state');
   });
 
   test('missing email redirects with facebook_profile_invalid', async () => {
@@ -142,7 +142,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=facebook_profile_invalid');
+    expect(res.headers.location).toBe('/is/#/?error=facebook_profile_invalid');
   });
 
   test('new user — creates row with facebook_id, verified, and auto-username', async () => {
@@ -151,7 +151,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/is/');
 
     // Sets an auth_session cookie (Lucia).
     const cookies = res.headers['set-cookie'] ?? [];
@@ -185,7 +185,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/is/');
 
     const countAfter = (await db.query(`SELECT COUNT(*)::int AS n FROM users`)).rows[0].n;
     expect(countAfter).toBe(countBefore);
@@ -206,7 +206,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/is/');
 
     const { rows } = await db.query(
       `SELECT facebook_id, oauth_provider, email_verified
@@ -232,7 +232,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=account_disabled');
+    expect(res.headers.location).toBe('/is/#/?error=account_disabled');
     // No auth_session cookie should be set.
     const cookies = res.headers['set-cookie'] ?? [];
     expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
@@ -246,7 +246,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=oauth_failed');
+    expect(res.headers.location).toBe('/is/#/?error=oauth_failed');
   });
 
   test('redirects to the returnTo cookie when present and clears it', async () => {
@@ -281,6 +281,6 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', `${cookieHeader}; facebook_oauth_return_to=${encodedReturnTo}`);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/is/');
   });
 });

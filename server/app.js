@@ -507,7 +507,7 @@ app.use('/api/v1/shop',       shopRoutes);
 //      and a miss is a real 404.
 //   2. Redirect root-level paths ('/', '/en', '/is' with no trailing segment)
 //      to a locale prefix chosen from the locale_choice cookie (explicit
-//      switcher choice only) → Accept-Language → DEFAULT_LOCALE. This gives
+//      switcher choice only) → Accept-Language → PUBLIC_DEFAULT_LOCALE. This gives
 //      crawlers + humans a clean 302 to the right language instead of
 //      ambiguous content.
 //   3. Redirect locale-locked routes (the Icelandic-only party pages) to
@@ -517,7 +517,7 @@ app.use('/api/v1/shop',       shopRoutes);
 //      Facebook, LinkedIn, X) get the right preview cards; humans get the
 //      SPA shell and client-side hydration kicks in.
 const ssrMetaMiddleware = require('./middleware/ssrMeta');
-const { SUPPORTED_LOCALES, forcedLocaleFor } = require('./config/i18n');
+const { PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('./config/i18n');
 
 function pickLocaleForRedirect(req) {
   const cookie = req.cookies?.locale_choice;
@@ -527,7 +527,7 @@ function pickLocaleForRedirect(req) {
     const code = part.split(';')[0].trim().split('-')[0];
     if (SUPPORTED_LOCALES.includes(code)) return code;
   }
-  return 'en';
+  return PUBLIC_DEFAULT_LOCALE;
 }
 
 app.get('*', (req, res, next) => {

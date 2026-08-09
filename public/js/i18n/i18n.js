@@ -6,7 +6,13 @@
 //   t('shop.inStock', {n: 3}) // → "3 in stock"
 
 export const SUPPORTED_LOCALES = ['en', 'is'];
-export const DEFAULT_LOCALE    = 'en';
+// DEFAULT_LOCALE is the MESSAGE-FALLBACK dimension (which JSON backfills a
+// missing key) — it mirrors the server's content dimension and stays 'en'.
+// PUBLIC_DEFAULT_LOCALE is what a brand-new visitor with no signal reads the
+// site in — Orange Smiley is an Icelandic business, so 'is'. Mirrors
+// server/config/i18n.js.
+export const DEFAULT_LOCALE        = 'en';
+export const PUBLIC_DEFAULT_LOCALE = 'is';
 
 let _locale   = DEFAULT_LOCALE;
 let _messages = {};
@@ -97,7 +103,7 @@ function resolveUserLocale() {
     const code = lang.split('-')[0].toLowerCase();
     if (SUPPORTED_LOCALES.includes(code)) return code;
   }
-  return DEFAULT_LOCALE;
+  return PUBLIC_DEFAULT_LOCALE;
 }
 
 /** Persist an EXPLICIT locale choice (localStorage + cookie). Called only

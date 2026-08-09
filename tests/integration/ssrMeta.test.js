@@ -20,12 +20,19 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.headers.location).toBe('/is/');
   });
 
-  test('GET / falls back to en when Accept-Language has no supported match', async () => {
+  test('GET / falls back to Icelandic when Accept-Language has no supported match', async () => {
+    // PUBLIC_DEFAULT_LOCALE — Orange Smiley's visitor-facing default is 'is'.
     const res = await request(app)
       .get('/')
       .set('Accept-Language', 'de-DE');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/is/');
+  });
+
+  test('GET / with no locale signal at all lands on Icelandic', async () => {
+    const res = await request(app).get('/');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/is/');
   });
 
   test('locale_choice cookie beats Accept-Language on root redirect', async () => {

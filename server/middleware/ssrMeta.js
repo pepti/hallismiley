@@ -29,7 +29,7 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
+const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 
 const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
@@ -140,9 +140,11 @@ function extractLocale(req) {
 
   if (hasLocalePrefix) return { locale: parts[0], rest };
 
-  // Unprefixed non-party path — keep the historic DEFAULT_LOCALE fallback so
-  // SEO for /, /projects, etc. stays unchanged.
-  return { locale: DEFAULT_LOCALE, rest: pathname };
+  // Unprefixed non-party path — render in the visitor-facing default so the
+  // crawler-visible <head> for / etc. is Icelandic. Content lookups inside
+  // still fall back through DEFAULT_LOCALE (the content dimension) when an
+  // IS entry is missing.
+  return { locale: PUBLIC_DEFAULT_LOCALE, rest: pathname };
 }
 
 function esc(s) {

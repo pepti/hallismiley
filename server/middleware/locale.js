@@ -9,7 +9,8 @@
 //   4. Logged-in user's saved preferred_locale
 //   5. Party-route default ('is' for /party* and /api/v1/party/*)
 //   6. Accept-Language header (first supported language)
-//   7. DEFAULT_LOCALE
+//   7. PUBLIC_DEFAULT_LOCALE ('is' — the visitor-facing default; distinct
+//      from DEFAULT_LOCALE, the content-fallback dimension)
 //
 // Explicit per-request signals (query / header / cookie) win over the
 // account-level preference so that an admin whose users.preferred_locale='is'
@@ -32,7 +33,7 @@
 // defeated the party default below; it is deliberately ignored, not migrated.
 
 const {
-  DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_FORCED_LOCALE, isPartyPath, forcedLocaleFor,
+  PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, PARTY_FORCED_LOCALE, isPartyPath, forcedLocaleFor,
 } = require('../config/i18n');
 
 function pickFromAcceptLanguage(header) {
@@ -66,7 +67,7 @@ function resolveLocale(req) {
 
   if (isPartyPath(req.path)) return PARTY_FORCED_LOCALE;
 
-  return pickFromAcceptLanguage(req.headers['accept-language']) || DEFAULT_LOCALE;
+  return pickFromAcceptLanguage(req.headers['accept-language']) || PUBLIC_DEFAULT_LOCALE;
 }
 
 function localeMiddleware(req, _res, next) {

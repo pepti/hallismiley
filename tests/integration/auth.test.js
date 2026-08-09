@@ -41,7 +41,7 @@ describe('POST /auth/login', () => {
       .send({ username: process.env.ADMIN_USERNAME, password: 'wrongpassword' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Invalid credentials');
+    expect(res.body.error).toBe('Rangt notandanafn eða lykilorð');
   });
 
   test('wrong username returns 401 with generic message', async () => {
@@ -50,7 +50,7 @@ describe('POST /auth/login', () => {
       .send({ username: 'notadmin', password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Invalid credentials');
+    expect(res.body.error).toBe('Rangt notandanafn eða lykilorð');
   });
 
   test('missing password returns 400', async () => {
@@ -59,7 +59,7 @@ describe('POST /auth/login', () => {
       .send({ username: process.env.ADMIN_USERNAME });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/password/i);
+    expect(res.body.error).toMatch(/lykilorð/i);
   });
 
   test('missing username returns 400', async () => {
@@ -92,7 +92,7 @@ describe('POST /auth/login', () => {
       .post('/auth/login')
       .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
     expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/disabled/i);
+    expect(res.body.error).toMatch(/hefur verið lokað/);
   });
 
   // Tests covering the "email or username" + case-insensitive lookup added so
@@ -132,7 +132,7 @@ describe('POST /auth/login', () => {
       .send({ username: 'admin@test.com', password: 'wrongpassword' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Invalid credentials');
+    expect(res.body.error).toBe('Rangt notandanafn eða lykilorð');
   });
 
   test('login by email still enforces the lockout counter', async () => {
@@ -150,7 +150,7 @@ describe('POST /auth/login', () => {
       .send({ username: 'admin@test.com', password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/locked/i);
+    expect(res.body.error).toMatch(/tímabundið læstur/);
   });
 });
 
@@ -169,7 +169,7 @@ describe('Account lockout', () => {
       .send({ username: process.env.ADMIN_USERNAME, password: 'bad' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/locked/i);
+    expect(res.body.error).toMatch(/tímabundið læstur/);
   });
 
   test('correct password after lockout still returns locked', async () => {
@@ -184,7 +184,7 @@ describe('Account lockout', () => {
       .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/locked/i);
+    expect(res.body.error).toMatch(/tímabundið læstur/);
   });
 });
 
@@ -308,7 +308,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/username/i);
+    expect(res.body.error).toMatch(/notandanafn/i);
   });
 
   test('duplicate email returns 409', async () => {
@@ -318,7 +318,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/email/i);
+    expect(res.body.error).toMatch(/netfang/i);
   });
 
   test('invalid email format returns 400', async () => {
@@ -328,7 +328,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/email/i);
+    expect(res.body.error).toMatch(/netfang/i);
   });
 
   test('short username returns 400', async () => {
@@ -338,7 +338,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/username/i);
+    expect(res.body.error).toMatch(/notandanafn/i);
   });
 
   test('username with special chars returns 400', async () => {
@@ -348,7 +348,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/username/i);
+    expect(res.body.error).toMatch(/notandanafn/i);
   });
 
   test('password too short returns 400', async () => {
@@ -358,7 +358,7 @@ describe('POST /auth/signup', () => {
       password: 'abc1234',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/password/i);
+    expect(res.body.error).toMatch(/lykilorð/i);
   });
 
   test('password without a number returns 400', async () => {
@@ -368,7 +368,7 @@ describe('POST /auth/signup', () => {
       password: 'abcdefgh',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/number/i);
+    expect(res.body.error).toMatch(/tölustaf/);
   });
 
   test('password without a letter returns 400', async () => {
@@ -378,7 +378,7 @@ describe('POST /auth/signup', () => {
       password: '12345678',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/letter/i);
+    expect(res.body.error).toMatch(/bókstaf/);
   });
 
   test('invalid avatar returns 400', async () => {
@@ -417,13 +417,13 @@ describe('POST /auth/verify-email', () => {
 
     const res = await request(app).post('/auth/verify-email').send({ token });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/verified/i);
+    expect(res.body.message).toMatch(/staðfest/);
   });
 
   test('invalid token returns 400', async () => {
     const res = await request(app).post('/auth/verify-email').send({ token: 'badtoken' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/invalid/i);
+    expect(res.body.error).toMatch(/ógilt/i);
   });
 
   test('expired token returns 400', async () => {
@@ -436,7 +436,7 @@ describe('POST /auth/verify-email', () => {
     );
     const res = await request(app).post('/auth/verify-email').send({ token });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/expired/i);
+    expect(res.body.error).toMatch(/útrunnið/);
   });
 
   test('missing token returns 400', async () => {
@@ -453,7 +453,7 @@ describe('POST /auth/forgot-password', () => {
       .post('/auth/forgot-password')
       .send({ email: 'admin@test.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/reset link/i);
+    expect(res.body.message).toMatch(/endurstilla lykilorð/);
   });
 
   test('returns 200 for unknown email (no enumeration)', async () => {
@@ -461,7 +461,7 @@ describe('POST /auth/forgot-password', () => {
       .post('/auth/forgot-password')
       .send({ email: 'nobody@nowhere.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/reset link/i);
+    expect(res.body.message).toMatch(/endurstilla lykilorð/);
   });
 
   test('missing email returns 400', async () => {
@@ -486,7 +486,7 @@ describe('POST /auth/reset-password', () => {
       .post('/auth/reset-password')
       .send({ token, password: 'newpassword1' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/password updated/i);
+    expect(res.body.message).toMatch(/lykilorð uppfært/i);
   });
 
   test('invalid token returns 400', async () => {
@@ -508,7 +508,7 @@ describe('POST /auth/reset-password', () => {
       .post('/auth/reset-password')
       .send({ token, password: 'newpassword1' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/expired/i);
+    expect(res.body.error).toMatch(/útrunnið/);
   });
 
   test('weak new password returns 400', async () => {
@@ -628,7 +628,7 @@ describe('POST /auth/resend-verification', () => {
   test('missing email returns 400', async () => {
     const res = await request(app).post('/auth/resend-verification').send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/email/i);
+    expect(res.body.error).toMatch(/netfang/i);
   });
 
   test('nonexistent email returns 200 (no enumeration)', async () => {
@@ -636,7 +636,7 @@ describe('POST /auth/resend-verification', () => {
       .post('/auth/resend-verification')
       .send({ email: 'nobody@nowhere.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/pending verification/i);
+    expect(res.body.message).toMatch(/bíður staðfestingar/);
     expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
   });
 
@@ -646,7 +646,7 @@ describe('POST /auth/resend-verification', () => {
       .post('/auth/resend-verification')
       .send({ email: 'admin@test.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/pending verification/i);
+    expect(res.body.message).toMatch(/bíður staðfestingar/);
     expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
   });
 
@@ -666,7 +666,7 @@ describe('POST /auth/resend-verification', () => {
       .send({ email: 'pending@example.com' });
 
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/pending verification/i);
+    expect(res.body.message).toMatch(/bíður staðfestingar/);
     expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
     expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
       'pending@example.com',
