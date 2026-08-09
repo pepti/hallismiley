@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Primary Meta -->
-  <title>Halli Smiley — Icelandic Carpenter &amp; Computer Scientist</title>
-  <meta name="description" content="Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing, combined with full-stack web development. Based in Iceland." />
-  <meta name="robots" content="index, follow" />
-  <meta name="author" content="Halli" />
+  <title>Orange Smiley — Allt kerfið þitt á einum stað</title>
+  <meta name="description" content="Vefur, verslun, lager og reikningar í einu íslensku kerfi. Einn mánaðarreikningur, breytingar á dögum ekki mánuðum." />
+  <meta name="robots" content="index, follow" id="ssr-robots" />
+  <meta name="author" content="Orange Smiley ehf." />
 
   <!-- Search engine ownership verification — populated by server SSR from the
        GOOGLE_VERIFICATION_TOKEN and BING_VERIFICATION_TOKEN env vars (see
@@ -36,15 +36,14 @@
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:locale" content="en_IS" />
+  <meta property="og:locale" content="is_IS" />
   <meta property="og:url" content="https://www.hallismiley.is/" />
-  <meta property="og:title" content="Halli Smiley — Icelandic Carpenter &amp; Computer Scientist" />
-  <meta property="og:description" content="Twenty years of carpentry precision — timber frames, hand-cut joinery, bespoke cabinetry — married to modern full-stack software engineering. Based in Iceland." />
-  <!-- TODO before launch: create og-image.jpg (1200×630 px) and place it in public/ -->
+  <meta property="og:title" content="Orange Smiley — Allt kerfið þitt á einum stað" />
+  <meta property="og:description" content="Vefur, verslun, lager og reikningar í einu íslensku kerfi. Einn mánaðarreikningur, breytingar á dögum ekki mánuðum." />
   <meta property="og:image" content="https://www.hallismiley.is/og-image.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:site_name" content="Halli Smiley" />
+  <meta property="og:site_name" content="Orange Smiley" />
 
   <!-- Favicon -->
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -66,30 +65,33 @@
   <!-- Stylesheet -->
   <link rel="stylesheet" href="/css/main.css" />
 
-  <!-- JSON-LD Structured Data. The @id matches the publisher reference in
-       the WebSite schema emitted server-side on the homepage so search
-       engines can stitch Person + WebSite into one knowledge-graph entity. -->
+  <!-- JSON-LD Structured Data. The @id matches the publisher reference in the
+       WebSite schema emitted server-side on the homepage so search engines can
+       stitch Organization + WebSite into one knowledge-graph entity. Change
+       both together — a dangling publisher @id yields a broken graph.
+       DRAFT: the kennitala (vatID/taxID) lands once registration completes. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "Person",
-    "@id": "https://www.hallismiley.is/#person",
-    "name": "Halli",
+    "@type": "Organization",
+    "@id": "https://www.hallismiley.is/#organization",
+    "name": "Orange Smiley ehf.",
+    "alternateName": "Orange Smiley",
     "url": "https://www.hallismiley.is",
-    "description": "Icelandic carpenter and computer scientist with twenty years of precision joinery and timber framing, combined with full-stack web development in Node.js and PostgreSQL.",
+    "logo": "https://www.hallismiley.is/favicon.svg",
+    "image": "https://www.hallismiley.is/og-image.jpg",
+    "email": "info@orangesmiley.is",
+    "description": "Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.",
     "address": {
       "@type": "PostalAddress",
       "addressCountry": "IS",
-      "addressLocality": "Iceland"
+      "addressLocality": "Hafnarfjörður"
     },
+    "areaServed": { "@type": "Country", "name": "Iceland" },
     "knowsAbout": [
-      "Carpentry", "Timber Framing", "Hand-Cut Joinery", "Cabinetry",
-      "JavaScript", "Node.js", "PostgreSQL", "Full-Stack Development",
-      "REST APIs", "JWT Authentication"
-    ],
-    "sameAs": [
-      "https://github.com/pepti",
-      "https://www.linkedin.com/in/halliv/"
+      "Web Development", "E-commerce", "Inventory Management",
+      "Invoicing", "VAT Accounting", "Shopify Migration",
+      "Node.js", "PostgreSQL"
     ]
   }
   </script>

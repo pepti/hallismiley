@@ -7,7 +7,7 @@ const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
 // Send from the real owner mailbox (a verified Google Workspace address) rather
 // than a noreply@ alias, so mail actually delivers. Override with EMAIL_FROM.
 const FROM_ADDR = process.env.EMAIL_FROM || 'halli@hallismiley.is';
-const FROM      = `Halli Smiley <${FROM_ADDR}>`;
+const FROM      = `Orange Smiley <${FROM_ADDR}>`;
 
 function isConfigured() {
   return !!process.env.RESEND_API_KEY;
@@ -47,8 +47,8 @@ function emailShell(title, bodyHtml, locale = 'en') {
           <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#1a1a1a 0%,#0d0d0d 100%);padding:32px 40px;border-bottom:2px solid #c9a84c;">
-              <h1 style="margin:0;font-size:28px;font-weight:700;color:#c9a84c;letter-spacing:1px;">Halli Smiley</h1>
-              <p style="margin:4px 0 0;font-size:13px;color:#666;letter-spacing:2px;text-transform:uppercase;">hallismiley.is</p>
+              <h1 style="margin:0;font-size:28px;font-weight:700;color:#c9a84c;letter-spacing:1px;">Orange Smiley</h1>
+              <p style="margin:4px 0 0;font-size:13px;color:#666;letter-spacing:2px;text-transform:uppercase;">orangesmiley.is</p>
             </td>
           </tr>
           <!-- Body -->

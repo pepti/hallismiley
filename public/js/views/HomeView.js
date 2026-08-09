@@ -235,7 +235,7 @@ export class HomeView {
     }
     const overlay = bg.mode === 'plain' ? '' : `<div class="lol-hero__overlay" aria-hidden="true" style="opacity:${veil / 100}"></div>`;
     return `
-    <section class="lol-hero" aria-label="Introduction">
+    <section class="lol-hero" id="main-content" aria-label="Introduction">
       ${bgEl}
       ${overlay}
 

@@ -128,7 +128,7 @@ export class NavBar {
                           class="lol-nav__lang-opt${lc === current ? ' lol-nav__lang-opt--active' : ''}"
                           data-locale="${lc}"
                           aria-pressed="${lc === current}"
-                          aria-label="${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}">${lc.toUpperCase()}</button>`)
+                          aria-label="${lc.toUpperCase()} — ${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}">${lc.toUpperCase()}</button>`)
       .join('');
     // `hidden` when the first render lands directly on a locale-locked route
     // (party) — otherwise the toggle would paint before syncLocaleLock runs.
