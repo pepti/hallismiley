@@ -41,5 +41,12 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 ## Build status (three jobs, in order)
 
 - [x] Job 1 — scaffold with all features (no strip), env fixes, this file, acceptance green
-- [ ] Job 2 — re-skin + re-organize: chunks B (IS default) → A (orange brand) → C (business IA) → D (hide portfolio surfaces) → E (lead capture) → F (SEO/JSON-LD) → G (business-routes e2e)
-- [ ] Job 3 — `ENHANCEMENTS.md` proposals → **STOP for Halli's approval**
+- [x] Job 2 — re-skin + re-organize, merged in seven chunks: B (IS default locale) → A (orange brand) → C (business IA) → D (hide portfolio surfaces) → E (lead capture) → F (SEO/JSON-LD + a11y) → G (business-routes e2e). 2012 Jest + 109 Playwright green.
+- [x] Job 3 — `ENHANCEMENTS.md` written. **Stopped for Halli's approval — implement nothing from it until he says so.**
+
+## Where things stand for the next session
+
+- **Awaiting Halli**: the 12 proposals in `ENHANCEMENTS.md`, all DRAFT copy in the locale files, and the tier prices on `/thjonusta`.
+- **Before the first `git push`**: read ENHANCEMENTS proposal #1 — the inherited `deploy.yml` still aims at Halli's personal Azure resources.
+- Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
+- Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.

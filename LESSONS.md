@@ -59,3 +59,28 @@ recorded `verified: true`. Surfaces as `booksReports.test.js › archive export
 full `npm test` run but passing in isolation. Fix: order by a unique key
 (`ORDER BY created_at, id`) — or better, keyset-paginate. Raised as an
 ENHANCEMENTS.md proposal rather than fixed inside a job-2 UI chunk.
+
+### 2026-08-09 — inherited e2e specs pin the OLD product, and only e2e catches it
+
+_(factory)_ Jest stayed green through every job-2 chunk while two Playwright
+specs silently described a site that no longer existed: `contact.spec.js`
+drove the homepage inline form (moved to `/hafa-samband`) and
+`editable-homepage.spec.js` drove the skills/stats inline editor (whose
+sections the business home page stopped rendering, so the admin affordance
+became unreachable). Neither is a server-side behaviour, so 2000+ integration
+tests could not see them. Lesson for the factory flow: run `npm run test:e2e`
+after every IA/composition chunk, not just at the end — and treat a removed
+section as a capability question ("who edited that, and where do they go
+now?"), not just a layout change.
+
+### 2026-08-09 — a re-skin needs a contrast pass, not just a palette
+
+_(factory)_ Swapping the dark charcoal/gold tokens for a light warm-neutral
+orange set produced four separate WCAG failures that no test caught: the
+brand orange (#F97316/#EA580C) is only 3.56:1 on white, so button labels,
+the wordmark, the language toggle and the price unit all failed AA. Fix was
+to split the token roles — `--gold` became #C2410C (5.18:1, carries white
+text and works as small text) while `--gold-light` keeps the vivid #F97316
+for hovers, glows and large display text. Worth adding to `/clone-ui`: after
+re-hueing tokens, compute contrast for text-on-surface and text-on-accent
+before declaring the re-skin done.

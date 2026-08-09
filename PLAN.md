@@ -1,6 +1,6 @@
 # Orange Smiley public site — build plan
 
-**Status:** Job 1 done, Job 2 in progress. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\HalliProjects` @ `562c637`.
+**Status:** Jobs 1–3 complete; stopped for Halli's approval of `ENHANCEMENTS.md`. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\HalliProjects` @ `562c637`.
 
 Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `C:\Users\Notandi\claude\Projects\orange smiley\CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `ORANGE-SMILEY-PLAN.md` (same folder).
 
@@ -25,9 +25,23 @@ One branch + worktree per chunk, lint + i18n + tests green per chunk, merge to m
 6. **F `feat/seo-jsonld`** — Organization + Service JSON-LD, index.html baked meta, `/personuvernd` copy, Lighthouse ≥90 on `/` + `/thjonusta`.
 7. **G `feat/e2e-business-routes`** — Playwright spec walking the six business routes in both locales; final acceptance sweep.
 
-## Job 3 — ENHANCEMENTS.md → STOP for Halli
+## Job 3 — ENHANCEMENTS.md → STOP for Halli ✅ written
 
-Numbered proposals (what / why / effort S·M·L / risk / now-vs-later), categorized quick-wins / architectural-now / later. Evaluate the brief's 9 seeds + build findings. **Implement nothing without approval.**
+12 numbered proposals in `ENHANCEMENTS.md`, categorized quick-wins / architectural-now / later. **Implement nothing without approval.** The one to read first is #1: the inherited `deploy.yml` still targets Halli's personal Azure resources and must be neutralized before this repo is pushed anywhere.
+
+## Job 2 outcome (all seven chunks merged)
+
+| Chunk | Branch | Landed |
+|---|---|---|
+| B | `feat/is-default-locale` | `PUBLIC_DEFAULT_LOCALE='is'` for the visitor default; `DEFAULT_LOCALE='en'` kept as the content/storage dimension |
+| A | `feat/orange-brand` | Light warm-neutral orange token set, smiley wordmark, favicon, og-image |
+| C | `feat/business-ia` | Six business routes, ThjonustaView + UmOkkurView, business hero/nav/footer, IS-first DRAFT copy |
+| D | `feat/hide-portfolio-surfaces` | `publicSurface.js` as the single source of truth; noindex + sitemap + nav exclusion |
+| E | `feat/lead-capture` | Company/phone/platform qualifiers, pino, notification email, 5/hr limit |
+| F | `feat/seo-jsonld` | Organization + Service JSON-LD, business privacy policy, a11y 94→100 |
+| G | `feat/e2e-business-routes` | 18-test bilingual route walk, spec adaptations, final sweep |
+
+Acceptance: 2012 Jest + 109 Playwright green · lint clean · i18n in sync · invariant hook clean · Lighthouse SEO 100 / a11y 100 on the business routes.
 
 ## Known intentional oddities
 
