@@ -101,7 +101,9 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
+  /* --text-secondary, not --text-muted: the inactive locale is an actual
+     control, so it must clear 4.5:1 (muted sits at 3.74:1). */
+  color: var(--text-secondary);
   background: transparent;
   border: 0;
   border-radius: 999px;

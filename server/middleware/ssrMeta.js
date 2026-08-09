@@ -393,8 +393,8 @@ function articleSchema(row, locale, canonical) {
     datePublished: row.published_at ? new Date(row.published_at).toISOString() : undefined,
     dateModified:  row.updated_at   ? new Date(row.updated_at).toISOString()   : undefined,
     image: image ? absUrl(image) : undefined,
-    author:    { '@type': 'Person', name: 'Halli' },
-    publisher: { '@type': 'Person', name: 'Halli' },
+    author:    { '@id': `${APP_URL}/#organization` },
+    publisher: { '@id': `${APP_URL}/#organization` },
     mainEntityOfPage: canonical,
   };
 }
@@ -412,7 +412,7 @@ function productSchema(row, locale, canonical) {
     description: desc,
     image: row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`,
     sku: row.slug,
-    brand: { '@type': 'Brand', name: 'Halli Smiley' },
+    brand: { '@type': 'Brand', name: 'Orange Smiley' },
     offers: {
       '@type': 'Offer',
       url: canonical,
@@ -425,19 +425,66 @@ function productSchema(row, locale, canonical) {
 
 function websiteSchema() {
   // Emitted only on the home page. The alternateName array binds branded
-  // search variants (one-word "Hallismiley", spaced "Halli Smiley") to the
-  // site so Bing's knowledge graph treats them as the same entity. The
-  // publisher reference resolves to the Person schema baked into
-  // public/index.html (same @id).
+  // search variants (one-word "Orangesmiley", the ehf. form) to the site so
+  // knowledge graphs treat them as the same entity. The publisher reference
+  // resolves to the Organization schema baked into public/index.html (same
+  // @id) — change the two together or the graph dangles.
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     '@id':  `${APP_URL}/#website`,
     url:    APP_URL,
-    name:   'Halli Smiley',
-    alternateName: ['Hallismiley', 'Halli', 'halli smiley'],
+    name:   'Orange Smiley',
+    alternateName: ['Orangesmiley', 'Orange Smiley ehf.', 'orange smiley'],
     inLanguage: ['en', 'is'],
-    publisher: { '@id': `${APP_URL}/#person` },
+    publisher: { '@id': `${APP_URL}/#organization` },
+  };
+}
+
+// The three service tiers as an OfferCatalog. Emitted on / and /thjonusta.
+// Prices are DRAFT until Halli confirms them, so no `price` is published —
+// an unconfirmed number in structured data is worse than none, because
+// search engines will surface it as if it were a commitment.
+const SERVICE_TIERS = [
+  {
+    name: 'Vefur',
+    en: 'Company website, contact form, Icelandic and English, SEO.',
+    is: 'Heimasíða fyrirtækisins, hafðu-samband form, íslenska og enska, leitarvélabestun.',
+  },
+  {
+    name: 'Verslun',
+    en: 'Everything in Vefur plus catalog, cart, payments, orders, inventory and barcodes.',
+    is: 'Allt í Vef auk vörulista, körfu, greiðslna, pantana, lagers og strikamerkja.',
+  },
+  {
+    name: 'Rekstur',
+    en: 'Everything in Verslun plus invoicing, VAT, receivables ledger and goods receiving.',
+    is: 'Allt í Verslun auk reikningagerðar, VSK, viðskiptamannabókhalds og vörumóttöku.',
+  },
+];
+
+function serviceSchema(locale) {
+  const isIS = locale === 'is';
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    '@id': `${APP_URL}/#service`,
+    serviceType: isIS ? 'Hugbúnaðargerð og vefþjónusta' : 'Software development and web services',
+    provider: { '@id': `${APP_URL}/#organization` },
+    areaServed: { '@type': 'Country', name: 'Iceland' },
+    inLanguage: isIS ? 'is-IS' : 'en-US',
+    hasOfferCatalog: {
+      '@type': 'OfferCatalog',
+      name: isIS ? 'Þjónustuleiðir' : 'Service tiers',
+      itemListElement: SERVICE_TIERS.map(tier => ({
+        '@type': 'Offer',
+        itemOffered: {
+          '@type': 'Service',
+          name: tier.name,
+          description: isIS ? tier.is : tier.en,
+        },
+      })),
+    },
   };
 }
 
@@ -450,7 +497,7 @@ function creativeWorkSchema(row, locale, canonical) {
     dateCreated: row.year ? String(row.year) : undefined,
     dateModified: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
     image: row.image_url ? absUrl(row.image_url) : undefined,
-    creator: { '@type': 'Person', name: 'Halli' },
+    creator: { '@id': `${APP_URL}/#organization` },
     inLanguage: locale === 'is' ? 'is-IS' : 'en-US',
     url: canonical,
     genre: row.category,
@@ -817,10 +864,14 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
 
     // Breadcrumbs on any non-home page.
     if (route !== '/') {
+      // The services page is the one non-home route that carries the offering
+      // itself, so the Service catalog belongs on it as well as on /.
+      if (route === '/thjonusta') schemas.push(serviceSchema(locale));
+
       let section = null;
       let detailName = null;
-      if (route === '/projects' || route === '/news' || route === '/shop') {
-        section = route.slice(1);
+      if (route === '/verkefni' || route === '/projects' || route === '/news' || route === '/shop') {
+        section = route === '/verkefni' ? 'projects' : route.slice(1);
       } else if (meta?.section) {
         // Shop sub-route — breadcrumb is Home › Shop › <Section title>
         section = meta.section;
@@ -834,10 +885,11 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       });
       if (bc) schemas.push(bc);
     } else {
-      // Home page — emit WebSite schema (alongside the baked Person schema
-      // in public/index.html). Binds brand-name variants for knowledge-graph
-      // matching on Bing/Google.
+      // Home page — WebSite (brand-name variants for knowledge-graph matching)
+      // plus the Service catalog, both resolving to the Organization schema
+      // baked into public/index.html.
       schemas.push(websiteSchema());
+      schemas.push(serviceSchema(locale));
     }
   }
 

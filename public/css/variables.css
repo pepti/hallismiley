@@ -26,8 +26,13 @@
   --border-dim:   rgba(124, 45, 18, 0.15);
   --border-light: rgba(124, 45, 18, 0.08);
 
-  /* Primary accent — brand orange (#F97316 family) */
-  --gold:         #EA580C;
+  /* Primary accent — brand orange (#F97316 family).
+     --gold is the INTERACTIVE orange: it carries white button text and is
+     used for small text on light surfaces, so it must clear WCAG AA both
+     ways. #C2410C is 5.18:1 against white in both directions; the vivid
+     #F97316 manages only 3.56:1, so it lives on as --gold-light for hovers,
+     glows and large display text where 3:1 is the bar. */
+  --gold:         #C2410C;
   --gold-light:   #F97316;
   --gold-dark:    #9A3412;
   --gold-glow:    rgba(249, 115, 22, 0.14);
@@ -37,7 +42,7 @@
   --teal-dim:     rgba(124, 45, 18, 0.10);
 
   /* Legacy aliases used in components */
-  --accent-amber:     #EA580C;
+  --accent-amber:     #C2410C;
   --accent-amber-dim: rgba(234, 88, 12, 0.10);
   --accent-blue:      #7C2D12;
   --accent-blue-dim:  rgba(124, 45, 18, 0.10);

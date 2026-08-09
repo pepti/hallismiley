@@ -328,9 +328,9 @@ describe('SSR meta-injection — SPA catch-all', () => {
       const res = await request(app).get('/en/');
       expect(res.status).toBe(200);
       expect(res.text).toMatch(/<script type="application\/ld\+json">[^<]*"@type":"WebSite"/);
-      expect(res.text).toMatch(/"alternateName":\["Hallismiley","Halli","halli smiley"\]/);
-      // Publisher reference resolves to the baked Person schema's @id.
-      expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#person"\}/);
+      expect(res.text).toMatch(/"alternateName":\["Orangesmiley","Orange Smiley ehf\.","orange smiley"\]/);
+      // Publisher reference resolves to the baked Organization schema's @id.
+      expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#organization"\}/);
     });
 
     test('does not emit WebSite schema on non-home pages', async () => {
@@ -374,5 +374,55 @@ describe('SSR meta-injection — SPA catch-all', () => {
       const res = await request(app).get('/abc123def456ghi789.txt');
       expect(res.status).toBe(404);
     });
+  });
+});
+
+// ── Structured data for the business (job 2F) ────────────────────────────────
+// The Organization is baked into public/index.html; everything the server
+// emits references it by @id. A dangling reference yields a broken knowledge
+// graph, so the two halves are asserted together.
+
+describe('business JSON-LD', () => {
+  const ORG_ID = /"@id":\s*"https?:\/\/[^"]*\/#organization"/;
+
+  test('the home page emits WebSite + Service, both bound to the Organization', async () => {
+    const res = await request(app).get('/is/');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/"@type":"WebSite"/);
+    expect(res.text).toMatch(/"@type":"Service"/);
+    expect(res.text).toMatch(/"publisher":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
+    expect(res.text).toMatch(/"provider":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
+  });
+
+  test('the baked Organization the server references actually exists', async () => {
+    const res = await request(app).get('/is/');
+    // The baked block in public/index.html is pretty-printed, so allow the
+    // whitespace that the server's JSON.stringify output never has.
+    expect(res.text).toMatch(/"@type":\s*"Organization"/);
+    expect(res.text).toMatch(ORG_ID);
+    expect(res.text).toMatch(/"name":\s*"Orange Smiley ehf\."/);
+  });
+
+  test('the services page carries the tier catalogue', async () => {
+    const res = await request(app).get('/is/thjonusta');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/"@type":"OfferCatalog"/);
+    for (const tier of ['Vefur', 'Verslun', 'Rekstur']) {
+      expect(res.text).toMatch(new RegExp(`"name":"${tier}"`));
+    }
+  });
+
+  test('no unconfirmed price is published as structured data', async () => {
+    // Prices are DRAFT until Halli signs off. A number in JSON-LD reads as a
+    // commitment, so the catalogue deliberately carries none.
+    const res = await request(app).get('/is/thjonusta');
+    const jsonLd = res.text.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
+    const service = jsonLd.find(b => b.includes('OfferCatalog')) || '';
+    expect(service).not.toMatch(/"price"/);
+  });
+
+  test('other business routes do not carry the service catalogue', async () => {
+    const res = await request(app).get('/is/um-okkur');
+    expect(res.text).not.toMatch(/"@type":"OfferCatalog"/);
   });
 });
