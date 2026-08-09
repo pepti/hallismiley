@@ -69,7 +69,7 @@ export class ProjectsView {
     projects.forEach(p => {
       this.grid.appendChild(
         new ProjectCard(p, (proj) => {
-          navigate(href(`/projects/${proj.id}`));
+          navigate(href(`/verkefni/${proj.id}`));
         }).render()
       );
     });

@@ -58,6 +58,13 @@ if (process.env.NODE_ENV !== 'production') {
 // each section is independently SEO-indexable.
 const ROUTE_META = {
   '/':                 { key: 'home',           contentKey: 'home_skills' },
+  // ── Business IA (canonical Icelandic slugs) ──
+  '/thjonusta':        { key: 'thjonusta' },
+  '/verkefni':         { key: 'projects' },
+  '/um-okkur':         { key: 'umOkkur' },
+  '/hafa-samband':     { key: 'contact',        contentKey: 'contact_hero' },
+  '/personuvernd':     { key: 'privacy' },
+  // ── Legacy portfolio routes (functional, de-emphasized) ──
   '/projects':         { key: 'projects' },
   '/halli':            { key: 'halli',          contentKey: 'halli_bio' },
   '/about':            { key: 'halli',          contentKey: 'halli_bio' },
@@ -74,46 +81,55 @@ const ROUTE_META = {
 
 const DEFAULT_META = {
   en: {
-    home:           { title: 'Halli Smiley — Icelandic Carpenter & Computer Scientist', description: 'Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing combined with full-stack web development.' },
-    projects:       { title: 'Projects — Halli Smiley', description: 'Selected carpentry and software projects by Halli — hand-cut joinery, timber frames, custom web apps.' },
+    home:           { title: 'Orange Smiley — Your whole system in one place', description: 'Website, online store, inventory and invoicing in one Icelandic system. One monthly invoice, changes in days not months.' },
+    thjonusta:      { title: 'Services & pricing — Orange Smiley', description: 'Three tiers — Vefur, Verslun, Rekstur — from website to full business system. Flat monthly subscription, no hourly billing.' },
+    umOkkur:        { title: 'About us — Orange Smiley', description: 'Orange Smiley ehf. is an Icelandic software company: a solo founder assisted by AI agents, building and operating systems for Icelandic SMBs.' },
+    projects:       { title: 'Our work — Orange Smiley', description: 'Case studies of systems we have built and operate — including a full Shopify-to-own-platform migration for an Icelandic wholesaler.' },
     halli:          { title: 'About Halli — Where Wood Meets Code', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
     shop:           { title: 'Shop — Halli Smiley', description: 'Apparel, goods, and services from the workshop. Prices include 24% VAT, shipping from Iceland.' },
     shopProducts:   { title: 'Products — Halli Smiley Shop', description: 'Physical goods from the workshop: apparel and accessories. Prices include 24% VAT, shipping from Iceland.' },
     shopTech:       { title: 'Tech Services — Work with Halli', description: 'Technical advisement, AI teaching sessions, and lectures by Halli. Book a session through the shop.' },
     shopCarpentry:  { title: 'Carpentry Services — Work with Halli', description: 'Carpentry advisement and commissioned work — including TV wall artwork. Book a session through the shop.' },
     news:           { title: 'News — Halli Smiley', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
-    contact:        { title: 'Contact — Halli Smiley', description: 'Reach Halli about carpentry commissions, software work, or anything at the intersection of the two.' },
-    privacy:        { title: 'Privacy Policy — Halli Smiley' },
-    terms:          { title: 'Terms of Service — Halli Smiley' },
+    contact:        { title: 'Contact — Orange Smiley', description: 'Get a demo or ask about moving your website, store or business system over. We reply within one business day.' },
+    privacy:        { title: 'Privacy Policy — Orange Smiley' },
+    terms:          { title: 'Terms of Service — Orange Smiley' },
     party:          { title: "Halli's 40th Birthday Party", description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
   },
   is: {
-    home:           { title: 'Halli Smiley — Íslenskur smiður & tölvunarfræðingur', description: 'Verkefnasafn Halla, íslensks smiðs og tölvunarfræðings. Tuttugu ára nákvæmni í smíði og grindarsmíði sem sameinast fullgildri vefforritun.' },
-    projects:       { title: 'Verkefni — Halli Smiley', description: 'Valin smíða- og hugbúnaðarverkefni Halla — handskornar fellingar, burðargrindur, sérsmíðuð vefforrit.' },
+    home:           { title: 'Orange Smiley — Allt kerfið þitt á einum stað', description: 'Vefur, verslun, lager og reikningar í einu íslensku kerfi. Einn mánaðarreikningur, breytingar á dögum ekki mánuðum.' },
+    thjonusta:      { title: 'Þjónusta og verð — Orange Smiley', description: 'Þrjár leiðir — Vefur, Verslun, Rekstur — frá heimasíðu upp í heilt rekstrarkerfi. Föst mánaðaráskrift, engir tímareikningar.' },
+    umOkkur:        { title: 'Um okkur — Orange Smiley', description: 'Orange Smiley ehf. er íslenskt hugbúnaðarfyrirtæki: einn stofnandi með aðstoð gervigreindarumboða sem smíðar og rekur kerfi fyrir íslensk fyrirtæki.' },
+    projects:       { title: 'Verkefnin okkar — Orange Smiley', description: 'Umfjöllun um kerfi sem við höfum smíðað og rekum — þar á meðal flutning íslenskrar heildverslunar af Shopify yfir á eigið kerfi.' },
     halli:          { title: 'Um Halla — Þar sem viður mætir kóða', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
     shop:           { title: 'Verslun — Halli Smiley', description: 'Fatnaður, varningur og þjónusta úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
     shopProducts:   { title: 'Vörur — Verslun Halla Smiley', description: 'Áþreifanlegar vörur úr verkstæðinu: fatnaður og fylgihlutir. Verð með 24% VSK, sent frá Íslandi.' },
     shopTech:       { title: 'Tækniþjónusta — Vinnuðu með Halla', description: 'Tækniráðgjöf, AI-kennsla og fyrirlestrar hjá Halla. Bókaðu tíma í gegnum verslunina.' },
     shopCarpentry:  { title: 'Smíðaþjónusta — Vinnuðu með Halla', description: 'Smíðaráðgjöf og sérsmíði — þar á meðal sjónvarpsveggir. Bókaðu tíma í gegnum verslunina.' },
     news:           { title: 'Fréttir — Halli Smiley', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
-    contact:        { title: 'Samband — Halli Smiley', description: 'Hafðu samband við Halla um smíðaverkefni, hugbúnaðarverkefni eða eitthvað þar á milli.' },
-    privacy:        { title: 'Persónuverndarstefna — Halli Smiley' },
-    terms:          { title: 'Notkunarskilmálar — Halli Smiley' },
+    contact:        { title: 'Hafa samband — Orange Smiley', description: 'Fáðu demo eða spurðu um flutning á vef, verslun eða rekstrarkerfi. Við svörum innan eins virks dags.' },
+    privacy:        { title: 'Persónuverndarstefna — Orange Smiley' },
+    terms:          { title: 'Notkunarskilmálar — Orange Smiley' },
     party:          { title: '40 ára afmæli Halla', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
   },
 };
 
 // Section labels for breadcrumbs (per locale).
 const SECTION_LABELS = {
-  en: { projects: 'Projects', news: 'News', shop: 'Shop' },
+  en: { projects: 'Our work', news: 'News', shop: 'Shop' },
   is: { projects: 'Verkefni', news: 'Fréttir', shop: 'Verslun' },
 };
 
+// URL path segment per section — projects moved to the canonical Icelandic
+// slug /verkefni (business IA); news/shop keep their legacy segments.
+const SECTION_PATHS = { projects: 'verkefni', news: 'news', shop: 'shop' };
+
 // Detail-route patterns. Order matters only because each returns on first match.
 const DETAIL_PATTERNS = [
-  { re: /^\/news\/([^/]+)$/,    type: 'news'    },
-  { re: /^\/shop\/([^/]+)$/,    type: 'product' },
-  { re: /^\/projects\/(\d+)$/,  type: 'project' },
+  { re: /^\/news\/([^/]+)$/,     type: 'news'    },
+  { re: /^\/shop\/([^/]+)$/,     type: 'product' },
+  { re: /^\/verkefni\/(\d+)$/,   type: 'project' },
+  { re: /^\/projects\/(\d+)$/,   type: 'project' },
 ];
 
 function extractDetail(route) {
@@ -349,7 +365,7 @@ function breadcrumbSchema({ section, detailName, localePath, locale }) {
     items.push({
       '@type': 'ListItem', position: 2,
       name: SECTION_LABELS[locale]?.[section] || SECTION_LABELS.en[section] || section,
-      item: `${APP_URL}/${locale}/${section}`,
+      item: `${APP_URL}/${locale}/${SECTION_PATHS[section] || section}`,
     });
   }
   if (detailName) {
@@ -484,7 +500,7 @@ function crawlerListHtml(section, rows, locale) {
     if (section === 'projects') {
       const title = pickLocale(row, 'title', 'title_is', locale);
       const desc  = pickLocale(row, 'description', 'description_is', locale);
-      const href  = `/${locale}/projects/${row.id}`;
+      const href  = `/${locale}/verkefni/${row.id}`;
       return `<li><a href="${esc(href)}"><h2>${esc(title)}</h2></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
     }
     return '';
@@ -571,13 +587,13 @@ async function crawlerHomeHtml(locale) {
     }
   }
 
-  // Featured projects — top 3 with anchor links into /<locale>/projects/<id>.
+  // Featured projects — top 3 with anchor links into /<locale>/verkefni/<id>.
   if (Array.isArray(projectRows) && projectRows.length) {
     const sectionHeading = locale === 'is' ? 'Valin verkefni' : 'Featured projects';
     const li = projectRows.map(row => {
       const title = pickLocale(row, 'title', 'title_is', locale);
       const desc  = pickLocale(row, 'description', 'description_is', locale);
-      const href  = `/${locale}/projects/${row.id}`;
+      const href  = `/${locale}/verkefni/${row.id}`;
       return `<li><a href="${esc(href)}"><h3>${esc(title)}</h3></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
     }).join('');
     parts.push(`<h2>${esc(sectionHeading)}</h2><ul>${li}</ul>`);
@@ -767,7 +783,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
         description = stripHtml(pickLocale(detailRow, 'description', 'description_is', locale)).slice(0, 200);
         ogImage     = detailRow.image_url ? absUrl(detailRow.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
         schemas.push(creativeWorkSchema(detailRow, locale, canonical));
-        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/projects/${detailRow.id}`, locale }));
+        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/verkefni/${detailRow.id}`, locale }));
       }
     }
   } else {

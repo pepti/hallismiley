@@ -82,16 +82,16 @@ const DEFAULT_STATS_CONTENT = [
 // i18n entries so first-load (no DB row yet) renders identically to before.
 const DEFAULT_HERO_CONTENT = {
   en: {
-    title_first:  'Halli',
-    title_second: 'Smiley',
-    subtitle:     'Where wood meets code',
-    cta_label:    'View Projects',
+    title_first:  'Your whole system',
+    title_second: 'in one place',
+    subtitle:     'Website, store, inventory and invoicing in one Icelandic system — one monthly invoice, changes in days not months.',
+    cta_label:    'Get a demo',
   },
   is: {
-    title_first:  'Halli',
-    title_second: 'Smiley',
-    subtitle:     'Þar sem tré og tækni mætast',
-    cta_label:    'Skoða verkefni',
+    title_first:  'Allt kerfið þitt',
+    title_second: 'á einum stað',
+    subtitle:     'Vefur, verslun, lager og reikningar í einu íslensku kerfi — einn mánaðarreikningur, breytingar á dögum ekki mánuðum.',
+    cta_label:    'Fáðu demo',
   },
 };
 
@@ -120,33 +120,26 @@ export class HomeView {
 
   async render() {
     await Promise.all([
-      this._loadContent(),
-      this._loadStats(),
-      this._loadDiscipline(),
       this._loadHero(),
       this._loadLandingBg(),
-      this._loadNews(),
     ]);
 
     const view = document.createElement('div');
     view.className = 'view';
 
+    // Business composition: hero → tier teaser → how-it-works → footer.
+    // The portfolio sections (news strip, project grid, skills, stats,
+    // inline contact) are no longer rendered here — their content API,
+    // admin surfaces and methods below remain (disposition: job 3).
     view.innerHTML = `
       ${this._hero()}
-      ${this._news()}
-      ${this._projects()}
-      ${this._skills()}
-      ${this._stats()}
-      ${this._contact()}
+      ${this._tiers()}
+      ${this._steps()}
       ${this._footer()}
     `;
 
-    this._initProjects(view);
-    this._initContactForm(view);
     this._initHeroVideo(view);
     this._initHeroEdit(view);
-    this._initSkillsEdit(view);
-    this._initDisciplineEdit(view);
     this._initFooterLinks(view);
     return view;
   }
@@ -209,7 +202,9 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
-  // ── Load landing background config (admin-configurable; video is default) ──
+  // ── Load landing background config (admin-configurable; plain is the
+  // default — the static business hero. Video/photo modes remain available
+  // through the admin background settings.) ──
   async _loadLandingBg() {
     try {
       const res = await fetch('/api/v1/content/landing_background?locale=en');
@@ -217,14 +212,14 @@ export class HomeView {
         const data = await res.json();
         if (data && typeof data === 'object') { this._landingBg = data; return; }
       }
-    } catch { /* network error — fall through to video default */ }
-    this._landingBg = { mode: 'video', photo_url: null, veil_percent: 100 };
+    } catch { /* network error — fall through to plain default */ }
+    this._landingBg = { mode: 'plain', photo_url: null, veil_percent: 100 };
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
   _hero() {
     const h  = this._heroContent || DEFAULT_HERO_CONTENT.en;
-    const bg = this._landingBg || { mode: 'video', photo_url: null, veil_percent: 100 };
+    const bg = this._landingBg || { mode: 'plain', photo_url: null, veil_percent: 100 };
     const veil = Math.max(0, Math.min(100, Number.isFinite(bg.veil_percent) ? bg.veil_percent : 100));
     // Background: video (default) | photo (a library image) | plain. The photo
     // layer uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
@@ -250,13 +245,61 @@ export class HomeView {
           <span class="lol-hero__title-second" data-hero-field="title_second">${escHtml(h.title_second)}</span>
         </h1>
         <p class="lol-hero__subtitle" data-hero-field="subtitle">${escHtml(h.subtitle)}</p>
-        <a href="${href('/projects')}" class="lol-hero__cta" data-hero-field="cta_label">${escHtml(h.cta_label)}</a>
+        <a href="${href('/hafa-samband')}" class="lol-hero__cta" data-hero-field="cta_label">${escHtml(h.cta_label)}</a>
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
         <span>Scroll</span>
         <div class="lol-hero__scroll-line"></div>
       </div>
+    </section>`;
+  }
+
+  // ── SECTION 2: Service-tier teaser — three cards → /thjonusta ──────────
+  _tiers() {
+    const tiers = [
+      { name: t('home.tierVefurName'),   desc: t('home.tierVefurDesc') },
+      { name: t('home.tierVerslunName'), desc: t('home.tierVerslunDesc') },
+      { name: t('home.tierReksturName'), desc: t('home.tierReksturDesc') },
+    ];
+    return `
+    <section class="home-tiers" aria-labelledby="home-tiers-title">
+      <div class="section__header">
+        <h2 class="section__title" id="home-tiers-title">${t('home.tiersTitle')}</h2>
+      </div>
+      <div class="home-tiers__grid">
+        ${tiers.map(tier => `
+        <a href="${href('/thjonusta')}" class="home-tiers__card">
+          <h3 class="home-tiers__name">${tier.name}</h3>
+          <p class="home-tiers__desc">${tier.desc}</p>
+        </a>`).join('')}
+      </div>
+      <div class="home-tiers__cta-row">
+        <a href="${href('/thjonusta')}" class="btn btn--primary">${t('home.tiersCta')}</a>
+      </div>
+    </section>`;
+  }
+
+  // ── SECTION 3: How it works — three steps ──────────────────────────────
+  _steps() {
+    const steps = [
+      { title: t('home.step1Title'), desc: t('home.step1Desc') },
+      { title: t('home.step2Title'), desc: t('home.step2Desc') },
+      { title: t('home.step3Title'), desc: t('home.step3Desc') },
+    ];
+    return `
+    <section class="home-steps" aria-labelledby="home-steps-title">
+      <div class="section__header">
+        <h2 class="section__title" id="home-steps-title">${t('home.stepsTitle')}</h2>
+      </div>
+      <ol class="home-steps__list">
+        ${steps.map((step, i) => `
+        <li class="home-steps__item">
+          <span class="home-steps__num" aria-hidden="true">${i + 1}</span>
+          <h3 class="home-steps__title">${step.title}</h3>
+          <p class="home-steps__desc">${step.desc}</p>
+        </li>`).join('')}
+      </ol>
     </section>`;
   }
 
@@ -591,29 +634,15 @@ export class HomeView {
     <footer class="lol-footer">
 
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
-        <a href="${href('/')}"         class="lol-footer__nav-link">${t('nav.home')}</a>
-        <a href="${href('/projects')}" class="lol-footer__nav-link">${t('nav.projects')}</a>
-        <a href="${href('/shop')}"     class="lol-footer__nav-link">${t('nav.shop')}</a>
-        <a href="${href('/news')}"     class="lol-footer__nav-link">${t('nav.news')}</a>
-        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
-        <a href="${href('/contact')}"  class="lol-footer__nav-link">${t('nav.contact')}</a>
-        <a href="${href('/party')}"    class="lol-footer__nav-link">${t('nav.party')}</a>
+        <a href="${href('/')}"             class="lol-footer__nav-link">${t('nav.home')}</a>
+        <a href="${href('/thjonusta')}"    class="lol-footer__nav-link">${t('nav.thjonusta')}</a>
+        <a href="${href('/verkefni')}"     class="lol-footer__nav-link">${t('nav.projects')}</a>
+        <a href="${href('/um-okkur')}"     class="lol-footer__nav-link">${t('nav.umOkkur')}</a>
+        <a href="${href('/hafa-samband')}" class="lol-footer__nav-link">${t('nav.hafaSamband')}</a>
       </nav>
 
       <div class="lol-footer__social">
-        <a href="https://github.com/pepti/hallismiley" target="_blank" rel="noopener noreferrer"
-           class="lol-footer__social-icon" aria-label="GitHub profile">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-        </a>
-        <a href="https://www.linkedin.com/in/halliv/" target="_blank" rel="noopener noreferrer"
-           class="lol-footer__social-icon" aria-label="LinkedIn profile">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-          </svg>
-        </a>
-        <a id="footer-email-icon" href="#contact"
+        <a id="footer-email-icon" href="${href('/hafa-samband')}"
            class="lol-footer__social-icon" aria-label="Send email">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -624,12 +653,12 @@ export class HomeView {
       </div>
 
       <div class="lol-footer__brand">
-        <div class="lol-footer__logo">Halli Smiley</div>
+        <div class="lol-footer__logo">Orange Smiley</div>
         <p class="lol-footer__copy">
-          &copy; ${new Date().getFullYear()} Halli Smiley. ${t('footer.tagline')}
+          &copy; ${new Date().getFullYear()} ${t('footer.companyLine')}
         </p>
         <nav class="lol-footer__legal" aria-label="${t('nav.legalNav')}">
-          <a href="${href('/privacy')}" class="lol-footer__legal-link">${t('footer.privacy')}</a>
+          <a href="${href('/personuvernd')}" class="lol-footer__legal-link">${t('footer.privacy')}</a>
           <a href="${href('/terms')}"   class="lol-footer__legal-link">${t('footer.terms')}</a>
         </nav>
       </div>
@@ -641,7 +670,7 @@ export class HomeView {
   _initFooterLinks(view) {
     const icon = view.querySelector('#footer-email-icon');
     if (icon) {
-      const parts = ['halli', 'hallismiley', 'is'];
+      const parts = ['info', 'orangesmiley', 'is'];
       icon.href = `mailto:${parts[0]}@${parts[1]}.${parts[2]}`;
     }
   }

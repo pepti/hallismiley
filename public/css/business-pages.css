@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════
+   BUSINESS PAGES — home tier teaser + steps, /thjonusta, /um-okkur
+   All colors ride the theme tokens (variables.css).
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Home: tier teaser ── */
+.home-tiers,
+.home-steps {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-5);
+}
+
+.home-tiers__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-5);
+}
+
+.home-tiers__card {
+  display: block;
+  padding: var(--sp-6) var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+.home-tiers__card:hover {
+  border-color: var(--gold);
+  box-shadow: var(--shadow-gold);
+  transform: translateY(-2px);
+}
+
+.home-tiers__name {
+  font-family: var(--font-display);
+  font-size: 1.3rem; font-weight: 700;
+  color: var(--gold);
+  margin-bottom: var(--sp-3);
+}
+
+.home-tiers__desc {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-tiers__cta-row {
+  display: flex; justify-content: center;
+  margin-top: var(--sp-6);
+}
+
+/* ── Home: how-it-works steps ── */
+.home-steps__list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-6);
+  padding: 0; margin: 0;
+}
+
+.home-steps__item { text-align: left; }
+
+.home-steps__num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--accent-amber-dim);
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-weight: 800; font-size: 1.1rem;
+  margin-bottom: var(--sp-3);
+}
+
+.home-steps__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.home-steps__desc {
+  font-size: 0.92rem; line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ── /thjonusta ── */
+.thjonusta-header,
+.um-okkur-header {
+  max-width: 46em;
+  margin: 0 auto var(--sp-7);
+  text-align: center;
+}
+
+.thjonusta-title,
+.um-okkur-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 4.5vw, 3rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: var(--sp-3) 0;
+}
+
+.thjonusta-intro,
+.um-okkur-lead {
+  font-size: 1.05rem; line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.tier-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-8);
+}
+
+.tier-card {
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: var(--sp-6) var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.tier-card--featured { border-color: var(--gold); box-shadow: var(--shadow-gold); }
+
+.tier-card__name {
+  font-family: var(--font-display);
+  font-size: 1.4rem; font-weight: 800;
+  color: var(--text-primary);
+}
+
+.tier-card__price { margin: var(--sp-3) 0 var(--sp-1); }
+.tier-card__amount {
+  font-family: var(--font-display);
+  font-size: 2.4rem; font-weight: 800;
+  color: var(--gold);
+}
+.tier-card__unit {
+  font-size: 0.85rem; font-weight: 600;
+  color: var(--text-muted);
+  margin-left: var(--sp-1);
+}
+
+/* DRAFT chip — prices unconfirmed until Halli signs off */
+.tier-card__draft {
+  display: inline-block;
+  font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--teal-dim);
+  color: var(--teal);
+  margin-bottom: var(--sp-4);
+}
+
+.tier-card__tagline {
+  font-size: 0.92rem; line-height: 1.6;
+  color: var(--text-secondary);
+  flex: 1;
+  margin-bottom: var(--sp-5);
+}
+
+.tier-card__cta { align-self: stretch; text-align: center; }
+
+/* Feature matrix */
+.tier-matrix-wrap { overflow-x: auto; margin-bottom: var(--sp-5); }
+
+.tier-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+}
+
+.tier-matrix th,
+.tier-matrix td {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--text-primary);
+}
+.tier-matrix thead th {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+.tier-matrix tbody th { font-weight: 500; color: var(--text-secondary); }
+.tier-matrix td { text-align: center; }
+.tier-matrix__yes span[aria-hidden] { color: var(--success); font-weight: 700; }
+.tier-matrix__no  span[aria-hidden] { color: var(--text-muted); }
+
+.thjonusta-setup-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ── /um-okkur ── */
+.um-okkur-story {
+  max-width: 42em;
+  margin: 0 auto var(--sp-7);
+}
+.um-okkur-story p {
+  font-size: 1rem; line-height: 1.75;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-5);
+}
+
+.um-okkur-facts {
+  max-width: 42em;
+  margin: 0 auto var(--sp-7);
+  padding: var(--sp-5);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+}
+.um-okkur-facts h2 {
+  font-family: var(--font-display);
+  font-size: 0.9rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: var(--sp-3);
+}
+.um-okkur-facts ul { list-style: none; padding: 0; margin: 0; }
+.um-okkur-facts li {
+  padding: var(--sp-1) 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+.um-okkur-facts a { color: var(--gold-dark); }
+
+.um-okkur-cta {
+  display: flex; justify-content: center;
+  margin-bottom: var(--sp-6);
+}
+
+/* Screen-reader-only helper (used by the tier matrix) */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
