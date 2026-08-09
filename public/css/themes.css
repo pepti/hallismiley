@@ -1,16 +1,19 @@
 /* ── Site themes ─────────────────────────────────────────────────────────────
    Five selectable alternate colour themes (picker:
-   public/js/components/ThemeSwitcher.js). `classic` is the site's existing
-   dark charcoal+gold look — the :root default in variables.css, with no
+   public/js/components/ThemeSwitcher.js). `classic` is Orange Smiley's light
+   warm-neutral orange-led look — the :root default in variables.css, with no
    data-theme attribute. The attribute lives on <html>, set pre-paint by
    /js/theme-boot.js and at runtime by services/themePrefs.js.
 
-   This site is dark by default and its component CSS is consistently
-   token-driven, so an alternate theme only has to REDEFINE the tokens below —
-   every tokenized component re-skins automatically. (Unlike the upstream store
-   this was ported from, there is no light baseline, so the light→dark fixes —
-   logo inversion, ink-flip hovers, admin status pills — are intentionally
-   omitted; they are not needed here.)
+   Component CSS is consistently token-driven, so an alternate theme only has
+   to REDEFINE the tokens below — every tokenized component re-skins
+   automatically. NOTE (Orange Smiley re-brand): classic flipped dark→light;
+   the five alternates below are still dark. The brand mark and nav ride
+   tokens, so no logo-inversion fix is needed, and this base's admin badges
+   are translucent token tints that work on both. `lava` doubles as the
+   orange-dark brand variant. If a component looks wrong ONLY under an
+   alternate theme, fix it here with scoped html[data-theme] rules — never in
+   the component files.
 
    glacier / moss / lava / aurora are immersive COLOUR themes: a deep tinted
    surface set + light text + a gradient backdrop + gradient primary buttons.
