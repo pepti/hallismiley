@@ -183,25 +183,35 @@ const DEFAULT_FOOTER = {
   },
 };
 
-// Topic dropdown options for the contact form. Values stay the same in both
-// locales (they're server-side enum keys) — only the human-readable labels
-// switch. Resolved at render time via TOPICS[getLocale()] || TOPICS.en.
-const TOPICS = {
+// Values stay the same in both locales (they're server-side enum keys) — only
+// the human-readable labels switch. Resolved at render time via
+// PLATFORMS[getLocale()] || PLATFORMS.en.
+// The system a prospect is moving off — the single most useful qualifying
+// answer, so it replaces the portfolio-era "topic" selector. Values must
+// match KNOWN_PLATFORMS in server/controllers/contactController.js; anything
+// unrecognised is recorded as 'other' rather than rejected.
+const PLATFORMS = {
   en: [
-    { value: '',              label: 'What is this about?' },
-    { value: 'carpentry',     label: 'Carpentry commission' },
-    { value: 'software',      label: 'Software work' },
-    { value: 'collaboration', label: 'Collaboration' },
-    { value: 'press',         label: 'Press & speaking' },
-    { value: 'other',         label: 'Other' },
+    { value: '',            label: 'What are you using today?' },
+    { value: 'shopify',     label: 'Shopify' },
+    { value: 'wix',         label: 'Wix' },
+    { value: 'wordpress',   label: 'WordPress' },
+    { value: 'woocommerce', label: 'WooCommerce' },
+    { value: 'squarespace', label: 'Squarespace' },
+    { value: 'dk',          label: 'DK / Regla / Payday (accounting only)' },
+    { value: 'none',        label: 'Nothing yet' },
+    { value: 'other',       label: 'Something else' },
   ],
   is: [
-    { value: '',              label: 'Hvað er þetta um?' },
-    { value: 'carpentry',     label: 'Smíðaverkefni' },
-    { value: 'software',      label: 'Hugbúnaðarvinna' },
-    { value: 'collaboration', label: 'Samstarf' },
-    { value: 'press',         label: 'Fjölmiðlar & erindi' },
-    { value: 'other',         label: 'Annað' },
+    { value: '',            label: 'Hvað notar þú í dag?' },
+    { value: 'shopify',     label: 'Shopify' },
+    { value: 'wix',         label: 'Wix' },
+    { value: 'wordpress',   label: 'WordPress' },
+    { value: 'woocommerce', label: 'WooCommerce' },
+    { value: 'squarespace', label: 'Squarespace' },
+    { value: 'dk',          label: 'DK / Regla / Payday (bara bókhald)' },
+    { value: 'none',        label: 'Ekkert ennþá' },
+    { value: 'other',       label: 'Eitthvað annað' },
   ],
 };
 
@@ -356,8 +366,8 @@ export class ContactView {
   // ── SECTION 3: Inquiry form ────────────────────────────────────────────
   _formHtml() {
     const f = this._form;
-    const topicOptions = (TOPICS[getLocale()] || TOPICS.en).map(t =>
-      `<option value="${escHtml(t.value)}">${escHtml(t.label)}</option>`
+    const platformOptions = (PLATFORMS[getLocale()] || PLATFORMS.en).map(p =>
+      `<option value="${escHtml(p.value)}">${escHtml(p.label)}</option>`
     ).join('');
 
     return `
@@ -374,13 +384,6 @@ export class ContactView {
                  tabindex="-1" autocomplete="off" aria-hidden="true"
                  style="position:absolute;left:-9999px;opacity:0;height:0;width:0;pointer-events:none;" />
 
-          <div class="contact-form__field">
-            <label for="contact-page-topic" class="contact-form__label">${t('contact.topic')}</label>
-            <select id="contact-page-topic" name="topic" class="contact-form__input contact-form__select">
-              ${topicOptions}
-            </select>
-          </div>
-
           <div class="contact-form__row">
             <div class="contact-form__field">
               <label for="contact-page-name" class="contact-form__label">
@@ -390,12 +393,32 @@ export class ContactView {
                      required autocomplete="name" placeholder="${t('contact.namePlaceholder')}" maxlength="100" />
             </div>
             <div class="contact-form__field">
+              <label for="contact-page-company" class="contact-form__label">${t('contact.company')}</label>
+              <input type="text" id="contact-page-company" name="company" class="contact-form__input"
+                     autocomplete="organization" placeholder="${t('contact.companyPlaceholder')}" maxlength="150" />
+            </div>
+          </div>
+
+          <div class="contact-form__row">
+            <div class="contact-form__field">
               <label for="contact-page-email" class="contact-form__label">
                 ${t('contact.email')} <span aria-hidden="true" class="required-mark">*</span>
               </label>
               <input type="email" id="contact-page-email" name="email" class="contact-form__input"
                      required autocomplete="email" placeholder="${t('contact.emailPlaceholder')}" maxlength="200" />
             </div>
+            <div class="contact-form__field">
+              <label for="contact-page-phone" class="contact-form__label">${t('contact.phone')}</label>
+              <input type="tel" id="contact-page-phone" name="phone" class="contact-form__input"
+                     autocomplete="tel" placeholder="${t('contact.phonePlaceholder')}" maxlength="40" />
+            </div>
+          </div>
+
+          <div class="contact-form__field">
+            <label for="contact-page-platform" class="contact-form__label">${t('contact.currentPlatform')}</label>
+            <select id="contact-page-platform" name="current_platform" class="contact-form__input contact-form__select">
+              ${platformOptions}
+            </select>
           </div>
 
           <div class="contact-form__field">
@@ -554,16 +577,14 @@ export class ContactView {
     });
   }
 
-  // ── Init: "Email me for setup help" pre-fills topic + scrolls to form ──
+  // ── Init: "Email me for setup help" pre-fills the form + scrolls to it ──
   _initBuiltWithButtons(view) {
     const btn = view.querySelector('#built-with-email-btn');
     if (!btn) return;
     btn.addEventListener('click', () => {
-      const topic = view.querySelector('#contact-page-topic');
-      if (topic) topic.value = 'collaboration';
       const message = view.querySelector('#contact-page-message');
       if (message && !message.value.trim()) {
-        message.value = 'Hi Halli — I am interested in cloning the portfolio repo and would like a hand with setup.';
+        message.value = t('contact.builtWithPrefill');
       }
       view.querySelector('#contact-form-section')?.scrollIntoView({ behavior: 'smooth' });
       setTimeout(() => view.querySelector('#contact-page-name')?.focus(), 500);
@@ -585,7 +606,9 @@ export class ContactView {
       const name     = form.querySelector('#contact-page-name').value.trim();
       const email    = form.querySelector('#contact-page-email').value.trim();
       const message  = form.querySelector('#contact-page-message').value.trim();
-      const topic    = form.querySelector('#contact-page-topic').value || null;
+      const company  = form.querySelector('#contact-page-company').value.trim() || null;
+      const phone    = form.querySelector('#contact-page-phone').value.trim() || null;
+      const platform = form.querySelector('#contact-page-platform').value || null;
 
       if (!name || !email || !message) {
         status.className = 'contact-form__status contact-form__status--error';
@@ -602,7 +625,7 @@ export class ContactView {
         const res = await fetch('/api/v1/contact', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, message, topic, website: honeypot }),
+          body: JSON.stringify({ name, email, message, company, phone, current_platform: platform, website: honeypot }),
         });
 
         if (res.ok) {

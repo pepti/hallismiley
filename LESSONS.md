@@ -44,3 +44,18 @@ Format for new entries:
 _(factory|base|project)_ What happened, why it was surprising, and what to do instead next time.
 Include the file path or command involved so the fix is actionable without this conversation.
 -->
+
+### 2026-08-09 — books archive pagination is not deterministic (flaky in full-suite runs)
+
+_(base)_ `server/scripts/books-archive-export.js` pages documents with
+`ORDER BY created_at LIMIT $1 OFFSET $2`. `created_at` is not unique, so when
+rows are inserted while the export runs (every books suite shares one test
+database) a row can be returned on two consecutive pages. Both manifest
+entries then point at the same `documents/<id><ext>` destination, the second
+`copyFile` overwrites the first, and `verify()` re-hashes those bytes against
+the FIRST entry's `checksum_recorded` — which fails, while that entry was
+recorded `verified: true`. Surfaces as `booksReports.test.js › archive export
+› writes every file, and a manifest that verifies against them` failing in a
+full `npm test` run but passing in isolation. Fix: order by a unique key
+(`ORDER BY created_at, id`) — or better, keyset-paginate. Raised as an
+ENHANCEMENTS.md proposal rather than fixed inside a job-2 UI chunk.

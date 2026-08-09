@@ -1,12 +1,10 @@
 {
   "email.footer": "Þú fékkst þennan tölvupóst frá <a href=\"{appUrl}\" style=\"color:#c9a84c;text-decoration:none;\">hallismiley.is</a>. Ef þú baðst ekki um þetta geturðu hunsað þennan póst.",
-
   "email.verify.subject": "Staðfestu Halli Smiley aðganginn þinn",
   "email.verify.heading": "Staðfestu netfangið þitt",
   "email.verify.body": "Takk fyrir að skrá þig! Smelltu á hnappinn hér að neðan til að staðfesta netfangið þitt og virkja aðganginn. Þessi tengill rennur út eftir <strong style=\"color:#c9a84c;\">24 klukkustundir</strong>.",
   "email.verify.button": "Staðfesta netfang",
   "email.verify.fallback": "Eða límdu þennan tengil inn í vafrann þinn:",
-
   "email.reset.subject": "Endurstilltu lykilorðið þitt á Halli Smiley",
   "email.reset.heading": "Endurstilla lykilorð",
   "email.reset.body": "Við fengum beiðni um að endurstilla lykilorðið á aðganginum þínum. Smelltu á hnappinn hér að neðan til að velja nýtt lykilorð. Þessi tengill rennur út eftir <strong style=\"color:#c9a84c;\">1 klukkustund</strong>.",
@@ -34,7 +32,6 @@
   "email.partyInvite.fallback": "Eða límdu þennan hlekk inn í vafrann þinn:",
   "email.partyInvite.passwordNote": "Vilt þú frekar lykilorð? Þú getur búið það til hvenær sem er á innskráningarsíðunni með \"Gleymt lykilorð\".",
   "email.partyInvite.fallbackName": "vinur",
-
   "email.order.subject": "Pöntun þín hjá Halli Smiley {orderNumber}",
   "email.order.heading": "Takk fyrir pöntunina",
   "email.order.body": "Pöntunin þín <strong style=\"color:#c9a84c;\">{orderNumber}</strong> er móttekin. Staðfesting á öllum upplýsingum er hér að neðan.",
@@ -48,7 +45,6 @@
   "email.order.questions": "Einhverjar spurningar? Svaraðu þessum tölvupósti og við höfum samband.",
   "email.order.bookingHeading": "Tímabókun",
   "email.order.bookingBody": "Pöntunin þín inniheldur þjónustu. Halli hefur samband innan 24 klst. til að bóka tíma.",
-
   "email.bookingNotification.subject": "Ný þjónustubókun — pöntun {orderNumber}",
   "email.bookingNotification.heading": "Þjónustubókun barst",
   "email.bookingNotification.body": "Pöntun <strong style=\"color:#c9a84c;\">{orderNumber}</strong> frá {customer} inniheldur þjónustulínur. Hafðu samband innan 24 klst. til að bóka tíma.",
@@ -56,7 +52,6 @@
   "email.bookingNotification.button": "Opna pöntunarstjórn",
   "email.bookingNotification.footer": "Þessi tilkynning er send einu sinni á hverja greiða pöntun með bókanlegum atriðum. Pantanir með birgðum eru ekki snertar.",
   "email.bookingNotification.unknownCustomer": "Viðskiptavinur (enginn netfang skráð)",
-
   "email.rsvpNotification.subject.new": "Nýtt RSVP frá {name}",
   "email.rsvpNotification.subject.update": "RSVP uppfært: {name}",
   "email.rsvpNotification.heading.new": "Nýtt RSVP barst",
@@ -65,7 +60,6 @@
   "email.rsvpNotification.body.update": "<strong style=\"color:#c9a84c;\">{name}</strong> ({email}) uppfærði RSVP sitt.",
   "email.rsvpNotification.noAnswers": "(engin svör)",
   "email.rsvpNotification.button": "Opna stjórnborð",
-
   "email.rsvpConfirmation.subject.new": "Þú ert skráð(ur) í fertugsafmælið hans Halla!",
   "email.rsvpConfirmation.subject.update": "Skráningin þín í fertugsafmælið — uppfærð",
   "email.rsvpConfirmation.heading.new": "Þú ert á listanum! 🎉",
@@ -78,13 +72,11 @@
   "email.rsvpConfirmation.updateNote": "Þarftu að breyta einhverju? Þú getur uppfært skráninguna þína hvenær sem er:",
   "email.rsvpConfirmation.button": "Uppfæra skráningu",
   "email.rsvpConfirmation.closing": "Hlakka til að fagna með þér!",
-
   "email.partyAnnouncement.subject": "Uppfærsla um fertugsafmæli Halla",
   "email.partyAnnouncement.heading": "Skilaboð frá Halla",
   "email.partyAnnouncement.intro": "Hæ — bara stutt uppfærsla um veisluna. Hlakka til að sjá þig!",
   "email.partyAnnouncement.button": "Opna veislusíðuna",
   "email.partyAnnouncement.signoff": "— Halli",
-
   "email.partyWelcome.subject": "Allt sem þú þarft að vita fyrir fertugsafmæli Halla 🎉",
   "email.partyWelcome.heading": "Hér eru veisluupplýsingarnar!",
   "email.partyWelcome.intro": "Hæ {name} — hér er allt fyrir stóra daginn. Veislusíðan er alltaf með nýjustu útgáfuna af þessu öllu.",
@@ -102,7 +94,6 @@
   "email.partyWelcome.goodToKnow4": "Hafðu samband við Halla, Katrínu eða Auði með fyrirspurnir.",
   "email.partyWelcome.button": "Opna veislusíðuna",
   "email.partyWelcome.closing": "Sjáumst þar! — Halli",
-
   "validation.title.required": "Titill er nauðsynlegur",
   "validation.title.nonEmptyString": "Titill má ekki vera tómur",
   "validation.title.maxLength": "Titill má að hámarki vera {n} stafir",
@@ -166,7 +157,6 @@
   "validation.coverImage.string": "cover_image verður að vera texti",
   "validation.coverImage.invalid": "cover_image verður að vera gild https:// slóð eða afstæð /assets/ slóð",
   "validation.published.boolean": "Birt verður að vera satt eða ósatt",
-
   "errors.auth.usernamePasswordRequired": "Notandanafn og lykilorð eru nauðsynleg",
   "errors.auth.invalidCredentials": "Rangt notandanafn eða lykilorð",
   "errors.auth.accountLocked": "Aðgangurinn er tímabundið læstur",
@@ -186,7 +176,6 @@
   "errors.auth.forgotPasswordSent": "Ef þetta netfang er skráð færðu tölvupóst með tengli til að endurstilla lykilorð.",
   "errors.auth.passwordUpdatedReLogin": "Lykilorð uppfært. Vinsamlegast skráðu þig inn með nýja lykilorðinu.",
   "errors.auth.resendVerificationSent": "Ef þetta netfang bíður staðfestingar færðu nýjan tengil.",
-
   "errors.user.noUpdatableFields": "Engar uppfæranlegar upplýsingar sendar",
   "errors.user.unsupportedLocale": "Óstutt tungumál",
   "errors.user.noFileUploaded": "Engin skrá hlaðin upp",
@@ -194,7 +183,6 @@
   "errors.user.wrongCurrentPassword": "Núverandi lykilorð er rangt",
   "errors.user.passwordUpdated": "Lykilorð uppfært.",
   "errors.user.sessionNotFound": "Seta fannst ekki",
-
   "errors.party.answersObject": "Svör verða að vera hlutur",
   "errors.party.invalidRsvpStatus": "Ógilt svarstöðugildi",
   "errors.party.invalidName": "Nafn má ekki vera lengra en 100 stafir",
@@ -253,7 +241,6 @@
   "errors.party.todoNoFields": "Engin gild svið til að uppfæra",
   "errors.party.todoNotFound": "Verkefni fannst ekki",
   "errors.party.subtaskNotFound": "Undirverkefni fannst ekki",
-
   "errors.party.planTitleRequired": "Titill verkefnis er nauðsynlegur",
   "errors.party.planTitleTooLong": "Titill má ekki vera lengri en {n} stafir",
   "errors.party.planNotesTooLong": "Athugasemdir mega ekki vera lengri en {n} stafir",
@@ -270,7 +257,6 @@
   "errors.party.planPhaseExists": "Áfangi með þessu heiti er þegar til",
   "errors.party.planPhaseNotFound": "Áfangi fannst ekki",
   "errors.party.planPhaseBuiltinLocked": "Ekki er hægt að eyða innbyggðum áföngum",
-
   "errors.shop.productNotFound": "Vara fannst ekki",
   "errors.shop.checkoutUnavailable": "Ekki hægt að klára kaup í augnablikinu",
   "errors.shop.itemsNonEmpty": "Listi af vörum má ekki vera tómur (hámark {n})",
@@ -285,7 +271,6 @@
   "errors.shop.variantRequired": "Vara {name} krefst vals á útgáfu",
   "errors.shop.itemNeedsId": "Hvert atriði þarf variantId eða productId",
   "errors.shop.orderNotFound": "Pöntun fannst ekki",
-
   "errors.news.invalidLimit": "Ógilt hámark",
   "errors.news.invalidOffset": "Ógilt frávik",
   "errors.news.articleNotFound": "Grein fannst ekki",
@@ -298,7 +283,6 @@
   "errors.news.noFieldsToUpdate": "Ekkert til að uppfæra",
   "errors.news.mediaNotFound": "Efni fannst ekki",
   "errors.news.mediaBelongsToArticle": "Eitt eða fleiri efnisauðkenni tilheyra ekki þessari grein",
-
   "errors.project.projectNotFound": "Verkefni fannst ekki",
   "errors.project.mediaNotFound": "Efnisatriði fannst ekki",
   "errors.project.sectionNotFound": "Svæði fannst ekki",
@@ -315,7 +299,6 @@
   "errors.project.videoBelongsToProject": "Eitt eða fleiri myndbandsauðkenni tilheyra ekki þessu verkefni",
   "errors.project.invalidPosition": "position verður að vera \"above_gallery\" eða \"below_gallery\"",
   "errors.project.mediaIdRequired": "media_id er nauðsynlegt",
-
   "errors.admin.cannotChangeOwnRole": "Ekki er hægt að breyta eigin hlutverki",
   "errors.admin.cannotDisableSelf": "Ekki er hægt að loka eigin aðgangi",
   "errors.admin.cannotDeleteSelf": "Ekki er hægt að eyða eigin aðgangi",
@@ -369,5 +352,16 @@
   "errors.contact.nameTooLong": "Nafn má að hámarki vera 100 stafir.",
   "errors.contact.emailTooLong": "Netfang má að hámarki vera 200 stafir.",
   "errors.contact.messageTooLong": "Skilaboð mega að hámarki vera 2000 stafir.",
-  "errors.contact.invalidTopic": "Ógilt umræðuefni."
+  "errors.contact.invalidTopic": "Ógilt umræðuefni.",
+  "errors.contact.companyTooLong": "Fyrirtækjanafn má að hámarki vera 150 stafir.",
+  "errors.contact.phoneTooLong": "Símanúmer má að hámarki vera 40 stafir.",
+  "email.lead.subject": "Ný fyrirspurn frá {name}",
+  "email.lead.heading": "Ný fyrirspurn",
+  "email.lead.body": "Fyrirspurn barst í gegnum vefinn. Svaraðu einfaldlega þessum pósti til að hafa samband.",
+  "email.lead.nameLabel": "Nafn",
+  "email.lead.companyLabel": "Fyrirtæki",
+  "email.lead.emailLabel": "Netfang",
+  "email.lead.phoneLabel": "Sími",
+  "email.lead.platformLabel": "Núverandi kerfi",
+  "email.lead.messageLabel": "Skilaboð"
 }

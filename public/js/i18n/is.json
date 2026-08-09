@@ -2109,5 +2109,11 @@
   "umOkkur.factKennitala": "Kennitala: í skráningu",
   "umOkkur.factLocation": "Hafnarfjörður, Ísland",
   "umOkkur.factEmail": "info@orangesmiley.is",
-  "footer.companyLine": "Orange Smiley ehf. · Kennitala: í skráningu · Hafnarfjörður"
+  "footer.companyLine": "Orange Smiley ehf. · Kennitala: í skráningu · Hafnarfjörður",
+  "contact.company": "Fyrirtæki",
+  "contact.companyPlaceholder": "Nafn fyrirtækisins",
+  "contact.phone": "Sími",
+  "contact.phonePlaceholder": "+354 ...",
+  "contact.currentPlatform": "Núverandi kerfi",
+  "contact.builtWithPrefill": "Sæl(l) — mig langar að heyra meira um kerfið og hvernig flutningur myndi ganga fyrir sig."
 }

@@ -131,3 +131,95 @@ describe('POST /api/v1/contact — honeypot', () => {
     expect(res.body.message).toMatch(/móttekin/i);
   });
 });
+
+// ── Business lead fields (job 2E) ────────────────────────────────────────────
+// The form doubles as lead capture: company, phone and current platform are
+// optional qualifiers, and a submission is never rejected for omitting them.
+
+describe('POST /api/v1/contact — lead fields', () => {
+  test('accepts the full business payload', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({
+        ...validPayload(),
+        company: 'Ísprjón ehf.',
+        phone: '+354 555 1234',
+        current_platform: 'shopify',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/móttekin/i);
+  });
+
+  test('omitting every optional field still succeeds', async () => {
+    const res = await request(app).post('/api/v1/contact').send(validPayload());
+    expect(res.status).toBe(200);
+  });
+
+  test('an unrecognised platform is accepted, not rejected', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({ ...validPayload(), current_platform: 'some-bespoke-thing' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('over-long company returns 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({ ...validPayload(), company: 'C'.repeat(151) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/150/)]));
+  });
+
+  test('over-long phone returns 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({ ...validPayload(), phone: '9'.repeat(41) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/40/)]));
+  });
+});
+
+describe('POST /api/v1/contact — notification', () => {
+  test('a valid submission triggers the lead notification', async () => {
+    const emailService = require('../../server/services/emailService');
+    const spy = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(undefined);
+
+    try {
+      const res = await request(app)
+        .post('/api/v1/contact')
+        .send({ ...validPayload(), company: 'Ísprjón ehf.', current_platform: 'shopify' });
+      expect(res.status).toBe(200);
+
+      // The send is fire-and-forget — let the microtask queue drain.
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        company: 'Ísprjón ehf.',
+        platform: 'shopify',
+      }));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('the honeypot path sends nothing', async () => {
+    const emailService = require('../../server/services/emailService');
+    const spy = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(undefined);
+
+    try {
+      await request(app)
+        .post('/api/v1/contact')
+        .send({ ...validPayload(), website: 'http://spam.bot' });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
