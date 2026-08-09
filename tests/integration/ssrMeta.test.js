@@ -87,6 +87,35 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(vk.text).toMatch(/rel="alternate" hreflang="en" href="[^"]*\/en\/verkefni"/);
   });
 
+  // "Hidden from nav/SSR/sitemap, still functional" — the routes render a
+  // full page; they are simply de-indexed. See server/config/publicSurface.js.
+  describe('hidden public surfaces', () => {
+    test.each(['/is/party', '/is/halli', '/is/news', '/is/shop', '/is/projects', '/is/contact'])(
+      '%s still renders, marked noindex',
+      async (path) => {
+        const res = await request(app).get(path);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
+        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+      }
+    );
+
+    test.each(['/is/', '/is/thjonusta', '/is/verkefni', '/is/um-okkur', '/is/hafa-samband', '/is/personuvernd'])(
+      '%s stays indexable',
+      async (path) => {
+        const res = await request(app).get(path);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<meta name="robots" content="index, follow"/);
+      }
+    );
+
+    test('a hidden detail route is de-indexed too', async () => {
+      const res = await request(app).get('/is/news/some-article-slug');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+    });
+  });
+
   test('GET /is/halli renders IS-language meta', async () => {
     const res = await request(app).get('/is/halli');
     expect(res.status).toBe(200);

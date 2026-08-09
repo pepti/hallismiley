@@ -2,13 +2,20 @@
 
 /**
  * Dynamic sitemap.xml — served from server/routes/sitemapRoutes.js.
- * Covers the static list pages plus live news/product/project rows.
- * Static fixtures are created by tests/globalSetup.js; empty
- * news/products/projects tables are fine — the static page entries
- * are always present.
+ *
+ * The sitemap advertises the PUBLIC BUSINESS surface only: the six business
+ * routes plus project (case-study) detail pages. Hidden-but-functional
+ * surfaces listed in server/config/publicSurface.js (party, bio, news, shop,
+ * and the superseded /projects · /contact · /privacy aliases) must NOT appear
+ * — they still render, but ssrMeta marks them noindex and a sitemap entry
+ * would contradict that.
+ *
+ * Static fixtures are created by tests/globalSetup.js; an empty projects
+ * table is fine — the static business entries are always present.
  */
 const request = require('supertest');
 const app     = require('../../server/app');
+const { HIDDEN_PUBLIC_ROUTES } = require('../../server/config/publicSurface');
 
 describe('GET /sitemap.xml', () => {
   let res;
@@ -31,38 +38,28 @@ describe('GET /sitemap.xml', () => {
     expect(res.text).toMatch(/xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
   });
 
-  test('includes both locale variants of the static list pages', () => {
-    // Home + 7 other static routes × 2 locales = 16 static entries minimum.
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/projects<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/projects<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/news<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/contact<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/halli<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/privacy<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/terms<\/loc>/);
+  test('includes both locale variants of every business route', () => {
+    for (const path of ['/', '/thjonusta', '/verkefni', '/um-okkur', '/hafa-samband', '/personuvernd', '/terms']) {
+      const suffix = path === '/' ? '/' : path;
+      expect(res.text).toMatch(new RegExp(`<loc>https?://[^<]+/en${suffix}</loc>`));
+      expect(res.text).toMatch(new RegExp(`<loc>https?://[^<]+/is${suffix}</loc>`));
+    }
   });
 
-  // The party page is Icelandic-only (server/config/i18n.js forcedLocaleFor).
-  // /en/party 301s away, so advertising it here would feed crawlers a URL that
-  // contradicts both the redirect and the page's own canonical.
-  test('party is listed once, in Icelandic only', () => {
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/party<\/loc>/);
-    expect(res.text).not.toMatch(/<loc>https?:\/\/[^<]+\/en\/party<\/loc>/);
-  });
-
-  test('the party entry carries no hreflang alternates', () => {
-    // Isolate the <url> block whose <loc> is /is/party.
-    const block = res.text.match(/ {2}<url>\n {4}<loc>[^<]+\/is\/party<\/loc>[\s\S]*?<\/url>/);
-    expect(block).not.toBeNull();
-    expect(block[0]).not.toMatch(/hreflang/);
+  // The contract of "hidden from nav/SSR/sitemap but still functional": the
+  // routes work (see the party/news/shop API + view suites), they just are
+  // not advertised here.
+  test('advertises no hidden public surface', () => {
+    for (const base of HIDDEN_PUBLIC_ROUTES) {
+      for (const locale of ['en', 'is']) {
+        expect(res.text).not.toMatch(new RegExp(`<loc>https?://[^<]+/${locale}${base}(/[^<]*)?</loc>`));
+      }
+    }
   });
 
   test('each entry has matching hreflang alternates', () => {
-    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/projects"/);
-    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/projects"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/verkefni"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/verkefni"/);
   });
 
   test('home gets an x-default hreflang so search engines know the canonical landing', () => {
@@ -71,21 +68,5 @@ describe('GET /sitemap.xml', () => {
 
   test('no references to the retired halliprojects.is domain', () => {
     expect(res.text).not.toMatch(/halliprojects\.is/);
-  });
-
-  // Shop redesign step 2 — section sub-routes get their own entries so each
-  // is independently SEO-indexable, not subsumed by the umbrella /shop.
-  test('includes both locale variants of every shop section sub-route', () => {
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/products<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/products<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/tech<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/tech<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/en\/shop\/carpentry<\/loc>/);
-    expect(res.text).toMatch(/<loc>https?:\/\/[^<]+\/is\/shop\/carpentry<\/loc>/);
-  });
-
-  test('shop section sub-routes carry matching hreflang alternates', () => {
-    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/shop\/tech"/);
-    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/shop\/tech"/);
   });
 });
