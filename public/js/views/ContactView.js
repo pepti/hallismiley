@@ -372,13 +372,13 @@ export class ContactView {
 
     return `
     <section class="contact-form-section" id="contact-form-section"
-             aria-label="Inquiry form" data-section="form">
+             aria-label="${t('contact.formAriaLabel')}" data-section="form">
       <div class="contact-form-section__inner">
         <p class="contact-form-section__eyebrow" data-field="eyebrow">${escHtml(f.eyebrow)}</p>
         <h2 class="contact-form-section__title" data-field="title">${escHtml(f.title)}</h2>
 
         <form class="contact-form contact-form--page" id="contact-page-form" novalidate
-              aria-label="Inquiry form">
+              aria-label="${t('contact.formAriaLabel')}">
           <!-- Honeypot — hidden from real users, bots fill it in -->
           <input type="text" name="website" id="contact-page-honeypot"
                  tabindex="-1" autocomplete="off" aria-hidden="true"

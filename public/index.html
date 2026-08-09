@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- lang is rewritten per request by server/middleware/ssrMeta.js; "is" is the
+     right static default because that is what an unprefixed URL resolves to. -->
+<html lang="is">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -102,7 +104,9 @@
   <script src="/js/consent.js" defer></script>
 </head>
 <body>
-  <a href="#main-content" class="skip-nav">Skip to main content</a>
+  <!-- Re-translated by the SPA on boot (public/js/main.js) once messages
+       load; the markup default is Icelandic to match <html lang>. -->
+  <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Fara í meginmál</a>
   <div id="app"></div>
   <script type="module" src="/js/main.js"></script>
 </body>

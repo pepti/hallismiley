@@ -12,19 +12,16 @@ const request = require('supertest');
 const app     = require('../../server/app');
 
 describe('SSR meta-injection — SPA catch-all', () => {
-  test('GET / redirects to preferred-locale path based on Accept-Language', async () => {
-    const res = await request(app)
-      .get('/')
-      .set('Accept-Language', 'is-IS,is;q=0.9');
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
-  });
-
-  test('GET / falls back to Icelandic when Accept-Language has no supported match', async () => {
-    // PUBLIC_DEFAULT_LOCALE — Orange Smiley's visitor-facing default is 'is'.
-    const res = await request(app)
-      .get('/')
-      .set('Accept-Language', 'de-DE');
+  // The root redirect is Icelandic unless the visitor has explicitly chosen
+  // otherwise. Accept-Language is NOT a signal here: most Icelandic browsers
+  // report en-US, so honouring it would serve the English site to the exact
+  // audience this one is written for.
+  test.each([
+    ['an Icelandic browser',      'is-IS,is;q=0.9'],
+    ['an English browser',        'en-US,en;q=0.9'],
+    ['an unsupported language',   'de-DE'],
+  ])('GET / lands on Icelandic for %s', async (_label, acceptLanguage) => {
+    const res = await request(app).get('/').set('Accept-Language', acceptLanguage);
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('/is/');
   });
@@ -35,22 +32,22 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.headers.location).toBe('/is/');
   });
 
-  test('locale_choice cookie beats Accept-Language on root redirect', async () => {
+  test('an explicit locale_choice cookie is what moves the landing page', async () => {
     const res = await request(app)
       .get('/')
-      .set('Cookie', 'locale_choice=is')
-      .set('Accept-Language', 'en-US');
+      .set('Cookie', 'locale_choice=en')
+      .set('Accept-Language', 'is-IS');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe('/en/');
   });
 
   test('legacy preferred_locale cookie is ignored (polluted by the old fallback bug)', async () => {
     const res = await request(app)
       .get('/')
-      .set('Cookie', 'preferred_locale=is')
+      .set('Cookie', 'preferred_locale=en')
       .set('Accept-Language', 'en-US');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/is/');
   });
 
   test('GET /en/ renders index.html with EN meta tags', async () => {

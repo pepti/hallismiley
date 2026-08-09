@@ -19,9 +19,18 @@ installSessionGuard();
 await tryRestoreSession();
 
 // ── 2. Determine and load the active locale ───────────────────────────────────
-// Priority: locale in the URL hash → user's saved preference → Accept-Language
+// Priority: locale in the URL hash → user's saved preference → Icelandic.
+// The browser's own language list is deliberately not consulted — see
+// resolveUserLocale in ./i18n/i18n.js.
 const initialLocale = getLocaleFromHash() || getPreferredLocale();
 await loadLocale(initialLocale);
+
+// Translate the static chrome that ships in index.html (the skip link) — it
+// renders before any module runs, so its markup carries Icelandic defaults
+// and gets re-translated here once messages are in.
+for (const el of document.querySelectorAll('body > [data-i18n]')) {
+  el.textContent = t(el.dataset.i18n);
+}
 
 // ── 3. Render NavBar + mount Router ──────────────────────────────────────────
 const navBar = new NavBar();

@@ -84,3 +84,37 @@ text and works as small text) while `--gold-light` keeps the vivid #F97316
 for hovers, glows and large display text. Worth adding to `/clone-ui`: after
 re-hueing tokens, compute contrast for text-on-surface and text-on-accent
 before declaring the re-skin done.
+
+### 2026-08-09 — "default locale" must beat Accept-Language for a single-market site
+
+_(factory)_ Job 2B made Icelandic the default by putting `PUBLIC_DEFAULT_LOCALE`
+at the BOTTOM of the resolution chain, below Accept-Language. That reads
+correctly ("default = what you get with no signal") and is wrong in practice:
+a large share of Icelandic users run an English-language OS, so their browser
+sends `Accept-Language: en-US` and the Icelandic business site served English
+to its own target market. Every automated gate passed — the tests asserted the
+chain I had written, not the outcome Halli wanted.
+
+For a site aimed at ONE market, Accept-Language is noise: only an explicit
+choice (URL prefix, `?locale=`, the switcher's `locale_choice` cookie, or a
+signed-in preference) should move a visitor off the default. Removed it from
+resolution on both sides — `server/middleware/locale.js`, the root redirect in
+`server/app.js`, and `resolveUserLocale` in `public/js/i18n/i18n.js`. The
+client half matters as much as the server half: if they disagree, the page
+hydrates in a different language than the SSR `<head>` just advertised.
+
+Factory lesson: when scaffolding a single-market instance, ask which language
+wins for a browser that asks for something else — and test the OUTCOME
+(`curl -H 'Accept-Language: en-US' /` → `/is/`), not the priority list.
+
+### 2026-08-09 — a re-skin has to cover the pre-module chrome too
+
+_(base)_ `public/js/consent.js` is a classic script that runs before the ESM
+i18n layer, so it carries hardcoded English — meaning the very first thing a
+visitor saw on the Icelandic site was an English cookie banner, and it linked
+to `/privacy` (superseded by `/personuvernd`). Same class of miss: the static
+`index.html` shell shipped `<html lang="en">` and an English skip link before
+any JS ran. Anything outside the SPA's translation pass — consent banner,
+skip link, `<html lang>`, `<title>`/OG defaults — needs its own locale
+handling. Fixed by giving consent.js a small two-locale string table and
+re-translating `body > [data-i18n]` in `main.js` after messages load.

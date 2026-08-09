@@ -87,10 +87,12 @@ describe('href() while the visitor is on the locked party page', () => {
     expect(i18n.href('/projects')).toBe('/is/projects');
   });
 
-  test('with no saved choice, Accept-Language decides — not the locked page', async () => {
+  test('with no saved choice, links leave the locked page in Icelandic', async () => {
+    // The lock must not leak, but with nothing chosen the visitor's own locale
+    // is the site default — the browser's language list is not consulted.
     browseTo('/is/party', { languages: ['en-GB', 'en'] });
     await i18n.loadLocale('is');
-    expect(i18n.href('/projects')).toBe('/en/projects');
+    expect(i18n.href('/projects')).toBe('/is/projects');
   });
 });
 
@@ -120,14 +122,17 @@ describe('getPreferredLocale', () => {
     expect(i18n.getPreferredLocale()).toBe('en');
   });
 
-  test('no saved choice and no matching browser language falls back to Icelandic', () => {
+  test('no saved choice falls back to Icelandic', () => {
     // PUBLIC_DEFAULT_LOCALE — the visitor-facing default mirrors the server.
     browseTo('/projects', { languages: ['de-DE', 'fr'] });
     expect(i18n.getPreferredLocale()).toBe('is');
   });
 
-  test('a matching browser language still beats the Icelandic fallback', () => {
-    browseTo('/projects', { languages: ['en-US'] });
-    expect(i18n.getPreferredLocale()).toBe('en');
+  // Mirrors the server rule in server/middleware/locale.js. If the client
+  // trusted navigator.languages while the server ignored it, the page would
+  // hydrate in a different language than the SSR <head> just advertised.
+  test('the browser language list never moves a visitor off Icelandic', () => {
+    browseTo('/projects', { languages: ['en-US', 'en'] });
+    expect(i18n.getPreferredLocale()).toBe('is');
   });
 });

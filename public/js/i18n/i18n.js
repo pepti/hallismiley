@@ -88,21 +88,23 @@ export function getPreferredLocale() {
 }
 
 /** The visitor's OWN locale, ignoring any route lock: ?locale= → explicit saved
- *  choice → Accept-Language → default.
+ *  choice → PUBLIC_DEFAULT_LOCALE.
  *
  *  Split out from getPreferredLocale because the lock and the preference answer
  *  different questions. "What locale does this page render in?" is the lock;
  *  "what locale does this visitor read the site in?" is this. On a locked page
- *  the two disagree, and href() below needs the second one. */
+ *  the two disagree, and href() below needs the second one.
+ *
+ *  navigator.languages is deliberately not consulted — it mirrors the server's
+ *  rule in server/middleware/locale.js. Most Icelandic browsers report en-US,
+ *  so trusting it would flip the site to English for the audience it is written
+ *  for; and if the client disagreed with the server the page would hydrate into
+ *  a different language than the SSR <head> advertises. */
 function resolveUserLocale() {
   const fromQuery = getLocaleFromQuery();
   if (fromQuery) return fromQuery;
   const saved = localStorage.getItem('locale_choice');
   if (saved && SUPPORTED_LOCALES.includes(saved)) return saved;
-  for (const lang of (navigator.languages || [])) {
-    const code = lang.split('-')[0].toLowerCase();
-    if (SUPPORTED_LOCALES.includes(code)) return code;
-  }
   return PUBLIC_DEFAULT_LOCALE;
 }
 

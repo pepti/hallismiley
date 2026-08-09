@@ -506,8 +506,8 @@ app.use('/api/v1/shop',       shopRoutes);
 //   1. Refuse anything under /api/ or /auth/ — those are data endpoints,
 //      and a miss is a real 404.
 //   2. Redirect root-level paths ('/', '/en', '/is' with no trailing segment)
-//      to a locale prefix chosen from the locale_choice cookie (explicit
-//      switcher choice only) → Accept-Language → PUBLIC_DEFAULT_LOCALE. This gives
+//      to a locale prefix: the locale_choice cookie (an explicit switcher
+//      choice) if there is one, otherwise PUBLIC_DEFAULT_LOCALE. This gives
 //      crawlers + humans a clean 302 to the right language instead of
 //      ambiguous content.
 //   3. Redirect locale-locked routes (the Icelandic-only party pages) to
@@ -519,14 +519,13 @@ app.use('/api/v1/shop',       shopRoutes);
 const ssrMetaMiddleware = require('./middleware/ssrMeta');
 const { PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('./config/i18n');
 
+// Only an explicit switcher choice moves the landing page off Icelandic.
+// Accept-Language is not consulted — see the note in middleware/locale.js:
+// most Icelandic browsers send en-US, so honouring it would hand the
+// English site to the very audience this one is for.
 function pickLocaleForRedirect(req) {
   const cookie = req.cookies?.locale_choice;
   if (cookie && SUPPORTED_LOCALES.includes(cookie)) return cookie;
-  const accept = (req.headers['accept-language'] || '').toLowerCase();
-  for (const part of accept.split(',')) {
-    const code = part.split(';')[0].trim().split('-')[0];
-    if (SUPPORTED_LOCALES.includes(code)) return code;
-  }
   return PUBLIC_DEFAULT_LOCALE;
 }
 
