@@ -1,44 +1,54 @@
 :root {
-  /* Charcoal-mid palette */
-  --bg-base:     #202020;
-  --bg-base-rgb: 32, 32, 32;
-  --bg-surface:  #2A2A2A;
-  --bg-elevated: #303030;
-  --bg-nav:      #141414;
-  --bg-nav-rgb:  20, 20, 20;
-  --bg-hover:    #383838;
-  /* Subtle two-stop tint used to break up flat dark surfaces — gold glow
-     at top, teal glow at bottom. Layered over a solid base color via
-     `background-image: var(--bg-tint); background-color: var(--bg-base);`
-     (or any base var). Same pattern as the /contact hero overlay. */
+  color-scheme: light;
+
+  /* ── Orange Smiley "classic" — light warm neutrals, orange-led ──────────────
+     Token NAMES are inherited from the base (incl. the legacy --gold/--teal
+     aliases) so every var() reference across the CSS resolves without
+     component edits; only the VALUES are branded. --gold carries the primary
+     orange; --teal carries the single dark accent. */
+
+  /* Warm neutral surfaces */
+  --bg-base:     #FDF8F3;
+  --bg-base-rgb: 253, 248, 243;
+  --bg-surface:  #FFFFFF;
+  --bg-elevated: #FAF0E6;
+  --bg-nav:      #FFFFFF;
+  --bg-nav-rgb:  255, 255, 255;
+  --bg-hover:    #F6EADD;
+  /* Subtle warm glow used to break up flat surfaces — orange at top, faint
+     rust at bottom. Layered over a solid base color via
+     `background-image: var(--bg-tint); background-color: var(--bg-base);`. */
   --bg-tint:
-    radial-gradient(ellipse at top, rgba(200, 170, 110, 0.12), transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(11, 196, 227, 0.08), transparent 60%);
+    radial-gradient(ellipse at top, rgba(249, 115, 22, 0.07), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(124, 45, 18, 0.04), transparent 60%);
 
-  --border:       rgba(120, 90, 40, 0.6);
-  --border-dim:   rgba(120, 90, 40, 0.3);
-  --border-light: rgba(200, 170, 110, 0.2);
+  --border:       rgba(124, 45, 18, 0.28);
+  --border-dim:   rgba(124, 45, 18, 0.15);
+  --border-light: rgba(124, 45, 18, 0.08);
 
-  --gold:         #C8AA6E;
-  --gold-light:   #F0E6D3;
-  --gold-dark:    #785A28;
-  --gold-glow:    rgba(200, 170, 110, 0.12);
-  --glow-around:  0 0 60px rgba(200, 170, 110, 0.196), 0 0 20px rgba(200, 170, 110, 0.126);
-  --teal:         #0BC4E3;
-  --teal-dim:     rgba(11, 196, 227, 0.12);
+  /* Primary accent — brand orange (#F97316 family) */
+  --gold:         #EA580C;
+  --gold-light:   #F97316;
+  --gold-dark:    #9A3412;
+  --gold-glow:    rgba(249, 115, 22, 0.14);
+  --glow-around:  0 0 40px rgba(249, 115, 22, 0.12), 0 0 14px rgba(249, 115, 22, 0.08);
+  /* Secondary accent — the one dark accent: deep rust-brown */
+  --teal:         #7C2D12;
+  --teal-dim:     rgba(124, 45, 18, 0.10);
 
   /* Legacy aliases used in components */
-  --accent-amber:     #C8AA6E;
-  --accent-amber-dim: rgba(200, 170, 110, 0.12);
-  --accent-blue:      #0BC4E3;
-  --accent-blue-dim:  rgba(11, 196, 227, 0.12);
+  --accent-amber:     #EA580C;
+  --accent-amber-dim: rgba(234, 88, 12, 0.10);
+  --accent-blue:      #7C2D12;
+  --accent-blue-dim:  rgba(124, 45, 18, 0.10);
 
-  --text-primary:   #F0E6D3;
-  --text-secondary: #A9B4C0;
-  --text-muted:     #5B5A56;
+  /* Warm ink */
+  --text-primary:   #241A12;
+  --text-secondary: rgba(36, 26, 18, 0.74);
+  --text-muted:     rgba(36, 26, 18, 0.55);
 
-  --success: #4caf78;
-  --error:   #e05c5c;
+  --success: #1c7c54;
+  --error:   #c0392b;
 
   /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
   --test-blue:     #2f6fed;
@@ -55,21 +65,22 @@
   --sp-7:  48px;
   --sp-8:  64px;
 
-  /* Typography */
-  --font-display: 'Cinzel', 'Georgia', serif;
+  /* Typography — Barlow everywhere (self-hosted; the base's Cinzel display
+     serif is retired for the business look, files remain unused) */
+  --font-display: 'Barlow', 'Inter', system-ui, sans-serif;
   --font-sans:    'Barlow', 'Inter', system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
 
-  /* Sharp corners — LoL aesthetic */
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 4px;
+  /* Soft, friendly corners */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
-  /* Shadows */
-  --shadow-card:  0 4px 24px rgba(0,0,0,0.6), 0 1px 4px rgba(0,0,0,0.4);
-  --shadow-modal: 0 16px 64px rgba(0,0,0,0.85);
-  --shadow-gold:  0 0 24px rgba(200,170,110,0.2);
+  /* Shadows — light, warm-tinted */
+  --shadow-card:  0 1px 3px rgba(36, 26, 18, 0.08), 0 1px 2px rgba(36, 26, 18, 0.05);
+  --shadow-modal: 0 16px 48px rgba(36, 26, 18, 0.20);
+  --shadow-gold:  0 0 24px rgba(249, 115, 22, 0.16);
 
   /* Transitions */
   --transition: 200ms ease;

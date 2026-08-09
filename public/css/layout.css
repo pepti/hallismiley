@@ -19,7 +19,7 @@
   height: 56px;
   background: var(--bg-nav);
   padding: 0 24px;
-  border-bottom: 1px solid rgba(200,170,110,0.08);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .lol-nav__brand { display: flex; align-items: center; width: 200px; }
@@ -31,20 +31,22 @@
 
 .lol-nav__logo-icon {
   width: 38px; height: 38px;
-  background: linear-gradient(135deg, #C8AA6E 0%, #785A28 100%);
-  color: var(--bg-nav);
-  font-family: var(--font-display);
-  font-size: 1.1rem; font-weight: 900;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
+.lol-nav__logo-icon svg { width: 100%; height: 100%; display: block; }
+/* Smiley mark colors ride the theme tokens so the brand adapts to alt themes. */
+.lol-nav__logo-mark-face { fill: var(--gold-light); }
+.lol-nav__logo-mark-ink  { fill: var(--bg-nav); }
+.lol-nav__logo-mark-inkstroke { stroke: var(--bg-nav); }
 
 .lol-nav__logo-text {
   font-family: var(--font-display);
-  font-size: 0.65rem; font-weight: 700;
-  letter-spacing: 0.2em; color: #C8AA6E;
+  font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--text-primary);
   text-transform: uppercase; line-height: 1.2;
 }
+.lol-nav__logo-text strong { color: var(--gold); font-weight: 700; }
 
 .lol-nav__center {
   display: flex; align-items: center; gap: 28px;
@@ -54,7 +56,7 @@
   font-family: var(--font-sans);
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.12em; text-transform: uppercase;
-  color: #CDBE91; text-decoration: none;
+  color: var(--text-secondary); text-decoration: none;
   transition: color 200ms ease; cursor: pointer;
   position: relative; padding-bottom: 4px;
   white-space: nowrap; background: none; border: none;
@@ -62,14 +64,14 @@
 .lol-nav__link::after {
   content: '';
   position: absolute; bottom: -2px; left: 0;
-  width: 0; height: 2px; background: #C8AA6E;
+  width: 0; height: 2px; background: var(--gold);
   transition: width 200ms ease;
 }
 .lol-nav__link:hover,
-.lol-nav__link.active { color: #F0E6D3; }
+.lol-nav__link.active { color: var(--text-primary); }
 .lol-nav__link:hover::after,
 .lol-nav__link.active::after { width: 100%; }
-.lol-nav__link--manage { color: #C8AA6E; }
+.lol-nav__link--manage { color: var(--gold); }
 
 .lol-nav__right {
   display: flex; align-items: center; gap: 14px;
@@ -83,9 +85,9 @@
   align-items: center;
   gap: 0;
   padding: 2px;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border-dim);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-elevated);
 }
 /* Locale-locked routes (the Icelandic-only party pages) hide the toggle via
    the `hidden` attribute — NavBar.syncLocaleLock. Needs to be spelled out:
@@ -99,23 +101,23 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #888;
+  color: var(--text-muted);
   background: transparent;
   border: 0;
   border-radius: 999px;
   cursor: pointer;
   transition: color 150ms ease, background 150ms ease;
 }
-.lol-nav__lang-opt:hover { color: #F0E6D3; }
+.lol-nav__lang-opt:hover { color: var(--text-primary); }
 .lol-nav__lang-opt:focus-visible {
-  outline: 2px solid #C8AA6E;
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 .lol-nav__lang-opt--active {
-  color: #0a0a0a;
-  background: #C8AA6E;
+  color: var(--bg-nav);
+  background: var(--gold);
 }
-.lol-nav__lang-opt--active:hover { color: #0a0a0a; }
+.lol-nav__lang-opt--active:hover { color: var(--bg-nav); }
 
 /* ── Hamburger (mobile only) ── */
 .lol-nav__hamburger {
@@ -128,19 +130,19 @@
 }
 .lol-nav__hamburger span {
   display: block; width: 22px; height: 2px;
-  background: #CDBE91; transition: all 200ms ease;
+  background: var(--text-secondary); transition: all 200ms ease;
 }
 .lol-nav__hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
 .lol-nav__hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
 .lol-nav__hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
 .lol-nav__search {
-  background: none; border: none; color: #CDBE91;
+  background: none; border: none; color: var(--text-secondary);
   cursor: pointer; padding: 4px;
   display: flex; align-items: center;
   transition: color 200ms ease;
 }
-.lol-nav__search:hover { color: #F0E6D3; }
+.lol-nav__search:hover { color: var(--text-primary); }
 
 .lol-nav__auth { display: flex; align-items: center; gap: 10px; }
 
@@ -154,7 +156,7 @@
 .lol-nav__cta {
   padding: 7px 18px;
   min-height: 44px;
-  background: #0BC4E3; color: var(--bg-nav);
+  background: var(--gold); color: var(--bg-nav);
   font-family: var(--font-sans);
   font-size: 0.7rem; font-weight: 700;
   letter-spacing: 0.12em; text-transform: uppercase;
@@ -162,15 +164,16 @@
   transition: all 200ms ease;
   white-space: nowrap; text-decoration: none;
   display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-md);
 }
-.lol-nav__cta:hover { background: #0DD4F5; box-shadow: 0 2px 12px rgba(11,196,227,0.4); }
+.lol-nav__cta:hover { background: var(--gold-light); box-shadow: 0 2px 12px var(--gold-glow); }
 .lol-nav__cta--ghost {
-  background: transparent; color: #CDBE91;
-  border: 1px solid rgba(200,170,110,0.3);
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-dim);
 }
 .lol-nav__cta--ghost:hover {
-  background: rgba(200,170,110,0.08);
-  border-color: #C8AA6E; color: #F0E6D3; box-shadow: none;
+  background: var(--accent-amber-dim);
+  border-color: var(--gold); color: var(--text-primary); box-shadow: none;
 }
 
 /* ── Inner-page main container (admin, projects, about) ── */
@@ -267,7 +270,7 @@
 .admin-table th { text-align: left; padding: var(--sp-2) var(--sp-4); font-size: 0.68rem; font-weight: 700; font-family: var(--font-sans); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.14em; border-bottom: 1px solid var(--border-dim); }
 .admin-table td { padding: var(--sp-4); border-bottom: 1px solid rgba(120,90,40,0.12); vertical-align: middle; }
 .admin-table tr:last-child td { border-bottom: none; }
-.admin-table tr:hover td { background: rgba(200,170,110,0.03); }
+.admin-table tr:hover td { background: var(--accent-amber-dim); }
 .admin-table__title { font-weight: 500; max-width: 340px; color: var(--text-primary); }
 .admin-table__year  { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.8rem; }
 .admin-table__actions { display: flex; gap: var(--sp-2); }
@@ -346,7 +349,7 @@
     position: absolute; top: 56px; left: 0; right: 0;
     flex-direction: column; gap: 0;
     background: var(--bg-nav);
-    border-bottom: 1px solid rgba(200,170,110,0.15);
+    border-bottom: 1px solid var(--border-dim);
     padding: 8px 0;
     z-index: 99;
   }
@@ -373,7 +376,7 @@
     gap: 12px;
     padding: 14px 24px 8px;
     margin-top: 8px;
-    border-top: 1px solid rgba(200,170,110,0.15);
+    border-top: 1px solid var(--border-dim);
   }
   .lol-nav__mobile-extras .lol-nav__lang { align-self: flex-start; }
   .lol-nav__mobile-extras .lol-nav__auth {

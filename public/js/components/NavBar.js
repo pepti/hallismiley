@@ -79,8 +79,16 @@ export class NavBar {
       <!-- Left: Brand -->
       <div class="lol-nav__brand">
         <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="${t('nav.brandAriaLabel')}">
-          <div class="lol-nav__logo-icon" aria-hidden="true">H</div>
-          <div class="lol-nav__logo-text">Halli<br>Smiley</div>
+          <div class="lol-nav__logo-icon" aria-hidden="true">
+            <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" focusable="false">
+              <circle class="lol-nav__logo-mark-face" cx="16" cy="16" r="15"/>
+              <circle class="lol-nav__logo-mark-ink" cx="10.8" cy="12.6" r="2.3"/>
+              <circle class="lol-nav__logo-mark-ink" cx="21.2" cy="12.6" r="2.3"/>
+              <path class="lol-nav__logo-mark-inkstroke" d="M9.2 19.2c1.9 3.2 4.2 4.8 6.8 4.8s4.9-1.6 6.8-4.8"
+                    fill="none" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="lol-nav__logo-text"><strong>Orange</strong><br>Smiley</div>
         </a>
       </div>
 
