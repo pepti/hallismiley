@@ -35,10 +35,13 @@
   flex-shrink: 0;
 }
 .lol-nav__logo-icon svg { width: 100%; height: 100%; display: block; }
-/* Smiley mark colors ride the theme tokens so the brand adapts to alt themes. */
-.lol-nav__logo-mark-face { fill: var(--gold-light); }
-.lol-nav__logo-mark-ink  { fill: var(--bg-nav); }
-.lol-nav__logo-mark-inkstroke { stroke: var(--bg-nav); }
+/* Emblem colors ride the theme tokens so the mark adapts to alt themes.
+   (The rim gradient's stops live inline in NavBar.js — SVG gradients can't
+   be colored from here — but they also reference the tokens.) */
+.lol-nav__logo-mark-plate    { fill: var(--bg-surface); }
+.lol-nav__logo-mark-hairline { stroke: var(--gold); opacity: 0.55; }
+.lol-nav__logo-mark-feature  { fill: var(--gold); }
+.lol-nav__logo-mark-smile    { stroke: var(--gold); }
 
 .lol-nav__logo-text {
   font-family: var(--font-display);

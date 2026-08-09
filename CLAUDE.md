@@ -34,6 +34,12 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 - `APP_URL`/canonical host still references hallismiley.is in places — intentional until orangesmiley.is is registered; tracked in PLAN.md.
 - Log surprises in `LESSONS.md` (tagged factory/base/project) so `/retro` can harvest them.
 
+## Design rules (Halli, 2026-08-09 — binding for all UI work)
+
+- **Banned defaults.** Fonts: Inter, Roboto, Open Sans, Arial, system-ui, Space Grotesk — not even in fallback stacks (use bare `serif`/`sans-serif`/`monospace` tails behind the self-hosted faces). Colors: purple/indigo/violet gradients, timid evenly-spread palettes, default Tailwind blue. Layout: centered hero + dual CTAs + three identical feature cards — the cookie-cutter SaaS shell.
+- **Palette discipline.** One dominant color + one sharp accent + neutrals, all through the CSS token system. Here: the orange ramp dominates (`--gold-light/--gold/--gold-dark`), glacial cyan `--teal` is the sharp accent used sparingly, warm near-blacks and ivory are the neutrals.
+- **Make unexpected, context-specific choices.** This site's look is the dark hallismiley/LoL lineage — Cinzel display, sharp corners, ember glows, the moving video hero — not a generic template. Vary light/dark, density and structure across projects rather than reusing one shell; when a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
+
 ## Factory commands
 
 `/status` · `/base-diff` (engine drift vs base HEAD) · `/test-plan` · `/audit` · `/retro` · `/e2e` · `/i18n-sync` — plus base commands `/security-check`, `/pre-deploy`, `/migration-new`. (`/strip-base`, `/clone-ui`, `/import-data` exist but do not apply to this build — see the warning above.)

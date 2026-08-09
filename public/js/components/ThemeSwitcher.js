@@ -16,16 +16,21 @@ import {
 const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.21-1.79 3-4 3h-2.5a2.5 2.5 0 0 0-1.9 4.13c.37.43.4 1.06.03 1.5-.4.47-1 .87-1.63.37Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="16" cy="9.5" r="1"/></svg>';
 
 // Swatch fills are hard-coded on purpose: each swatch advertises its own
-// theme regardless of which theme is currently active. classic = this site's
-// existing dark charcoal default; the colour themes show an accent→background
-// gradient so the swatch previews their immersive look.
+// theme regardless of which theme is currently active. All ten alternates
+// are orange-and-black (Halli's exploration set, 2026-08-09), so each swatch
+// hints at its personality — slab, scanline, grid, horizon — not a hue.
 const SWATCH_COLORS = {
-  classic: '#202020',
-  glacier: 'linear-gradient(135deg, #5FB4E8 0%, #0B2138 100%)',
-  moss: 'linear-gradient(135deg, #6FD08E 0%, #0F2418 100%)',
-  lava: 'linear-gradient(135deg, #FF8347 0%, #221210 100%)',
-  aurora: 'linear-gradient(135deg, #CDB8FB 0%, #123E39 100%)',
-  'black-sand': '#1A1A1A',
+  classic:    'linear-gradient(135deg, #FDBA74 0%, #C2410C 55%, #100D0A 100%)',
+  brutal:     'linear-gradient(135deg, #F97316 0%, #F97316 48%, #000 48%, #000 100%)',
+  terminal:   'repeating-linear-gradient(0deg, #170D05 0 2px, #050403 2px 4px)',
+  blueprint:  'repeating-linear-gradient(90deg, #1D1004 0 1px, #0A0806 1px 6px)',
+  editorial:  'linear-gradient(105deg, #0D0B09 58%, #E8621D 58%, #E8621D 66%, #0D0B09 66%)',
+  sunset:     'radial-gradient(circle at 50% 115%, #F97316 0%, #7C2D12 45%, #0A0503 85%)',
+  bauhaus:    'radial-gradient(circle 7px at 68% 32%, #F97316 97%, #0B0B0B 100%)',
+  magma:      'radial-gradient(circle at 28% 72%, #F97316 0%, #C2410C 38%, #0F0906 78%)',
+  neon:       'linear-gradient(135deg, #030303 60%, #FB923C 100%)',
+  industrial: 'linear-gradient(90deg, #F97316 0 22%, #111110 22%)',
+  ash:        'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
 };
 
 function esc(s) {
@@ -114,7 +119,7 @@ export class ThemeSwitcher {
     const active = getTheme();
     const swatches = THEMES.map((id) => {
       const name = t(`themeSwitcher.theme.${id}`);
-      return `<button type="button" class="theme-switcher__swatch${id === 'black-sand' ? ' theme-switcher__swatch--dark' : ''}"
+      return `<button type="button" class="theme-switcher__swatch${['terminal', 'blueprint', 'neon'].includes(id) ? ' theme-switcher__swatch--dark' : ''}"
         data-theme-id="${id}" aria-pressed="${id === active}"
         aria-label="${esc(name)}" title="${esc(name)}"></button>`;
     }).join('');
