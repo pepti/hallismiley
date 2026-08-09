@@ -30,6 +30,7 @@ const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
+const { isHiddenRoute } = require('../config/publicSurface');
 
 const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
@@ -642,13 +643,19 @@ function removeById(html, id) {
   return html.replace(selfRe, '');
 }
 
-function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd }) {
+function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots }) {
   if (/<title\b/i.test(html)) {
     html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
   }
   html = html.replace(
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${esc(description)}" id="ssr-description" />`
+  );
+  // Hidden-but-functional surfaces (config/publicSurface.js) are de-indexed;
+  // everything else keeps the template's index,follow.
+  html = html.replace(
+    /<meta\s+name="robots"[^>]*>/i,
+    `<meta name="robots" content="${esc(robots || 'index, follow')}" id="ssr-robots" />`
   );
   // App environment for the client (drives the in-app feedback widget + TEST
   // chrome). Explicit APP_ENV wins; otherwise any non-production NODE_ENV is
@@ -889,6 +896,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   let html = rewriteHead(loadTemplate(), {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
+    robots: isHiddenRoute(route) ? 'noindex, nofollow' : 'index, follow',
   });
   html = injectCrawlerContent(html, crawlerHtml);
 
