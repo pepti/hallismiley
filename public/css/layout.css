@@ -37,10 +37,11 @@
 .lol-nav__logo-icon svg { width: 100%; height: 100%; display: block; }
 /* Emblem colors ride the theme tokens so the mark adapts to alt themes.
    (The rim gradient's stops live inline in NavBar.js — SVG gradients can't
-   be colored from here — but they also reference the tokens.) */
+   be colored from here — but they also reference the tokens. The eyes are
+   gradient-filled too, so they have no class at all: any fill declared here
+   would beat the SVG presentation attribute and flatten them.) */
 .lol-nav__logo-mark-plate    { fill: var(--bg-surface); }
 .lol-nav__logo-mark-hairline { stroke: var(--gold); opacity: 0.55; }
-.lol-nav__logo-mark-feature  { fill: var(--gold); }
 .lol-nav__logo-mark-smile    { stroke: var(--gold); }
 
 .lol-nav__logo-text {

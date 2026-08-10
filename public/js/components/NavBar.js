@@ -95,8 +95,13 @@ export class NavBar {
               <path class="lol-nav__logo-mark-plate" d="M16 1 29 8v16L16 31 3 24V8z"
                     stroke="url(#os-mark-rim)" stroke-width="1.6"/>
               <path class="lol-nav__logo-mark-hairline" d="M16 3.4 26.9 9.3v13.4L16 28.6 5.1 22.7V9.3z" fill="none" stroke-width="0.5"/>
-              <circle class="lol-nav__logo-mark-feature" cx="11.4" cy="13.2" r="2"/>
-              <circle class="lol-nav__logo-mark-feature" cx="20.6" cy="13.2" r="2"/>
+              <!-- Eyes: vertical bars filled with the rim gradient, so they share
+                   the plate edge's light source (Halli's pick 2026-08-10, sample 06).
+                   They carry no theme class — a CSS fill declaration would out-rank
+                   the presentation attribute and kill the gradient; the gradient's own
+                   stops already ride --gold-light/--gold-dark, so themes still apply. -->
+              <rect x="10.2" y="10.5" width="2.5" height="5.4" rx="1.25" fill="url(#os-mark-rim)"/>
+              <rect x="19.3" y="10.5" width="2.5" height="5.4" rx="1.25" fill="url(#os-mark-rim)"/>
               <path class="lol-nav__logo-mark-smile" d="M10.4 19c1.6 2.7 3.5 4 5.6 4s4-1.3 5.6-4"
                     fill="none" stroke-width="2.1" stroke-linecap="round"/>
             </svg>
