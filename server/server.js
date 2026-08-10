@@ -25,6 +25,7 @@ const { migrate } = require('./scripts/migrate');
 const { startTokenCleanup } = require('./services/tokenCleanup');
 const { logResolvedConfig } = require('./config/clientConfig');
 const { startUpdateChecker } = require('./services/updateChecker');
+const { verifyPendingUpdate } = require('./services/updateApplier');
 
 const PORT = process.env.PORT || 3000;
 
@@ -50,6 +51,14 @@ async function start() {
   // so cold boots (especially on Azure with a cross-region DB) don't
   // pay 5–7 extra SELECTs before listen().
   await migrate();
+
+  // Did the update we triggered before the last restart actually land? This
+  // runs AFTER migrations and BEFORE listen, on purpose: migrations are the
+  // riskiest part of a release, and a verdict recorded before they ran would be
+  // recording that the container started, not that the release works.
+  await verifyPendingUpdate().catch(err => {
+    logger.error({ err }, '[server] post-boot update verification failed');
+  });
 
   // One-shot boot-time notice if outbound email isn't configured. RSVP
   // confirmations + admin notifications silently no-op when this is missing.

@@ -24,6 +24,7 @@ const { assertAllowedUrl, OutboundBlockedError } = require('./outboundAllowlist'
 const { isNewer, gte, isValid } = require('../utils/semver');
 const { nextWindowStart } = require('../utils/maintenanceWindow');
 const SystemUpdate = require('../models/SystemUpdate');
+const { verifyPendingUpdate, runDueScheduled } = require('./updateApplier');
 const baseLogger = require('../logger');
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
@@ -268,7 +269,18 @@ function startUpdateChecker({ intervalMs = DEFAULT_INTERVAL_MS, log = baseLogger
 
   async function tick() {
     try {
+      // Resolve any update that is mid-flight BEFORE looking for new ones. On
+      // an instance whose new image never booted, this tick is the only thing
+      // that will ever expire the grace period — the old container is still
+      // running and will not see another boot.
+      await verifyPendingUpdate({ log }).catch(err => log.error({ err }, '[updateChecker] verification failed'));
+
       const result = await checkOnce({ log });
+
+      // auto mode: fire anything whose window has now opened. Same loop, so
+      // there is no second scheduler to keep in sync.
+      await runDueScheduled({ log }).catch(err => log.error({ err }, '[updateChecker] scheduled apply failed'));
+
       // Only network/host problems earn backoff. A malformed manifest is the
       // publisher's bug and re-reading it sooner costs nothing.
       failures = (result.outcome === 'fetch-failed' || result.outcome === 'blocked') ? failures + 1 : 0;
