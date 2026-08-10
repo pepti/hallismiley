@@ -1,0 +1,178 @@
+/* Admin → Software updates (/admin/updates).
+   Tokens only, no literals, so it tracks whichever theme is active. The visual
+   argument of the page: the AVAILABLE card is the only thing that gets the
+   accent, because it is the only thing that asks for a decision. Status,
+   settings and history stay quiet surfaces. */
+
+.updates-sub {
+  margin: 0 0 var(--sp-5);
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.updates-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-5);
+}
+
+.updates-card__title {
+  margin: 0 0 var(--sp-4);
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+/* The one card that wants attention: a left rule in the accent, nothing else.
+   No full-bleed panel — a page that shouts at you every time you open it stops
+   being read. */
+.updates-card--available {
+  border-left: 3px solid var(--gold);
+}
+
+.updates-version { color: var(--gold-light); }
+
+/* ── Status facts ─────────────────────────────────────────────────────────── */
+
+.updates-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-4);
+}
+.updates-fact dt {
+  margin: 0 0 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.updates-fact dd {
+  margin: 0;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+.updates-fact code,
+.updates-meta code,
+.updates-table code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-primary);
+}
+
+.updates-meta { margin: 0 0 var(--sp-4); color: var(--text-muted); font-size: 0.85rem; }
+.updates-note,
+.updates-hint { margin: var(--sp-2) 0 0; color: var(--text-muted); font-size: 0.82rem; }
+.updates-managed { margin: var(--sp-3) 0 0; color: var(--text-muted); }
+.updates-warn { margin: var(--sp-3) 0 0; color: var(--gold-light); font-size: 0.88rem; }
+.updates-scheduled { margin: var(--sp-3) 0 0; font-size: 0.9rem; }
+.updates-next { margin: var(--sp-3) 0 0; font-size: 0.88rem; color: var(--text-muted); }
+
+/* ── Badges + chips ───────────────────────────────────────────────────────── */
+
+.updates-badge,
+.updates-chip {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+.updates-badge--critical { border-color: var(--gold); color: var(--gold-light); }
+.updates-badge--blocked  { border-style: dashed; }
+
+.updates-chip--applied   { border-color: var(--gold-dark); color: var(--gold-light); }
+.updates-chip--failed    { border-color: var(--error); color: var(--error); }
+.updates-chip--applying  { border-style: dashed; }
+
+/* ── Changelog (server-rendered, sanitized) ───────────────────────────────── */
+
+.updates-changelog {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.updates-changelog h3,
+.updates-changelog h4 { margin: 0 0 var(--sp-2); font-size: 0.95rem; }
+.updates-changelog p,
+.updates-changelog ul,
+.updates-changelog ol { margin: 0 0 var(--sp-3); }
+.updates-changelog li { margin-left: var(--sp-4); }
+
+/* ── Settings ─────────────────────────────────────────────────────────────── */
+
+.updates-field { margin-bottom: var(--sp-5); border: 0; padding: 0; }
+.updates-field__label {
+  display: block;
+  margin-bottom: var(--sp-2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.updates-modes { display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.updates-mode {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.updates-mode:hover { border-color: var(--gold-dark); }
+.updates-mode small { display: block; margin-top: 2px; color: var(--text-muted); font-size: 0.78rem; }
+
+.updates-window[disabled] { opacity: 0.55; }
+.updates-days { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.updates-day { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: 0.88rem; }
+.updates-hours { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.updates-hours label { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: 0.88rem; }
+.updates-hours input { width: 4.5rem; }
+.updates-tz { color: var(--text-muted); font-size: 0.82rem; }
+
+.updates-advanced { margin-bottom: var(--sp-4); }
+.updates-advanced summary { cursor: pointer; color: var(--text-muted); font-size: 0.85rem; }
+.updates-advanced > .updates-field { margin-top: var(--sp-3); }
+
+.updates-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-4); }
+
+/* ── History ──────────────────────────────────────────────────────────────── */
+
+/* The table scrolls inside its own box; the page never scrolls sideways. */
+.updates-table-wrap { overflow-x: auto; }
+.updates-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.updates-table th {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-dim);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.updates-table td {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border-dim);
+  vertical-align: top;
+}
+.updates-fail { color: var(--text-muted); font-size: 0.82rem; }
+
+@media (max-width: 640px) {
+  .updates-card { padding: var(--sp-4); }
+  .updates-hours { gap: var(--sp-3); }
+}
