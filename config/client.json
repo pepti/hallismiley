@@ -5,6 +5,7 @@
       "mode": "managed",
       "channel": "stable",
       "manifestUrl": "https://releases.orangesmiley.is/store/{channel}.json",
+      "allowCriticalOutsideWindow": true,
       "maintenanceWindow": {
         "days": ["tue", "wed", "thu"],
         "fromHour": 3,

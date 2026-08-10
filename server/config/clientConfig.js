@@ -54,6 +54,12 @@ const SCHEMA = {
         default: 'https://releases.orangesmiley.is/store/{channel}.json',
         validate: validateManifestUrl,
       },
+      // A release flagged `critical: true` (a security fix) may jump the queue
+      // and apply outside the maintenance window. Default true: the window
+      // exists to protect a quiet hour, and a known-exploited hole outranks a
+      // quiet hour. An instance that genuinely cannot tolerate an unscheduled
+      // restart — a till mid-shift — turns this off and accepts the exposure.
+      allowCriticalOutsideWindow: { type: 'boolean', default: true },
       maintenanceWindow: {
         days:     { type: 'string[]', default: ['tue', 'wed', 'thu'], enum: DAYS },
         fromHour: { type: 'int', default: 3, min: 0, max: 23 },
