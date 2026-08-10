@@ -1,0 +1,210 @@
+/* Background library admin (components/BackgroundLibraryAdmin.js) — the enable
+   toggle, upload/section toolbar, and the section groups of draggable media
+   tiles. Mounted both inside a .profile-section on Profile and standalone on
+   /admin/background, so nothing here assumes a page wrapper.
+
+   Tokens only — the same rules have to hold up on the dark default and the
+   light theme, and themes.css re-points these variables rather than these
+   selectors. */
+
+/* Standalone /admin/background page only — on Profile the component supplies
+   its own .profile-section heading. */
+.bg-lib-heading {
+  margin: var(--sp-6) 0 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.bg-lib-admin { margin-top: var(--sp-5); }
+
+.bg-lib-admin__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.bg-lib-admin__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.bg-lib-admin__toggle input { accent-color: var(--gold); }
+
+.bg-lib-admin__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.bg-lib-admin__target,
+.bg-lib-admin__new-name,
+.bg-lib-admin__sec-name,
+.bg-lib-admin__sec-desc,
+.bg-lib-admin__cap {
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition);
+}
+.bg-lib-admin__target:focus-visible,
+.bg-lib-admin__new-name:focus-visible,
+.bg-lib-admin__sec-name:focus-visible,
+.bg-lib-admin__sec-desc:focus-visible,
+.bg-lib-admin__cap:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.bg-lib-admin__target   { max-width: 220px; }
+.bg-lib-admin__new-name { min-width: 180px; }
+
+.bg-lib-admin__progress {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ── Section groups ─────────────────────────────────────────────────────────*/
+.bg-lib-admin__group {
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+}
+
+.bg-lib-admin__group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.bg-lib-admin__group-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.bg-lib-admin__sec-name { flex: 1 1 160px; min-width: 140px; }
+.bg-lib-admin__sec-actions { display: inline-flex; gap: var(--sp-1); margin-left: auto; }
+
+.bg-lib-admin__sec-desc {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--sp-2);
+  resize: vertical;
+}
+
+/* ── Icon buttons ───────────────────────────────────────────────────────────*/
+.bg-lib-admin__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+.bg-lib-admin__icon:hover:not(:disabled) {
+  color: var(--gold);
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.bg-lib-admin__icon:disabled { opacity: 0.35; cursor: default; }
+.bg-lib-admin__icon--danger:hover:not(:disabled) { color: var(--error); border-color: var(--error); }
+
+/* ── Media tiles ────────────────────────────────────────────────────────────*/
+.bg-lib-admin__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--sp-2);
+  min-height: 64px;
+}
+
+.bg-lib-admin__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+}
+
+.bg-lib-admin__thumb {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+}
+.bg-lib-admin__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.bg-lib-admin__video {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 20px;
+  color: var(--gold);
+}
+
+.bg-lib-admin__cap { font-size: 12px; padding: 4px 8px; }
+.bg-lib-admin__item-actions { display: flex; gap: var(--sp-1); justify-content: flex-end; }
+
+.bg-lib-admin__drop-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--sp-3);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-dim);
+  border-radius: var(--radius-md);
+}
+
+/* ── Drag states ────────────────────────────────────────────────────────────*/
+.bg-lib-admin__item.is-dragging { opacity: 0.4; }
+.bg-lib-admin__item.is-drag-over { outline: 2px solid var(--gold); outline-offset: 2px; }
+.bg-lib-admin__grid.is-drop-active {
+  background: var(--gold-glow);
+  border-radius: var(--radius-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-lib-admin__icon,
+  .bg-lib-admin__target,
+  .bg-lib-admin__new-name,
+  .bg-lib-admin__sec-name,
+  .bg-lib-admin__sec-desc,
+  .bg-lib-admin__cap { transition: none; }
+}

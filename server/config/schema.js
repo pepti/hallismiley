@@ -3913,6 +3913,38 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          ON payments (idempotency_key) WHERE idempotency_key LIKE 'client:%'`,
     ],
   },
+  {
+    // ── 080: background library sections ─────────────────────────────────────
+    //
+    // Grows the flat background_media library (051) into named, ordered
+    // sections so the admin can group backgrounds ("Winter", "Studio", …) with
+    // per-locale names and descriptions. background_media already exists here,
+    // so section_id is ADDED rather than declared — 051 stays untouched.
+    //
+    // section_id is nullable with ON DELETE SET NULL: deleting a section
+    // ungroups its media instead of destroying uploads. Media list order is
+    // (section_id NULLS FIRST, sort_order, id), so the ungrouped bucket sorts
+    // first and matches what the admin UI paints.
+    //
+    // Authoritative copy; human-reference duplicate in
+    // server/migrations/080_background_sections.sql.
+    name: '080_background_sections',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS background_sections (
+        id             SERIAL      PRIMARY KEY,
+        name           TEXT        NOT NULL,
+        name_is        TEXT,
+        description    TEXT,
+        description_is TEXT,
+        sort_order     INTEGER     NOT NULL DEFAULT 0,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `ALTER TABLE background_media
+         ADD COLUMN IF NOT EXISTS section_id INTEGER
+         REFERENCES background_sections(id) ON DELETE SET NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_background_media_section ON background_media (section_id)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
