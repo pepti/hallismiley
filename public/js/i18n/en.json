@@ -1,7 +1,7 @@
 {
   "themeSwitcher.open": "Site theme",
   "themeSwitcher.title": "Theme",
-  "themeSwitcher.theme.classic": "Ash (default)",
+  "themeSwitcher.theme.classic": "Dark (default)",
   "themeSwitcher.testMode": "TEST mode",
   "themeSwitcher.testModeNote": "This browser only",
   "changeRequest.badge": "TEST",
@@ -2115,13 +2115,5 @@
   "home.heroAriaLabel": "Introduction",
   "home.scrollHint": "Scroll",
   "contact.formAriaLabel": "Inquiry form",
-  "themeSwitcher.theme.brutal": "Brutal",
-  "themeSwitcher.theme.terminal": "Terminal",
-  "themeSwitcher.theme.blueprint": "Blueprint",
-  "themeSwitcher.theme.editorial": "Editorial",
-  "themeSwitcher.theme.sunset": "Sunset",
-  "themeSwitcher.theme.bauhaus": "Poster",
-  "themeSwitcher.theme.magma": "Magma",
-  "themeSwitcher.theme.neon": "Neon",
-  "themeSwitcher.theme.industrial": "Workshop"
+  "themeSwitcher.theme.light": "Light"
 }
