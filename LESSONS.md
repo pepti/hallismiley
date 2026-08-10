@@ -149,3 +149,23 @@ junction and a copied `.env`), and give the run its own database —
 `TEST_DATABASE_URL=…/orangesmiley_<chunk>_test`. Same suite, 72/72 and 2055/2055
 green. Worth making the per-worktree test DB the factory default rather than a
 thing you remember after being burned.
+
+### 2026-08-09 — "port a feature from the sibling instance" is mostly a delta hunt
+
+_(factory)_ Halli asked to copy icelandicstore's landing-background admin into
+Orange Smiley. Orange Smiley already HAD the whole feature — same controller,
+same `landing_background` site_content key — inherited from the base and
+preserved only because `/strip-base` was never run. The real difference was
+placement (icelandicstore mounts it inside ProfileView; the base put it on a
+standalone `/admin/background` page) and one extra layer (sections + bilingual
+captions + reorder). Lesson for `/clone-ui` and any future port: diff the two
+instances BEFORE writing code — schema entry, controller exports, route table,
+component — and port only the delta. Here that turned "copy 900 lines" into
+"extract a shared component, add one migration and one component".
+
+Two traps the delta hunt exposed: the destination table already existed with a
+different shape, so the new migration had to `ALTER TABLE ... ADD COLUMN IF NOT
+EXISTS` rather than `CREATE` (never edit the applied entry); and the source's
+"enable library" flag gates a public /gallery page that does not exist here, so
+copying it faithfully would have shipped a switch that visibly does nothing.
+Ported features need a "what does this control HERE?" pass, not just a port.

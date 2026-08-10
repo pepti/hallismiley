@@ -18,6 +18,17 @@ router.use(requireAuth, requireView('background'));
 router.get('/landing',   ctrl.getLanding);
 router.patch('/landing', csrfProtect, ctrl.updateLanding);
 
+// Library enable toggle
+router.get('/library',   ctrl.getLibrary);
+router.patch('/library', csrfProtect, ctrl.updateLibrary);
+
+// Library sections — /reorder is declared before /:id so the literal wins.
+router.get('/sections',           ctrl.listSections);
+router.post('/sections',          csrfProtect, ctrl.createSection);
+router.patch('/sections/reorder', csrfProtect, ctrl.reorderSections);
+router.patch('/sections/:id',     csrfProtect, ctrl.updateSection);
+router.delete('/sections/:id',    csrfProtect, ctrl.deleteSection);
+
 // Media library
 router.get('/media', ctrl.listMedia);
 router.post('/media',
@@ -32,6 +43,8 @@ router.post('/media',
     });
   },
   ctrl.uploadMedia);
-router.delete('/media/:id', csrfProtect, ctrl.deleteMedia);
+router.patch('/media/reorder', csrfProtect, ctrl.reorderMedia);
+router.patch('/media/:id',     csrfProtect, ctrl.updateMedia);
+router.delete('/media/:id',    csrfProtect, ctrl.deleteMedia);
 
 module.exports = router;

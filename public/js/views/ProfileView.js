@@ -39,6 +39,24 @@ export class ProfileView {
       this._bindLangPref(el);
       this._bindPassword(el);
       this._bindSessions(el, sessions);
+
+      // Admin-only: the landing-page background editor and, below it, the
+      // background library manager — both inserted right after the language
+      // section. Mounted as components (each owns its own data and events) and
+      // shared with /admin/background, so the two surfaces never drift.
+      // Gated on the SERVER-provided role, not a client flag.
+      if (profile.role === 'admin') {
+        const langSection = el.querySelector('#lang-section');
+        if (langSection) {
+          const [{ LandingBackgroundAdmin }, { BackgroundLibraryAdmin }] = await Promise.all([
+            import('../components/LandingBackgroundAdmin.js'),
+            import('../components/BackgroundLibraryAdmin.js'),
+          ]);
+          const landing = new LandingBackgroundAdmin({ section: true }).render();
+          langSection.insertAdjacentElement('afterend', landing);
+          landing.insertAdjacentElement('afterend', new BackgroundLibraryAdmin({ section: true }).render());
+        }
+      }
     } catch (err) {
       wrap.innerHTML = `<p class="profile-error">Failed to load profile: ${escHtml(err.message)}</p>`;
     }

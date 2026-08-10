@@ -417,6 +417,16 @@
   padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--border-dim);
 }
+/* Sub-heading for sections that need a line of explanation under the title —
+   the landing-background editor mounted from LandingBackgroundAdmin. The
+   title's own margin is collapsed there so the hint sits with it. */
+.profile-section__title + .profile-section__hint {
+  margin-top: calc(var(--sp-5) * -1 + var(--sp-2));
+  margin-bottom: var(--sp-5);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
 .profile-section__header-row {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: var(--sp-5);
