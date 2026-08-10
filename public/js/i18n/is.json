@@ -1,7 +1,7 @@
 {
   "themeSwitcher.open": "Þema síðu",
   "themeSwitcher.title": "Þema",
-  "themeSwitcher.theme.classic": "Aska (sjálfgefið)",
+  "themeSwitcher.theme.classic": "Dökkt (sjálfgefið)",
   "themeSwitcher.testMode": "TEST-hamur",
   "themeSwitcher.testModeNote": "Aðeins þessi vafri",
   "changeRequest.badge": "TEST",
@@ -2115,13 +2115,5 @@
   "home.heroAriaLabel": "Kynning",
   "home.scrollHint": "Skruna",
   "contact.formAriaLabel": "Fyrirspurnarform",
-  "themeSwitcher.theme.brutal": "Hrátt",
-  "themeSwitcher.theme.terminal": "Skjár",
-  "themeSwitcher.theme.blueprint": "Teikning",
-  "themeSwitcher.theme.editorial": "Ritstjórn",
-  "themeSwitcher.theme.sunset": "Sólarlag",
-  "themeSwitcher.theme.bauhaus": "Plakat",
-  "themeSwitcher.theme.magma": "Kvika",
-  "themeSwitcher.theme.neon": "Neon",
-  "themeSwitcher.theme.industrial": "Verkstæði"
+  "themeSwitcher.theme.light": "Ljóst"
 }
