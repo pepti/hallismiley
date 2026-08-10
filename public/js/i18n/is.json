@@ -980,6 +980,8 @@
   "admin.menu": "Valmynd",
   "admin.sidebarLabel": "Stjórnborðsvalmynd",
   "admin.backToSite": "Til baka á vefinn",
+  "admin.build.label": "Útgáfa",
+  "admin.build.dev": "þróunarútgáfa á vél",
   "admin.navGroup.overview": "Yfirlit",
   "admin.navGroup.shop": "Verslun",
   "admin.navGroup.site": "Vefur",

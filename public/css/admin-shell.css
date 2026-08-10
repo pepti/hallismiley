@@ -41,6 +41,19 @@
 }
 .admin-sidebar__back:hover { color: var(--text-primary); }
 
+/* Build stamp — which release is actually running. Deliberately the quietest
+   thing in the sidebar: you look for it, it never competes for attention. */
+.admin-sidebar__build {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-2) 0;
+  border-top: 1px solid var(--border-dim);
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 .admin-sidebar__nav { display: flex; flex-direction: column; gap: var(--sp-5); }
 .admin-sidebar__group { display: flex; flex-direction: column; gap: 2px; }
 .admin-sidebar__group-title {

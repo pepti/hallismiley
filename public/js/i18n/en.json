@@ -980,6 +980,8 @@
   "admin.menu": "Menu",
   "admin.sidebarLabel": "Admin navigation",
   "admin.backToSite": "Back to site",
+  "admin.build.label": "Build",
+  "admin.build.dev": "local development build",
   "admin.navGroup.overview": "Overview",
   "admin.navGroup.shop": "Shop",
   "admin.navGroup.site": "Site",

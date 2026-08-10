@@ -88,6 +88,14 @@ jobs:
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Stamp the image with its own identity — server/version.json. Without
+          # these the container boots reporting gitSha "unknown", and the
+          # self-update checker cannot tell whether a published release is newer
+          # than what is running (docs/SELF-UPDATE.md).
+          build-args: |
+            GIT_SHA=${{ env.DEPLOY_SHA }}
+            BUILT_AT=${{ github.event.repository.updated_at }}
+            RELEASE_CHANNEL=stable
           tags: |
             hallismileyacr.azurecr.io/hallismiley:latest
             hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}

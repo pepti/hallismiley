@@ -19,6 +19,7 @@
 
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { isAdmin, canSeeView } from '../services/auth.js';
+import { getBuildInfo } from '../services/buildInfo.js';
 import { showToast } from './Toast.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
@@ -348,6 +349,7 @@ export function renderAdminShell({ activePath, content } = {}) {
         <span class="admin-sidebar__edit-toggle-label">${t('admin.navEdit.edit')}</span>
       </button>` : ''}
       <nav class="admin-sidebar__nav"></nav>
+      <p class="admin-sidebar__build" data-testid="admin-build-stamp" hidden></p>
     </aside>
     <div class="admin-shell__content"></div>
   `;
@@ -638,6 +640,21 @@ export function renderAdminShell({ activePath, content } = {}) {
   shell.querySelector('.admin-sidebar__back')?.addEventListener('click', () => aside.classList.remove('is-open'));
 
   renderNav();
+
+  // Build stamp — the sidebar's quiet answer to "which release is live right
+  // now?", the first thing you want when a fix is supposedly deployed. Fills in
+  // asynchronously and stays hidden if the endpoint says no (non-admin roles).
+  const stamp = shell.querySelector('.admin-sidebar__build');
+  getBuildInfo().then((info) => {
+    if (!info || !stamp) return;
+    const b = info.build || {};
+    stamp.textContent = b.version === 'dev'
+      ? t('admin.build.dev')
+      : `${t('admin.build.label')} ${b.version} · ${String(b.gitSha || '').slice(0, 12)}`;
+    const built = b.builtAt ? new Date(b.builtAt).toLocaleString() : null;
+    stamp.title = [b.channel, built].filter(Boolean).join(' · ');
+    stamp.hidden = false;
+  });
 
   // Pull the per-admin layout from the DB once per page load; this shell's
   // re-render is the hook a late-arriving hydrate calls when it differs.
