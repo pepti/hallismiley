@@ -22,6 +22,7 @@ describe('clientConfig — defaults', () => {
   test('a missing file yields the safe defaults', () => {
     const { config, warnings } = resolve({});
     expect(selfUpdate(config)).toEqual({
+      enabled: true,
       mode: 'managed',
       channel: 'stable',
       manifestUrl: 'https://releases.orangesmiley.is/store/{channel}.json',

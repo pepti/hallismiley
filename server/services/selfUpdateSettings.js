@@ -39,6 +39,9 @@ function contract() {
   return clientConfig.modules.selfUpdate;
 }
 
+/** Is the self-update module switched on for this instance at all? */
+function isEnabled() { return contract().enabled === true; }
+
 /** Can this instance's admin change its update behaviour at all? */
 function isManaged() { return contract().mode === 'managed'; }
 
@@ -51,6 +54,9 @@ async function getSelfUpdateSettings() {
   const base = contract();
   const managed = base.mode === 'managed';
   const effective = {
+    // Contract-only: whether the module exists here is not a setting an
+    // instance admin can flip.
+    enabled:           base.enabled,
     mode:              base.mode,
     channel:           base.channel,
     manifestUrl:       base.manifestUrl,
@@ -106,5 +112,5 @@ function isAuto(mode) { return mode === 'auto'; }
 
 module.exports = {
   MODES, ADMIN_MODES, CHANNELS, KEYS,
-  getSelfUpdateSettings, manifestUrlFor, canApply, isAuto, isManaged, contract,
+  getSelfUpdateSettings, manifestUrlFor, canApply, isAuto, isManaged, isEnabled, contract,
 };

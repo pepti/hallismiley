@@ -23,11 +23,20 @@ const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
 const { buildInfo }   = require('../config/version');
 const { applyUpdate, rollbackUpdate } = require('../services/updateApplier');
-const { getSelfUpdateSettings, ADMIN_MODES, CHANNELS, KEYS } = require('../services/selfUpdateSettings');
+const { getSelfUpdateSettings, isEnabled, ADMIN_MODES, CHANNELS, KEYS } = require('../services/selfUpdateSettings');
 const { renderChangelog } = require('../services/changelogRender');
 const { nextWindowStart, DAY_KEYS } = require('../utils/maintenanceWindow');
 const SystemUpdate = require('../models/SystemUpdate');
 const Setting = require('../models/Setting');
+
+// A module that is switched off answers 404, not 403. 403 says "this exists and
+// you may not have it"; on an instance where self-update was never provisioned,
+// that would be a lie and a hint. The base (HalliProjects) ships the flag off,
+// so the engine carries this dormant until a fleet turns it on.
+router.use((req, res, next) => {
+  if (!isEnabled()) return res.status(404).json({ error: 'Not found', code: 404 });
+  return next();
+});
 
 router.use(requireAuth);
 

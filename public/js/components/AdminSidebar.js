@@ -149,13 +149,22 @@ function cleanFlagList(raw, valid) {
 // first section) so new nav items never vanish, and prune stale label overrides.
 // Passing null/empty yields the default layout — so the same render path covers
 // the "never customized" case (and stays byte-identical to the legacy output).
+// Nav items whose backing MODULE is switched off for this instance (as opposed
+// to role-invisible, which canSeeView already handles). Populated once the
+// shell learns the answer; an item in here is absent from the nav entirely,
+// including in edit mode, because there is nothing behind it to arrange.
+const UNAVAILABLE = new Set();
+
+/** True when the item is both permitted by the role AND present on this instance. */
+function itemUsable(id) { return canSeeView(id) && !UNAVAILABLE.has(id); }
+
 function reconcile(saved) {
   const base = (saved && Array.isArray(saved.sections) && saved.sections.length) ? saved : DEFAULT_SNAPSHOT;
   const seen = new Set();
   const sections = base.sections.map(s => {
     const items = [];
     for (const id of (s.items || [])) {
-      if (BY_ID.has(id) && canSeeView(id) && !seen.has(id)) { seen.add(id); items.push(id); }
+      if (BY_ID.has(id) && itemUsable(id) && !seen.has(id)) { seen.add(id); items.push(id); }
     }
     return { key: String(s.key), title: (s.title == null ? null : String(s.title)), items };
   });
@@ -175,7 +184,7 @@ function reconcile(saved) {
   });
   for (const id of BY_ID.keys()) {
     if (seen.has(id)) continue;
-    if (!canSeeView(id)) continue; // RBAC: never surface a view the role can't access
+    if (!itemUsable(id)) continue; // RBAC + module flags: never surface what isn't there
     const target = sections.find(s => s.key === GROUP_OF.get(id)) || sections[0];
     if (target) { target.items.push(id); seen.add(id); }
   }
@@ -649,7 +658,15 @@ export function renderAdminShell({ activePath, content } = {}) {
   // asynchronously and stays hidden if the endpoint says no (non-admin roles).
   const stamp = shell.querySelector('.admin-sidebar__build');
   getBuildInfo().then((info) => {
-    if (!info || !stamp) return;
+    // No answer means the self-update module is switched off for this instance
+    // (the API 404s) or this role cannot see it — either way the Updates line is
+    // a dead link, so drop it from the nav rather than leave it to disappoint.
+    if (!info) {
+      if (!UNAVAILABLE.has('updates')) { UNAVAILABLE.add('updates'); renderNav(); }
+      return;
+    }
+    UNAVAILABLE.delete('updates');
+    if (!stamp) return;
     const b = info.build || {};
     stamp.textContent = b.version === 'dev'
       ? t('admin.build.dev')

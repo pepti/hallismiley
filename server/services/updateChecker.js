@@ -19,7 +19,7 @@
 // runs stay quiet.
 
 const { buildInfo, isDevBuild } = require('../config/version');
-const { getSelfUpdateSettings, manifestUrlFor, isAuto } = require('./selfUpdateSettings');
+const { getSelfUpdateSettings, manifestUrlFor, isAuto, isEnabled } = require('./selfUpdateSettings');
 const { assertAllowedUrl, OutboundBlockedError } = require('./outboundAllowlist');
 const { isNewer, gte, isValid } = require('../utils/semver');
 const { nextWindowStart } = require('../utils/maintenanceWindow');
@@ -250,6 +250,10 @@ function jitter(ms) {
  * @returns {{stop:Function}|null} null when this build never checks (dev).
  */
 function startUpdateChecker({ intervalMs = DEFAULT_INTERVAL_MS, log = baseLogger, runNow = false } = {}) {
+  if (!isEnabled()) {
+    log.info('[updateChecker] not started — the self-update module is switched off on this instance');
+    return null;
+  }
   if (isDevBuild) {
     log.info('[updateChecker] not started — this is a dev build with no release identity');
     return null;

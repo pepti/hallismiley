@@ -169,3 +169,48 @@ EXISTS` rather than `CREATE` (never edit the applied entry); and the source's
 "enable library" flag gates a public /gallery page that does not exist here, so
 copying it faithfully would have shipped a switch that visibly does nothing.
 Ported features need a "what does this control HERE?" pass, not just a port.
+
+### 2026-08-10 — the plan assumed a mechanism that did not exist
+
+_(base)_ SELF-UPDATE-PLAN phase 2 said to send the manifest fetch "through the
+existing SSRF-allowlist mechanism — add the release host to the allowlist
+explicitly". There is no such mechanism. Grepping `server/` for it returns
+nothing, and the reason is sound: every other outbound call in this codebase
+goes to a hardcoded provider URL (Resend, Stripe, IndexNow, Anthropic), so
+nothing ever needed one. The update checker is the first outbound fetch whose
+URL comes from *configuration*, which is exactly the shape that needs a gate —
+"fetch this URL and act on what it says" is the SSRF template.
+
+The lesson is about how plans get written, not about the gap: a plan that says
+"reuse the existing X" is asserting X exists, and that assertion deserves one
+grep before the phase is scoped. Here it turned a one-line change into
+`server/services/outboundAllowlist.js`. Worth checking whether the base wants
+that module generally — the moment any customer instance fetches a
+customer-configured URL, it does.
+
+### 2026-08-10 — a security helper that ate its own code spans
+
+_(project)_ `renderChangelog` applies inline Markdown to already-escaped text,
+in order: code, bold, italic. Ordering it that way is the obvious defence
+("code first, so its content is not re-read") and it is wrong — a later
+`replace` runs over the whole string, including the `<code>` element the earlier
+one just produced, so `` `a * b * c` `` came out as `<code>a <em> b </em> c</code>`.
+Fixed by lifting code spans out to placeholders and restoring them last; the
+placeholder is unforgeable because escaping strips null bytes first.
+
+Two things generalise. Sequential regex passes over one string are not
+composable — each one sees the previous one's output, so "do X first" does not
+protect X. And the test that caught it was the one asserting a *product*
+property (code stays code) rather than a security property; the security tests
+all passed, because the bug was never exploitable, only wrong.
+
+### 2026-08-10 — assert the property, not the substring
+
+_(project)_ The first XSS tests for the changelog renderer asserted the output
+did not contain `onerror` or `javascript:`. They failed on correct output:
+`&lt;img src=x onerror=alert(1)&gt;` is escaped text and completely inert, and
+`[click](javascript:alert(1))` is a non-link that stays literal. Both are the
+sanitizer working. Rewritten to pull the actual `<…>` tags out of the output and
+assert none is a script/img/iframe, carries an `on*=` attribute, or has a
+`javascript:` attribute value — which is the property that matters and which a
+substring check both over- and under-approximates.

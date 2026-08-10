@@ -2,6 +2,7 @@
   "$comment": "Per-instance configuration for orangesmiley.is (the public company site). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. selfUpdate stays 'managed' until the release channel of SELF-UPDATE-PLAN Phase 5 exists; Orange Smiley's own instances move to the 'canary' channel then, so we soak our own releases before customers see 'stable'.",
   "modules": {
     "selfUpdate": {
+      "enabled": true,
       "mode": "managed",
       "channel": "stable",
       "manifestUrl": "https://releases.orangesmiley.is/store/{channel}.json",

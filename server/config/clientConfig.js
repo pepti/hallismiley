@@ -41,6 +41,12 @@ const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const SCHEMA = {
   modules: {
     selfUpdate: {
+      // Is the module present on this instance at all? Off means: no checker,
+      // no admin screen, and the API answers 404 rather than 403 — a module
+      // that is not here should not advertise that it could be. This is the
+      // switch the base (HalliProjects) ships OFF, so the engine carries the
+      // capability dormant and each fleet turns it on deliberately.
+      enabled: { type: 'boolean', default: true },
       // managed → check + record only (Orange Smiley drives the update)
       // manual  → the customer's admin presses "Update now"
       // auto    → applies itself inside the maintenance window
