@@ -131,3 +131,21 @@ instead of deleting (video hero mode, Cinzel woff2 files, glow tokens). The
 "keep capability, change presentation" discipline is what made a same-day
 full re-theme possible. Also: dark + orange clears WCAG AA almost everywhere
 by construction (6.9–16.7:1), where light + orange needed shade surgery.
+
+### 2026-08-10 — two agents, one checkout, one test DB
+
+_(factory)_ Two Claude sessions worked this repo at the same time. The other
+one committed its theme chunk and switched the shared working copy back to
+`master`, moving this session off its feature branch mid-edit; worse, both ran
+`npm test` against the same `orangesmiley_test`, and `globalSetup` drops and
+recreates that database on every run. The result was 21 red suites and 218 red
+tests that had nothing to do with either change — the exact race the comment in
+`tests/globalSetup.js` predicts, but at a scale that reads convincingly like a
+real regression. It cost a full baseline re-run to disprove.
+
+Two habits close it: take the worktree *before* the first edit rather than
+branching in the shared checkout (a worktree needs only a `node_modules`
+junction and a copied `.env`), and give the run its own database —
+`TEST_DATABASE_URL=…/orangesmiley_<chunk>_test`. Same suite, 72/72 and 2055/2055
+green. Worth making the per-worktree test DB the factory default rather than a
+thing you remember after being burned.
