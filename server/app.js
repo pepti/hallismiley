@@ -31,6 +31,7 @@ const adminBinsRoutes = require('./routes/adminBinsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const adminBookkeepingRoutes = require('./routes/adminBookkeepingRoutes');
+const systemRoutes = require('./routes/systemRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -483,6 +484,7 @@ app.use('/api/v1/contact',    contactRoutes);
 app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/change-requests', changeRequestRoutes);
+app.use('/api/v1/system',     systemRoutes);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all

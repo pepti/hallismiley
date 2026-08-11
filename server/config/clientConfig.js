@@ -41,6 +41,12 @@ const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const SCHEMA = {
   modules: {
     selfUpdate: {
+      // Is the module present on this instance at all? Off means: no checker,
+      // no admin screen, and the API answers 404 rather than 403 — a module
+      // that is not here should not advertise that it could be. This is the
+      // switch the base (HalliProjects) ships OFF, so the engine carries the
+      // capability dormant and each fleet turns it on deliberately.
+      enabled: { type: 'boolean', default: true },
       // managed → check + record only (Orange Smiley drives the update)
       // manual  → the customer's admin presses "Update now"
       // auto    → applies itself inside the maintenance window
@@ -54,6 +60,12 @@ const SCHEMA = {
         default: 'https://releases.orangesmiley.is/store/{channel}.json',
         validate: validateManifestUrl,
       },
+      // A release flagged `critical: true` (a security fix) may jump the queue
+      // and apply outside the maintenance window. Default true: the window
+      // exists to protect a quiet hour, and a known-exploited hole outranks a
+      // quiet hour. An instance that genuinely cannot tolerate an unscheduled
+      // restart — a till mid-shift — turns this off and accepts the exposure.
+      allowCriticalOutsideWindow: { type: 'boolean', default: true },
       maintenanceWindow: {
         days:     { type: 'string[]', default: ['tue', 'wed', 'thu'], enum: DAYS },
         fromHour: { type: 'int', default: 3, min: 0, max: 23 },

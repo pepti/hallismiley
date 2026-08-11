@@ -1,5 +1,12 @@
 const { defineConfig, devices } = require('@playwright/test');
 
+// Port is configurable so a second checkout (a parallel worktree, another
+// session) can run the suite without either colliding on 3000 or — worse —
+// silently REUSING the other one's server and testing the wrong code against
+// the wrong database. Default 3000 keeps CI and everyday local runs unchanged.
+const PORT = process.env.E2E_PORT || '3000';
+const BASE_URL = `http://localhost:${PORT}`;
+
 module.exports = defineConfig({
   testDir: './e2e',
   timeout: 30_000,
@@ -8,13 +15,13 @@ module.exports = defineConfig({
   reporter: [['html', { open: 'never' }]],
 
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: BASE_URL,
     trace: 'on-first-retry',
     // Pre-dismiss the cookie consent banner so it never blocks test interactions
     storageState: {
       cookies: [],
       origins: [{
-        origin: 'http://localhost:3000',
+        origin: BASE_URL,
         localStorage: [{ name: 'cookie_consent', value: 'declined' }],
       }],
     },
@@ -31,7 +38,7 @@ module.exports = defineConfig({
 
   webServer: {
     command: 'node server/server.js',
-    url: 'http://localhost:3000',
+    url: BASE_URL,
     timeout: 60_000,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
@@ -44,6 +51,10 @@ module.exports = defineConfig({
       // throwaway E2E server.
       CSRF_SECRET: process.env.CSRF_SECRET || 'e2e-only-csrf-secret-do-not-use-in-prod',
       NODE_ENV:    process.env.NODE_ENV    || 'test',
+      PORT,
+      // Must match the origin the browser actually uses, or every state-changing
+      // request fails CORS the moment E2E_PORT is set.
+      ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || BASE_URL,
     },
   },
 });

@@ -81,6 +81,7 @@ jobs:
       # an attestation child) would change what the weekly ACR purge sees and
       # what App Service pulls.
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -88,9 +89,44 @@ jobs:
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Stamp the image with its own identity — server/version.json. Without
+          # these the container boots reporting gitSha "unknown", and the
+          # self-update checker cannot tell whether a published release is newer
+          # than what is running (docs/SELF-UPDATE.md).
+          build-args: |
+            GIT_SHA=${{ env.DEPLOY_SHA }}
+            BUILT_AT=${{ github.event.repository.updated_at }}
+            RELEASE_CHANNEL=stable
           tags: |
             hallismileyacr.azurecr.io/hallismiley:latest
             hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
+            hallismileyacr.azurecr.io/hallismiley:sha-${{ env.DEPLOY_SHA }}
+
+      # The digest is the identity the release channel publishes and the
+      # platform pulls. Print it so a promote run can be given the exact bytes
+      # this deploy produced, rather than "whatever :sha-… resolves to later".
+      - name: Record image digest
+        run: |
+          echo "Image digest: ${{ steps.build.outputs.digest }}"
+          echo "### Deployed image" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "sha:    ${{ env.DEPLOY_SHA }}" >> $GITHUB_STEP_SUMMARY
+          echo "digest: ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # Scanned after the push but BEFORE the web app is pointed at it: an
+      # unreferenced image sitting in ACR serves no traffic, so this is the
+      # moment that actually matters. A HIGH/CRITICAL finding leaves the running
+      # version untouched.
+      - name: Scan pushed image (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: hallismileyacr.azurecr.io/hallismiley:sha-${{ env.DEPLOY_SHA }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3

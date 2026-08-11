@@ -24,6 +24,8 @@ const { pool } = require('./config/database');
 const { migrate } = require('./scripts/migrate');
 const { startTokenCleanup } = require('./services/tokenCleanup');
 const { logResolvedConfig } = require('./config/clientConfig');
+const { startUpdateChecker } = require('./services/updateChecker');
+const { verifyPendingUpdate } = require('./services/updateApplier');
 
 const PORT = process.env.PORT || 3000;
 
@@ -50,6 +52,14 @@ async function start() {
   // pay 5–7 extra SELECTs before listen().
   await migrate();
 
+  // Did the update we triggered before the last restart actually land? This
+  // runs AFTER migrations and BEFORE listen, on purpose: migrations are the
+  // riskiest part of a release, and a verdict recorded before they ran would be
+  // recording that the container started, not that the release works.
+  await verifyPendingUpdate().catch(err => {
+    logger.error({ err }, '[server] post-boot update verification failed');
+  });
+
   // One-shot boot-time notice if outbound email isn't configured. RSVP
   // confirmations + admin notifications silently no-op when this is missing.
   if (!process.env.RESEND_API_KEY) {
@@ -63,11 +73,17 @@ async function start() {
   // Start periodic cleanup of expired sessions (runs every 24h)
   const cleanupTimer = startTokenCleanup();
 
+  // Ask the release channel whether anything newer than this image exists.
+  // No-ops on a dev build (no release identity to compare against), and never
+  // applies anything on its own unless this instance is in `auto` mode.
+  const updateChecker = startUpdateChecker();
+
   // Graceful shutdown — finish in-flight requests before exiting
   function shutdown(signal) {
     logger.info({ signal }, '[server] Shutting down gracefully');
     server.close(async () => {
       clearInterval(cleanupTimer);
+      updateChecker?.stop();
       logger.info('[server] HTTP server closed');
       await pool.end();
       logger.info('[server] Database pool closed');

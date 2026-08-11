@@ -62,6 +62,20 @@ jobs:
       - name: i18n keys in sync
         run: npm run check:i18n
 
+      # The release manifest is what every deployed instance polls to decide
+      # what to become, and it is validated by the SAME code the instances run
+      # (server/services/updateChecker.js). Building one here with a dummy
+      # digest proves the publisher can always produce a document the fleet will
+      # accept — the alternative is finding out at promote time, with a release
+      # half out the door.
+      - name: Release manifest schema
+        run: |
+          node scripts/build-manifest.js \
+            --channel=stable \
+            --digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --out=/tmp/manifest-dryrun.json
+          node scripts/check-manifest.js /tmp/manifest-dryrun.json
+
       - name: Run tests with coverage
         env:
           NODE_ENV:            test
@@ -152,6 +166,23 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t orangesmiley:smoke .
+
+      # Container scan. This gates the deploy, because deploy.yml only fires on
+      # a successful CI run — so a HIGH/CRITICAL finding in the base image or an
+      # OS package stops the release here rather than after it is live.
+      #
+      # ignore-unfixed is not laziness: a finding with no available fix cannot
+      # be acted on by this repo, and a permanently-red gate is a gate people
+      # learn to route around. Those still show in the report artifact.
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: orangesmiley:smoke
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
 
       # Boot the production image against an empty database: proves the
       # container starts, the migration runner applies the full chain from

@@ -33,6 +33,11 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Build identity — stamped into the image at build time by
+# scripts/generate-version.js, never committed (a committed stamp would lie
+# the moment anyone edited code without rebuilding).
+server/version.json
+
 # Build output
 dist/
 build/

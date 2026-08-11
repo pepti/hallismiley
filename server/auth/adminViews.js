@@ -12,6 +12,11 @@ const ALL = '*';
 const ADMIN_VIEW_IDS = [
   'dashboard', 'products', 'orders', 'collections', 'bins', 'customers', 'discounts', 'sales',
   'analytics', 'background', 'feedback', 'general', 'users', 'roles',
+  // Software updates. Granting this is granting SIGHT of the release channel and
+  // the update history — the apply/rollback/settings routes are hard admin-only
+  // on top (server/routes/systemRoutes.js), so an ops role can watch a fleet
+  // without being able to restart anything.
+  'updates',
   // Bókhald. Split per area so a bookkeeper or accountant can be granted exactly
   // what they need. Holding one of these grants READ access only: issuing invoices,
   // recording payments and crediting are hard admin-only (adminBookkeepingRoutes.js).

@@ -22,9 +22,11 @@ describe('clientConfig — defaults', () => {
   test('a missing file yields the safe defaults', () => {
     const { config, warnings } = resolve({});
     expect(selfUpdate(config)).toEqual({
+      enabled: true,
       mode: 'managed',
       channel: 'stable',
       manifestUrl: 'https://releases.orangesmiley.is/store/{channel}.json',
+      allowCriticalOutsideWindow: true,
       maintenanceWindow: {
         days: ['tue', 'wed', 'thu'],
         fromHour: 3,
@@ -131,6 +133,17 @@ describe('clientConfig — env var naming', () => {
     expect(w.toHour).toBe(4);
     expect(w.days).toEqual(['mon', 'fri']);
     expect(warnings).toEqual([]);
+  });
+
+  test('booleans coerce from the usual env spellings', () => {
+    const read = v => resolve({}, { CLIENT_CONFIG_MODULES_SELF_UPDATE_ALLOW_CRITICAL_OUTSIDE_WINDOW: v })
+      .config.modules.selfUpdate.allowCriticalOutsideWindow;
+    expect(read('false')).toBe(false);
+    expect(read('0')).toBe(false);
+    expect(read('off')).toBe(false);
+    expect(read('true')).toBe(true);
+    expect(resolve({}, { CLIENT_CONFIG_MODULES_SELF_UPDATE_ALLOW_CRITICAL_OUTSIDE_WINDOW: 'maybe' }).warnings)
+      .toEqual([expect.stringContaining('must be a boolean')]);
   });
 
   test('a list also accepts JSON array syntax', () => {
