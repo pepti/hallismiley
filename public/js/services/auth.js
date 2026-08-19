@@ -84,8 +84,40 @@ export async function login(username, password) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Login failed');
+  // A protected account (admin with 2FA) gets a challenge instead of a session.
+  // Return it WITHOUT touching _user: nothing is signed in yet, and treating this
+  // as a login would put the SPA into a logged-in state the server disagrees with.
+  if (data.mfaRequired) return data;
   _user = data.user;
   _csrfToken = null; // refresh CSRF after login
+  _dispatch('login');
+  return data;
+}
+
+/**
+ * Step two of a protected sign-in: exchange the challenge + code for a session.
+ * `code` is a 6-digit authenticator code or a single-use recovery code — the
+ * server works out which, so the UI doesn't have to ask.
+ */
+export async function loginTotp(challengeId, code) {
+  const res = await fetch('/auth/login/totp', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify({ challengeId, code }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error || 'Verification failed');
+    err.attemptsRemaining = data.attemptsRemaining;
+    // These mean the challenge is gone — the UI must send the user back to the
+    // password step rather than let them keep typing codes at a dead challenge.
+    err.restart = res.status === 401 && typeof data.attemptsRemaining !== 'number';
+    throw err;
+  }
+  _user = data.user;
+  _csrfToken = null;
+  // Completing the challenge IS the deliberate sign-in — same reason as login().
   _dispatch('login');
   return data;
 }
@@ -275,6 +307,41 @@ export async function changePassword(currentPassword, newPassword) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Password change failed');
+  return data;
+}
+
+// ── Two-step verification (admin) ─────────────────────────────────────────────
+
+/** Begin enrolment. Returns { secret, uri, qr } — shown once, for the app or manual entry. */
+export async function totpSetup() {
+  const headers = await _csrfHeaders();
+  const res = await fetch('/auth/totp/setup', { method: 'POST', credentials: 'include', headers, body: '{}' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not start set-up');
+  return data;
+}
+
+/** Confirm with a code from the app. Returns { enabled, recoveryCodes } — the codes appear ONCE. */
+export async function totpConfirm(code) {
+  const headers = await _csrfHeaders();
+  const res = await fetch('/auth/totp/confirm', {
+    method: 'POST', credentials: 'include', headers, body: JSON.stringify({ code }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not confirm');
+  updateCachedUser({ totp_enabled: true });
+  return data;
+}
+
+/** Turn it off. Requires the account password. */
+export async function totpDisable(password) {
+  const headers = await _csrfHeaders();
+  const res = await fetch('/auth/totp/disable', {
+    method: 'POST', credentials: 'include', headers, body: JSON.stringify({ password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not turn off');
+  updateCachedUser({ totp_enabled: false });
   return data;
 }
 

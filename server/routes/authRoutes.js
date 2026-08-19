@@ -6,6 +6,7 @@ const googleAuthController   = require('../controllers/googleAuthController');
 const facebookAuthController = require('../controllers/facebookAuthController');
 const { validateSignup, validateResetPassword } = require('../middleware/validate');
 const { csrfProtect } = require('../middleware/csrf');
+const { requireAuth } = require('../auth/middleware');
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
@@ -60,6 +61,10 @@ const magicLoginLimiter = rateLimit({
 
 // ── Existing auth ─────────────────────────────────────────────────────────────
 router.post('/login',  authLimiter,              authController.login);
+// Step two of a protected sign-in — accepts guesses against a live challenge,
+// so it is rate-limited as tightly as /login itself. CSRF-exempt like /login
+// (it mints the session; there is no token yet).
+router.post('/login/totp', authLimiter,          authController.loginTotp);
 // Magic-link login — CSRF-exempt like login/signup (mints a session; no token yet).
 router.post('/party-magic-login', magicLoginLimiter, authController.partyMagicLogin);
 // csrfProtect on logout: the client already fetches a fresh CSRF token before
@@ -74,18 +79,38 @@ router.post('/resend-verification', resendLimiter,              authController.r
 router.post('/forgot-password', resetLimiter,                  authController.forgotPassword);
 router.post('/reset-password',  resetLimiter, validateResetPassword, authController.resetPassword);
 
+// ── Admin two-factor enrolment ────────────────────────────────────────────────
+// Behind the session (requireAuth) + CSRF like every state-changing route.
+// Role-gating (admin only) lives in the controller so the 403 carries the
+// standard error envelope.
+router.post('/totp/setup',   csrfProtect, requireAuth, authController.totpSetup);
+router.post('/totp/confirm', csrfProtect, requireAuth, authController.totpConfirm);
+router.post('/totp/disable', csrfProtect, requireAuth, authController.totpDisable);
+
 // ── Availability checks ───────────────────────────────────────────────────────
 router.get('/check-username/:username', checkLimiter, authController.checkUsername);
 router.get('/check-email/:email',       checkLimiter, authController.checkEmail);
 
+// ── Social login kill-switch ──────────────────────────────────────────────────
+// Two-layer flag ported from icelandicstore (#153 there), with the DEFAULT
+// default OFF here: no OAuth app is configured for this instance, so the
+// routes 404 unless SOCIAL_LOGIN_ENABLED=true is set explicitly (the base,
+// where social login is live, inverts this). The client half is SOCIAL_LOGIN_ENABLED in
+// public/js/utils/features.js — both must flip to change the experience
+// cleanly. Read per-request so tests can toggle it via env.
+const socialLoginGate = (req, res, next) => {
+  if (process.env.SOCIAL_LOGIN_ENABLED === 'true') return next();
+  return res.status(404).json({ error: 'Not found', code: 404 });
+};
+
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 // No CSRF (top-level redirects can't carry CSRF headers; state cookie covers it).
 // Reuse authLimiter — 10 requests per 15 min per IP — to deter abuse.
-router.get('/google',           authLimiter, googleAuthController.start);
-router.get('/google/callback',  authLimiter, googleAuthController.callback);
+router.get('/google',           socialLoginGate, authLimiter, googleAuthController.start);
+router.get('/google/callback',  socialLoginGate, authLimiter, googleAuthController.callback);
 
 // ── Facebook OAuth ────────────────────────────────────────────────────────────
-router.get('/facebook',          authLimiter, facebookAuthController.start);
-router.get('/facebook/callback', authLimiter, facebookAuthController.callback);
+router.get('/facebook',          socialLoginGate, authLimiter, facebookAuthController.start);
+router.get('/facebook/callback', socialLoginGate, authLimiter, facebookAuthController.callback);
 
 module.exports = router;

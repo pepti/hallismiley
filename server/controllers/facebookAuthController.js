@@ -18,6 +18,7 @@
 
 const { query: dbQuery }           = require('../config/database');
 const { lucia }                    = require('../auth/lucia');
+const securityLogger               = require('../observability/securityLogger');
 const { loadArctic, isConfigured } = require('../auth/facebook');
 const { generateUniqueUsername, isSafeReturnTo } = require('../auth/oauthHelpers');
 
@@ -132,24 +133,21 @@ async function callback(req, res, next) {
     if (byFacebook[0]?.disabled) return redirectWithError(res, 'account_disabled', req.locale);
     let userId = byFacebook[0]?.id ?? null;
 
-    // 2. Else existing by email → auto-link. Note: unlike Google, Facebook
-    //    does NOT verify email ownership; we trust it per product decision.
+    // 2. An account already exists with this email but is NOT linked to this
+    //    Facebook id. Facebook does NOT verify email ownership, so silently
+    //    auto-linking would let an attacker who controls a Facebook account
+    //    that asserts the victim's email take over the victim's account.
+    //    Refuse — the user must sign in with their existing method. (Google,
+    //    which returns a provider-verified email, still auto-links.) This
+    //    reverses the earlier trust-per-product-decision, per the SDL audit
+    //    finding ported from icelandicstore (#54 there).
     if (!userId) {
       const { rows: byEmail } = await dbQuery(
-        `SELECT id, disabled FROM users WHERE email = $1`,
+        `SELECT id FROM users WHERE email = $1`,
         [email],
       );
       if (byEmail[0]) {
-        if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled', req.locale);
-        await dbQuery(
-          `UPDATE users
-             SET facebook_id = $1,
-                 oauth_provider = COALESCE(oauth_provider, 'facebook'),
-                 email_verified = TRUE
-           WHERE id = $2`,
-          [facebookId, byEmail[0].id],
-        );
-        userId = byEmail[0].id;
+        return redirectWithError(res, 'email_already_registered', req.locale);
       }
     }
 
@@ -168,6 +166,17 @@ async function callback(req, res, next) {
       userId = ins[0].id;
     }
 
+    // 2FA must not be walk-aroundable: the TOTP challenge (migration 080)
+    // lives on the password path, so an admin with a linked Facebook account
+    // could walk straight past it, and the security of the site would rest on
+    // OAuth account hygiene we neither set nor can verify. Refusing the role
+    // outright is simpler and stronger than replicating the challenge in the
+    // provider controllers. Ordinary users keep social sign-in.
+    const { rows: roleRows } = await dbQuery('SELECT role FROM users WHERE id = $1', [userId]);
+    if (roleRows[0]?.role === 'admin') {
+      securityLogger.loginFailed(req.ip, `facebook oauth refused for admin account ${email}`);
+      return redirectWithError(res, 'admin_oauth_blocked', req.locale);
+    }
     // Reset any lockout state from previous password-login failures, then
     // create a Lucia session with the same pattern as password login.
     await dbQuery(

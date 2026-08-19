@@ -31,6 +31,10 @@ const lucia = new Lucia(adapter, {
       party_access:     attributes.party_access,
       approval_status:  attributes.approval_status,
       preferred_locale: attributes.preferred_locale,
+      // Exposed so the enrolment endpoints and the SPA can tell whether this
+      // account is already protected, without a second query. The SECRET is
+      // deliberately not here — nothing outside mfaService should ever read it.
+      totp_enabled:     attributes.totp_enabled,
     };
   },
   getSessionAttributes(attributes) {
