@@ -63,6 +63,7 @@ if (IS_TEST) {
     google_profile_invalid:   'auth.errors.googleProfileInvalid',
     google_not_configured:    'auth.errors.googleNotConfigured',
     facebook_profile_invalid: 'auth.errors.facebookProfileInvalid',
+    admin_oauth_blocked:      'auth.errors.adminOauthBlocked',
     facebook_not_configured:  'auth.errors.facebookNotConfigured',
   };
 
