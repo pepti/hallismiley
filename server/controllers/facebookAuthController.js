@@ -132,24 +132,21 @@ async function callback(req, res, next) {
     if (byFacebook[0]?.disabled) return redirectWithError(res, 'account_disabled', req.locale);
     let userId = byFacebook[0]?.id ?? null;
 
-    // 2. Else existing by email → auto-link. Note: unlike Google, Facebook
-    //    does NOT verify email ownership; we trust it per product decision.
+    // 2. An account already exists with this email but is NOT linked to this
+    //    Facebook id. Facebook does NOT verify email ownership, so silently
+    //    auto-linking would let an attacker who controls a Facebook account
+    //    that asserts the victim's email take over the victim's account.
+    //    Refuse — the user must sign in with their existing method. (Google,
+    //    which returns a provider-verified email, still auto-links.) This
+    //    reverses the earlier trust-per-product-decision, per the SDL audit
+    //    finding ported from icelandicstore (#54 there).
     if (!userId) {
       const { rows: byEmail } = await dbQuery(
-        `SELECT id, disabled FROM users WHERE email = $1`,
+        `SELECT id FROM users WHERE email = $1`,
         [email],
       );
       if (byEmail[0]) {
-        if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled', req.locale);
-        await dbQuery(
-          `UPDATE users
-             SET facebook_id = $1,
-                 oauth_provider = COALESCE(oauth_provider, 'facebook'),
-                 email_verified = TRUE
-           WHERE id = $2`,
-          [facebookId, byEmail[0].id],
-        );
-        userId = byEmail[0].id;
+        return redirectWithError(res, 'email_already_registered', req.locale);
       }
     }
 

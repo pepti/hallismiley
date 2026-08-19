@@ -91,6 +91,10 @@ app.use(helmet({
       connectSrc: ["'self'", 'https://www.google-analytics.com', 'https://analytics.google.com'],
       fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
       objectSrc:  ["'none'"],
+      // Clickjacking: nothing embeds this site. Modern browsers honor
+      // frame-ancestors; helmet's default X-Frame-Options (SAMEORIGIN) still
+      // covers legacy browsers.
+      frameAncestors: ["'self'"],
       // Allow YouTube iframes so project Video sections can embed videos.
       // Stripe Checkout is allowed so the hosted-checkout redirect works.
       frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://checkout.stripe.com'],

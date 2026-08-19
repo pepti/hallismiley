@@ -262,6 +262,7 @@
   "auth.errors.googleProfileInvalid": "Google-aðgangurinn þinn skilaði ekki staðfestum tölvupósti.",
   "auth.errors.googleNotConfigured": "Google-innskráning er ekki virk á þessari síðu.",
   "auth.errors.facebookProfileInvalid": "Facebook-aðgangurinn þinn skilaði ekki tölvupósti. Notaðu aðra innskráningarmáta.",
+  "auth.errors.emailAlreadyRegistered": "Aðgangur með þessu netfangi er þegar til. Skráðu þig inn með netfangi og lykilorði.",
   "auth.errors.facebookNotConfigured": "Facebook-innskráning er ekki virk á þessari síðu.",
   "form.submit": "Senda",
   "form.cancel": "Hætta við",

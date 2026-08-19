@@ -191,8 +191,10 @@ describe('GET /auth/facebook/callback', () => {
     expect(countAfter).toBe(countBefore);
   });
 
-  test('auto-link: existing password user with same email gets facebook_id attached', async () => {
+  test('refuses to auto-link an existing account by unverified email (takeover guard)', async () => {
     // Insert a password-only user with email matching what Facebook will return.
+    // Facebook does NOT verify email ownership, so linking here would hand the
+    // account to whoever controls a Facebook profile asserting this email.
     await db.query(
       `INSERT INTO users (email, username, password_hash, role, email_verified, avatar)
        VALUES ('linkme@example.com', 'linkfbuser', 'fakehash', 'user', FALSE, 'avatar-01.svg')`,
@@ -206,16 +208,19 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe('/en/#/?error=email_already_registered');
 
+    // No session was issued and the existing account is unchanged (not linked).
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
     const { rows } = await db.query(
       `SELECT facebook_id, oauth_provider, email_verified
          FROM users WHERE email = 'linkme@example.com'`,
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].facebook_id).toBe('fb-id-link');
-    expect(rows[0].oauth_provider).toBe('facebook');
-    expect(rows[0].email_verified).toBe(true);
+    expect(rows[0].facebook_id).toBeNull();
+    expect(rows[0].oauth_provider).toBeNull();
+    expect(rows[0].email_verified).toBe(false);
   });
 
   test('disabled account redirects with account_disabled', async () => {
