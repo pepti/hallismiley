@@ -10,6 +10,7 @@ const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
+const mfaService          = require('../services/mfaService');
 const { t }               = require('../i18n');
 
 const scrypt = new Scrypt();
@@ -47,7 +48,7 @@ const authController = {
         `SELECT id, username, email, role, password_hash,
                 failed_login_attempts, locked_until,
                 disabled, disabled_reason,
-                avatar, display_name, phone,
+                avatar, display_name, phone, totp_enabled,
                 email_verified, party_access, approval_status
          FROM users
          WHERE LOWER(username) = LOWER($1)
@@ -112,11 +113,28 @@ const authController = {
         return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
       }
 
-      // Successful login — reset counters, create session
+      // Password accepted — clear the brute-force counters either way.
       await dbQuery(
         'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
         [user.id]
       );
+
+      // Second factor. NO session is created here: a half-authenticated session
+      // is still a session, and anything that forgot to check an "upgraded" flag
+      // would be a bypass. The challenge id is not a credential for anything
+      // except exchanging a correct code for a real session.
+      if (mfaService.isProtected(user)) {
+        const challengeId = await mfaService.createChallenge(user.id, {
+          ip: req.ip ?? null,
+          userAgent: req.headers['user-agent'] ?? null,
+        });
+        securityLogger.loginSuccess(req.ip, `${user.username} (password ok, awaiting 2FA)`, user.id);
+        return res.json({
+          mfaRequired: true,
+          challengeId,
+          expiresInMs: mfaService.CHALLENGE_TTL_MS,
+        });
+      }
 
       const session = await lucia.createSession(user.id, {
         ip_address: req.ip ?? null,
@@ -140,6 +158,164 @@ const authController = {
           approval_status: user.approval_status,
         },
       });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/login/totp  { challengeId, code }
+  //
+  // Step two of a protected sign-in. The challenge proves the password step
+  // already succeeded, so this endpoint never sees or re-checks a password —
+  // which is also why it must be rate-limited as tightly as /login itself.
+  //
+  // `code` is either a 6-digit TOTP or a single-use recovery code; mfaService
+  // decides which, so the user does not have to tell us.
+  async loginTotp(req, res, next) {
+    try {
+      const { challengeId, code } = req.body;
+      if (!challengeId || !code) {
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.mfaCodeRequired'), code: 400 });
+      }
+
+      const result = await mfaService.verifyChallenge(challengeId, code);
+      if (!result.ok) {
+        // Deliberately uniform: a wrong code, an expired challenge and a spent
+        // challenge all look the same to the caller apart from the message, and
+        // none of them says whether the account exists or has 2FA.
+        const messages = {
+          EXPIRED:           'errors.auth.mfaChallengeExpired',
+          TOO_MANY_ATTEMPTS: 'errors.auth.mfaTooManyAttempts',
+          INVALID:           'errors.auth.mfaChallengeInvalid',
+          BAD_CODE:          'errors.auth.mfaBadCode',
+        };
+        securityLogger.loginFailed(req.ip, `2FA ${result.reason}`);
+        return res.status(401).json({
+          error: t(req.locale, messages[result.reason] || messages.BAD_CODE),
+          code: 401,
+          ...(typeof result.attemptsRemaining === 'number' ? { attemptsRemaining: result.attemptsRemaining } : {}),
+        });
+      }
+
+      const { rows } = await dbQuery(
+        `SELECT id, username, email, role, avatar, display_name, phone, disabled,
+                email_verified, party_access, approval_status
+           FROM users
+          WHERE id = $1`,
+        [result.userId]
+      );
+      const user = rows[0];
+      // The account could have been disabled between the two steps.
+      if (!user || user.disabled) {
+        return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
+      }
+
+      const session = await lucia.createSession(user.id, {
+        ip_address: req.ip ?? null,
+        user_agent: req.headers['user-agent'] ?? null,
+      });
+      res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
+
+      securityLogger.loginSuccess(req.ip, user.username, user.id);
+
+      const recoveryCodesRemaining = await mfaService.remainingRecoveryCodes(user.id);
+
+      return res.json({
+        // Surfaced so the UI can warn when the fallbacks are nearly gone — the
+        // moment that matters for a single-admin site is *before* the last
+        // one is spent, not after.
+        usedRecoveryCode: result.usedRecoveryCode,
+        recoveryCodesRemaining,
+        user: {
+          id:             user.id,
+          username:       user.username,
+          email:          user.email,
+          ...(await roleFields(user.id, user.role)),
+          avatar:         user.avatar,
+          display_name:   user.display_name,
+          phone:          user.phone,
+          email_verified: user.email_verified,
+          party_access:   user.party_access,
+          approval_status: user.approval_status,
+        },
+      });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/totp/setup — begin enrolment, return the otpauth URI + manual key.
+  //
+  // Restricted to roles the login path actually challenges. Letting anyone enrol
+  // would create accounts holding a secret that never gates anything — a
+  // confusing state that looks like protection and isn't.
+  async totpSetup(req, res, next) {
+    try {
+      const user = req.user;
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
+      }
+      if (user.totp_enabled) {
+        return res.status(409).json({ error: t(req.locale, 'errors.auth.mfaAlreadyEnabled'), code: 409 });
+      }
+
+      const { secret, uri, qr } = await mfaService.beginEnrolment(user.id, user.email || user.username);
+      securityLogger.loginSuccess(req.ip, `${user.username} started 2FA enrolment`, user.id);
+      // Returned exactly once per setup call: the QR to scan, and the same
+      // secret in text for manual entry when scanning isn't possible. Neither is
+      // readable afterwards through any endpoint.
+      return res.json({ secret, uri, qr });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/totp/confirm  { code } — prove the app works, switch 2FA on.
+  async totpConfirm(req, res, next) {
+    try {
+      const user = req.user;
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
+      }
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.mfaCodeRequired'), code: 400 });
+      }
+
+      const result = await mfaService.confirmEnrolment(user.id, code);
+      if (!result.ok) {
+        const map = {
+          NOT_STARTED:     ['errors.auth.mfaNotStarted', 409],
+          ALREADY_ENABLED: ['errors.auth.mfaAlreadyEnabled', 409],
+          BAD_CODE:        ['errors.auth.mfaBadCode', 400],
+        };
+        const [key, status] = map[result.reason] || map.BAD_CODE;
+        return res.status(status).json({ error: t(req.locale, key), code: status });
+      }
+
+      securityLogger.loginSuccess(req.ip, `${user.username} enabled 2FA`, user.id);
+      // Shown once, never again — they are stored hashed.
+      return res.json({ enabled: true, recoveryCodes: result.recoveryCodes });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/totp/disable  { password } — turn 2FA off.
+  //
+  // Requires the password again: a walk-up attacker with an unlocked laptop and a
+  // live session should not be able to strip the second factor off the account.
+  async totpDisable(req, res, next) {
+    try {
+      const user = req.user;
+      const { password } = req.body;
+      if (!password) {
+        return res.status(400).json({ error: t(req.locale, 'errors.auth.usernamePasswordRequired'), code: 400 });
+      }
+
+      const { rows } = await dbQuery('SELECT password_hash FROM users WHERE id = $1', [user.id]);
+      let validPass = false;
+      try { validPass = await scrypt.verify(rows[0]?.password_hash || '', password); } catch { validPass = false; }
+      if (!validPass) {
+        securityLogger.loginFailed(req.ip, `${user.username} failed password check disabling 2FA`);
+        return res.status(401).json({ error: t(req.locale, 'errors.auth.invalidCredentials'), code: 401 });
+      }
+
+      await mfaService.disable(user.id);
+      securityLogger.loginSuccess(req.ip, `${user.username} DISABLED 2FA`, user.id);
+      return res.json({ enabled: false });
     } catch (err) { next(err); }
   },
 
@@ -461,6 +637,12 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
+          // The ProfileView 2FA section paints from this flag; without it a
+          // page reload forgets the account is protected and offers "Set up"
+          // to an already-enrolled admin (which then 409s). NOTE: deliberately
+          // included here where the icelandicstore original omits it — flagged
+          // for back-porting there.
+          totp_enabled:   !!user.totp_enabled,
         },
       });
     } catch (err) { next(err); }

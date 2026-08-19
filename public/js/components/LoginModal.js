@@ -1,4 +1,5 @@
-import { login }     from '../services/auth.js';
+import { login, loginTotp } from '../services/auth.js';
+import { decideTotpFailure } from './totpFailure.js';
 import { showToast } from './Toast.js';
 import { t, href }   from '../i18n/i18n.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
@@ -71,11 +72,22 @@ export class LoginModal {
 
   open() {
     if (!this._overlay) this.mount();
+    // The code step replaces the modal's innards, so a reopen after an abandoned
+    // 2FA attempt would otherwise find no password form (and throw on focus()).
+    if (!this._overlay.querySelector('#login-username')) this._resetToPasswordStep();
     // Refresh OAuth returnTo on every open — the modal mounts once but the
     // user's current path may have changed since the last open.
     this._refreshOAuthReturnTo();
     requestAnimationFrame(() => this._overlay.classList.add('open'));
     this._overlay.querySelector('#login-username').focus();
+  }
+
+  // Rebuild the password step when the modal is reopened after a swapped-out DOM.
+  _resetToPasswordStep() {
+    if (!this._overlay) return;
+    this._overlay.remove();
+    this._overlay = null;
+    this.mount();
   }
 
   _refreshOAuthReturnTo() {
@@ -105,7 +117,12 @@ export class LoginModal {
     btn.textContent = t('login.signingIn');
 
     try {
-      await login(username, password);
+      const result = await login(username, password);
+      // Protected account: the password was right but nothing is signed in yet.
+      if (result?.mfaRequired) {
+        this._showTotpStep(result.challengeId);
+        return;
+      }
       this.close();
       showToast(t('auth.signIn'), 'success');
     } catch (err) {
@@ -113,6 +130,113 @@ export class LoginModal {
     } finally {
       btn.disabled    = false;
       btn.textContent = t('login.submit');
+    }
+  }
+
+  // Swap the password form for the code step. The password form is replaced
+  // rather than hidden so a stale password can't sit in the DOM, and so there is
+  // no way to submit step one again while a challenge is open.
+  _showTotpStep(challengeId) {
+    const modal = this._overlay.querySelector('.login-modal');
+    modal.innerHTML = `
+      <button class="modal__close" aria-label="${t('login.close')}">&times;</button>
+      <h2 class="modal__title" id="login-title">${t('login.totpTitle')}</h2>
+      <p class="login-modal__hint">${t('login.totpHint')}</p>
+      <form class="login-form" novalidate data-testid="login-totp-form">
+        <div class="form-group">
+          <label class="form-label" for="login-totp">${t('login.totpLabel')}</label>
+          <input class="form-input" id="login-totp" name="code" type="text"
+                 inputmode="numeric" autocomplete="one-time-code"
+                 autocapitalize="off" spellcheck="false"
+                 placeholder="123456" required data-testid="login-totp-input" />
+        </div>
+        <div class="form-error" role="alert"></div>
+        <button class="btn btn--primary btn--full" type="submit" data-testid="login-totp-submit">${t('login.totpSubmit')}</button>
+        <div class="login-modal__footer">
+          <button type="button" class="login-modal__link" id="login-totp-recovery">${t('login.totpUseRecovery')}</button>
+        </div>
+      </form>
+    `;
+
+    modal.querySelector('.modal__close').addEventListener('click', () => this.close());
+    // Recovery codes are longer and not numeric — relax the input so the field
+    // stops fighting the user when they paste one off paper.
+    modal.querySelector('#login-totp-recovery').addEventListener('click', () => {
+      const input = modal.querySelector('#login-totp');
+      input.removeAttribute('inputmode');
+      input.placeholder = 'ABCDE-FGHJK';
+      modal.querySelector('.login-modal__hint').textContent = t('login.totpRecoveryHint');
+      input.value = '';
+      input.focus();
+    });
+    modal.querySelector('.login-form').addEventListener('submit', e => this._onTotpSubmit(e, challengeId));
+    modal.querySelector('#login-totp').focus();
+  }
+
+  async _onTotpSubmit(e, challengeId) {
+    e.preventDefault();
+    const form  = e.currentTarget;
+    const errEl = form.querySelector('.form-error');
+    const btn   = form.querySelector('[type=submit]');
+    const code  = form.code.value.trim();
+
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = t('login.signingIn');
+
+    // Decided by totpFailure.js so the rule is testable without a DOM. A
+    // mistyped code must always leave the form usable — the server allows five
+    // attempts, so the UI has to let the user actually spend them.
+    //
+    // Default true so a success path (or an unexpected throw before the catch
+    // assigns) still restores the button rather than stranding it.
+    let reEnableSubmit = true;
+
+    try {
+      const data = await loginTotp(challengeId, code);
+      this.close();
+      showToast(t('auth.signIn'), 'success');
+      // A recovery code just got burned — say so, and say how many are left.
+      // For a single-admin site, running out silently is the failure mode
+      // that ends with nobody able to sign in.
+      if (data.usedRecoveryCode) {
+        showToast(t('login.recoveryCodeUsed', { n: data.recoveryCodesRemaining }), 'warning', 9000);
+      }
+    } catch (err) {
+      const decision = decideTotpFailure(err);
+
+      // Say how many tries are left. Without it a wrong code looks identical to
+      // the last wrong code, and the user has no idea they are one away from
+      // being sent back to the start.
+      // `err?.message` because decideTotpFailure deliberately tolerates a null
+      // error; dereferencing it here anyway would throw inside the catch and
+      // escape as an unhandled rejection, leaving a form that silently did
+      // nothing. The two must agree about what they accept.
+      const message = err?.message || t('login.totpGenericError');
+      errEl.textContent = decision.attemptsRemaining !== null
+        ? `${message} ${t('login.totpAttemptsLeft', { n: decision.attemptsRemaining })}`
+        : message;
+
+      // Read straight off the decision, so the property the tests assert is the
+      // property that actually drives the button. Keeping a parallel local flag
+      // meant the rule could be tested and the UI still broken.
+      reEnableSubmit = decision.reEnableSubmit;
+
+      if (decision.restart) {
+        // The challenge is gone (expired or spent). Keeping the code box open
+        // would just collect guesses against nothing — go back to step one.
+        setTimeout(() => { this.close(); this.open(); }, 2500);
+      }
+      if (decision.clearInput) {
+        // Ready for the next attempt without the user having to clear the field.
+        form.code.value = '';
+        form.code.focus();
+      }
+    } finally {
+      if (reEnableSubmit) {
+        btn.disabled = false;
+        btn.textContent = t('login.totpSubmit');
+      }
     }
   }
 }

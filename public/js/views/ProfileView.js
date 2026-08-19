@@ -1,4 +1,4 @@
-import { isAuthenticated, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions } from '../services/auth.js';
+import { isAuthenticated, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
@@ -39,9 +39,116 @@ export class ProfileView {
       this._bindLangPref(el);
       this._bindPassword(el);
       this._bindSessions(el, sessions);
+      if (profile.role === 'admin') {
+        this._renderTotp(el);
+      }
     } catch (err) {
       wrap.innerHTML = `<p class="profile-error">Failed to load profile: ${escHtml(err.message)}</p>`;
     }
+  }
+
+  // Two-step verification panel. Three states: off, mid-enrolment, on.
+  // Ported from icelandicstore (#138/#147 there), QR enrolment included.
+  _renderTotp(el) {
+    const body = el.querySelector('#totp-body');
+    if (!body) return;
+
+    const enabled = () => !!getUser()?.totp_enabled;
+
+    const paint = () => {
+      body.innerHTML = enabled()
+        ? `<p class="profile-hint">${t('profile.twoStepOn')}</p>
+           <form class="profile-form" id="totp-off-form" novalidate>
+             <div class="form-group">
+               <label class="form-label" for="totp-off-pw">${t('profile.currentPassword')}</label>
+               <input class="form-input" id="totp-off-pw" type="password" autocomplete="current-password" required/>
+             </div>
+             <p class="form-error" id="totp-error" aria-live="polite"></p>
+             <div class="form-actions">
+               <button type="submit" class="btn btn--danger" data-testid="totp-disable">${t('profile.twoStepTurnOff')}</button>
+             </div>
+           </form>`
+        : `<p class="profile-hint">${t('profile.twoStepOff')}</p>
+           <p class="form-error" id="totp-error" aria-live="polite"></p>
+           <div class="form-actions">
+             <button type="button" class="btn btn--primary" id="totp-start" data-testid="totp-start">${t('profile.twoStepSetUp')}</button>
+           </div>`;
+
+      const startBtn = body.querySelector('#totp-start');
+      if (startBtn) startBtn.addEventListener('click', () => this._startTotp(body, paint));
+
+      const offForm = body.querySelector('#totp-off-form');
+      if (offForm) offForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errEl = body.querySelector('#totp-error');
+        errEl.textContent = '';
+        try {
+          await totpDisable(body.querySelector('#totp-off-pw').value);
+          showToast(t('profile.twoStepTurnedOff'), 'success');
+          paint();
+        } catch (err) { errEl.textContent = err.message; }
+      });
+    };
+
+    paint();
+  }
+
+  async _startTotp(body, repaint) {
+    const errEl = body.querySelector('#totp-error');
+    errEl.textContent = '';
+    let setup;
+    try { setup = await totpSetup(); } catch (err) { errEl.textContent = err.message; return; }
+
+    body.innerHTML = `
+      <ol class="profile-hint totp-steps">
+        <li>${t('profile.twoStepStep1')}</li>
+        <li>${t('profile.twoStepScan')}</li>
+      </ol>
+      ${setup.qr ? `
+      <div class="totp-qr">
+        <img src="${escHtml(setup.qr)}" width="200" height="200" alt="${escHtml(t('profile.twoStepQrAlt'))}"
+             data-testid="totp-qr"/>
+      </div>` : ''}
+      <details class="totp-manual">
+        <summary>${t('profile.twoStepCantScan')}</summary>
+        <p class="profile-hint">${t('profile.twoStepStep2')}</p>
+        <p class="totp-key"><code data-testid="totp-secret">${escHtml(setup.secret)}</code></p>
+        <p class="profile-hint"><a href="${escHtml(setup.uri)}">${t('profile.twoStepOpenApp')}</a></p>
+      </details>
+      <form class="profile-form" id="totp-confirm-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="totp-code">${t('login.totpLabel')}</label>
+          <input class="form-input" id="totp-code" type="text" inputmode="numeric"
+                 autocomplete="one-time-code" placeholder="123456" required data-testid="totp-code"/>
+        </div>
+        <p class="form-error" id="totp-error" aria-live="polite"></p>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary" data-testid="totp-confirm">${t('profile.twoStepConfirm')}</button>
+          <button type="button" class="btn btn--ghost" id="totp-cancel">${t('admin.cancel')}</button>
+        </div>
+      </form>`;
+
+    body.querySelector('#totp-cancel').addEventListener('click', repaint);
+    body.querySelector('#totp-confirm-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err2 = body.querySelector('#totp-error');
+      err2.textContent = '';
+      try {
+        const res = await totpConfirm(body.querySelector('#totp-code').value.trim());
+        // Recovery codes are shown exactly once. Make that unmissable — for a
+        // single-admin site these are the only way back in if the phone is lost.
+        body.innerHTML = `
+          <p class="profile-hint"><strong>${t('profile.twoStepOnNow')}</strong></p>
+          <p class="form-error">${t('profile.twoStepSaveCodes')}</p>
+          <ul class="totp-recovery-codes" data-testid="totp-recovery-codes">
+            ${res.recoveryCodes.map((c) => `<li><code>${escHtml(c)}</code></li>`).join('')}
+          </ul>
+          <div class="form-actions">
+            <button type="button" class="btn btn--primary" id="totp-done">${t('profile.twoStepSavedThem')}</button>
+          </div>`;
+        body.querySelector('#totp-done').addEventListener('click', repaint);
+      } catch (err) { err2.textContent = err.message; }
+    });
   }
 
   _buildHTML(profile, sessions) {
@@ -156,6 +263,15 @@ export class ProfileView {
           <button class="btn btn--primary" id="lang-save-btn">${t('profile.saveChanges')}</button>
         </div>
       </section>
+
+      <!-- Two-step verification. Admin-only: the login path challenges that role
+           and no other, so offering it elsewhere would promise protection that
+           never engages. Rendered from the session's totp_enabled flag. -->
+      ${profile.role === 'admin' ? `
+      <section class="profile-section" id="totp-section" data-testid="totp-section">
+        <h2 class="profile-section__title">${t('profile.twoStepTitle')}</h2>
+        <div id="totp-body"></div>
+      </section>` : ''}
 
       <!-- Change password -->
       <section class="profile-section">

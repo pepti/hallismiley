@@ -3913,6 +3913,54 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          ON payments (idempotency_key) WHERE idempotency_key LIKE 'client:%'`,
     ],
   },
+  {
+    // Admin two-factor sign-in (TOTP, RFC 6238). Ported from icelandicstore
+    // (#138 there; base migration number differs — chains diverged at 072).
+    //
+    //   totp_secret        — base32, NULL until enrolment starts. Present but with
+    //                        totp_enabled = FALSE means enrolment was begun and
+    //                        never confirmed; such a secret must never authorise.
+    //   totp_enabled       — the single source of truth for "this account is protected".
+    //   totp_last_step     — the last accepted TOTP counter, so a code cannot be
+    //                        replayed inside its own 30-second window.
+    //
+    // user_recovery_codes: single-use fallbacks, stored as scrypt HASHES (the same
+    // primitive as passwords) — a leaked DB backup must not hand over the second
+    // factor. Deleted with the user.
+    //
+    // mfa_challenges: the short-lived state between "password accepted" and "code
+    // accepted". It exists as a TABLE rather than a signed token because a row is
+    // revocable, attempt-countable and audit-visible, which a stateless token is
+    // not — and inventing a second token format for auth is the wrong place to
+    // improvise.
+    name: '080_admin_totp',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret       TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled      BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_confirmed_at TIMESTAMPTZ`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step    BIGINT`,
+
+      `CREATE TABLE IF NOT EXISTS user_recovery_codes (
+         id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         code_hash  TEXT NOT NULL,
+         used_at    TIMESTAMPTZ,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_recovery_codes_user ON user_recovery_codes(user_id) WHERE used_at IS NULL`,
+
+      `CREATE TABLE IF NOT EXISTS mfa_challenges (
+         id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         expires_at TIMESTAMPTZ NOT NULL,
+         attempts   INTEGER NOT NULL DEFAULT 0,
+         ip_address TEXT,
+         user_agent TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires ON mfa_challenges(expires_at)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
