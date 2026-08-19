@@ -3,6 +3,7 @@ import { escHtml } from '../utils/escHtml.js';
 import { isSafeReturnTo } from '../utils/safeReturnTo.js';
 import { t, href } from '../i18n/i18n.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
+import { SOCIAL_LOGIN_ENABLED } from '../utils/features.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -60,12 +61,13 @@ export class SignupView {
             <p class="signup-subtitle">${t('signup.alreadyHaveAccount')} <a href="${href('/login')}" class="signup-link" data-route="/login">${t('nav.signIn')}</a></p>
           </div>
 
+          ${SOCIAL_LOGIN_ENABLED ? `
           <a class="btn btn--outline btn--full btn--google" href="/auth/google${rtParam}"
              data-testid="signup-google">
             <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
             <span>${t('signup.continueWithGoogle')}</span>
           </a>
-          <div class="login-modal__divider signup-divider"><span>${t('signup.orEmail')}</span></div>
+          <div class="login-modal__divider signup-divider"><span>${t('signup.orEmail')}</span></div>` : ''}
 
           <form class="signup-form" id="signup-form" novalidate data-testid="signup-form">
 
