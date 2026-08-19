@@ -1,19 +1,26 @@
 name: Deploy to Azure
 
-# Deploy is gated on CI: it runs only after the CI workflow finishes
-# successfully on main, deploying the exact SHA that CI validated.
-# `workflow_dispatch` stays available as a manual override — used when
-# we need to ship an image without re-running CI (e.g. after a
-# subscription/billing outage where the previous CI was already green).
+# ── NEUTRALIZED (ENHANCEMENTS #1, 2026-08-19) ────────────────────────────────
+# The base's deploy.yml was inherited verbatim and aimed at the owner's
+# PERSONAL Azure resources (hallismileyacr / hallismiley-app) with an
+# auto-trigger on green CI — one push to a wired-up remote away from deploying
+# this repo over the live personal site.
+#
+# This rewrite makes the workflow inert-by-default, the same pattern as
+# promote.yml: manual dispatch only, and every target read from repo
+# variables that DO NOT EXIST yet. Until Halli provisions the company Azure
+# stack and sets the vars, a dispatch fails fast at the guard step and
+# touches nothing. Arming it later = set vars, no workflow edit:
+#   vars.ACR_NAME · vars.IMAGE_NAME · vars.WEBAPP_NAME · vars.RESOURCE_GROUP
+#   secrets.AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
+#   (optional) vars.ALERT_EMAIL_TO / vars.ALERT_EMAIL_FROM + secrets.RESEND_API_KEY
+#
+# The auto-deploy-on-green-CI trigger (workflow_run) is deliberately NOT kept:
+# re-adding it is a decision for when the company stack exists, and belongs in
+# the same review as the release-channel rollout (promote.yml canary→stable).
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
-# Default every job to read-only; the deploy job's own permissions block
-# grants the OIDC id-token it needs and overrides this at job level.
 permissions:
   contents: read
 
@@ -29,11 +36,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    # Fail closed: deploy only fires when CI succeeded for this SHA, or
-    # when a human explicitly dispatched the workflow. Any CI failure
-    # (red tests, audit, docker build) leaves prod untouched.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-
     # Required for OIDC federated login against Azure AD — the job gets a
     # short-lived token from GitHub that Azure exchanges for a service-
     # principal session, no long-lived secrets in the repo.
@@ -42,13 +44,29 @@ jobs:
       contents: read
 
     env:
-      # For workflow_run, deploy the exact commit CI validated (not whatever
-      # is at main HEAD now — main may have advanced between CI completion
-      # and this job starting). For workflow_dispatch, fall back to the SHA
-      # at the time of dispatch.
-      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      DEPLOY_SHA: ${{ github.sha }}
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+      WEBAPP_NAME: ${{ vars.WEBAPP_NAME }}
+      RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
 
     steps:
+      # Inert-by-default guard: with the repo variables unset (the state of
+      # this repo until the company Azure stack exists), fail here — before
+      # login, before any resource is touched.
+      - name: Guard — require deploy target variables
+        run: |
+          missing=""
+          for v in ACR_NAME IMAGE_NAME WEBAPP_NAME RESOURCE_GROUP; do
+            eval "val=\${$v}"
+            [ -z "$val" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Deploy target not configured — unset repo variables:$missing"
+            echo "This workflow is neutralized until the company Azure stack exists (ENHANCEMENTS #1)."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,24 +80,18 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # `az acr login` uses the Azure session above — no ACR_USERNAME /
-      # ACR_PASSWORD needed. It populates Docker's credential store so
-      # the subsequent build-push step can push images without a second
-      # auth round-trip.
+      # ACR_PASSWORD needed.
       - name: Log in to ACR
-        run: az acr login --name hallismileyacr
+        run: az acr login --name "$ACR_NAME"
 
       # The default docker driver can't export a build cache; the
       # docker-container driver can, which is what makes cache-to below work.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      # GHA layer cache so unchanged layers (notably the ~200 MB `npm ci`
-      # node_modules layer) are reused across deploys instead of rebuilt and
-      # pushed to ACR as brand-new blobs every time. mode=max caches the deps
-      # stage too, not just the final image. provenance:false keeps the pushed
-      # artifact a plain single-arch manifest — the default (an OCI index with
-      # an attestation child) would change what the weekly ACR purge sees and
-      # what App Service pulls.
+      # provenance:false keeps the pushed artifact a plain single-arch manifest —
+      # the default (an OCI index with an attestation child) would change what
+      # an ACR purge sees and what App Service pulls.
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -98,9 +110,9 @@ jobs:
             BUILT_AT=${{ github.event.repository.updated_at }}
             RELEASE_CHANNEL=stable
           tags: |
-            hallismileyacr.azurecr.io/hallismiley:latest
-            hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
-            hallismileyacr.azurecr.io/hallismiley:sha-${{ env.DEPLOY_SHA }}
+            ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:latest
+            ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:${{ env.DEPLOY_SHA }}
+            ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:sha-${{ env.DEPLOY_SHA }}
 
       # The digest is the identity the release channel publishes and the
       # platform pulls. Print it so a promote run can be given the exact bytes
@@ -121,7 +133,7 @@ jobs:
       - name: Scan pushed image (Trivy)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: hallismileyacr.azurecr.io/hallismiley:sha-${{ env.DEPLOY_SHA }}
+          image-ref: ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:sha-${{ env.DEPLOY_SHA }}
           format: table
           exit-code: '1'
           ignore-unfixed: true
@@ -131,109 +143,59 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
-          app-name: hallismiley-app
-          images: hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
+          app-name: ${{ vars.WEBAPP_NAME }}
+          images: ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:${{ env.DEPLOY_SHA }}
 
-      # azure/webapps-deploy updates the configured image tag but on B1
-      # (no slots) doesn't reliably trigger a container swap — observed on
-      # 2026-04-24 where six successive successful deploys all reported
-      # success while the container kept running a 10-hour-old image. Force
-      # a restart so the new image is actually running. Brief (~30-60s)
-      # unavailability per deploy until we move to a tier with slots.
+      # azure/webapps-deploy updates the configured image tag but on tiers
+      # without slots doesn't reliably trigger a container swap (observed on
+      # the base 2026-04-24: six successful deploys, container kept a
+      # 10-hour-old image). Force a restart so the new image actually runs.
       - name: Force restart to activate new image
-        run: az webapp restart --resource-group hallismiley-rg --name hallismiley-app
+        run: az webapp restart --resource-group "$RESOURCE_GROUP" --name "$WEBAPP_NAME"
 
-  # ── Failsafe: email halli@hallismiley.is when merged code does NOT go live ──
-  # Two distinct "merged but not live" causes are covered:
-  #   1. CI went red on main  → the deploy job above is SKIPPED (fail-closed).
-  #   2. the deploy job RAN but errored (ACR/build/webapp/restart).
-  # Both email via Resend (the app's provider). They no-op cleanly if the
-  # RESEND_API_KEY secret isn't set, and run independently of `deploy` so an
-  # alert can never block or break a deploy.
-
-  alert-ci-blocked:
-    name: Alert — CI red on main (deploy skipped)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Fires only when CI completed on main WITHOUT success — i.e. the exact
-    # moment the deploy is being skipped. A manual workflow_dispatch never
-    # reaches this branch. `cancelled` is excluded: CI only cancels when a run
-    # is superseded (see ci.yml concurrency), which isn't a failure to alert on.
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.conclusion != 'cancelled' }}
-    steps:
-      - name: Email deploy-blocked alert (Resend)
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          CI_SHA: ${{ github.event.workflow_run.head_sha }}
-          CI_URL: ${{ github.event.workflow_run.html_url }}
-          CI_TITLE: ${{ github.event.workflow_run.display_title }}
-        run: |
-          if [ -z "$RESEND_API_KEY" ]; then
-            echo "RESEND_API_KEY not set — skipping deploy-blocked alert."; exit 0
-          fi
-          SHORT_SHA="${CI_SHA:0:9}"
-          # jq builds the JSON so any character in the commit title/url is safely escaped.
-          jq -n \
-            --arg subj "⚠️ hallismiley — merged code did NOT deploy (CI ${CI_CONCLUSION} on main)" \
-            --arg concl "$CI_CONCLUSION" \
-            --arg sha "$SHORT_SHA" \
-            --arg title "$CI_TITLE" \
-            --arg url "$CI_URL" \
-            '{
-               from: "Hallismiley Deploy <noreply@hallismiley.is>",
-               to: ["halli@hallismiley.is"],
-               subject: $subj,
-               html: ("<h2>⚠️ Merged code did NOT deploy</h2>"
-                 + "<p>CI finished <strong>" + $concl + "</strong> on <code>main</code> for commit <code>" + $sha + "</code> — " + $title + ".</p>"
-                 + "<p>The Azure deploy is gated on green CI, so it was <strong>skipped</strong>. The merged code is <strong>not live</strong>. Fix CI and it will auto-deploy, or run the “Deploy to Azure” workflow manually.</p>"
-                 + "<p><a href=\"" + $url + "\">View the CI run →</a></p>")
-             }' \
-            | curl -sS --fail-with-body -X POST https://api.resend.com/emails \
-                -H "Authorization: Bearer $RESEND_API_KEY" \
-                -H "Content-Type: application/json" \
-                -d @-
-          echo "Deploy-blocked alert emailed to halli@hallismiley.is."
-
+  # ── Failsafe: email when a dispatched deploy errored ─────────────────────────
+  # No-ops cleanly unless vars.ALERT_EMAIL_TO/FROM and secrets.RESEND_API_KEY
+  # are all set. (The base's second alert — CI-red-on-main blocking an
+  # auto-deploy — is gone with the workflow_run trigger.)
   alert-deploy-failed:
     name: Alert — Azure deploy failed
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [deploy]
-    # Only when the deploy job actually RAN and failed (not when it was skipped
-    # because CI was red — that case is covered by alert-ci-blocked above).
-    #
     # always() is load-bearing, not decoration. An `if:` that contains no status
     # function still has the implicit success() gate applied to `needs`, so a
     # failed deploy SKIPS this job and the alert never fires — which is exactly
-    # what happened on 2026-08-07, when a registry 504 failed the deploy of
-    # 112d5a8 in silence. always() lifts that gate so the result check is
-    # actually reached.
+    # what happened on the base 2026-08-07, when a registry 504 failed a deploy
+    # in silence. always() lifts that gate so the result check is reached.
     if: ${{ always() && needs.deploy.result == 'failure' }}
     steps:
       - name: Email deploy-failed alert (Resend)
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
+          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+          DEPLOY_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ -z "$RESEND_API_KEY" ]; then
-            echo "RESEND_API_KEY not set — skipping deploy-failed alert."; exit 0
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$ALERT_EMAIL_TO" ] || [ -z "$ALERT_EMAIL_FROM" ]; then
+            echo "Alert email not configured (RESEND_API_KEY / ALERT_EMAIL_TO / ALERT_EMAIL_FROM) — skipping."; exit 0
           fi
           SHORT_SHA="${DEPLOY_SHA:0:9}"
           jq -n \
+            --arg from "Orange Smiley Deploy <$ALERT_EMAIL_FROM>" \
+            --arg to "$ALERT_EMAIL_TO" \
             --arg sha "$SHORT_SHA" \
             --arg url "$RUN_URL" \
             '{
-               from: "Hallismiley Deploy <noreply@hallismiley.is>",
-               to: ["halli@hallismiley.is"],
-               subject: "⚠️ hallismiley — Azure deploy FAILED",
+               from: $from,
+               to: [$to],
+               subject: "⚠️ orangesmiley — Azure deploy FAILED",
                html: ("<h2>⚠️ Azure deploy failed</h2>"
-                 + "<p>The deploy job for <code>main</code> (commit <code>" + $sha + "</code>) errored, so the merged code is <strong>not live</strong> on Azure.</p>"
+                 + "<p>The dispatched deploy (commit <code>" + $sha + "</code>) errored, so the code is <strong>not live</strong> on Azure.</p>"
                  + "<p><a href=\"" + $url + "\">View the deploy run →</a></p>")
              }' \
             | curl -sS --fail-with-body -X POST https://api.resend.com/emails \
                 -H "Authorization: Bearer $RESEND_API_KEY" \
                 -H "Content-Type: application/json" \
                 -d @-
-          echo "Deploy-failed alert emailed to halli@hallismiley.is."
+          echo "Deploy-failed alert emailed."

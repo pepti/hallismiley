@@ -4,7 +4,7 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 
 - **Owner**: Halli. Business plan: `company/ORANGE-SMILEY-PLAN.md` (offering/tiers §1, instance architecture §4, targets §7). Build brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Both live in the gitignored `company/` folder in this repo, alongside `COMPANY-LOG.md` and `ORANGE-SMILEY-WEBSITE-PLAN.md`.
 - **Provenance**: scaffolded 2026-08-09 from `C:\Users\Notandi\claude\HalliProjects` at base rev **`562c637`** by site-factory.
-- **Deploy target**: company Azure tenant (exists since 2026-08-12; company identity details in gitignored `company/COMPANY-LOG.md`) — **no provisioning or deploy without Halli's explicit go-ahead**, and ENHANCEMENTS proposal #1 (neutralize inherited `deploy.yml`) comes before any push.
+- **Deploy target**: company Azure tenant (exists since 2026-08-12; company identity details in gitignored `company/COMPANY-LOG.md`) — **no provisioning or deploy without Halli's explicit go-ahead**. ENHANCEMENTS #1 is done (2026-08-19): `deploy.yml` is neutralized, so pushing the repo is safe.
 
 ## ⚠ Do NOT run /strip-base
 
@@ -27,7 +27,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 
 ## Project rules
 
-- Read-only references — never modify: `C:\Users\Notandi\claude\HalliProjects` (the base) and `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system).
+- Read-only references — never modify: `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system). **Dated exception (Halli, 2026-08-19):** `C:\Users\Notandi\claude\HalliProjects` (the base) is writable for the duration of the base-upgrade program (plan: `~\.claude\plans\as-icelandic-store-is-wiggly-liskov.md` — icelandicstore features land in the base first, then fan out here). The base reverts to read-only when the program ends.
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
 - Prices on `/thjonusta` (39–79 þ.kr./mán) are placeholders marked DRAFT until Halli confirms.
@@ -67,6 +67,6 @@ the base is documented but deliberately NOT performed (`docs/UPSTREAM-SELF-UPDAT
 ## Where things stand for the next session
 
 - **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files, and the tier prices on `/thjonusta`.
-- **Before the first `git push`**: read ENHANCEMENTS proposal #1 — the inherited `deploy.yml` still aims at Halli's personal Azure resources.
+- **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
 - Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
 - Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.

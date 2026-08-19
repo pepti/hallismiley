@@ -8,7 +8,20 @@ Format: **what** / **why for Orange Smiley** / **effort** (S ≤ half a day · M
 
 ## (a) Quick wins
 
-### 1. Neutralise the inherited deploy workflow — do this before the first `git push`
+### 1. ✅ DONE 2026-08-19 — Neutralise the inherited deploy workflow
+
+**Implemented** (approved by Halli as chunk 0.2 of the base-upgrade program):
+`deploy.yml` is now `workflow_dispatch`-only (the `workflow_run` auto-trigger
+is gone — re-adding it is a decision for when the company stack exists), every
+target reads from repo variables that do not exist yet (`ACR_NAME`,
+`IMAGE_NAME`, `WEBAPP_NAME`, `RESOURCE_GROUP` — the same inert-by-default
+pattern as promote.yml), a guard step fails before Azure login while they are
+unset, all `hallismiley*` names and the `halli@hallismiley.is` alert address
+are gone (alerts now need `vars.ALERT_EMAIL_TO/FROM` + `RESEND_API_KEY`), and
+the CI-red alert job went with the auto-trigger. The repo is push-safe.
+Original proposal kept below for the record.
+
+#### Original proposal
 **What.** `.github/workflows/deploy.yml` came over verbatim from the base. It still pushes to `hallismileyacr.azurecr.io/hallismiley`, deploys App Service `hallismiley-app` in resource group `hallismiley-rg`, restarts it, and emails `halli@hallismiley.is` when a deploy is skipped. It triggers automatically on every successful CI run on `main`.
 **Why.** This repo is a different company's product. The moment it lands in a GitHub repo that can see Azure credentials, a merge to `main` aims a deploy at Halli's personal live site. Today the repo has no remote and no secrets, so nothing can fire — that is exactly why this is cheap to fix now.
 **Effort.** S. **Risk.** Low to change; high if left.
