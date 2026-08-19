@@ -90,6 +90,18 @@ Format: **what** / **why for Orange Smiley** / **effort** (S ≤ half a day · M
 **Effort.** S ongoing. **Risk.** None.
 **Recommendation.** Run `/retro` at the end of this engagement and fold the lessons into site-factory.
 
+### 13. MCP connector — let owners/admins drive the system from their Claude accounts
+**What.** Expose the app as a remote MCP server: one `POST /mcp` endpoint (Streamable HTTP, official `@modelcontextprotocol/sdk` on the existing Express app), which a store owner or admin adds as a **custom connector** in their own Claude account (claude.ai → Settings → Connectors; requires Pro/Max/Team/Enterprise — Team/Enterprise owners can add it org-wide). Claude then gets typed, RBAC-gated tools against this instance: look up orders/products/stock, sales summaries, list + filter leads, bookkeeping queries; a second phase can add write tools (mark order shipped, adjust stock, mark lead contacted), each individually flagged.
+**Why for Orange Smiley.** Two-sided: (a) admins of this instance get conversational access to their own data — "hvaða leads komu inn í vikunni?" — without new UI; (b) it becomes a **fleet feature**: every customer instance inherits it, and "talk to your store from Claude" is a differentiator no Icelandic ERP replacement offers. Dogfooding it here first is exactly what this instance is for.
+**How it respects the invariants.**
+- *#3 one auth system:* connectors authenticate via OAuth 2.1 (authorization-code + PKCE + dynamic client registration, per the MCP spec). The authorize page is a normal site page behind the existing Lucia session; issued access tokens are the existing RS256 JWTs (`keys/`). New grant flow, same system — no parallel auth.
+- *#8 server-side gating:* every tool call re-resolves the caller's role set from the DB (same path as `requireAuth`), so disabled accounts and revoked roles are rejected immediately regardless of token lifetime. Tools declare a required role; scoping is enforced in SQL, not in the tool description.
+- *#7 security posture:* rate limit on `/mcp` + the OAuth routes, pino audit line per tool call (who, tool, args hash), sanitized inputs, no CSRF needed (bearer tokens, not cookies). Discovery documents (`/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`) are static and public by spec.
+- *#5 error envelope:* MCP is JSON-RPC — protocol responses follow the MCP error shape, not the REST envelope. Documented exemption with reason, per the rule.
+- *Module seam:* `modules.mcp` in `config/client.json` — `enabled`, `allowedRoles`, `writeTools` — so a customer instance can ship with it off or read-only.
+**Effort.** M–L: M for OAuth routes + consent page + read-only tool set; the write tools and per-instance flagging push it to L. **Risk.** Medium — it is a new authenticated surface exposing business data, and the OAuth endpoints must be reviewed like auth code, not like a feature. Mitigated by read-only first, RBAC re-check per call, and the audit log. Verify at implementation time that the current SDK version loads cleanly under CommonJS (it ships a CJS build; pin the version that does).
+**Recommendation.** Approve the design now; implement read-only after the site is deployed (a remote connector needs a public HTTPS URL, so it is meaningless before then — same sequencing as proposal 10). Write tools as a separate sign-off.
+
 ---
 
 ## Remaining `hallismiley` references
