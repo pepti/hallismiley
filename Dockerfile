@@ -29,14 +29,6 @@ COPY package.json ./
 RUN mkdir -p /app/public/assets/content /app/uploads/news /app/uploads/party /app/uploads/projects \
  && chown -R appuser:appgroup /app/public/assets /app/uploads
 
-# Drop to non-root user
-USER appuser
-
-# Azure App Service injects PORT (=8080 by default) at runtime; default to
-# 3000 for local docker run.
-ENV NODE_ENV=production
-EXPOSE 3000
-
 # ── Build identity ───────────────────────────────────────────────────────────
 # Stamp server/version.json into the image so the running container can answer
 # "which release am I?" — the question the whole self-update mechanism turns on
@@ -47,13 +39,23 @@ EXPOSE 3000
 #
 # These ARGs sit AFTER the source COPYs on purpose: they change on every commit,
 # and an ARG invalidates every layer below it. Here they only bust the tiny
-# stamp layer, not the ~200 MB node_modules layer above.
+# stamp layer, not the ~200 MB node_modules layer above. It must run BEFORE
+# USER appuser: the stamp writes /app/server/version.json, which appuser cannot.
 ARG APP_VERSION
 ARG GIT_SHA
 ARG BUILT_AT
 ARG RELEASE_CHANNEL
 COPY scripts/generate-version.js ./scripts/generate-version.js
 RUN node scripts/generate-version.js
+
+# Drop to non-root user
+USER appuser
+
+# Azure App Service injects PORT (=8080 by default) at runtime; default to
+# 3000 for local docker run.
+ENV NODE_ENV=production
+EXPOSE 3000
+
 
 # Health check using Node.js (Alpine has no curl/wget by default)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

@@ -13,6 +13,16 @@ const { loginAsAdmin, createTestUser } = require('./helpers');
 // they end in is covered exhaustively by the Jest suites
 // (tests/integration/updateApplier.test.js).
 
+// The BASE ships the self-update module OFF (no config/client.json), and off
+// means genuinely absent: the sidebar drops the Updates line and /admin/updates
+// 404s. Probe once per test and skip when dormant — instances that enable the
+// module (a 401 here, since the endpoint then exists behind auth) run the full
+// suite. Keeping the spec in the engine is the point: it travels to every fleet.
+test.beforeEach(async ({ request }) => {
+  const res = await request.get('/api/v1/system/version');
+  test.skip(res.status() === 404, 'self-update module dormant in the base — instance suites cover this');
+});
+
 const UPDATES_API = '**/api/v1/system/updates';
 
 /** A stubbed GET /api/v1/system/updates, so a rendering can be tested per mode. */
