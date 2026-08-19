@@ -37,8 +37,6 @@ USER appuser
 ENV NODE_ENV=production
 EXPOSE 3000
 
-# Health check using Node.js (Alpine has no curl/wget by default)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 # ── Build identity ───────────────────────────────────────────────────────────
 # Stamp server/version.json into the image so the running container can answer
 # "which release am I?" — the question the whole self-update mechanism turns on
@@ -57,6 +55,8 @@ ARG RELEASE_CHANNEL
 COPY scripts/generate-version.js ./scripts/generate-version.js
 RUN node scripts/generate-version.js
 
+# Health check using Node.js (Alpine has no curl/wget by default)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 # Graceful-shutdown-aware start command
