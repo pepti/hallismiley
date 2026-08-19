@@ -103,8 +103,102 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+
+      # The browser download from the Playwright CDN intermittently hangs until
+      # the job's 30-minute timeout kills it (4× on 2026-08-19) — and on main a
+      # cancelled job cancels the whole CI run, which deploy.yml fail-closes on:
+      # merged code silently never reaches TEST. So: cache the browser binaries
+      # keyed on the installed Playwright version (the common path never touches
+      # the CDN), and on a miss bound each download attempt and retry instead of
+      # hanging for the whole job budget.
+      # GitHub's Ubuntu runners resolve apt through /etc/apt/apt-mirrors.txt,
+      # which lists Azure's mirror first. On 2026-08-19 that mirror stopped
+      # answering entirely: apt spent its whole retry budget on `Ign:` lines
+      # before falling back to archive.ubuntu.com, and the 8-minute OS-deps step
+      # below timed out twice in a row — on `main`, which left a merged commit
+      # unable to reach TEST at all.
+      #
+      # Dropping the dead hop and bounding apt's own network waits fixes both
+      # apt paths in this job (the cache-miss `install --with-deps` uses apt too,
+      # it just usually finishes inside its larger budget).
+      - name: Pin apt away from the flaky Azure mirror
+        run: |
+          set -euo pipefail
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            echo "before:"; cat /etc/apt/apt-mirrors.txt
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            # Never leave the mirrorlist empty if the file format ever changes.
+            if ! grep -q . /etc/apt/apt-mirrors.txt; then
+              printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://security.ubuntu.com/ubuntu/\tpriority:2\n' \
+                | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            fi
+            echo "after:"; cat /etc/apt/apt-mirrors.txt
+          else
+            echo "no /etc/apt/apt-mirrors.txt on this runner image — nothing to pin"
+          fi
+          # apt's defaults wait a long time per unreachable host. Bound them so a
+          # dead mirror costs seconds, not the whole step budget.
+          printf 'Acquire::http::Timeout "15";\nAcquire::https::Timeout "15";\nAcquire::Retries "2";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # restore + save as SEPARATE steps rather than one `actions/cache`: the
+      # combined action saves in its post-job hook even when a later step
+      # failed, which would publish a half-downloaded browser directory under
+      # this key and break every subsequent run. Saving explicitly (and only on
+      # success — an `if:` without a status function still implies success())
+      # means a failed install poisons nothing.
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 18
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 300 npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} failed or hung after 5 minutes — retrying"
+          done
+          echo "::error::Playwright browser install failed after 3 attempts"
+          exit 1
+
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # The cache holds only ~/.cache/ms-playwright — the browsers' OS packages
+      # still need installing on every runner, via apt.
+      #
+      # This used to say apt "doesn't share the hang" of the Playwright CDN.
+      # That was wrong: on 2026-08-19 the Azure mirror took this step over its
+      # 8-minute timeout twice consecutively. It now retries on a bounded clock,
+      # matching the browser-install step above, so one bad mirror response
+      # costs a retry rather than the job.
+      - name: Install Playwright OS deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 12
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 180 npx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright OS dep install attempt ${attempt} failed or hung after 3 minutes — retrying"
+            sudo apt-get update || true
+          done
+          echo "::error::Playwright OS dependency install failed after 3 attempts"
+          exit 1
 
       - name: Run E2E tests
         env:

@@ -116,14 +116,23 @@ jobs:
   # alert can never block or break a deploy.
 
   alert-ci-blocked:
-    name: Alert — CI red on main (deploy skipped)
+    name: Alert — CI not green on main (deploy skipped)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Fires only when CI completed on main WITHOUT success — i.e. the exact
+    # Fires whenever CI completed on main WITHOUT success — i.e. the exact
     # moment the deploy is being skipped. A manual workflow_dispatch never
-    # reaches this branch. `cancelled` is excluded: CI only cancels when a run
-    # is superseded (see ci.yml concurrency), which isn't a failure to alert on.
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.conclusion != 'cancelled' }}
+    # reaches this branch.
+    #
+    # `cancelled` used to be excluded on the theory that a cancelled run is a
+    # benign supersession. 2026-08-19 proved that wrong twice in one day: a
+    # hung Playwright download cancelled main's CI at its timeout, and a merge
+    # burst had GitHub's one-pending-slot concurrency rule cancel queued main
+    # runs — in both cases merged code silently never deployed and nothing
+    # went red. Cancelled now alerts AND fails this run (see the last step),
+    # so "merged but not live" is always loud. A benign supersession costs one
+    # red run + one email; silence cost hours. (Ported policy from
+    # icelandicstore #164.)
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' }}
     steps:
       - name: Email deploy-blocked alert (Resend)
         env:
@@ -158,6 +167,13 @@ jobs:
                 -H "Content-Type: application/json" \
                 -d @-
           echo "Deploy-blocked alert emailed to halli@hallismiley.is."
+
+      # A skipped deploy must not read as a green run in the Actions list —
+      # that is exactly how the 2026-08-19 non-deploys stayed invisible.
+      - name: Fail the run so the skip is visible
+        run: |
+          echo "::error::CI concluded '${{ github.event.workflow_run.conclusion }}' on main — deploy skipped, merged code is NOT live."
+          exit 1
 
   alert-deploy-failed:
     name: Alert — Azure deploy failed
