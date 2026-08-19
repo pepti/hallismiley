@@ -1,5 +1,5 @@
 # ── Stage 1: install production dependencies ─────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS deps
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # ── Stage 2: production image ─────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runner
 
 # Non-root user for least-privilege container execution
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
