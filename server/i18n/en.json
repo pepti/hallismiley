@@ -186,6 +186,7 @@
   "errors.auth.forbidden": "You do not have permission to do that",
   "errors.user.noUpdatableFields": "No updatable fields provided",
   "errors.user.unsupportedLocale": "Unsupported locale",
+  "errors.user.unsupportedTheme": "Unsupported theme",
   "errors.user.noFileUploaded": "No file uploaded",
   "errors.user.userNotFound": "User not found",
   "errors.user.wrongCurrentPassword": "Current password is incorrect",

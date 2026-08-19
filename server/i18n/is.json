@@ -186,6 +186,7 @@
   "errors.auth.forbidden": "Þú hefur ekki heimild til þessa",
   "errors.user.noUpdatableFields": "Engar uppfæranlegar upplýsingar sendar",
   "errors.user.unsupportedLocale": "Óstutt tungumál",
+  "errors.user.unsupportedTheme": "Óstutt þema",
   "errors.user.noFileUploaded": "Engin skrá hlaðin upp",
   "errors.user.userNotFound": "Notandi fannst ekki",
   "errors.user.wrongCurrentPassword": "Núverandi lykilorð er rangt",
