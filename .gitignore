@@ -57,3 +57,6 @@ public/assets/responsive-screenshots/
 # Bookkeeping fylgiskjol (receipts, supplier invoices) — private upload root,
 # never statically served. Local-disk fallback for BOOKS_UPLOAD_ROOT.
 private-uploads/
+
+# Build identity — stamped by scripts/generate-version.js at docker build
+server/version.json

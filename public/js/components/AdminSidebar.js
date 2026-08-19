@@ -19,6 +19,7 @@
 
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { isAdmin, canSeeView } from '../services/auth.js';
+import { getBuildInfo } from '../services/buildInfo.js';
 import { showToast } from './Toast.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
@@ -62,6 +63,7 @@ export const ADMIN_NAV = [
   ] },
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
+    { id: 'updates', route: '/admin/updates', labelKey: 'admin.nav.updates', icon: 'update' },
     { id: 'users',   route: '/admin/users',   labelKey: 'admin.nav.users',   icon: 'shield' },
     { id: 'roles',   route: '/admin/roles',   labelKey: 'admin.nav.roles',   icon: 'key' },
   ] },
@@ -70,6 +72,7 @@ export const ADMIN_NAV = [
 // Inline SVGs (stroke="currentColor"), matching the NavBar icon convention.
 const ICONS = {
   grid:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
+  update:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
   box:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
   receipt:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12a1 1 0 0 1 1 1v18l-3-2-3 2-3-2-3 2V3a1 1 0 0 1 1-1Z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>',
   tag:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
@@ -145,13 +148,22 @@ function cleanFlagList(raw, valid) {
 // first section) so new nav items never vanish, and prune stale label overrides.
 // Passing null/empty yields the default layout — so the same render path covers
 // the "never customized" case (and stays byte-identical to the legacy output).
+// Nav items whose backing MODULE is switched off for this instance (as opposed
+// to role-invisible, which canSeeView already handles). Populated once the
+// shell learns the answer; an item in here is absent from the nav entirely,
+// including in edit mode, because there is nothing behind it to arrange.
+const UNAVAILABLE = new Set();
+
+/** True when the item is both permitted by the role AND present on this instance. */
+function itemUsable(id) { return canSeeView(id) && !UNAVAILABLE.has(id); }
+
 function reconcile(saved) {
   const base = (saved && Array.isArray(saved.sections) && saved.sections.length) ? saved : DEFAULT_SNAPSHOT;
   const seen = new Set();
   const sections = base.sections.map(s => {
     const items = [];
     for (const id of (s.items || [])) {
-      if (BY_ID.has(id) && canSeeView(id) && !seen.has(id)) { seen.add(id); items.push(id); }
+      if (BY_ID.has(id) && itemUsable(id) && !seen.has(id)) { seen.add(id); items.push(id); }
     }
     return { key: String(s.key), title: (s.title == null ? null : String(s.title)), items };
   });
@@ -171,7 +183,7 @@ function reconcile(saved) {
   });
   for (const id of BY_ID.keys()) {
     if (seen.has(id)) continue;
-    if (!canSeeView(id)) continue; // RBAC: never surface a view the role can't access
+    if (!itemUsable(id)) continue; // RBAC/module gate: never surface a dead line
     const target = sections.find(s => s.key === GROUP_OF.get(id)) || sections[0];
     if (target) { target.items.push(id); seen.add(id); }
   }
@@ -348,6 +360,7 @@ export function renderAdminShell({ activePath, content } = {}) {
         <span class="admin-sidebar__edit-toggle-label">${t('admin.navEdit.edit')}</span>
       </button>` : ''}
       <nav class="admin-sidebar__nav"></nav>
+      <p class="admin-sidebar__build" data-testid="admin-build-stamp" hidden></p>
     </aside>
     <div class="admin-shell__content"></div>
   `;
@@ -641,6 +654,28 @@ export function renderAdminShell({ activePath, content } = {}) {
 
   // Pull the per-admin layout from the DB once per page load; this shell's
   // re-render is the hook a late-arriving hydrate calls when it differs.
+  // Build stamp — the sidebar's quiet answer to "which release is live right
+  // now?". Fills in asynchronously and stays hidden if the endpoint says no.
+  const stamp = shell.querySelector('.admin-sidebar__build');
+  getBuildInfo().then((info) => {
+    // No answer means the self-update module is switched off for this instance
+    // (the API 404s) or this role cannot see it — either way the Updates line is
+    // a dead link, so drop it from the nav rather than leave it to disappoint.
+    if (!info) {
+      if (!UNAVAILABLE.has('updates')) { UNAVAILABLE.add('updates'); renderNav(); }
+      return;
+    }
+    UNAVAILABLE.delete('updates');
+    if (!stamp) return;
+    const b = info.build || {};
+    stamp.textContent = b.version === 'dev'
+      ? t('admin.build.dev')
+      : `${t('admin.build.label')} ${b.version} · ${String(b.gitSha || '').slice(0, 12)}`;
+    const built = b.builtAt ? new Date(b.builtAt).toLocaleString() : null;
+    stamp.title = [b.channel, built].filter(Boolean).join(' · ');
+    stamp.hidden = false;
+  });
+
   if (canEdit) {
     setNavRerender(renderNav);
     hydrateNavLayout();

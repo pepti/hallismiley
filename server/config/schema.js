@@ -3989,6 +3989,52 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        END $$`,
     ],
   },
+  {
+    // ── 081: self-update ledger ──────────────────────────────────────────────
+    //
+    // One row per release this instance has ever heard about, on the channel it
+    // heard about it from. The unique (channel, version) index is what makes
+    // the hourly check idempotent: re-reading the same manifest updates the row
+    // in place instead of growing the table forever.
+    //
+    // status is a CHECK, not an enum type: adding a state to a Postgres enum is
+    // a migration with a lock, adding one to a CHECK is a migration without the
+    // ceremony — and this state machine will grow.
+    //
+    // previous_digest is the digest that was running when apply was triggered,
+    // captured BEFORE the swap. It is the only thing that makes an assisted
+    // rollback possible, and it cannot be recovered after the fact.
+    //
+    // detail (jsonb) carries the non-indexed remainder — the scheduled time an
+    // auto instance picked, the compatibility flag, the failure reason — so the
+    // shape can grow without a migration per field.
+    //
+    // Authoritative copy; human-reference duplicate in
+    // server/migrations/081_system_updates.sql.
+    name: '082_system_updates',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS system_updates (
+        id              SERIAL      PRIMARY KEY,
+        discovered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        version         TEXT        NOT NULL,
+        image_digest    TEXT        NOT NULL,
+        channel         TEXT        NOT NULL,
+        changelog_md    TEXT,
+        status          TEXT        NOT NULL DEFAULT 'available'
+                        CHECK (status IN ('available','scheduled','applying','applied','failed','dismissed')),
+        applied_at      TIMESTAMPTZ,
+        previous_digest TEXT,
+        detail          JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_system_updates_channel_version
+         ON system_updates (channel, version)`,
+      // The two questions the app asks constantly: "is anything actionable?"
+      // and "what is the newest thing I know about?".
+      `CREATE INDEX IF NOT EXISTS idx_system_updates_status
+         ON system_updates (status, discovered_at DESC)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

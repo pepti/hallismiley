@@ -5,6 +5,7 @@ import { HalliView }          from './views/HalliView.js';
 import { ContactView }        from './views/ContactView.js';
 import { AdminView }          from './views/AdminView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
+import { AdminUpdatesView }   from './views/AdminUpdatesView.js';
 import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
 import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
 import { AdminDiscountsView }  from './views/AdminDiscountsView.js';
@@ -69,6 +70,7 @@ const ROUTES = [
   { pattern: '/about',           factory: ()  => new HalliView() },
   { pattern: '/contact',         factory: ()  => new ContactView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && canSeeView('users')) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/updates',   factory: ()  => (isAuthenticated() && canSeeView('updates')) ? new AdminUpdatesView() : new HomeView() },
   { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
   { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
   { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && canSeeView('discounts')) ? new AdminDiscountsView() : new HomeView() },
@@ -257,6 +259,7 @@ export class Router {
     // early client-side redirect). Each admin view maps to a role view-id.
     const VIEW_BY_PATH = {
       '/admin/users':      'users',
+      '/admin/updates':    'updates',
       '/admin/analytics':  'analytics',
       '/admin/general':    'general',
       '/admin/discounts':  'discounts',
