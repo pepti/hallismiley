@@ -36,6 +36,26 @@ _(factory)_ `scripts/dev-server.ps1` defaults `-Port 3001` for its bind-check bu
 
 _(base)_ The base's test-DB name is hardcoded in FOUR places, and missing any one of them fails subtly: `tests/env.js` AND `tests/globalSetup.js` (each has its own `hallismiley_test` fallback — fixing only env.js makes globalSetup migrate the wrong DB while workers query the empty right one: "relation news_articles does not exist"), plus `.github/workflows/ci.yml` (test, e2e, smoke jobs) and docs (`RUNBOOK.md`). Base fix: derive the fallback from `package.json` name in ONE shared module, or have scaffold.js rewrite these files like it rewrites package.json.
 
+### 2026-08-19 — base-sync fan-out: apply the base squash commits as patches, expect 3 kinds of drift
+
+_(factory)_ Wave 6A applied the base engine’s six Phase-1 squash commits here with
+`git apply -C1 --reject`. Five of six applied clean. The rejects came in exactly three shapes:
+locale-shape drift (this instance is IS-first, so redirect assertions differ), structure drift
+(ProfileView here mounts the background editors, so methods were spliced by anchor), and
+i18n-context drift (keys land at different lines — insert by anchor KEY, never by hunk).
+Migrations must be RENUMBERED per chain: the runner records by name, and three repos now own
+the same numbers for different things (see site-factory/BASE-SYNC.md 2026-08-19).
+
+### 2026-08-19 — two ways to delete a repo’s node_modules through an NTFS junction
+
+_(factory)_ (1) `git worktree remove --force` on a worktree whose node_modules is a junction
+recurses THROUGH the junction and empties the target repo’s packages — this emptied two
+repos’ roots today and was first misblamed on npm. (2) `npm install` inside a junctioned
+worktree rewrites node_modules wholesale, deleting through the link first. Rules: junctions
+are for read-only tooling; delete the junction BEFORE removing the worktree
+(PowerShell (Get-Item path -Force).Delete() removes just the link); installs need a real
+npm ci. Symptom: husky says ‘eslint is not recognized’ — check ls node_modules | wc -l.
+
 <!--
 Format for new entries:
 

@@ -64,6 +64,26 @@ the base is documented but deliberately NOT performed (`docs/UPSTREAM-SELF-UPDAT
   nothing. It has no `SELF_UPDATE_TRIGGER_URL`, so it could not install one yet.
 - New invariant #14 (expand/contract migrations) — self-update is why.
 
+## Base-sync 2026-08-19 (the base-upgrade program)
+
+Three waves of engine features landed on master the same day they landed in
+HalliProjects (ledger: site-factory/BASE-SYNC.md 2026-08-19):
+
+- **6A security**: transactional+locked migration runner, UPLOAD_ROOT boot
+  guard, upload-path allowlists, FB auto-link takeover refusal, CSP
+  frameAncestors, PG TLS default-on, log secret-scrubbing, uploaded-avatar
+  owner-scoping, **admin TOTP** (migration 082_admin_totp; enrol from the
+  profile), OAuth-admin refusal, social-login kill switch (**OFF here** — no
+  OAuth app configured), TEST-chrome one-way clamp.
+- **6B stack**: Node 24 LTS (digest-pinned), Express 5 (catch-all +
+  IndexNow-route idioms fixed), CI boot smoke declares UPLOAD_ROOT+DB_SSL.
+- **6C theme**: per-account UI theme as migration 083_user_theme, adapted to
+  the 2-theme palette (classic/light); Appearance section in the profile.
+
+The migration chain now ends 080_background_sections · 081_system_updates ·
+082_admin_totp · 083_user_theme. NEVER adopt the base's numbering for the
+same features (it uses 080/081/082 for totp/theme/system_updates).
+
 ## Where things stand for the next session
 
 - **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files, and the tier prices on `/thjonusta`.
