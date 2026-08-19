@@ -10,7 +10,7 @@ import { t } from '../i18n/i18n.js';
 import { isAdmin } from '../services/auth.js';
 import {
   THEMES, getTheme, setTheme,
-  getServerEnv, getTestOverride, setTestOverride,
+  getServerEnv, getEffectiveEnv, setTestOverride,
 } from '../services/themePrefs.js';
 
 const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.21-1.79 3-4 3h-2.5a2.5 2.5 0 0 0-1.9 4.13c.37.43.4 1.06.03 1.5-.4.47-1 .87-1.63.37Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="16" cy="9.5" r="1"/></svg>';
@@ -119,8 +119,11 @@ export class ThemeSwitcher {
         aria-label="${esc(name)}" title="${esc(name)}"></button>`;
     }).join('');
 
-    const testOn = (getTestOverride() ?? getServerEnv()) === 'test';
-    const testRow = isAdmin() ? `
+    // Admin-only, and only on the TEST stack: the switch hides the loud test
+    // chrome for demos. It is absent in production because the override can no
+    // longer turn the chrome on there (see themePrefs.getEffectiveEnv).
+    const testOn = getEffectiveEnv() === 'test';
+    const testRow = isAdmin() && getServerEnv() === 'test' ? `
       <div class="theme-switcher__test">
         <span class="theme-switcher__test-text">
           <span class="theme-switcher__test-label">${esc(t('themeSwitcher.testMode'))}</span>

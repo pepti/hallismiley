@@ -5,8 +5,10 @@
 // attribute is removed rather than set).
 // `ws_test_override` — 'test' | 'production'; absent = follow the server's
 // APP_ENV (the <meta name="app-env"> stamped by ssrMeta.js). The override is
-// purely client-side: the change-request submit endpoint is still gated by
-// the server's real APP_ENV (requireTestEnv).
+// purely client-side, and it can only ever turn the test affordances OFF —
+// never on. See getEffectiveEnv(): the blue TEST chrome means "this really is
+// the TEST stack" and nothing else. The change-request submit endpoint is
+// gated by the server's real APP_ENV regardless (requireTestEnv).
 // `ws_demo_mode` — '1' = demo mode on; absent = off. A presentation overlay
 // layered on top of TEST (see test-env.css / ChangeRequestWidget); purely
 // client-side and only meaningful while the test affordances are showing.
@@ -54,6 +56,21 @@ export function getTestOverride() {
 // null when the wanted value equals the server env, so the key self-cleans.
 export function setTestOverride(value) {
   write(TEST_KEY, value === 'test' || value === 'production' ? value : null);
+}
+
+// The env the client chrome should render as — the single source of truth for
+// body.is-test-env (badge + nav/footer glow) and the change-request widget.
+//
+// One-way clamp on purpose: on the TEST stack an admin may hide the chrome for
+// a demo (override 'production'), but no browser state can make PROD wear the
+// TEST colours. That keeps the blue badge a trustworthy "you are NOT on the
+// live site" signal, and stops an admin from being handed a change-request
+// widget whose submit endpoint 404s in production (requireTestEnv). A stale
+// 'test' override left in a PROD browser is simply ignored. (Ported from
+// icelandicstore #108.)
+export function getEffectiveEnv() {
+  if (getServerEnv() !== 'test') return 'production';
+  return getTestOverride() === 'production' ? 'production' : 'test';
 }
 
 // Demo mode — a presentation overlay layered on top of TEST: hides the loud

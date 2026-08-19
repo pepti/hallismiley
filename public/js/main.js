@@ -5,7 +5,7 @@ import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
 import { installSessionGuard } from './services/sessionGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
-import { initTheme, getTestOverride, getDemoMode, getServerEnv } from './services/themePrefs.js';
+import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
 import {
   loadLocale, getLocaleFromHash, getPreferredLocale, t,
 } from './i18n/i18n.js';
@@ -35,9 +35,11 @@ initTheme();
 document.body.appendChild(new ThemeSwitcher().render());
 
 // ── Test-environment affordances (non-prod): the in-app feedback widget ──────
-// IS_TEST = the per-browser override, else the server's <meta name="app-env">.
+// On TEST, admins can hide the chrome per browser from the theme switcher; the
+// override can never switch it ON (getEffectiveEnv), so the blue TEST badge
+// only ever appears on the real TEST stack. Server gates are untouched either way.
 // Lazy-import so the widget + html2canvas never load on the production bundle.
-const IS_TEST = (getTestOverride() ?? getServerEnv()) === 'test';
+const IS_TEST = getEffectiveEnv() === 'test';
 if (IS_TEST) {
   document.body.classList.add('is-test-env');
   if (getDemoMode()) document.body.classList.add('is-demo-mode');
