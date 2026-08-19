@@ -8,8 +8,9 @@ const { t }              = require('../i18n');
 
 const scrypt = new Scrypt();
 
-const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, preferred_locale, created_at';
+const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, preferred_locale, theme, created_at';
 const { SUPPORTED_LOCALES } = require('../config/i18n');
+const { THEMES }            = require('../config/themes');
 
 // Only delete a file that matches the user-upload pattern AND belongs to the
 // caller — never the baked SVGs, and never another user's upload (the avatars
@@ -40,7 +41,7 @@ const userController = {
   // Field validation handled upstream by validateProfileUpdate middleware.
   async updateMe(req, res, next) {
     try {
-      const allowed  = ['username', 'display_name', 'phone', 'avatar', 'preferred_locale'];
+      const allowed  = ['username', 'display_name', 'phone', 'avatar', 'preferred_locale', 'theme'];
       const updates  = {};
       for (const key of allowed) {
         if (key in req.body) updates[key] = req.body[key];
@@ -52,6 +53,12 @@ const userController = {
 
       if ('preferred_locale' in updates && !SUPPORTED_LOCALES.includes(updates.preferred_locale)) {
         return res.status(400).json({ error: t(req.locale, 'errors.user.unsupportedLocale'), code: 400 });
+      }
+
+      // Theme is validated here rather than left to the DB CHECK constraint so
+      // an unknown value returns a typed 400 instead of a 500 from Postgres.
+      if ('theme' in updates && !THEMES.includes(updates.theme)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.user.unsupportedTheme'), code: 400 });
       }
 
       // Switching avatar via PATCH (e.g. back to a baked SVG) must clean up a

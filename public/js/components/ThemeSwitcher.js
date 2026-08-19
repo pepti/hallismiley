@@ -9,24 +9,12 @@
 import { t } from '../i18n/i18n.js';
 import { isAdmin } from '../services/auth.js';
 import {
-  THEMES, getTheme, setTheme,
+  THEMES, THEME_SWATCHES, getTheme, setTheme,
   getServerEnv, getEffectiveEnv, setTestOverride,
 } from '../services/themePrefs.js';
 
 const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.21-1.79 3-4 3h-2.5a2.5 2.5 0 0 0-1.9 4.13c.37.43.4 1.06.03 1.5-.4.47-1 .87-1.63.37Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="16" cy="9.5" r="1"/></svg>';
 
-// Swatch fills are hard-coded on purpose: each swatch advertises its own
-// theme regardless of which theme is currently active. classic = this site's
-// existing dark charcoal default; the colour themes show an accent→background
-// gradient so the swatch previews their immersive look.
-const SWATCH_COLORS = {
-  classic: '#202020',
-  glacier: 'linear-gradient(135deg, #5FB4E8 0%, #0B2138 100%)',
-  moss: 'linear-gradient(135deg, #6FD08E 0%, #0F2418 100%)',
-  lava: 'linear-gradient(135deg, #FF8347 0%, #221210 100%)',
-  aurora: 'linear-gradient(135deg, #CDB8FB 0%, #123E39 100%)',
-  'black-sand': '#1A1A1A',
-};
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -143,7 +131,7 @@ export class ThemeSwitcher {
     `;
 
     this.popover.querySelectorAll('.theme-switcher__swatch').forEach((btn) => {
-      btn.style.setProperty('--swatch', SWATCH_COLORS[btn.dataset.themeId]);
+      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
       btn.addEventListener('click', () => {
         setTheme(btn.dataset.themeId);
         this.popover.querySelectorAll('.theme-switcher__swatch')
