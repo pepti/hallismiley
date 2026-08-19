@@ -234,3 +234,27 @@ sanitizer working. Rewritten to pull the actual `<…>` tags out of the output a
 assert none is a script/img/iframe, carries an `on*=` attribute, or has a
 `javascript:` attribute value — which is the property that matters and which a
 substring check both over- and under-approximates.
+
+### 2026-08-19 — an appended CSS hunk silently escapes its media query
+
+_(factory)_ Wave 6D ported the icelandicstore row-tint CSS by appending the
+new blocks to `admin-shell.css`. One of the "new" blocks was actually an
+*edit inside* `@media (max-width: 640px)` (mobile `.admin-sidebar`
+positioning, `static` → `relative`); appended at top level it became an
+unconditional `.admin-sidebar { display: none }` and hid the admin sidebar at
+every viewport width — in the base branch AND here. Two generalizations:
+port CSS by *diffing rule-for-rule inside the selector's scope*, never by
+appending anything that repeats an existing selector; and a quick brace-depth
+check (count `{`/`}` up to the rule) catches an orphaned media rule in one
+line of node.
+
+### 2026-08-19 — a rotted fixture role masks the real failure
+
+_(project)_ The same suite's failure had TWO stacked causes and the louder one
+was the boring one: the dev DB's `testadmin` had been left demoted to role
+`user` by some earlier run, so every admin spec died at the login/permission
+layer — which read exactly like the CSS bug it was hiding. `setup-admin.js`
+deliberately never updates `role` on conflict (so a prod-like DB can't be
+escalated by re-running it), meaning fixture rot is permanent until repaired
+by hand. When an admin e2e fails at *entry* (login, first admin click), check
+the fixture row's role before reading any further into the diff.
