@@ -450,10 +450,13 @@ app.use('/', sitemapRoutes);
 // app-settings change and survives container redeploys with no fs writes.
 // The route is constrained to the IndexNow key character set (hex + dash,
 // 8-128 chars) so it can't be coerced into serving arbitrary paths.
-app.get('/:key([A-Za-z0-9-]{8,128}).txt', (req, res, next) => {
+// Express 5: path-to-regexp v8 dropped inline param regexes
+// ('/:key(...)'), so the constraint is now a plain RegExp route — Express
+// matches it directly and exposes the capture as req.params[0].
+app.get(/^\/([A-Za-z0-9-]{8,128})\.txt$/, (req, res, next) => {
   const expected = process.env.INDEXNOW_KEY;
   if (!expected) return next();
-  if (req.params.key !== expected) return next();
+  if (req.params[0] !== expected) return next();
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.send(expected);
@@ -534,7 +537,11 @@ function pickLocaleForRedirect(req) {
   return 'en';
 }
 
-app.get('*', (req, res, next) => {
+// Express 5: path-to-regexp v8 rejects a bare '*' — the catch-all is now a
+// named splat. KEEP THE BRACES: '/{*splat}' also matches '/' itself, while
+// '/*splat' would not, silently breaking the root locale redirect below.
+// (Ported with the Express 5 bump from icelandicstore #112.)
+app.get('/{*splat}', (req, res, next) => {
   // Real 404s for data paths — don't serve HTML for missed API calls.
   if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
     return res.status(404).json({ error: 'Not found', code: 404 });
