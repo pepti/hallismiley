@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env'), quiet: true });
 
 // ── Sentry error tracking — init before anything else if DSN is configured ────
 if (process.env.SENTRY_DSN) {
