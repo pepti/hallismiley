@@ -159,10 +159,17 @@ jobs:
       # real Azure deploy performs. Catches broken migrations before merge.
       - name: Boot smoke test
         run: |
+          # UPLOAD_ROOT: paths.js fails a production boot without it (the
+          # ephemeral-disk guard) — declare it like a real deploy does.
+          # DB_SSL=false: the runner's Postgres speaks plain TCP; production
+          # defaults to TLS-on, and this is the one documented opt-out case,
+          # never Azure.
           docker run -d --name smoke --network host \
             -e NODE_ENV=production \
             -e PORT=3000 \
             -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_smoke \
+            -e DB_SSL=false \
+            -e UPLOAD_ROOT=/app/uploads \
             -e ALLOWED_ORIGINS=http://localhost:3000 \
             -e CSRF_SECRET=$(openssl rand -hex 32) \
             hallismiley:smoke
