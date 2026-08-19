@@ -18,6 +18,27 @@ updates:
     # Majors (express 5, eslint 9+, jest 30…) arrive as individual PRs so each
     # breaking upgrade is a deliberate decision.
 
+  # Keeps the Dockerfile base image patched. The image is SHA-pinned, so
+  # without this the pin silently rots and Trivy starts failing CI on base
+  # CVEs nobody is bumping. (Ported from icelandicstore with the Node-24 pin.)
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Atlantic/Reykjavik
+    open-pull-requests-limit: 5
+    # Keep the digest fresh WITHIN the current Node LTS line, but never propose
+    # a major. Left unconstrained, the first thing this ecosystem produced on
+    # icelandicstore was node 20 -> 26 — and 26 is a Current release
+    # (lts: false), not something to run a production site on. Moving Node
+    # major is a deliberate change that also has to bump `node-version` in
+    # ci.yml, so it should not arrive as an automated base-image bump.
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
