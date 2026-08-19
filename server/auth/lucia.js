@@ -35,6 +35,7 @@ const lucia = new Lucia(adapter, {
       // account is already protected, without a second query. The SECRET is
       // deliberately not here — nothing outside mfaService should ever read it.
       totp_enabled:     attributes.totp_enabled,
+      theme:            attributes.theme,
     };
   },
   getSessionAttributes(attributes) {

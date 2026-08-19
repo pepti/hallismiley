@@ -202,6 +202,7 @@
   "errors.user.wrongCurrentPassword": "Núverandi lykilorð er rangt",
   "errors.user.passwordUpdated": "Lykilorð uppfært.",
   "errors.user.sessionNotFound": "Seta fannst ekki",
+  "errors.user.unsupportedTheme": "Óstutt þema",
 
   "errors.party.answersObject": "Svör verða að vera hlutur",
   "errors.party.invalidRsvpStatus": "Ógilt svarstöðugildi",

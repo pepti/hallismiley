@@ -5,6 +5,7 @@ import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
+import { THEMES, THEME_SWATCHES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -12,6 +13,20 @@ const avatarPath = n => `/assets/avatars/avatar-${pad(n)}.svg`;
 const avatarPathByName = name => `/assets/avatars/${name}`;
 
 export class ProfileView {
+  // Called by the router when navigating away — drops the window-level
+  // themechange listener bound in _bindTheme. _disposed matters because
+  // _load() is deliberately not awaited by render(): leaving the page while
+  // the profile is still fetching means destroy() runs BEFORE _bindTheme, and
+  // without the flag the listener would be registered afterwards with nothing
+  // left to remove it.
+  destroy() {
+    this._disposed = true;
+    if (this._onThemeChange) {
+      window.removeEventListener('themechange', this._onThemeChange);
+      this._onThemeChange = null;
+    }
+  }
+
   async render() {
     if (!isAuthenticated()) {
       navigateReplace(href('/login'));
@@ -39,6 +54,7 @@ export class ProfileView {
       this._bindLangPref(el);
       this._bindPassword(el);
       this._bindSessions(el, sessions);
+      this._bindTheme(el);
       if (profile.role === 'admin') {
         this._renderTotp(el);
       }
@@ -330,6 +346,19 @@ export class ProfileView {
           </table>
         </div>
       </section>
+
+      <!-- Appearance — last section on the page. The floating switcher offers
+           the same six themes; here the choice is labelled as account-wide,
+           because for a logged-in user it is saved to users.theme and follows
+           the login to any browser. -->
+      <section class="profile-section" id="theme-section">
+        <h2 class="profile-section__title">${t('profile.appearance')}</h2>
+        <p class="profile-lang-description">${t('profile.themeDescription')}</p>
+        <div class="profile-theme-grid" role="radiogroup" aria-label="${escHtml(t('profile.appearance'))}">
+          ${this._themeOptionsHtml()}
+        </div>
+        <p class="profile-theme-status" id="theme-status" aria-live="polite"></p>
+      </section>
     `;
   }
 
@@ -559,7 +588,71 @@ export class ProfileView {
     });
   }
 
-  _bindSessions(el, _sessions) {
+  _themeOptionsHtml() {
+    const active = getTheme();
+    return THEMES.map((id) => {
+      const name = t(`themeSwitcher.theme.${id}`);
+      return `
+        <button type="button" class="profile-theme" role="radio" data-theme-id="${escHtml(id)}"
+                aria-checked="${id === active}" tabindex="${id === active ? '0' : '-1'}">
+          <span class="profile-theme__swatch${id === 'black-sand' ? ' profile-theme__swatch--dark' : ''}" aria-hidden="true"></span>
+          <span class="profile-theme__name">${escHtml(name)}</span>
+        </button>`;
+    }).join('');
+  }
+
+  // Appearance section. The theme applies instantly (no Save button — you can
+  // see the result), then persists: localStorage for this browser plus a PATCH
+  // to users.theme so it follows the login elsewhere. A failed account write is
+  // reported inline rather than reverting the theme; the browser still has it.
+  _bindTheme(el) {
+    const grid   = el.querySelector('.profile-theme-grid');
+    const status = el.querySelector('#theme-status');
+    if (!grid || this._disposed) return;
+
+    const buttons = [...grid.querySelectorAll('.profile-theme')];
+    buttons.forEach((btn) => {
+      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
+    });
+
+    // Reflect a selection made anywhere (here or the floating switcher).
+    const markActive = (theme) => {
+      buttons.forEach((b) => {
+        const on = b.dataset.themeId === theme;
+        b.setAttribute('aria-checked', String(on));
+        b.tabIndex = on ? 0 : -1;
+      });
+    };
+    this._onThemeChange = (e) => markActive(e.detail?.theme || getTheme());
+    window.addEventListener('themechange', this._onThemeChange);
+
+    const choose = async (btn) => {
+      const theme = setTheme(btn.dataset.themeId, { persist: false });
+      markActive(theme);
+      status.textContent = t('profile.themeSaving');
+      const saved = await saveThemeToAccount(theme);
+      status.textContent = saved ? t('profile.themeSaved') : t('profile.themeSaveFailed');
+    };
+
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('.profile-theme');
+      if (btn) choose(btn);
+    });
+
+    // Roving-tabindex arrow keys, as expected of a radiogroup.
+    grid.addEventListener('keydown', (e) => {
+      if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) return;
+      const i = buttons.indexOf(document.activeElement);
+      if (i === -1) return;
+      e.preventDefault();
+      const step = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+      const next = buttons[(i + step + buttons.length) % buttons.length];
+      next.focus();
+      choose(next);
+    });
+  }
+
+    _bindSessions(el, _sessions) {
     const tbody = el.querySelector('#sessions-tbody');
 
     tbody.addEventListener('click', async e => {

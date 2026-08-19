@@ -113,3 +113,44 @@ body {
 .profile-lang-description { font-size: 14px; color: #888; margin: 0 0 16px; }
 .profile-lang-error { margin-top: 8px; }
 .profile-lang-actions { margin-top: 12px; }
+
+/* Profile page — Appearance (theme) section. Same six themes as the floating
+   switcher, laid out as labelled cards so the section reads as a setting. */
+.profile-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  max-width: 620px;
+}
+.profile-theme {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), transform var(--transition);
+}
+.profile-theme:hover { transform: translateY(-1px); }
+.profile-theme:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.profile-theme[aria-checked="true"] {
+  border-color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--text-primary);
+}
+.profile-theme__swatch {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 1px solid var(--border);
+}
+/* black-sand reads as a duplicate of classic ink without a hint of its gold accent. */
+.profile-theme__swatch--dark { border: 2px solid #E8C06A; }
+.profile-theme__name { font-size: 14px; }
+.profile-theme-status { margin: 12px 0 0; font-size: 13px; color: #888; min-height: 18px; }

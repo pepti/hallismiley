@@ -3961,6 +3961,34 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires ON mfa_challenges(expires_at)`,
     ],
   },
+  {
+    // Per-account UI theme. The switcher already persisted the choice in
+    // localStorage (per browser); this column makes it follow the LOGIN, so a
+    // user who signs in on a second device or a fresh browser gets their theme
+    // back. Values match THEMES in public/js/services/themePrefs.js and the
+    // token sets in public/css/themes.css — adding a theme needs a new
+    // migration to widen the CHECK. (Ported from icelandicstore #176; number
+    // differs — the chains diverged at 072.)
+    //
+    // NULLABLE on purpose, and NULL is not the same as 'classic': NULL means
+    // "this account has never picked a theme", so the browser's own
+    // localStorage choice is left alone at login. Defaulting to 'classic'
+    // would make every existing user's saved local theme get reset on their
+    // first login after this migration. A CHECK constraint ignores NULLs, so
+    // the column still can't hold an unknown theme name.
+    name: '081_user_theme',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'users_theme_check'
+         ) THEN
+           ALTER TABLE users ADD CONSTRAINT users_theme_check
+             CHECK (theme IN ('classic', 'glacier', 'moss', 'lava', 'aurora', 'black-sand'));
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

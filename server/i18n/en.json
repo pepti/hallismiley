@@ -202,6 +202,7 @@
   "errors.user.wrongCurrentPassword": "Current password is incorrect",
   "errors.user.passwordUpdated": "Password updated successfully.",
   "errors.user.sessionNotFound": "Session not found",
+  "errors.user.unsupportedTheme": "Unsupported theme",
 
   "errors.party.answersObject": "Answers must be an object",
   "errors.party.invalidRsvpStatus": "Invalid RSVP status",
