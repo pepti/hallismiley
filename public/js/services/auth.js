@@ -35,10 +35,16 @@ export function hasAnyAdminView() { return getViews().length > 0; }
 
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.
-export function updateCachedUser(partial) {
+//
+// `silent` skips that dispatch — for fields no view derives anything from. The
+// router re-navigates on every authchange, so a silent merge is the difference
+// between "keep the cache honest" and "rebuild the page the user is using".
+// Saving a theme is exactly that case: the change is already painted via the
+// <html data-theme> attribute, and a re-render would discard the open view.
+export function updateCachedUser(partial, { silent = false } = {}) {
   if (!_user) return;
   _user = { ..._user, ...partial };
-  _dispatch();
+  if (!silent) _dispatch();
 }
 
 // Drop the cached session WITHOUT a network call — used by the global 401 guard

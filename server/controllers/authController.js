@@ -48,7 +48,7 @@ const authController = {
         `SELECT id, username, email, role, password_hash,
                 failed_login_attempts, locked_until,
                 disabled, disabled_reason,
-                avatar, display_name, phone, totp_enabled,
+                avatar, display_name, phone, totp_enabled, theme,
                 email_verified, party_access, approval_status
          FROM users
          WHERE LOWER(username) = LOWER($1)
@@ -156,6 +156,9 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
+          // Saved UI theme — the SPA adopts it on login and on session restore,
+          // so the account's theme follows the user to any browser (themePrefs.js).
+          theme:          user.theme || null,
         },
       });
     } catch (err) { next(err); }
@@ -196,7 +199,7 @@ const authController = {
       }
 
       const { rows } = await dbQuery(
-        `SELECT id, username, email, role, avatar, display_name, phone, disabled,
+        `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
                 email_verified, party_access, approval_status
            FROM users
           WHERE id = $1`,
@@ -235,6 +238,9 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
+          // Saved UI theme — the SPA adopts it on login and on session restore,
+          // so the account's theme follows the user to any browser (themePrefs.js).
+          theme:          user.theme || null,
         },
       });
     } catch (err) { next(err); }
@@ -643,6 +649,8 @@ const authController = {
           // included here where the icelandicstore original omits it — flagged
           // for back-porting there.
           totp_enabled:   !!user.totp_enabled,
+          // Saved UI theme — adopted during session restore, before first render.
+          theme:          user.theme || null,
         },
       });
     } catch (err) { next(err); }

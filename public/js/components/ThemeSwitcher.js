@@ -9,19 +9,11 @@
 import { t } from '../i18n/i18n.js';
 import { isAdmin } from '../services/auth.js';
 import {
-  THEMES, getTheme, setTheme,
+  THEMES, THEME_SWATCHES, getTheme, setTheme,
   getServerEnv, getEffectiveEnv, setTestOverride,
 } from '../services/themePrefs.js';
 
 const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.21-1.79 3-4 3h-2.5a2.5 2.5 0 0 0-1.9 4.13c.37.43.4 1.06.03 1.5-.4.47-1 .87-1.63.37Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="16" cy="9.5" r="1"/></svg>';
-
-// Swatch fills are hard-coded on purpose: each swatch advertises its own
-// theme regardless of which theme is currently active. Two themes only
-// (Halli, 2026-08-09): Ash dark as the default, one light alternate.
-const SWATCH_COLORS = {
-  classic: 'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
-  light:   'linear-gradient(135deg, #EA580C 0%, #F7F2EC 70%)',
-};
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -138,7 +130,7 @@ export class ThemeSwitcher {
     `;
 
     this.popover.querySelectorAll('.theme-switcher__swatch').forEach((btn) => {
-      btn.style.setProperty('--swatch', SWATCH_COLORS[btn.dataset.themeId]);
+      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
       btn.addEventListener('click', () => {
         setTheme(btn.dataset.themeId);
         this.popover.querySelectorAll('.theme-switcher__swatch')
