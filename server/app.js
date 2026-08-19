@@ -31,6 +31,7 @@ const adminBinsRoutes = require('./routes/adminBinsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const adminBookkeepingRoutes = require('./routes/adminBookkeepingRoutes');
+const systemRoutes = require('./routes/systemRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
@@ -507,6 +508,9 @@ app.use('/api/v1/content',    contentRoutes);
 app.use('/api/v1/news',       newsRoutes);
 app.use('/api/v1/party',      partyRoutes);
 app.use('/api/v1/shop',       shopRoutes);
+// Self-update module (dormant unless config/client.json enables it — the
+// routes 404 while selfUpdate.enabled is false).
+app.use('/api/v1/system',     systemRoutes);
 
 // ── SPA catch-all with server-side meta tag injection ─────────────────────
 // Unmatched paths land here. We do three things in order:

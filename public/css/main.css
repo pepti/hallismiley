@@ -27,6 +27,7 @@
 @import './admin-bins.css';
 @import './admin-bookkeeping.css';
 @import './admin-shell.css';
+@import './admin-updates.css';
 @import './test-env.css';
 @import './theme-switcher.css';
 /* themes.css must stay LAST — its html[data-theme] rules out-specify and

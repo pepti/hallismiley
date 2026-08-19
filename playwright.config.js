@@ -1,3 +1,4 @@
+const PORT = process.env.E2E_PORT || '3000';
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
@@ -8,13 +9,13 @@ module.exports = defineConfig({
   reporter: [['html', { open: 'never' }]],
 
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
     // Pre-dismiss the cookie consent banner so it never blocks test interactions
     storageState: {
       cookies: [],
       origins: [{
-        origin: 'http://localhost:3000',
+        origin: `http://localhost:${PORT}`,
         localStorage: [{ name: 'cookie_consent', value: 'declined' }],
       }],
     },
@@ -31,12 +32,14 @@ module.exports = defineConfig({
 
   webServer: {
     command: 'node server/server.js',
-    url: 'http://localhost:3000',
+    url: `http://localhost:${PORT}`,
     timeout: 60_000,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
+      // Must reach the server or the webServer listens on 3000 while tests aim at E2E_PORT.
+      PORT,
       // The dev server now hard-fails when CSRF_SECRET / NODE_ENV are unset
       // (see server/server.js REQUIRED_ENV). Provide ephemeral defaults so
       // both CI and local Playwright runs spin up cleanly. The secret here

@@ -39,6 +39,24 @@ EXPOSE 3000
 
 # Health check using Node.js (Alpine has no curl/wget by default)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+# ── Build identity ───────────────────────────────────────────────────────────
+# Stamp server/version.json into the image so the running container can answer
+# "which release am I?" — the question the whole self-update mechanism turns on
+# (see docs/SELF-UPDATE.md). Build ARGs are exposed to RUN as env vars, which is
+# exactly what generate-version.js reads. There is no .git in the build context,
+# so GIT_SHA must be passed by CI; without it the stamp reads "unknown", which
+# is honest rather than wrong.
+#
+# These ARGs sit AFTER the source COPYs on purpose: they change on every commit,
+# and an ARG invalidates every layer below it. Here they only bust the tiny
+# stamp layer, not the ~200 MB node_modules layer above.
+ARG APP_VERSION
+ARG GIT_SHA
+ARG BUILT_AT
+ARG RELEASE_CHANNEL
+COPY scripts/generate-version.js ./scripts/generate-version.js
+RUN node scripts/generate-version.js
+
   CMD node -e "require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 # Graceful-shutdown-aware start command
