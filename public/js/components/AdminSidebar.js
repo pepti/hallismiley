@@ -10,7 +10,8 @@
 //
 // EDIT MODE (admin only): the sidebar can be flipped into an editor where the
 // admin renames lines/section titles inline, drags lines to reorder within and
-// across sections, creates new sections, deletes ones they created, and resets to
+// across sections, creates new sections, deletes ones they created, tints lines
+// with one of 12 colours to group them, and resets to
 // default. ADMIN_NAV is the static source of truth; a per-admin *layout snapshot*
 // (persisted via adminNavLayout.js → users.admin_nav_config) is reconciled against
 // it on every render. The snapshot stores only item ids + titles + label
@@ -119,7 +120,7 @@ function buildIndex() {
     }
     sections.push({ key: g.key, title: null, items: ids });
   }
-  return { byId, groupOf, groupTitleKey, defaultSnapshot: { v: 1, sections, labels: {} } };
+  return { byId, groupOf, groupTitleKey, defaultSnapshot: { v: 1, sections, labels: {}, colors: {} } };
 }
 const { byId: BY_ID, groupOf: GROUP_OF, groupTitleKey: GROUP_TITLE_KEY, defaultSnapshot: DEFAULT_SNAPSHOT } = buildIndex();
 
@@ -128,6 +129,18 @@ function escHtml(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// The 12 offerable row tints, used to group related lines visually. Named for
+// their role rather than their hex — the actual hue swaps between the light and
+// dark token sets (variables.css / themes.css), so "green" is a different colour
+// under classic than under moss. Grey is deliberately absent: a grey wash is
+// almost exactly --bg-hover, so a grey row reads as permanently hovered (slate
+// carries enough chroma to stay clear of it). Set and rationale ported from
+// icelandicstore (#152 + #161 there, incl. the light-theme red fix).
+export const TINT_KEYS = new Set([
+  'red', 'rose', 'brown', 'amber', 'lime', 'green',
+  'teal', 'slate', 'blue', 'violet', 'fuchsia', 'pink',
+]);
 
 // Keep only known, de-duplicated string keys/ids from a saved flag array
 // (collapsed / hidden). Mirrors the label-pruning so the blob stays self-cleaning
@@ -157,7 +170,7 @@ const UNAVAILABLE = new Set();
 /** True when the item is both permitted by the role AND present on this instance. */
 function itemUsable(id) { return canSeeView(id) && !UNAVAILABLE.has(id); }
 
-function reconcile(saved) {
+export function reconcile(saved) {
   const base = (saved && Array.isArray(saved.sections) && saved.sections.length) ? saved : DEFAULT_SNAPSHOT;
   const seen = new Set();
   const sections = base.sections.map(s => {
@@ -192,6 +205,15 @@ function reconcile(saved) {
   for (const [id, val] of Object.entries(raw)) {
     if (BY_ID.has(id) && typeof val === 'string' && val !== '') labels[id] = val;
   }
+  // Row tints, pruned exactly like labels: an unknown item id or a colour key
+  // that is no longer in the palette is dropped, so the blob self-cleans on the
+  // next save instead of carrying dead entries forever.
+  const colors = {};
+  const rawColors = (saved && saved.colors && typeof saved.colors === 'object' && !Array.isArray(saved.colors))
+    ? saved.colors : {};
+  for (const [id, val] of Object.entries(rawColors)) {
+    if (BY_ID.has(id) && TINT_KEYS.has(val)) colors[id] = val;
+  }
   // Per-admin personalization flags: collapsed/hidden sections (by key) + hidden
   // lines (by id). Pruned to what still exists so moved/deleted bits don't linger.
   const sectionKeys = new Set(sections.map(s => s.key));
@@ -199,7 +221,7 @@ function reconcile(saved) {
   const collapsed = cleanFlagList(saved && saved.collapsed, sectionKeys);
   const hiddenSections = cleanFlagList(saved && saved.hiddenSections, sectionKeys);
   const hiddenItems = cleanFlagList(saved && saved.hiddenItems, itemIds);
-  return { v: 1, sections, labels, collapsed, hiddenSections, hiddenItems };
+  return { v: 1, sections, labels, colors, collapsed, hiddenSections, hiddenItems };
 }
 
 // Section title: custom sections carry an explicit string; default sections show
@@ -241,17 +263,30 @@ function pickActiveId(path) {
   return best;
 }
 
+// Human name for a tint key (or "no colour"), used on the picker controls.
+function tintLabel(key) {
+  if (!key) return t('admin.navEdit.tintNone');
+  return t('admin.navEdit.tint' + key.charAt(0).toUpperCase() + key.slice(1));
+}
+
 function itemHtml(item, activeId, labels, editing, opts = {}) {
   if (!item) return '';
   const icon = `<span class="admin-sidebar__item-icon" aria-hidden="true">${ICONS[item.icon] || ''}</span>`;
   const labelText = itemLabel(item, labels);
+  // The tint renders in BOTH modes — it's assigned in edit mode but its whole
+  // purpose is to group lines during everyday use. Decorative only, so it is
+  // never added to the accessible name.
+  const tint = opts.colors && opts.colors[item.id];
+  const tintAttr = tint ? ` data-tint="${escHtml(tint)}"` : '';
   if (editing) {
     const hidden = !!(opts.hiddenItems && opts.hiddenItems.includes(item.id));
     const soonBadge = item.soon ? `<span class="admin-sidebar__soon-badge">${t('admin.soon')}</span>` : '';
     const drag = escHtml(t('admin.navEdit.dragHandle'));
     const hideLabel = escHtml(t(hidden ? 'admin.navEdit.show' : 'admin.navEdit.hide'));
-    return `<div class="admin-sidebar__item admin-sidebar__item--editing${hidden ? ' admin-sidebar__item--hidden' : ''}" data-item-id="${escHtml(item.id)}">`
+    const tintBtnLabel = escHtml(`${t('admin.navEdit.tint')}: ${tintLabel(tint)}`);
+    return `<div class="admin-sidebar__item admin-sidebar__item--editing${hidden ? ' admin-sidebar__item--hidden' : ''}" data-item-id="${escHtml(item.id)}"${tintAttr}>`
       + `<span class="admin-sidebar__drag-handle" data-drag-handle draggable="true" aria-label="${drag}" title="${drag}">${GRIP}</span>`
+      + `<button type="button" class="admin-sidebar__tint-btn" data-tint-btn="${escHtml(item.id)}" data-tint-key="${escHtml(tint || 'none')}" aria-haspopup="dialog" aria-expanded="false" aria-label="${tintBtnLabel}" title="${tintBtnLabel}"></button>`
       + icon
       + `<span class="admin-sidebar__item-label" data-item-label contenteditable="true" spellcheck="false">${escHtml(labelText)}</span>`
       + soonBadge
@@ -260,10 +295,10 @@ function itemHtml(item, activeId, labels, editing, opts = {}) {
   }
   const label = `<span class="admin-sidebar__item-label">${escHtml(labelText)}</span>`;
   if (item.soon) {
-    return `<span class="admin-sidebar__item admin-sidebar__item--soon" aria-disabled="true">${icon}${label}<span class="admin-sidebar__soon-badge">${t('admin.soon')}</span></span>`;
+    return `<span class="admin-sidebar__item admin-sidebar__item--soon" aria-disabled="true"${tintAttr}>${icon}${label}<span class="admin-sidebar__soon-badge">${t('admin.soon')}</span></span>`;
   }
   const active = item.id === activeId;
-  return `<a class="admin-sidebar__item${active ? ' is-active' : ''}" href="${href(item.route)}" data-route="${item.route}"${active ? ' aria-current="page"' : ''}>${icon}${label}</a>`;
+  return `<a class="admin-sidebar__item${active ? ' is-active' : ''}" href="${href(item.route)}" data-route="${item.route}"${active ? ' aria-current="page"' : ''}${tintAttr}>${icon}${label}</a>`;
 }
 
 function sectionHtml(section, activeId, labels, editing, opts = {}) {
@@ -376,10 +411,27 @@ export function renderAdminShell({ activePath, content } = {}) {
   let editing = false;
   let working = reconcile(loadNavLayout());
   let drag = null;
+  // ── Row colour picker ───────────────────────────────────────────────────────
+  // ONE popover for the whole sidebar, parented to `aside` rather than `navEl`.
+  // navEl is innerHTML-wiped by every renderNav(), so a popover rendered inside
+  // it would be destroyed by every unrelated code path and its listener would
+  // need re-binding each time. Out here it is created once, bound once, and
+  // simply re-anchored per row on open.
+  let tintOpenId = null;
+  const tintPop = document.createElement('div');
+  tintPop.className = 'admin-sidebar__tint-pop';
+  tintPop.setAttribute('role', 'dialog');
+  tintPop.hidden = true;
+  aside.appendChild(tintPop);
+
   const indicator = document.createElement('div');
   indicator.className = 'admin-sidebar__drop-indicator';
 
   function renderNav() {
+    // The anchor row is about to be wiped (or moved), so drop the popover first.
+    // This one line covers every re-render path: edit toggle, drag-drop, hide/
+    // show, add/delete section, reset, and the late hydrate callback.
+    closeTintPop(false);
     // While editing we keep the working copy; otherwise re-read the latest
     // persisted layout (so a hydrate or another view's change is reflected).
     if (!editing) working = reconcile(loadNavLayout());
@@ -392,6 +444,7 @@ export function renderAdminShell({ activePath, content } = {}) {
       collapsed: working.collapsed,
       hiddenSections: working.hiddenSections,
       hiddenItems: working.hiddenItems,
+      colors: working.colors,
     };
     // Outside edit mode, hide sections the role has no items in (e.g. a
     // shop-only role won't see an empty "Settings" header). In edit mode (admin
@@ -403,6 +456,114 @@ export function renderAdminShell({ activePath, content } = {}) {
   }
 
   function persist() { saveNavLayout(working); }
+
+  // ── row colour picker ───────────────────────────────────────────────────────
+  // Opening/closing is DOM-local (hidden + re-anchor) and never calls renderNav.
+  // That matters: a document-level `pointerdown` fires BEFORE navEl's delegated
+  // `click`, so if closing re-rendered, the swatch node would be destroyed
+  // between mousedown and click and the pick would be silently swallowed.
+
+  // Look the trigger up by selector, never by a captured reference — a
+  // renderNav() may have replaced the node since the popover was opened.
+  function tintTrigger(id) {
+    return id ? navEl.querySelector(`[data-tint-btn="${CSS.escape(id)}"]`) : null;
+  }
+
+  function renderTintPop(current) {
+    tintPop.setAttribute('aria-label', t('admin.navEdit.tint'));
+    const swatch = (key) => {
+      const label = escHtml(tintLabel(key));
+      const on = (key || 'none') === (current || 'none');
+      return `<button type="button" data-tint-key="${escHtml(key || 'none')}" aria-pressed="${on}" aria-label="${label}" title="${label}"></button>`;
+    };
+    tintPop.innerHTML = swatch(null) + [...TINT_KEYS].map(swatch).join('');
+  }
+
+  function closeTintPop(refocus) {
+    if (tintOpenId === null) return;          // idempotent — called from many paths
+    const id = tintOpenId;
+    tintOpenId = null;
+    tintPop.hidden = true;
+    document.removeEventListener('pointerdown', onTintDocPointerDown);
+    document.removeEventListener('keydown', onTintDocKeydown);
+    const btn = tintTrigger(id);
+    btn?.setAttribute('aria-expanded', 'false');
+    if (refocus) btn?.focus();
+  }
+
+  function openTintPop(btn, id) {
+    if (tintOpenId === id) { closeTintPop(true); return; }   // same trigger → toggle off
+    closeTintPop(false);
+    tintOpenId = id;
+    renderTintPop(working.colors[id]);        // rebuilt per open: current locale + selection
+    tintPop.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const a = aside.getBoundingClientRect();
+    tintPop.style.top  = `${r.bottom - a.top + 4}px`;
+    tintPop.style.left = `${Math.max(4, Math.min(r.left - a.left, a.width - tintPop.offsetWidth - 4))}px`;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', onTintDocPointerDown);
+    document.addEventListener('keydown', onTintDocKeydown);
+    tintPop.querySelector('[aria-pressed="true"]')?.focus();
+  }
+
+  function onTintDocPointerDown(e) {
+    // The shell has no teardown hook, so an SPA navigation with the popover open
+    // would strand these two document listeners on a detached tree. Self-heal.
+    if (!aside.isConnected) { closeTintPop(false); return; }
+    if (tintPop.contains(e.target)) return;             // inside the popover
+    if (e.target.closest('[data-tint-btn]')) return;    // any trigger — let `click` decide
+    closeTintPop(false);
+  }
+
+  function onTintDocKeydown(e) {
+    if (!aside.isConnected) { closeTintPop(false); return; }
+    if (e.key === 'Escape') closeTintPop(true);
+  }
+
+  // In-place mutation, mirroring toggleCollapse — patch just the two DOM bits
+  // that changed rather than re-rendering the whole nav mid-click.
+  function setItemTint(id, key) {
+    if (!id || !BY_ID.has(id)) return;
+    if (key && TINT_KEYS.has(key)) working.colors[id] = key;
+    else delete working.colors[id];
+    persist();
+    const row = navEl.querySelector(`[data-item-id="${CSS.escape(id)}"]`);
+    if (!row) return;
+    if (working.colors[id]) row.setAttribute('data-tint', working.colors[id]);
+    else row.removeAttribute('data-tint');
+    const btn = row.querySelector('[data-tint-btn]');
+    if (btn) {
+      btn.dataset.tintKey = working.colors[id] || 'none';
+      const label = `${t('admin.navEdit.tint')}: ${tintLabel(working.colors[id])}`;
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+    }
+  }
+
+  // Bound once — tintPop is never destroyed.
+  tintPop.addEventListener('click', (e) => {
+    const sw = e.target.closest('[data-tint-key]');
+    if (!sw || !tintOpenId) return;
+    setItemTint(tintOpenId, sw.dataset.tintKey === 'none' ? null : sw.dataset.tintKey);
+    closeTintPop(true);
+  });
+
+  // Arrow/Home/End roving between swatches (Escape is handled on document).
+  tintPop.addEventListener('keydown', (e) => {
+    const keys = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(e.key)) return;
+    const all = [...tintPop.querySelectorAll('[data-tint-key]')];
+    const i = all.indexOf(document.activeElement);
+    if (i === -1) return;
+    e.preventDefault();
+    const step = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1
+      : (e.key === 'ArrowLeft' || e.key === 'ArrowUp') ? -1 : 0;
+    const next = e.key === 'Home' ? 0
+      : e.key === 'End' ? all.length - 1
+        : (i + step + all.length) % all.length;
+    all[next]?.focus();
+  });
 
   // ── collapse / hide (per-admin personalization stored in the snapshot) ────────
   function toggleIn(arr, val) {
@@ -582,6 +743,8 @@ export function renderAdminShell({ activePath, content } = {}) {
     if (!editing) return;
     if (e.target.closest('[data-nav-add-section]')) { addSection(); return; }
     if (e.target.closest('[data-nav-reset]'))       { resetLayout(); return; }
+    const tintBtn = e.target.closest('[data-tint-btn]');
+    if (tintBtn) { openTintPop(tintBtn, tintBtn.dataset.tintBtn); return; }
     const itemHide = e.target.closest('[data-item-hide]');
     if (itemHide) { toggleHiddenItem(itemHide.dataset.itemHide); return; }
     const secHide = e.target.closest('[data-section-hide]');

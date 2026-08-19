@@ -45,6 +45,37 @@
   --test-blue-rgb: 47, 111, 237;
   --test-glow:     0 0 0 2px rgba(47, 111, 237, 0.55), 0 0 16px 2px rgba(47, 111, 237, 0.45);
 
+  /* Admin-nav row tints — the 12 colours an admin can assign to a sidebar line to
+     group related lines (AdminSidebar.js TINT_KEYS). Each token is used twice: as
+     a low-alpha wash behind the row and at full chroma for the 3px identity rail.
+     These are the LIGHT values, tuned to read as pale tints on the white surface;
+     themes.css swaps in bright counterparts under html[data-theme], because on a
+     dark surface the tint has to be a LIGHT hue — lightness delta is what the eye
+     reads first, so a dark hue on a dark surface just looks like a smudge.
+
+     Hues are spaced for SEPARATION rather than picked to match the status-pill
+     inks: at this alpha the pill red/amber (#c0392b/#b45309) composite only ~7
+     apart on white, which is too close to group by. Red stays --error; the rest
+     are spread out.
+
+     Ordered round the wheel. brown and slate are intentionally muted: at twelve
+     tints the hues no longer fit round the circle, so those two separate by
+     CHROMA rather than hue. slate keeps enough chroma to stay clear of
+     --bg-hover (measured) — a neutral grey would read as a hovered row. */
+  --nav-tint-red:     #c0392b;
+  --nav-tint-rose:    #9f1239;
+  --nav-tint-brown:   #78350f;
+  --nav-tint-amber:   #ca8a04;
+  --nav-tint-lime:    #4d7c0f;
+  --nav-tint-green:   #15803d;
+  --nav-tint-teal:    #0891b2;
+  --nav-tint-slate:   #475569;
+  --nav-tint-blue:    #1d4ed8;
+  --nav-tint-violet:  #7c3aed;
+  --nav-tint-fuchsia: #a21caf;
+  --nav-tint-pink:    #db2777;
+  --nav-tint-a:       18%;
+
   /* Spacing scale */
   --sp-1:  4px;
   --sp-2:  8px;

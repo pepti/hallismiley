@@ -293,3 +293,125 @@
 @media (max-width: 640px) {
   .admin-sidebar__edit-toggle { display: none; }
 }
+
+  /* `relative`, not `static` — un-sticks identically, but keeps the sidebar as
+     the containing block for the absolutely-positioned row-tint popover. */
+  .admin-sidebar { position: relative; top: auto; display: none; margin-bottom: var(--sp-4); }
+
+/* ── Row colour tints ─────────────────────────────────────────────────────────
+   An admin can tint any nav line one of 7 colours (AdminSidebar.js TINT_KEYS) to
+   group related lines. Assigned in edit mode, but always visible — grouping only
+   helps if it shows during everyday use. `data-tint` maps the stored key to
+   --nav-tint; one rule then applies it, so adding a colour is a token + one line.
+
+   Two deliberate choices:
+
+   (1) The wash is a background-IMAGE layer. :hover and .is-active set the
+       `background` SHORTHAND, which would reset background-image to none — but
+       the selector below is doubled with .admin-sidebar to (0,3,0), out-
+       specifying those (0,2,0) rules whatever the source order. The result:
+       hover/active still swap the background-COLOR underneath the wash, so a
+       tinted row keeps its hover feedback with no second strength value and no
+       edits to the existing rules.
+
+   (2) The 3px full-chroma rail is load-bearing, not decoration. At 16-26% the
+       wash alone cannot keep 7 hues apart on the chromatic dark surfaces —
+       indigo `aurora` compresses green/teal/blue/violet, warm `lava` compresses
+       blue/violet/pink. The rail is full chroma, so hue identity survives
+       whatever the surface does to the wash: the wash carries "these belong
+       together", the rail carries "which colour". It's a ::before rather than a
+       border-left because .is-active already owns border-left-color.
+
+   An unknown data-tint value leaves --nav-tint unset, so the color-mix is
+   invalid-at-computed-value and the row simply renders untinted. */
+.admin-sidebar .admin-sidebar__item[data-tint] {
+  position: relative;
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--nav-tint) var(--nav-tint-a), transparent),
+    color-mix(in srgb, var(--nav-tint) var(--nav-tint-a), transparent));
+}
+.admin-sidebar .admin-sidebar__item[data-tint]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--nav-tint);
+  pointer-events: none;
+}
+/* Windows high-contrast strips background-image and ::before fills. */
+@media (forced-colors: active) {
+  .admin-sidebar .admin-sidebar__item[data-tint]::before { forced-color-adjust: none; }
+}
+
+/* key → token. Shared by the row tint, the row's swatch button and the popover
+   swatches, so all three always agree and track the active theme. */
+[data-tint="red"],     [data-tint-key="red"]     { --nav-tint: var(--nav-tint-red); }
+[data-tint="rose"],    [data-tint-key="rose"]    { --nav-tint: var(--nav-tint-rose); }
+[data-tint="brown"],   [data-tint-key="brown"]   { --nav-tint: var(--nav-tint-brown); }
+[data-tint="amber"],   [data-tint-key="amber"]   { --nav-tint: var(--nav-tint-amber); }
+[data-tint="lime"],    [data-tint-key="lime"]    { --nav-tint: var(--nav-tint-lime); }
+[data-tint="green"],   [data-tint-key="green"]   { --nav-tint: var(--nav-tint-green); }
+[data-tint="teal"],    [data-tint-key="teal"]    { --nav-tint: var(--nav-tint-teal); }
+[data-tint="slate"],   [data-tint-key="slate"]   { --nav-tint: var(--nav-tint-slate); }
+[data-tint="blue"],    [data-tint-key="blue"]    { --nav-tint: var(--nav-tint-blue); }
+[data-tint="violet"],  [data-tint-key="violet"]  { --nav-tint: var(--nav-tint-violet); }
+[data-tint="fuchsia"], [data-tint-key="fuchsia"] { --nav-tint: var(--nav-tint-fuchsia); }
+[data-tint="pink"],    [data-tint-key="pink"]    { --nav-tint: var(--nav-tint-pink); }
+
+/* Per-row picker trigger (edit mode), between the grip and the icon. Swatches
+   show FULL chroma while rows show the wash — the picker advertises the colour,
+   the row applies it subtly. Fills come from the tokens, never from inline
+   styles, so they re-hue with the theme (unlike the ThemeSwitcher swatches,
+   which are intentionally theme-independent). */
+.admin-sidebar__tint-btn,
+.admin-sidebar__tint-pop [data-tint-key] {
+  flex: 0 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--nav-tint, var(--bg-surface));
+  cursor: pointer;
+}
+.admin-sidebar__tint-btn { width: 16px; height: 16px; }
+.admin-sidebar__tint-pop [data-tint-key] { width: 24px; height: 24px; }
+/* "No colour" — a neutral chip with a diagonal slash. */
+[data-tint-key="none"] {
+  background: var(--bg-surface);
+  background-image: linear-gradient(45deg, transparent 45%, var(--text-muted) 45% 55%, transparent 55%);
+}
+.admin-sidebar__tint-btn:hover,
+.admin-sidebar__tint-pop [data-tint-key]:hover { transform: scale(1.12); }
+.admin-sidebar__tint-btn:focus-visible,
+.admin-sidebar__tint-pop [data-tint-key]:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+/* Theme-agnostic selected ring, per theme-switcher.css. */
+.admin-sidebar__tint-pop [aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--text-primary);
+}
+
+/* One popover for the whole sidebar, parented to .admin-sidebar (never wiped)
+   and anchored per row on open. `display: grid` must be paired with an explicit
+   [hidden] rule — display would otherwise beat the UA's [hidden]{display:none}. */
+.admin-sidebar__tint-pop {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  /* 13 swatches (None + 12 tints) — 5 columns lays them out 5 / 5 / 3. */
+  grid-template-columns: repeat(5, 24px);
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+.admin-sidebar__tint-pop[hidden] { display: none; }
+
+/* The extra control costs ~28px of a 240px sidebar; tighten the edit-mode gap
+   so Icelandic labels ("Vörumóttökur") don't ellipsis away. */
+.admin-sidebar__item--editing { gap: var(--sp-2); }

@@ -33,6 +33,20 @@ function isValidLayout(layout) {
       if (typeof v !== 'string' || v.length > 80) return false;
     }
   }
+  // Row tints: { itemId: colourKey }. Bounded like labels, but deliberately NOT
+  // allowlisted to the known keys. This file's contract is that the frontend
+  // owns meaning and reconciles; an allowlist here would mean a client
+  // shipping a new colour gets a hard 400 that rejects the ENTIRE layout,
+  // silently losing unrelated renames and reorders in the same PATCH until
+  // the server catches up. reconcile() drops unknown keys client-side, and
+  // the value only ever reaches the DOM through escHtml() into an attribute.
+  if (layout.colors != null) {
+    if (typeof layout.colors !== 'object' || Array.isArray(layout.colors)) return false;
+    const colors = Object.entries(layout.colors);
+    if (colors.length > 100) return false;
+    if (!colors.every(([k, v]) => typeof k === 'string' && k.length <= 64 &&
+                                   typeof v === 'string' && v.length <= 16)) return false;
+  }
   // Optional personalization flags (collapsed/hidden sections + hidden lines).
   // Absent = default; the frontend reconciles meaning, so we just bound them.
   for (const f of ['collapsed', 'hiddenSections', 'hiddenItems']) {
