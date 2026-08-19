@@ -195,11 +195,10 @@ jobs:
               exit 0
             fi
             echo "::warning::Playwright OS dep install attempt ${attempt} failed or hung after 3 minutes — retrying"
-
+            sudo apt-get update || true
           done
-          echo "::error::Playwright OS dep install failed after 3 attempts"
+          echo "::error::Playwright OS dependency install failed after 3 attempts"
           exit 1
-
 
       - name: Run E2E tests
         env:
