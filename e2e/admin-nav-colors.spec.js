@@ -10,7 +10,13 @@
 // click, so a naive implementation either swallows the selection or needs two
 // clicks to move the popover between rows.
 const { test, expect } = require('@playwright/test');
-const { gotoAndSettle, loginAs } = require('./helpers');
+const { loginAsAdmin } = require('./helpers');
+
+// The base helpers have no gotoAndSettle — same behaviour inlined.
+async function gotoAndSettle(page, path) {
+  await page.goto(path);
+  await page.waitForLoadState('networkidle');
+}
 
 const ROW   = '[data-item-id="orders"]';
 const TRIG  = '[data-tint-btn="orders"]';
@@ -27,7 +33,7 @@ async function enterEditMode(page) {
 
 test.describe('admin nav — row colours', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'admin');
+    await loginAsAdmin(page);
     await gotoAndSettle(page, '/admin');
     await enterEditMode(page);
     // Start from a known state — a previous test may have left tints behind.
