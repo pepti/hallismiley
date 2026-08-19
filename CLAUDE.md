@@ -27,7 +27,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 
 ## Project rules
 
-- Read-only references — never modify: `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system). **Dated exception (Halli, 2026-08-19):** `C:\Users\Notandi\claude\HalliProjects` (the base) is writable for the duration of the base-upgrade program (plan: `~\.claude\plans\as-icelandic-store-is-wiggly-liskov.md` — icelandicstore features land in the base first, then fan out here). The base reverts to read-only when the program ends.
+- Read-only references — never modify: `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system) and `C:\Users\Notandi\claude\HalliProjects` (the base). The base was temporarily writable for the 2026-08-19 base-upgrade program (13 PRs, ledger: site-factory/BASE-SYNC.md); that program is closed and the read-only rule is back in force — base writes need Halli's explicit say-so again.
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
 - Prices on `/thjonusta` (39–79 þ.kr./mán) are placeholders marked DRAFT until Halli confirms.
@@ -66,8 +66,9 @@ the base is documented but deliberately NOT performed (`docs/UPSTREAM-SELF-UPDAT
 
 ## Base-sync 2026-08-19 (the base-upgrade program)
 
-Three waves of engine features landed on master the same day they landed in
-HalliProjects (ledger: site-factory/BASE-SYNC.md 2026-08-19):
+Four waves of engine features landed on master the same day they landed in
+HalliProjects (ledger: site-factory/BASE-SYNC.md 2026-08-19). The program is
+CLOSED — all 13 base PRs merged and deployed, base back to read-only:
 
 - **6A security**: transactional+locked migration runner, UPLOAD_ROOT boot
   guard, upload-path allowlists, FB auto-link takeover refusal, CSP
@@ -79,6 +80,10 @@ HalliProjects (ledger: site-factory/BASE-SYNC.md 2026-08-19):
   IndexNow-route idioms fixed), CI boot smoke declares UPLOAD_ROOT+DB_SSL.
 - **6C theme**: per-account UI theme as migration 083_user_theme, adapted to
   the 2-theme palette (classic/light); Appearance section in the profile.
+- **6D nav tints + CI**: admin-nav 12-tint row colours (rides the existing
+  admin_nav_config JSONB, no migration) + Playwright CI hardening. A ported
+  CSS hunk initially hid the admin sidebar at all widths (rule appended
+  outside its @media block — fixed same day, see LESSONS.md 2026-08-19).
 
 The migration chain now ends 080_background_sections · 081_system_updates ·
 082_admin_totp · 083_user_theme. NEVER adopt the base's numbering for the
