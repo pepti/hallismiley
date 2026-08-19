@@ -11,10 +11,13 @@ const scrypt = new Scrypt();
 const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, preferred_locale, created_at';
 const { SUPPORTED_LOCALES } = require('../config/i18n');
 
-// Only delete files that match the user-upload pattern (never the baked SVGs).
-const UPLOADED_AVATAR_RE = /^user-\d+-\d+-[a-z0-9]+\.(jpg|jpeg|png|webp)$/i;
-function _tryUnlinkAvatar(filename) {
-  if (!filename || !UPLOADED_AVATAR_RE.test(filename)) return;
+// Only delete a file that matches the user-upload pattern AND belongs to the
+// caller — never the baked SVGs, and never another user's upload (the avatars
+// dir is one flat shared directory). Shared with the avatar-field validator so
+// the two allowlists can't drift apart again.
+const { isOwnUploadedAvatar } = require('../middleware/validate');
+function _tryUnlinkAvatar(filename, userId) {
+  if (!isOwnUploadedAvatar(filename, userId)) return;
   try { fs.unlinkSync(path.join(userAvatarDir(), filename)); } catch { /* ignore */ }
 }
 
@@ -51,6 +54,18 @@ const userController = {
         return res.status(400).json({ error: t(req.locale, 'errors.user.unsupportedLocale'), code: 400 });
       }
 
+      // Switching avatar via PATCH (e.g. back to a baked SVG) must clean up a
+      // superseded uploaded file, or it sits orphaned in UPLOAD_ROOT/avatars
+      // forever — uploadAvatar only covers the upload path.
+      let previousAvatar = null;
+      if ('avatar' in updates) {
+        const { rows: prevRows } = await dbQuery(
+          'SELECT avatar FROM users WHERE id = $1',
+          [req.user.id]
+        );
+        previousAvatar = prevRows[0]?.avatar || null;
+      }
+
       const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);
       const values     = [req.user.id, ...Object.values(updates)];
 
@@ -72,6 +87,10 @@ const userController = {
           return res.status(409).json({ error: t(req.locale, 'errors.auth.usernameTaken'), code: 409 });
         }
         throw err;
+      }
+
+      if (previousAvatar && previousAvatar !== rows[0].avatar) {
+        _tryUnlinkAvatar(previousAvatar, req.user.id);
       }
 
       return res.json(rows[0]);
@@ -101,11 +120,11 @@ const userController = {
         [newName, req.user.id]
       );
 
-      if (previous && previous !== newName) _tryUnlinkAvatar(previous);
+      if (previous && previous !== newName) _tryUnlinkAvatar(previous, req.user.id);
 
       return res.json(rows[0]);
     } catch (err) {
-      if (req.file) _tryUnlinkAvatar(req.file.filename);
+      if (req.file) _tryUnlinkAvatar(req.file.filename, req.user.id);
       next(err);
     }
   },
