@@ -48,6 +48,11 @@ global.fetch = jest.fn(async () => ({
   json: async () => mockUserinfo.response,
 }));
 
+// Social login ships OFF on this instance — this suite tests the providers
+// LIVE, so opt in before the app is required (the gate reads env per request,
+// but set it up-front for clarity).
+process.env.SOCIAL_LOGIN_ENABLED = 'true';
+
 const app = require('../../server/app');
 const db  = require('../../server/config/database');
 const { cleanTables, createTestAdminUser } = require('../helpers');

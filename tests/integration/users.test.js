@@ -3,6 +3,7 @@ const app     = require('../../server/app');
 const db      = require('../../server/config/database');
 const {
   createTestAdminUser,
+  createTestRegularUser,
   getTestSessionCookie,
   cleanTables,
 } = require('../helpers');
@@ -430,5 +431,143 @@ describe('DELETE /api/v1/users/me/sessions (revoke all others)', () => {
   test('requires auth', async () => {
     const res = await request(app).delete('/api/v1/users/me/sessions');
     expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/v1/users/me/avatar ─────────────────────────────────────────────
+// users.id is TEXT (gen_random_uuid()::text / test-style ids), so uploaded
+// filenames are user-<textId>-<ts>-<rand>.<ext>. The shared UPLOADED_AVATAR_RE
+// must match them, or superseded files are never unlinked and PATCH /users/me
+// rejects the stored value when a client echoes it back.
+
+describe('POST /api/v1/users/me/avatar', () => {
+  const fs   = require('fs');
+  const path = require('path');
+  const { userAvatarDir } = require('../../server/config/paths');
+  // Any bytes will do — multer validates the declared mimetype, not the content.
+  const fakePng = Buffer.from('89504e470d0a1a0a', 'hex');
+
+  function uploadAvatar() {
+    return request(app)
+      .post('/api/v1/users/me/avatar')
+      .set('Cookie', sessionCookie)
+      .attach('file', fakePng, { filename: 'me.png', contentType: 'image/png' });
+  }
+
+  afterEach(async () => {
+    // Remove any files this suite wrote (admin + the second user below).
+    const dir = userAvatarDir();
+    if (fs.existsSync(dir)) {
+      for (const f of fs.readdirSync(dir)) {
+        if (f.startsWith(`user-${adminId}-`) || f.startsWith('user-test-')) {
+          fs.unlinkSync(path.join(dir, f));
+        }
+      }
+    }
+  });
+
+  test('stores the file, sets users.avatar, and the filename passes the shared allowlist', async () => {
+    const res = await uploadAvatar();
+
+    expect(res.status).toBe(200);
+    const { UPLOADED_AVATAR_RE } = require('../../server/middleware/validate');
+    expect(res.body.avatar).toMatch(UPLOADED_AVATAR_RE);
+    expect(fs.existsSync(path.join(userAvatarDir(), res.body.avatar))).toBe(true);
+
+    const { rows } = await db.query('SELECT avatar FROM users WHERE id = $1', [adminId]);
+    expect(rows[0].avatar).toBe(res.body.avatar);
+  });
+
+  test('uploading a replacement deletes the superseded file from disk', async () => {
+    const first = await uploadAvatar();
+    expect(first.status).toBe(200);
+    const firstPath = path.join(userAvatarDir(), first.body.avatar);
+    expect(fs.existsSync(firstPath)).toBe(true);
+
+    const second = await uploadAvatar();
+    expect(second.status).toBe(200);
+    expect(second.body.avatar).not.toBe(first.body.avatar);
+
+    expect(fs.existsSync(path.join(userAvatarDir(), second.body.avatar))).toBe(true);
+    expect(fs.existsSync(firstPath)).toBe(false);
+  });
+
+  test('switching to a baked SVG via PATCH deletes the superseded upload', async () => {
+    const uploaded = await uploadAvatar();
+    const uploadedPath = path.join(userAvatarDir(), uploaded.body.avatar);
+    expect(fs.existsSync(uploadedPath)).toBe(true);
+
+    const res = await request(app)
+      .patch('/api/v1/users/me')
+      .set('Cookie', sessionCookie)
+      .send({ avatar: 'avatar-10.svg' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.avatar).toBe('avatar-10.svg');
+    expect(fs.existsSync(uploadedPath)).toBe(false);
+  });
+
+  test('PATCH /users/me echoing the stored uploaded-avatar value succeeds', async () => {
+    const uploaded = await uploadAvatar();
+    expect(uploaded.status).toBe(200);
+
+    // Clients send the whole profile back on save — the stored value must
+    // round-trip through the avatar validator.
+    const res = await request(app)
+      .patch('/api/v1/users/me')
+      .set('Cookie', sessionCookie)
+      .send({ avatar: uploaded.body.avatar });
+
+    expect(res.status).toBe(200);
+    expect(res.body.avatar).toBe(uploaded.body.avatar);
+  });
+
+  // The avatars dir is one flat shared directory and uploaded filenames are
+  // served publicly, so an uploaded avatar must be claimable only by its owner.
+  // Otherwise a user could point their profile at someone else's file and have
+  // their next upload delete it (uploadAvatar unlinks the superseded value).
+  describe('cross-user protection', () => {
+    let victimFile;
+    let otherCookie;
+
+    beforeEach(async () => {
+      const uploaded = await uploadAvatar();      // admin uploads; admin is the victim
+      victimFile = uploaded.body.avatar;
+      await createTestRegularUser();
+      otherCookie = await getTestSessionCookie('test-user-id');
+    });
+
+    test("another user cannot set their avatar to the victim's uploaded file", async () => {
+      const res = await request(app)
+        .patch('/api/v1/users/me')
+        .set('Cookie', otherCookie)
+        .send({ avatar: victimFile });
+
+      expect(res.status).toBe(400);
+      expect(fs.existsSync(path.join(userAvatarDir(), victimFile))).toBe(true);
+    });
+
+    test("a planted foreign avatar value is not deleted by the other user's upload", async () => {
+      // Bypass the validator and write the victim's filename straight into the
+      // attacker's row — proves the unlink guard is a second, independent layer.
+      await db.query('UPDATE users SET avatar = $1 WHERE id = $2', [victimFile, 'test-user-id']);
+
+      const res = await request(app)
+        .post('/api/v1/users/me/avatar')
+        .set('Cookie', otherCookie)
+        .attach('file', fakePng, { filename: 'me.png', contentType: 'image/png' });
+
+      expect(res.status).toBe(200);
+      expect(fs.existsSync(path.join(userAvatarDir(), victimFile))).toBe(true);
+    });
+  });
+
+  test('rejects a non-image mimetype with 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/users/me/avatar')
+      .set('Cookie', sessionCookie)
+      .attach('file', Buffer.from('<svg/>'), { filename: 'evil.svg', contentType: 'image/svg+xml' });
+
+    expect(res.status).toBe(400);
   });
 });

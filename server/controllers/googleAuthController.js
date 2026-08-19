@@ -15,6 +15,7 @@
 
 const { query: dbQuery }          = require('../config/database');
 const { lucia }                   = require('../auth/lucia');
+const securityLogger               = require('../observability/securityLogger');
 const { loadArctic, isConfigured } = require('../auth/google');
 const { generateUniqueUsername, isSafeReturnTo } = require('../auth/oauthHelpers');
 
@@ -166,6 +167,17 @@ async function callback(req, res, next) {
       userId = ins[0].id;
     }
 
+    // 2FA must not be walk-aroundable: the TOTP challenge (migration 080)
+    // lives on the password path, so an admin with a linked Google account
+    // could walk straight past it, and the security of the site would rest on
+    // OAuth account hygiene we neither set nor can verify. Refusing the role
+    // outright is simpler and stronger than replicating the challenge in the
+    // provider controllers. Ordinary users keep social sign-in.
+    const { rows: roleRows } = await dbQuery('SELECT role FROM users WHERE id = $1', [userId]);
+    if (roleRows[0]?.role === 'admin') {
+      securityLogger.loginFailed(req.ip, `google oauth refused for admin account ${email}`);
+      return redirectWithError(res, 'admin_oauth_blocked', req.locale);
+    }
     // Reset any lockout state from previous password-login failures, then
     // create a Lucia session with the same pattern as password login.
     await dbQuery(

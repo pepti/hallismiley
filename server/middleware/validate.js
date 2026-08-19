@@ -147,11 +147,37 @@ const ALLOWED_AVATARS = Array.from({ length: 40 }, (_, i) =>
 );
 
 // User-uploaded avatars are written by the upload endpoint with a controlled
-// filename pattern: user-<userId>-<timestamp>-<rand>.<ext>. This regex is the
-// allowlist for uploaded avatars referenced from the avatar field.
-const UPLOADED_AVATAR_RE = /^user-\d+-\d+-[a-z0-9]+\.(jpg|jpeg|png|webp)$/i;
-function isAllowedAvatar(name) {
-  return ALLOWED_AVATARS.includes(name) || UPLOADED_AVATAR_RE.test(name);
+// filename pattern: user-<userId>-<timestamp>-<rand>.<ext> (built in
+// server/routes/userRoutes.js). This regex is the allowlist for uploaded
+// avatars referenced from the avatar field, and doubles as the unlink guard in
+// userController._tryUnlinkAvatar — keep the id segment free of dots/slashes so
+// a matching value can never name a path outside the avatars dir. users.id is
+// TEXT (gen_random_uuid()::text, [A-Za-z0-9-] in practice), not numeric: the
+// earlier `\d+` could never match a real upload, so every uploaded avatar was
+// rejected here and superseded files were never unlinked. Shape alone is not
+// enough, though — see the owner check below. (Ported from icelandicstore #145.)
+const UPLOADED_AVATAR_RE = /^user-[A-Za-z0-9-]+-\d+-[a-z0-9]+\.(jpg|jpeg|png|webp)$/i;
+
+// An uploaded avatar belongs to exactly one user — the upload endpoint bakes the
+// owner's id into the filename. Ownership has to be proved, not just shape:
+// UPLOAD_ROOT/avatars is one flat shared directory, so a user who could name
+// someone else's file would both wear their picture and — on their next upload —
+// have _tryUnlinkAvatar delete it out from under them.
+function ownedUploadedAvatarRe(userId) {
+  const esc = String(userId).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^user-${esc}-\\d+-[a-z0-9]+\\.(jpg|jpeg|png|webp)$`, 'i');
+}
+
+// Both checks must pass. UPLOADED_AVATAR_RE keeps the value path-safe whatever
+// the id turns out to contain (no dots, no separators — it is also the unlink
+// guard); the owner regex proves the file is the caller's own.
+function isOwnUploadedAvatar(name, userId) {
+  if (!name || !userId) return false;
+  return UPLOADED_AVATAR_RE.test(name) && ownedUploadedAvatarRe(userId).test(name);
+}
+
+function isAllowedAvatar(name, userId) {
+  return ALLOWED_AVATARS.includes(name) || isOwnUploadedAvatar(name, userId);
 }
 
 function validatePassword(password, errors) {
@@ -254,7 +280,8 @@ function validateProfileUpdate(req, res, next) {
   }
 
   if (avatar !== undefined) {
-    if (!isAllowedAvatar(avatar))
+    // req.user is always set — this route sits behind requireAuth.
+    if (!isAllowedAvatar(avatar, req.user?.id))
       errors.push({ key: 'validation.avatar.invalidOrUploaded' });
   }
 
@@ -637,4 +664,6 @@ module.exports = {
   validateNewsMediaUpdate,
   validateNewsMediaReorder,
   ALLOWED_AVATARS,
+  UPLOADED_AVATAR_RE,
+  isOwnUploadedAvatar,
 };
