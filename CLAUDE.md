@@ -17,7 +17,7 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 - Email: Resend (primary) + nodemailer (fallback)
 - Payments: Stripe
 - Tests: Jest (integration, hits real Postgres) + Playwright (e2e)
-- Lint: ESLint 8 + Husky pre-commit
+- Lint: ESLint 10 (flat config, `eslint.config.js`) + Husky pre-commit
 - Deploy: GitHub Actions → ACR → Azure App Service. Migrations run automatically at container start.
 
 ## Architecture invariants (do not change without discussing)
@@ -25,7 +25,7 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 1. **Vanilla JS frontend.** No SPA framework, no bundler-required syntax. ES modules + plain DOM.
 2. **CommonJS server.** Don't convert to ESM piecemeal.
 3. **Lucia owns sessions; JWT for stateless API auth.** Don't bolt on a second session system.
-4. **Migrations are sequential SQL files** under `server/scripts/migrations/` (or wherever `migrate.js` reads). Never edit a migration that has been applied to prod — always add a new one.
+4. **Migrations are entries appended to the array in `server/config/schema.js`** (applied by `npm run migrate` / at boot, one transaction per migration, advisory-locked against concurrent booters). Never edit a migration that has been applied to prod — always add a new one.
 5. **All routes return a consistent error envelope** (see `docs/API.md` "Error formats"). Don't invent new error shapes.
 6. **Integration tests hit a real Postgres** — do not mock `pg`.
 7. **The books are double-entry, and the ledger is the only source of totals.** Every
@@ -109,7 +109,7 @@ Full deployment guide: `docs/DEPLOYMENT.md`. Operational runbook: `RUNBOOK.md`.
 
 - `/security-check` — review pending changes against this project's security invariants
 - `/pre-deploy` — pre-deploy verification (CI green, migrations safe, env vars, rollback plan)
-- `/migration-new <name>` — scaffold a new sequential SQL migration
+- `/migration-new <name>` — scaffold a new migration entry (schema.js array)
 
 ## Things that have bitten us before
 
