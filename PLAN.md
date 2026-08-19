@@ -1,8 +1,8 @@
 # Orange Smiley public site — build plan
 
-**Status:** Jobs 1–3 complete; stopped for Halli's approval of `ENHANCEMENTS.md`. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\HalliProjects` @ `562c637`.
+**Status:** Jobs 1–3 complete; stopped for Halli's approval of `ENHANCEMENTS.md`. Since then: self-update module built + merged 2026-08-10 (six phases — see CLAUDE.md and `docs/SELF-UPDATE.md`). **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\HalliProjects` @ `562c637`.
 
-Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `C:\Users\Notandi\claude\Projects\orange smiley\CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `ORANGE-SMILEY-PLAN.md` (same folder).
+Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `company/ORANGE-SMILEY-PLAN.md` (same folder — gitignored, inside this repo).
 
 ## Job 1 — Scaffold with ALL features (done 2026-08-09)
 

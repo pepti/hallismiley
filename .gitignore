@@ -65,3 +65,6 @@ private-uploads/
 
 # site-factory
 data/import/
+
+# Company/business docs — belong in the future orange-smiley/company repo, not the website repo
+company/

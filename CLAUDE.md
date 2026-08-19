@@ -2,9 +2,9 @@
 
 The **public instance** of Orange Smiley ehf.: marketing site + seed of the customer portal, for the software agency / ERP-replacement business serving Icelandic SMBs. **This is NOT a customer migration** — it is the company's own site, dogfooding the site factory.
 
-- **Owner**: Halli. Business plan: `C:\Users\Notandi\claude\Projects\orange smiley\ORANGE-SMILEY-PLAN.md` (offering/tiers §1, instance architecture §4, targets §7). Build brief: `CLAUDE-CODE-BUILD-INSTRUCTIONS.md` in the same folder.
+- **Owner**: Halli. Business plan: `company/ORANGE-SMILEY-PLAN.md` (offering/tiers §1, instance architecture §4, targets §7). Build brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Both live in the gitignored `company/` folder in this repo, alongside `COMPANY-LOG.md` and `ORANGE-SMILEY-WEBSITE-PLAN.md`.
 - **Provenance**: scaffolded 2026-08-09 from `C:\Users\Notandi\claude\HalliProjects` at base rev **`562c637`** by site-factory.
-- **Deploy target**: company Azure tenant — **pending kennitala, do not provision anything yet**.
+- **Deploy target**: company Azure tenant (exists since 2026-08-12; company identity details in gitignored `company/COMPANY-LOG.md`) — **no provisioning or deploy without Halli's explicit go-ahead**, and ENHANCEMENTS proposal #1 (neutralize inherited `deploy.yml`) comes before any push.
 
 ## ⚠ Do NOT run /strip-base
 
@@ -50,7 +50,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 - [x] Job 2 — re-skin + re-organize, merged in seven chunks: B (IS default locale) → A (orange brand) → C (business IA) → D (hide portfolio surfaces) → E (lead capture) → F (SEO/JSON-LD + a11y) → G (business-routes e2e). 2012 Jest + 109 Playwright green.
 - [x] Job 3 — `ENHANCEMENTS.md` written. **Stopped for Halli's approval — implement nothing from it until he says so.**
 
-## Self-update module (built 2026-08-10, six phases, on `feat/self-update`)
+## Self-update module (built 2026-08-10, six phases, merged to master `64457ef`)
 
 The fleet update mechanism: release channel published by CI, in-app checker,
 apply/verify, admin screen at `/admin/updates`. Full architecture and the
@@ -66,7 +66,7 @@ the base is documented but deliberately NOT performed (`docs/UPSTREAM-SELF-UPDAT
 
 ## Where things stand for the next session
 
-- **Awaiting Halli**: the 12 proposals in `ENHANCEMENTS.md`, all DRAFT copy in the locale files, and the tier prices on `/thjonusta`.
+- **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files, and the tier prices on `/thjonusta`.
 - **Before the first `git push`**: read ENHANCEMENTS proposal #1 — the inherited `deploy.yml` still aims at Halli's personal Azure resources.
 - Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
 - Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.
