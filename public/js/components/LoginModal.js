@@ -3,6 +3,7 @@ import { decideTotpFailure } from './totpFailure.js';
 import { showToast } from './Toast.js';
 import { t, href }   from '../i18n/i18n.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
+import { SOCIAL_LOGIN_ENABLED } from '../utils/features.js';
 
 export class LoginModal {
   constructor() {
@@ -23,12 +24,13 @@ export class LoginModal {
         <button class="modal__close" aria-label="${t('login.close')}">&times;</button>
         <h2 class="modal__title" id="login-title">${t('login.title')}</h2>
 
+        ${SOCIAL_LOGIN_ENABLED ? `
         <a class="btn btn--outline btn--full btn--google" href="/auth/google${rtParam}"
            data-testid="login-google">
           <img src="/assets/icons/google.svg" alt="" aria-hidden="true" class="btn__icon"/>
           <span>${t('login.continueWithGoogle')}</span>
         </a>
-        <div class="login-modal__divider"><span>${t('login.orSignInWithEmail')}</span></div>
+        <div class="login-modal__divider"><span>${t('login.orSignInWithEmail')}</span></div>` : ''}
 
         <form class="login-form" novalidate data-testid="login-form">
           <div class="form-group">

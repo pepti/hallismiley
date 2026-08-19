@@ -91,14 +91,26 @@ router.post('/totp/disable', csrfProtect, requireAuth, authController.totpDisabl
 router.get('/check-username/:username', checkLimiter, authController.checkUsername);
 router.get('/check-email/:email',       checkLimiter, authController.checkEmail);
 
+// ── Social login kill-switch ──────────────────────────────────────────────────
+// Two-layer flag ported from icelandicstore (#153 there), with the DEFAULT
+// INVERTED: social login is live on this site, so the routes stay open unless
+// SOCIAL_LOGIN_ENABLED=false is set explicitly (there, they 404 unless it is
+// set true). The client half is SOCIAL_LOGIN_ENABLED in
+// public/js/utils/features.js — both must flip to change the experience
+// cleanly. Read per-request so tests can toggle it via env.
+const socialLoginGate = (req, res, next) => {
+  if (process.env.SOCIAL_LOGIN_ENABLED !== 'false') return next();
+  return res.status(404).json({ error: 'Not found', code: 404 });
+};
+
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 // No CSRF (top-level redirects can't carry CSRF headers; state cookie covers it).
 // Reuse authLimiter — 10 requests per 15 min per IP — to deter abuse.
-router.get('/google',           authLimiter, googleAuthController.start);
-router.get('/google/callback',  authLimiter, googleAuthController.callback);
+router.get('/google',           socialLoginGate, authLimiter, googleAuthController.start);
+router.get('/google/callback',  socialLoginGate, authLimiter, googleAuthController.callback);
 
 // ── Facebook OAuth ────────────────────────────────────────────────────────────
-router.get('/facebook',          authLimiter, facebookAuthController.start);
-router.get('/facebook/callback', authLimiter, facebookAuthController.callback);
+router.get('/facebook',          socialLoginGate, authLimiter, facebookAuthController.start);
+router.get('/facebook/callback', socialLoginGate, authLimiter, facebookAuthController.callback);
 
 module.exports = router;
