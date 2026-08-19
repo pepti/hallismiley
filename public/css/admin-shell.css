@@ -128,7 +128,9 @@
 @media (max-width: 640px) {
   .admin-shell { display: block; padding: var(--sp-5) var(--sp-4) var(--sp-7); }
   .admin-shell__menu-btn { display: inline-flex; }
-  .admin-sidebar { position: static; top: auto; display: none; margin-bottom: var(--sp-4); }
+  /* `relative`, not `static` — un-sticks identically, but keeps the sidebar as
+     the containing block for the absolutely-positioned row-tint popover. */
+  .admin-sidebar { position: relative; top: auto; display: none; margin-bottom: var(--sp-4); }
   .admin-sidebar.is-open { display: flex; }
 }
 
@@ -294,9 +296,6 @@
   .admin-sidebar__edit-toggle { display: none; }
 }
 
-  /* `relative`, not `static` — un-sticks identically, but keeps the sidebar as
-     the containing block for the absolutely-positioned row-tint popover. */
-  .admin-sidebar { position: relative; top: auto; display: none; margin-bottom: var(--sp-4); }
 
 /* ── Row colour tints ─────────────────────────────────────────────────────────
    An admin can tint any nav line one of 7 colours (AdminSidebar.js TINT_KEYS) to
