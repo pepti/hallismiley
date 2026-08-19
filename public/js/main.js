@@ -62,6 +62,7 @@ if (IS_TEST) {
     account_disabled:         'auth.errors.accountDisabled',
     google_profile_invalid:   'auth.errors.googleProfileInvalid',
     google_not_configured:    'auth.errors.googleNotConfigured',
+    email_already_registered: 'auth.errors.emailAlreadyRegistered',
     facebook_profile_invalid: 'auth.errors.facebookProfileInvalid',
     facebook_not_configured:  'auth.errors.facebookNotConfigured',
   };

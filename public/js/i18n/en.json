@@ -262,6 +262,7 @@
   "auth.errors.googleProfileInvalid": "Your Google account did not return a verified email.",
   "auth.errors.googleNotConfigured": "Google sign-in is not configured on this site.",
   "auth.errors.facebookProfileInvalid": "Your Facebook account did not return an email. Please use a different sign-in method.",
+  "auth.errors.emailAlreadyRegistered": "An account with this email already exists. Please sign in with your email and password.",
   "auth.errors.facebookNotConfigured": "Facebook sign-in is not configured on this site.",
   "form.submit": "Submit",
   "form.cancel": "Cancel",
