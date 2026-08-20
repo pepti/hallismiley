@@ -156,6 +156,10 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
+          // Always false here: an enrolled account never reaches this payload,
+          // it gets the challenge response instead. Sent anyway so all three
+          // session payloads (login / loginTotp / getSession) have one shape.
+          totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
@@ -200,7 +204,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
-                email_verified, party_access, approval_status
+                totp_enabled, email_verified, party_access, approval_status
            FROM users
           WHERE id = $1`,
         [result.userId]
@@ -238,6 +242,11 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
+          // The 2FA panel paints from this flag. Without it the admin who just
+          // passed the challenge sees the OFF state and is offered "Set up",
+          // which 409s — the account is already enrolled — with no way to reach
+          // the disable form until a reload re-fetches the session.
+          totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
