@@ -48,10 +48,16 @@
   /* Admin-nav row tints — the 12 colours an admin can assign to a sidebar line to
      group related lines (AdminSidebar.js TINT_KEYS). Each token is used twice: as
      a low-alpha wash behind the row and at full chroma for the 3px identity rail.
-     These are the LIGHT values, tuned to read as pale tints on the white surface;
-     themes.css swaps in bright counterparts under html[data-theme], because on a
-     dark surface the tint has to be a LIGHT hue — lightness delta is what the eye
-     reads first, so a dark hue on a dark surface just looks like a smudge.
+     EVERY theme in this repo is dark (classic here plus the five in themes.css),
+     so one set covers all of them and lives here. They must be LIGHT hues: on a
+     dark surface lightness delta is what the eye reads first, so a dark hue on a
+     dark surface just looks like a smudge. The values arrived from icelandicstore
+     — whose :root IS a white surface — as its dark-on-light set under :root with
+     these light-on-dark ones under html[data-theme]. That mapping is wrong here:
+     classic carries no data-theme attribute, so the DEFAULT theme took the
+     white-surface values and its tints were near-invisible (brown/rose/slate all
+     composited under 2:1 against --bg-surface). Do not reintroduce a second set
+     unless a genuinely light theme ships.
 
      Hues are spaced for SEPARATION rather than picked to match the status-pill
      inks: at this alpha the pill red/amber (#c0392b/#b45309) composite only ~7
@@ -62,19 +68,19 @@
      tints the hues no longer fit round the circle, so those two separate by
      CHROMA rather than hue. slate keeps enough chroma to stay clear of
      --bg-hover (measured) — a neutral grey would read as a hovered row. */
-  --nav-tint-red:     #c0392b;
-  --nav-tint-rose:    #9f1239;
-  --nav-tint-brown:   #78350f;
-  --nav-tint-amber:   #ca8a04;
-  --nav-tint-lime:    #4d7c0f;
-  --nav-tint-green:   #15803d;
-  --nav-tint-teal:    #0891b2;
-  --nav-tint-slate:   #475569;
-  --nav-tint-blue:    #1d4ed8;
-  --nav-tint-violet:  #7c3aed;
-  --nav-tint-fuchsia: #a21caf;
-  --nav-tint-pink:    #db2777;
-  --nav-tint-a:       18%;
+  --nav-tint-red:     #F59289;
+  --nav-tint-rose:    #FDA4AF;
+  --nav-tint-brown:   #D2A679;
+  --nav-tint-amber:   #F0C868;
+  --nav-tint-lime:    #A3E635;
+  --nav-tint-green:   #5EE08F;
+  --nav-tint-teal:    #5FD6D0;
+  --nav-tint-slate:   #A8B3C4;
+  --nav-tint-blue:    #93B8FA;
+  --nav-tint-violet:  #CBB6F2;
+  --nav-tint-fuchsia: #F0ABFC;
+  --nav-tint-pink:    #F79AD3;
+  --nav-tint-a:       26%;
 
   /* Spacing scale */
   --sp-1:  4px;

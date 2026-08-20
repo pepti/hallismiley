@@ -191,27 +191,4 @@ html[data-theme] body {
 html[data-theme] .btn--primary { background: var(--accent-gradient, var(--gold)); }
 html[data-theme] .btn--primary:hover { box-shadow: 0 0 24px var(--gold-glow); }
 
-/* ── Admin-nav row tints (every dark theme) ───────────────────────────────────
-   Same reasoning as the status pills above. The light-theme hues in
-   variables.css are saturated mid-tones that read as pastel washes on white;
-   on a dark surface they'd read as holes, because the eye reads the lightness
-   delta first. Swap in the bright pill inks (five of the twelve are the exact
-   values used above, which keeps the admin's colour vocabulary consistent) and
-   raise the wash so the tint still survives the strongly tinted surfaces —
-   lava is warm, aurora indigo, moss green. Shared by the wash AND the rail. */
-html[data-theme] {
-  --nav-tint-red:     #F59289;
-  --nav-tint-rose:    #FDA4AF;
-  --nav-tint-brown:   #D2A679;
-  --nav-tint-amber:   #F0C868;
-  --nav-tint-lime:    #A3E635;
-  --nav-tint-green:   #5EE08F;
-  --nav-tint-teal:    #5FD6D0;
-  --nav-tint-slate:   #A8B3C4;
-  --nav-tint-blue:    #93B8FA;
-  --nav-tint-violet:  #CBB6F2;
-  --nav-tint-fuchsia: #F0ABFC;
-  --nav-tint-pink:    #F79AD3;
-  --nav-tint-a:       26%;
-}
 

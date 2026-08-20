@@ -3976,6 +3976,12 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // would make every existing user's saved local theme get reset on their
     // first login after this migration. A CHECK constraint ignores NULLs, so
     // the column still can't hold an unknown theme name.
+    // WARNING for whoever widens this list: the DO block below guards by
+    // constraint NAME, so appending a copy of this pattern with more themes
+    // silently no-ops (the name already exists) and the DB keeps rejecting the
+    // new values while the UI offers them. A widening migration must instead be
+    // DROP CONSTRAINT IF EXISTS users_theme_check; ADD CONSTRAINT … (both
+    // idempotent, so still safe to re-run).
     name: '081_user_theme',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT`,
@@ -3990,7 +3996,7 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
-    // ── 081: self-update ledger ──────────────────────────────────────────────
+    // ── 082: self-update ledger ──────────────────────────────────────────────
     //
     // One row per release this instance has ever heard about, on the channel it
     // heard about it from. The unique (channel, version) index is what makes
@@ -4009,8 +4015,10 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // auto instance picked, the compatibility flag, the failure reason — so the
     // shape can grow without a migration per field.
     //
-    // Authoritative copy; human-reference duplicate in
-    // server/migrations/081_system_updates.sql.
+    // Authoritative copy. NOTE: ported from orangesmiley, where this same
+    // migration is named 081_system_updates — here it is 082, because the
+    // runner records by NAME and the two chains diverged. There is no
+    // server/migrations/*.sql reference copy for it in this repo.
     name: '082_system_updates',
     statements: [
       `CREATE TABLE IF NOT EXISTS system_updates (
