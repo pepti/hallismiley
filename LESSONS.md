@@ -258,3 +258,32 @@ deliberately never updates `role` on conflict (so a prod-like DB can't be
 escalated by re-running it), meaning fixture rot is permanent until repaired
 by hand. When an admin e2e fails at *entry* (login, first admin click), check
 the fixture row's role before reading any further into the diff.
+
+### 2026-08-20 — a ported token set is only as right as the surface under it
+
+_(factory)_ The nav-tint port carried two value sets — dark-on-light under
+`:root`, light-on-dark under `html[data-theme]`. That mapping is correct in
+icelandicstore, whose `:root` **is** a white Shopify-Dawn surface. Both
+destinations invert it: the base's `:root` is charcoal and every one of its six
+themes is dark; here `:root` is Ash dark and the only `data-theme` is `light`.
+So each repo shipped its tints on the wrong surface and the feature was inert —
+the default theme worst of all, because `classic` carries no attribute and
+therefore silently takes whatever `:root` holds. Generalization: **when porting
+theme tokens, port the surface assumption too.** The check is one line of
+arithmetic (composite the wash, measure contrast against `--bg-surface` and
+`--bg-hover`), and it is worth running for any ported design token, because CSS
+never errors — it just renders something plausible and wrong.
+
+### 2026-08-20 — a renamed test is not a ported test
+
+_(project)_ Adapting the inherited theme suites from six themes to two by
+substituting `'light'` everywhere left four tests asserting `'light' === 'light'`
+in three different files: both logout-revert tests, the write-serialisation test
+(whose slow/fast timing split also collapsed to slow/slow), and the social
+kill-switch "switched ON" case, which set the flag to `'false'` and asserted 404
+while claiming to cover the ON path. All four passed, so nothing looked wrong —
+deleting the entire logout-revert block from `themePrefs.js` kept the suite
+green. Generalization: after any bulk rename inside tests, **mutate the code the
+test guards and confirm it fails.** A test whose two sides were distinct values
+before the rename and equal after it has stopped testing anything, and the CI
+badge cannot tell you that.
