@@ -5,7 +5,7 @@ import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
-import { THEMES, THEME_SWATCHES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
+import { THEMES, THEME_SWATCHES, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -623,7 +623,7 @@ export class ProfileView {
       return `
         <button type="button" class="profile-theme" role="radio" data-theme-id="${escHtml(id)}"
                 aria-checked="${id === active}" tabindex="${id === active ? '0' : '-1'}">
-          <span class="profile-theme__swatch${id === 'black-sand' ? ' profile-theme__swatch--dark' : ''}" aria-hidden="true"></span>
+          <span class="profile-theme__swatch${DARK_THEMES.has(id) ? ' profile-theme__swatch--dark' : ''}" aria-hidden="true"></span>
           <span class="profile-theme__name">${escHtml(name)}</span>
         </button>`;
     }).join('');

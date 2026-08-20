@@ -10,7 +10,11 @@
 // (the :root default, and the value meaning "no data-theme attribute on
 // <html>"). Server code must handle a NULL theme — every account has one until
 // the user opens a picker. Adding a theme needs a new migration to widen the
-// CHECK constraint.
-const THEMES = ['classic', 'light'];
+// CHECK constraint (084_user_theme_widen is the worked example; read the
+// WARNING on 083 before writing another one).
+//
+// 'classic' is BJART, the light default, since 2026-08-20 — the id outlived
+// the palette it was named for. See the header of public/css/themes.css.
+const THEMES = ['classic', 'light', 'mono', 'ember', 'midnight'];
 
 module.exports = { THEMES };

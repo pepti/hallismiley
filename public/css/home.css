@@ -12,6 +12,18 @@
   align-items: center; justify-content: center;
   text-align: center; overflow: hidden;
   padding: var(--sp-8) var(--sp-5);
+  /* The themed gradient IS the hero background since 2026-08-20 (the waterfall
+     video moved to an opt-in admin mode). --bg-base is the fallback the
+     gradient paints over, so a theme that sets --hero-gradient: none still
+     gets a sane surface rather than a transparent hero. */
+  background-color: var(--bg-base);
+  background-image: var(--hero-gradient, var(--bg-tint));
+  background-size: cover;
+}
+/* Media modes (photo/video) put an image behind the copy and a dark veil over
+   it, so the hero stops being a themed surface and the gradient must get out
+   of the way. */
+.lol-hero--media {
   background-color: var(--bg-nav);
   background-image: var(--bg-tint);
 }
@@ -82,8 +94,15 @@
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
+  /* Sized for white text on dark video. Over the gradient it reads as soot
+     under every letter, so the default is a whisper and the media modes keep
+     the heavy version. */
+  filter: drop-shadow(0 1px 2px var(--gold-glow));
+  text-shadow: var(--hero-title-glow, none);
   margin-bottom: 0.3em;
+}
+.lol-hero--media .lol-hero__title {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
 }
 .lol-hero__title span {
   display: block;
@@ -115,7 +134,9 @@
   padding: 16px 52px;
   background: transparent;
   border: 2px solid var(--gold);
-  color: var(--gold-light);
+  /* --accent-ink, not --gold-light: the bright end of the ramp is decorative
+     (3.41 : 1 on white) and this is a button label. */
+  color: var(--accent-ink);
   font-family: var(--font-sans);
   font-size: 0.82rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
@@ -129,6 +150,12 @@
   box-shadow: var(--glow-around);
   color: var(--text-primary);
 }
+/* Over media the hero copy sits on the veil, not on the page, so it keeps the
+   light-on-dark treatment regardless of theme. */
+.lol-hero--media .lol-hero__subtitle    { color: #F5EDE2; }
+.lol-hero--media .lol-hero__cta         { color: #FDE7D3; border-color: #EA580C; }
+.lol-hero--media .lol-hero__cta:hover   { color: #FFFFFF; background: rgba(234, 88, 12, 0.28); }
+.lol-hero--media .lol-hero__scroll span { color: rgba(245, 237, 226, 0.72); }
 
 /* Scroll indicator */
 .lol-hero__scroll {
@@ -601,18 +628,18 @@
   display: flex; justify-content: center;
   gap: 40px; flex-wrap: wrap;
   padding: 40px 48px 30px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .lol-footer__nav-link {
   font-family: 'Barlow', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
-  color: #A9B4C0; text-decoration: none; cursor: pointer;
+  color: var(--text-secondary); text-decoration: none; cursor: pointer;
   background: none; border: none;
   transition: color 200ms ease;
 }
-.lol-footer__nav-link:hover { color: var(--gold); }
+.lol-footer__nav-link:hover { color: var(--accent-ink); }
 
 /* Social icons row */
 .lol-footer__social {
@@ -622,9 +649,9 @@
 
 .lol-footer__social-icon {
   width: 36px; height: 36px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--border-dim);
   display: flex; align-items: center; justify-content: center;
-  color: #A9B4C0; cursor: pointer;
+  color: var(--text-secondary); cursor: pointer;
   transition: all 200ms ease;
   font-size: 0.85rem; text-decoration: none;
 }
@@ -647,7 +674,7 @@
 
 .lol-footer__copy {
   font-family: 'Barlow', sans-serif;
-  font-size: 0.68rem; color: #5B5A56;
+  font-size: 0.68rem; color: var(--text-muted);
   line-height: 1.7; max-width: 520px;
   margin: 0 auto 20px;
 }
@@ -661,11 +688,11 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.62rem; font-weight: 700;
   letter-spacing: 0.15em; text-transform: uppercase;
-  color: #5B5A56; text-decoration: none; cursor: pointer;
+  color: var(--text-muted); text-decoration: none; cursor: pointer;
   background: none; border: none;
   transition: color 200ms ease;
 }
-.lol-footer__legal-link:hover { color: #A9B4C0; }
+.lol-footer__legal-link:hover { color: var(--text-primary); }
 
 /* ── Responsive ── */
 @media (max-width: 1024px) {
