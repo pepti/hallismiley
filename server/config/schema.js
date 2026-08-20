@@ -4054,6 +4054,16 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // would make every existing user's saved local theme get reset on their
     // first login after this migration. A CHECK constraint ignores NULLs, so
     // the column still can't hold an unknown theme name.
+    // WARNING for whoever widens this list (a base-sync will, sooner or later:
+    // the base ships six themes to this repo's two): the DO block below guards
+    // by constraint NAME, so appending a copy of this pattern silently no-ops —
+    // the name already exists — and the DB keeps rejecting the new themes while
+    // themePrefs.js, theme-boot.js and config/themes.js all offer them. The
+    // symptom is a 500 from PATCH /users/me, not the typed 400 userController
+    // promises. A widening migration must be:
+    //   ALTER TABLE users DROP CONSTRAINT IF EXISTS users_theme_check;
+    //   ALTER TABLE users ADD  CONSTRAINT users_theme_check CHECK (theme IN (…));
+    // Both statements are idempotent, so that form is still re-run safe.
     name: '083_user_theme',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT`,
