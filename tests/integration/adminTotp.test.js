@@ -124,6 +124,10 @@ describe('Login — the session must not exist until the second factor passes', 
     expect(res.status).toBe(200);
     expect(res.body.user.username).toBe('totpadmin');
     expect(res.body.usedRecoveryCode).toBe(false);
+    // The SPA holds this payload until the next reload, and the profile 2FA
+    // panel paints from it: without the flag an enrolled admin is shown the OFF
+    // state and offered "Set up", which then 409s.
+    expect(res.body.user.totp_enabled).toBe(true);
     expect(res.headers['set-cookie'].join()).toMatch(/auth_session/);
   });
 
