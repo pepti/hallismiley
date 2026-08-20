@@ -126,7 +126,18 @@ app.post(
   '/csp-report',
   express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '32kb' }),
   (req, res) => {
-    logger.warn({ cspViolation: req.body }, 'CSP violation reported');
+    // The report body carries live URLs — document-uri is whatever page the
+    // violation happened on, and the password-reset page URL contains a valid
+    // single-use token (see emailService). scrubUrl is only wired into the req
+    // serializer, which nothing here uses, so scrub explicitly before logging.
+    const report = req.body && req.body['csp-report'] ? req.body['csp-report'] : req.body;
+    const cspViolation = (report && typeof report === 'object')
+      ? Object.fromEntries(Object.entries(report).map(([k, v]) => [
+          k,
+          (typeof v === 'string' && /uri|referrer|source-file/i.test(k)) ? logger.scrubUrl(v) : v,
+        ]))
+      : report;
+    logger.warn({ cspViolation }, 'CSP violation reported');
     res.status(204).end();
   },
 );

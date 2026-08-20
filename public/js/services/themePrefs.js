@@ -126,7 +126,19 @@ function _flushSave(theme) {
 export function saveThemeToAccount(theme, { delay = SAVE_DEBOUNCE_MS } = {}) {
   const next = THEMES.includes(theme) ? theme : DEFAULT_THEME;
   if (!isAuthenticated()) return Promise.resolve(false);
-  if (getUser()?.theme === next) return Promise.resolve(true);
+  // Already what the account holds — nothing to write. But a save armed by an
+  // EARLIER selection may still be pending, and letting it fire would persist a
+  // theme the user merely passed through (arrow-keying the Appearance radios, or
+  // two clicks inside the debounce window). Disarm it and settle its waiters
+  // truthfully: the account already ends up in the state they asked for.
+  if (getUser()?.theme === next) {
+    _saveWanted = next;
+    clearTimeout(_saveTimer);
+    const waiters = _saveWaiters;
+    _saveWaiters = [];
+    waiters.forEach((r) => r(true));
+    return Promise.resolve(true);
+  }
 
   _saveWanted = next;
   clearTimeout(_saveTimer);

@@ -194,6 +194,24 @@ describe('themePrefs — browser → account', () => {
     expect(mockUpdateCachedUser).toHaveBeenCalledWith({ theme: 'aurora' }, { silent: true });
   });
 
+  // Arrow-keying the Appearance radios walks THROUGH themes. If the user lands
+  // back on the one the account already holds, the fast path returns early —
+  // and used to leave the write armed by the theme they passed through, so the
+  // account silently ended up on a theme they had rejected (and adopted it at
+  // the next session restore, while the UI had said "Saved").
+  test('returning to the account theme inside the window cancels the pending write', async () => {
+    mockUser = { id: 'u1', theme: 'lava' };
+    const { saveThemeToAccount } = load();
+
+    const passedThrough = saveThemeToAccount('aurora');
+    const backToCurrent = saveThemeToAccount('lava');
+
+    await expect(backToCurrent).resolves.toBe(true);
+    await expect(passedThrough).resolves.toBe(true);
+    await flushSave();
+
+    expect(mockUpdateProfile).not.toHaveBeenCalled();
+  });
   test('every caller in a burst resolves with the surviving write\'s outcome', async () => {
     mockUser = { id: 'u1', theme: null };
     const { saveThemeToAccount } = load();
