@@ -28,6 +28,14 @@ async function migrate() {
     // transactions below and released by the explicit unlock (or automatically
     // if the connection dies). The second booter simply waits here, then finds
     // everything applied and continues.
+    // pg_advisory_lock BLOCKS, and the pool sets statement_timeout (see
+    // config/database.js) — which applies to it. Left alone, the waiting
+    // booter is cancelled with 57014 the moment the first booter takes
+    // longer than that timeout to migrate, and exits(1) instead of waiting:
+    // a crash-loop in exactly the slot-swap case this lock exists for.
+    // Disable the timeout on THIS session only (it is our own dedicated
+    // client), then restore it before the client goes back to the pool.
+    await client.query('SET statement_timeout = 0');
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_ID]);
     lockHeld = true;
 
@@ -76,6 +84,9 @@ async function migrate() {
     // Release before returning the connection to the pool: a pooled connection
     // is reused, and a session-level advisory lock left held would travel with
     // it and deadlock the next boot.
+    // Undo the SET above before the client goes back to the pool, where the
+    // next borrower would inherit an unlimited statement_timeout.
+    await client.query('RESET statement_timeout').catch(() => {});
     if (lockHeld) {
       try {
         await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_ID]);
