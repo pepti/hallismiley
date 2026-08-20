@@ -194,6 +194,24 @@ describe('themePrefs — browser → account', () => {
     expect(mockUpdateCachedUser).toHaveBeenCalledWith({ theme: 'classic' }, { silent: true });
   });
 
+  // Arrow-keying the Appearance radios walks THROUGH themes. If the user lands
+  // back on the one the account already holds, the fast path returns early —
+  // and used to leave the write armed by the theme they passed through, so the
+  // account silently ended up on a theme they had rejected (and adopted it at
+  // the next session restore, while the UI had said "Saved").
+  test('returning to the account theme inside the window cancels the pending write', async () => {
+    mockUser = { id: 'u1', theme: 'light' };
+    const { saveThemeToAccount } = load();
+
+    const passedThrough = saveThemeToAccount('classic');
+    const backToCurrent = saveThemeToAccount('light');
+
+    await expect(backToCurrent).resolves.toBe(true);
+    await expect(passedThrough).resolves.toBe(true);
+    await flushSave();
+
+    expect(mockUpdateProfile).not.toHaveBeenCalled();
+  });
   test('every caller in a burst resolves with the surviving write\'s outcome', async () => {
     mockUser = { id: 'u1', theme: null };
     const { saveThemeToAccount } = load();
@@ -216,8 +234,9 @@ describe('themePrefs — browser → account', () => {
     mockUser = { id: 'u1', theme: null };
     const order = [];
     mockUpdateProfile = jest.fn(({ theme }) => new Promise((resolve) => {
-      // First write is slow, second is instant — parallel writes would
-      // finish reversed.
+      // The FIRST write is slow and the second instant, so unchained writes
+      // would resolve reversed and land the account on the theme the user
+      // already moved off. The two themes must differ for that to be visible.
       setTimeout(() => { order.push(theme); resolve({}); }, theme === 'light' ? 60 : 0);
     }));
     const { saveThemeToAccount } = load();
@@ -226,11 +245,11 @@ describe('themePrefs — browser → account', () => {
     // Let the first debounce fire so its PATCH is genuinely in flight — a
     // second call in the same tick would simply be collapsed into it.
     await new Promise((r) => setTimeout(r, 10));
-    const second = saveThemeToAccount('light', { delay: 0 });
+    const second = saveThemeToAccount('classic', { delay: 0 });
     await Promise.all([first, second]);
 
-    expect(order).toEqual(['light', 'light']);
-    expect(mockUpdateCachedUser).toHaveBeenLastCalledWith({ theme: 'light' }, { silent: true });
+    expect(order).toEqual(['light', 'classic']);
+    expect(mockUpdateCachedUser).toHaveBeenLastCalledWith({ theme: 'classic' }, { silent: true });
   });
 });
 
@@ -302,34 +321,36 @@ describe('themePrefs — logout', () => {
   }
 
   test('logout hands the browser back the theme it had before the login', () => {
-    store.ws_theme = 'light'; // this browser's own choice, made while signed out
+    store.ws_theme = 'classic'; // this browser's own choice, made while signed out
     const { initTheme, getTheme } = load();
     initTheme();
 
+    // The account theme must differ from the browser one, or this asserts nothing.
     login({ id: 'a', theme: 'light' });
     expect(getTheme()).toBe('light');
 
     login(null);
-    expect(getTheme()).toBe('light');
+    expect(getTheme()).toBe('classic');
   });
 
   test('a theme picked while signed in does not carry into the next account', () => {
-    store.ws_theme = 'light';
+    store.ws_theme = 'classic';
     const { initTheme, setTheme, getTheme } = load();
     initTheme();
 
     // User A has never picked (theme null), so nothing is adopted — then picks
-    // aurora during the session.
+    // light during the session. It must differ from the browser theme, or the
+    // assertions below pass whatever the logout path does.
     login({ id: 'a', theme: null });
     setTheme('light', { persist: false });
     expect(getTheme()).toBe('light');
 
     login(null);
-    expect(getTheme()).toBe('light');
+    expect(getTheme()).toBe('classic');
 
     // User B, also with no saved theme, gets the browser's own theme — not A's.
     login({ id: 'b', theme: null });
-    expect(getTheme()).toBe('light');
+    expect(getTheme()).toBe('classic');
   });
 
   test('an anonymous visitor is untouched by the logout path', () => {

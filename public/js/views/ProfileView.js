@@ -65,15 +65,25 @@ export class ProfileView {
       // shared with /admin/background, so the two surfaces never drift.
       // Gated on the SERVER-provided role, not a client flag.
       if (profile.role === 'admin') {
-        const langSection = el.querySelector('#lang-section');
-        if (langSection) {
-          const [{ LandingBackgroundAdmin }, { BackgroundLibraryAdmin }] = await Promise.all([
-            import('../components/LandingBackgroundAdmin.js'),
-            import('../components/BackgroundLibraryAdmin.js'),
-          ]);
-          const landing = new LandingBackgroundAdmin({ section: true }).render();
-          langSection.insertAdjacentElement('afterend', landing);
-          landing.insertAdjacentElement('afterend', new BackgroundLibraryAdmin({ section: true }).render());
+        // These editors are optional chrome, and this is the ONLY await that runs
+        // after wrap.innerHTML is populated — so a rejected import() (stale chunk
+        // after a deploy, a blocked request) would otherwise reach the outer catch
+        // and replace a fully working profile page with an error line, taking 2FA,
+        // password change and session revocation down with it. Contain it here.
+        try {
+          const langSection = el.querySelector('#lang-section');
+          if (langSection) {
+            const [{ LandingBackgroundAdmin }, { BackgroundLibraryAdmin }] = await Promise.all([
+              import('../components/LandingBackgroundAdmin.js'),
+              import('../components/BackgroundLibraryAdmin.js'),
+            ]);
+            const landing = new LandingBackgroundAdmin({ section: true }).render();
+            langSection.insertAdjacentElement('afterend', landing);
+            landing.insertAdjacentElement('afterend', new BackgroundLibraryAdmin({ section: true }).render());
+          }
+        } catch {
+          // Profile itself stays usable; the editors live at /admin/background too.
+          // Intentionally silent — nothing here is load-bearing for the page.
         }
       }
     } catch (err) {
