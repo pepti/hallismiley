@@ -1,6 +1,7 @@
 // LandingBackgroundAdmin — the admin-only "landing page background" editor:
-// pick a mode (video | photo | plain) and a veil amount, upload background
-// media, and choose a library image as the hero photo.
+// pick a mode (gradient | video | photo | plain) and a veil amount, upload
+// background media, and choose a library image as the hero photo. gradient is
+// the default since 2026-08-20 (the themed --hero-gradient, no media at all).
 //
 // Mounted in two places, which is why it is a component rather than view code:
 //   • ProfileView   — an admin-only section, the way icelandicstore surfaces it
@@ -66,12 +67,13 @@ export class LandingBackgroundAdmin {
   }
 
   _paint() {
-    const l = this._landing || { mode: 'video', photo_url: null, veil_percent: 100 };
+    const l = this._landing || { mode: 'gradient', photo_url: null, veil_percent: 100 };
     const veil = Number.isFinite(l.veil_percent) ? l.veil_percent : 100;
     this._el.querySelector('#bg-body').innerHTML = `
       <div class="bg-card">
         <label class="bg-row"><span>${t('adminBg.mode')}</span>
           <select id="bg-mode">
+            <option value="gradient" ${l.mode === 'gradient' ? 'selected' : ''}>${t('adminBg.modeGradient')}</option>
             <option value="video" ${l.mode === 'video' ? 'selected' : ''}>${t('adminBg.modeVideo')}</option>
             <option value="photo" ${l.mode === 'photo' ? 'selected' : ''}>${t('adminBg.modePhoto')}</option>
             <option value="plain" ${l.mode === 'plain' ? 'selected' : ''}>${t('adminBg.modePlain')}</option>
@@ -167,7 +169,7 @@ export class LandingBackgroundAdmin {
     try {
       const res = await fetch('/api/v1/admin/background/media/' + id, { method: 'DELETE', credentials: 'include', headers: await csrfHeaders() });
       if (!res.ok && res.status !== 204) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Delete failed'); }
-      await this._load(); // landing may have reset to video if the active photo was deleted
+      await this._load(); // landing may have reset to the gradient if the active photo was deleted
     } catch (err) { showToast(err.message, 'error'); }
   }
 }

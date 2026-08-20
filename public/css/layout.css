@@ -22,7 +22,15 @@
   border-bottom: 1px solid var(--border-light);
 }
 
-.lol-nav__brand { display: flex; align-items: center; width: 200px; }
+/* Sizes to the wordmark rather than to a fixed 200px. "Rekstrarkerfið" is
+   twice as wide as the "Orange / Smiley" stack this column was measured for
+   (2026-08-20), and a fixed width just let the lockup overflow into the first
+   nav link. min-width keeps the old reservation so the nav's three columns
+   still balance on wide viewports. */
+.lol-nav__brand {
+  display: flex; align-items: center;
+  min-width: 200px; flex: 0 0 auto;
+}
 
 .lol-nav__logo {
   display: flex; align-items: center; gap: 10px;
@@ -51,6 +59,15 @@
   text-transform: uppercase; line-height: 1.2;
 }
 .lol-nav__logo-text strong { color: var(--gold); font-weight: 700; }
+/* The company line under the product name. Deliberately quieter and wider-
+   tracked than the product name it sits below — "Rekstrarkerfið" is the thing
+   being sold, "Orange Smiley" is who sells it. */
+.lol-nav__logo-by {
+  display: inline-block;
+  font-size: 0.86em; font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--text-muted);
+}
 
 .lol-nav__center {
   display: flex; align-items: center; gap: 28px;
@@ -204,7 +221,7 @@
   font-family: var(--font-display);
   font-size: 1rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.2em;
-  color: var(--gold-light);
+  color: var(--accent-ink);
 }
 
 .section__count {
@@ -269,7 +286,7 @@
 /* ── Admin page ── */
 .admin-page { padding-top: var(--sp-6); }
 .admin-eyebrow { font-size: 0.7rem; font-weight: 600; color: var(--gold); letter-spacing: 0.25em; text-transform: uppercase; margin-bottom: var(--sp-2); font-family: var(--font-sans); }
-.admin-title { font-family: var(--font-display); font-size: 1.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gold-light); }
+.admin-title { font-family: var(--font-display); font-size: 1.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-ink); }
 .admin-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: var(--sp-6); padding-bottom: var(--sp-5); border-bottom: 1px solid var(--border-dim); }
 .admin-table-wrap { overflow-x: auto; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
@@ -302,7 +319,7 @@
 .legal-header { margin-bottom: var(--sp-7); padding-bottom: var(--sp-5); border-bottom: 1px solid var(--border-dim); }
 .legal-title {
   font-family: var(--font-display); font-size: 2rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.08em; color: var(--gold-light);
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-ink);
   margin: var(--sp-2) 0;
 }
 .legal-meta { font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-mono); }
@@ -337,15 +354,22 @@
 }
 .not-found__title {
   font-family: var(--font-display); font-size: 1.4rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold-light);
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent-ink);
   margin-bottom: var(--sp-4);
 }
 .not-found__desc { font-size: 0.92rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: var(--sp-6); }
 
 /* ── Mobile nav ── */
-@media (max-width: 640px) {
+/* Hamburger from 1024px down, not 640px. Five Icelandic nav labels
+   ("HAFA SAMBAND" alone is 12 characters) plus the cart, the language toggle
+   and two auth CTAs do not fit a tablet viewport: at 768px the row used to
+   run ~50px past the right edge and the links overlapped the buttons. The
+   drawer already existed for phones — this just starts using it before the
+   row breaks rather than after. (Found 2026-08-20 in the iPad e2e screenshot;
+   the longer Rekstrarkerfið wordmark made an existing overflow obvious.) */
+@media (max-width: 1024px) {
   .lol-nav { padding: 0 16px; }
-  .lol-nav__brand { width: auto; }
+  .lol-nav__brand { min-width: 0; }
   .lol-nav__right { width: auto; gap: 8px; }
 
   .lol-nav__hamburger { display: flex; }

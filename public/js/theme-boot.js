@@ -3,7 +3,7 @@
 // no flash of the default theme on reload. Mirrors the THEMES list and the
 // data-theme rule in services/themePrefs.js; keep the two in sync.
 (function () {
-  var THEMES = ['classic', 'light'];
+  var THEMES = ['classic', 'light', 'mono', 'ember', 'midnight'];
   try {
     var theme = localStorage.getItem('ws_theme');
     // classic is the :root default → no attribute. Anything else applies.

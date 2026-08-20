@@ -1,7 +1,7 @@
 /* ── Floating theme switcher ─────────────────────────────────────────────────
    Discreet FAB bottom-left + a small popover with the theme swatches.
    See public/js/components/ThemeSwitcher.js. Everything tokenized so the
-   control itself follows the active theme, including black-sand.
+   control itself follows the active theme, including the dark pair.
    z-index 85: below nav (100), modals (200), toasts (300) — transient bars
    may legitimately cover it. */
 
@@ -84,8 +84,8 @@
 .theme-switcher__swatch[aria-pressed="true"] {
   box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--text-primary);
 }
-/* black-sand swatch — dark fill needs a hint of its gold accent to read as
-   "dark theme" rather than a duplicate of classic ink. */
+/* Dark-theme swatches — a near-black fill needs an orange rim to read as
+   "dark theme" rather than a blob of ink. */
 .theme-switcher__swatch--dark {
   border: 2px solid #F97316;
 }

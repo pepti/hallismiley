@@ -106,7 +106,11 @@ export class NavBar {
                     fill="none" stroke-width="2.1" stroke-linecap="round"/>
             </svg>
           </div>
-          <div class="lol-nav__logo-text"><strong>Orange</strong><br>Smiley</div>
+          <!-- Product lockup: the product name carries the mark, the company
+               name rides underneath. Halli's naming call 2026-08-20 — the
+               ASCII "Rekstrarkerfi" is for domains and identifiers; anything a
+               human reads uses the definite form. -->
+          <div class="lol-nav__logo-text"><strong>Rekstrarkerfið</strong><br><span class="lol-nav__logo-by">Orange Smiley</span></div>
         </a>
       </div>
 

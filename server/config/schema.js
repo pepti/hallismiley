@@ -4077,6 +4077,56 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        END $$`,
     ],
   },
+  {
+    // Widen users.theme for the five-theme set that came in with the product
+    // rename (Rekstrarkerfið, 2026-08-20): 'mono', 'ember' and 'midnight' join
+    // the two that 083 allowed.
+    //
+    // This is the migration shape 083's WARNING calls for, and the reason it
+    // exists: 083 guards by constraint NAME, so a second copy of that DO block
+    // would find users_theme_check already present, no-op, and leave the DB
+    // rejecting the new themes while all three client/server lists offer them
+    // (symptom: a 500 from PATCH /users/me, not the typed 400). DROP + ADD is
+    // the only form that actually widens, and both statements are idempotent,
+    // so this stays re-run safe.
+    //
+    // WIDEN-ONLY, per invariant 14 (expand/contract). 'classic' and 'light'
+    // stay in the list even though 'classic' now labels a light theme and
+    // 'light' is now labelled Pappír: during a self-update swap the OLD
+    // container still serves against the NEW schema, and it will happily PATCH
+    // the ids it knows. Dropping an id from this CHECK is only safe a release
+    // after nothing offers it any more.
+    name: '084_user_theme_widen',
+    statements: [
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_theme_check`,
+      `ALTER TABLE users ADD CONSTRAINT users_theme_check
+         CHECK (theme IN ('classic', 'light', 'mono', 'ember', 'midnight'))`,
+    ],
+  },
+  {
+    // Retire the waterfall hero (Halli, 2026-08-20). Changing the code default
+    // in adminBackgroundController/HomeView only covers instances that never
+    // saved a landing_background row; any instance that has one — including
+    // this repo's dev DB — keeps whatever mode it stored, which is 'video'.
+    // So the stored row moves too, or the change is invisible where it counts.
+    //
+    // Scoped to 'video' on purpose: an admin who deliberately chose 'photo' or
+    // 'plain' keeps their choice. This flips the old default, not everyone's
+    // configuration.
+    //
+    // Forward-compatible for the swap window (invariant 14): the previous
+    // release's HomeView treats any mode that is not 'photo' or 'plain' as
+    // video, so an old container reading 'gradient' renders the old hero
+    // rather than erroring. Its admin PATCH would reject 'gradient', which is
+    // a degraded admin screen for the length of a swap, not an outage.
+    name: '085_landing_background_gradient',
+    statements: [
+      `UPDATE site_content
+          SET value = jsonb_set(value, '{mode}', '"gradient"'::jsonb)
+        WHERE key = 'landing_background'
+          AND value->>'mode' = 'video'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

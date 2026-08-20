@@ -412,7 +412,7 @@
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--gold-light);
+  color: var(--accent-ink);
   font-size: 0.75rem;
   cursor: pointer;
   display: flex;

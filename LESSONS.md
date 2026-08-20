@@ -287,3 +287,28 @@ green. Generalization: after any bulk rename inside tests, **mutate the code the
 test guards and confirm it fails.** A test whose two sides were distinct values
 before the rename and equal after it has stopped testing anything, and the CI
 badge cannot tell you that.
+
+### 2026-08-20 — a hidden browser pane freezes CSS transitions mid-flight
+
+_(factory)_ Verifying the five-theme set meant flipping `html[data-theme]` in
+the page and measuring contrast from `getComputedStyle`. Three surfaces came
+back wrong — the hero CTA stuck on `#9A3412` under every theme, the active nav
+link at **1.03 : 1** against its own navbar — while surfaces one DOM node away
+reported correct per-theme values. The tokens themselves were right on the
+failing elements (`getPropertyValue('--accent-ink')` returned the ember value
+while `color` returned the classic one), which is impossible for a plain
+cascade bug and is what eventually gave it away.
+
+The failing elements were exactly the ones carrying `transition: color`. The
+Browser pane was not displayed, so the compositor produced no frames, `rAF`
+never fired, and every running transition sat frozen at its *start* value —
+which `getComputedStyle` faithfully reports, because the animated value is the
+computed value. Injecting `* { transition: none !important }` before measuring
+returned all five themes to sane numbers (min 5.01 : 1).
+
+Generalization: **when scripting visual measurements, disable transitions and
+animations first** — a transition mid-flight is indistinguishable from a
+cascade bug in a computed-style readout, and a headless or hidden pane keeps it
+mid-flight forever. Corollary for triage: if a token resolves correctly on an
+element but the property that consumes it does not, suspect animation state
+before you suspect specificity.

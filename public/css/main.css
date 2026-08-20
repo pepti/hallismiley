@@ -144,7 +144,7 @@ body::before {
 .profile-lang-error { margin-top: 8px; }
 .profile-lang-actions { margin-top: 12px; }
 
-/* Profile page — Appearance (theme) section. Same six themes as the floating
+/* Profile page — Appearance (theme) section. Same five themes as the floating
    switcher, laid out as labelled cards so the section reads as a setting. */
 .profile-theme-grid {
   display: grid;
@@ -180,7 +180,9 @@ body::before {
   background: var(--swatch);
   border: 1px solid var(--border);
 }
-/* black-sand reads as a duplicate of classic ink without a hint of its gold accent. */
-.profile-theme__swatch--dark { border: 2px solid #E8C06A; }
+/* A dark theme’s swatch is a near-black circle; on the light themes that reads
+   as a blob of ink rather than "this is the dark one". The orange rim is what
+   makes it legible as a theme preview. */
+.profile-theme__swatch--dark { border: 2px solid #F97316; }
 .profile-theme__name { font-size: 14px; }
 .profile-theme-status { margin: 12px 0 0; font-size: 13px; color: #888; min-height: 18px; }

@@ -1,5 +1,5 @@
 // Floating theme switcher — a discreet FAB (bottom-left, opposite the
-// change-request widget) opening a small popover with the six site themes
+// change-request widget) opening a small popover with the five site themes
 // (see themes.css) and, for admins only, a per-browser TEST-mode switch that
 // overrides the server's app-env (see services/themePrefs.js).
 //
@@ -9,7 +9,7 @@
 import { t } from '../i18n/i18n.js';
 import { isAdmin } from '../services/auth.js';
 import {
-  THEMES, THEME_SWATCHES, getTheme, setTheme,
+  THEMES, THEME_SWATCHES, DARK_THEMES, getTheme, setTheme,
   getServerEnv, getEffectiveEnv, setTestOverride,
 } from '../services/themePrefs.js';
 
@@ -101,7 +101,7 @@ export class ThemeSwitcher {
     const active = getTheme();
     const swatches = THEMES.map((id) => {
       const name = t(`themeSwitcher.theme.${id}`);
-      return `<button type="button" class="theme-switcher__swatch"
+      return `<button type="button" class="theme-switcher__swatch${DARK_THEMES.has(id) ? ' theme-switcher__swatch--dark' : ''}"
         data-theme-id="${id}" aria-pressed="${id === active}"
         aria-label="${esc(name)}" title="${esc(name)}"></button>`;
     }).join('');

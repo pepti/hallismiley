@@ -17,11 +17,21 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.lol-hero__title')).toContainText('in one place');
   });
 
-  test('homepage hero has the video background by default', async ({ page }) => {
-    // Halli's re-theme call (2026-08-09): the moving hero is the wow factor,
-    // like hallismiley. Photo/plain modes remain admin-selectable.
+  test('homepage hero has the themed gradient background by default', async ({ page }) => {
+    // Halli's call (2026-08-20, with the rename to Rekstrarkerfið): the
+    // waterfall video came out and the themed --hero-gradient took its place.
+    // Video/photo/plain remain admin-selectable, so this asserts the DEFAULT,
+    // not the only possibility.
     await page.goto('/');
-    await expect(page.locator('video.lol-hero__bg')).toBeAttached();
+    const hero = page.locator('.lol-hero');
+    await expect(hero).toBeVisible();
+    // No media layer at all — nothing to veil, so no overlay either.
+    await expect(page.locator('video.lol-hero__bg')).toHaveCount(0);
+    await expect(page.locator('.lol-hero__overlay')).toHaveCount(0);
+    await expect(hero).not.toHaveClass(/lol-hero--media/);
+    // The gradient is painted from the token rather than an inline style, so
+    // assert on what actually reaches the pixel.
+    await expect(hero).toHaveCSS('background-image', /linear-gradient/);
   });
 
   test('Projects page loads and shows project cards', async ({ page }) => {

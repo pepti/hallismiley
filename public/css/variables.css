@@ -1,65 +1,106 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* ── Orange Smiley "classic" = ASH — quiet warm charcoal, softened embers ──
-     Halli tested the ten-theme exploration set in the picker and chose Ash
-     (2026-08-09): calm, professional, ember-warm rather than ember-loud.
-     These are the Ash tokens promoted to the default. Token NAMES are
-     inherited from the base (incl. the legacy --gold/--teal aliases) so
-     every var() reference resolves without component edits.
+  /* ── Rekstrarkerfið "classic" = BJART — white paper, black ink, orange ─────
+     Halli's call (2026-08-20): the product got its own name and a LIGHT main
+     theme, with orange / black / white as the only brand colours. These are
+     the Bjart tokens promoted to the default. Token NAMES are inherited from
+     the base (incl. the legacy --gold/--teal aliases) so every var() reference
+     resolves without component edits.
 
-     Palette discipline (design rules): dominant = the softened orange ramp
-       #F3B577  --gold-light   highlights, hovers
-       #E8853D  --gold         THE accent — icons, links, price numerals
-       #B45309  --gold-dark    borders, gradient tails, pressed
-     sharp accent = warm ivory (--teal), used sparingly; neutrals = warm
-     charcoals + warm off-white ink. */
+     Note for anyone reading git history: :root used to be ASH, the warm dark
+     charcoal theme. Ash was not deleted — it lives on as the `ember` theme in
+     themes.css with its values intact. Inverting the default is why the
+     "light-mode fixes" that used to sit under html[data-theme="light"] are now
+     unscoped, token-driven rules: the fixes became the norm.
 
-  /* Warm charcoal surfaces */
-  --bg-base:     #161412;
-  --bg-base-rgb: 22, 20, 18;
-  --bg-surface:  #1C1916;
-  --bg-elevated: #23201B;
-  --bg-nav:      #100F0D;
-  --bg-nav-rgb:  16, 15, 13;
-  --bg-hover:    #2A2620;
-  /* Ash is deliberately pattern-free — no tint layer behind content. The
-     ambient drift in main.css still breathes, but through Ash's soft glow
-     values it is barely-there, which is the point. */
+     Palette discipline (design rules): dominant = the orange ramp
+       #EA580C  --gold-light   DECORATIVE ONLY (3.41 : 1) — rules, hovers, fills
+       #C2410C  --gold         THE accent — icons, links, price numerals
+                               (4.96 : 1 on paper, 5.18 : 1 on card)
+       #9A3412  --gold-dark    accent-as-text, borders, pressed (7.00 / 7.31)
+     sharp accent = near-black (--teal), used sparingly; neutrals = white,
+     whisper-grey and black ink. Every text token clears WCAG AA on both the
+     page (#FAFAFA) and cards (#FFFFFF):
+       --text-primary   #0A0A0B  18.96 / 19.79
+       --text-secondary #4B4B50   8.31 /  8.67
+       --text-muted     #6B6B72   5.07 /  5.29 */
+
+  /* White surfaces — the page is a whisper off-white so white cards lift */
+  --bg-base:     #FAFAFA;
+  --bg-base-rgb: 250, 250, 250;
+  --bg-surface:  #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-nav:      #FFFFFF;
+  --bg-nav-rgb:  255, 255, 255;
+  --bg-hover:    #F1F1F2;
+  /* Bjart is deliberately pattern-free — no tint layer behind content. */
   --bg-tint:     none;
 
-  --border:       rgba(217, 119, 6, 0.42);
-  --border-dim:   rgba(217, 119, 6, 0.22);
-  --border-light: rgba(217, 119, 6, 0.10);
+  /* Neutral hairlines. Orange-tinted borders muddy a white page; ink at low
+     alpha keeps the black/white/orange discipline intact. */
+  --border:       rgba(10, 10, 11, 0.20);
+  --border-dim:   rgba(10, 10, 11, 0.11);
+  --border-light: rgba(10, 10, 11, 0.06);
 
-  /* The softened orange ramp */
-  --gold:         #E8853D;
-  --gold-light:   #F3B577;
-  --gold-dark:    #B45309;
-  --gold-glow:    rgba(217, 119, 6, 0.10);
-  --glow-around:  0 0 30px rgba(217, 119, 6, 0.14);
-  /* The sharp accent — warm ivory, rare by design */
-  --teal:         #D6CDC2;
-  --teal-dim:     rgba(214, 205, 194, 0.08);
+  /* The orange ramp */
+  --gold:         #C2410C;
+  --gold-light:   #EA580C;
+  --gold-dark:    #9A3412;
+  --gold-glow:    rgba(194, 65, 12, 0.14);
+  --glow-around:  0 0 26px rgba(194, 65, 12, 0.16);
+  /* The sharp accent — near-black, rare by design */
+  --teal:         #0A0A0B;
+  --teal-dim:     rgba(10, 10, 11, 0.06);
 
-  /* Accent gradients — shared by CTAs and the hero title fill */
-  --accent-gradient:     linear-gradient(135deg, #F3B577 0%, #D97706 100%);
-  --accent-gradient-dim: linear-gradient(135deg, rgba(243, 181, 119, 0.18), rgba(217, 119, 6, 0.18));
+  /* Accent gradients — shared by CTAs and the hero title fill. Both stops
+     carry --on-accent labels, so both must clear AA against white:
+     #C2410C is 5.18 : 1 and #9A3412 is 7.31 : 1. The brighter #EA580C
+     (3.56 : 1) is deliberately NOT a stop — it would fail at the light end
+     of every filled button. */
+  --accent-gradient:     linear-gradient(135deg, #C2410C 0%, #9A3412 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(194, 65, 12, 0.14), rgba(154, 52, 18, 0.14));
   --hero-title-glow: none;
 
   /* Legacy aliases used in components */
-  --accent-amber:     #E8853D;
-  --accent-amber-dim: rgba(232, 133, 61, 0.10);
-  --accent-blue:      #D6CDC2;
-  --accent-blue-dim:  rgba(214, 205, 194, 0.08);
+  --accent-amber:     #C2410C;
+  --accent-amber-dim: rgba(194, 65, 12, 0.10);
+  --accent-blue:      #0A0A0B;
+  --accent-blue-dim:  rgba(10, 10, 11, 0.06);
 
-  /* Warm ink */
-  --text-primary:   #EFE8DF;
-  --text-secondary: #BFB2A2;
-  --text-muted:     #8F8474;
+  /* Ink */
+  --text-primary:   #0A0A0B;
+  --text-secondary: #4B4B50;
+  --text-muted:     #6B6B72;
 
-  --success: #4caf78;
-  --error:   #e0635c;
+  /* ── Cross-theme contract tokens (added 2026-08-20 with the 5-theme set) ──
+     --on-accent  the label colour ON a filled accent surface (orange or ink
+                  fill). NOT the same as a background token: `midnight` fills
+                  with bright #FB923C, which needs a BLACK label, while every
+                  light theme needs white. Components that used to say
+                  `color: var(--bg-nav)` on an orange fill say --on-accent now
+                  — under a dark theme --bg-nav is near-black, which on an
+                  orange fill is the wrong side of the contrast line.
+     --accent-ink the accent colour that is safe as TEXT on the page
+                  background. --gold-light is decorative-only in light themes
+                  (3.41 : 1), so accent-coloured copy must reach for this.
+     --hero-gradient  the hero background (see home.css). Replaced the
+                  waterfall video as the default hero — Halli, 2026-08-20.
+     --accent-hover  the fill a filled control takes on hover. It must keep
+                  --on-accent legible, which rules out simply reaching for
+                  --gold-light: white on #EA580C is 3.56 : 1.
+     --ambient-opacity  gates the drifting ember wash in main.css. The wash is
+                  tuned for a near-black page; on paper it reads as a dirty
+                  smudge, so light themes take it to 0. */
+  --on-accent:       #FFFFFF;
+  --accent-ink:      #9A3412;
+  --accent-hover:    #9A3412;
+  --ambient-opacity: 0;
+  --hero-gradient:   linear-gradient(155deg, #FFFFFF 0%, #FFF4EA 38%, #FFE3CC 70%, #FFD1AC 100%);
+  --bg-gradient:     none;
+
+  --success: #1c7c54;
+  --error:   #b3261e;
 
   /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
   --test-blue:     #2f6fed;
@@ -69,35 +110,33 @@
   /* Admin-nav row tints — the 12 colours an admin can assign to a sidebar line to
      group related lines (AdminSidebar.js TINT_KEYS). Each token is used twice: as
      a low-alpha wash behind the row and at full chroma for the 3px identity rail.
-     These are the light-on-dark values for the Ash default (:root). The
-     dark-on-light counterparts live under html[data-theme="light"] in
-     themes.css — this repo's ONLY light surface. The two sets arrived from
-     icelandicstore mapped the other way round (its :root IS a white surface),
-     which put the white-surface values on Ash and the dark-surface values on
-     the light theme, leaving both themes' tints near-invisible.
+
+     These are the DARK-ON-LIGHT values, because :root is now a white surface:
+     saturated mid-tones that composite to pale washes on white, at a lower
+     alpha because a light surface needs less wash to read. The light-on-dark
+     counterparts live under the `ember` and `midnight` themes in themes.css.
+     (Before 2026-08-20 the mapping was the other way round — :root was Ash.
+     Whoever adds a sixth theme: a dark theme MUST bring its own tint block, or
+     it inherits these and its sidebar tints go near-invisible.)
 
      Hues are spaced for SEPARATION rather than picked to match the status-pill
-     inks: at this alpha the pill red/amber (#c0392b/#b45309) composite only ~7
-     apart on white, which is too close to group by. Red stays --error; the rest
-     are spread out.
-
-     Ordered round the wheel. brown and slate are intentionally muted: at twelve
-     tints the hues no longer fit round the circle, so those two separate by
-     CHROMA rather than hue. slate keeps enough chroma to stay clear of
-     --bg-hover (measured) — a neutral grey would read as a hovered row. */
-  --nav-tint-red:     #F59289;
-  --nav-tint-rose:    #FDA4AF;
-  --nav-tint-brown:   #D2A679;
-  --nav-tint-amber:   #F0C868;
-  --nav-tint-lime:    #A3E635;
-  --nav-tint-green:   #5EE08F;
-  --nav-tint-teal:    #5FD6D0;
-  --nav-tint-slate:   #A8B3C4;
-  --nav-tint-blue:    #93B8FA;
-  --nav-tint-violet:  #CBB6F2;
-  --nav-tint-fuchsia: #F0ABFC;
-  --nav-tint-pink:    #F79AD3;
-  --nav-tint-a:       26%;
+     inks: at this alpha the pill red/amber composite only ~7 apart on white,
+     which is too close to group by. Ordered round the wheel; brown and slate
+     are intentionally muted — at twelve tints the hues no longer fit round the
+     circle, so those two separate by CHROMA rather than hue. */
+  --nav-tint-red:     #c0392b;
+  --nav-tint-rose:    #9f1239;
+  --nav-tint-brown:   #78350f;
+  --nav-tint-amber:   #ca8a04;
+  --nav-tint-lime:    #4d7c0f;
+  --nav-tint-green:   #15803d;
+  --nav-tint-teal:    #0891b2;
+  --nav-tint-slate:   #475569;
+  --nav-tint-blue:    #1d4ed8;
+  --nav-tint-violet:  #7c3aed;
+  --nav-tint-fuchsia: #a21caf;
+  --nav-tint-pink:    #db2777;
+  --nav-tint-a:       18%;
 
   /* Spacing scale */
   --sp-1:  4px;
@@ -109,23 +148,24 @@
   --sp-7:  48px;
   --sp-8:  64px;
 
-  /* Typography — Barlow carries Ash's quiet voice; Cinzel remains available
-     to the alternate themes (editorial). Fallback stacks end in bare generic
+  /* Typography — Barlow carries the quiet voice; Cinzel remains available to
+     the alternate themes (editorial). Fallback stacks end in bare generic
      families — no named default fonts (design rule). */
   --font-display: 'Barlow', sans-serif;
   --font-sans:    'Barlow', 'Barlow Condensed', sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
 
-  /* Soft corners — Ash rounds gently where Ember was sharp */
+  /* Soft corners */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
 
-  /* Shadows — low, matte */
-  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
-  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.75);
-  --shadow-gold:  0 0 20px rgba(217, 119, 6, 0.18);
+  /* Shadows — low and matte. Ink-based, not black-on-black: these are the
+     values for a white page, and the dark themes override them. */
+  --shadow-card:  0 1px 3px rgba(10, 10, 11, 0.10), 0 1px 2px rgba(10, 10, 11, 0.06);
+  --shadow-modal: 0 16px 56px rgba(10, 10, 11, 0.22);
+  --shadow-gold:  0 0 20px rgba(194, 65, 12, 0.18);
 
   /* Transitions */
   --transition: 200ms ease;

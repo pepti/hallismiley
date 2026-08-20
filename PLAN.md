@@ -54,3 +54,11 @@ Acceptance: 2012 Jest + 109 Playwright green · lint clean · i18n in sync · in
 1. Confirm tier pricing (39–79 þ.kr./mán is DRAFT).
 2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
 3. ENHANCEMENTS.md decisions after Job 3.
+
+## Product name (decided 2026-08-20)
+
+- **Rekstrarkerfi** — ASCII base form for everything technical: domain (`rekstrarkerfi.is`), slugs, identifiers, email addresses, metadata.
+- **"Rekstrarkerfið" by Orange Smiley** — definite form (fallbeyging) for all spoken/UI/advertising use.
+- Logo unchanged: the existing orange smiley mark carries the product.
+- **Registered 2026-08-20:** `rekstrarkerfi.is` **and** `rekstrarkerfið.is` (IDN — catches the spoken definite form typed directly) — both on Halli's ISNIC account. heildarkerfi.is was passed on. TODO when DNS goes live: 301 rekstrarkerfið.is → rekstrarkerfi.is (canonical).
+- Adopting the name in site copy/locale files is **not yet approved** — separate pass with Halli's sign-off per the CLAUDE.md copy rules.

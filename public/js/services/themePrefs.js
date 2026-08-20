@@ -27,7 +27,13 @@
 
 import { getUser, isAuthenticated, updateProfile, updateCachedUser } from './auth.js';
 
-export const THEMES = ['classic', 'light'];
+// Order is the picker's order: the light default first, then the other light
+// themes, then the dark pair. 'classic' is BJART (light) since 2026-08-20 —
+// the id outlived the palette it was named for, and is kept because
+// theme-boot.js encodes "classic = no data-theme attribute" and because the
+// users.theme CHECK may only be widened, never narrowed (invariant 14). Same
+// reason 'light' survives under its new label, Pappír.
+export const THEMES = ['classic', 'light', 'mono', 'ember', 'midnight'];
 const DEFAULT_THEME = 'classic';
 const THEME_KEY = 'ws_theme';
 const TEST_KEY  = 'ws_test_override';
@@ -38,9 +44,18 @@ const DEMO_KEY  = 'ws_demo_mode';
 // theme regardless of which one is active, so these can't come from the live
 // CSS variables. The colour themes show an accent→background gradient so the
 // swatch previews their immersive look.
+// Which themes paint a dark page. Both pickers use it to put an orange rim on
+// the dark swatches — a near-black circle on a light picker otherwise reads as
+// a blob of ink rather than "this is the dark one". Kept here so the two
+// pickers cannot disagree about which themes are dark.
+export const DARK_THEMES = new Set(['ember', 'midnight']);
+
 export const THEME_SWATCHES = {
-  classic: 'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
-  light:   'linear-gradient(135deg, #EA580C 0%, #F7F2EC 70%)',
+  classic:  'linear-gradient(135deg, #C2410C 0%, #FFFFFF 70%)',
+  light:    'linear-gradient(135deg, #C2410C 0%, #F7F2EC 70%)',
+  mono:     'linear-gradient(135deg, #C2410C 0%, #FFFFFF 42%, #000000 100%)',
+  ember:    'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
+  midnight: 'linear-gradient(135deg, #FB923C 0%, #000000 70%)',
 };
 
 function read(key) {
