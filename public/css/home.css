@@ -27,6 +27,23 @@
   background-color: var(--bg-nav);
   background-image: var(--bg-tint);
 }
+/* Scene mode — the Iceland scene engine (SceneStage prepends .ice-scene as
+   the first child; hero copy stacks above on its existing z-index). The
+   ember-wash ::after is switched off: the photograph IS the atmosphere. */
+.lol-hero--scene { background-color: var(--bg-nav); background-image: none; }
+.lol-hero--scene::after { content: none; }
+/* The molten-gradient title fill was tuned for a near-black video. Over a
+   living photograph it lands on greens and skies and turns to mud — scene
+   mode trades it for white with real shadow, which reads on every scene and
+   every theme grade. */
+.lol-hero--scene .lol-hero__title {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: #FFFFFF;
+  color: #FFFFFF;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.6));
+}
 /* Ember wash over the video/plain background — sits between the media layer
    and the content, tinting the whole hero toward the brand. */
 .lol-hero::after {

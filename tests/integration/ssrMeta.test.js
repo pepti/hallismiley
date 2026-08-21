@@ -60,6 +60,19 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.text).toMatch(/rel="canonical" href="[^"]*\/en\/"/);
   });
 
+  test('home preloads the Iceland scene hero image (LCP insurance)', async () => {
+    // Injected by ssrMeta from server/config/sceneManifest.json — the tag must
+    // sit BEFORE the main stylesheet so the fetch starts ahead of CSS parse.
+    const res = await request(app).get('/is/');
+    expect(res.status).toBe(200);
+    const preloadAt = res.text.indexOf('id="ssr-scene-preload"');
+    const cssAt = res.text.indexOf('href="/css/main.css"');
+    expect(preloadAt).toBeGreaterThan(-1);
+    expect(cssAt).toBeGreaterThan(preloadAt);
+    expect(res.text).toMatch(/<link rel="preload" as="image"[^>]*fetchpriority="high"/);
+    expect(res.text).toMatch(/imagesrcset="[^"]*\/assets\/iceland\/skogafoss-[^"]*\.avif[^"]*"/);
+  });
+
   test('business routes render locale-aware business meta', async () => {
     const th = await request(app).get('/is/thjonusta');
     expect(th.status).toBe(200);

@@ -312,3 +312,33 @@ cascade bug in a computed-style readout, and a headless or hidden pane keeps it
 mid-flight forever. Corollary for triage: if a token resolves correctly on an
 element but the property that consumes it does not, suspect animation state
 before you suspect specificity.
+
+### 2026-08-21 — a detached <img> still downloads, so "it loaded" proves nothing
+
+_(project)_ The scene engine built its `<picture>`, configured the `<img>`
+(srcset, priority, load handler) — and never appended it. Nothing looked
+broken from the inside: browsers fetch images the moment `src`/`srcset` is
+set, connected to the DOM or not, so the photo downloaded, `load` fired, and
+the `is-loaded` class lit. Every signal derived from the element itself was
+green while the page showed only the blurred LQIP. The e2e caught it because
+it asserted on the QUERIED element (`.ice-scene__img` attached, then
+`naturalWidth > 0`), not on the class the engine sets for itself.
+Generalization: **assert on what the DOM serves, never on the flags your own
+code raises** — an implementation can satisfy its own bookkeeping while
+delivering nothing.
+
+### 2026-08-21 — computed-style tests race everything that repaints
+
+_(project)_ Three Playwright failures in the new scene spec had one shape:
+reading computed styles at a moment something else owned the pixels. Axe
+flagged 10 contrast violations in the footer because the session-restore
+`authchange` re-renders the view and axe sampled MID-fadeIn (opacity ~0.5
+composites #4B4B50 ink to #a8a8aa); setting `data-theme` via
+`page.evaluate` lost a race with `themePrefs.applyTheme()` on that same
+authchange, silently reverting to classic. Fixes that hold: measure after the
+page settles (the existing no-JS-errors spec already waited 2s — same
+reason), and install state the way the app persists it (`ws_theme` in
+localStorage before load, so theme-boot applies it pre-paint) instead of
+poking the DOM from outside. Corollary of the 2026-08-20 lesson: a hidden
+browser pane freezes transitions; a VISIBLE one still repaints on its own
+schedule.

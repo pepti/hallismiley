@@ -68,3 +68,6 @@ data/import/
 
 # Company/business docs — belong in the future orange-smiley/company repo, not the website repo
 company/
+
+# Iceland scene source photos (originals; only generated derivatives ship)
+assets-src/

@@ -3,9 +3,9 @@
 // library. Two pieces of config live in site_content (locale 'en', read
 // publicly via GET /api/v1/content/:key):
 //   landing_background → { mode, photo_url, veil_percent }
-//     mode: 'gradient' (the default hero since 2026-08-20 — the themed
-//           --hero-gradient, no media) | 'video' | 'photo' (a library image)
-//           | 'plain'
+//     mode: 'scene' (the default since 2026-08-21 — the Iceland scene
+//           engine, public/js/scenes/) | 'gradient' (the themed
+//           --hero-gradient) | 'video' | 'photo' (a library image) | 'plain'
 //     The waterfall video was the default until Halli replaced it with the
 //     gradient; 'video' is kept as a selectable mode rather than removed, so
 //     the asset and the admin affordance both still work.
@@ -23,8 +23,8 @@ const { mediaTypeForMime } = require('../middleware/upload');
 const CONFIG_LOCALE   = 'en';
 const LANDING_KEY     = 'landing_background';
 const LIBRARY_KEY     = 'background_library';
-const VALID_MODES     = ['gradient', 'video', 'photo', 'plain'];
-const DEFAULT_LANDING = { mode: 'gradient', photo_url: null, veil_percent: 100 };
+const VALID_MODES     = ['scene', 'gradient', 'video', 'photo', 'plain'];
+const DEFAULT_LANDING = { mode: 'scene', photo_url: null, veil_percent: 100 };
 const DEFAULT_LIBRARY = { enabled: false };
 
 async function readConfig(key, fallback) {

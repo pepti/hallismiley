@@ -4127,6 +4127,25 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
           AND value->>'mode' = 'video'`,
     ],
   },
+  {
+    // The Iceland scene becomes the default hero (Halli, 2026-08-21 — the
+    // "Úti á Íslandi" re-skin). Same reasoning as 085: the code default only
+    // covers instances without a stored row, so the stored old default moves
+    // too. Scoped to 'gradient' — deliberate photo/video/plain choices keep.
+    //
+    // Swap-window safe (invariant 14): the previous release's HomeView falls
+    // back to its own default for a mode it doesn't know, so an old container
+    // reading 'scene' renders the gradient hero rather than erroring; its
+    // admin PATCH rejects 'scene' — a degraded admin screen for the length of
+    // the swap, not an outage.
+    name: '086_landing_background_scene',
+    statements: [
+      `UPDATE site_content
+          SET value = jsonb_set(value, '{mode}', '"scene"'::jsonb)
+        WHERE key = 'landing_background'
+          AND value->>'mode' = 'gradient'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

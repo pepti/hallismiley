@@ -96,6 +96,18 @@
   --accent-ink:      #9A3412;
   --accent-hover:    #9A3412;
   --ambient-opacity: 0;
+
+  /* ── Iceland scene grading (engine: public/js/scenes/, iceland-scene.css).
+     Five themes = five lights on the same photographs. Bjart is the daylight
+     reference: no filter, a scrim that darkens enough for white hero text
+     (bottom-heavy so scenes melt into the page). --scene-aurora gates the
+     chunk-3 aurora layer: only themes dark enough to sell a night sky. */
+  --scene-filter: none;
+  --scene-scrim: linear-gradient(180deg, rgba(10, 10, 11, 0.34) 0%, rgba(10, 10, 11, 0.18) 40%, rgba(10, 10, 11, 0.52) 100%);
+  --scene-scrim-strength: 1;
+  --scene-chip-bg: rgba(10, 10, 11, 0.52);
+  --scene-chip-fg: #FFFFFF;
+  --scene-aurora: 0;
   --hero-gradient:   linear-gradient(155deg, #FFFFFF 0%, #FFF4EA 38%, #FFE3CC 70%, #FFD1AC 100%);
   --bg-gradient:     none;
 
