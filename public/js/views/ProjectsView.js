@@ -3,6 +3,7 @@ import { ProjectCard } from '../components/ProjectCard.js';
 import { FilterBar }   from '../components/FilterBar.js';
 import { t, href }     from '../i18n/i18n.js';
 import { navigate }    from '../navigate.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
 
 export class ProjectsView {
   constructor() {
@@ -16,18 +17,15 @@ export class ProjectsView {
 
     const main = document.createElement('main');
     main.className = 'main';
+    // Give the page the skip-nav target it never had — every other business
+    // page anchors #main-content on its <main>.
+    main.id = 'main-content';
 
     const filterBar = new FilterBar((category) => this._applyFilter(category));
 
     const section = document.createElement('section');
     section.className = 'section';
-    section.innerHTML = `
-      <div class="section__header">
-        <h2 class="section__title">${t('projects.title')}</h2>
-        <span class="section__count" id="projects-count"></span>
-      </div>
-    `;
-    section.insertBefore(filterBar.render(), section.querySelector('.section__header').nextSibling);
+    section.appendChild(filterBar.render());
 
     this.grid = document.createElement('div');
     this.grid.className = 'project-grid';
@@ -37,8 +35,20 @@ export class ProjectsView {
     main.appendChild(section);
     view.appendChild(main);
 
+    // Landmannalaugar — black-and-orange, the brand as landscape.
+    this._scene = mountSceneHeader(main, 'verkefni', `
+        <header class="thjonusta-header">
+          <p class="admin-eyebrow">${t('nav.projects')}</p>
+          <h1 class="thjonusta-title">${t('projects.title')}</h1>
+          <p class="section__count" id="projects-count"></p>
+        </header>`);
+
     this._loadProjects(view);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
   }
 
   async _loadProjects(view) {

@@ -9,6 +9,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { SceneStage } from '../scenes/SceneStage.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // Pick the locale-resolved slice of a `{ en, is }` default blob. Falls back
@@ -255,11 +256,25 @@ export class ContactView {
       ${this._footerHtml()}
     `;
 
+    // Reynisfjara behind the hero — mounted INSIDE the existing decoration
+    // node so the admin-editable data-section/data-field tree is untouched.
+    const heroBg = view.querySelector('.contact-hero__bg');
+    if (heroBg) {
+      this._scene = new SceneStage('hafaSamband', { variant: 'hero' });
+      heroBg.appendChild(this._scene.el());
+      this._scene.mount();
+      heroBg.closest('.contact-hero')?.classList.add('contact-hero--scene');
+    }
+
     this._initEmailLinks(view);
     this._initForm(view);
     this._initBuiltWithButtons(view);
     this._initPageEdit(view);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
   }
 
   // ── Load all site_content rows in parallel; fall back to defaults on 404 ──

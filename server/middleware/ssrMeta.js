@@ -38,9 +38,15 @@ const { isHiddenRoute } = require('../config/publicSurface');
 // build) degrades to no preload, never an error.
 let SCENE_MANIFEST = null;
 try { SCENE_MANIFEST = require('../config/sceneManifest.json'); } catch { /* not built yet */ }
-// Route (locale-stripped) → scene image id. Chunk 1 covers home; the inner
-// pages join in chunk 2 alongside their scene bands.
-const ROUTE_SCENE_IMAGES = { '/': 'skogafoss' };
+// Route (locale-stripped) → scene image id — kept in step with the
+// assignments in public/js/scenes/sceneDefs.js.
+const ROUTE_SCENE_IMAGES = {
+  '/': 'skogafoss',
+  '/thjonusta': 'sigoldugljufur',
+  '/verkefni': 'landmannalaugar',
+  '/um-okkur': 'glacier',
+  '/hafa-samband': 'reynisfjara',
+};
 function scenePreloadTag(route) {
   const img = SCENE_MANIFEST && SCENE_MANIFEST[ROUTE_SCENE_IMAGES[route]];
   if (!img || !img.sources || !img.sources.avif || !img.sources.avif.length) return '';

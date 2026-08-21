@@ -77,6 +77,11 @@ body::before {
 @media (prefers-reduced-motion: no-preference) {
   .view { animation: fadeIn 300ms ease forwards; }
 }
+/* While a View Transition runs the router adds .vt-active — the crossfade
+   owns the entrance, so the legacy fade must not stack on top of it. */
+.vt-active .view { animation: none; }
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 280ms; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

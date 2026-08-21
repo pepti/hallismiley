@@ -1,4 +1,6 @@
 import { t, href } from '../i18n/i18n.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
+import { initReveal } from '../utils/reveal.js';
 
 // The three service tiers (Vefur / Verslun / Rekstur) with a feature matrix.
 // Prices come from i18n values marked DRAFT until Halli confirms them
@@ -56,12 +58,6 @@ export class ThjonustaView {
 
     view.innerHTML = `
       <main class="main thjonusta-page" id="main-content">
-        <header class="thjonusta-header">
-          <p class="admin-eyebrow">${t('thjonusta.eyebrow')}</p>
-          <h1 class="thjonusta-title">${t('thjonusta.title')}</h1>
-          <p class="thjonusta-intro">${t('thjonusta.intro')}</p>
-        </header>
-
         <div class="tier-cards">${cards}</div>
 
         <div class="tier-matrix-wrap">
@@ -79,6 +75,21 @@ export class ThjonustaView {
         <p class="thjonusta-setup-note">${t('thjonusta.setupNote')}</p>
       </main>
     `;
+    // Sigöldugljúfur — many falls feeding one river; the page's header rides
+    // the band on a frosted panel (h1 stays inside #main-content).
+    this._scene = mountSceneHeader(view.querySelector('.main'), 'thjonusta', `
+        <header class="thjonusta-header">
+          <p class="admin-eyebrow">${t('thjonusta.eyebrow')}</p>
+          <h1 class="thjonusta-title">${t('thjonusta.title')}</h1>
+          <p class="thjonusta-intro">${t('thjonusta.intro')}</p>
+        </header>`);
+    view.querySelectorAll('.tier-card').forEach((el, i) => el.classList.add('ice-reveal', 'ice-reveal--d' + Math.min(i + 1, 3)));
+    this._reveal = initReveal(view);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
+    this._reveal?.destroy();
   }
 }

@@ -214,3 +214,42 @@
     -webkit-backdrop-filter: blur(12px) saturate(1.15);
   }
 }
+
+/* ── Chunk 2: inner-page scene headers, contact scene, reveals, VT ────────── */
+
+/* Full-bleed breakout for a band that lives INSIDE .main (so the h1 stays in
+   the skip-nav target): stretch to the viewport, swallow .main's top pad. */
+.ice-scene--bleed {
+  margin: calc(-1 * var(--sp-8)) calc(50% - 50vw) var(--sp-7);
+  width: 100vw;
+}
+
+/* The band header panel keeps the pages' own header classes working inside
+   it; kill their outer margins so the frost hugs the text. */
+.ice-band-panel > :first-child { margin-top: 0; }
+.ice-band-panel .thjonusta-header,
+.ice-band-panel .um-okkur-header { margin: 0; max-width: none; }
+.ice-band-panel .thjonusta-intro,
+.ice-band-panel .um-okkur-lead { margin-bottom: 0; }
+
+/* Contact hero over a photograph: the page-token ink was measured for the
+   page background, not foliage — go light-on-scrim like the home hero. */
+.contact-hero--scene .contact-hero__title { color: #FFFFFF; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
+.contact-hero--scene .contact-hero__title-accent { color: var(--gold-light); }
+.contact-hero--scene .contact-hero__eyebrow { color: #FDE7D3; }
+.contact-hero--scene .contact-hero__subtitle { color: #F5EDE2; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
+
+/* ── Reveal system (extracted from the bio page's .hb-reveal) ──────────────
+   JS: public/js/utils/reveal.js adds .is-visible via IntersectionObserver. */
+.ice-reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 600ms ease, transform 600ms ease;
+}
+.ice-reveal.is-visible { opacity: 1; transform: none; }
+.ice-reveal--d1 { transition-delay: 0.08s; }
+.ice-reveal--d2 { transition-delay: 0.16s; }
+.ice-reveal--d3 { transition-delay: 0.24s; }
+@media (prefers-reduced-motion: reduce) {
+  .ice-reveal { opacity: 1; transform: none; transition: none; }
+}

@@ -1,3 +1,4 @@
+import { motionAllowed } from './utils/motion.js';
 import { HomeView }           from './views/HomeView.js';
 import { ProjectsView }       from './views/ProjectsView.js';
 import { ProjectDetailView }  from './views/ProjectDetailView.js';
@@ -324,16 +325,35 @@ export class Router {
       return;
     }
 
-    if (this._currentView && typeof this._currentView.destroy === 'function') {
-      this._currentView.destroy();
+    // The synchronous swap — wrapped in a View Transition where the browser
+    // supports it, so navigating between pages cross-fades between landscapes.
+    // Only the swap goes inside the callback: view.render() already ran above
+    // (async work inside startViewTransition would hold the page frozen), and
+    // the stale-nav guard already passed. The .vt-active class suppresses the
+    // legacy .view fadeIn for the duration (main.css) so the two animations
+    // don't stack.
+    const swap = () => {
+      if (this._currentView && typeof this._currentView.destroy === 'function') {
+        this._currentView.destroy();
+      }
+      this._currentView = view;
+
+      this.mountEl.innerHTML = '';
+      this.mountEl.appendChild(el);
+      this.navBar.setActive(pattern || '/');
+    };
+
+    if (document.startViewTransition && motionAllowed()) {
+      document.documentElement.classList.add('vt-active');
+      const vt = document.startViewTransition(swap);
+      vt.finished.finally(() => document.documentElement.classList.remove('vt-active'));
+      // Instant scroll during a transition — a smooth scroll mid-crossfade
+      // smears the captured frames.
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    } else {
+      swap();
+      window.scrollTo({ top: 0, behavior: motionAllowed() ? 'smooth' : 'auto' });
     }
-    this._currentView = view;
-
-    this.mountEl.innerHTML = '';
-    this.mountEl.appendChild(el);
-    this.navBar.setActive(pattern || '/');
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Anonymous page-view beacon. Placed after the commit point (past the
     // stale-nav guard and the locale/admin redirects) so it fires exactly once

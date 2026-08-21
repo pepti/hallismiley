@@ -82,3 +82,48 @@ test.describe('Iceland scene — home', () => {
     expect(await res.text()).toContain('CC BY');
   });
 });
+
+// ── Chunk 2: inner pages + View Transitions ─────────────────────────────────
+test.describe('Iceland scene — inner pages', () => {
+  const pages = [
+    ['/is/thjonusta', 'sigoldugljufur', 'Sigöldugljúfur — Hálendið', 'h1.thjonusta-title'],
+    ['/is/um-okkur', 'glacier', 'Svínafellsjökull — Öræfi', 'h1.um-okkur-title'],
+    ['/is/verkefni', 'landmannalaugar', 'Landmannalaugar — Fjallabak', 'h1.thjonusta-title'],
+  ];
+  for (const [path, image, chip, h1sel] of pages) {
+    test(`${path} wears its landscape with the h1 on the band`, async ({ page }) => {
+      await page.goto(path);
+      const scene = page.locator(`.ice-scene--bleed[data-scene="${image}"]`);
+      await expect(scene).toBeVisible();
+      await expect(scene).toHaveClass(/is-loaded/, { timeout: 10_000 });
+      await expect(scene.locator('.ice-scene__chip')).toHaveText(chip);
+      // The h1 lives ON the band's frost panel, inside #main-content.
+      await expect(page.locator(`#main-content ${h1sel}`)).toBeVisible();
+    });
+  }
+
+  test('/is/hafa-samband mounts Reynisfjara inside the editable hero untouched', async ({ page }) => {
+    await page.goto('/is/hafa-samband');
+    const hero = page.locator('.contact-hero');
+    await expect(hero).toHaveClass(/contact-hero--scene/);
+    await expect(hero.locator('.contact-hero__bg .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    // The admin-editable field tree is byte-identical: the scene lives inside
+    // the decoration node, and every data-field still renders.
+    await expect(hero.locator('[data-field="title_accent"]')).toBeVisible();
+    await expect(page.locator('.contact-form')).toBeVisible();
+  });
+
+  test('SPA navigation between scene pages leaves no leaked observers or errors', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto('/is/');
+    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    // Walk through every scene page via the SPA (View Transitions where
+    // supported, plain swap elsewhere — both must land cleanly).
+    for (const link of ['thjonusta', 'verkefni', 'um-okkur', 'hafa-samband']) {
+      await page.locator(`.lol-nav__link[data-route="/${link}"]`).first().click();
+      await expect(page.locator('.ice-scene').first()).toBeVisible({ timeout: 10_000 });
+    }
+    expect(errors, `Unexpected JS errors: ${errors.join(', ')}`).toEqual([]);
+  });
+});
