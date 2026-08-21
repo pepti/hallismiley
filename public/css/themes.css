@@ -82,6 +82,12 @@ html[data-theme="light"] {
   --on-accent:       #FFFFFF;
   --accent-ink:      #9A3412;
   --accent-hover:    #9A3412;
+  /* Scene grade — Pappír: gentle warmth, like a printed photograph. */
+  --scene-filter: sepia(0.14) saturate(0.94) brightness(1.02);
+  --scene-scrim: linear-gradient(180deg, rgba(36, 26, 18, 0.34) 0%, rgba(36, 26, 18, 0.16) 40%, rgba(36, 26, 18, 0.52) 100%);
+  --scene-chip-bg: rgba(36, 26, 18, 0.55);
+  --scene-chip-fg: #F7F2EC;
+  --scene-aurora: 0;
   --ambient-opacity: 0;
   --hero-gradient:   linear-gradient(155deg, #FFFDFA 0%, #F7F2EC 40%, #F3E3D2 72%, #EFD3B8 100%);
   --bg-gradient:     none;
@@ -145,6 +151,13 @@ html[data-theme="mono"] {
   --on-accent:       #FFFFFF;
   --accent-ink:      #9A3412;
   --accent-hover:    #9A3412;
+  /* Scene grade — Svart & hvítt: the signature move. Pure black scrim; the
+     grayscale can LOWER scrim contrast on busy photos, so it runs heavier. */
+  --scene-filter: grayscale(1) contrast(1.08);
+  --scene-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0.20) 40%, rgba(0, 0, 0, 0.58) 100%);
+  --scene-chip-bg: rgba(0, 0, 0, 0.6);
+  --scene-chip-fg: #FFFFFF;
+  --scene-aurora: 0;
   --ambient-opacity: 0;
   --hero-gradient:   linear-gradient(155deg, #FFFFFF 0%, #F7F7F7 55%, #EBEBEB 100%);
   --bg-gradient:     none;
@@ -213,6 +226,12 @@ html[data-theme="ember"] {
   --on-accent:       #100F0D;
   --accent-ink:      #F3B577;
   --accent-hover:    #F3B577;
+  /* Scene grade — Glóð: dusk. Ember-warm, darkened toward the charcoal page. */
+  --scene-filter: brightness(0.8) saturate(0.85) sepia(0.16) hue-rotate(-6deg);
+  --scene-scrim: linear-gradient(180deg, rgba(16, 15, 13, 0.42) 0%, rgba(16, 15, 13, 0.26) 40%, rgba(22, 20, 18, 0.72) 100%);
+  --scene-chip-bg: rgba(16, 15, 13, 0.62);
+  --scene-chip-fg: #EFE8DF;
+  --scene-aurora: 1;
   --ambient-opacity: 1;
   --hero-gradient:   linear-gradient(155deg, #201C18 0%, #161412 46%, #241A10 100%);
   --bg-gradient:     none;
@@ -293,6 +312,12 @@ html[data-theme="midnight"] {
   --on-accent:       #000000;
   --accent-ink:      #FB923C;
   --accent-hover:    #FDBA74;
+  /* Scene grade — Miðnætti: night. Deep cut toward black; aurora country. */
+  --scene-filter: brightness(0.55) saturate(0.72) contrast(1.06);
+  --scene-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.3) 40%, rgba(0, 0, 0, 0.82) 100%);
+  --scene-chip-bg: rgba(0, 0, 0, 0.66);
+  --scene-chip-fg: #FFFFFF;
+  --scene-aurora: 1;
   --ambient-opacity: 1;
   --hero-gradient:   linear-gradient(155deg, #17100A 0%, #000000 48%, #1F1206 100%);
   --bg-gradient:     none;

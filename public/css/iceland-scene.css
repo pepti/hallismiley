@@ -1,0 +1,216 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ICELAND SCENE ENGINE — photographic scenes behind the public pages.
+   DOM built by public/js/scenes/SceneStage.js; per-theme grading comes from
+   the --scene-* tokens (variables.css :root = Bjart, overrides in themes.css).
+   Imported by main.css BEFORE themes.css so theme overrides win.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ice-scene {
+  position: relative;
+  overflow: hidden;
+  /* Small internal z-indexes can never fight page chrome. */
+  isolation: isolate;
+}
+.ice-scene--empty { display: none; }
+
+/* The hero fills its host (.lol-hero--scene provides the viewport sizing);
+   bands size themselves. Heights are set in CSS, present from the first
+   paint, so the JS mount changes nothing geometrically → CLS ≈ 0. */
+.ice-scene--hero { position: absolute; inset: 0; }
+.ice-scene--band {
+  height: clamp(340px, 46vh, 560px);
+}
+
+.ice-scene__media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* LQIP — inline data-URI, blurred past recognition of its 24px self. Fades
+   under the real photo on `is-loaded` but is never removed: it is also the
+   fallback surface if the network image never arrives. */
+.ice-scene__lqip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: var(--focal, 50% 50%);
+  filter: blur(24px) var(--scene-filter, none);
+  transform: scale(1.1); /* hide blur-bleed edges */
+}
+
+.ice-scene picture { position: absolute; inset: 0; z-index: 1; }
+.ice-scene__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--focal, 50% 50%);
+  filter: var(--scene-filter, none);
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+.ice-scene.is-loaded .ice-scene__img { opacity: 1; }
+
+.ice-scene__fx {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* The contrast layer. Strength is admin-tunable on the home hero (the old
+   veil_percent slider maps onto --scene-scrim-strength). */
+.ice-scene__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--scene-scrim);
+  opacity: var(--scene-scrim-strength, 1);
+}
+
+.ice-scene__content {
+  position: relative;
+  z-index: 5;
+  height: 100%;
+}
+
+/* Place chip — bottom corner, real geography. */
+.ice-scene__chip {
+  position: absolute;
+  z-index: 6;
+  right: 14px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--scene-chip-bg);
+  color: var(--scene-chip-fg);
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 600ms ease 200ms;
+}
+.ice-scene.is-loaded .ice-scene__chip { opacity: 1; }
+
+/* Frosted panel — content surface over a photo. Solid fallback FIRST-CLASS:
+   browsers without backdrop-filter get a slightly more opaque plate (same
+   pattern as the nav bar, layout.css). */
+.ice-frost {
+  background: rgba(var(--bg-nav-rgb), 0.92);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .ice-frost {
+    background: rgba(var(--bg-nav-rgb), 0.62);
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  }
+}
+
+/* ── Motion (all gated) ─────────────────────────────────────────────────────
+   Ken Burns on the hero only — a 38s drift, base scale eats the travel so
+   edges never show. Band parallax rides CSS scroll-driven animations where
+   they exist; elsewhere the scene is simply still. */
+@media (prefers-reduced-motion: no-preference) {
+  .ice-scene--hero .ice-scene__img {
+    animation: ice-drift 38s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+}
+@keyframes ice-drift {
+  from { transform: scale(1.05); }
+  to { transform: scale(1.11) translate3d(-1.6%, -1.2%, 0); }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .ice-scene--band .ice-scene__media {
+      /* 12% taller than the band so ±6% travel never reveals edges */
+      inset: -6% 0;
+      animation: ice-parallax linear both;
+      animation-timeline: view();
+    }
+  }
+}
+@keyframes ice-parallax {
+  from { transform: translateY(-4%); }
+  to { transform: translateY(4%); }
+}
+
+/* ── Scene band as a page header (inner pages, chunk 2) ──────────────────── */
+.ice-scene--band .ice-scene__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--sp-6) var(--sp-5);
+}
+.ice-band-panel {
+  max-width: 52em;
+  padding: var(--sp-5) var(--sp-6);
+}
+
+/* ── Scene as a section backdrop (home tiers + steps) ────────────────────────
+   The section keeps its layout and solid-background fallback; the stage
+   stretches behind it (not the clamp()-height band shape) and the section's
+   children rise above. Cards on these sections switch to frost so the
+   landscape reads through without costing contrast (they keep their solid
+   --bg-surface wherever backdrop-filter is unsupported via .ice-frost's
+   fallback-first pattern). */
+.home-section--scene {
+  position: relative;
+  isolation: isolate;
+  max-width: none;           /* full-bleed backdrop… */
+  padding-left: 0;
+  padding-right: 0;
+}
+.home-section--scene > .ice-scene--backdrop {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  z-index: 0;
+}
+/* …while the content keeps the old 1100px column. */
+.home-section--scene > :not(.ice-scene--backdrop) {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--sp-5);
+  padding-right: var(--sp-5);
+}
+.home-section--scene { padding-top: var(--sp-8); padding-bottom: var(--sp-8); }
+
+/* Backdrop scenes read through a lighter scrim than hero/band headers — the
+   content carries its own frost plates. */
+.ice-scene--backdrop .ice-scene__scrim {
+  background: var(--scene-scrim);
+  opacity: calc(var(--scene-scrim-strength, 1) * 0.85);
+}
+
+/* Section titles/copy sitting directly on the photo go white-over-scrim like
+   the hero; the cards themselves are frosted. */
+.home-section--scene .section__title { color: #FFFFFF; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45); }
+.home-section--scene .home-tiers__card,
+.home-section--scene .home-steps__item {
+  background: rgba(var(--bg-nav-rgb), 0.92);
+  border-color: var(--border-light);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .home-section--scene .home-tiers__card,
+  .home-section--scene .home-steps__item {
+    background: rgba(var(--bg-nav-rgb), 0.68);
+    backdrop-filter: blur(12px) saturate(1.15);
+    -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  }
+}

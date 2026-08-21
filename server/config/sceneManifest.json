@@ -1,0 +1,436 @@
+{
+  "skogafoss": {
+    "width": 3840,
+    "height": 2551,
+    "focal": "62% 40%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAQABgDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAQFA//EAB4QAAICAgMBAQAAAAAAAAAAAAECAAMEIRESMVHB/8QAFgEBAQEAAAAAAAAAAAAAAAAAAwAB/8QAGREBAAIDAAAAAAAAAAAAAAAAAAECERJR/9oADAMBAAIRAxEAPwCO2SEdVI0Rz5NaV5rJRiATofYtT1tIDjR0DKuMlWMRZa4YL4qwcaw0xmY9WMtdfYteADZvXP5CKMyuC/fRPPPsIc24n//Z",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/skogafoss-480.21bfb2d7.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/skogafoss-960.0b69d074.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/skogafoss-1600.8084ca45.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/skogafoss-2400.fe4359d7.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/skogafoss-480.12e38d2b.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/skogafoss-960.88544b6d.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/skogafoss-1600.c1e08d57.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/skogafoss-2400.ad639b74.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/skogafoss-480.d3c741c1.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/skogafoss-960.974226bb.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/skogafoss-1600.dd941ce2.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/skogafoss-2400.84a7c66a.jpg"
+        }
+      ]
+    }
+  },
+  "braided": {
+    "width": 3840,
+    "height": 2525,
+    "focal": "50% 55%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAQABgDASIAAhEBAxEB/8QAGAAAAwEBAAAAAAAAAAAAAAAAAAIDAQX/xAAkEAACAQQABQUAAAAAAAAAAAABAgADBAURISIjMYEyQWFiwf/EABYBAQEBAAAAAAAAAAAAAAAAAAACA//EABgRAAMBAQAAAAAAAAAAAAAAAAABAhIx/9oADAMBAAIRAxEAPwC+SuMdcuWQuhP04TnpjqdwenVXzsS6oAmqnP8AB7RmZdEKNH21NVTXCXKfTKeAYn1KfMI1tekoCNEfsI3QxJ//2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-480.16a82aad.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-960.df108c0c.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/braided-1600.36244134.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/braided-2400.9bbe3a80.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-480.b2f2a10d.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-960.40353187.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/braided-1600.b7fb972e.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/braided-2400.b3208031.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-480.45b5f993.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-960.25ce942d.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/braided-1600.f064e2d3.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/braided-2400.b3c2c9e6.jpg"
+        }
+      ]
+    }
+  },
+  "highland-road": {
+    "width": 3840,
+    "height": 2160,
+    "focal": "45% 55%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABAAD/8QAIRAAAgAFBQEBAAAAAAAAAAAAAQIAAwQRIQUSEzFBUSL/xAAVAQEBAAAAAAAAAAAAAAAAAAABAv/EABkRAAIDAQAAAAAAAAAAAAAAAAABAgMEUf/aAAwDAQACEQMRAD8A3Ot6cR+eUuel29weXrsnlZZtOyqDbHcEpqfkyzHv7DZCpbC48vmF6ZAs0RI1WhZWKch2jF1tc/IoM9Is5htYq3noiiHps6KzV8P/2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/highland-road-480.3b3e55bb.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/highland-road-960.9d80e81b.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/highland-road-1600.340ecfbb.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/highland-road-2400.84971264.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/highland-road-480.c54fa464.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/highland-road-960.87c8f028.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/highland-road-1600.f9eb39a1.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/highland-road-2400.c577786b.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/highland-road-480.7e521bf0.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/highland-road-960.91fae09a.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/highland-road-1600.78cb7c4c.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/highland-road-2400.070e8b48.jpg"
+        }
+      ]
+    }
+  },
+  "sigoldugljufur": {
+    "width": 3840,
+    "height": 2160,
+    "focal": "45% 50%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAGAAAAwEBAAAAAAAAAAAAAAAAAAMEBQb/xAAiEAACAQMDBQEAAAAAAAAAAAABAgMABBEFEiExQUJxgcH/xAAWAQEBAQAAAAAAAAAAAAAAAAACAAH/xAAbEQADAAIDAAAAAAAAAAAAAAAAAQIxURESE//aAAwDAQACEQMRAD8AsF6yDJtkb0eaRLrMO8Rm2VXPixI/KdGpMOemFzWJrsyKFDxguy4DDgj7SV21kDmecFF7rYt32m0XkZBD0VzcsjSMWkYsx7mit9L2XWdH/9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/sigoldugljufur-480.58562fc0.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/sigoldugljufur-960.c89ad3f8.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/sigoldugljufur-1600.2c8c60ab.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/sigoldugljufur-2400.857b12e6.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/sigoldugljufur-480.fe74955e.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/sigoldugljufur-960.68320843.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/sigoldugljufur-1600.d641ad3a.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/sigoldugljufur-2400.45417d5f.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/sigoldugljufur-480.429ccf54.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/sigoldugljufur-960.bc3740d3.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/sigoldugljufur-1600.badae6e5.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/sigoldugljufur-2400.ef3cdab5.jpg"
+        }
+      ]
+    }
+  },
+  "landmannalaugar": {
+    "width": 3840,
+    "height": 2160,
+    "focal": "40% 55%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAGQAAAgMBAAAAAAAAAAAAAAAAAAYBAwQF/8QAIhAAAQMDBQADAAAAAAAAAAAAAQACAxESIQQFMUFRBjLB/8QAFQEBAQAAAAAAAAAAAAAAAAAAAQL/xAAaEQACAgMAAAAAAAAAAAAAAAAAEgECETFB/9oADAMBAAIRAxEAPwC2H5JOLRK2LI+3Ffxam71ISCbCPEoskxZmh9yokv0xqx2Oh4oadFY6Ncm8ah+GRtbUVFeULgjXTOY1pDAezTpCGsKwf//Z",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/landmannalaugar-480.2f2e0139.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/landmannalaugar-960.a9646dc2.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/landmannalaugar-1600.40210ec5.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/landmannalaugar-2400.3fac0e8e.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/landmannalaugar-480.078d5025.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/landmannalaugar-960.7419529f.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/landmannalaugar-1600.db0ddb72.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/landmannalaugar-2400.019be2a3.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/landmannalaugar-480.81536767.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/landmannalaugar-960.c98af1b9.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/landmannalaugar-1600.19eb4f53.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/landmannalaugar-2400.75da8571.jpg"
+        }
+      ]
+    }
+  },
+  "glacier": {
+    "width": 3840,
+    "height": 2160,
+    "focal": "50% 55%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABAYA/8QAJRAAAgIBAgQHAAAAAAAAAAAAAQIDEQAEMQUVIZEGEhQiMkKB/8QAFwEAAwEAAAAAAAAAAAAAAAAAAAECA//EABcRAQADAAAAAAAAAAAAAAAAAAABESH/2gAMAwEAAhEDEQA/AFQ+KDO1ctmo7EMMWvFFkkC+lmUHcsVsfl5KanicCrccUxdh088hodqwA1eopqnkodfkc0yEbKu1HHJIZSvL9QEH2K79s2SCyzFWcSvY39xzYWdP/9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/glacier-480.129946a5.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/glacier-960.c4ab2630.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/glacier-1600.7c3b133a.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/glacier-2400.7efc1842.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/glacier-480.7e8dafa7.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/glacier-960.56bcc921.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/glacier-1600.c83a661f.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/glacier-2400.074aa082.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/glacier-480.0544ed9b.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/glacier-960.ab82e3c1.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/glacier-1600.2540ee3b.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/glacier-2400.43bfc483.jpg"
+        }
+      ]
+    }
+  },
+  "reynisfjara": {
+    "width": 3840,
+    "height": 2564,
+    "focal": "40% 60%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAQABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUG/8QAJRAAAQMCAwkAAAAAAAAAAAAAAQACAwQRBRIhIyRRUlNhkZKh/8QAFQEBAQAAAAAAAAAAAAAAAAAAAQP/xAAWEQADAAAAAAAAAAAAAAAAAAAAARP/2gAMAwEAAhEDEQA/AKAEHVj9ggNOdBK0nsp1ZjWGUjCKGGOaUG13NOXyodXitTWvvI4MHLGMo+KtGSmjW7vc7aMW4usixGcg6EoijGaP/9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/reynisfjara-480.be3c8e1c.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/reynisfjara-960.70236507.avif"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/reynisfjara-1600.5a482be6.avif"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/reynisfjara-2400.34961ba1.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/reynisfjara-480.b13cf1d1.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/reynisfjara-960.88a368ae.webp"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/reynisfjara-1600.54fdec77.webp"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/reynisfjara-2400.3a47c573.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/reynisfjara-480.369e078f.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/reynisfjara-960.a74b0a2a.jpg"
+        },
+        {
+          "w": 1600,
+          "src": "/assets/iceland/reynisfjara-1600.2d7f699e.jpg"
+        },
+        {
+          "w": 2400,
+          "src": "/assets/iceland/reynisfjara-2400.aa6c02bb.jpg"
+        }
+      ]
+    }
+  }
+}

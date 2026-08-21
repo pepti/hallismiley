@@ -4,6 +4,7 @@
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { SceneStage } from '../scenes/SceneStage.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -114,8 +115,9 @@ export class HomeView {
     this._statsContent = null;  // stats — loaded from API in render()
     this._discipline = null;    // discipline (projects categories) — loaded from API
     this._heroContent = null;   // hero — loaded from API in render()
-    this._landingBg = null;     // landing background config — video (default) | photo | plain
+    this._landingBg = null;     // landing background config — scene (default) | gradient | video | photo | plain
     this._newsArticles = [];
+    this._scenes = [];          // SceneStage instances (destroyed with the view)
   }
 
   async render() {
@@ -139,6 +141,8 @@ export class HomeView {
     `;
 
     this._initHeroVideo(view);
+    this._initHeroScene(view);
+    this._initBandScenes(view);
     this._initHeroEdit(view);
     this._initFooterLinks(view);
     return view;
@@ -202,11 +206,10 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
-  // ── Load landing background config (admin-configurable; GRADIENT is the
-  // default — Halli's call (2026-08-20): the waterfall video came out with the
-  // rename to Rekstrarkerfið and the themed --hero-gradient took its place.
-  // Video/photo/plain all remain available through the admin background
-  // settings, so the asset and the picker still work. ──
+  // ── Load landing background config (admin-configurable; the ICELAND SCENE
+  // is the default — Halli's call (2026-08-21): the site lives inside the
+  // landscape now. Gradient/video/photo/plain all remain available through
+  // the admin background settings, so nothing admins could pick was lost. ──
   async _loadLandingBg() {
     try {
       const res = await fetch('/api/v1/content/landing_background?locale=en');
@@ -214,20 +217,20 @@ export class HomeView {
         const data = await res.json();
         if (data && typeof data === 'object') { this._landingBg = data; return; }
       }
-    } catch { /* network error — fall through to the gradient default */ }
-    this._landingBg = { mode: 'gradient', photo_url: null, veil_percent: 100 };
+    } catch { /* network error — fall through to the scene default */ }
+    this._landingBg = { mode: 'scene', photo_url: null, veil_percent: 100 };
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
   _hero() {
     const h  = this._heroContent || DEFAULT_HERO_CONTENT.en;
-    const bg = this._landingBg || { mode: 'gradient', photo_url: null, veil_percent: 100 };
+    const bg = this._landingBg || { mode: 'scene', photo_url: null, veil_percent: 100 };
     const veil = Math.max(0, Math.min(100, Number.isFinite(bg.veil_percent) ? bg.veil_percent : 100));
-    // Background: gradient (default) | photo (a library image) | video | plain.
-    // gradient and plain add no media layer at all — the themed
-    // --hero-gradient paints .lol-hero from CSS, so there is nothing to render
-    // here and nothing to veil. The photo layer uses its own class so
-    // _initHeroVideo's `.lol-hero__bg` lookup only matches the real <video>.
+    // Background: scene (default — the Iceland scene engine, mounted after
+    // render into the section) | gradient | photo (a library image) | video |
+    // plain. gradient and plain add no media layer at all. The photo layer
+    // uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
+    // matches the real <video>.
     let bgEl = '';
     if (bg.mode === 'photo' && bg.photo_url) {
       bgEl = `<div class="lol-hero__photobg" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${escHtml(bg.photo_url)}')" aria-hidden="true"></div>`;
@@ -242,11 +245,15 @@ export class HomeView {
     // and it is built from --bg-nav-rgb, so on a light theme it would wash the
     // hero out rather than darken it.
     const overlay = bgEl ? `<div class="lol-hero__overlay" aria-hidden="true" style="opacity:${veil / 100}"></div>` : '';
-    // Media modes still carry light-on-dark hero text; the gradient modes let
-    // the theme tokens drive it (see .lol-hero--media in home.css).
-    const mediaCls = bgEl ? ' lol-hero--media' : '';
+    // Media modes still carry light-on-dark hero text; scene mode does too
+    // (white over the scrim), so both wear --media. The scene slot itself is
+    // filled in _initHeroScene after render.
+    const isScene = bg.mode === 'scene';
+    const mediaCls = (bgEl || isScene) ? ' lol-hero--media' : '';
+    const sceneCls = isScene ? ' lol-hero--scene' : '';
+    const sceneStrength = isScene ? ` style="--scene-scrim-strength:${(veil / 100).toFixed(2)}"` : '';
     return `
-    <section class="lol-hero${mediaCls}" id="main-content" aria-label="${t('home.heroAriaLabel')}">
+    <section class="lol-hero${mediaCls}${sceneCls}" id="main-content" aria-label="${t('home.heroAriaLabel')}"${sceneStrength}>
       ${bgEl}
       ${overlay}
 
@@ -672,6 +679,11 @@ export class HomeView {
         <nav class="lol-footer__legal" aria-label="${t('nav.legalNav')}">
           <a href="${href('/personuvernd')}" class="lol-footer__legal-link">${t('footer.privacy')}</a>
           <a href="${href('/terms')}"   class="lol-footer__legal-link">${t('footer.terms')}</a>
+          <!-- CC BY attribution for the scene photography — the credits file
+               is generated by scripts/build-iceland-scenes.js. Served as a
+               plain document; the license requires reasonable attribution,
+               and a legal-row link is the standard web form of it. -->
+          <a href="/assets/iceland/CREDITS.md" class="lol-footer__legal-link" target="_blank" rel="noopener">${t('footer.photoCredits')}</a>
         </nav>
       </div>
 
@@ -688,6 +700,43 @@ export class HomeView {
   }
 
   // ── Hero video — ensure autoplay fires after mount ────────────────────
+  // ── Iceland scene: hero ─────────────────────────────────────────────────
+  // The stage is prepended into the section so the existing hero content
+  // (data-hero-field spans, CTA, scroll hint) stacks above it unchanged.
+  _initHeroScene(view) {
+    const host = view.querySelector('.lol-hero--scene');
+    if (!host) return;
+    const stage = new SceneStage('home', { variant: 'hero' });
+    host.prepend(stage.el());
+    stage.mount();
+    this._scenes.push(stage);
+  }
+
+  // ── Iceland scene: section bands (tiers = braided river, steps = the
+  // highland road). The sections keep their own solid background as the
+  // no-JS/no-image fallback; the band sits behind the content. ──
+  _initBandScenes(view) {
+    const bands = [
+      ['homeTiers', view.querySelector('.home-tiers')],
+      ['homeSteps', view.querySelector('.home-steps')],
+    ];
+    for (const [key, section] of bands) {
+      if (!section) continue;
+      const stage = new SceneStage(key, { variant: 'band', chip: true });
+      const el = stage.el();
+      el.classList.add('ice-scene--backdrop');
+      section.classList.add('home-section--scene');
+      section.prepend(el);
+      stage.mount();
+      this._scenes.push(stage);
+    }
+  }
+
+  destroy() {
+    this._scenes.forEach((s) => s.destroy());
+    this._scenes = [];
+  }
+
   _initHeroVideo(view) {
     const video = view.querySelector('.lol-hero__bg');
     if (!video) return;

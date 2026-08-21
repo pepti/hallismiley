@@ -451,6 +451,11 @@ app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), u
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
 app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  uploadStaticOpts));
+// Iceland scene renditions — baked (not uploads), but they share the uploads'
+// immutable policy: filenames are content-hashed by build-iceland-scenes.js,
+// so a year of immutable caching is correct where the generic public/ mount
+// below would give them only 1h.
+app.use('/assets/iceland',  express.static(path.join(__dirname, '../public/assets/iceland'), uploadStaticOpts));
 
 // Dynamic /sitemap.xml — must come BEFORE express.static so it shadows
 // any stale public/sitemap.xml file and reflects live DB state.

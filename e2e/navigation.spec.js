@@ -17,21 +17,24 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.lol-hero__title')).toContainText('in one place');
   });
 
-  test('homepage hero has the themed gradient background by default', async ({ page }) => {
-    // Halli's call (2026-08-20, with the rename to Rekstrarkerfið): the
-    // waterfall video came out and the themed --hero-gradient took its place.
-    // Video/photo/plain remain admin-selectable, so this asserts the DEFAULT,
-    // not the only possibility.
+  test('homepage hero shows the Iceland scene by default', async ({ page }) => {
+    // Halli's call (2026-08-21, the "Úti á Íslandi" re-skin): the Iceland
+    // scene engine is the default hero. Gradient/video/photo/plain remain
+    // admin-selectable, so this asserts the DEFAULT, not the only possibility.
     await page.goto('/');
-    const hero = page.locator('.lol-hero');
+    const hero = page.locator('.lol-hero--scene');
     await expect(hero).toBeVisible();
-    // No media layer at all — nothing to veil, so no overlay either.
+    // The scene photo loads from the hashed derivative mount and actually
+    // decodes (naturalWidth > 0 = a real image, not a 404 placeholder).
+    const img = hero.locator('.ice-scene__img');
+    await expect(img).toHaveAttribute('src', /\/assets\/iceland\//);
+    await expect(hero.locator('.ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    expect(await img.evaluate((el) => el.naturalWidth)).toBeGreaterThan(0);
+    // Real geography, on screen.
+    await expect(hero.locator('.ice-scene__chip')).toHaveText(/Skógafoss/);
+    // No legacy media layers in scene mode.
     await expect(page.locator('video.lol-hero__bg')).toHaveCount(0);
     await expect(page.locator('.lol-hero__overlay')).toHaveCount(0);
-    await expect(hero).not.toHaveClass(/lol-hero--media/);
-    // The gradient is painted from the token rather than an inline style, so
-    // assert on what actually reaches the pixel.
-    await expect(hero).toHaveCSS('background-image', /linear-gradient/);
   });
 
   test('Projects page loads and shows project cards', async ({ page }) => {

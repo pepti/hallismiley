@@ -32,6 +32,22 @@ const db   = require('../config/database');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 const { isHiddenRoute } = require('../config/publicSurface');
 
+// Iceland scene hero preloads — the scene engine's LCP insurance. The JSON
+// twin of public/js/scenes/manifest.js (both written by
+// scripts/build-iceland-scenes.js). Absent manifest (fresh clone before a
+// build) degrades to no preload, never an error.
+let SCENE_MANIFEST = null;
+try { SCENE_MANIFEST = require('../config/sceneManifest.json'); } catch { /* not built yet */ }
+// Route (locale-stripped) → scene image id. Chunk 1 covers home; the inner
+// pages join in chunk 2 alongside their scene bands.
+const ROUTE_SCENE_IMAGES = { '/': 'skogafoss' };
+function scenePreloadTag(route) {
+  const img = SCENE_MANIFEST && SCENE_MANIFEST[ROUTE_SCENE_IMAGES[route]];
+  if (!img || !img.sources || !img.sources.avif || !img.sources.avif.length) return '';
+  const srcset = img.sources.avif.map((x) => `${x.src} ${x.w}w`).join(', ');
+  return `<link rel="preload" as="image" type="image/avif" imagesrcset="${srcset}" imagesizes="100vw" fetchpriority="high" id="ssr-scene-preload">`;
+}
+
 const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
 const OG_IMAGE_PATH  = '/og-image.jpg';
@@ -690,7 +706,7 @@ function removeById(html, id) {
   return html.replace(selfRe, '');
 }
 
-function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots }) {
+function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots, scenePreload }) {
   if (/<title\b/i.test(html)) {
     html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
   }
@@ -763,6 +779,12 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     : removeById(html, 'ssr-hreflang-default');
   html = html.replace(/<html\b[^>]*\blang="[^"]*"/i, `<html lang="${esc(ogLocale.split('_')[0])}"`);
 
+  // Hero-image preload for scene routes — ahead of the main stylesheet so
+  // the LCP fetch starts before CSS parse blocks anything.
+  if (scenePreload) {
+    html = html.replace(/<link rel="stylesheet" href="\/css\/main\.css"/i,
+      `${scenePreload}\n  <link rel="stylesheet" href="/css/main.css"`);
+  }
   // Inject per-route JSON-LD just before </head>. The baked Person schema
   // on home stays in place (inside <head> before this insertion point).
   if (jsonLd) {
@@ -949,6 +971,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
     robots: isHiddenRoute(route) ? 'noindex, nofollow' : 'index, follow',
+    scenePreload: scenePreloadTag(route),
   });
   html = injectCrawlerContent(html, crawlerHtml);
 

@@ -132,7 +132,8 @@
   "adminBg.title": "Bakgrunnur forsíðu",
   "adminBg.subtitle": "Veldu bakgrunn forsíðu — haltu myndbandinu, notaðu ljósmynd eða hafðu sléttan.",
   "adminBg.mode": "Bakgrunnur",
-  "adminBg.modeGradient": "Litstigull (sjálfgefið)",
+  "adminBg.modeScene": "Íslandssena (sjálfgefið)",
+  "adminBg.modeGradient": "Litstigull",
   "adminBg.modeVideo": "Myndband",
   "adminBg.modePhoto": "Ljósmynd",
   "adminBg.modePlain": "Sléttur",
@@ -2258,5 +2259,13 @@
   "admin.updates.day_thu": "Fim",
   "admin.updates.day_fri": "Fös",
   "admin.updates.day_sat": "Lau",
-  "admin.updates.day_sun": "Sun"
+  "admin.updates.day_sun": "Sun",
+  "scene.skogafossAlt": "Skógafoss séð ofan frá með regnboga í úðanum",
+  "scene.braidedAlt": "Kvíslótt jökulá — dökkir álar í snjó, séð úr lofti",
+  "scene.highlandRoadAlt": "Fjallvegur inn í Landmannalaugar með kvíslóttri á",
+  "scene.sigoldugljufurAlt": "Sigöldugljúfur — margir fossar renna í eina á",
+  "scene.landmannalaugarAlt": "Svartar og appelsínugular hlíðar í Landmannalaugum",
+  "scene.glacierAlt": "Svínafellsjökull í bláma kvöldsins",
+  "scene.reynisfjaraAlt": "Reynisfjara — svartur sandur og hvítt brim",
+  "footer.photoCredits": "Ljósmyndir"
 }

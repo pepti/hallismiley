@@ -32,6 +32,7 @@
 @import './admin-shell.css';
 @import './test-env.css';
 @import './theme-switcher.css';
+@import './iceland-scene.css';
 /* themes.css must stay LAST — its html[data-theme] rules out-specify and
    override the component CSS above when an alternate theme is active. */
 @import './themes.css';
@@ -73,7 +74,9 @@ body::before {
 
 #app { min-height: calc(100vh - 56px); }
 
-.view { animation: fadeIn 300ms ease forwards; }
+@media (prefers-reduced-motion: no-preference) {
+  .view { animation: fadeIn 300ms ease forwards; }
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
