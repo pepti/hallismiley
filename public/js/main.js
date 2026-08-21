@@ -6,6 +6,7 @@ import { installRateLimitGuard } from './api/rateLimitGuard.js';
 import { installSessionGuard } from './services/sessionGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
+import { syncBodyClass as syncAmbienceClass } from './services/ambiencePrefs.js';
 import {
   loadLocale, getLocaleFromHash, getPreferredLocale, t,
 } from './i18n/i18n.js';
@@ -41,6 +42,7 @@ document.body.insertBefore(navEl, document.getElementById('app'));
 // theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs
 // at runtime in case the boot script was blocked.
 initTheme();
+syncAmbienceClass(); // body.amb-off mirrors the visitor's live-Iceland pref
 document.body.appendChild(new ThemeSwitcher().render());
 
 // ── Test-environment affordances (non-prod): the in-app feedback widget ──────

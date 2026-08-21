@@ -2267,5 +2267,9 @@
   "scene.landmannalaugarAlt": "Black and orange slopes in Landmannalaugar",
   "scene.glacierAlt": "Svínafellsjökull glacier at blue hour",
   "scene.reynisfjaraAlt": "Reynisfjara — black sand and white surf",
-  "footer.photoCredits": "Photography"
+  "footer.photoCredits": "Photography",
+  "themeSwitcher.ambience": "Live Iceland weather",
+  "themeSwitcher.ambienceNote": "Real weather and sun from Iceland",
+  "themeSwitcher.ambienceSound": "Waterfall sound",
+  "themeSwitcher.ambienceSoundNote": "A quiet water hush"
 }

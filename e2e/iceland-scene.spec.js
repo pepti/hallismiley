@@ -127,3 +127,53 @@ test.describe('Iceland scene — inner pages', () => {
     expect(errors, `Unexpected JS errors: ${errors.join(', ')}`).toEqual([]);
   });
 });
+
+// ── Chunk 3: live ambience ──────────────────────────────────────────────────
+test.describe('Live Iceland ambience', () => {
+  test('the weather endpoint answers 200 whatever happens upstream', async ({ page }) => {
+    const res = await page.request.get('/api/v1/ambience');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(typeof body.available).toBe('boolean');
+    if (body.available) {
+      expect(['clear', 'cloudy', 'rain', 'snow', 'fog']).toContain(body.condition);
+    }
+  });
+
+  test('the ambience toggle flips body.amb-off and persists across reloads', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await expect(page.locator('body')).not.toHaveClass(/amb-off/);
+
+    await page.locator('.theme-switcher__fab').click();
+    const toggle = page.locator('.theme-switcher__amb .theme-switcher__toggle');
+    await expect(toggle).toHaveAttribute('aria-checked', 'true'); // on by default
+    await toggle.click();
+    await expect(page.locator('body')).toHaveClass(/amb-off/);
+    expect(await page.evaluate(() => localStorage.getItem('ws_ambience'))).toBe('0');
+
+    await page.reload();
+    await expect(page.locator('body')).toHaveClass(/amb-off/, { timeout: 10_000 });
+    // Scene still renders — ambience off means static, never absent.
+    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+  });
+
+  test('the sun phase lands on the body while ambience is on', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    // The engine dynamic-imports after mount; give it a beat.
+    await expect(page.locator('body[data-amb-phase]')).toBeAttached({ timeout: 10_000 });
+    const phase = await page.evaluate(() => document.body.dataset.ambPhase);
+    expect(['day', 'golden', 'blue', 'night']).toContain(phase);
+  });
+
+  test('reduced motion keeps the whole live layer off', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await page.waitForTimeout(1500);
+    expect(await page.evaluate(() => document.body.dataset.ambPhase)).toBeUndefined();
+    // The fx canvas never wakes up.
+    expect(await page.locator('.lol-hero--scene .ice-scene__fx').first().isHidden()).toBe(true);
+  });
+});
