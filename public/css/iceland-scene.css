@@ -253,3 +253,52 @@
 @media (prefers-reduced-motion: reduce) {
   .ice-reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* ── Chunk 3: live ambience ────────────────────────────────────────────────
+   Sun-phase tint — body[data-amb-phase] set by the AmbienceEngine from the
+   real solar altitude over Iceland. The tint layer paints on the scenes'
+   ambient slot, never on content. Whisper-strength on purpose. */
+.ice-scene__media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+body[data-amb-phase='golden'] .ice-scene__media::after {
+  background: linear-gradient(20deg, rgba(255, 150, 60, 0.16), transparent 60%);
+  opacity: 1;
+}
+body[data-amb-phase='blue'] .ice-scene__media::after {
+  background: linear-gradient(200deg, rgba(70, 110, 190, 0.14), transparent 65%);
+  opacity: 1;
+}
+body[data-amb-phase='night'] .ice-scene__media::after {
+  background: rgba(4, 8, 16, 0.18);
+  opacity: 1;
+}
+/* Toggle off (body.amb-off) kills the tint with the rest of the live layer. */
+body.amb-off .ice-scene__media::after { opacity: 0; }
+
+/* CSS aurora — the no-WebGL ribbon. Two blurred gradients drifting slowly. */
+.ice-aurora--css {
+  position: absolute;
+  inset: 8% 0 40% 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(100deg, transparent 15%, rgba(50, 220, 130, 0.22) 42%, rgba(60, 170, 220, 0.16) 60%, transparent 85%),
+    linear-gradient(80deg, transparent 25%, rgba(50, 220, 130, 0.12) 55%, transparent 80%);
+  background-size: 220% 100%, 180% 100%;
+  filter: blur(18px);
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ice-aurora--css { animation: ice-aurora-drift 26s ease-in-out infinite alternate; }
+}
+@keyframes ice-aurora-drift {
+  from { background-position: 0% 0, 100% 0; }
+  to { background-position: 100% 0, 0% 0; }
+}

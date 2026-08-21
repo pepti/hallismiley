@@ -55,6 +55,18 @@ Acceptance: 2012 Jest + 109 Playwright green · lint clean · i18n in sync · in
 2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
 3. ENHANCEMENTS.md decisions after Job 3.
 
+## "Úti á Íslandi" re-skin (2026-08-21, three chunks, merged)
+
+Halli's directive: base the whole public site on Iceland photography — the
+visitor should feel outside in Iceland. Delivered as the scene engine
+(`public/js/scenes/`), landscapes on all five public pages, five-theme
+photographic grading, View Transitions, and the live ambience layer (real
+Hafnarfjörður weather via /api/v1/ambience + local solar position + aurora).
+His Facebook-saved photos had no usage rights → shipped photos are Commons
+CC0/CC BY equivalents, credited in /assets/iceland/CREDITS.md. Migration chain
+now ends 086_landing_background_scene. Copy on toggles/alt-texts is DRAFT
+pending Halli, like all copy.
+
 ## Product name (decided 2026-08-20)
 
 - **Rekstrarkerfi** — ASCII base form for everything technical: domain (`rekstrarkerfi.is`), slugs, identifiers, email addresses, metadata.

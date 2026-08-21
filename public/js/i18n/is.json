@@ -2267,5 +2267,9 @@
   "scene.landmannalaugarAlt": "Svartar og appelsínugular hlíðar í Landmannalaugum",
   "scene.glacierAlt": "Svínafellsjökull í bláma kvöldsins",
   "scene.reynisfjaraAlt": "Reynisfjara — svartur sandur og hvítt brim",
-  "footer.photoCredits": "Ljósmyndir"
+  "footer.photoCredits": "Ljósmyndir",
+  "themeSwitcher.ambience": "Lifandi veður",
+  "themeSwitcher.ambienceNote": "Alvöru veður og sól frá Íslandi",
+  "themeSwitcher.ambienceSound": "Fossaniður",
+  "themeSwitcher.ambienceSoundNote": "Lágvær vatnshljóð"
 }

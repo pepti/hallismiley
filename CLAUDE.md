@@ -41,6 +41,36 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
 - **Palette discipline.** One dominant color + one sharp accent + neutrals, all through the CSS token system. Here (the **Bjart** default since 2026-08-20, Halli's call): orange / black / white only — the orange ramp dominates (`--gold-light/--gold/--gold-dark` = #EA580C/#C2410C/#9A3412), near-black `--teal` is the sharp accent used sparingly, white and whisper-grey are the neutrals. **`--gold-light` is decorative-only on a light page (3.41 : 1)** — accent-coloured TEXT must use `--accent-ink`.
 - **Make unexpected, context-specific choices.** The default is Bjart — white paper, black ink, one orange, Barlow voice, a themed gradient hero (the waterfall video is retired to an opt-in admin mode), the 4.1 emblem mark unchanged. **Five themes** live in the picker (`themes.css`): `classic`/Bjart (light default) · `light`/Pappír (warm ivory) · `mono` (b/w, orange on actions only) · `ember`/Glóð (the former Ash dark, values intact) · `midnight` (true black + bright orange). Halli picks themes by testing them live, so keep the picker healthy. When a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
 
+## Iceland scene engine ("Úti á Íslandi", 2026-08-21)
+
+The public pages live inside photographic Icelandic landscapes (Halli's
+directive: the visitor should feel like they are outside in Iceland). Built in
+three chunks on master; the engine is `public/js/scenes/` + `iceland-scene.css`.
+
+- **Photos are licensed, never Halli's Facebook saves** — those were the mood
+  board only. Shipped photos come from Wikimedia Commons (CC0/CC BY), credited
+  in the generated `public/assets/iceland/CREDITS.md` (linked from the footer —
+  CC BY requires it). Originals in gitignored `assets-src/iceland/` +
+  `SOURCES.json`; `node scripts/build-iceland-scenes.js` regenerates all
+  renditions/manifests and FAILS if a hero AVIF exceeds the 250KB LCP budget.
+- **Scene assignments mean something** (sceneDefs.js): home = Skógafoss; tiers
+  = braided river ("þrjár leiðir — eitt kerfi"); steps = the highland road;
+  /thjonusta = Sigöldugljúfur (many falls, one river); /verkefni =
+  Landmannalaugar (brand as landscape); /um-okkur = glacier at blue hour;
+  /hafa-samband = Reynisfjara. Five themes grade the same photos via
+  `--scene-*` tokens (mono = full grayscale).
+- **Live ambience, on by default**: `/api/v1/ambience` proxies Open-Meteo
+  (10-min server cache, ALWAYS 200 — failure is `{available:false}` and static
+  scenes); real sun position computed client-side (sun.js — midnight sun falls
+  out of the math); weather particles + WebGL aurora (dark themes at real
+  night, CSS fallback); synthesized waterfall sound OFF by default. Toggles in
+  the ThemeSwitcher (`ws_ambience`, `ws_ambience_sound`); everything obeys
+  `utils/motion.js` (reduced-motion + Save-Data) and pauses off-screen/hidden.
+- **landing_background mode 'scene' is the hero default** (migration 086);
+  gradient/video/photo/plain remain admin-selectable. SPA navigation uses View
+  Transitions where supported (router.js); `.view` fadeIn is
+  reduced-motion-gated and suppressed during VT.
+
 ## Factory commands
 
 `/status` · `/base-diff` (engine drift vs base HEAD) · `/test-plan` · `/audit` · `/retro` · `/e2e` · `/i18n-sync` — plus base commands `/security-check`, `/pre-deploy`, `/migration-new`. (`/strip-base`, `/clone-ui`, `/import-data` exist but do not apply to this build — see the warning above.)

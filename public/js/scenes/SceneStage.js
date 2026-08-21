@@ -20,7 +20,7 @@ import { SCENE_IMAGES } from './manifest.js';
 import { SCENE_DEFS } from './sceneDefs.js';
 import { t } from '../i18n/i18n.js';
 import { escHtml } from '../utils/escHtml.js';
-import { saveData } from '../utils/motion.js';
+import { saveData, motionAllowed } from '../utils/motion.js';
 
 export class SceneStage {
   /**
@@ -109,6 +109,7 @@ export class SceneStage {
 
   mount() {
     if (!this.root || this.root.classList.contains('ice-scene--empty')) return;
+    this._mountAmbience();
     if (this.variant === 'hero') return; // picture already in the DOM
     // Bands: insert the real photo when the band approaches the viewport.
     // Generous rootMargin so the blur-up usually finishes before arrival.
@@ -128,6 +129,22 @@ export class SceneStage {
 
   destroy() {
     if (this._io) { this._io.disconnect(); this._io = null; }
+    this._ambience?.unregister(this.root);
+  }
+
+  // The live-Iceland layer (chunk 3) — dynamic import so pages pay nothing
+  // until a scene is actually mounted with the pref on and motion allowed.
+  // Import failure (old cache, blocked JS) leaves the scene static.
+  async _mountAmbience() {
+    const { ambienceEnabled } = await import('../services/ambiencePrefs.js');
+    if (!ambienceEnabled() || !motionAllowed()) return;
+    try {
+      const { getAmbienceEngine } = await import('./AmbienceEngine.js');
+      this._ambience = getAmbienceEngine();
+      await this._ambience.start();
+      const canvas = this.root.querySelector('.ice-scene__fx');
+      if (canvas) this._ambience.register(this.root, canvas, this.def.particles, { isHero: this.variant === 'hero' });
+    } catch { /* ambience is optional by design */ }
   }
 
   _insertPicture() {
