@@ -1,4 +1,6 @@
 import { t, href } from '../i18n/i18n.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
+import { initReveal } from '../utils/reveal.js';
 
 // Company story page — solo founder + AI-agent operation, company facts.
 // The kennitala line stays a placeholder until registration completes
@@ -9,11 +11,6 @@ export class UmOkkurView {
     view.className = 'view';
     view.innerHTML = `
       <main class="main um-okkur-page" id="main-content">
-        <header class="um-okkur-header">
-          <p class="admin-eyebrow">${t('umOkkur.eyebrow')}</p>
-          <h1 class="um-okkur-title">${t('umOkkur.title')}</h1>
-          <p class="um-okkur-lead">${t('umOkkur.lead')}</p>
-        </header>
 
         <section class="um-okkur-story">
           <p>${t('umOkkur.story1')}</p>
@@ -36,6 +33,22 @@ export class UmOkkurView {
         </footer>
       </main>
     `;
+    // Svínafellsjökull at blue hour — patient, quiet craft.
+    this._scene = mountSceneHeader(view.querySelector('.main'), 'umOkkur', `
+        <header class="um-okkur-header">
+          <p class="admin-eyebrow">${t('umOkkur.eyebrow')}</p>
+          <h1 class="um-okkur-title">${t('umOkkur.title')}</h1>
+          <p class="um-okkur-lead">${t('umOkkur.lead')}</p>
+        </header>`);
+    ['.um-okkur-story', '.um-okkur-facts', '.um-okkur-cta'].forEach((sel, i) => {
+      view.querySelector(sel)?.classList.add('ice-reveal', 'ice-reveal--d' + Math.min(i + 1, 3));
+    });
+    this._reveal = initReveal(view);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
+    this._reveal?.destroy();
   }
 }
