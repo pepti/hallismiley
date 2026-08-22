@@ -530,6 +530,10 @@ app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come 
 app.use('/api/v1/admin/bookkeeping', adminBookkeepingRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
+// Client error beacon + admin event log (harvest 2026-08-22, ice #195). The
+// beacon route carries its own tighter limiter (routes/eventRoutes.js).
+app.use('/api/v1/events',     require('./routes/eventRoutes'));
+app.use('/api/v1/admin/events', require('./routes/adminEventRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/news',       newsRoutes);
 app.use('/api/v1/party',      partyRoutes);
 app.use('/api/v1/shop',       shopRoutes);

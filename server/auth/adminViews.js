@@ -25,6 +25,7 @@ const ADMIN_VIEW_IDS = [
   // docs/BOOKKEEPING-SYSTEM.md).
   'books', 'invoices', 'expenses', 'ar', 'vat', 'bank', 'ledger', 'payroll', 'pos',
   'updates',
+  'monitoring',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +
