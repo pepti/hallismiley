@@ -11,6 +11,8 @@ import { AdminUsersView }     from './views/AdminUsersView.js';
 import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
 import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
 import { AdminUpdatesView } from './views/AdminUpdatesView.js';
+import { AdminMonitoringView } from './views/AdminMonitoringView.js';
+import { AdminMcpSettingsView } from './views/AdminMcpSettingsView.js';
 import { AdminDiscountsView }  from './views/AdminDiscountsView.js';
 import { AdminSalesView }      from './views/AdminSalesView.js';
 import { AdminBackgroundView } from './views/AdminBackgroundView.js';
@@ -84,6 +86,8 @@ const ROUTES = [
   { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
   { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
   { pattern: '/admin/updates',   factory: ()  => (isAuthenticated() && canSeeView('updates')) ? new AdminUpdatesView() : new HomeView() },
+  { pattern: '/admin/monitoring', factory: () => (isAuthenticated() && isAdmin()) ? new AdminMonitoringView() : new HomeView() },
+  { pattern: '/admin/mcp', factory: () => (isAuthenticated() && isAdmin()) ? new AdminMcpSettingsView() : new HomeView() },
   { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && canSeeView('discounts')) ? new AdminDiscountsView() : new HomeView() },
   { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && canSeeView('sales')) ? new AdminSalesView() : new HomeView() },
   { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },

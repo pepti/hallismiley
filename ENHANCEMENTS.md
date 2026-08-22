@@ -86,6 +86,8 @@ Original proposal kept below for the record.
 **Recommendation.** Halli decides. My suggestion: repurpose news, flag off party and bio, keep shop (it is the Verslun tier demo), and replace skills/stats with business proof points.
 
 ### 10. Observability
+
+> **STATUS: substantially delivered in-app (harvest 2026-08-22):** event_logs + client error beacon + /admin/monitoring + retention cleanup came over from icelandicstore #195, and the false-memory-critical alert bug was fixed (#180 port). Remaining from this proposal: App Insights wiring + external availability ping — still with-first-deploy.
 **What.** App Insights wiring + an availability ping, plus pino serializers for the lead flow. Scaled-down version of the icelandicstore monitoring runbook.
 **Why.** Plan §5.6 stage 3 assumes a daily fleet-health report exists. Nothing reports today.
 **Effort.** M. **Risk.** Low.
@@ -104,6 +106,8 @@ Original proposal kept below for the record.
 **Recommendation.** Run `/retro` at the end of this engagement and fold the lessons into site-factory.
 
 ### 13. MCP connector — let owners/admins drive the system from their Claude accounts
+
+> **STATUS: APPROVED + IMPLEMENTED (read-only v1) — Halli, 2026-08-22, harvest program.** Shipped as a port of icelandicstore #188 rather than the OAuth design below: bearer tokens minted at /admin/mcp (sha256-hashed, expiring, revocable — migration 088), stateless Streamable-HTTP endpoint at /api/v1/mcp, scope double-gate, ships dark behind MCP_ENABLED. v1 tools: environment_info + updates_status (no leads tool — leads have no DB rows by design, see #4). The OAuth flow sketched below remains the phase-2 path (the mcp_tokens table pre-ships kind/oauth_client_id/parent_id for it); note the design's "existing RS256 JWTs" premise was disproved during the harvest — no JWT layer ever existed.
 **What.** Expose the app as a remote MCP server: one `POST /mcp` endpoint (Streamable HTTP, official `@modelcontextprotocol/sdk` on the existing Express app), which a store owner or admin adds as a **custom connector** in their own Claude account (claude.ai → Settings → Connectors; requires Pro/Max/Team/Enterprise — Team/Enterprise owners can add it org-wide). Claude then gets typed, RBAC-gated tools against this instance: look up orders/products/stock, sales summaries, list + filter leads, bookkeeping queries; a second phase can add write tools (mark order shipped, adjust stock, mark lead contacted), each individually flagged.
 **Why for Orange Smiley.** Two-sided: (a) admins of this instance get conversational access to their own data — "hvaða leads komu inn í vikunni?" — without new UI; (b) it becomes a **fleet feature**: every customer instance inherits it, and "talk to your store from Claude" is a differentiator no Icelandic ERP replacement offers. Dogfooding it here first is exactly what this instance is for.
 **How it respects the invariants.**

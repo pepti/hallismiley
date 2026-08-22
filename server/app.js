@@ -536,6 +536,15 @@ app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come 
 app.use('/api/v1/admin/bookkeeping', adminBookkeepingRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
+// Client error beacon + admin event log (harvest 2026-08-22, ice #195). The
+// beacon route carries its own tighter limiter (routes/eventRoutes.js).
+// MCP connector (ships dark: MCP_ENABLED unset → 404 before auth). Bearer-only
+// (middleware/mcpAuth.js reads no cookies — the documented reason the router
+// omits csrfProtect). Ported from icelandicstore #188; ENHANCEMENTS #13.
+app.use('/api/v1/mcp', require('./routes/mcpRoutes'));
+app.use('/api/v1/events',     require('./routes/eventRoutes'));
+app.use('/api/v1/admin/mcp-tokens', require('./routes/mcpAdminRoutes')); // before the /api/v1/admin catch-all
+app.use('/api/v1/admin/events', require('./routes/adminEventRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/ambience',   require('./routes/ambienceRoutes')); // live-Iceland scene layer
 app.use('/api/v1/news',       newsRoutes);
 app.use('/api/v1/party',      partyRoutes);
