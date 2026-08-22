@@ -111,8 +111,21 @@
   --hero-gradient:   linear-gradient(155deg, #FFFFFF 0%, #FFF4EA 38%, #FFE3CC 70%, #FFD1AC 100%);
   --bg-gradient:     none;
 
-  --success: #1c7c54;
-  --error:   #b3261e;
+  /* Status colours — a complete, theme-aware set (ported shape from
+     icelandicstore #196/#192; VALUES re-measured for this palette). The
+     strong colour must clear 4.5:1 as text on --bg-base AND --bg-surface;
+     the -dim washes are for pills/rows and never carry text alone.
+     --danger aliases --error: components had grown var(--danger, hex)
+     fallbacks against a token that never existed, so every one silently
+     took its fallback. Measured here (page/card): success 4.95/5.17 ·
+     error 6.26/6.54 · warning #8A5300 6.06/6.33. */
+  --success:     #1c7c54;
+  --success-dim: rgba(28, 124, 84, 0.12);
+  --error:       #b3261e;
+  --error-dim:   rgba(179, 38, 30, 0.12);
+  --danger:      #b3261e;
+  --warning:     #8A5300;
+  --warning-dim: rgba(138, 83, 0, 0.14);
 
   /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
   --test-blue:     #2f6fed;
