@@ -1,0 +1,191 @@
+name: Promote release to a channel
+
+# Publishes an already-built image to a release channel: retag it by DIGEST and
+# regenerate the channel manifest that every deployed instance polls
+# (docs/SELF-UPDATE.md).
+#
+# ── Rollout discipline ───────────────────────────────────────────────────────
+#
+#   1. merge to main  → CI → deploy.yml builds and pushes :sha-<gitSha>
+#   2. promote that sha to `canary`
+#   3. The publisher's OWN instances soak it for 24–48 hours. The publisher is the canary;
+#      customers are not. If it is broken, you find out on your own site.
+#   4. promote the SAME sha to `stable`
+#
+# Never promote a fresh build straight to stable, and never rebuild between
+# canary and stable. This workflow retags an existing digest and never builds,
+# which is what makes "the same bytes we soaked" a fact rather than a hope — a
+# rebuild from the same commit produces different bytes (timestamps, base-image
+# drift) and silently discards the soak.
+#
+# `critical: true` is for a security fix you want installed outside customers'
+# maintenance windows. It is not for "we would like this sooner".
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Git SHA to promote (the full 40-char sha deploy.yml built)'
+        required: true
+        type: string
+      channel:
+        description: 'Channel to publish to'
+        required: true
+        type: choice
+        options: [canary, stable]
+      critical:
+        description: 'Security release — instances may install it outside their maintenance window'
+        required: false
+        type: boolean
+        default: false
+      min_compatible:
+        description: 'Oldest version that can upgrade directly to this one (semver, optional)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Build and validate the manifest, publish nothing'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One promotion at a time, per channel. Two runs racing to rewrite the same
+# manifest is how a channel ends up pointing at a digest nobody chose.
+concurrency:
+  group: promote-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.sha }} → ${{ inputs.channel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      # Registry, image and release host come from repository variables so the
+      # same workflow serves the public site, the ops instance and every
+      # customer instance. They are checked below rather than defaulted — a
+      # silent default here would publish to the wrong fleet.
+      ACR_NAME:        ${{ vars.ACR_NAME }}
+      IMAGE_NAME:      ${{ vars.IMAGE_NAME }}
+      RELEASE_ACCOUNT: ${{ vars.RELEASE_STORAGE_ACCOUNT }}
+      RELEASE_CONTAINER: ${{ vars.RELEASE_CONTAINER }}
+
+    steps:
+      - name: Checkout the commit being promoted
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The manifest's version and changelog must come from the code being
+          # promoted, not from main-as-of-now.
+          ref: ${{ inputs.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+
+      - name: Check the fleet variables are configured
+        run: |
+          missing=""
+          for var in ACR_NAME IMAGE_NAME RELEASE_ACCOUNT RELEASE_CONTAINER; do
+            if [ -z "${!var}" ]; then missing="$missing $var"; fi
+          done
+          if [ -n "$missing" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+            echo "Missing repository variables:$missing"
+            echo "Set them under Settings → Secrets and variables → Actions → Variables."
+            exit 1
+          fi
+          echo "Variables OK (or dry run)."
+
+      - name: Azure Login (OIDC)
+        if: ${{ inputs.dry_run != true }}
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Resolve the tag to the immutable digest ONCE, and use that digest for
+      # everything downstream. Between "read the tag" and "publish the manifest"
+      # the tag could move; the digest cannot.
+      - name: Resolve the image digest
+        id: digest
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "digest=sha256:$(printf '0%.0s' $(seq 1 64))" >> "$GITHUB_OUTPUT"
+            echo "Dry run — using a placeholder digest."
+            exit 0
+          fi
+          digest=$(az acr manifest show-metadata \
+            --registry "$ACR_NAME" \
+            --name "$IMAGE_NAME:sha-${{ inputs.sha }}" \
+            --query digest -o tsv)
+          if [ -z "$digest" ]; then
+            echo "No image found for sha-${{ inputs.sha }} — was it built and pushed by deploy.yml?"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Resolved sha-${{ inputs.sha }} → $digest"
+
+      # Retag BY DIGEST. `az acr import` copies within the registry without
+      # pulling or rebuilding, so :canary and :stable are guaranteed to be the
+      # same bytes that were soaked.
+      - name: Retag the digest as :${{ inputs.channel }}
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          az acr import \
+            --name "$ACR_NAME" \
+            --source "$ACR_NAME.azurecr.io/$IMAGE_NAME@${{ steps.digest.outputs.digest }}" \
+            --image "$IMAGE_NAME:${{ inputs.channel }}" \
+            --force
+
+      - name: Build the channel manifest
+        run: |
+          node scripts/build-manifest.js \
+            --channel=${{ inputs.channel }} \
+            --digest=${{ steps.digest.outputs.digest }} \
+            ${{ inputs.critical && '--critical' || '' }} \
+            ${{ inputs.min_compatible && format('--min-compatible={0}', inputs.min_compatible) || '' }} \
+            --out=manifest.json
+          cat manifest.json
+
+      # The same validator every deployed instance runs. A manifest that fails
+      # here would be one the whole fleet ignores.
+      - name: Validate the manifest
+        run: node scripts/check-manifest.js manifest.json
+
+      - name: Publish the manifest
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          # Short cache: an instance polls hourly, so a stale edge copy would
+          # delay a security release by however long the CDN felt like.
+          az storage blob upload \
+            --account-name "$RELEASE_ACCOUNT" \
+            --container-name "$RELEASE_CONTAINER" \
+            --name "${{ inputs.channel }}.json" \
+            --file manifest.json \
+            --content-type application/json \
+            --content-cache-control "public, max-age=300" \
+            --auth-mode login \
+            --overwrite
+
+      - name: Summary
+        run: |
+          {
+            echo "### Promoted to \`${{ inputs.channel }}\`"
+            echo '```'
+            echo "sha:      ${{ inputs.sha }}"
+            echo "digest:   ${{ steps.digest.outputs.digest }}"
+            echo "critical: ${{ inputs.critical }}"
+            echo "dry run:  ${{ inputs.dry_run }}"
+            echo '```'
+            if [ "${{ inputs.channel }}" = "canary" ]; then
+              echo "Now soak this on the publisher's own instances for 24–48 h before promoting the SAME sha to stable."
+            fi
+          } >> $GITHUB_STEP_SUMMARY
