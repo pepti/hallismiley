@@ -88,6 +88,27 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.body).toEqual(expect.objectContaining({ error: expect.any(String), code: 404 }));
   });
 
+  // These prefixes are exempt from the global rate limiter (STATIC_ASSET_RE in
+  // app.js), so a miss must terminate at a cheap 404 and never reach the
+  // SSR/DB path — even extensionless, even with an HTML Accept header.
+  test('missed static-asset paths return JSON 404, never the SPA shell', async () => {
+    for (const path of ['/assets/party/venue/gone.jpg', '/assets/no-extension', '/js/nope.js', '/css/nope.css', '/fonts/nope.woff2']) {
+      const res = await request(app).get(path).set('Accept', 'text/html');
+      expect(res.status).toBe(404);
+      expect(res.headers['content-type']).toMatch(/application\/json/);
+      expect(res.body).toEqual(expect.objectContaining({ error: expect.any(String), code: 404 }));
+    }
+  });
+
+  test('existing static assets still serve (venue photo, incl. non-ASCII name)', async () => {
+    const ok = await request(app).get('/assets/party/venue/Steggjun_myrarkot.jpg');
+    expect(ok.status).toBe(200);
+    expect(ok.headers['content-type']).toMatch(/image\/jpeg/);
+    const accented = await request(app).get('/assets/party/venue/' + encodeURIComponent('Mýrarkot_veislusalur.jpg'));
+    expect(accented.status).toBe(200);
+    expect(accented.headers['content-type']).toMatch(/image\/jpeg/);
+  });
+
   test('response carries cache headers for CDN/edge caching', async () => {
     const res = await request(app).get('/en/');
     expect(res.headers['cache-control']).toMatch(/public.*max-age=300.*stale-while-revalidate/);

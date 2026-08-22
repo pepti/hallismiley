@@ -140,7 +140,7 @@ app.post(
           (typeof v === 'string' && /uri|referrer|source-file/i.test(k)) ? logger.scrubUrl(v) : v,
         ]))
       : report;
-    logger.warn({ cspViolation }, 'CSP violation reported');
+    logger.warn({ cspViolation }, 'CSP violation reported');
     res.status(204).end();
   },
 );
@@ -209,12 +209,24 @@ app.use(sanitizeBody);
 app.use(localeMiddleware);
 
 // ── A01 Broken Access Control: global rate limiter ───────────────────────────
+// Static asset reads are exempt: one party-page visit is ~180 sendfile requests
+// (ES modules, CSS, fonts) before the 221-photo album even starts loading, so
+// the 400/15 min budget 429'd legitimate browsing — the venue gallery at the
+// bottom of the page rendered as 13 broken images (2026-08-22). This is
+// scoping, not loosening: the exemption covers only cheap sendfile GETs, a
+// miss under these prefixes never reaches the SSR/DB path (the '/{*splat}'
+// catch-all 404s them — keep the two in sync), and every dynamic route stays
+// inside the limiter.
+const STATIC_ASSET_RE = /^\/(assets|js|css|fonts)\//;
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 400,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
+  skip: (req) =>
+    process.env.NODE_ENV === 'test' ||
+    process.env.NODE_ENV === 'development' ||
+    ((req.method === 'GET' || req.method === 'HEAD') && STATIC_ASSET_RE.test(req.path)),
   message: { error: 'Too many requests, please try again later.', code: 429 },
 });
 app.use(globalLimiter);
@@ -582,6 +594,13 @@ function pickLocaleForRedirect(req) {
 app.get('/{*splat}', (req, res, next) => {
   // Real 404s for data paths — don't serve HTML for missed API calls.
   if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
+    return res.status(404).json({ error: 'Not found', code: 404 });
+  }
+
+  // Asset-path misses are real 404s too, never the SPA shell. These prefixes
+  // are exempt from the global rate limiter (see STATIC_ASSET_RE above), so
+  // they must not fall through to the SSR/DB path.
+  if (STATIC_ASSET_RE.test(req.path)) {
     return res.status(404).json({ error: 'Not found', code: 404 });
   }
 
