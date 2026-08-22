@@ -4043,6 +4043,37 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          ON system_updates (status, discovered_at DESC)`,
     ],
   },
+  {
+    // Admin → Monitoring (harvest 2026-08-22, from icelandicstore #195): a
+    // server-side failure log the admin can actually see. Client errors
+    // arrive via the public beacon (/api/v1/events/collect), server errors
+    // from the error middleware; eventLogCleanup prunes past
+    // EVENT_LOG_RETENTION_DAYS (default 90). NOTE the number: ice calls this
+    // table's migration 093_event_logs (and even carries a duplicate 093 in
+    // its chain) — the runner records by NAME, chains diverged at 072, so
+    // this repo numbers it 083.
+    name: '083_event_logs',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS event_logs (
+         id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         source      TEXT NOT NULL CHECK (source IN ('client','server')),
+         level       TEXT NOT NULL DEFAULT 'error' CHECK (level IN ('error','warn','info')),
+         message     TEXT NOT NULL,
+         path        TEXT,
+         status      INTEGER,
+         user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+         username    TEXT,
+         request_id  TEXT,
+         user_agent  TEXT,
+         context     JSONB NOT NULL DEFAULT '{}',
+         created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_event_logs_user ON event_logs (user_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_event_logs_source_level
+         ON event_logs (source, level, created_at DESC)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

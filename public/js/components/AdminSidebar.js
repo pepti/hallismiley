@@ -65,6 +65,7 @@ export const ADMIN_NAV = [
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
     { id: 'updates', route: '/admin/updates', labelKey: 'admin.nav.updates', icon: 'update' },
+    { id: 'monitoring', route: '/admin/monitoring', labelKey: 'adminMonitoring.navTitle', icon: 'monitor' },
     { id: 'users',   route: '/admin/users',   labelKey: 'admin.nav.users',   icon: 'shield' },
     { id: 'roles',   route: '/admin/roles',   labelKey: 'admin.nav.roles',   icon: 'key' },
   ] },
