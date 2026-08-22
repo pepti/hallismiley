@@ -11,6 +11,7 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/e
 const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
 const mfaService          = require('../services/mfaService');
+const { userIsAdminAnywhere } = require('../utils/adminRole');
 const { t }               = require('../i18n');
 
 const scrypt = new Scrypt();
@@ -123,6 +124,10 @@ const authController = {
       // is still a session, and anything that forgot to check an "upgraded" flag
       // would be a bypass. The challenge id is not a credential for anything
       // except exchanging a correct code for a real session.
+      // Role-SET check (utils/adminRole.js): users.role alone under-counts —
+      // an account can hold admin through user_roles while its primary role
+      // says 'user', and it must not walk past the 2FA challenge.
+      user.admin_anywhere = await userIsAdminAnywhere(dbQuery, user.id);
       if (mfaService.isProtected(user)) {
         const challengeId = await mfaService.createChallenge(user.id, {
           ip: req.ip ?? null,

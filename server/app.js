@@ -42,6 +42,7 @@ const { register }   = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
 const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
 const { healthCheckFailed } = require('./observability/alerts');
+const { readMemory } = require('./observability/memoryUsage');
 const { trackRequest } = require('./observability/alerts');
 
 const app = express();
@@ -115,6 +116,8 @@ app.use(helmet({
   // and doesn't break the Stripe/YouTube cross-origin embeds we already allow
   // via frameSrc above.
   crossOriginResourcePolicy: { policy: 'same-site' },
+  // NOTE: /assets/brand carries a per-route cross-origin override below —
+  // transactional email images render on foreign origins (ice #190).
   crossOriginEmbedderPolicy: false,
 }));
 
@@ -357,16 +360,18 @@ app.get('/ready', async (req, res) => {
   };
   if (dbCircuitBreaker.state === 'open') overallOk = false;
 
-  // Memory usage — reported for visibility; does not flip readiness.
-  // Node's heapTotal grows dynamically, so a high heapUsed/heapTotal ratio
-  // is common under load (especially in CI) and is not a reason to refuse traffic.
-  const mem = process.memoryUsage();
-  const heapRatio = mem.heapUsed / mem.heapTotal;
+  // Memory usage — reported for visibility; does not flip readiness. Reading
+  // comes from observability/memoryUsage.js, shared with the periodic alert so
+  // the two can never disagree again (they did: both used heapUsed/heapTotal,
+  // which V8 grows on demand — see the module header). Ported from
+  // icelandicstore #180.
+  const mem = readMemory();
   checks.memory = {
-    status:    heapRatio > 0.9 ? 'critical' : heapRatio > 0.8 ? 'degraded' : 'ok',
-    heapUsedMb:  Math.round(mem.heapUsed  / 1024 / 1024),
-    heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
-    ratio:       `${(heapRatio * 100).toFixed(1)}%`,
+    status:      mem.heapRatio > 0.9 ? 'critical' : mem.heapRatio > 0.8 ? 'degraded' : 'ok',
+    heapUsedMb:  mem.heapUsedMb,
+    heapLimitMb: mem.heapLimitMb,
+    rssMb:       mem.rssMb,
+    ratio:       mem.ratioPct,
   };
 
   // Event loop lag — reported for visibility; does not flip readiness.
@@ -451,6 +456,15 @@ app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), u
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
 app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  uploadStaticOpts));
+
+// Brand assets referenced from transactional email. helmet's site-wide CORP
+// same-site makes mail clients (rendering on their own origin) refuse the
+// image bytes; this narrow override keeps the exemption to exactly the files
+// meant to be embedded elsewhere. Ported from icelandicstore #190.
+app.use('/assets/brand', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
 
 // Dynamic /sitemap.xml — must come BEFORE express.static so it shadows
 // any stale public/sitemap.xml file and reflects live DB state.

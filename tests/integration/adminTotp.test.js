@@ -127,7 +127,7 @@ describe('Login — the session must not exist until the second factor passes', 
     // The SPA holds this payload until the next reload, and the profile 2FA
     // panel paints from it: without the flag an enrolled admin is shown the OFF
     // state and offered "Set up", which then 409s.
-    expect(res.body.user.totp_enabled).toBe(true);
+    expect(res.body.user.totp_enabled).toBe(true);
     expect(res.headers['set-cookie'].join()).toMatch(/auth_session/);
   });
 
@@ -402,10 +402,42 @@ describe('Social sign-in must not walk around 2FA', () => {
     const fs = require('fs');
     for (const f of ['googleAuthController.js', 'facebookAuthController.js']) {
       const src = fs.readFileSync(require('path').join(__dirname, '../../server/controllers', f), 'utf8');
-      expect(src).toMatch(/role\s*===\s*'admin'/);
+      // Since the 2026-08-22 harvest the guard asks the role SET, not the
+      // primary-role column (utils/adminRole.js) — an account holding admin
+      // through user_roles must be refused too.
+      expect(src).toMatch(/userIsAdminAnywhere/);
       expect(src).toMatch(/admin_oauth_blocked/);
       // The guard must come BEFORE the session is minted, or it guards nothing.
       expect(src.indexOf('admin_oauth_blocked')).toBeLessThan(src.indexOf('lucia.createSession'));
     }
+  });
+});
+
+// ── The role SET counts, not just the primary-role column ────────────────────
+// Migration 061 made user_roles the source of truth ("admin in the set ⇒ all
+// views") while users.role stayed a denormalized primary. The 2FA gate used to
+// read only users.role — so an account holding admin through user_roles had
+// every admin permission and NO challenge. Harvest 2026-08-22 closes it
+// (utils/adminRole.js); this pins it closed.
+describe('Login — admin held via the role SET faces the same challenge', () => {
+  test('role=user + user_roles admin + enrolled → mfaRequired', async () => {
+    const id = await makeUser({ id: 'totp-set-admin', username: 'setadmin', role: 'user' });
+    await db.query(
+      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'admin') ON CONFLICT DO NOTHING`,
+      [id]
+    );
+    await enrol(id);
+
+    const res = await login('setadmin');
+    expect(res.status).toBe(200);
+    expect(res.body.mfaRequired).toBe(true);
+    expect(res.body.user).toBeUndefined(); // no session until the second factor
+  });
+
+  test('role=user with no admin in the set stays unchallenged', async () => {
+    await makeUser({ id: 'totp-plain', username: 'plainuser', role: 'user' });
+    const res = await login('plainuser');
+    expect(res.status).toBe(200);
+    expect(res.body.mfaRequired).toBeUndefined();
   });
 });

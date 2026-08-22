@@ -1,6 +1,7 @@
 'use strict';
 
 const securityLogger = require('./securityLogger');
+const { readMemory } = require('./memoryUsage');
 
 // ── In-memory tracking for rate-based alerts ───────────────────────────────────
 
@@ -132,13 +133,13 @@ function trackRequest(isError) {
  * Called periodically from server.js.
  */
 function checkMemory() {
-  const mem = process.memoryUsage();
-  const ratio = mem.heapUsed / mem.heapTotal;
-  if (ratio > MEMORY_ALERT_THRESHOLD) {
+  const mem = readMemory();
+  if (mem.heapRatio > MEMORY_ALERT_THRESHOLD) {
     alert('critical', 'High memory usage', {
-      heapUsed:   `${Math.round(mem.heapUsed / 1024 / 1024)} MB`,
-      heapTotal:  `${Math.round(mem.heapTotal / 1024 / 1024)} MB`,
-      ratio:      `${(ratio * 100).toFixed(1)}%`,
+      heapUsed:  `${mem.heapUsedMb} MB`,
+      heapLimit: `${mem.heapLimitMb} MB`,
+      rss:       `${mem.rssMb} MB`,
+      ratio:     mem.ratioPct,
     });
   }
 }

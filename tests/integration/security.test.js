@@ -205,3 +205,21 @@ describe('GET /health', () => {
     expect(res.headers['x-request-id']).toMatch(/^[0-9a-f]{16}$/);
   });
 });
+
+// ── CORP — brand assets are the ONE cross-origin exemption ───────────────────
+// helmet's site-wide Cross-Origin-Resource-Policy: same-site makes mail
+// clients (which render on their own origin) refuse embedded images, so
+// /assets/brand carries a narrow cross-origin override (ported from
+// icelandicstore #190). Pinned BOTH ways: the exemption must exist, and it
+// must not widen past that one path.
+describe('Cross-Origin-Resource-Policy', () => {
+  test('/assets/brand is cross-origin (embeddable in transactional email)', async () => {
+    const res = await request(app).get('/assets/brand/logo.png');
+    expect(res.headers['cross-origin-resource-policy']).toBe('cross-origin');
+  });
+
+  test('everything else keeps same-site', async () => {
+    const res = await request(app).get('/assets/icons/google.svg');
+    expect(res.headers['cross-origin-resource-policy']).toBe('same-site');
+  });
+});
