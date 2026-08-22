@@ -38,6 +38,9 @@ export class NavBar {
     this._bindNavLinks(nav);
 
     window.addEventListener('authchange', () => this._renderAuth());
+    // Profile-data edits (name, avatar) repaint the auth area without the
+    // full re-navigation an authchange causes (ice #187).
+    window.addEventListener('userchange', () => this._renderAuth());
 
     return nav;
   }
