@@ -15,7 +15,7 @@ Halli's explicit instruction: **all base features and data models stay** — sho
 
 - Express 4.x, CommonJS server. PostgreSQL via `pg` (dev DB `orangesmiley`, test DB `orangesmiley_test`, user postgres/postgres).
 - Vanilla JS SPA frontend — **no React/Vue/Svelte, no bundler**.
-- Lucia v3 sessions + RS256 JWT. One auth system only.
+- Lucia v3 sessions. One auth system only. (The old "RS256 JWT" line was boilerplate — no JWT code exists; verified 2026-08-22.)
 - Migrations are **entries appended to the array in `server/config/schema.js`** (applied by `npm run migrate` / at boot); the `NNN_name.sql` files under `server/migrations/` are reference copies. Never edit an applied entry (`/migration-new` to add).
 - Consistent error envelope on all routes; pino (no console.log); typed errors → central middleware.
 - Security: helmet, csrf-csrf, hpp, express-rate-limit, sanitize-html, RBAC role checks. Tighten, don't loosen.
@@ -24,7 +24,7 @@ Halli's explicit instruction: **all base features and data models stay** — sho
 - i18n: EN + IS JSON locale files; `npm run check:i18n` before pushing translation changes. Icelandic is the primary/default visitor locale (job 2); EN mirrors it. Language-switcher choice lives in the **`locale_choice`** cookie.
 - Transactional email sender = **`EMAIL_FROM`** in `.env` (set to placeholder `info@orangesmiley.is` — base default is halli@hallismiley.is, never use it here).
 
-Full rules: `.claude/rules/stack-invariants.md` (auto-loaded).
+Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns worth repeating here: Express 5 catch-alls are `app.get('/{*splat}', …)` — keep the braces, `'/*splat'` stops matching `/`; and Node 26 is Current-not-LTS — the Docker digest and ci.yml node-version move TOGETHER, and dependabot must not major-bump the base image on its own.
 
 ## Project rules
 
