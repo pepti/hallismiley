@@ -10,8 +10,8 @@ Live site: **https://www.hallismiley.is**
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js 20 |
-| Framework | Express 4.18 |
+| Runtime | Node 24 LTS |
+| Framework | Express 5 |
 | Database | PostgreSQL 16 |
 | Frontend | Vanilla JS SPA (MVC + Component pattern) |
 | Auth | RS256 JWT (access + refresh tokens) |
@@ -21,7 +21,7 @@ Live site: **https://www.hallismiley.is**
 
 ## Prerequisites
 
-- Node.js 20+
+- Node 24 LTS+
 - PostgreSQL 16+
 - OpenSSL (for generating RSA keys)
 
