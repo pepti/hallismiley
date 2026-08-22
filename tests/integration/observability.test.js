@@ -74,7 +74,12 @@ describe('GET /ready (readiness probe)', () => {
     // CI runners may have high heap ratios, so accept any valid status
     expect(['ok', 'degraded', 'critical']).toContain(res.body.checks.memory.status);
     expect(res.body.checks.memory).toHaveProperty('heapUsedMb');
-    expect(res.body.checks.memory).toHaveProperty('heapTotalMb');
+    // heapLimitMb replaced heapTotalMb in the 2026-08-22 harvest: the check
+    // now measures against V8's heap_size_limit (heapTotal grows on demand and
+    // sat near 100% on healthy processes — ice #180). rssMb keeps the real
+    // footprint visible.
+    expect(res.body.checks.memory).toHaveProperty('heapLimitMb');
+    expect(res.body.checks.memory).toHaveProperty('rssMb');
   });
 
   test('event loop check is included', async () => {

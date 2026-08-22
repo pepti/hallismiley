@@ -2,12 +2,72 @@
 // Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
 const { t }      = require('../i18n');
+const logger     = require('../logger');
 
 const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
 // Send from the real owner mailbox (a verified Google Workspace address) rather
 // than a noreply@ alias, so mail actually delivers. Override with EMAIL_FROM.
 const FROM_ADDR = process.env.EMAIL_FROM || 'halli@hallismiley.is';
 const FROM      = `Halli Smiley <${FROM_ADDR}>`;
+
+// Staging safety: when EMAIL_ALLOWLIST is set (comma-separated addresses),
+// every message is redirected to those addresses instead of its real
+// recipients — so an environment cloned from production can never mail real
+// customers. Ported from icelandicstore #173.
+const ALLOWLIST = (process.env.EMAIL_ALLOWLIST || '')
+  .split(',').map((a) => a.trim().toLowerCase()).filter(Boolean);
+
+function applyAllowlist(to) {
+  if (!ALLOWLIST.length) return to;
+  return ALLOWLIST;
+}
+
+// A stalled mail endpoint must never hang a request that already COMMITted —
+// the account exists, the response never arrives, and a hung await shows up
+// in no telemetry (ice #199).
+const EMAIL_TIMEOUT_MS = Number(process.env.EMAIL_TIMEOUT_MS || 10000);
+
+// Failure loudness (ice #180): a mute transport used to no-op behind
+// console.log while every caller returned 200. Both failure exits now funnel
+// through here at error level plus a throttled critical alert, so no caller
+// can silence one by catching.
+const { alert } = require('../observability/alerts');
+const ALERT_THROTTLE_MS = 10 * 60 * 1000;
+const lastAlertAt = new Map();
+function alertOnce(key, title, details) {
+  const now = Date.now();
+  if (now - (lastAlertAt.get(key) || 0) < ALERT_THROTTLE_MS) return;
+  lastAlertAt.set(key, now);
+  alert('critical', title, details);
+}
+
+function transportNotConfigured(channel, details = {}) {
+  logger.error({ channel, ...details },
+    `email.${channel} NOT SENT — Resend transport not configured (RESEND_API_KEY)`);
+  alertOnce('transport', 'Email not sent — transport not configured', { channel, ...details });
+}
+
+function sendFailed(channel, detail) {
+  logger.error({ channel, detail }, 'email send FAILED (Resend)');
+  alertOnce('send:' + String(detail).slice(0, 40), 'Email send failed', { channel, detail });
+}
+
+// The single choke point every sender goes through: allowlist rewrite,
+// bounded wait, loud failure. Returns Resend's { data, error } shape.
+async function deliver(payload, channel = 'generic') {
+  const msg = { ...payload, to: applyAllowlist(payload.to) };
+  try {
+    const result = await Promise.race([
+      getClient().emails.send(msg),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`)), EMAIL_TIMEOUT_MS)),
+    ]);
+    if (result && result.error) sendFailed(channel, result.error.message || String(result.error));
+    return result;
+  } catch (err) {
+    sendFailed(channel, err.message);
+    return { data: null, error: { message: err.message } };
+  }
+}
 
 function isConfigured() {
   return !!process.env.RESEND_API_KEY;
@@ -21,6 +81,7 @@ function emailHealthCheck() {
     resendConfigured: !!process.env.RESEND_API_KEY,
     fromAddressSet:   !!process.env.EMAIL_FROM,
     fromAddress:      FROM_ADDR,
+    allowlistActive:  ALLOWLIST.length > 0,
   };
 }
 
@@ -85,7 +146,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
     // Do NOT log the token or the full link — they are credential-equivalent.
     // In development, retrieve the token directly from the database:
     //   SELECT email_verify_token FROM users WHERE email = '...';
-    console.log('[EmailService] Resend not configured — verification email skipped (retrieve token from DB)');
+    transportNotConfigured("verification", { note: "verification email skipped (retrieve token from DB)" });
     return;
   }
 
@@ -113,7 +174,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
   `, locale);
 
   // Log the Resend message ID (not the recipient address — that's PII)
-  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Verification email sent: id=${data.id}`);
 }
@@ -127,7 +188,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
     // Do NOT log the token or the full link — they are credential-equivalent.
     // In development, retrieve the token directly from the database:
     //   SELECT password_reset_token FROM users WHERE email = '...';
-    console.log('[EmailService] Resend not configured — password reset email skipped (retrieve token from DB)');
+    transportNotConfigured("password", { note: "password reset email skipped (retrieve token from DB)" });
     return;
   }
 
@@ -158,7 +219,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
   `, locale);
 
   // Log the Resend message ID (not the recipient address — that's PII)
-  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Password reset email sent: id=${data.id}`);
 }
@@ -206,7 +267,7 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
   const link = `${APP_URL}/#/reset-password?token=${token}&locale=${encodeURIComponent(locale)}`;
   if (!isConfigured()) {
     // Do NOT log the token or the link — they are credential-equivalent.
-    console.log('[EmailService] Resend not configured — welcome invite skipped (retrieve token from DB)');
+    transportNotConfigured("welcome", { note: "welcome invite skipped (retrieve token from DB)" });
     return false;
   }
   // Admin-saved copy wins per field; anything blank falls back to the i18n default.
@@ -219,7 +280,7 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
     link,
     locale,
   });
-  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Welcome invite sent: id=${data.id}`);
   return data?.id;
@@ -288,7 +349,7 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
   `).join('');
 
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — order receipt for ${order.order_number} skipped`);
+    transportNotConfigured("order");
     return;
   }
 
@@ -343,7 +404,7 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
     </p>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Order receipt sent: order=${order.order_number} id=${data.id}`);
 }
@@ -359,7 +420,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
   if (!adminEmails || adminEmails.length === 0) return;
   if (!bookableItems || bookableItems.length === 0) return;
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — booking notification skipped (order=${order.order_number}, items=${bookableItems.length})`);
+    transportNotConfigured("booking");
     return;
   }
 
@@ -416,7 +477,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
     </p>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({
+  const { data, error } = await deliver({
     from: FROM, to: adminEmails, subject, html,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
@@ -430,7 +491,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
 async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEmails }) {
   if (!adminEmails || adminEmails.length === 0) return;
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — RSVP notification skipped (user=${user.id}, isUpdate=${isUpdate})`);
+    transportNotConfigured("RSVP");
     return;
   }
 
@@ -490,7 +551,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     </table>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({
+  const { data, error } = await deliver({
     from: FROM, to: adminEmails, subject, html,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
@@ -502,7 +563,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
 async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyInfo }) {
   if (!user?.email) return;
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — RSVP confirmation skipped (user=${user.id}, isUpdate=${isUpdate})`);
+    transportNotConfigured("RSVP");
     return;
   }
 
@@ -579,7 +640,7 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
     </p>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({ from: FROM, to: user.email, subject, html });
+  const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] RSVP confirmation sent: user=${user.id} isUpdate=${isUpdate} id=${data.id}`);
 }
@@ -599,7 +660,7 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
 async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   if (!Array.isArray(recipients) || recipients.length === 0) return { sent: 0, failed: 0 };
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — party announcement skipped (recipients=${recipients.length})`);
+    transportNotConfigured("party");
     return { sent: 0, failed: 0 };
   }
 
@@ -701,7 +762,7 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
 async function sendPartyRequestNotification({ request, adminEmails, approveUrl, granted = true }) {
   if (!adminEmails || adminEmails.length === 0) return;
   if (!isConfigured()) {
-    console.log('[EmailService] Resend not configured — party request notification skipped');
+    transportNotConfigured("party", { note: "party request notification skipped" });
     return;
   }
 
@@ -743,7 +804,7 @@ async function sendPartyRequestNotification({ request, adminEmails, approveUrl, 
     </p>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({ from: FROM, to: adminEmails, subject, html });
+  const { data, error } = await deliver({ from: FROM, to: adminEmails, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Party request notification sent: recipients=${adminEmails.length} id=${data.id}`);
 }
@@ -758,7 +819,7 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
 
   if (!isConfigured()) {
     // Do NOT log the token or full link — it is credential-equivalent.
-    console.log('[EmailService] Resend not configured — party invite email skipped (retrieve magic token from DB)');
+    transportNotConfigured("party", { note: "party invite email skipped (retrieve magic token from DB)" });
     return;
   }
 
@@ -789,7 +850,7 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
     </p>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({ from: FROM, to, subject, html });
+  const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Party invite email sent: id=${data.id}`);
 }
@@ -818,7 +879,7 @@ function _escapeMultiline(value) {
 async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
   if (!user?.email) return;
   if (!isConfigured()) {
-    console.log(`[EmailService] Resend not configured — party welcome email skipped (user=${user.id})`);
+    transportNotConfigured("party");
     return;
   }
 
@@ -965,9 +1026,9 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
     </p>
   `, locale);
 
-  const { data, error } = await getClient().emails.send({ from: FROM, to: user.email, subject, html });
+  const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, emailHealthCheck, isConfigured };
+module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, emailHealthCheck, isConfigured };

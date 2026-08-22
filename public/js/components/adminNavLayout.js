@@ -42,6 +42,12 @@ const DIRTY_KEY = 'halli.admin.nav.dirty';
 let _saveTimer = null;
 let _pending = null;     // last layout (or null) waiting to be PATCHed
 let _hasPending = false;
+// Write serialisation (ice #189): without it two overlapping PATCHes can land
+// out of order — the OLDER payload arrives last and becomes the stored state —
+// and the in-flight completion handler cleared the dirty flag unconditionally,
+// dropping the last write entirely.
+let _seq = 0;        // bumped on every enqueue; a completion only counts if
+let _sending = false; // the sequence it sent is still the latest
 
 // A localStorage "dirty" flag marks that the cache holds a change the DB hasn't
 // confirmed yet. It survives a reload, so if a debounced PATCH is lost (e.g. the
@@ -60,11 +66,23 @@ function scheduleFlush() {
   _saveTimer = setTimeout(flushSave, 400);
 }
 function flushSave() {
+  if (_sending) return; // one PATCH in flight at a time; completion reschedules
   _saveTimer = null;
   if (!_hasPending) return;
+  const sentSeq = _seq;
+  _sending = true;
   saveNavConfig(_pending)
-    .then(() => { _hasPending = false; setDirty(false); })
-    .catch(() => { /* stay dirty — retry on next change or next page load */ });
+    .then(() => {
+      // Only the latest enqueued layout may clear the flags — an older
+      // in-flight save completing must not mark a NEWER edit as synced.
+      if (_seq === sentSeq) { _hasPending = false; setDirty(false); }
+    })
+    .catch(() => { /* stay dirty — retry on next change or next page load */ })
+    .finally(() => {
+      _sending = false;
+      // Anything enqueued while we were in flight goes out now, in order.
+      if (_hasPending) scheduleFlush();
+    });
 }
 
 /** Persist a layout: cache + dirty flag immediately (sync), PATCH the DB shortly
@@ -74,6 +92,7 @@ export function saveNavLayout(layout) {
   setDirty(true);
   _pending = layout;
   _hasPending = true;
+  _seq++;
   scheduleFlush();
 }
 
@@ -83,6 +102,7 @@ export function clearNavLayout() {
   setDirty(true);
   _pending = null;
   _hasPending = true;
+  _seq++;
   scheduleFlush();
 }
 
