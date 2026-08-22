@@ -13,6 +13,13 @@ if (process.env.SENTRY_DSN) {
 // so a misconfigured deploy refuses to start instead of degrading silently.
 const REQUIRED_ENV = ['DATABASE_URL', 'ALLOWED_ORIGINS', 'CSRF_SECRET', 'NODE_ENV'];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+// A silent mail transport on production means verification, resets and
+// receipts all no-op while every request returns 200 (ice #180). Fatal at
+// boot, where the config error is cheap to see. APP_ENV, not NODE_ENV —
+// NODE_ENV is 'production' on TEST stacks and CI boot-smoke too.
+if (process.env.APP_ENV === 'production' && !process.env.RESEND_API_KEY) {
+  missing.push('RESEND_API_KEY (required when APP_ENV=production)');
+}
 if (missing.length) {
   console.error(`[server] Missing required environment variables: ${missing.join(', ')}`);
   process.exit(1);

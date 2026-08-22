@@ -17,6 +17,7 @@
 // Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 
 const { query: dbQuery }           = require('../config/database');
+const { userIsAdminAnywhere } = require('../utils/adminRole');
 const { lucia }                    = require('../auth/lucia');
 const securityLogger               = require('../observability/securityLogger');
 const { loadArctic, isConfigured } = require('../auth/facebook');
@@ -172,8 +173,10 @@ async function callback(req, res, next) {
     // OAuth account hygiene we neither set nor can verify. Refusing the role
     // outright is simpler and stronger than replicating the challenge in the
     // provider controllers. Ordinary users keep social sign-in.
-    const { rows: roleRows } = await dbQuery('SELECT role FROM users WHERE id = $1', [userId]);
-    if (roleRows[0]?.role === 'admin') {
+    // Role-SET check, not just the primary-role column: user_roles is the
+    // source of truth since migration 061 and admin-in-the-set holds every
+    // admin permission (utils/adminRole.js).
+    if (await userIsAdminAnywhere(dbQuery, userId)) {
       securityLogger.loginFailed(req.ip, `facebook oauth refused for admin account ${email}`);
       return redirectWithError(res, 'admin_oauth_blocked', req.locale);
     }

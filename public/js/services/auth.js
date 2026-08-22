@@ -9,6 +9,15 @@ let _csrfToken = null;
 // on this page (password login, party magic link, post-signup Continue) as
 // opposed to a session simply being restored on page load. cart.js uses it to
 // decide whether a guest basket should be folded into the account's basket.
+// The cached user's DATA changed while the session stayed the same — a profile
+// save, not a sign-in. Deliberately NOT `authchange`: router.js re-navigates on
+// every authchange, so announcing a phone-number save that way tears down and
+// rebuilds the view the user is standing on, mid-edit. Components that paint
+// user fields (the NavBar's name + avatar) listen for this instead.
+function _dispatchUserChange(fields) {
+  window.dispatchEvent(new CustomEvent('userchange', { detail: { fields } }));
+}
+
 function _dispatch(reason = null) {
   window.dispatchEvent(new CustomEvent('authchange', {
     detail: { authenticated: isAuthenticated(), reason },
@@ -281,7 +290,19 @@ export async function updateProfile(updates) {
     err.status = res.status;
     throw err;
   }
-  if (data.user) { _user = data.user; _dispatch(); }
+  // The response IS the updated profile row (`res.json(rows[0])`), not a
+  // `{ user }` envelope. This used to test `data.user`, which is never set, so
+  // the cached user silently kept its pre-save values after EVERY profile
+  // save. Ported from icelandicstore #187.
+  //
+  // MERGE, never replace: the profile row carries only the `users` columns
+  // the controller selects, while the cached session user can hold more
+  // (approval workflow fields, party access). Assigning the row wholesale
+  // would drop those and silently demote the user's own permissions.
+  if (_user && data && typeof data === 'object' && data.id) {
+    _user = { ..._user, ...data };
+    _dispatchUserChange(Object.keys(data));
+  }
   return data;
 }
 

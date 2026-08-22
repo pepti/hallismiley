@@ -44,13 +44,19 @@ const ISSUER = 'Icelandic Store';
  * not customer or financial data, and shared counter devices make enrolment
  * awkward; widening this is a deliberate later choice, not an oversight.
  */
+// `admin_anywhere` is precomputed by the caller (utils/adminRole.js): since
+// migration 061, user_roles is the source of truth for the role SET and
+// "admin in the set ⇒ all views" — so a users.role='user' account with admin
+// in its set holds every admin permission and MUST face the same challenge.
 function isProtected(user) {
-  return !!user && user.role === 'admin' && user.totp_enabled === true;
+  const isAdmin = !!user && (user.role === 'admin' || user.admin_anywhere === true);
+  return isAdmin && user.totp_enabled === true;
 }
 
 /** Should this account be *pushed* to enrol? (Protected roles that haven't yet.) */
 function shouldEnrol(user) {
-  return !!user && user.role === 'admin' && user.totp_enabled !== true;
+  const isAdmin = !!user && (user.role === 'admin' || user.admin_anywhere === true);
+  return isAdmin && user.totp_enabled !== true;
 }
 
 // ── Enrolment ───────────────────────────────────────────────────────────────
