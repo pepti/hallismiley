@@ -2,6 +2,13 @@
 
 The **public instance** of Orange Smiley ehf.: marketing site + seed of the customer portal, for the software agency / ERP-replacement business serving Icelandic SMBs. **This is NOT a customer migration** — it is the company's own site, dogfooding the site factory.
 
+## Company/product split (Halli, 2026-08-22)
+
+- **Orange Smiley = the company**; THIS repo/site is the **company site**: what the company does + its products (content pass = roadmap R1, not yet done — the current /thjonusta tier matrix eventually moves to the product site).
+- **Rekstrarkerfið = the product** — ONE product for all: one shared core for every customer + per-customer custom features as AI-built/AI-maintained flagged modules, managed via the MCP connector (feature requests flow through the same AI workflow). Positioning: against fit-everyone standard ERP.
+- **Canonical product core = sibling repo `C:\Users\Notandi\claude\Projects\rekstrarkerfid`** (scaffolded from the base 2026-08-22; serves rekstrarkerfi.is). Customers are generated from IT; HalliProjects retires as upstream after the transition (criteria in `company/REKSTRARKERFI-PLAN.md` §8).
+- Strategy docs: `company/REKSTRARKERFI-PLAN.md` (product plan + roadmap R0–R8) and `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md` (product-site build brief); company plan §1/§4/§7 rewritten same day.
+
 - **Owner**: Halli. Business plan: `company/ORANGE-SMILEY-PLAN.md` (offering/tiers §1, instance architecture §4, targets §7). Build brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Both live in the gitignored `company/` folder in this repo, alongside `COMPANY-LOG.md` and `ORANGE-SMILEY-WEBSITE-PLAN.md`.
 - **Product name** (Halli, 2026-08-20): **Rekstrarkerfi** is the ASCII/technical form — domain `rekstrarkerfi.is` (registered, with IDN `rekstrarkerfið.is` to 301 to it), slugs, identifiers. **"Rekstrarkerfið"** (definite form) is what every human-facing surface says: nav lockup, page titles, ads. The COMPANY stays Orange Smiley ehf. — footer, legal pages, /um-okkur, Organization JSON-LD. Logo unchanged.
 - **Provenance**: scaffolded 2026-08-09 from `C:\Users\Notandi\claude\HalliProjects` at base rev **`562c637`** by site-factory.
@@ -103,9 +110,12 @@ Halli's content pass, not a bug.
 
 The fleet update mechanism: release channel published by CI, in-app checker,
 apply/verify, admin screen at `/admin/updates`. Full architecture and the
-provisioning items that are NOT code: `docs/SELF-UPDATE.md`. Upstreaming it to
-the base is documented but deliberately NOT performed (`docs/UPSTREAM-SELF-UPDATE.md`)
-— HalliProjects is read-only, so that write needs Halli.
+provisioning items that are NOT code: `docs/SELF-UPDATE.md`. **Upstream status
+(verified 2026-08-22): the base ALREADY has the whole module** — its own PR
+#134 (migration 082_system_updates, ship-dark `enabled:false` default); the
+old "documented but deliberately NOT performed" claim was stale. Only
+`promote.yml` (channel publisher workflow) remained orangesmiley-only; its
+base PR is prepared (see COMPANY-LOG 2026-08-22).
 
 - `config/client.json` is the per-instance module config seam (defaults < file <
   `CLIENT_CONFIG_*` env). Every future module flag should read from it.
@@ -144,7 +154,8 @@ Five chunks merged on master + five base PRs (#136–#140); full ledger entry in
 
 ## Where things stand for the next session
 
-- **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files, and the tier prices on `/thjonusta`.
+- **Company/product split decided 2026-08-22** (section above): next programs are R1 (company-site content pass HERE, copy needs Halli) and R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
+- **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
 - **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
 - Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
 - Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.

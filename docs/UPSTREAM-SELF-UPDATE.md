@@ -5,10 +5,14 @@ Every instance the factory ever scaffolds has the same problem — "how does thi
 customer get the security fix?" — so the module belongs in HalliProjects, with
 the flag off, and each fleet turns it on.
 
-> **Not done yet, on purpose.** `CLAUDE.md` marks
-> `C:\Users\Notandi\claude\HalliProjects` **read-only — never modify**. This
-> document is the port, ready to apply; performing it needs Halli's go-ahead
-> and should be a normal commit in the base repo, not a copy from here.
+> **DONE — verified 2026-08-22.** The base performed this port itself (its PR
+> #134, `feat/self-update-module`): all files below are in the base, migration
+> numbered **082_system_updates** there, wiring complete, and the one
+> deliberate difference (ship-dark `enabled: false` default) is in place. The
+> only piece that stayed instance-only was `.github/workflows/promote.yml`
+> (channel publisher) — upstreamed via its own base PR (COMPANY-LOG
+> 2026-08-22). This document remains as the port's record; the read-only rule
+> on the base is back in force.
 
 ---
 

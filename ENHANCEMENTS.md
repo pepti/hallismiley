@@ -56,6 +56,8 @@ Original proposal kept below for the record.
 **Effort.** M–L. **Risk.** Medium — touches routing and nav, so it needs the e2e suite green before and after.
 **Recommendation.** **Do now, while there is exactly one instance to migrate.** The cost scales with the number of deployed instances.
 
+> STATUS 2026-08-22: strategic weight raised — this is roadmap item **R4** under the one-product-for-all strategy (`company/REKSTRARKERFI-PLAN.md` §7): tiers AND per-customer custom features are flag sets on this seam. Still awaiting Halli's implementation sign-off.
+
 ### 6. Route-level code splitting
 **What.** `public/js/router.js` statically imports all 58 view modules, so every visitor downloads and parses 107 JS modules (~70 KB of it the two Party views alone) before the home page can render. Convert the route table to dynamic `import()` — native ESM, no bundler, so stack invariant #1 holds.
 **Why.** This is the entire remaining Lighthouse performance gap: `/thjonusta` scores 92–93 but the home page sits at 84–85 against a ≥90 target, and the profile shows the cost is module graph, not content (network settles by ~680 ms; the rest is parse/execute of views nobody asked for). It also gets worse with every module the ERP tier adds.
@@ -67,6 +69,8 @@ Original proposal kept below for the record.
 **Why.** It is the second half of what this instance is for, and the ChangeRequestWidget is already the support product. `kennitala` already exists in the bookkeeping schema (`invoices`, `suppliers`), so the identity key is not new.
 **Effort.** L. **Risk.** Medium-high — it is the first surface where one customer could see another's data, so RBAC and row scoping need real tests.
 **Recommendation.** Later — after the first customer contract is signed and the ops instance actually has data to publish. Design the seam now, build when there is something to show.
+
+> STATUS 2026-08-22: roadmap item **R6** under the one-product-for-all strategy (`company/REKSTRARKERFI-PLAN.md` §7). Timing unchanged (after first contract).
 
 ### 8. Company deploy workflow (prepare, do not provision)
 **What.** A parameterised CI → ACR → App Service workflow whose registry, app name, resource group and alert address come from repo/org variables, so the same shape serves the public site, the ops instance and every customer instance. Includes the `/health` + `/ready` boot smoke already in `ci.yml`.
@@ -118,6 +122,8 @@ Original proposal kept below for the record.
 - *Module seam:* `modules.mcp` in `config/client.json` — `enabled`, `allowedRoles`, `writeTools` — so a customer instance can ship with it off or read-only.
 **Effort.** M–L: M for OAuth routes + consent page + read-only tool set; the write tools and per-instance flagging push it to L. **Risk.** Medium — it is a new authenticated surface exposing business data, and the OAuth endpoints must be reviewed like auth code, not like a feature. Mitigated by read-only first, RBAC re-check per call, and the audit log. Verify at implementation time that the current SDK version loads cleanly under CommonJS (it ships a CJS build; pin the version that does).
 **Recommendation.** Approve the design now; implement read-only after the site is deployed (a remote connector needs a public HTTPS URL, so it is meaningless before then — same sequencing as proposal 10). Write tools as a separate sign-off.
+
+> STATUS 2026-08-22 (strategy): this connector is the substrate of the one-product-for-all AI-operations model — per-customer monitoring, module management and the feature-request workflow all run over it. Phase 2 (OAuth 2.1 + write tools + feature-request tool) is roadmap item **R5**, the AI ops loop **R8** (`company/REKSTRARKERFI-PLAN.md` §5/§7). Write tools remain a separate Halli sign-off.
 
 ---
 
