@@ -37,8 +37,19 @@
   --text-secondary: #A9B4C0;
   --text-muted:     #5B5A56;
 
-  --success: #4caf78;
-  --error:   #e05c5c;
+  /* Status colours — completed into a theme-aware set (ported shape from
+     icelandicstore #196/#192; values re-measured for the base's six dark
+     themes: warning #E8A33D clears 7.55:1 on the lightest bg #202020).
+     --danger aliases --error: components had var(--danger, hex) fallbacks
+     against a token that never existed. -dim washes are for pills/rows and
+     never carry text alone. */
+  --success:     #4caf78;
+  --success-dim: rgba(76, 175, 120, 0.16);
+  --error:       #e05c5c;
+  --error-dim:   rgba(224, 92, 92, 0.16);
+  --danger:      #e05c5c;
+  --warning:     #E8A33D;
+  --warning-dim: rgba(232, 163, 61, 0.16);
 
   /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
   --test-blue:     #2f6fed;

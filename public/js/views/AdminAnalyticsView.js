@@ -2,14 +2,12 @@ import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t } from '../i18n/i18n.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
+import { chartTokens } from '../utils/chartTheme.js';
 
 const RANGES  = [7, 30, 90];
-// Palette drawn from the site's design tokens (variables.css).
-const GOLD    = '#C8AA6E'; // --gold
-const TEAL    = '#0BC4E3'; // --teal
-const PALETTE = ['#C8AA6E', '#0BC4E3', '#A9B4C0', '#4caf78', '#e05c5c', '#785A28', '#8c6aaf', '#A08B6A'];
-const AXIS    = '#A9B4C0'; // --text-secondary
-const GRID    = 'rgba(120, 90, 40, 0.3)'; // --border-dim
+// Colours are NOT module constants any more: this block was frozen at one
+// theme's values and wrong on the other five. The build function reads
+// chartTokens() at draw time instead (utils/chartTheme.js).
 
 export class AdminAnalyticsView {
   constructor() {
@@ -194,9 +192,10 @@ export class AdminAnalyticsView {
 
   _buildCharts(Chart) {
     // Theme Chart.js for the dark surface (default text is near-black).
-    Chart.defaults.color = AXIS;
-    Chart.defaults.borderColor = GRID;
-    Chart.defaults.font.family = "'Barlow', 'Inter', system-ui, sans-serif";
+    const ct = chartTokens();
+    Chart.defaults.color = ct.axis;
+    Chart.defaults.borderColor = ct.grid;
+    Chart.defaults.font.family = ct.font;
 
     const ts = this._el.querySelector('#analytics-timeseries');
     if (ts && this._timeseries.length) {
@@ -205,8 +204,8 @@ export class AdminAnalyticsView {
         data: {
           labels: this._timeseries.map(d => d.date),
           datasets: [
-            { label: t('analytics.views'),   data: this._timeseries.map(d => d.views),   borderColor: GOLD, backgroundColor: 'rgba(200,170,110,0.15)', fill: true, tension: 0.3 },
-            { label: t('analytics.uniques'), data: this._timeseries.map(d => d.uniques), borderColor: TEAL, backgroundColor: 'rgba(11,196,227,0.12)', fill: true, tension: 0.3 },
+            { label: t('analytics.views'),   data: this._timeseries.map(d => d.views),   borderColor: ct.accent, backgroundColor: ct.fill(ct.accent, 15), fill: true, tension: 0.3 },
+            { label: t('analytics.uniques'), data: this._timeseries.map(d => d.uniques), borderColor: ct.info, backgroundColor: ct.fill(ct.info, 12), fill: true, tension: 0.3 },
           ],
         },
         options: {
@@ -226,7 +225,7 @@ export class AdminAnalyticsView {
         type: 'bar',
         data: {
           labels: this._conversions.map(c => this._convLabel(c.event_type)),
-          datasets: [{ label: t('analytics.conversions'), data: this._conversions.map(c => c.total), backgroundColor: GOLD }],
+          datasets: [{ label: t('analytics.conversions'), data: this._conversions.map(c => c.total), backgroundColor: ct.accent }],
         },
         options: {
           responsive: true, maintainAspectRatio: false,
@@ -238,11 +237,12 @@ export class AdminAnalyticsView {
   }
 
   _doughnut(Chart, sel, agg) {
+    const ct = chartTokens(); // per-draw: doughnuts rebuild on range change
     const ctx = this._el.querySelector(sel);
     if (!ctx || !agg.labels.length) return;
     this._charts.push(new Chart(ctx, {
       type: 'doughnut',
-      data: { labels: agg.labels, datasets: [{ data: agg.values, backgroundColor: PALETTE }] },
+      data: { labels: agg.labels, datasets: [{ data: agg.values, backgroundColor: ct.palette }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
     }));
   }

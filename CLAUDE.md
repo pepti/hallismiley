@@ -8,10 +8,10 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 
 ## Stack (authoritative — confirm against package.json before changing)
 
-- Node.js 20, Express 4.18, CommonJS (`"type": "commonjs"`)
+- Node 24 LTS (digest-pinned image; Node 26 is Current-not-LTS — never let dependabot major-bump the base image alone), Express 5 (catch-alls are `app.get('/{*splat}', …)` — keep the braces), CommonJS (`"type": "commonjs"`)
 - PostgreSQL 16 via `pg`
 - Vanilla JS SPA frontend (MVC + component pattern). **No React/Vue/Svelte — keep it framework-free.**
-- Auth: **Lucia v3** + RS256 JWT (access + refresh). RSA keys in `keys/` locally, env vars `PRIVATE_KEY`/`PUBLIC_KEY` in prod.
+- Auth: **Lucia v3** sessions. (The old "RS256 JWT (access + refresh)" line was boilerplate — no JWT code exists in this tree; verified 2026-08-22, the same finding icelandicstore made on its copy of the claim.)
 - Security: helmet, csrf-csrf, hpp, express-rate-limit, sanitize-html, cors
 - Observability: pino + pino-http (logs), Sentry (errors), prom-client (metrics)
 - Email: Resend (primary) + nodemailer (fallback)
@@ -24,7 +24,7 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 
 1. **Vanilla JS frontend.** No SPA framework, no bundler-required syntax. ES modules + plain DOM.
 2. **CommonJS server.** Don't convert to ESM piecemeal.
-3. **Lucia owns sessions; JWT for stateless API auth.** Don't bolt on a second session system.
+3. **Lucia owns sessions.** Don't bolt on a second session system. (The JWT half of this line was boilerplate — see the auth note above.)
 4. **Migrations are entries appended to the array in `server/config/schema.js`** (applied by `npm run migrate` / at boot, one transaction per migration, advisory-locked against concurrent booters). Never edit a migration that has been applied to prod — always add a new one.
 5. **All routes return a consistent error envelope** (see `docs/API.md` "Error formats"). Don't invent new error shapes.
 6. **Integration tests hit a real Postgres** — do not mock `pg`.
