@@ -17,6 +17,8 @@ const ADMIN_VIEW_IDS = [
   // on top (server/routes/systemRoutes.js), so an ops role can watch a fleet
   // without being able to restart anything.
   'updates',
+  'monitoring',
+  'mcp',
   // Bókhald. Split per area so a bookkeeper or accountant can be granted exactly
   // what they need. Holding one of these grants READ access only: issuing invoices,
   // recording payments and crediting are hard admin-only (adminBookkeepingRoutes.js).

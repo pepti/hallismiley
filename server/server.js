@@ -29,6 +29,7 @@ const logger = require('./logger');
 const app    = require('./app');
 const { pool } = require('./config/database');
 const { migrate } = require('./scripts/migrate');
+const { startEventLogCleanup } = require('./services/eventLogCleanup');
 const { startTokenCleanup } = require('./services/tokenCleanup');
 const { logResolvedConfig } = require('./config/clientConfig');
 const { startUpdateChecker } = require('./services/updateChecker');
@@ -74,6 +75,7 @@ async function start() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
+    startEventLogCleanup(); // daily event_logs prune (EVENT_LOG_RETENTION_DAYS)
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
   });
 

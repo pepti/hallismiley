@@ -342,3 +342,28 @@ localStorage before load, so theme-boot applies it pre-paint) instead of
 poking the DOM from outside. Corollary of the 2026-08-20 lesson: a hidden
 browser pane freezes transitions; a VISIBLE one still repaints on its own
 schedule.
+
+### 2026-08-22 — check a ported view's import graph before anything else
+
+_(factory)_ Twice in one harvest, a copied admin view imported a service
+module that didn't make the copy list (`adminEvents.js`, then
+`adminMcp.js`). The failure is nothing like "one admin page broken": the
+router imports every view eagerly, so ONE missing module kills the whole
+SPA at load — which presents as ~150 e2e tests timing out on locators,
+plus worker crashes once enough zombie browsers pile up. Fifteen-minute
+suite runs, zero pointing at the actual file. The check that catches it
+is ten lines: walk `from './…'` edges from main.js + router.js and stat
+each target. Generalization: **after any multi-file port, verify the
+full import graph mechanically before running anything expensive** — and
+when a suite's character changes from "failures" to "everything slow",
+suspect module load, not the tests.
+
+### 2026-08-22 — don't edit the tree a suite is reading
+
+_(project)_ A full Jest run was started in the background and the next
+chunk's edits continued in the same working tree. Jest loads each suite
+lazily, so later suites required half-edited modules: 64 failures across
+six suites, none reproducible afterwards. The two fixes are discipline,
+not code: park edits until the run lands, or run the suite from a
+worktree snapshot. (The per-branch e2e databases from this same harvest
+solve the DB half of this; the FILE half stays on the operator.)

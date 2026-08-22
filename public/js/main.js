@@ -1,3 +1,4 @@
+import { installGlobalErrorReporting } from './services/errorReporter.js';
 import { tryRestoreSession } from './services/auth.js';
 import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
@@ -41,6 +42,7 @@ document.body.insertBefore(navEl, document.getElementById('app'));
 // ── Floating theme switcher — mounted outside #app so it survives SPA nav ──
 // theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs
 // at runtime in case the boot script was blocked.
+installGlobalErrorReporting(); // client failures → /api/v1/events/collect (ice #195)
 initTheme();
 syncAmbienceClass(); // body.amb-off mirrors the visitor's live-Iceland pref
 document.body.appendChild(new ThemeSwitcher().render());
