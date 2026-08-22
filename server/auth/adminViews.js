@@ -26,6 +26,7 @@ const ADMIN_VIEW_IDS = [
   'books', 'invoices', 'expenses', 'ar', 'vat', 'bank', 'ledger', 'payroll', 'pos',
   'updates',
   'monitoring',
+  'mcp',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +
