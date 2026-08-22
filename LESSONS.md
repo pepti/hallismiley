@@ -367,3 +367,15 @@ six suites, none reproducible afterwards. The two fixes are discipline,
 not code: park edits until the run lands, or run the suite from a
 worktree snapshot. (The per-branch e2e databases from this same harvest
 solve the DB half of this; the FILE half stays on the operator.)
+
+## 2026-08-22 — project — full-bleed photo bands between themed sections read as "cutovers"
+
+The Iceland home used alternating photographic bands (hero photo → frosted
+cards on photo → next photo). Each band was individually polished, but
+scrolling the seams between two unrelated photographs reads as a hard cut —
+Halli rejected it the day after shipping ("I dont like how the cuttover
+between background") and reverted the home page to the single-canvas
+hallismiley composition. Lesson: stacked full-bleed imagery needs a shared
+continuum (one photo, one gradient, or real transitions between bands) — a
+sequence of beautiful-but-unrelated backdrops is experienced as seams, not
+scenery. Inner pages with ONE band each survived the same review.

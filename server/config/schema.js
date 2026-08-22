@@ -4204,6 +4204,20 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id)`,
     ],
   },
+  {
+    // Homepage revert to the hallismiley composition (Halli, 2026-08-22):
+    // the scene-band cutovers didn't work, so the waterfall video is the
+    // landing default again. Same shape as 085/086 — flip the mode only when
+    // it still holds the previous default, so an explicit admin choice of
+    // another mode survives.
+    name: '089_landing_background_video',
+    statements: [
+      `UPDATE site_content
+          SET value = jsonb_set(value, '{mode}', '"video"'::jsonb)
+        WHERE key = 'landing_background'
+          AND value->>'mode' = 'scene'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

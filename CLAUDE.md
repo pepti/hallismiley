@@ -41,11 +41,15 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 - **Palette discipline.** One dominant color + one sharp accent + neutrals, all through the CSS token system. Here (the **Bjart** default since 2026-08-20, Halli's call): orange / black / white only — the orange ramp dominates (`--gold-light/--gold/--gold-dark` = #EA580C/#C2410C/#9A3412), near-black `--teal` is the sharp accent used sparingly, white and whisper-grey are the neutrals. **`--gold-light` is decorative-only on a light page (3.41 : 1)** — accent-coloured TEXT must use `--accent-ink`.
 - **Make unexpected, context-specific choices.** The default is Bjart — white paper, black ink, one orange, Barlow voice, a themed gradient hero (the waterfall video is retired to an opt-in admin mode), the 4.1 emblem mark unchanged. **Five themes** live in the picker (`themes.css`): `classic`/Bjart (light default) · `light`/Pappír (warm ivory) · `mono` (b/w, orange on actions only) · `ember`/Glóð (the former Ash dark, values intact) · `midnight` (true black + bright orange). Halli picks themes by testing them live, so keep the picker healthy. When a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
 
-## Iceland scene engine ("Úti á Íslandi", 2026-08-21)
+## Iceland scene engine ("Úti á Íslandi", 2026-08-21 — INNER PAGES only since 2026-08-22)
 
-The public pages live inside photographic Icelandic landscapes (Halli's
+The public INNER pages live inside photographic Icelandic landscapes (Halli's
 directive: the visitor should feel like they are outside in Iceland). Built in
 three chunks on master; the engine is `public/js/scenes/` + `iceland-scene.css`.
+**The homepage left the program on 2026-08-22**: Halli rejected the hard
+cutovers between the home scene bands and reverted the home page to the
+original hallismiley composition (see next section). The engine, ambience and
+inner-page scenes are untouched.
 
 - **Photos are licensed, never Halli's Facebook saves** — those were the mood
   board only. Shipped photos come from Wikimedia Commons (CC0/CC BY), credited
@@ -53,12 +57,12 @@ three chunks on master; the engine is `public/js/scenes/` + `iceland-scene.css`.
   CC BY requires it). Originals in gitignored `assets-src/iceland/` +
   `SOURCES.json`; `node scripts/build-iceland-scenes.js` regenerates all
   renditions/manifests and FAILS if a hero AVIF exceeds the 250KB LCP budget.
-- **Scene assignments mean something** (sceneDefs.js): home = Skógafoss; tiers
-  = braided river ("þrjár leiðir — eitt kerfi"); steps = the highland road;
-  /thjonusta = Sigöldugljúfur (many falls, one river); /verkefni =
-  Landmannalaugar (brand as landscape); /um-okkur = glacier at blue hour;
-  /hafa-samband = Reynisfjara. Five themes grade the same photos via
-  `--scene-*` tokens (mono = full grayscale).
+- **Scene assignments mean something** (sceneDefs.js): /thjonusta =
+  Sigöldugljúfur (many falls, one river); /verkefni = Landmannalaugar (brand
+  as landscape); /um-okkur = glacier at blue hour; /hafa-samband =
+  Reynisfjara. (home/tiers/steps defs remain for the dormant home scenes.)
+  Five themes grade the same photos via `--scene-*` tokens (mono = full
+  grayscale).
 - **Live ambience, on by default**: `/api/v1/ambience` proxies Open-Meteo
   (10-min server cache, ALWAYS 200 — failure is `{available:false}` and static
   scenes); real sun position computed client-side (sun.js — midnight sun falls
@@ -66,10 +70,24 @@ three chunks on master; the engine is `public/js/scenes/` + `iceland-scene.css`.
   night, CSS fallback); synthesized waterfall sound OFF by default. Toggles in
   the ThemeSwitcher (`ws_ambience`, `ws_ambience_sound`); everything obeys
   `utils/motion.js` (reduced-motion + Save-Data) and pauses off-screen/hidden.
-- **landing_background mode 'scene' is the hero default** (migration 086);
-  gradient/video/photo/plain remain admin-selectable. SPA navigation uses View
-  Transitions where supported (router.js); `.view` fadeIn is
-  reduced-motion-gated and suppressed during VT.
+- **landing_background mode 'video' is the hero default again** (migration
+  089 reverted 086's one-day scene default); scene/gradient/photo/plain
+  remain admin-selectable. SPA navigation uses View Transitions where
+  supported (router.js); `.view` fadeIn is reduced-motion-gated and
+  suppressed during VT.
+
+## Homepage = the hallismiley composition (2026-08-22)
+
+Halli's call: revert all the way back to the Halli Smiley homepage layout and
+iterate from there — **dark waterfall-video hero, light Bjart site** below it.
+`HomeView` renders hero → news → projects → skills → stats → contact →
+footer again; the business `_tiers()`/`_steps()` sections (and the scene
+band mount) are the dormant methods now, kept with their i18n for the coming
+content pass. The media-hero surfaces are fixed dark on EVERY theme by design
+(home.css — the veil's bottom stop alone hands off to the themed page), which
+satisfies invariant 15 by construction. Content still wearing carpentry-era
+copy (skills/stats rows, Unsplash discipline placeholders, contact page) is
+Halli's content pass, not a bug.
 
 ## Factory commands
 
