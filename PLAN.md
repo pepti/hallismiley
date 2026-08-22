@@ -74,3 +74,14 @@ pending Halli, like all copy.
 - Logo unchanged: the existing orange smiley mark carries the product.
 - **Registered 2026-08-20:** `rekstrarkerfi.is` **and** `rekstrarkerfið.is` (IDN — catches the spoken definite form typed directly) — both on Halli's ISNIC account. heildarkerfi.is was passed on. TODO when DNS goes live: 301 rekstrarkerfið.is → rekstrarkerfi.is (canonical).
 - Adopting the name in site copy/locale files is **not yet approved** — separate pass with Halli's sign-off per the CLAUDE.md copy rules.
+
+## Company/product split (decided 2026-08-22)
+
+Orange Smiley = the company (this site lists what it does + its products);
+Rekstrarkerfið = the one product for all — shared core + per-customer
+AI-maintained flagged modules via MCP — with its own site rekstrarkerfi.is
+served from the sibling canonical product repo `Projects\rekstrarkerfid`
+(scaffolded from the base this day). Strategy + long-term roadmap R0–R8:
+`company/REKSTRARKERFI-PLAN.md`; the product-site build program:
+`company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`. This repo's follow-on is the
+R1 company-site content pass (copy needs Halli) — nothing else changes here.
