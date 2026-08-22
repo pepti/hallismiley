@@ -379,3 +379,17 @@ hallismiley composition. Lesson: stacked full-bleed imagery needs a shared
 continuum (one photo, one gradient, or real transitions between bands) — a
 sequence of beautiful-but-unrelated backdrops is experienced as seams, not
 scenery. Inner pages with ONE band each survived the same review.
+
+### 2026-08-22 — check the base before porting: our upstream docs were stale _(base)_ _(factory)_
+
+Planned "port self-update to the base" as the first step of the product-repo
+program — and found the base had already done it itself (its PR #134), with
+the exact migration number (082_system_updates) our CLAUDE.md warned it would
+use, while docs/UPSTREAM-SELF-UPDATE.md and CLAUDE.md here still said
+"deliberately NOT performed". The base is an actively developed repo; a
+read-only rule does not mean a frozen one. Lesson: before porting anything
+base-ward (or claiming a gap), diff the actual trees — the whole "port" turned
+out to be one workflow file (promote.yml). Corollary for the factory: the
+scaffolder's generated setup.ps1 hangs on bare `createdb` when PG wants a
+password, and a fresh repo has no git identity — both bit the rekstrarkerfid
+scaffold and are noted in site-factory/BASE-SYNC.md.
