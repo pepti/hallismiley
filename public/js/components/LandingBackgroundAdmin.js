@@ -67,7 +67,7 @@ export class LandingBackgroundAdmin {
   }
 
   _paint() {
-    const l = this._landing || { mode: 'scene', photo_url: null, veil_percent: 100 };
+    const l = this._landing || { mode: 'video', photo_url: null, veil_percent: 100 };
     const veil = Number.isFinite(l.veil_percent) ? l.veil_percent : 100;
     this._el.querySelector('#bg-body').innerHTML = `
       <div class="bg-card">

@@ -60,17 +60,23 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.text).toMatch(/rel="canonical" href="[^"]*\/en\/"/);
   });
 
-  test('home preloads the Iceland scene hero image (LCP insurance)', async () => {
+  test('scene routes preload their hero image; the video home does not', async () => {
     // Injected by ssrMeta from server/config/sceneManifest.json — the tag must
     // sit BEFORE the main stylesheet so the fetch starts ahead of CSS parse.
-    const res = await request(app).get('/is/');
-    expect(res.status).toBe(200);
-    const preloadAt = res.text.indexOf('id="ssr-scene-preload"');
-    const cssAt = res.text.indexOf('href="/css/main.css"');
+    const th = await request(app).get('/is/thjonusta');
+    expect(th.status).toBe(200);
+    const preloadAt = th.text.indexOf('id="ssr-scene-preload"');
+    const cssAt = th.text.indexOf('href="/css/main.css"');
     expect(preloadAt).toBeGreaterThan(-1);
     expect(cssAt).toBeGreaterThan(preloadAt);
-    expect(res.text).toMatch(/<link rel="preload" as="image"[^>]*fetchpriority="high"/);
-    expect(res.text).toMatch(/imagesrcset="[^"]*\/assets\/iceland\/skogafoss-[^"]*\.avif[^"]*"/);
+    expect(th.text).toMatch(/<link rel="preload" as="image"[^>]*fetchpriority="high"/);
+    expect(th.text).toMatch(/imagesrcset="[^"]*\/assets\/iceland\/sigoldugljufur-[^"]*\.avif[^"]*"/);
+
+    // Home is the waterfall video again (2026-08-22 revert): a scene preload
+    // there would fetch ~200KB the page never paints.
+    const home = await request(app).get('/is/');
+    expect(home.status).toBe(200);
+    expect(home.text).not.toContain('id="ssr-scene-preload"');
   });
 
   test('business routes render locale-aware business meta', async () => {

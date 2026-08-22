@@ -12,16 +12,18 @@ async function settle(page) {
   await page.waitForTimeout(2_000);
 }
 
-test.describe('Iceland scene — home', () => {
+// Home reverted to the hallismiley video hero (2026-08-22) — the engine's
+// generic behaviours (LQIP, theme grading, reduced motion, a11y) are covered
+// on /is/thjonusta's Sigöldugljúfur band instead. Scene mode on the home hero
+// itself remains admin-selectable but is no longer the tested default.
+test.describe('Iceland scene — engine behaviours (on /is/thjonusta)', () => {
   test('scene renders: photo loaded, LQIP behind it, place chip visible', async ({ page }) => {
-    // Resource 404s (e.g. the optional home_hero content row that dev DBs
-    // don't seed) are pre-existing noise — what this guards against is scene
-    // engine exceptions.
+    // What this guards against is scene engine exceptions, not resource noise.
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
-    await page.goto('/');
-    const scene = page.locator('.lol-hero--scene .ice-scene');
+    await page.goto('/is/thjonusta');
+    const scene = page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]');
     await expect(scene).toHaveClass(/is-loaded/, { timeout: 10_000 });
 
     // LQIP is present (inline data URI) and stays in the DOM as the fallback.
@@ -29,11 +31,7 @@ test.describe('Iceland scene — home', () => {
     expect(lqipBg).toContain('data:image/jpeg');
 
     await expect(scene.locator('.ice-scene__chip')).toBeVisible();
-    await expect(scene.locator('.ice-scene__chip')).toHaveText('Skógafoss — Suðurland');
-
-    // Section bands mount their scenes when scrolled near; force it.
-    await page.locator('.home-steps').scrollIntoViewIfNeeded();
-    await expect(page.locator('.home-tiers .ice-scene__img')).toBeAttached({ timeout: 10_000 });
+    await expect(scene.locator('.ice-scene__chip')).toHaveText('Sigöldugljúfur — Hálendið');
 
     expect(errors, `Unexpected JS errors: ${errors.join(', ')}`).toEqual([]);
   });
@@ -43,8 +41,8 @@ test.describe('Iceland scene — home', () => {
     // theme-boot pre-paint) — setting the attribute after load loses a race
     // with themePrefs.applyTheme() on the session-restore authchange.
     await page.addInitScript(() => localStorage.setItem('ws_theme', 'mono'));
-    await page.goto('/');
-    const img = page.locator('.lol-hero--scene .ice-scene__img');
+    await page.goto('/is/thjonusta');
+    const img = page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"] .ice-scene__img');
     await expect(img).toBeAttached({ timeout: 10_000 });
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('mono');
     const filter = await img.evaluate((el) => getComputedStyle(el).filter);
@@ -53,18 +51,18 @@ test.describe('Iceland scene — home', () => {
 
   test('reduced motion: no Ken Burns, page still fully rendered', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/');
-    const img = page.locator('.lol-hero--scene .ice-scene__img');
+    await page.goto('/is/thjonusta');
+    const img = page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"] .ice-scene__img');
     await expect(img).toBeVisible({ timeout: 10_000 });
     expect(await img.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
     // The scene is still there — motion off never means content off.
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/);
-    await expect(page.locator('.lol-hero__title')).toBeVisible();
+    await expect(page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]')).toHaveClass(/is-loaded/);
+    await expect(page.locator('h1.thjonusta-title')).toBeVisible();
   });
 
   test('has no detectable accessibility violations over the photography', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await page.goto('/is/thjonusta');
+    await expect(page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]')).toHaveClass(/is-loaded/, { timeout: 10_000 });
     await settle(page);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -116,10 +114,11 @@ test.describe('Iceland scene — inner pages', () => {
   test('SPA navigation between scene pages leaves no leaked observers or errors', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
+    // Start on the (sceneless, video-hero) home and walk every scene page
+    // via the SPA (View Transitions where supported, plain swap elsewhere —
+    // both must land cleanly).
     await page.goto('/is/');
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
-    // Walk through every scene page via the SPA (View Transitions where
-    // supported, plain swap elsewhere — both must land cleanly).
+    await expect(page.locator('video.lol-hero__bg')).toBeAttached({ timeout: 10_000 });
     for (const link of ['thjonusta', 'verkefni', 'um-okkur', 'hafa-samband']) {
       await page.locator(`.lol-nav__link[data-route="/${link}"]`).first().click();
       await expect(page.locator('.ice-scene').first()).toBeVisible({ timeout: 10_000 });
@@ -141,8 +140,8 @@ test.describe('Live Iceland ambience', () => {
   });
 
   test('the ambience toggle flips body.amb-off and persists across reloads', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await page.goto('/is/thjonusta');
+    await expect(page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]')).toHaveClass(/is-loaded/, { timeout: 10_000 });
     await expect(page.locator('body')).not.toHaveClass(/amb-off/);
 
     await page.locator('.theme-switcher__fab').click();
@@ -155,12 +154,12 @@ test.describe('Live Iceland ambience', () => {
     await page.reload();
     await expect(page.locator('body')).toHaveClass(/amb-off/, { timeout: 10_000 });
     // Scene still renders — ambience off means static, never absent.
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await expect(page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]')).toHaveClass(/is-loaded/, { timeout: 10_000 });
   });
 
   test('the sun phase lands on the body while ambience is on', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await page.goto('/is/thjonusta');
+    await expect(page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]')).toHaveClass(/is-loaded/, { timeout: 10_000 });
     // The engine dynamic-imports after mount; give it a beat.
     await expect(page.locator('body[data-amb-phase]')).toBeAttached({ timeout: 10_000 });
     const phase = await page.evaluate(() => document.body.dataset.ambPhase);
@@ -169,11 +168,11 @@ test.describe('Live Iceland ambience', () => {
 
   test('reduced motion keeps the whole live layer off', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/');
-    await expect(page.locator('.lol-hero--scene .ice-scene')).toHaveClass(/is-loaded/, { timeout: 10_000 });
+    await page.goto('/is/thjonusta');
+    await expect(page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"]')).toHaveClass(/is-loaded/, { timeout: 10_000 });
     await page.waitForTimeout(1500);
     expect(await page.evaluate(() => document.body.dataset.ambPhase)).toBeUndefined();
     // The fx canvas never wakes up.
-    expect(await page.locator('.lol-hero--scene .ice-scene__fx').first().isHidden()).toBe(true);
+    expect(await page.locator('.ice-scene--bleed .ice-scene__fx').first().isHidden()).toBe(true);
   });
 });

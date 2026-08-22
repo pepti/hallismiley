@@ -21,11 +21,15 @@
   background-size: cover;
 }
 /* Media modes (photo/video) put an image behind the copy and a dark veil over
-   it, so the hero stops being a themed surface and the gradient must get out
-   of the way. */
+   it — dark by DESIGN on every theme (Halli 2026-08-22: "dark video hero,
+   light site"). The theme surface gets out of the way entirely: fixed warm
+   near-black behind the media while it loads, fixed light copy over it, and
+   only the veil's last stop hands back to the themed page below. That is
+   invariant 15 compliance by construction, not exemption — the hero renders
+   identically under all five themes. */
 .lol-hero--media {
-  background-color: var(--bg-nav);
-  background-image: var(--bg-tint);
+  background-color: #17110B;
+  background-image: none;
 }
 /* Scene mode — the Iceland scene engine (SceneStage prepends .ice-scene as
    the first child; hero copy stacks above on its existing z-index). The
@@ -77,18 +81,20 @@
   to   { background-position: center 60%; }
 }
 
-/* Dark veil over the video: heavy at the top (nav legibility), thinnest
-   across the middle so the waterfall still reads, then rolling to fully
-   opaque page-black at the bottom — the hero melts into the dark page
-   instead of ending on a hard video edge. */
+/* Dark veil over the video: heavy at the top, thinnest across the middle so
+   the waterfall still reads, then rolling to near-opaque PAGE colour at the
+   bottom — the hero melts into whatever surface the theme paints next (light
+   Bjart included) instead of ending on a hard video edge. The dark stops are
+   fixed warm charcoal, NOT theme tokens: on the light themes --bg-nav-rgb is
+   white-ish and would fog the video instead of veiling it. */
 .lol-hero__overlay {
   position: absolute; inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(var(--bg-nav-rgb), 0.62) 0%,
-    rgba(var(--bg-nav-rgb), 0.38) 26%,
-    rgba(var(--bg-nav-rgb), 0.34) 52%,
-    rgba(var(--bg-nav-rgb), 0.72) 78%,
+    rgba(23, 17, 11, 0.62) 0%,
+    rgba(23, 17, 11, 0.38) 26%,
+    rgba(23, 17, 11, 0.34) 52%,
+    rgba(23, 17, 11, 0.72) 78%,
     rgba(var(--bg-base-rgb), 0.98) 100%
   );
 }

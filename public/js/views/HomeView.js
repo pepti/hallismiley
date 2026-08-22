@@ -115,35 +115,47 @@ export class HomeView {
     this._statsContent = null;  // stats — loaded from API in render()
     this._discipline = null;    // discipline (projects categories) — loaded from API
     this._heroContent = null;   // hero — loaded from API in render()
-    this._landingBg = null;     // landing background config — scene (default) | gradient | video | photo | plain
+    this._landingBg = null;     // landing background config — video (default) | scene | gradient | photo | plain
     this._newsArticles = [];
     this._scenes = [];          // SceneStage instances (destroyed with the view)
   }
 
   async render() {
     await Promise.all([
+      this._loadContent(),
+      this._loadStats(),
+      this._loadDiscipline(),
       this._loadHero(),
       this._loadLandingBg(),
+      this._loadNews(),
     ]);
 
     const view = document.createElement('div');
     view.className = 'view';
 
-    // Business composition: hero → tier teaser → how-it-works → footer.
-    // The portfolio sections (news strip, project grid, skills, stats,
-    // inline contact) are no longer rendered here — their content API,
-    // admin surfaces and methods below remain (disposition: job 3).
+    // The original hallismiley composition, restored 2026-08-22 (Halli's
+    // call: the scene-band cutovers between photographs didn't work — back
+    // to the one-canvas homepage and iterate from there). The business
+    // tier/step sections are the dormant ones now (_tiers/_steps below);
+    // the Iceland scene engine stays on the inner pages and remains an
+    // admin-selectable hero background mode.
     view.innerHTML = `
       ${this._hero()}
-      ${this._tiers()}
-      ${this._steps()}
+      ${this._news()}
+      ${this._projects()}
+      ${this._skills()}
+      ${this._stats()}
+      ${this._contact()}
       ${this._footer()}
     `;
 
+    this._initProjects(view);
+    this._initContactForm(view);
     this._initHeroVideo(view);
-    this._initHeroScene(view);
-    this._initBandScenes(view);
+    this._initHeroScene(view); // scene mode is still admin-selectable
     this._initHeroEdit(view);
+    this._initSkillsEdit(view);
+    this._initDisciplineEdit(view);
     this._initFooterLinks(view);
     return view;
   }
@@ -206,10 +218,11 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
-  // ── Load landing background config (admin-configurable; the ICELAND SCENE
-  // is the default — Halli's call (2026-08-21): the site lives inside the
-  // landscape now. Gradient/video/photo/plain all remain available through
-  // the admin background settings, so nothing admins could pick was lost. ──
+  // ── Load landing background config (admin-configurable; the WATERFALL
+  // VIDEO is the default again — Halli's call (2026-08-22), reverting the
+  // one-day scene default. Scene/gradient/photo/plain all remain available
+  // through the admin background settings, so nothing admins could pick was
+  // lost. ──
   async _loadLandingBg() {
     try {
       const res = await fetch('/api/v1/content/landing_background?locale=en');
@@ -217,17 +230,17 @@ export class HomeView {
         const data = await res.json();
         if (data && typeof data === 'object') { this._landingBg = data; return; }
       }
-    } catch { /* network error — fall through to the scene default */ }
-    this._landingBg = { mode: 'scene', photo_url: null, veil_percent: 100 };
+    } catch { /* network error — fall through to the video default */ }
+    this._landingBg = { mode: 'video', photo_url: null, veil_percent: 100 };
   }
 
   // ── SECTION 1: Hero ────────────────────────────────────────────────────
   _hero() {
     const h  = this._heroContent || DEFAULT_HERO_CONTENT.en;
-    const bg = this._landingBg || { mode: 'scene', photo_url: null, veil_percent: 100 };
+    const bg = this._landingBg || { mode: 'video', photo_url: null, veil_percent: 100 };
     const veil = Math.max(0, Math.min(100, Number.isFinite(bg.veil_percent) ? bg.veil_percent : 100));
-    // Background: scene (default — the Iceland scene engine, mounted after
-    // render into the section) | gradient | photo (a library image) | video |
+    // Background: video (default) | scene (the Iceland scene engine, mounted
+    // after render into the section) | gradient | photo (a library image) |
     // plain. gradient and plain add no media layer at all. The photo layer
     // uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
     // matches the real <video>.
@@ -273,7 +286,9 @@ export class HomeView {
     </section>`;
   }
 
-  // ── SECTION 2: Service-tier teaser — three cards → /thjonusta ──────────
+  // ── DORMANT since 2026-08-22 (hallismiley-layout revert): service-tier
+  // teaser — three cards → /thjonusta. Kept, with its i18n, for the coming
+  // content pass — Halli decides where the tiers return. ──────────────────
   _tiers() {
     const tiers = [
       { name: t('home.tierVefurName'),   desc: t('home.tierVefurDesc') },
@@ -299,7 +314,7 @@ export class HomeView {
     </section>`;
   }
 
-  // ── SECTION 3: How it works — three steps ──────────────────────────────
+  // ── DORMANT since 2026-08-22 (see _tiers above): how it works — 3 steps ──
   _steps() {
     const steps = [
       { title: t('home.step1Title'), desc: t('home.step1Desc') },
@@ -712,9 +727,9 @@ export class HomeView {
     this._scenes.push(stage);
   }
 
-  // ── Iceland scene: section bands (tiers = braided river, steps = the
-  // highland road). The sections keep their own solid background as the
-  // no-JS/no-image fallback; the band sits behind the content. ──
+  // ── DORMANT since 2026-08-22: Iceland scene section bands (tiers/steps).
+  // Not called — the sections it decorates are dormant too, and the band
+  // cutovers are what Halli reverted. Kept with them for the content pass. ──
   _initBandScenes(view) {
     const bands = [
       ['homeTiers', view.querySelector('.home-tiers')],

@@ -3,12 +3,13 @@
 // library. Two pieces of config live in site_content (locale 'en', read
 // publicly via GET /api/v1/content/:key):
 //   landing_background → { mode, photo_url, veil_percent }
-//     mode: 'scene' (the default since 2026-08-21 — the Iceland scene
+//     mode: 'video' (the waterfall — the default again since 2026-08-22,
+//           the hallismiley-layout revert) | 'scene' (the Iceland scene
 //           engine, public/js/scenes/) | 'gradient' (the themed
-//           --hero-gradient) | 'video' | 'photo' (a library image) | 'plain'
-//     The waterfall video was the default until Halli replaced it with the
-//     gradient; 'video' is kept as a selectable mode rather than removed, so
-//     the asset and the admin affordance both still work.
+//           --hero-gradient) | 'photo' (a library image) | 'plain'
+//     This DEFAULT is what the admin editor reports when no row exists yet,
+//     and what a save-then-restore round trip writes back — it MUST match
+//     the client fallback in HomeView._loadLandingBg and migration 089.
 //   background_library → { enabled }
 // The media and its sections live in background_media / background_sections
 // (BackgroundLibrary, migrations 051 + 080).
@@ -24,7 +25,7 @@ const CONFIG_LOCALE   = 'en';
 const LANDING_KEY     = 'landing_background';
 const LIBRARY_KEY     = 'background_library';
 const VALID_MODES     = ['scene', 'gradient', 'video', 'photo', 'plain'];
-const DEFAULT_LANDING = { mode: 'scene', photo_url: null, veil_percent: 100 };
+const DEFAULT_LANDING = { mode: 'video', photo_url: null, veil_percent: 100 };
 const DEFAULT_LIBRARY = { enabled: false };
 
 async function readConfig(key, fallback) {
