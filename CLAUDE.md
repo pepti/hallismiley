@@ -55,31 +55,6 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 - i18n: keys live in JSON locale files; run `npm run check:i18n` before pushing translation-touching changes.
 - Tests live alongside the code under test, or under `__tests__/`. E2E specs under `e2e/`.
 
-## Where things live
-
-```
-server/         Express app, routes, middleware, db, scripts
-server/scripts/ migrate.js, bootstrap.js, seed.js, setup-admin.js
-public/         Vanilla JS SPA — HTML, CSS, ES module JS
-e2e/            Playwright specs
-docs/           API.md (REST reference), DEPLOYMENT.md (Azure runbook)
-keys/           RSA keypair (gitignored, local dev only)
-data/           seed data / fixtures
-scripts/        repo-level helper scripts (e.g. check-i18n-keys.js)
-```
-
-## Commands you'll reach for
-
-```bash
-npm run dev              # nodemon
-npm run migrate          # run migrations
-npm run seed             # seed sample data
-npm test                 # jest (needs Postgres)
-npm run test:e2e         # playwright
-npm run lint
-npm run check:i18n
-```
-
 ## Deployment summary
 
 Push to `main` → CI (lint + `npm audit` + Jest + Playwright + docker build) → on green, `Deploy to Azure` workflow auto-runs via `workflow_run` → image pushed to `hallismileyacr.azurecr.io/hallismiley:<sha>` → App Service container ref updated → restart. Migrations run at container startup.
@@ -104,12 +79,6 @@ Full deployment guide: `docs/DEPLOYMENT.md`. Operational runbook: `RUNBOOK.md`.
   with the current behaviour stated for each. Two of them affect real figures.
 - `SECURITY_AUDIT_2026-04-16.md` — security posture
 - `PRE_LAUNCH_AUDIT.md` — launch checklist
-
-## Slash commands available
-
-- `/security-check` — review pending changes against this project's security invariants
-- `/pre-deploy` — pre-deploy verification (CI green, migrations safe, env vars, rollback plan)
-- `/migration-new <name>` — scaffold a new migration entry (schema.js array)
 
 ## Things that have bitten us before
 
