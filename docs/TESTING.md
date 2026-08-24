@@ -9,16 +9,18 @@ _Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suit
 | `npm run test:unit` | All of `tests/unit/` via `jest.unit.config.js` — no globalSetup (no DB drop/migrate), parallel workers | 981 tests, **~8 s** | none |
 | `npm run test:smoke` | Critical-path integration specs: auth, security (CSRF/RBAC/headers/envelope), shop, contact (lead capture) | 112 tests, **~28 s** | yes |
 | `npm run test:hotfix` | unit + smoke, in that order | **~36 s** | yes |
-| `npm run test:related -- <files…>` | Jest picks every test that (statically) depends on the named source files | varies | maybe |
+| `npm run test:related -- <files…>` | Jest picks every test that (statically) depends on the named source files | varies — see caveat below | maybe |
 | `npm test` | Everything (unit + all integration, serial) | ~2012 tests, minutes | yes |
 | `npm run test:e2e:smoke` | Playwright: auth, navigation, business-routes | subset of 109 | yes |
 | `npm run test:e2e` | Full Playwright suite | 109 tests | yes |
+
+**`test:related` caveat** (measured 2026-08-24): for a *leaf* file (a util, a client script) the related set is small and fast. For a *core* file required by `app.js`'s route tree (services, models, middleware), the related set is most of the integration suite — ~6.7 min for `discountEngine.js` (1201 tests). That is the true blast radius, but locally it defeats the purpose: for core-file fixes run `test:hotfix` and let CI's full run be the wide net.
 
 ## The hotfix workflow (production bug)
 
 1. **Reproduce as a failing test first** — in the tier where it belongs (a controller bug → integration spec; pure logic → unit).
 2. Fix it.
-3. Run `npm run test:hotfix` **and** `npm run test:related -- <every file you touched>`. Total cost ≈ one minute.
+3. Run `npm run test:hotfix`; add `npm run test:related -- <every file you touched>` when the touched files are leaf modules (see the caveat above — for core files, hotfix + CI is the right pair). Total cost ≈ one minute.
 4. Push the branch — CI runs the full suite with coverage exactly as before. CI green is still the deploy gate; the tiers only buy you a fast, high-confidence local loop.
 5. If the fix touched auth, payments, RBAC, migrations, or the error envelope: run the full local suite anyway before pushing. Those surfaces are why the smoke tier exists, but they deserve the whole net.
 
