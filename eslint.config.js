@@ -52,6 +52,7 @@ module.exports = [
     files: [
       'server/**/*.js',
       'jest.config.js',
+      'jest.unit.config.js',
       'babel.config.js',
       'eslint.config.js',
     ],
