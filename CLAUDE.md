@@ -54,6 +54,7 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 - File names: kebab-case for files, PascalCase for component classes, camelCase for functions.
 - i18n: keys live in JSON locale files; run `npm run check:i18n` before pushing translation-touching changes.
 - Tests live alongside the code under test, or under `__tests__/`. E2E specs under `e2e/`.
+- `data/` (gitignored, absent on fresh clones) holds local seed data and fixtures.
 
 ## Deployment summary
 
