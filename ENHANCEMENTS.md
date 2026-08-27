@@ -34,6 +34,8 @@ Original proposal kept below for the record.
 **Risk.** Low. Adds PII to the database, so the retention promise in `/personuvernd` (24 months) needs a cleanup job or a documented manual sweep.
 **Recommendation.** Do now — it is the difference between a marketing site and a sales tool.
 
+> ADDENDUM 2026-08-27 (sales-staff program): when this lands, add a grantable `leads` admin view id and grant it to the `solufolk` role (migration 090) so the human sales team works its own lead queue from the same shell as Handbók sölufólks. The Sölustjóri agent's lead-tracking duty currently runs on Halli forwarding the notification emails — this proposal retires that workaround.
+
 ### 3. Deterministic pagination in the bookkeeping archive
 **What.** `server/scripts/books-archive-export.js` pages documents with `ORDER BY created_at LIMIT/OFFSET`. `created_at` is not unique, so a row can repeat across page boundaries; two manifest entries then claim the same `documents/<id>` path, the second copy overwrites the first, and `verify()` fails against the first entry's checksum while the manifest called it verified. Fix: `ORDER BY created_at, id`, or keyset-paginate.
 **Why.** The archive's entire purpose is statutory evidence (lög 145/1994). "The verifier and the archive disagree" is the one failure it must never have. It already caused a real full-suite failure during this build (see `LESSONS.md`).
@@ -124,6 +126,21 @@ Original proposal kept below for the record.
 **Recommendation.** Approve the design now; implement read-only after the site is deployed (a remote connector needs a public HTTPS URL, so it is meaningless before then — same sequencing as proposal 10). Write tools as a separate sign-off.
 
 > STATUS 2026-08-22 (strategy): this connector is the substrate of the one-product-for-all AI-operations model — per-customer monitoring, module management and the feature-request workflow all run over it. Phase 2 (OAuth 2.1 + write tools + feature-request tool) is roadmap item **R5**, the AI ops loop **R8** (`company/REKSTRARKERFI-PLAN.md` §5/§7). Write tools remain a separate Halli sign-off.
+
+### 14. In-app AI assistant for the sales handbook
+
+**What.** A chat panel inside `/admin/handbok` where a salesperson asks product/pricing/objection questions in Icelandic and gets answers grounded EXCLUSIVELY in the published `sales_guides` rows (the handbook, migration 090). Server-side: one new route under `/api/v1/admin/handbok/assistant` behind `requireView('handbok')` + its own rate limit, calling the Claude API (current model tier at implementation time) with the published guides as context and a system prompt that refuses questions the handbook cannot answer ("spurðu Halla"). Ships dark behind `modules.salesAssistant` in `config/client.json` (`enabled`, `model`, `maxTokensPerDay`) + an `ANTHROPIC_API_KEY` env — the same seam discipline as #13.
+**Why.** The sales team has average software knowledge; search-by-reading is slower than asking. The guides table is already the curated, Halli-approved corpus — grounding on it (and nothing else) keeps answers inside approved positioning and DRAFT-price discipline. This is also the customer-facing pattern (R6 portal assistant) dogfooded internally first.
+**How it respects the invariants.** Server-side gating (#8): the view check + per-user rate limit on the route; the client panel is UX only. Security (#7): the API key lives in env, never the client; prompts and answers logged via pino (who, tokens, truncated question) for cost control; user text is data, never executed. Error envelope (#5) on the route. No new auth (#3).
+**Effort.** M — one route + one service + a panel in AdminHandbookView; the corpus query is `SELECT ... WHERE published`. **Risk.** Medium: recurring API cost (mitigated by `maxTokensPerDay` and caching the corpus in the prompt-cache), and answer quality is bounded by handbook quality — which is the point.
+**Recommendation.** Approve after the handbook has real content and the team has used it for a few weeks; the guides table and read API were built as the seam, so nothing needs restructuring later.
+
+### 15. Guide media — images in handbook bodies
+
+**What.** A `sales_guide_media` table + upload route cloned from the news-media pattern (`createNewsUpload`), plus `<img>`/`<figure>` added to BOTH rich-text allowlists (server `sanitize.js` and client `utils/sanitizeHtml.js`). Crucially the files must be served behind auth: news assets under `/assets/` are statically served to anyone, so guide images need an authenticated file route (`/api/v1/admin/handbok/:id/media/:file` with `requireView('handbok')`) instead of the static mount.
+**Why.** Screenshots are the natural medium for "how do I do X in the admin" guides aimed at people with average software knowledge. v1 shipped text-only because widening the allowlist and the static-serving question deserve their own review.
+**Effort.** M. **Risk.** Low-medium — allowlist widening touches the XSS surface (both layers must move together, see LESSONS.md 2026-08-27 on the `body_is` precedent), and the auth-gated file route must not regress the upload-path allowlist hardening from base-sync 6A.
+**Recommendation.** Do when the first guide actually needs a screenshot, not before.
 
 ---
 

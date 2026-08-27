@@ -59,6 +59,50 @@
 }
 .admin-handbok__empty { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
 
+/* ── Editor affordances (canEdit only) ── */
+.admin-handbok__card-wrap { position: relative; }
+.admin-handbok__card-controls {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+}
+.admin-handbok__card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+.admin-handbok__card-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-ink); }
+.admin-handbok__card-btn:disabled { opacity: 0.35; cursor: default; }
+/* Leave room for the control cluster so the title never sits under it. */
+.admin-handbok__card-wrap .admin-handbok__card { padding-right: 96px; }
+
+.admin-handbok__draft-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning, var(--text-muted));
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
 /* ── Read mode ── */
 .admin-handbok__breadcrumb { margin-bottom: var(--sp-3); font-size: 0.85rem; }
 .admin-handbok__breadcrumb a { color: var(--text-secondary); text-decoration: none; }
