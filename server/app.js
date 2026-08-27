@@ -140,7 +140,7 @@ app.post(
           (typeof v === 'string' && /uri|referrer|source-file/i.test(k)) ? logger.scrubUrl(v) : v,
         ]))
       : report;
-    logger.warn({ cspViolation }, 'CSP violation reported');
+    logger.warn({ cspViolation }, 'CSP violation reported');
     res.status(204).end();
   },
 );
@@ -255,6 +255,12 @@ app.use('/api/v1/admin/shop', (req, res, next) => {
   next();
 });
 app.use('/api/v1/admin/bins', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
+app.use('/api/v1/admin/handbok', (req, res, next) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }
@@ -534,6 +540,7 @@ app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admi
 app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bookkeeping', adminBookkeepingRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/handbok', require('./routes/salesGuidesRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 // Client error beacon + admin event log (harvest 2026-08-22, ice #195). The
