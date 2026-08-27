@@ -2,6 +2,11 @@ User-agent: *
 Allow: /
 Disallow: /auth/
 Disallow: /api/
+# Admin shell (incl. the internal sales handbook). All content behind it is
+# auth-gated at the API layer; this just keeps the shell out of crawlers.
+Disallow: /admin
+Disallow: /en/admin
+Disallow: /is/admin
 
 # Hidden-but-functional surfaces (server/config/publicSurface.js). They still
 # render for anyone with the URL; they are simply not part of the public

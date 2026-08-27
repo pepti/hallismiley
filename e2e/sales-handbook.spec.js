@@ -129,4 +129,41 @@ test.describe('sales handbook (solufolk)', () => {
     await expect(page.locator('.admin-title')).toHaveText(/Handbók sölufólks/);
     await expect(page.locator('.admin-handbok__card', { hasText: GUIDE.title })).toBeVisible();
   });
+
+  test('admin creates a draft in the editor, publishes it, then deletes it', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/#/admin/handbok');
+
+    // Create as draft.
+    await page.click('#handbok-new');
+    await page.fill('#handbok-editor-form [name=title]', 'Editor-próf (e2e)');
+    await page.selectOption('#handbok-editor-form [name=section]', 'vara');
+    await page.fill('#handbok-editor-form [name=body]', '<p>Prufutexti úr ritli.</p>');
+    await page.click('#handbok-editor-form [type=submit]');
+    const card = page.locator('.admin-handbok__card', { hasText: 'Editor-próf (e2e)' });
+    await expect(card).toBeVisible();
+    await expect(card.locator('.admin-handbok__draft-badge')).toBeVisible();
+
+    // Publish via the edit overlay; the draft badge disappears.
+    const wrap = page.locator('.admin-handbok__card-wrap', { hasText: 'Editor-próf (e2e)' });
+    await wrap.locator('[data-edit]').click();
+    await page.check('#handbok-editor-form [name=published]');
+    await page.click('#handbok-editor-form [type=submit]');
+    await expect(card).toBeVisible();
+    await expect(card.locator('.admin-handbok__draft-badge')).toHaveCount(0);
+
+    // Delete from the editor (admin only) so re-runs start clean.
+    page.once('dialog', d => d.accept());
+    await wrap.locator('[data-edit]').click();
+    await page.click('#handbok-delete-btn');
+    await expect(page.locator('.admin-handbok__card', { hasText: 'Editor-próf (e2e)' })).toHaveCount(0);
+  });
+
+  test('sales user sees no editor affordances', async ({ page }) => {
+    await loginAsSales(page);
+    await page.goto('/#/admin/handbok');
+    await expect(page.locator('.admin-handbok__card', { hasText: GUIDE.title })).toBeVisible();
+    await expect(page.locator('#handbok-new')).toHaveCount(0);
+    await expect(page.locator('[data-edit]')).toHaveCount(0);
+  });
 });
