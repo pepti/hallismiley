@@ -159,6 +159,44 @@ test.describe('sales handbook (solufolk)', () => {
     await expect(page.locator('.admin-handbok__card', { hasText: 'Editor-próf (e2e)' })).toHaveCount(0);
   });
 
+  // Regression (2026-08-27): the reader called the published-only endpoint, so
+  // an admin could see a draft card in the library and get "Guide not found"
+  // on opening it — which is exactly the review-before-publish path.
+  test('admin can OPEN a draft from the library and read it', async ({ page }) => {
+    const pool = new Pool({ connectionString: e2eDatabaseUrl(), ssl: false });
+    try {
+      await pool.query(
+        `INSERT INTO sales_guides (slug, section, title, body, published)
+         VALUES ('drog-lestur-e2e', 'grunnur', 'Drög til lestrar (e2e)',
+                 '<h2>Drög</h2><p>Þetta er óútgefinn texti.</p>', FALSE)
+         ON CONFLICT (slug) DO UPDATE SET published = FALSE`
+      );
+    } finally {
+      await pool.end();
+    }
+
+    await loginAsAdmin(page);
+    await page.goto('/#/admin/handbok');
+    await page.locator('.admin-handbok__card', { hasText: 'Drög til lestrar (e2e)' }).click();
+
+    await expect(page.locator('.admin-handbok__body h2')).toHaveText('Drög');
+    await expect(page.locator('.admin-handbok__body p')).toContainText('óútgefinn');
+    await expect(page.locator('.admin-error')).toHaveCount(0);
+    // The read page flags that this one is not published yet.
+    await expect(page.locator('.admin-handbok__eyebrow .admin-handbok__draft-badge')).toBeVisible();
+  });
+
+  test('sales user still cannot open a draft by URL', async ({ page }) => {
+    await loginAsSales(page);
+    await page.goto('/#/admin/handbok/drog-lestur-e2e');
+    await expect(page.locator('.admin-error')).toBeVisible();
+    await expect(page.locator('.admin-handbok__body')).toHaveCount(0);
+    const res = await page.request.get('/api/v1/admin/handbok/drog-lestur-e2e');
+    expect(res.status()).toBe(404);
+    const prev = await page.request.get('/api/v1/admin/handbok/drog-lestur-e2e/preview');
+    expect(prev.status()).toBe(403);
+  });
+
   test('sales user sees no editor affordances', async ({ page }) => {
     await loginAsSales(page);
     await page.goto('/#/admin/handbok');

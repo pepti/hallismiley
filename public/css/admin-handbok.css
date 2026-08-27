@@ -118,6 +118,7 @@
   color: var(--accent-ink);
 }
 .admin-handbok__meta { margin: var(--sp-1) 0 var(--sp-4); font-size: 0.8rem; color: var(--text-muted); }
+.admin-handbok__actions { margin: 0 0 var(--sp-4); }
 
 .admin-handbok__body { font-size: 0.95rem; line-height: 1.7; color: var(--text-primary); }
 .admin-handbok__body p,
