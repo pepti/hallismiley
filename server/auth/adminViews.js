@@ -31,6 +31,12 @@ const ADMIN_VIEW_IDS = [
   // granting them is granting sight of that (an accepted decision, see
   // docs/BOOKKEEPING-SYSTEM.md).
   'books', 'invoices', 'expenses', 'ar', 'vat', 'bank', 'ledger', 'payroll', 'pos',
+  // Handbók sölufólks (sales-staff handbook). Granting `handbok` grants READ
+  // of PUBLISHED guides only — editing, drafts and delete are hard
+  // admin/moderator on top (server/routes/salesGuidesRoutes.js), matching the
+  // news/bookkeeping convention. The seeded `solufolk` role holds exactly
+  // this view (migration 090).
+  'handbok',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +

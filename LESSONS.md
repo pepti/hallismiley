@@ -393,3 +393,7 @@ out to be one workflow file (promote.yml). Corollary for the factory: the
 scaffolder's generated setup.ps1 hangs on bare `createdb` when PG wants a
 password, and a fresh repo has no git identity — both bit the rekstrarkerfid
 scaffold and are noted in site-factory/BASE-SYNC.md.
+
+### 2026-08-27 — RICH_TEXT_FIELDS misses secondary-locale bodies: body_is HTML was stripped on save
+
+_(base)_ `server/middleware/sanitize.js` RICH_TEXT_FIELDS was `{body, content}` only, but the news CMS also submits `body_is` — so any Icelandic article body saved through the API had ALL its tags stripped by the global sanitizer (the seeded IS bodies only kept their HTML because migrations bypass Express). Found while building the sales handbook (whose EN sibling `body_en` would have hit the same wall). Fixed here by adding `body_is` + `body_en` to the set. Base fix: same addition upstream, plus a test that posts rich HTML in every `_is`/`_en` body field and asserts the tags survive.

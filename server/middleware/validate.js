@@ -646,6 +646,118 @@ function validateNewsMediaReorder(req, res, next) {
   next();
 }
 
+// ── Sales-guide validation ───────────────────────────────────────────────────
+// Guides are Icelandic-canonical: title/summary/body ARE the IS copy and the
+// `_en` siblings are optional (inverse of the news `_is` convention).
+
+const GUIDE_SECTIONS = ['grunnur', 'sala', 'thjonusta', 'vara'];
+
+// POST /api/v1/admin/handbok  and  PATCH /api/v1/admin/handbok/:id
+function validateGuide(req, res, next) {
+  const {
+    title, slug, summary, body, section,
+    title_en, summary_en, body_en,
+    sort_order, published,
+  } = req.body;
+  const errors = [];
+  const isPOST = req.method === 'POST';
+
+  // Required on creation (Icelandic canonical fields)
+  if (isPOST) {
+    if (!title?.trim()) errors.push({ key: 'validation.title.required' });
+    if (!body?.trim())  errors.push({ key: 'validation.body.required' });
+  }
+
+  if (title !== undefined) {
+    if (typeof title !== 'string' || title.trim().length === 0)
+      errors.push({ key: 'validation.title.nonEmptyString' });
+    else if (title.length > MAX_NEWS_TITLE_LEN)
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_NEWS_TITLE_LEN } });
+  }
+
+  if (slug !== undefined && slug !== null && slug !== '') {
+    if (typeof slug !== 'string' || !SLUG_RE.test(slug))
+      errors.push({ key: 'validation.slug.invalid' });
+    else if (slug.length > 100)
+      errors.push({ key: 'validation.slug.maxLength', params: { n: 100 } });
+  }
+
+  if (summary !== undefined && summary !== null) {
+    if (typeof summary !== 'string')
+      errors.push({ key: 'validation.summary.nonEmptyString' });
+    else if (summary.length > MAX_NEWS_SUMMARY_LEN)
+      errors.push({ key: 'validation.summary.maxLength', params: { n: MAX_NEWS_SUMMARY_LEN } });
+  }
+
+  if (body !== undefined) {
+    if (typeof body !== 'string' || body.trim().length === 0)
+      errors.push({ key: 'validation.body.nonEmptyString' });
+  }
+
+  if (section !== undefined) {
+    if (typeof section !== 'string' || !GUIDE_SECTIONS.includes(section))
+      errors.push({ key: 'validation.section.invalid' });
+  }
+
+  if (sort_order !== undefined) {
+    if (!Number.isInteger(sort_order) || sort_order < 0)
+      errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i: 0 } });
+  }
+
+  if (published !== undefined && typeof published !== 'boolean') {
+    errors.push({ key: 'validation.published.boolean' });
+  }
+
+  // English siblings — nullable, same constraints as their IS counterparts.
+  if (title_en !== undefined && title_en !== null) {
+    if (typeof title_en !== 'string') errors.push({ key: 'validation.title.nonEmptyString' });
+    else if (title_en.length > MAX_NEWS_TITLE_LEN)
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_NEWS_TITLE_LEN } });
+  }
+  if (summary_en !== undefined && summary_en !== null) {
+    if (typeof summary_en !== 'string') errors.push({ key: 'validation.summary.nonEmptyString' });
+    else if (summary_en.length > MAX_NEWS_SUMMARY_LEN)
+      errors.push({ key: 'validation.summary.maxLength', params: { n: MAX_NEWS_SUMMARY_LEN } });
+  }
+  if (body_en !== undefined && body_en !== null) {
+    if (typeof body_en !== 'string') errors.push({ key: 'validation.body.nonEmptyString' });
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
+// PUT /api/v1/admin/handbok/reorder — [{ id, section, sort_order }, ...]
+function validateGuideReorder(req, res, next) {
+  const { order } = req.body;
+  const errors = [];
+
+  if (!Array.isArray(order) || order.length === 0) {
+    errors.push({ key: 'validation.order.nonEmptyArray' });
+  } else if (order.length > MAX_REORDER_LEN) {
+    errors.push({ key: 'validation.order.maxItems', params: { n: MAX_REORDER_LEN } });
+  } else {
+    for (let i = 0; i < order.length; i++) {
+      const item = order[i];
+      if (typeof item !== 'object' || item === null) {
+        errors.push({ key: 'validation.order.itemObject', params: { i } });
+        continue;
+      }
+      const id = Number(item.id);
+      const so = Number(item.sort_order);
+      if (!Number.isInteger(id) || id <= 0)
+        errors.push({ key: 'validation.order.itemIdPositive', params: { i } });
+      if (!Number.isInteger(so) || so < 0)
+        errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i } });
+      if (item.section !== undefined && !GUIDE_SECTIONS.includes(item.section))
+        errors.push({ key: 'validation.section.invalid' });
+    }
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
@@ -663,6 +775,8 @@ module.exports = {
   validateNews,
   validateNewsMediaUpdate,
   validateNewsMediaReorder,
+  validateGuide,
+  validateGuideReorder,
   ALLOWED_AVATARS,
   UPLOADED_AVATAR_RE,
   isOwnUploadedAvatar,
