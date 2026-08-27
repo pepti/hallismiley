@@ -204,6 +204,23 @@ describe('write endpoints RBAC', () => {
       .set('Cookie', adminCookie)).status).toBe(204);
   });
 
+  // Regression guard for the reader bug (2026-08-27): the editor read path
+  // depends on /preview serving drafts, while /:slug must keep hiding them.
+  test('admin previews a draft that the plain read endpoint hides', async () => {
+    const draft = await createGuide(adminCookie, { published: false });
+
+    const read = await request(app).get(`/api/v1/admin/handbok/${draft.body.slug}`)
+      .set('Cookie', adminCookie);
+    expect(read.status).toBe(404);
+
+    const prev = await request(app).get(`/api/v1/admin/handbok/${draft.body.slug}/preview`)
+      .set('Cookie', adminCookie);
+    expect(prev.status).toBe(200);
+    expect(prev.body.published).toBe(false);
+    expect(prev.body.body).toBe('<p>Eitt kerfi, ein áskrift.</p>');
+    expect(prev.headers['cache-control']).toBe('no-store');
+  });
+
   test('manage list surfaces drafts and both locales raw', async () => {
     await createGuide(adminCookie, { title_en: 'The sales story', published: false });
     const res = await request(app).get('/api/v1/admin/handbok/manage').set('Cookie', modCookie);

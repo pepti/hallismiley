@@ -13,7 +13,7 @@
 // mirrors NewsView's. Theme rule: tokens only (invariant 15).
 import { isAuthenticated, canSeeView, canEdit, isAdmin } from '../services/auth.js';
 import {
-  getGuides, getGuide, getManageList,
+  getGuides, getGuide, getGuidePreview, getManageList,
   createGuide, updateGuide, deleteGuide, reorderGuides,
 } from '../services/salesGuides.js';
 import { escHtml } from '../utils/escHtml.js';
@@ -291,25 +291,38 @@ export class AdminHandbookView {
   // ── Read mode ───────────────────────────────────────────────────────────
   async _loadGuide() {
     try {
-      const g = await getGuide(this._slug);
+      // Editors read through /preview so DRAFTS open too — the plain read
+      // endpoint serves published guides only, so without this an admin can
+      // see a draft card in the library and not open it (bug, 2026-08-27).
+      // Preview returns both locales' raw columns, so resolve the EN fallback
+      // here exactly as the server's COALESCE would.
+      const editing = canEdit();
+      const g = editing ? await getGuidePreview(this._slug) : await getGuide(this._slug);
+      const title = editing && getLocale() === 'en' ? (g.title_en || g.title) : g.title;
+      const body  = editing && getLocale() === 'en' ? (g.body_en  || g.body)  : g.body;
+
       const updated = g.updated_at
         ? new Date(g.updated_at).toLocaleDateString(getLocale() === 'is' ? 'is-IS' : 'en-GB',
             { day: 'numeric', month: 'long', year: 'numeric' })
         : '';
+      const draft = editing && !g.published
+        ? `<span class="admin-handbok__draft-badge">${t('handbok.draftBadge')}</span>` : '';
 
       this._el.innerHTML = `
         <nav class="admin-handbok__breadcrumb">
           <a href="${href('/admin/handbok')}" data-route="/admin/handbok">← ${t('handbok.back')}</a>
         </nav>
         <article class="admin-handbok__article">
-          <p class="admin-handbok__eyebrow">${t('handbok.section.' + g.section)}</p>
-          <h1 class="admin-title">${escHtml(g.title)}</h1>
+          <p class="admin-handbok__eyebrow">${draft}${t('handbok.section.' + g.section)}</p>
+          <h1 class="admin-title">${escHtml(title)}</h1>
           ${updated ? `<p class="admin-handbok__meta">${t('handbok.updated')} ${escHtml(updated)}</p>` : ''}
+          ${editing ? `<p class="admin-handbok__actions"><button type="button" class="btn btn--outline" id="handbok-edit-this">${t('handbok.editGuide')}</button></p>` : ''}
           <div class="admin-handbok__body rich-body"></div>
         </article>
       `;
       // Body is allowlist-HTML from the API; sanitize again for display.
-      this._el.querySelector('.admin-handbok__body').innerHTML = sanitizeBodyHtml(g.body || '');
+      this._el.querySelector('.admin-handbok__body').innerHTML = sanitizeBodyHtml(body || '');
+      this._el.querySelector('#handbok-edit-this')?.addEventListener('click', () => this._showEditor(g));
     } catch (err) {
       this._el.innerHTML = `
         <nav class="admin-handbok__breadcrumb">
