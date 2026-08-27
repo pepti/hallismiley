@@ -153,6 +153,37 @@ same features (it uses 080/081/082 for totp/theme/system_updates).
 
 Five chunks merged on master + five base PRs (#136–#140); full ledger entry in site-factory/BASE-SYNC.md. Highlights here: Tier-1 fixes (cached-user, memory-alert, loud mail + EMAIL_ALLOWLIST, nav-saver races, CORP brand exemption, role-SET 2FA/OAuth gates via utils/adminRole.js); ISOLATED per-branch e2e DBs (e2e/lib/dbUrl.js — local e2e used to write into the dev DB); status-token completion + chartTheme.js + invariant 15; Admin → Monitoring (event_logs = migration 087, beacon, /admin/monitoring); MCP connector (mcp_tokens = 088, /admin/mcp, ships dark behind MCP_ENABLED) = ENHANCEMENTS #13 approved+implemented. Migration chain now ends 087_event_logs · 088_mcp_tokens. **HalliProjects is read-only again.** Ice back-port queue (when ITS window opens): role-SET gate fix, /auth/session totp_enabled.
 
+## Sales-staff program (2026-08-27 — Handbók sölufólks)
+
+Halli is hiring human salespeople; they log in on the site and work from the
+handbook. Built in four chunks on master, operator guide: `docs/SALES-STAFF.md`.
+
+- **Data/RBAC**: `sales_guides` (migration 090 — IS-canonical + `_en` siblings,
+  the INVERSE of the news `_is` convention) + seeded non-system role
+  **`solufolk`** holding the new view id **`handbok`**. Read = requireView;
+  edit/drafts = admin/moderator; delete = admin. Every guide response
+  `no-store`; nothing public. The sanitize fix that rode along: `body_is`/
+  `body_en` joined RICH_TEXT_FIELDS (news IS bodies were being tag-stripped —
+  LESSONS.md 2026-08-27).
+- **UI**: `/admin/handbok` — four numbered sections (grunnur/sala/þjónusta/
+  vara), reader + overlay editor, per-section reorder; `AdminView` forwards
+  dashboard-less users to their first visible view, so sales users land there
+  with a one-item sidebar. Shared sanitizer extracted to
+  `public/js/utils/sanitizeHtml.js` (ArticleView uses it too).
+- **Onboarding a hire** (no code): create in `/admin/customers` (set-password
+  email) → add to `solufolk` in `/admin/roles`.
+- **Content**: `server/scripts/seed-sales-guides.js` seeds 14 Icelandic
+  guides as DRAFTS (idempotent). **Awaiting Halli: review + publish each in
+  the editor — sales staff see nothing until he does.** Prices inside guides
+  carry DRÖG per the standing rule.
+- **Agents**: Söluþjálfari (`soluthjalfari.md`, handbook content + proposals)
+  and Sölustjóri (`solustjori.md`, sales ops) joined the AI staff; shared log
+  `Projects\SALES-LOG.md`.
+- **Proposals awaiting Halli**: ENHANCEMENTS #14 (in-app AI sales assistant),
+  #15 (guide media), #2 addendum (leads view for solufolk). Flagged to Halli
+  in COMPANY-LOG: plan §6 ("sole human employee, no salaries 2 years")
+  contradicts hiring — his call.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): next programs are R1 (company-site content pass HERE, copy needs Halli) and R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.

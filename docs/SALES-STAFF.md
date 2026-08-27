@@ -46,7 +46,7 @@ check); optionally remove the `solufolk` membership.
 - **Drafts (`published = false`) are invisible to sales staff** — publishing
   is the approval act, so per the house rule all drafting (including the
   Söluþjálfari agent's) lands as drafts and **only Halli publishes**.
-- The seed script `scripts/seed-sales-guides.js` inserts the initial guide set
+- The seed script `server/scripts/seed-sales-guides.js` inserts the initial guide set
   as drafts; it is idempotent (`ON CONFLICT (slug) DO NOTHING`) and never
   overwrites edited guides.
 - Keep guides consistent with the live `/thjonusta` tier matrix and the
