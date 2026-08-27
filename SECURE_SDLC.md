@@ -1,7 +1,7 @@
 # Secure Development Lifecycle (S-SDLC)
 
 **Project:** Halli Smiley — `hallismiley.is`
-**Version:** 1.0
+**Version:** 1.1
 **Effective:** 2026-05-25
 **Cadence:** Two-week sprints (Monday → Sunday, 14 days)
 **Owner:** Halli (Security Champion + Engineering Lead)
@@ -144,6 +144,8 @@ A sprint is **14 calendar days, Monday 00:00 → Sunday 23:59 (Atlantic/Reykjavi
 | **Monthly** | Dependency upgrade sprint half-day, secret rotation check, access review | SC + EL |
 | **Quarterly** | Internal security audit (next: 2026-07-16), SDLC review | SC |
 | **Annually** | External penetration test (scheduled: 2026 Q4), DR exercise, key rotation | SC + EL |
+
+The weekly, monthly, quarterly and annual rows are executed or flagged-when-due by **Öryggisvörður** (the estate's security SDL agent, `~\.claude\agents\oryggisvordur.md`) via the Monday 07:45 `security-sdl-sweep` scheduled task, logging to `Projects\ORYGGIS-LOG.md`; the per-PR rows remain enforced by `/security-check` + CI gates.
 
 ---
 
@@ -726,9 +728,10 @@ A story is "security done" only when all apply (in addition to functional DoD):
 | Version | Date | Author | Change |
 |---------|------|--------|--------|
 | 1.0 | 2026-05-23 | Halli | Initial S-SDLC, effective 2026-05-25. |
+| 1.1 | 2026-08-27 | Öryggisvörður (approved by Halli) | §5 cadence ownership: weekly/monthly/quarterly/annual rows executed or flagged by the `security-sdl-sweep` scheduled task run as Öryggisvörður. The site-factory/template mirror of this doc is deliberately NOT updated — divergence to be reconciled by a later /retro or base-sync. |
 
 Future revisions are tracked here. The SDLC is reviewed quarterly at the verification day of the sprint containing the quarter boundary; major changes require an ADR.
 
 ---
 
-*End of Secure Development Lifecycle v1.0.*
+*End of Secure Development Lifecycle v1.1.*
