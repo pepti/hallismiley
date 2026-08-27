@@ -57,6 +57,7 @@ import { AdminLedgerView }       from './views/AdminLedgerView.js';
 import { AdminPayrollView }      from './views/AdminPayrollView.js';
 import { AdminPosView }          from './views/AdminPosView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
+import { AdminHandbookView }     from './views/AdminHandbookView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale, forcedLocaleFor,
@@ -93,6 +94,8 @@ const ROUTES = [
   { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
   { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
   { pattern: '/admin/bins',      factory: ()  => (isAuthenticated() && canSeeView('bins')) ? new AdminBinsView() : new HomeView() },
+  { pattern: '/admin/handbok/:slug', factory: (p) => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView(p.slug) : new HomeView() },
+  { pattern: '/admin/handbok',   factory: ()  => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
   { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
@@ -282,6 +285,7 @@ export class Router {
       '/admin/background': 'background',
       '/admin/feedback':   'feedback',
       '/admin/bins':       'bins',
+      '/admin/handbok':    'handbok',
       '/admin/customers':  'customers',
       '/admin/books':      'books',
       '/admin/books/invoices': 'invoices',

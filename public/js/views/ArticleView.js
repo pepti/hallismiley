@@ -9,81 +9,10 @@ import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
 import { t, href }                  from '../i18n/i18n.js';
 import { navigate }                 from '../navigate.js';
-
-// Tags allowed in article body (whitelist for DOMParser sanitisation)
-const ALLOWED_TAGS = new Set([
-  'P', 'H2', 'H3', 'H4', 'STRONG', 'EM', 'B', 'I', 'A',
-  'UL', 'OL', 'LI', 'BLOCKQUOTE', 'BR', 'HR',
-  'SPAN', 'DIV', 'FIGURE', 'FIGCAPTION',
-]);
-
-const ALLOWED_ATTRS = {
-  A: new Set(['href', 'target', 'rel']),
-};
-
-/**
- * Parse body HTML through DOMParser, strip disallowed tags/attrs, return safe HTML string.
- * This is client-side sanitisation — the server never renders article body directly into
- * server-rendered HTML, so this is the only attack surface.
- */
-function sanitizeBody(rawHtml) {
-  const doc  = new DOMParser().parseFromString(rawHtml, 'text/html');
-  const body = doc.body;
-
-  function clean(node) {
-    if (node.nodeType === Node.TEXT_NODE) return node.cloneNode();
-
-    if (node.nodeType !== Node.ELEMENT_NODE) return null;
-
-    const tag = node.tagName.toUpperCase();
-    if (!ALLOWED_TAGS.has(tag)) {
-      // Replace disallowed element with its children (unwrap)
-      const frag = document.createDocumentFragment();
-      for (const child of node.childNodes) {
-        const cleaned = clean(child);
-        if (cleaned) frag.appendChild(cleaned);
-      }
-      return frag;
-    }
-
-    const el = document.createElement(tag === 'DIV' ? 'DIV' : tag);
-
-    // Copy only allowed attributes
-    const allowedAttrs = ALLOWED_ATTRS[tag];
-    if (allowedAttrs) {
-      for (const attr of allowedAttrs) {
-        if (node.hasAttribute(attr)) {
-          const val = node.getAttribute(attr);
-          // Reject javascript: hrefs
-          if (attr === 'href' && /^\s*javascript:/i.test(val)) continue;
-          el.setAttribute(attr, val);
-        }
-      }
-    }
-
-    // Force external links open in new tab with noopener
-    if (tag === 'A' && el.href && !el.href.startsWith(window.location.origin)) {
-      el.setAttribute('target', '_blank');
-      el.setAttribute('rel',    'noopener noreferrer');
-    }
-
-    for (const child of node.childNodes) {
-      const cleaned = clean(child);
-      if (cleaned) el.appendChild(cleaned);
-    }
-    return el;
-  }
-
-  const frag = document.createDocumentFragment();
-  for (const child of body.childNodes) {
-    const cleaned = clean(child);
-    if (cleaned) frag.appendChild(cleaned);
-  }
-
-  const wrapper = document.createElement('div');
-  wrapper.appendChild(frag);
-  return wrapper.innerHTML;
-}
+// Shared DOMParser allowlist sanitizer (also used by AdminHandbookView).
+// This is client-side sanitisation — the server never renders article body
+// directly into server-rendered HTML, so this is the only attack surface.
+import { sanitizeBodyHtml as sanitizeBody } from '../utils/sanitizeHtml.js';
 
 function _esc(str) {
   if (!str) return '';

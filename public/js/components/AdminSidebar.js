@@ -58,11 +58,9 @@ export const ADMIN_NAV = [
     { id: 'pos',      route: '/admin/books/pos',      labelKey: 'admin.nav.pos',      icon: 'till' },
   ] },
   // Handbók sölufólks — the one group a `solufolk` (sales-staff) user sees.
-  // `soon` is dropped when the reader view lands (chunk 2 of the sales-handbook
-  // program); the id must stay in lockstep with server/auth/adminViews.js
-  // (parity test).
+  // The id must stay in lockstep with server/auth/adminViews.js (parity test).
   { key: 'staff', group: 'admin.navGroup.staff', items: [
-    { id: 'handbok', route: '/admin/handbok', labelKey: 'admin.nav.handbok', icon: 'book', soon: true },
+    { id: 'handbok', route: '/admin/handbok', labelKey: 'admin.nav.handbok', icon: 'book' },
   ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },

@@ -1,0 +1,96 @@
+/* Handbók sölufólks — the sales-staff handbook (/admin/handbok).
+   Library = four numbered section blocks of guide cards; read mode = a
+   narrow article column. Tokens only (invariant 15): every colour reads
+   from the theme set, nothing here may assume light or dark. */
+
+.admin-handbok__head { margin-bottom: var(--sp-4); }
+
+/* ── Library ── */
+.admin-handbok__section { margin: 0 0 var(--sp-5); }
+.admin-handbok__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+/* Numbered chips differentiate the row of sections (design rule: no four
+   identical blocks). */
+.admin-handbok__section-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--bg-base);
+  background: var(--accent-ink);
+  border-radius: 50%;
+}
+
+.admin-handbok__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+.admin-handbok__card {
+  display: block;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color var(--transition), transform var(--transition);
+}
+.admin-handbok__card:hover { transform: translateY(-1px); border-color: var(--accent-ink); }
+.admin-handbok__card:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.admin-handbok__card-title { margin: 0 0 4px; font-size: 0.95rem; font-weight: 600; }
+.admin-handbok__card-summary {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.admin-handbok__empty { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+
+/* ── Read mode ── */
+.admin-handbok__breadcrumb { margin-bottom: var(--sp-3); font-size: 0.85rem; }
+.admin-handbok__breadcrumb a { color: var(--text-secondary); text-decoration: none; }
+.admin-handbok__breadcrumb a:hover { color: var(--text-primary); text-decoration: underline; }
+
+.admin-handbok__article { max-width: 720px; }
+.admin-handbok__eyebrow {
+  margin: 0 0 var(--sp-1);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.admin-handbok__meta { margin: var(--sp-1) 0 var(--sp-4); font-size: 0.8rem; color: var(--text-muted); }
+
+.admin-handbok__body { font-size: 0.95rem; line-height: 1.7; color: var(--text-primary); }
+.admin-handbok__body p,
+.admin-handbok__body ul,
+.admin-handbok__body ol,
+.admin-handbok__body blockquote { margin: 0 0 var(--sp-3); }
+.admin-handbok__body h2,
+.admin-handbok__body h3,
+.admin-handbok__body h4 { margin: var(--sp-4) 0 var(--sp-2); line-height: 1.3; }
+.admin-handbok__body ul,
+.admin-handbok__body ol { padding-left: 1.4em; }
+.admin-handbok__body a { color: var(--accent-ink); }
+.admin-handbok__body blockquote {
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--accent-ink);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary);
+}
+.admin-handbok__body hr { border: 0; border-top: 1px solid var(--border); margin: var(--sp-4) 0; }

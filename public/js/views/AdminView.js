@@ -1,16 +1,28 @@
 import { projectApi }      from '../api/projectApi.js';
 import { ProjectForm }     from '../components/ProjectForm.js';
 import { showToast }       from '../components/Toast.js';
-import { isAuthenticated } from '../services/auth.js';
+import { isAuthenticated, canSeeView, canEdit } from '../services/auth.js';
 import { escHtml }         from '../utils/escHtml.js';
 import { t, href }         from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
-import { renderAdminShell } from '../components/AdminSidebar.js';
+import { renderAdminShell, ADMIN_NAV } from '../components/AdminSidebar.js';
 
 export class AdminView {
   async render() {
     if (!isAuthenticated()) {
       navigateReplace(href('/'));
+      return document.createTextNode('');
+    }
+
+    // /admin renders the legacy projects dashboard, which only admins (view
+    // '*') and content editors use. A user whose role grants OTHER admin
+    // views but not this one — e.g. `solufolk` with only 'handbok' — lands
+    // here from the NavBar "Admin" entry; forward them to the first sidebar
+    // item their role can actually see instead of a screen of 403s.
+    if (!canSeeView('dashboard') && !canEdit()) {
+      const first = ADMIN_NAV.flatMap(g => g.items)
+        .find(item => !item.soon && item.route !== '/admin' && canSeeView(item.id));
+      navigateReplace(href(first ? first.route : '/'));
       return document.createTextNode('');
     }
 
