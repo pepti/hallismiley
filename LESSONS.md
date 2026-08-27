@@ -398,6 +398,46 @@ scaffold and are noted in site-factory/BASE-SYNC.md.
 
 _(base)_ `server/middleware/sanitize.js` RICH_TEXT_FIELDS was `{body, content}` only, but the news CMS also submits `body_is` — so any Icelandic article body saved through the API had ALL its tags stripped by the global sanitizer (the seeded IS bodies only kept their HTML because migrations bypass Express). Found while building the sales handbook (whose EN sibling `body_en` would have hit the same wall). Fixed here by adding `body_is` + `body_en` to the set. Base fix: same addition upstream, plus a test that posts rich HTML in every `_is`/`_en` body field and asserts the tags survive.
 
-### 2026-08-27 — an intermittent one-test Jest flake (unidentified)
+### 2026-08-27 — the intermittent one-test Jest flake: a verify() failure line the test could not parse _(base)_
 
-_(project)_ During the sales-handbook program the full Jest suite reported `1 failed, 2567 passed` on two of six full runs; the other four were `2568 passed`, including immediate reruns with no code change in between. The failing test's NAME was never captured (the runs were piped through `Select-Object -Last N`, which kept the summary and dropped the `●` failure block). It is not related to the handbook work — one of the two failures happened on a content-only commit that the Jest suite never executes. Next time: pipe the whole run to a file FIRST (`npm test *> jest.log`) and grep the log, rather than trimming the stream. Prófari (qa-engineer) should hunt it with `--runInBand` + repeated runs; the suspects are the tests that share the single test DB and the in-process 30s role/user caches.
+**Identified and fixed.** The flake was `booksReports.test.js › archive export ›
+writes every file, and a manifest that verifies against them`. Nothing was wrong
+with the archive: `verify()` in `server/scripts/books-archive-export.js` wrote
+CSV failures as `<path>: <reason>` but document failures as
+`<path> (<original_name>): <reason>`, and the test classifies failures by
+splitting on the first colon — so a mismatched document's "path" came out as
+`documents/<id>.pdf (reikningur.pdf)` and never matched the manifest entry the
+archive had correctly flagged. The assertion therefore fails **whenever a
+document whose bytes no longer match its upload checksum is present at export
+time** — which is `booksExpenses.test.js`'s deliberately-tampered fixture, and
+it is present only when that suite runs after the last `cleanTables()` before
+`booksReports`. Jest orders suites by cached duration, so that neighbourhood
+shifts run to run: one run in three. Fixed by giving every failure line the same
+`<path>: <reason>` shape (name moved into the reason) + a regression test that
+tampers a document and asserts `failure.split(':')[0] === entry.archived_as`.
+
+Three method notes worth keeping:
+
+- **Capture the whole run to a file** (`npm test *> jest.log`) — the original
+  hunt was blind because `Select-Object -Last N` kept the summary and dropped
+  the `●` block.
+- **The Postgres server log is a run oracle.** `C:/Program Files/PostgreSQL/17/data/log/postgresql-*.log`
+  still held both failing runs from that night: identical expected-error profiles
+  and *no* database error at all, which killed the deadlock, connection-exhaustion
+  and constraint theories before any code was read. Run boundaries are visible as
+  bursts of "could not receive data from client" (Jest's `forceExit`).
+- **Force the order to reproduce.** A 6-line custom `--testSequencer` that sorts
+  by an env var turned "one run in three, eight minutes each" into a
+  90-second deterministic repro (`booksExpenses.test.js` then
+  `booksReports.test.js`). Keep that trick for the next order-dependent flake.
+
+Also found while hunting, NOT the cause and NOT fixed: a fire-and-forget insert
+that carries an FK to `users` (`EventLog.record` from the 5xx path and the
+beacon) can deadlock against the next test's
+`TRUNCATE … users … CASCADE` in `cleanTables()` — the insert holds
+`event_logs` and wants `users`, the truncate holds `users` and wants
+`event_logs` (CASCADE pulls it in). A 40-round probe hit it 4 times; the victim
+is sometimes the test, which fails with `deadlock detected` in `beforeEach`.
+It did not happen in the runs under investigation (the Postgres log has no
+deadlock before this session), but it is a real single-test flake waiting to
+happen if any test stops awaiting one of those writes.

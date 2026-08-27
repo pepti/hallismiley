@@ -31,6 +31,43 @@ _Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suit
 - **Never delete inherited specs** (stack invariant: adapt, don't delete). Tiering reorganizes when tests run, never whether they exist.
 - `jest.unit.config.js` derives from `jest.config.js` — config drift between them is a bug. New unit specs must stay DB-free; a unit spec that needs Postgres belongs in `tests/integration/`.
 
+## Hunting an intermittent failure
+
+Suites share one database and Jest orders them by cached duration, so a suite's
+*neighbours* change between runs — which is how an order-dependent test fails
+"one run in three" with no code change (LESSONS.md 2026-08-27).
+
+1. **Capture the whole run, then grep.** `npm test *> jest.log` in PowerShell.
+   Trimming the stream (`Select-Object -Last N`) keeps the summary and throws
+   away the `●` block that names the test.
+2. **Ask Postgres what happened.** `C:/Program Files/PostgreSQL/17/data/log/postgresql-*.log`
+   holds every server-side error, days back. If the failing run's errors match a
+   passing run's exactly, the failure was an assertion, not the database — that
+   alone rules out deadlocks, exhausted connections and constraint violations.
+   Run boundaries show up as bursts of "could not receive data from client".
+3. **Force the order once you have a suspect pair.** A custom sequencer that
+   sorts by an env var turns an eight-minute lottery into a 90-second repro:
+
+   ```js
+   // ordered-sequencer.js
+   const Sequencer = require('@jest/test-sequencer').default;
+   const path = require('path');
+   module.exports = class extends Sequencer {
+     sort(tests) {
+       const order = (process.env.TEST_ORDER || '').split(',').map(s => s.trim());
+       const at = t => (order.indexOf(path.basename(t.path)) + 1) || 999;
+       return [...tests].sort((a, b) => at(a) - at(b));
+     }
+   };
+   ```
+
+   ```bash
+   TEST_ORDER="booksExpenses.test.js,booksReports.test.js" npx jest --testSequencer ./ordered-sequencer.js tests/integration/booksExpenses.test.js tests/integration/booksReports.test.js
+   ```
+
+4. **Fix the dependency, not the symptom.** No retries, no raised timeouts: make
+   the assertion independent of what the previous suite left behind.
+
 ## The structural next step (engine work — belongs upstream in rekstrarkerfid)
 
 Integration runs serially (`maxWorkers: 1`) because all suites share one `orangesmiley_test` DB — `tests/globalSetup.js` documents the race. The estate already solved this shape for Playwright with per-branch e2e DBs (`e2e/lib/dbUrl.js`). Applying the same idea per Jest worker (`orangesmiley_test_w${JEST_WORKER_ID}`, one migrate per worker DB) would parallelize the integration tier and cut the full suite by roughly the worker count. That is a change to the engine's test harness: build it once in the upstream repo and let every instance inherit it — do not hand-build it per instance.
