@@ -17,6 +17,8 @@ const db = require('../../server/config/database');
 const path = require('path');
 const fs = require('fs/promises');
 const os = require('os');
+const crypto = require('crypto');
+const { BOOKS_UPLOAD_ROOT } = require('../../server/config/paths');
 const ledger = require('../../server/services/bookkeeping/ledgerService');
 const reports = require('../../server/services/bookkeeping/reportService');
 const invoices = require('../../server/services/bookkeeping/invoiceService');
@@ -431,6 +433,53 @@ describe('archive export', () => {
     const flagged = new Set(manifest.documents.filter(d => !d.verified).map(d => d.archived_as));
     for (const failure of failures.filter(f => f.startsWith('documents/'))) {
       expect(flagged.has(pathOf(failure))).toBe(true);
+    }
+  });
+
+  it('reports a mismatched document as "<path>: <reason>", like every other failure', async () => {
+    // The regression guard for the 2026-08-27 flake (LESSONS.md). verify() used to
+    // write the document lines as "<path> (<original_name>): <reason>", so the path
+    // segment of a mismatched document never matched its manifest entry — and the
+    // check above, which classifies failures by splitting on the first colon, failed
+    // for it. Nothing was wrong with the archive: the manifest and the verifier
+    // agreed, the test simply could not tell. It only went red when a mismatched
+    // document happened to survive into this suite's export, which depends on which
+    // suite ran last — hence "fails one run in three, always a different run".
+    const rel = 'test-fixtures/archive-failure-shape.pdf';
+    const abs = path.join(BOOKS_UPLOAD_ROOT, rel);
+    const recorded = Buffer.from('%PDF-1.4 fylgiskjal\n');
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+    await fs.writeFile(abs, recorded);
+
+    const { rows } = await db.query(
+      `INSERT INTO books_documents
+         (kind, original_name, file_path, mime_type, byte_size, checksum_sha256, created_by)
+       VALUES ('other','reikningur.pdf',$1,'application/pdf',$2,$3,$4)
+       RETURNING id`,
+      [rel, recorded.length, crypto.createHash('sha256').update(recorded).digest('hex'), adminId]
+    );
+    // The file changes underneath the row — exactly what gr. 14 exists to catch.
+    await fs.writeFile(abs, Buffer.from('%PDF-1.4 breytt\n'));
+
+    const out = await fs.mkdtemp(path.join(os.tmpdir(), 'books-archive-shape-'));
+    try {
+      const { manifest } = await archive.exportArchive({
+        out, year: YEAR, documents: true, force: true,
+      });
+      const entry = manifest.documents.find(d => d.id === rows[0].id);
+      expect(entry.verified).toBe(false);
+
+      const { failures } = await archive.verify(out);
+      const failure = failures.find(f => f.startsWith(entry.archived_as));
+      expect(failure).toBeDefined();
+      expect(failure.split(':')[0]).toBe(entry.archived_as); // the path, and only the path
+      expect(failure).toContain('reikningur.pdf');           // the name is still reported
+    } finally {
+      // The row is append-only (books_protect_document), so put the bytes it
+      // recorded back rather than leaving a mismatched document behind for the
+      // rest of the run.
+      await fs.writeFile(abs, recorded);
+      await fs.rm(out, { recursive: true, force: true });
     }
   });
 

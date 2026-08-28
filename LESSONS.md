@@ -400,7 +400,7 @@ _(base)_ `server/middleware/sanitize.js` RICH_TEXT_FIELDS was `{body, content}` 
 
 ### 2026-08-27 — the intermittent Jest flake IS the archive-pagination bug (ENHANCEMENTS #3)
 
-_(base)_ **Identified.** It is `tests/integration/booksReports.test.js › archive export › writes every file, and a manifest that verifies against them` (line 433: a `documents/…` file that failed verification is not flagged `verified:false` in the manifest). That is exactly the defect already written up as **ENHANCEMENTS proposal #3**: `server/scripts/books-archive-export.js` pages with `ORDER BY created_at LIMIT/OFFSET`, and `created_at` is not unique — when two documents land in the same millisecond (which fast test inserts do intermittently, hence the flake), a row repeats across a page boundary, two manifest entries claim the same `documents/<id>` path, the second copy overwrites the first, and `verify()` then disagrees with a manifest that called the file verified. Fix is `ORDER BY created_at, id` (or keyset pagination) — **not implemented: ENHANCEMENTS items need Halli's approval before the fact.** Every instance inherits the bug, so it back-ports to the base. Method note that finally caught it: pipe the whole run to a file FIRST (`npm test *> jest.log`) and grep for `FAIL` / `●`; trimming the stream with `Select-Object -Last N` keeps the summary and drops the failure block, which is why six earlier runs left it anonymous.
+_(base)_ **Superseded 2026-08-28** — the flake's actual cause turned out to be the `verify()` failure-line shape (see the "identified and fixed" entry below), NOT this pagination defect. The pagination defect itself (`ORDER BY created_at` without a tiebreaker) is still real and still ENHANCEMENTS #3, still awaiting Halli. Original diagnosis kept for the trail: **Identified.** It is `tests/integration/booksReports.test.js › archive export › writes every file, and a manifest that verifies against them` (line 433: a `documents/…` file that failed verification is not flagged `verified:false` in the manifest). That is exactly the defect already written up as **ENHANCEMENTS proposal #3**: `server/scripts/books-archive-export.js` pages with `ORDER BY created_at LIMIT/OFFSET`, and `created_at` is not unique — when two documents land in the same millisecond (which fast test inserts do intermittently, hence the flake), a row repeats across a page boundary, two manifest entries claim the same `documents/<id>` path, the second copy overwrites the first, and `verify()` then disagrees with a manifest that called the file verified. Fix is `ORDER BY created_at, id` (or keyset pagination) — **not implemented: ENHANCEMENTS items need Halli's approval before the fact.** Every instance inherits the bug, so it back-ports to the base. Method note that finally caught it: pipe the whole run to a file FIRST (`npm test *> jest.log`) and grep for `FAIL` / `●`; trimming the stream with `Select-Object -Last N` keeps the summary and drops the failure block, which is why six earlier runs left it anonymous.
 
 ### 2026-08-27 — an intermittent one-test Jest flake (superseded by the entry above)
 
@@ -409,3 +409,47 @@ _(project)_ During the sales-handbook program the full Jest suite reported `1 fa
 ### 2026-08-27 — a stale e2e server on port 3000 makes the suite test the wrong database
 
 _(base)_ `playwright.config.js` sets `reuseExistingServer: !CI`, and the per-branch e2e database name comes from the branch (`e2e/lib/dbUrl.js`). If a server from an EARLIER run is still listening on port 3000 — a run that was killed, or whose shutdown was missed — Playwright silently reuses it. Two things then go wrong at once: the `node e2e/global-setup.js && node server/server.js` command prefix never runs, so the current branch's database is never created; and the reused server is still connected to the PREVIOUS branch's database, so fixtures the specs seed are invisible to the app under test. The symptom is not "wrong database" — it is every spec timing out on `nav-user-btn` after login, which reads exactly like a broken login modal. Cost ~20 minutes chasing a non-existent regression. Check `Get-NetTCPConnection -LocalPort 3000 -State Listen` before believing a full-suite login failure. Base fix worth considering: have the webServer command fail fast when the server it would reuse reports a different `DATABASE_URL` (a `/health` field would do), rather than silently reusing it. Note the port that matters is 3000 — the dev/preview server on 3001 is unrelated.
+
+### 2026-08-27 — the intermittent one-test Jest flake: a verify() failure line the test could not parse _(base)_
+
+**Identified and fixed.** The flake was `booksReports.test.js › archive export ›
+writes every file, and a manifest that verifies against them`. Nothing was wrong
+with the archive: `verify()` in `server/scripts/books-archive-export.js` wrote
+CSV failures as `<path>: <reason>` but document failures as
+`<path> (<original_name>): <reason>`, and the test classifies failures by
+splitting on the first colon — so a mismatched document's "path" came out as
+`documents/<id>.pdf (reikningur.pdf)` and never matched the manifest entry the
+archive had correctly flagged. The assertion therefore fails **whenever a
+document whose bytes no longer match its upload checksum is present at export
+time** — which is `booksExpenses.test.js`'s deliberately-tampered fixture, and
+it is present only when that suite runs after the last `cleanTables()` before
+`booksReports`. Jest orders suites by cached duration, so that neighbourhood
+shifts run to run: one run in three. Fixed by giving every failure line the same
+`<path>: <reason>` shape (name moved into the reason) + a regression test that
+tampers a document and asserts `failure.split(':')[0] === entry.archived_as`.
+
+Three method notes worth keeping:
+
+- **Capture the whole run to a file** (`npm test *> jest.log`) — the original
+  hunt was blind because `Select-Object -Last N` kept the summary and dropped
+  the `●` block.
+- **The Postgres server log is a run oracle.** `C:/Program Files/PostgreSQL/17/data/log/postgresql-*.log`
+  still held both failing runs from that night: identical expected-error profiles
+  and *no* database error at all, which killed the deadlock, connection-exhaustion
+  and constraint theories before any code was read. Run boundaries are visible as
+  bursts of "could not receive data from client" (Jest's `forceExit`).
+- **Force the order to reproduce.** A 6-line custom `--testSequencer` that sorts
+  by an env var turned "one run in three, eight minutes each" into a
+  90-second deterministic repro (`booksExpenses.test.js` then
+  `booksReports.test.js`). Keep that trick for the next order-dependent flake.
+
+Also found while hunting, NOT the cause and NOT fixed: a fire-and-forget insert
+that carries an FK to `users` (`EventLog.record` from the 5xx path and the
+beacon) can deadlock against the next test's
+`TRUNCATE … users … CASCADE` in `cleanTables()` — the insert holds
+`event_logs` and wants `users`, the truncate holds `users` and wants
+`event_logs` (CASCADE pulls it in). A 40-round probe hit it 4 times; the victim
+is sometimes the test, which fails with `deadlock detected` in `beforeEach`.
+It did not happen in the runs under investigation (the Postgres log has no
+deadlock before this session), but it is a real single-test flake waiting to
+happen if any test stops awaiting one of those writes.
