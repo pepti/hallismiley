@@ -59,18 +59,10 @@
   text-transform: uppercase; line-height: 1.2;
 }
 .lol-nav__logo-text strong { color: var(--gold); font-weight: 700; }
-/* The descriptor under the company name: what Orange Smiley is, in a quieter
-   voice than the wordmark above it. Tracked tighter and set smaller than the
-   wordmark because it is a phrase, not a mark — the old 0.22em/0.86em pair was
-   sized for the single word "Orange Smiley" and overflows the brand column
-   with a descriptor. nowrap keeps it on the wordmark's baseline grid. */
-.lol-nav__logo-by {
-  display: inline-block;
-  font-size: 0.72em; font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
+/* .lol-nav__logo-by held the second line of the lockup — first the company
+   name under the product name, then briefly a descriptor under the company
+   name. The lockup is the wordmark alone now (Halli, 2026-09-01), so the rule
+   is gone; the class name is free if a second line is ever wanted again. */
 
 .lol-nav__center {
   display: flex; align-items: center; gap: 28px;
@@ -374,13 +366,6 @@
 @media (max-width: 1024px) {
   .lol-nav { padding: 0 16px; }
   .lol-nav__brand { min-width: 0; }
-  /* Below 480px the descriptor line runs into the TEST chip and the cart. The
-     wordmark alone still identifies the company, so the descriptor steps out
-     rather than squeezing the row. */
-  @media (max-width: 480px) {
-    .lol-nav__logo-text br,
-    .lol-nav__logo-by { display: none; }
-  }
   .lol-nav__right { width: auto; gap: 8px; }
 
   .lol-nav__hamburger { display: flex; }

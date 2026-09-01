@@ -4,11 +4,21 @@ import { Lightbox }   from '../components/Lightbox.js';
 import { canEdit }    from '../services/auth.js';
 import { t, href }    from '../i18n/i18n.js';
 
+// Hero fallback for a project with no image of its own. The site's own
+// licensed Iceland set (credited in CREDITS.md from the footer), at the widest
+// rendition — these were four hotlinked Unsplash photos, of a workshop bench
+// and a carpenter's tools among them.
 const CATEGORY_HERO = {
-  tech:        'https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=1920&h=1080&fit=crop&q=80&auto=format',
-  carpentry:   'https://images.unsplash.com/photo-1416339306562-f3d12fefd36f?w=1920&h=1080&fit=crop&q=80&auto=format',
-  remodelling: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1920&h=1080&fit=crop&q=80&auto=format',
-  tools:       'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=1920&h=1080&fit=crop&q=80&auto=format',
+  tech:      '/assets/iceland/highland-road-2400.070e8b48.jpg',
+  carpentry: '/assets/iceland/braided-2400.b3c2c9e6.jpg',
+};
+
+// The hero badge printed the raw enum key, so an Icelandic reader met the word
+// "CARPENTRY" on an otherwise Icelandic page. Same labels the cards and the
+// filter row use; an unlabelled category shows no badge rather than the key.
+const CATEGORY_LABELS = {
+  tech:      'projects.tech',
+  carpentry: 'projects.carpentry',
 };
 
 export class ProjectDetailView {
@@ -139,7 +149,7 @@ export class ProjectDetailView {
         <div class="pd-hero__content">
           <a href="${href('/verkefni')}" class="pd-back-link">&#x2190; ${t('projectDetail.allProjects')}</a>
           <div class="pd-hero__meta">
-            <span class="badge badge--${escHtml(p.category)}">${escHtml(p.category)}</span>
+            ${CATEGORY_LABELS[p.category] ? `<span class="badge badge--${escHtml(p.category)}">${escHtml(t(CATEGORY_LABELS[p.category]))}</span>` : ''}
             <span class="pd-hero__year">${p.year}</span>
             ${p.featured ? `<span class="pd-hero__featured">&#x2605; ${t('projectDetail.featured')}</span>` : ''}
           </div>

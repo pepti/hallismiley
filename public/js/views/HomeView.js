@@ -9,46 +9,59 @@ import { SceneStage } from '../scenes/SceneStage.js';
 
 // ── Project categories (champion-selector style) ──────────────────────────
 // Icons are NOT editable — keyed by category id and merged at render time.
+// One icon per discipline id. The ids are the company's lines of work
+// (2026-09-01) — they replaced the portfolio's tech/carpentry/remodelling/
+// tools set, which put timber joinery and workshop tools on the front page of
+// a software company. Decorative only: these tiles swap a preview image, they
+// are not the /verkefni category filter and are not the projects.category enum.
 const CATEGORY_ICONS = {
-  tech: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-           <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-         </svg>`,
-  carpentry: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>`,
-  remodelling: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                </svg>`,
-  tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+  web: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="16" rx="2"/>
+          <path d="M2 9h20"/><circle cx="5.5" cy="6.5" r="0.6" fill="currentColor"/>
+        </svg>`,
+  store: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M3 7h18l-1.5 12.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5z"/>
+            <path d="M8.5 10V6a3.5 3.5 0 0 1 7 0v4"/>
           </svg>`,
+  operations: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                 <path d="M4 3h12l4 4v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+                 <path d="M8 12h8M8 16h8M8 8h4"/>
+               </svg>`,
+  ai: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+         <rect x="6" y="6" width="12" height="12" rx="2"/>
+         <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8"/>
+       </svg>`,
 };
 
 // Default discipline content — fallback if API row is unavailable. Shaped
 // as { en, is } for locale-aware fallback (picked via pick() at load time).
+//
+// DRAFT (2026-09-01): the four lines of work the company sells, replacing the
+// portfolio's disciplines. Imagery is the site's own licensed Iceland set
+// (public/assets/iceland, credited in CREDITS.md from the footer) rather than
+// the timber photos and hotlinked Unsplash placeholders that were here — the
+// tiles are decorative, and the site already speaks in these landscapes.
 const DEFAULT_DISCIPLINE_CONTENT = {
   en: {
     eyebrow:     'Browse by',
-    heading:     'Discipline',
-    description: 'Systems we have built and still operate — and the workshop work the same hands did first. Every project is built to last.',
+    heading:     'What we build',
+    description: 'One system with four faces. Every customer runs the same core; what differs is how much of it they switch on, and the modules we fit to their business.',
     categories: [
-      { id: 'tech',        label: 'Tech',        type: 'Full-Stack Applications', img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
-      { id: 'carpentry',   label: 'Carpentry',   type: 'Joinery & Timber Work',   img: '/assets/projects/arnarhraun/img_1795.jpg' },
-      { id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',     img: '/assets/projects/arnarhraun/img_1071.jpg' },
-      { id: 'tools',       label: 'Tools',       type: 'Workshop & Dev Tooling',  img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+      { id: 'web',        label: 'Web',        type: 'Sites & content',            img: '/assets/iceland/skogafoss-960.974226bb.jpg' },
+      { id: 'store',      label: 'Store',      type: 'Catalogue & checkout',       img: '/assets/iceland/landmannalaugar-960.c98af1b9.jpg' },
+      { id: 'operations', label: 'Operations', type: 'Inventory, invoicing & VAT', img: '/assets/iceland/sigoldugljufur-960.bc3740d3.jpg' },
+      { id: 'ai',         label: 'AI',         type: 'Agents that build & operate', img: '/assets/iceland/glacier-960.ab82e3c1.jpg' },
     ],
   },
   is: {
     eyebrow:     'Skoða eftir',
-    heading:     'Sviði',
-    description: 'Kerfi sem við höfum smíðað og rekum enn — og smíðavinnan sem sömu hendur unnu á undan. Hvert verkefni byggt til að endast.',
+    heading:     'Því sem við smíðum',
+    description: 'Eitt kerfi með fjórum hliðum. Allir viðskiptavinir keyra sama kjarnann; það sem er ólíkt er hversu mikið af honum er kveikt á og hvaða einingar við sníðum að rekstrinum.',
     categories: [
-      { id: 'tech',        label: 'Tækni',       type: 'Fullur tæknistafli',       img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
-      { id: 'carpentry',   label: 'Smíði',       type: 'Fellingar & timburvinna',  img: '/assets/projects/arnarhraun/img_1795.jpg' },
-      { id: 'remodelling', label: 'Endurnýjun',  type: 'Innanhússfrágangur',       img: '/assets/projects/arnarhraun/img_1071.jpg' },
-      { id: 'tools',       label: 'Verkfæri',    type: 'Verkstæði & þróunarverkfæri', img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+      { id: 'web',        label: 'Vefur',      type: 'Vefir og efnisstjórnun',      img: '/assets/iceland/skogafoss-960.974226bb.jpg' },
+      { id: 'store',      label: 'Verslun',    type: 'Vörulisti og greiðslur',      img: '/assets/iceland/landmannalaugar-960.c98af1b9.jpg' },
+      { id: 'operations', label: 'Rekstur',    type: 'Lager, reikningar og VSK',    img: '/assets/iceland/sigoldugljufur-960.bc3740d3.jpg' },
+      { id: 'ai',         label: 'Gervigreind', type: 'Umboð sem smíða og reka',    img: '/assets/iceland/glacier-960.ab82e3c1.jpg' },
     ],
   },
 };
