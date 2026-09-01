@@ -3,6 +3,98 @@
    All colors ride the theme tokens (variables.css).
    ═══════════════════════════════════════════════════════ */
 
+/* ── Home: products ──
+   The company site names its products (2026-09-01). One card today, so the
+   card is wide and confident rather than one-of-three: a single narrow card
+   in a three-column grid reads as a gap, and this is the only place on the
+   homepage where the visitor learns what we actually sell. The grid takes a
+   second product without a rewrite; auto-fit turns one full-width card into
+   a row when it arrives. */
+.home-products {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-5);
+}
+
+.home-products__header { margin-bottom: var(--sp-6); }
+
+.home-products__eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem; letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-2);
+}
+
+.home-products__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.home-products__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: var(--sp-5);
+}
+
+.home-products__card {
+  position: relative;
+  padding: var(--sp-7) var(--sp-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+/* Molten top rail, same treatment as the tier cards it replaced up here. */
+.home-products__card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent-gradient);
+  opacity: 0.8;
+}
+
+.home-products__badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.home-products__name {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 900;
+  color: var(--accent-ink);
+  line-height: 1.1;
+  margin-bottom: var(--sp-2);
+}
+
+.home-products__tagline {
+  font-family: var(--font-display);
+  font-size: 1.05rem; font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-4);
+}
+
+.home-products__desc {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-6);
+  max-width: 60ch;
+}
+
+.home-products__cta { display: inline-block; }
+
 /* ── Home: tier teaser ── */
 .home-tiers,
 .home-steps {
