@@ -540,3 +540,20 @@ through a JS template literal first, so `\n` inside a JSON value must be
 written `\n` (migration 030 already did this). Written as `\n` it becomes a
 real newline inside a JSON string literal and Postgres rejects the jsonb cast
 — caught here by parsing every generated statement back before committing.
+
+### 2026-09-01 — a scripted splice into schema.js ate `$'` out of a CHECK regex _(project)_
+
+Migration 093 was spliced into `server/config/schema.js` by a node script that
+derived the statements from the reference `.sql` and then did
+`js.replace(marker, entry + marker)`. JavaScript's `String.prototype.replace`
+treats `$'` inside a *string* replacement as a pattern — "the text after the
+match" — so the kennitala CHECK `'^[0-9]{10}$'` came out as `'^[0-9]{10}`
+followed by the tail of the file. The `.sql` reference copy was correct, the
+transactional runner rolled the migration back cleanly on both DBs, and the
+error ("syntax error at or near annad") pointed at the next token, not at the
+damage — which is why it took a JSON.stringify of the stored statement to see it.
+
+Fix: a function replacer, `js.replace(marker, () => entry + marker)`. The same
+trap covers `$&`, `` $` ``, `$1`… Rule: when generated text goes through
+`replace()`, pass a function, never a string — a regex literal in SQL is
+exactly the kind of content that contains `$'`.
