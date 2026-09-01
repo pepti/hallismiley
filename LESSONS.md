@@ -477,3 +477,39 @@ before it was ported (this chunk). Two things are worth keeping:
   limiter — a strictly worse posture than before the "fix". Anything that widens
   a limiter exemption needs the matching narrowing on the path the exemption
   opens, in the same commit, with the comment on each half pointing at the other.
+
+### 2026-09-01 — uploads: alert, never block (and two ways the test lies)
+
+_(base)_ Halli's standing product decision: **a large upload must always be
+allowed to finish.** Throttling one is a broken-product experience — an admin
+drops a folder of stills and the batch dies half-way through with a 429 that
+looks like the product is broken. So `POST /api/v1/admin/background/media` is
+carved out of the global limiter and the blocking backstop is replaced by
+detection: `services/uploadVolumeAlert.js` writes a `warn` row into
+`event_logs` when a burst is large, and the upload still completes.
+
+This is base-tagged because it is a product rule, not a site rule — the same
+carve-out belongs in every instance, and `rekstrarkerfid` currently has the
+opposite shape (a blocking `backgroundUploadLimiter`, 1000/15 min) that
+contradicts it.
+
+Three things that cost time and generalize:
+
+- **`skip:` chains are joined with `||`, not commas.** Appending
+  `(req.method === 'POST' && …),` under the last clause terminates the arrow
+  body and the object literal, so the file stops parsing. A `grep` for the new
+  constant "verified" the patch and said nothing — greping for a symbol proves
+  presence, not syntax. `node --check` on every file you machine-edit, before
+  running anything slower.
+- **`event_logs.user_id` is `TEXT REFERENCES users(id)`, and `EventLog.record`
+  swallows its own errors by design.** So a test that alerts against a made-up
+  user id gets its row dropped by the FK, silently — and any assertion of the
+  form "no row appeared" then passes for entirely the wrong reason. When
+  testing a fire-and-forget writer, always assert the positive case against a
+  real FK row first, or the negative cases are worthless.
+- **`UPLOAD_ROOT` resolves to the COMMITTED `public/assets/` tree under
+  `NODE_ENV=test`.** An upload test that does not clean up leaves real binaries
+  in the repo — three PNGs made it into the working tree here. Clean up by
+  diffing the directory before/after, never by parsing the handler's response
+  for a path: the payload key is not part of the test's contract, and guessing
+  it wrong fails silently and litters every single run.

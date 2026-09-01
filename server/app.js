@@ -229,6 +229,20 @@ app.use(localeMiddleware);
 //     Accept header would otherwise hit the database unthrottled).
 // API, auth, page loads and every write limiter are unchanged.
 const STATIC_ASSET_RE = /^\/(assets|js|css|fonts)\//;
+
+// Bulk background-media uploads are carved out of the global limiter as well.
+// Standing product decision (Halli, 2026-09-01): a large upload must ALWAYS be
+// allowed to finish — throttling one is a broken-product experience, not a
+// safety feature. This route takes one file per request, so an admin dropping a
+// folder of stills spends a request per file and would otherwise burn the whole
+// 400/15 min budget and 429 half-way through the batch.
+//
+// A deliberate exemption, not an oversight (invariant 7): the access control on
+// this route is requireAuth + requireView('background') + CSRF, unchanged — the
+// limiter never was the gate. Prevention is replaced by detection —
+// services/uploadVolumeAlert.js records a warn row in Admin → Monitoring when a
+// burst is large, and the upload still completes.
+const BG_MEDIA_UPLOAD_PATH = '/api/v1/admin/background/media';
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 400,
@@ -237,7 +251,8 @@ const globalLimiter = rateLimit({
   skip: (req) =>
     process.env.NODE_ENV === 'test' ||
     process.env.NODE_ENV === 'development' ||
-    ((req.method === 'GET' || req.method === 'HEAD') && STATIC_ASSET_RE.test(req.path)),
+    ((req.method === 'GET' || req.method === 'HEAD') && STATIC_ASSET_RE.test(req.path)) ||
+    (req.method === 'POST' && req.path === BG_MEDIA_UPLOAD_PATH),
   message: { error: 'Too many requests, please try again later.', code: 429 },
 });
 app.use(globalLimiter);
