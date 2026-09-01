@@ -110,12 +110,13 @@ export class NavBar {
             </svg>
           </div>
           <!-- Company lockup: this is the company site (Halli's call 2026-09-01),
-               so the company name carries the mark and a descriptor rides
-               underneath. Rekstrarkerfið is a product — it is named on the
-               product surfaces (/thjonusta, the home products section), not
-               here. "Orange Smiley" stays hardcoded: a proper noun reads the
-               same in both locales, same as the home footer's logo line. -->
-          <div class="lol-nav__logo-text"><strong>Orange Smiley</strong><br><span class="lol-nav__logo-by">${t('nav.brandTagline')}</span></div>
+               so the company name carries the mark. The name stands on its own —
+               the descriptor line under it was dropped the same day (Halli).
+               Rekstrarkerfið is a product: it is named on the product surfaces
+               (/thjonusta, the home products section), not here. "Orange Smiley"
+               is hardcoded — a proper noun reads the same in both locales, same
+               as the home footer's logo line. -->
+          <div class="lol-nav__logo-text"><strong>Orange Smiley</strong></div>
         </a>
       </div>
 

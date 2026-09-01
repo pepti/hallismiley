@@ -21,11 +21,11 @@ export class ProjectsView {
     // page anchors #main-content on its <main>.
     main.id = 'main-content';
 
-    const filterBar = new FilterBar((category) => this._applyFilter(category));
+    this.filterBar = new FilterBar((category) => this._applyFilter(category));
 
     const section = document.createElement('section');
     section.className = 'section';
-    section.appendChild(filterBar.render());
+    section.appendChild(this.filterBar.render());
 
     this.grid = document.createElement('div');
     this.grid.className = 'project-grid';
@@ -54,6 +54,9 @@ export class ProjectsView {
   async _loadProjects(view) {
     try {
       this.allProjects = await projectApi.getAll({ limit: 100 });
+      // The filter row is built from the categories actually present, so it
+      // never offers a filter that would return nothing.
+      this.filterBar.setCategories(this.allProjects.map(pr => pr.category));
       this._renderGrid(this.allProjects, view);
     } catch {
       this.grid.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div>${t('form.error')}</div>`;
