@@ -453,3 +453,27 @@ is sometimes the test, which fails with `deadlock detected` in `beforeEach`.
 It did not happen in the runs under investigation (the Postgres log has no
 deadlock before this session), but it is a real single-test flake waiting to
 happen if any test stops awaiting one of those writes.
+
+### 2026-09-01 — a base security fix sat unsynced for two weeks because it landed on a harvest day _(base)_
+
+Base commit `2b6842c` (2026-08-22, "fix(rate-limit): exempt static asset GETs
+from the global limiter") reached `rekstrarkerfid` but never reached here.
+Öryggisvörður's weekly SDL sweep flagged it twice — 2026-08-24 and 2026-08-31 —
+before it was ported (this chunk). Two things are worth keeping:
+
+- **Same-day commits fall between two ledgers.** 2026-08-22 is the date of the
+  icelandicstore→here+base harvest (five chunks + base PRs #136–#140, ledger in
+  `site-factory/BASE-SYNC.md`). `2b6842c` is a *base-only* fix that landed the
+  same day, outside that fan-out, so both ledgers read as complete while a
+  commit sat between them. Do not sync by date range or by "the program is
+  closed" — diff by identifier: grep the new symbol (`STATIC_ASSET_RE`) in every
+  live repo. That is exactly the check that caught it, and it is cheap enough to
+  run for every base commit that introduces a named constant.
+- **The fix has two halves that must move together.** The limiter exemption
+  (`skip:` on the global limiter) and the `/{*splat}` catch-all's asset 404 are
+  one change. `ssrMeta` only skips paths that carry a file extension, so porting
+  the exemption alone would leave `/assets/<anything-without-a-dot>` with an
+  HTML `Accept` header reaching the DB-backed meta renderer *outside* the rate
+  limiter — a strictly worse posture than before the "fix". Anything that widens
+  a limiter exemption needs the matching narrowing on the path the exemption
+  opens, in the same commit, with the comment on each half pointing at the other.
