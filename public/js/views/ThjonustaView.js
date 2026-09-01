@@ -2,7 +2,11 @@ import { t, href } from '../i18n/i18n.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { initReveal } from '../utils/reveal.js';
 
-// The three service tiers (Vefur / Verslun / Rekstur) with a feature matrix.
+// The company's products page (2026-09-01). Today it holds exactly one
+// product — Rekstrarkerfið — so the page leads with the product and then
+// shows how it is sold: the three tiers (Vefur / Verslun / Rekstur) and the
+// feature matrix that tells them apart.
+//
 // Prices come from i18n values marked DRAFT until Halli confirms them
 // (thjonusta.draft chip is rendered next to every price).
 const TIERS = ['Vefur', 'Verslun', 'Rekstur'];
@@ -58,7 +62,17 @@ export class ThjonustaView {
 
     view.innerHTML = `
       <main class="main thjonusta-page" id="main-content">
-        <div class="tier-cards">${cards}</div>
+        <!-- The tier machinery below is the product's pricing, presented on
+             the company's site because the product has no site of its own
+             yet. When rekstrarkerfi.is ships (roadmap R2) this whole block
+             moves there and what stays here is a link to it. -->
+        <section class="thjonusta-tiers" aria-labelledby="thjonusta-tiers-title">
+          <div class="thjonusta-tiers__header">
+            <h2 class="thjonusta-tiers__title" id="thjonusta-tiers-title">${t('thjonusta.tiersTitle')}</h2>
+            <p class="thjonusta-tiers__intro">${t('thjonusta.tiersIntro')}</p>
+          </div>
+          <div class="tier-cards">${cards}</div>
+        </section>
 
         <div class="tier-matrix-wrap">
           <table class="tier-matrix">
