@@ -22,10 +22,10 @@ const PALETTE_TOKENS = [
 export function chartTokens() {
   const cs = getComputedStyle(document.documentElement);
   const read = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
-  const accent = read('--gold', '#C2410C');
+  const accent = read('--gold', '#7B5533');
   return {
     accent,
-    info:    read('--accent-blue', '#0A0A0B'),
+    info:    read('--accent-blue', '#2A1F17'),
     success: read('--success', '#1c7c54'),
     warning: read('--warning', '#8A5300'),
     error:   read('--error', '#b3261e'),

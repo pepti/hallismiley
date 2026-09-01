@@ -48,6 +48,20 @@
   color: #FFFFFF;
   filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.6));
 }
+/* Media mode — the same problem as scene mode, arriving from the other side.
+   The title takes its fill from --accent-gradient, which the 2026-09-01 re-hue
+   turned brown; brown on a dark waterfall is mud, exactly what the note above
+   warns about. The video is fixed dark on every theme, so this hero can hold a
+   fixed light fill: sand to tan, plus the same shadow scene mode uses. Both
+   stops are far enough from the footage to read over the bright water. */
+.lol-hero--media .lol-hero__title {
+  background: linear-gradient(135deg, #F2E2C9 0%, #C9AE8C 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.62));
+}
+
 /* Ember wash over the video/plain background — sits between the media layer
    and the content, tinting the whole hero toward the brand. */
 .lol-hero::after {
@@ -176,8 +190,8 @@
 /* Over media the hero copy sits on the veil, not on the page, so it keeps the
    light-on-dark treatment regardless of theme. */
 .lol-hero--media .lol-hero__subtitle    { color: #F5EDE2; }
-.lol-hero--media .lol-hero__cta         { color: #FDE7D3; border-color: #EA580C; }
-.lol-hero--media .lol-hero__cta:hover   { color: #FFFFFF; background: rgba(234, 88, 12, 0.28); }
+.lol-hero--media .lol-hero__cta         { color: #FDE7D3; border-color: #C9AE8C; }
+.lol-hero--media .lol-hero__cta:hover   { color: #FFFFFF; background: rgba(201, 174, 140, 0.26); }
 .lol-hero--media .lol-hero__scroll span { color: rgba(245, 237, 226, 0.72); }
 
 /* Scroll indicator */
