@@ -184,10 +184,42 @@ handbook. Built in four chunks on master, operator guide: `docs/SALES-STAFF.md`.
   in COMPANY-LOG: plan §6 ("sole human employee, no salaries 2 years")
   contradicts hiring — his call.
 
+## R1 — company-site content pass (2026-09-01, five chunks on master)
+
+Halli's directive: this is the COMPANY site of an AI-driven software company;
+Rekstrarkerfið is a product it sells, not the site's identity. **All new copy
+is DRAFT awaiting his approval — he edits it in place via the inline editors.**
+
+- **A, brand core**: nav lockup is ORANGE SMILEY + descriptor (`nav.brandTagline`);
+  SSR business-route titles suffix "— Orange Smiley"; `og:site_name`, static
+  head, PWA name. Hidden portfolio routes keep "Halli Smiley" ON PURPOSE.
+- **B, homepage**: hero/skills/stats/discipline fallbacks are company copy and
+  all four are `{en,is}` now; new `_products()` section (one card →
+  /thjonusta, grid takes a second product); news/projects links no longer
+  point at hidden surfaces. `_tiers()`/`_steps()` stay dormant.
+- **C, /thjonusta**: products page — h1 is the product, the tier matrix is a
+  section under it (`thjonusta.tiersTitle` = the page's old h1). Moves to
+  rekstrarkerfi.is at R2; comment in the view says so.
+- **D, legacy brand**: ContactView defaults, its footer (5 business routes,
+  /personuvernd), the 7 server email strings, pdfService fallback, and a full
+  TermsView rewrite (IS-first, company as legal entity).
+- **E, admin**: new **Vörustýring** sidebar group = updates + monitoring + mcp
+  (ids untouched → RBAC/parity unaffected; saved layouts keep their own order,
+  Reset adopts the new one). Seed of the fleet console (R3–R8).
+- **Migrations 091 + 092 matter**: `home_skills`/`home_stats` and all six
+  `contact_*` rows are SEEDED (007/017/030/036-038), so code fallbacks never
+  render on a real instance — copy had to move in the DB too. Both guard on
+  `updated_by IS NULL` (seeds leave it null, contentController stamps the
+  admin id), so admin-written copy survives and re-runs are no-ops.
+- Out of scope, deliberate: hallismiley.is canonical/robots/sitemap hosts
+  (domain cutover), the MCP instance string, Product-schema brand on the
+  hidden shop.
+
 ## Where things stand for the next session
 
-- **Company/product split decided 2026-08-22** (section above): next programs are R1 (company-site content pass HERE, copy needs Halli) and R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
-- **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
+- **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
+- **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
+- Post-R1 notes: the news list wants a public `/frettir` home (home links into it were removed, not re-homed); `/terms` could take an `/skilmalar` slug; Product-schema `brand` on the hidden shop still says Rekstrarkerfið.
 - **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
 - Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
 - Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.

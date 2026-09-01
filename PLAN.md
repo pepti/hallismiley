@@ -85,3 +85,22 @@ served from the sibling canonical product repo `Projects\rekstrarkerfid`
 `company/REKSTRARKERFI-PLAN.md`; the product-site build program:
 `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`. This repo's follow-on is the
 R1 company-site content pass (copy needs Halli) — nothing else changes here.
+
+## R1 company-site content pass (done 2026-09-01)
+
+Five chunks on master (A brand core → B homepage → C /thjonusta → D legacy
+brand → E admin group). The site now presents Orange Smiley ehf., an
+AI-driven software company, with Rekstrarkerfið as its first product.
+Details in CLAUDE.md; every line of new copy is **DRAFT pending Halli**.
+
+Two things worth carrying forward:
+
+- Seeded `site_content` rows shadow the view fallbacks. `home_skills`,
+  `home_stats` and all six `contact_*` keys were seeded by migrations, so
+  editing the JS defaults changed nothing a visitor sees. Migrations 091/092
+  move the rows, guarded on `updated_by IS NULL`. Any future copy pass has to
+  check for a seeded row first.
+- Deferred, not forgotten: a public `/frettir` home for the news list (the
+  homepage's links into the hidden `/news` were removed), an `/skilmalar`
+  slug for `/terms`, and the Product-schema `brand` on the hidden shop
+  surface, which still names the product as the brand of every SKU.

@@ -513,3 +513,30 @@ Three things that cost time and generalize:
   diffing the directory before/after, never by parsing the handler's response
   for a path: the payload key is not part of the test's contract, and guessing
   it wrong fails silently and litters every single run.
+
+## 2026-09-01 — a content pass that edits code changes nothing (project)
+
+R1 rewrote the homepage and contact-page fallback constants in the view files,
+and the site kept showing carpentry copy. `home_skills`, `home_stats` and all
+six `contact_*` keys are **seeded by applied migrations** (007, 017, 030,
+036–038), so `site_content` always has a row, the API never 404s, and the code
+fallback is dead code on any instance that has ever run migrations. The
+fallbacks are only reached on a database that predates the seed — which is no
+database.
+
+The tell: the exploration pass reported "no seed migrations exist for home_*",
+which was true for `home_hero` and `home_discipline` (they 404 in dev) and
+false for the two beside them. Per-key, not per-prefix.
+
+The fix pattern, now in migrations 091 and 092: update the rows, guarded on
+`updated_by IS NULL`. Seeds and migrations leave that column null;
+`contentController` stamps the admin's id on every save. So the migration
+replaces only copy nobody has edited, an instance where the customer wrote
+their own text keeps it, and re-running is a no-op — idempotent without a
+version flag.
+
+Also worth remembering: JSON going into a migration's SQL string passes
+through a JS template literal first, so `\n` inside a JSON value must be
+written `\n` (migration 030 already did this). Written as `\n` it becomes a
+real newline inside a JSON string literal and Postgres rejects the jsonb cast
+— caught here by parsing every generated statement back before committing.
