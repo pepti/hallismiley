@@ -232,6 +232,27 @@
   color: var(--text-secondary);
 }
 
+/* The tier block sits a level under the product it prices, so its heading is
+   smaller than the page h1 and the type walks down from there. */
+.thjonusta-tiers__header {
+  max-width: 46em;
+  margin: 0 auto var(--sp-6);
+  text-align: center;
+}
+
+.thjonusta-tiers__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-3);
+}
+
+.thjonusta-tiers__intro {
+  font-size: 1rem; line-height: 1.65;
+  color: var(--text-secondary);
+}
+
 .tier-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

@@ -12,7 +12,7 @@ const { test, expect } = require('@playwright/test');
 // route → the heading text that proves the right view rendered, per locale.
 const ROUTES = [
   { path: '',              is: 'Við smíðum hugbúnað',   en: 'We build software' },
-  { path: '/thjonusta',    is: 'Ein áskrift',           en: 'One subscription' },
+  { path: '/thjonusta',    is: 'Rekstrarkerfið',        en: 'Rekstrarkerfið' },
   { path: '/verkefni',     is: 'Verkefni',              en: 'Projects' },
   { path: '/um-okkur',     is: 'Lítil stofa',           en: 'Small studio' },
   { path: '/hafa-samband', is: null,                    en: null },  // form-led page, asserted below
@@ -64,7 +64,10 @@ test.describe('locale behaviour', () => {
     // drawer, and that copy is hidden on a desktop viewport.
     await page.locator('.lol-nav__right .lol-nav__lang-opt[data-locale="en"]').click();
     await expect(page).toHaveURL(/\/en\/thjonusta$/);
-    await expect(page.locator('h1').filter({ hasText: 'One subscription' })).toBeVisible();
+    // The h1 is the product name, identical in both locales — it would pass
+    // here without the locale having switched at all. The tier heading under
+    // it is the nearest thing on the page that is actually translated.
+    await expect(page.locator('h2').filter({ hasText: 'One subscription' })).toBeVisible();
   });
 
   test('an unprefixed business path serves Icelandic to a visitor with no signal', async ({ browser }) => {
