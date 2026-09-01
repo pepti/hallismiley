@@ -109,11 +109,13 @@ export class NavBar {
                     fill="none" stroke-width="2.1" stroke-linecap="round"/>
             </svg>
           </div>
-          <!-- Product lockup: the product name carries the mark, the company
-               name rides underneath. Halli's naming call 2026-08-20 — the
-               ASCII "Rekstrarkerfi" is for domains and identifiers; anything a
-               human reads uses the definite form. -->
-          <div class="lol-nav__logo-text"><strong>Rekstrarkerfið</strong><br><span class="lol-nav__logo-by">Orange Smiley</span></div>
+          <!-- Company lockup: this is the company site (Halli's call 2026-09-01),
+               so the company name carries the mark and a descriptor rides
+               underneath. Rekstrarkerfið is a product — it is named on the
+               product surfaces (/thjonusta, the home products section), not
+               here. "Orange Smiley" stays hardcoded: a proper noun reads the
+               same in both locales, same as the home footer's logo line. -->
+          <div class="lol-nav__logo-text"><strong>Orange Smiley</strong><br><span class="lol-nav__logo-by">${t('nav.brandTagline')}</span></div>
         </a>
       </div>
 

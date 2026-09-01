@@ -55,7 +55,7 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
     expect(res.text).toMatch(/<html lang="en"/);
-    expect(res.text).toMatch(/<title id="ssr-title">[^<]*Rekstrarkerfið[^<]*<\/title>/);
+    expect(res.text).toMatch(/<title id="ssr-title">[^<]*Orange Smiley[^<]*<\/title>/);
     expect(res.text).toMatch(/property="og:locale" content="en_IS"/);
     expect(res.text).toMatch(/rel="canonical" href="[^"]*\/en\/"/);
   });
@@ -82,24 +82,24 @@ describe('SSR meta-injection — SPA catch-all', () => {
   test('business routes render locale-aware business meta', async () => {
     const th = await request(app).get('/is/thjonusta');
     expect(th.status).toBe(200);
-    expect(th.text).toMatch(/<title id="ssr-title">Þjónusta og verð — Rekstrarkerfið<\/title>/);
+    expect(th.text).toMatch(/<title id="ssr-title">Vörur og verð — Orange Smiley<\/title>/);
     expect(th.text).toMatch(/rel="canonical" href="[^"]*\/is\/thjonusta"/);
 
     const um = await request(app).get('/en/um-okkur');
     expect(um.status).toBe(200);
-    expect(um.text).toMatch(/<title id="ssr-title">About us — Rekstrarkerfið<\/title>/);
+    expect(um.text).toMatch(/<title id="ssr-title">About us — Orange Smiley<\/title>/);
 
     const hs = await request(app).get('/is/hafa-samband');
     expect(hs.status).toBe(200);
-    expect(hs.text).toMatch(/<title id="ssr-title">Hafa samband — Rekstrarkerfið<\/title>/);
+    expect(hs.text).toMatch(/<title id="ssr-title">Hafa samband — Orange Smiley<\/title>/);
 
     const pv = await request(app).get('/is/personuvernd');
     expect(pv.status).toBe(200);
-    expect(pv.text).toMatch(/<title id="ssr-title">Persónuverndarstefna — Rekstrarkerfið<\/title>/);
+    expect(pv.text).toMatch(/<title id="ssr-title">Persónuverndarstefna — Orange Smiley<\/title>/);
 
     const vk = await request(app).get('/is/verkefni');
     expect(vk.status).toBe(200);
-    expect(vk.text).toMatch(/<title id="ssr-title">Verkefnin okkar — Rekstrarkerfið<\/title>/);
+    expect(vk.text).toMatch(/<title id="ssr-title">Verkefnin okkar — Orange Smiley<\/title>/);
     expect(vk.text).toMatch(/rel="alternate" hreflang="en" href="[^"]*\/en\/verkefni"/);
   });
 
