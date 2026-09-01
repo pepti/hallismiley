@@ -11,6 +11,7 @@ const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
 const { createBackgroundUpload } = require('../middleware/upload');
 const ctrl = require('../controllers/adminBackgroundController');
+const { recordUpload } = require('../services/uploadVolumeAlert');
 
 router.use(requireAuth, requireView('background'));
 
@@ -41,6 +42,22 @@ router.post('/media',
       if (err) return res.status(400).json({ error: err.message, code: 400 });
       next();
     });
+  },
+  // Count the accepted file and, on a large burst, raise a warn row for
+  // Admin → Monitoring. This NEVER blocks: the request is already past multer,
+  // and recordUpload swallows its own failures. Uploads are carved out of the
+  // global limiter (BG_MEDIA_UPLOAD_PATH in app.js) precisely so a big batch
+  // always finishes — we notify that it was large, we never refuse it.
+  (req, _res, next) => {
+    if (req.file) {
+      recordUpload({
+        userId:    req.user?.id || null,
+        username:  req.user?.username || null,
+        path:      `${req.method} ${req.originalUrl}`,
+        requestId: req.requestId || null,
+      });
+    }
+    next();
   },
   ctrl.uploadMedia);
 router.patch('/media/reorder', csrfProtect, ctrl.reorderMedia);
