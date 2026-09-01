@@ -215,6 +215,39 @@ is DRAFT awaiting his approval — he edits it in place via the inline editors.*
   (domain cutover), the MCP instance string, Product-schema brand on the
   hidden shop.
 
+## Market-research program (2026-09-01 — Markaðsstjóri)
+
+Halli's ask: find the ~100 Icelandic companies most likely to buy
+Rekstrarkerfið, judged from their annual accounts, and map the sites that
+publish Icelandic company financials. A new agent, **Markaðsstjóri**
+(`Projects\agents\markadsstjori.md`, log `Projects\MARKADS-LOG.md`), owns it
+with a full marketing charter (market picture, prospect universe + scoring,
+source map, competitor/incumbent tracking, channel briefs).
+
+- **Data**: migration **093_market_research** — `market_companies` (one row
+  per company, `list_type` smb|large, workflow `status`), `market_financials`
+  (per company per fiscal year; `admin_cost_ratio` is a GENERATED column =
+  skrifstofu- og stjórnunarkostnaður / tekjur, Halli's fit signal),
+  `market_stats` (Hagstofa sizing aggregates). Nothing in the app reads them
+  yet; the admin list view is ENHANCEMENTS #16 (proposal, not implemented).
+- **Importer**: `npm run market:import -- company/markadur/market.json
+  [--dry-run]` (`server/scripts/market-import.js`) — validates every row, one
+  transaction per file, idempotent upserts by kennitala / (company, year) /
+  stats key; `status` is only overwritten when the JSON row carries one.
+  Test: `tests/integration/marketImport.test.js`.
+- **Staging + PDFs live in gitignored `company/markadur/`** (`market.json`,
+  `arsreikningar/<kennitala>-<year>.pdf`, `report_path` stored repo-relative).
+  Named companies never go into a git-tracked file; contact persons are never
+  recorded anywhere.
+- **Decisions (Halli, 2026-09-01)**: two lists — smb best-fit (~100, 25 deep,
+  10 with reports) + large watchlist; sectors smásala 47 / heildsala 46 /
+  iðnaður+verktakar 41–43 / þjónusta+ferðaþjónusta, plus the admin-cost ratio
+  across all; size band is DATA-DRIVEN (he confirms the proposal before it
+  filters); free/public sources only — Skatturinn ársreikningaskrá downloads
+  (free per Halli), Keldan public figures first; the top-10 download batch is
+  listed to him before it runs.
+- Migration chain now ends 093_market_research.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.

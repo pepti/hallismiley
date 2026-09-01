@@ -142,6 +142,14 @@ Original proposal kept below for the record.
 **Effort.** M. **Risk.** Low-medium — allowlist widening touches the XSS surface (both layers must move together, see LESSONS.md 2026-08-27 on the `body_is` precedent), and the auth-gated file route must not regress the upload-path allowlist hardening from base-sync 6A.
 **Recommendation.** Do when the first guide actually needs a screenshot, not before.
 
+### 16. Markaður — read-only prospect list in the admin
+
+**What.** A `/admin/markadur` list view over `market_companies` joined to each company's latest `market_financials` row (migration 093, 2026-09-01): filter by `list_type`, `sector_group` and `status`, sort by `fit_score`, and a row opens the company's summary, sources and figures. Wiring: view id `markadur` in `ADMIN_VIEW_IDS` (`server/auth/adminViews.js`), a sidebar item in the **staff** group beside Handbók sölufólks (`AdminSidebar.js`), routes behind `requireAuth` + `requireView('markadur')` mirroring `salesGuidesRoutes.js`, `admin.nav.markadur` in both locale files, and optionally a migration granting the view to `solufolk` so the sales team works its shortlist from the same shell. The one write is the status change (`shortlist` → `handed_to_sales` / `rejected`), admin/moderator only.
+**Why.** The research data lands in the DB today (Halli's decision, 2026-09-01) but is reachable only through SQL or the importer's staging JSON. Sölustjóri's prospect duty and the human sales team need to see the shortlist without a database client.
+**How it respects the invariants.** Server-side gating (#8) via `requireView`; every response `no-store` like the guides; read-only apart from the status field, so no new sanitize surface; error envelope (#5) on the routes; tokens only, so it survives all five themes (#15).
+**Effort.** S–M — one routes file, one view, one sidebar entry, two locale keys. **Risk.** Low.
+**Recommendation.** Do after the first research pass has filled the tables and Halli has confirmed the size band — the list is only worth a screen once the rows are worth reading.
+
 ---
 
 ## Remaining `hallismiley` references
