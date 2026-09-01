@@ -5,16 +5,28 @@ test.describe('Navigation — basic page loads', () => {
   // The site is Icelandic by default: Accept-Language no longer switches the
   // locale, so a Playwright browser (en-US) still lands on Icelandic. English
   // lives at /en/ — assert each locale at its own explicit URL.
-  test('homepage shows the business value proposition in Icelandic', async ({ page }) => {
+  // The hero introduces the COMPANY (2026-09-01): this is Orange Smiley's own
+  // site, and the product pitch it used to carry moved down to the products
+  // section and /thjonusta, where a product belongs.
+  test('homepage shows the company proposition in Icelandic', async ({ page }) => {
     await page.goto('/is/');
-    await expect(page.locator('.lol-hero__title')).toContainText('Allt kerfið þitt');
-    await expect(page.locator('.lol-hero__title')).toContainText('á einum stað');
+    await expect(page.locator('.lol-hero__title')).toContainText('Við smíðum hugbúnað');
+    await expect(page.locator('.lol-hero__title')).toContainText('sem rekur fyrirtæki');
   });
 
-  test('homepage mirrors the value proposition in English', async ({ page }) => {
+  test('homepage mirrors the company proposition in English', async ({ page }) => {
     await page.goto('/en/');
-    await expect(page.locator('.lol-hero__title')).toContainText('Your whole system');
-    await expect(page.locator('.lol-hero__title')).toContainText('in one place');
+    await expect(page.locator('.lol-hero__title')).toContainText('We build software');
+    await expect(page.locator('.lol-hero__title')).toContainText('that runs businesses');
+  });
+
+  test('the homepage names its products, and the product card leads to them', async ({ page }) => {
+    await page.goto('/is/');
+    const card = page.locator('.home-products__card');
+    await expect(card).toHaveCount(1);
+    await expect(card.locator('.home-products__name')).toHaveText('Rekstrarkerfið');
+    await card.locator('.home-products__cta').click();
+    await expect(page).toHaveURL(/\/is\/thjonusta$/);
   });
 
   test('homepage hero shows the waterfall video by default', async ({ page }) => {

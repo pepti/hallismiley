@@ -32,7 +32,7 @@ const DEFAULT_DISCIPLINE_CONTENT = {
   en: {
     eyebrow:     'Browse by',
     heading:     'Discipline',
-    description: 'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
+    description: 'Systems we have built and still operate — and the workshop work the same hands did first. Every project is built to last.',
     categories: [
       { id: 'tech',        label: 'Tech',        type: 'Full-Stack Applications', img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
       { id: 'carpentry',   label: 'Carpentry',   type: 'Joinery & Timber Work',   img: '/assets/projects/arnarhraun/img_1795.jpg' },
@@ -43,7 +43,7 @@ const DEFAULT_DISCIPLINE_CONTENT = {
   is: {
     eyebrow:     'Skoða eftir',
     heading:     'Sviði',
-    description: 'Allt frá nákvæmum timburgrindum og handskornum fellingum til fullra vefforrita — hvert verkefni byggt til að endast.',
+    description: 'Kerfi sem við höfum smíðað og rekum enn — og smíðavinnan sem sömu hendur unnu á undan. Hvert verkefni byggt til að endast.',
     categories: [
       { id: 'tech',        label: 'Tækni',       type: 'Fullur tæknistafli',       img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
       { id: 'carpentry',   label: 'Smíði',       type: 'Fellingar & timburvinna',  img: '/assets/projects/arnarhraun/img_1795.jpg' },
@@ -53,48 +53,85 @@ const DEFAULT_DISCIPLINE_CONTENT = {
   },
 };
 
-// ── Default skills content — used as fallback if API is unavailable ───────
+// ── Default skills content — used as fallback if API is unavailable.
+// DRAFT (2026-09-01): company copy — what Orange Smiley does. Shaped as
+// { en, is } like the hero and discipline defaults; _loadContent() picks the
+// locale slice, so what reaches the inline editor is always the flat row
+// shape the API stores. ──
 const DEFAULT_SKILLS_CONTENT = {
-  eyebrow:     'Two Decades of',
-  title:       'Craft\n& Code',
-  description: 'Twenty years of carpentry precision — reading grain, cutting to the line, fitting without gaps — applied to every line of code. The same principles that make a mortise-and-tenon joint last a century make software maintainable.',
-  items: [
-    { label: 'Languages', value: 'JS · Python · SQL' },
-    { label: 'Backend',   value: 'Node · Express · REST' },
-    { label: 'Database',  value: 'PostgreSQL · Redis' },
-    { label: 'Carpentry', value: '20+ yrs hand & power tools' },
-    { label: 'Cloud',     value: 'Azure' },
-    { label: 'Security',  value: 'OWASP · OAuth 2.0 · RS256' },
-  ],
-  image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+  en: {
+    eyebrow:     'What we do',
+    title:       'We build it\n& we run it',
+    description: 'Orange Smiley is an Icelandic software house driven by AI. We build business systems and then operate them — hosting, monitoring, security and the changes you ask for. AI agents do the custom work, which is why bespoke costs subscription money instead of consultancy money.',
+    items: [
+      { label: 'Web',        value: 'Sites · stores · checkout' },
+      { label: 'Operations', value: 'Inventory · invoicing · VAT' },
+      { label: 'AI',         value: 'Agents build and maintain' },
+      { label: 'Platform',   value: 'Node · PostgreSQL · Azure' },
+      { label: 'Running it', value: 'Hosting · updates · 24/7 watch' },
+      { label: 'Security',   value: 'OWASP · 2FA · audit logging' },
+    ],
+    image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+  },
+  is: {
+    eyebrow:     'Það sem við gerum',
+    title:       'Við smíðum\n& við rekum',
+    description: 'Orange Smiley er íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum rekstrarkerfi og rekum þau svo áfram — hýsingu, vöktun, öryggi og breytingarnar sem þú biður um. Gervigreindin vinnur sérsmíðina, þess vegna kostar hún áskrift en ekki ráðgjafartíma.',
+    items: [
+      { label: 'Vefur',    value: 'Vefir · verslanir · greiðslur' },
+      { label: 'Rekstur',  value: 'Lager · reikningar · VSK' },
+      { label: 'Gervigreind', value: 'Umboð smíða og viðhalda' },
+      { label: 'Undirstaða', value: 'Node · PostgreSQL · Azure' },
+      { label: 'Umsjón',   value: 'Hýsing · uppfærslur · vöktun' },
+      { label: 'Öryggi',   value: 'OWASP · 2FA · aðgerðaskrár' },
+    ],
+    image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+  },
 };
 
-// ── Default stats content — used as fallback if API is unavailable ───────
-const DEFAULT_STATS_CONTENT = [
-  { num: '22+', label: 'Years Carpentry Experience' },
-  { num: '15+', label: 'Years Coding Experience' },
-  { num: '6+',  label: 'Years Tech Management' },
-  { num: '40',  label: 'Years of creating all kinds of trouble' },
-];
+// ── Default stats content — used as fallback if API is unavailable.
+// DRAFT (2026-09-01): company numbers, { en, is } like the rest. ──
+const DEFAULT_STATS_CONTENT = {
+  en: [
+    { num: '2026', label: 'Founded in Iceland' },
+    { num: '1',    label: 'Product — Rekstrarkerfið' },
+    { num: '20+',  label: 'Years building software' },
+    { num: '24/7', label: 'Monitored and operated' },
+  ],
+  is: [
+    { num: '2026', label: 'Stofnað á Íslandi' },
+    { num: '1',    label: 'Vara — Rekstrarkerfið' },
+    { num: '20+',  label: 'Ára reynsla af hugbúnaðarsmíði' },
+    { num: '24/7', label: 'Vöktun og rekstur' },
+  ],
+};
 
 // ── Default hero content — fallback if API row is unavailable. Shaped as
 // { en, is } for locale-aware fallback (picked via getLocale() at load time).
-// Values mirror the previous hardcoded title + halli.tagline + home.viewProjects
-// i18n entries so first-load (no DB row yet) renders identically to before.
+// DRAFT (2026-09-01): the hero introduces the COMPANY. The product pitch it
+// used to carry ("Allt kerfið þitt á einum stað") is now Rekstrarkerfið's
+// own tagline, in the products section below and on /thjonusta. ──
 const DEFAULT_HERO_CONTENT = {
   en: {
-    title_first:  'Your whole system',
-    title_second: 'in one place',
-    subtitle:     'Website, store, inventory and invoicing in one Icelandic system — one monthly invoice, changes in days not months.',
-    cta_label:    'Get a demo',
+    title_first:  'We build software',
+    title_second: 'that runs businesses',
+    subtitle:     'Orange Smiley is an Icelandic software house driven by AI — we build the systems your company runs on, and we keep them running.',
+    cta_label:    'Get in touch',
   },
   is: {
-    title_first:  'Allt kerfið þitt',
-    title_second: 'á einum stað',
-    subtitle:     'Vefur, verslun, lager og reikningar í einu íslensku kerfi — einn mánaðarreikningur, breytingar á dögum ekki mánuðum.',
-    cta_label:    'Fáðu demo',
+    title_first:  'Við smíðum hugbúnað',
+    title_second: 'sem rekur fyrirtæki',
+    subtitle:     'Orange Smiley er íslenskt hugbúnaðarhús knúið gervigreind — við smíðum kerfin sem fyrirtækið þitt keyrir á og höldum þeim gangandi.',
+    cta_label:    'Hafa samband',
   },
 };
+
+// The stats fallback for the active locale, deep-copied so callers can hand
+// it straight to the inline editor without writing through to the constant.
+function _defaultStats() {
+  const rows = DEFAULT_STATS_CONTENT[getLocale()] || DEFAULT_STATS_CONTENT.en;
+  return JSON.parse(JSON.stringify(rows));
+}
 
 // Historical rows in site_content were sometimes saved as an object with
 // numeric string keys (`{"0": {...}, "1": {...}}`) instead of a JSON array.
@@ -105,7 +142,7 @@ function _coerceStatsArray(data) {
     const vals = Object.values(data).filter(v => v && typeof v === 'object' && 'num' in v && 'label' in v);
     if (vals.length) return vals;
   }
-  return [...DEFAULT_STATS_CONTENT];
+  return _defaultStats();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -141,6 +178,7 @@ export class HomeView {
     // admin-selectable hero background mode.
     view.innerHTML = `
       ${this._hero()}
+      ${this._products()}
       ${this._news()}
       ${this._projects()}
       ${this._skills()}
@@ -169,7 +207,8 @@ export class HomeView {
         return;
       }
     } catch { /* network error — fall through to default */ }
-    this._content = { ...DEFAULT_SKILLS_CONTENT };
+    const defaults = DEFAULT_SKILLS_CONTENT[getLocale()] || DEFAULT_SKILLS_CONTENT.en;
+    this._content = JSON.parse(JSON.stringify(defaults));
   }
 
   // ── Load stats content from API ────────────────────────────────────────
@@ -182,7 +221,7 @@ export class HomeView {
         return;
       }
     } catch { /* network error — fall through to default */ }
-    this._statsContent = [...DEFAULT_STATS_CONTENT];
+    this._statsContent = _defaultStats();
   }
 
   // ── Load discipline (projects categories) content from API ─────────────
@@ -289,6 +328,31 @@ export class HomeView {
   // ── DORMANT since 2026-08-22 (hallismiley-layout revert): service-tier
   // teaser — three cards → /thjonusta. Kept, with its i18n, for the coming
   // content pass — Halli decides where the tiers return. ──────────────────
+  // ── SECTION: Products ──────────────────────────────────────────────────
+  // The company site names its products here (Halli, 2026-09-01). One entry
+  // today; the grid takes a second card without restructuring, which is the
+  // whole point of listing products rather than pitching the one we have.
+  // Deep product marketing lives on the product's own site — this card's job
+  // is to say what Rekstrarkerfið is and hand the visitor to /thjonusta.
+  _products() {
+    return `
+    <section class="home-products" aria-labelledby="home-products-title">
+      <div class="home-products__header">
+        <span class="home-products__eyebrow">${t('home.productsEyebrow')}</span>
+        <h2 class="home-products__title" id="home-products-title">${t('home.productsTitle')}</h2>
+      </div>
+      <div class="home-products__grid">
+        <article class="home-products__card">
+          <span class="home-products__badge">${t('home.productRekstrarBadge')}</span>
+          <h3 class="home-products__name">${t('home.productRekstrarName')}</h3>
+          <p class="home-products__tagline">${t('home.productRekstrarTagline')}</p>
+          <p class="home-products__desc">${t('home.productRekstrarDesc')}</p>
+          <a href="${href('/thjonusta')}" class="btn btn--primary home-products__cta">${t('home.productRekstrarCta')}</a>
+        </article>
+      </div>
+    </section>`;
+  }
+
   _tiers() {
     const tiers = [
       { name: t('home.tierVefurName'),   desc: t('home.tierVefurDesc') },
@@ -505,15 +569,12 @@ export class HomeView {
     return `
     <section class="lol-news" id="news" aria-label="Latest news">
       <div class="lol-news__inner">
+        <!-- The /news list is a hidden surface (publicSurface.js): unlinked,
+             noindex, still functional. The heading and the view-all link used
+             to point straight at it from the public homepage — the individual
+             article links stay, since those are what get shared. -->
         <div class="lol-news__header">
-          <a href="${href('/news')}" class="lol-news__heading-link"><h2 class="lol-news__heading">${t('nav.news')}</h2></a>
-          <a href="${href('/news')}" class="lol-news__view-all">
-            ${t('home.viewAll')}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </a>
+          <h2 class="lol-news__heading">${t('nav.news')}</h2>
         </div>
         <div class="lol-news__grid">${cards}</div>
       </div>
@@ -544,7 +605,7 @@ export class HomeView {
           <h2 class="lol-projects__heading" data-disc-field="heading">${escHtml(d.heading)}</h2>
           <p class="lol-projects__desc" data-disc-field="description">${escHtml(d.description)}</p>
           <div class="lol-projects__btns">
-            <a href="${href('/projects')}" class="lol-btn--gold">${t('home.viewAllProjects')}</a>
+            <a href="${href('/verkefni')}" class="lol-btn--gold">${t('home.viewAllProjects')}</a>
             <a href="${href('/')}" class="lol-btn--teal" id="contact-btn">${t('home.getInTouch')}</a>
           </div>
           <div class="lol-projects__categories" role="tablist" aria-label="Project disciplines">

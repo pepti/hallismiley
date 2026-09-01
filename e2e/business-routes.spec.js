@@ -11,7 +11,7 @@ const { test, expect } = require('@playwright/test');
 
 // route → the heading text that proves the right view rendered, per locale.
 const ROUTES = [
-  { path: '',              is: 'Allt kerfið þitt',      en: 'Your whole system' },
+  { path: '',              is: 'Við smíðum hugbúnað',   en: 'We build software' },
   { path: '/thjonusta',    is: 'Ein áskrift',           en: 'One subscription' },
   { path: '/verkefni',     is: 'Verkefni',              en: 'Projects' },
   { path: '/um-okkur',     is: 'Lítil stofa',           en: 'Small studio' },
