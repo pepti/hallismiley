@@ -22,11 +22,11 @@
   border-bottom: 1px solid var(--border-light);
 }
 
-/* Sizes to the wordmark rather than to a fixed 200px. "Rekstrarkerfið" is
-   twice as wide as the "Orange / Smiley" stack this column was measured for
-   (2026-08-20), and a fixed width just let the lockup overflow into the first
-   nav link. min-width keeps the old reservation so the nav's three columns
-   still balance on wide viewports. */
+/* Sizes to the wordmark rather than to a fixed 200px. The column now carries
+   the company lockup — "Orange Smiley" over a descriptor line (2026-09-01) —
+   and the descriptor is the wider of the two rows, so the intrinsic width
+   still has to win over a fixed one. min-width keeps the reservation so the
+   nav's three columns balance on wide viewports. */
 .lol-nav__brand {
   display: flex; align-items: center;
   min-width: 200px; flex: 0 0 auto;
@@ -59,14 +59,17 @@
   text-transform: uppercase; line-height: 1.2;
 }
 .lol-nav__logo-text strong { color: var(--gold); font-weight: 700; }
-/* The company line under the product name. Deliberately quieter and wider-
-   tracked than the product name it sits below — "Rekstrarkerfið" is the thing
-   being sold, "Orange Smiley" is who sells it. */
+/* The descriptor under the company name: what Orange Smiley is, in a quieter
+   voice than the wordmark above it. Tracked tighter and set smaller than the
+   wordmark because it is a phrase, not a mark — the old 0.22em/0.86em pair was
+   sized for the single word "Orange Smiley" and overflows the brand column
+   with a descriptor. nowrap keeps it on the wordmark's baseline grid. */
 .lol-nav__logo-by {
   display: inline-block;
-  font-size: 0.86em; font-weight: 600;
-  letter-spacing: 0.22em;
+  font-size: 0.72em; font-weight: 600;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .lol-nav__center {
@@ -365,11 +368,19 @@
    and two auth CTAs do not fit a tablet viewport: at 768px the row used to
    run ~50px past the right edge and the links overlapped the buttons. The
    drawer already existed for phones — this just starts using it before the
-   row breaks rather than after. (Found 2026-08-20 in the iPad e2e screenshot;
-   the longer Rekstrarkerfið wordmark made an existing overflow obvious.) */
+   row breaks rather than after. (Found 2026-08-20 in the iPad e2e screenshot,
+   when a long wordmark made an existing overflow obvious; the brand column is
+   the company lockup now, but the row is just as tight.) */
 @media (max-width: 1024px) {
   .lol-nav { padding: 0 16px; }
   .lol-nav__brand { min-width: 0; }
+  /* Below 480px the descriptor line runs into the TEST chip and the cart. The
+     wordmark alone still identifies the company, so the descriptor steps out
+     rather than squeezing the row. */
+  @media (max-width: 480px) {
+    .lol-nav__logo-text br,
+    .lol-nav__logo-by { display: none; }
+  }
   .lol-nav__right { width: auto; gap: 8px; }
 
   .lol-nav__hamburger { display: flex; }
