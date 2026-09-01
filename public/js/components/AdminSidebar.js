@@ -62,6 +62,19 @@ export const ADMIN_NAV = [
   { key: 'staff', group: 'admin.navGroup.staff', items: [
     { id: 'handbok', route: '/admin/handbok', labelKey: 'admin.nav.handbok', icon: 'book' },
   ] },
+  // Vörustýring — governing the product, as distinct from running this site
+  // (Halli, 2026-09-01). Which release this instance is on, how it is behaving,
+  // and who may reach it over MCP are one job; they sat in Settings next to the
+  // user list, which is a different one. The ids are unchanged, so RBAC and the
+  // adminViews parity test do not notice the move.
+  //
+  // This is the group a fleet console would grow into (roadmap R3–R8): today
+  // every screen in it speaks for this instance alone.
+  { key: 'product', group: 'admin.navGroup.product', items: [
+    { id: 'updates',    route: '/admin/updates',    labelKey: 'admin.nav.updates',        icon: 'update' },
+    { id: 'monitoring', route: '/admin/monitoring', labelKey: 'adminMonitoring.navTitle', icon: 'monitor' },
+    { id: 'mcp',        route: '/admin/mcp',        labelKey: 'mcp.navTitle',             icon: 'gear' },
+  ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
     { id: 'background', route: '/admin/background',    labelKey: 'admin.nav.background', icon: 'image' },
@@ -69,9 +82,6 @@ export const ADMIN_NAV = [
   ] },
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
-    { id: 'updates', route: '/admin/updates', labelKey: 'admin.nav.updates', icon: 'update' },
-    { id: 'monitoring', route: '/admin/monitoring', labelKey: 'adminMonitoring.navTitle', icon: 'monitor' },
-    { id: 'mcp', route: '/admin/mcp', labelKey: 'mcp.navTitle', icon: 'gear' },
     { id: 'users',   route: '/admin/users',   labelKey: 'admin.nav.users',   icon: 'shield' },
     { id: 'roles',   route: '/admin/roles',   labelKey: 'admin.nav.roles',   icon: 'key' },
   ] },
