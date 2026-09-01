@@ -209,12 +209,35 @@ app.use(sanitizeBody);
 app.use(localeMiddleware);
 
 // ── A01 Broken Access Control: global rate limiter ───────────────────────────
+// Static asset reads are exempt. The router imports all 58 view modules eagerly
+// (ENHANCEMENTS #6), so a single cold page load costs ~120 sendfile requests
+// before the Iceland scene renditions (multi-width AVIF/WebP srcsets) and the
+// fonts are counted — the 400/15 min budget 429'd ordinary browsing, which
+// renders as broken images and an unstyled page. Base fix 2b6842c, ported
+// 2026-09-01.
+//
+// This is scoping, not loosening, and the scope is exact:
+//   • only GET/HEAD, only paths whose RAW pathname begins with one of the four
+//     baked/upload static prefixes followed by a slash — '/assetsfoo/x' and
+//     '/is/js/x.js' do not match;
+//   • nothing dynamic is mounted under those prefixes (they are express.static
+//     mounts plus the /assets/brand CORP header, checked at port time), so an
+//     exempt request can only ever reach a cheap sendfile;
+//   • a miss under them never reaches the SSR/DB path — the '/{*splat}'
+//     catch-all 404s them (KEEP THE TWO IN SYNC; ssrMeta only skips paths that
+//     carry a file extension, so an extensionless '/assets/x' with an HTML
+//     Accept header would otherwise hit the database unthrottled).
+// API, auth, page loads and every write limiter are unchanged.
+const STATIC_ASSET_RE = /^\/(assets|js|css|fonts)\//;
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 400,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
+  skip: (req) =>
+    process.env.NODE_ENV === 'test' ||
+    process.env.NODE_ENV === 'development' ||
+    ((req.method === 'GET' || req.method === 'HEAD') && STATIC_ASSET_RE.test(req.path)),
   message: { error: 'Too many requests, please try again later.', code: 429 },
 });
 app.use(globalLimiter);
@@ -591,6 +614,13 @@ function pickLocaleForRedirect(req) {
 app.get('/{*splat}', (req, res, next) => {
   // Real 404s for data paths — don't serve HTML for missed API calls.
   if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
+    return res.status(404).json({ error: 'Not found', code: 404 });
+  }
+
+  // Asset-path misses are real 404s too, never the SPA shell. These prefixes
+  // are exempt from the global rate limiter (see STATIC_ASSET_RE above), so
+  // they must not fall through to the SSR/DB path.
+  if (STATIC_ASSET_RE.test(req.path)) {
     return res.status(404).json({ error: 'Not found', code: 404 });
   }
 

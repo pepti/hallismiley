@@ -164,6 +164,61 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.body).toEqual(expect.objectContaining({ error: expect.any(String), code: 404 }));
   });
 
+  // ── Static-asset prefixes (base fix 2b6842c, ported 2026-09-01) ───────────
+  // /assets, /js, /css and /fonts GETs are exempt from the global rate
+  // limiter (STATIC_ASSET_RE in app.js). Two things must therefore hold, and
+  // they are asserted here because the limiter itself is skipped under
+  // NODE_ENV=test: a miss under those prefixes must terminate at a cheap JSON
+  // 404 rather than reaching the SSR/DB path (ssrMeta only skips paths that
+  // carry a file extension, so extensionless + Accept: text/html used to fall
+  // through to database-backed meta rendering), and the exemption must not be
+  // wider than those four prefixes.
+
+  test('missed static-asset paths return JSON 404, never the SPA shell', async () => {
+    for (const path of [
+      '/assets/iceland/gone.avif',
+      '/assets/no-extension',
+      '/js/nope.js',
+      '/js/no-extension',
+      '/css/nope.css',
+      '/fonts/nope.woff2',
+    ]) {
+      const res = await request(app).get(path).set('Accept', 'text/html');
+      expect(res.status).toBe(404);
+      expect(res.headers['content-type']).toMatch(/application\/json/);
+      expect(res.body).toEqual(expect.objectContaining({ error: expect.any(String), code: 404 }));
+    }
+  });
+
+  test('existing static assets still serve under every exempt prefix', async () => {
+    const css = await request(app).get('/css/main.css');
+    expect(css.status).toBe(200);
+    expect(css.headers['content-type']).toMatch(/text\/css/);
+
+    const js = await request(app).get('/js/router.js');
+    expect(js.status).toBe(200);
+    expect(js.headers['content-type']).toMatch(/javascript/);
+
+    const img = await request(app).get('/assets/waterfall-cover.jpg');
+    expect(img.status).toBe(200);
+    expect(img.headers['content-type']).toMatch(/image\/jpeg/);
+
+    const font = await request(app).get('/fonts/barlow-400-normal-latin.woff2');
+    expect(font.status).toBe(200);
+  });
+
+  // Tightness: the prefix must be the WHOLE first segment and must sit at the
+  // root. Anything else is an ordinary SPA route and still gets the shell —
+  // if one of these ever 404s as JSON, the exemption has grown too wide.
+  test.each(['/assetsguide/intro', '/is/assets/yfirlit', '/is/css-tips'])(
+    '%s is not treated as a static-asset path',
+    async (path) => {
+      const res = await request(app).get(path).set('Accept', 'text/html');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/html/);
+    }
+  );
+
   test('response carries cache headers for CDN/edge caching', async () => {
     const res = await request(app).get('/en/');
     expect(res.headers['cache-control']).toMatch(/public.*max-age=300.*stale-while-revalidate/);
