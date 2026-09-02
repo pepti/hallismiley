@@ -117,7 +117,7 @@
   --ambient-opacity: 0;
 
   /* ── Iceland scene grading (engine: public/js/scenes/, iceland-scene.css).
-     Five themes = five lights on the same photographs. Bjart is the daylight
+     Three themes = three lights on the same photographs. Bjart is the daylight
      reference: a scrim that darkens enough for white hero text (bottom-heavy
      so scenes melt into the page). --scene-aurora gates the chunk-3 aurora
      layer: only themes dark enough to sell a night sky.

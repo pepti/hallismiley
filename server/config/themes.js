@@ -15,6 +15,12 @@
 //
 // 'classic' is BJART, the light default, since 2026-08-20 — the id outlived
 // the palette it was named for. See the header of public/css/themes.css.
-const THEMES = ['classic', 'light', 'mono', 'ember', 'midnight'];
+//
+// Cut from five to three on 2026-09-02 (Halli). 'light' and 'mono' are
+// rejected here with the typed 400 like any unknown value; migration 094
+// moved the accounts that had them to classic. The CHECK constraint still
+// admits the old ids — invariant 14 says it narrows in a later release, after
+// no running container can write them.
+const THEMES = ['classic', 'ember', 'midnight'];
 
 module.exports = { THEMES };

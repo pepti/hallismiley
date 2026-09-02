@@ -27,13 +27,16 @@
 
 import { getUser, isAuthenticated, updateProfile, updateCachedUser } from './auth.js';
 
-// Order is the picker's order: the light default first, then the other light
-// themes, then the dark pair. 'classic' is BJART (light) since 2026-08-20 —
-// the id outlived the palette it was named for, and is kept because
-// theme-boot.js encodes "classic = no data-theme attribute" and because the
-// users.theme CHECK may only be widened, never narrowed (invariant 14). Same
-// reason 'light' survives under its new label, Pappír.
-export const THEMES = ['classic', 'light', 'mono', 'ember', 'midnight'];
+// Order is the picker's order: the light default, then the dark, then high
+// contrast. 'classic' is BJART (light) since 2026-08-20 — the id outlived the
+// palette it was named for, and is kept because theme-boot.js encodes
+// "classic = no data-theme attribute". The set was cut from five to three on
+// 2026-09-02 (Halli): 'light' and 'mono' are gone from here and from
+// themes.css; a stale localStorage or account value for them normalises to
+// classic below (getTheme/setTheme both gate on THEMES), and migration 094
+// moved the stored accounts. The users.theme CHECK still admits the old ids
+// on purpose — it narrows in a later release (invariant 14).
+export const THEMES = ['classic', 'ember', 'midnight'];
 const DEFAULT_THEME = 'classic';
 const THEME_KEY = 'ws_theme';
 const TEST_KEY  = 'ws_test_override';
@@ -51,11 +54,9 @@ const DEMO_KEY  = 'ws_demo_mode';
 export const DARK_THEMES = new Set(['ember', 'midnight']);
 
 export const THEME_SWATCHES = {
-  classic:  'linear-gradient(135deg, #C2410C 0%, #FFFFFF 70%)',
-  light:    'linear-gradient(135deg, #C2410C 0%, #F7F2EC 70%)',
-  mono:     'linear-gradient(135deg, #C2410C 0%, #FFFFFF 42%, #000000 100%)',
-  ember:    'linear-gradient(135deg, #F3B577 0%, #161412 70%)',
-  midnight: 'linear-gradient(135deg, #FB923C 0%, #000000 70%)',
+  classic:  'linear-gradient(135deg, #7B5533 0%, #F2EBE0 70%)',
+  ember:    'linear-gradient(135deg, #E6CDA8 0%, #1A1410 70%)',
+  midnight: 'linear-gradient(135deg, #FFD166 0%, #000000 60%)',
 };
 
 function read(key) {

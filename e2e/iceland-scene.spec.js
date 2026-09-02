@@ -36,17 +36,19 @@ test.describe('Iceland scene — engine behaviours (on /is/thjonusta)', () => {
     expect(errors, `Unexpected JS errors: ${errors.join(', ')}`).toEqual([]);
   });
 
-  test('the mono theme grades the photograph to grayscale', async ({ page }) => {
+  test('the high-contrast theme grades the photograph for contrast', async ({ page }) => {
     // Theme set the way a visitor's choice persists (localStorage +
     // theme-boot pre-paint) — setting the attribute after load loses a race
     // with themePrefs.applyTheme() on the session-restore authchange.
-    await page.addInitScript(() => localStorage.setItem('ws_theme', 'mono'));
+    // (Was the mono grayscale check; mono retired 2026-09-02, Miðnætti took
+    // over the contrast job and its grade is what this now pins.)
+    await page.addInitScript(() => localStorage.setItem('ws_theme', 'midnight'));
     await page.goto('/is/thjonusta');
     const img = page.locator('.ice-scene--bleed[data-scene="sigoldugljufur"] .ice-scene__img');
     await expect(img).toBeAttached({ timeout: 10_000 });
-    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('mono');
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('midnight');
     const filter = await img.evaluate((el) => getComputedStyle(el).filter);
-    expect(filter).toContain('grayscale(1)');
+    expect(filter).toContain('contrast(1.15)');
   });
 
   test('reduced motion: no Ken Burns, page still fully rendered', async ({ page }) => {

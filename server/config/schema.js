@@ -4428,6 +4428,28 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
     ],
   },
+  {
+    // Cut the theme set from five to three (Halli, 2026-09-02): 'light'
+    // (Pappír) and 'mono' (Svart & hvítt) no longer ship a token set, so an
+    // account that had picked one would boot into classic anyway (themePrefs
+    // normalises an unknown value to the default). Move the stored choice so
+    // the account and the screen agree, and so a later narrowing of the
+    // CHECK constraint has nothing left to reject.
+    //
+    // DATA ONLY, per invariant 14 (expand/contract). users_theme_check keeps
+    // admitting the retired ids on purpose: during a release swap the
+    // previous container may still write 'light' or 'mono', and a narrowed
+    // CHECK would turn that PATCH into a 500 for the length of the swap. The
+    // contract step — DROP + ADD with ('classic', 'ember', 'midnight') —
+    // belongs to a release that ships after no running container can write
+    // the old ids; 084_user_theme_widen is the shape to copy when it does.
+    //
+    // Idempotent: the WHERE matches nothing on a second run.
+    name: '094_theme_set_three',
+    statements: [
+      `UPDATE users SET theme = 'classic' WHERE theme IN ('light', 'mono')`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

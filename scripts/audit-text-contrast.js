@@ -22,7 +22,7 @@ const { chromium } = require('playwright');
 
 const PAGES = ['/is/', '/is/thjonusta', '/is/verkefni', '/is/um-okkur',
   '/is/hafa-samband', '/is/personuvernd', '/is/terms'];
-const THEMES = ['classic', 'light', 'mono', 'ember', 'midnight'];
+const THEMES = ['classic', 'ember', 'midnight'];
 const BASE = 'http://localhost:3001';
 
 const AUDIT = () => {

@@ -2239,8 +2239,6 @@
   "home.heroAriaLabel": "Introduction",
   "home.scrollHint": "Scroll",
   "contact.formAriaLabel": "Inquiry form",
-  "themeSwitcher.theme.light": "Paper",
-  "themeSwitcher.theme.mono": "Mono",
   "themeSwitcher.theme.ember": "Ember",
   "themeSwitcher.theme.midnight": "Midnight",
   "admin.nav.updates": "Releases & updates",

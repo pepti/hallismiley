@@ -193,6 +193,6 @@ body::before {
 /* A dark theme’s swatch is a near-black circle; on the light themes that reads
    as a blob of ink rather than "this is the dark one". The orange rim is what
    makes it legible as a theme preview. */
-.profile-theme__swatch--dark { border: 2px solid #F97316; }
+.profile-theme__swatch--dark { border: 2px solid var(--gold); }
 .profile-theme__name { font-size: 14px; }
 .profile-theme-status { margin: 12px 0 0; font-size: 13px; color: #888; min-height: 18px; }
