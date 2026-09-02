@@ -21,13 +21,32 @@ const { requireAuth } = require('../auth/middleware');
 const { requireRole } = require('../auth/roles');
 const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
-const { buildInfo }   = require('../config/version');
+const { buildInfo, isDevBuild, changes } = require('../config/version');
 const { applyUpdate, rollbackUpdate } = require('../services/updateApplier');
 const { getSelfUpdateSettings, isEnabled, ADMIN_MODES, CHANNELS, KEYS } = require('../services/selfUpdateSettings');
 const { renderChangelog } = require('../services/changelogRender');
 const { nextWindowStart, DAY_KEYS } = require('../utils/maintenanceWindow');
 const SystemUpdate = require('../models/SystemUpdate');
 const Setting = require('../models/Setting');
+
+// GET /api/v1/system/changes → the changes this build carries, newest first.
+//
+// Backs the "Latest updates" card on Admin → Monitoring (ice #209/#220): an
+// admin waiting for a fix can see it arrive on this instance instead of asking.
+// Deliberately mounted ABOVE the self-update module gate below — this is a fact
+// about the running build, which every instance has, not about release
+// channels, which the base ships off. Hard admin: the list names commits.
+// An empty list on a stamped build means the build workflow skipped the
+// generate-changes step (or hid everything) — visible, not smoothed over.
+router.get('/changes', requireAuth, requireRole('admin'), (req, res) => {
+  res.json({
+    gitSha:  buildInfo.gitSha,
+    builtAt: buildInfo.builtAt,
+    stamped: !isDevBuild,
+    appEnv:  process.env.APP_ENV || null,
+    changes,
+  });
+});
 
 // A module that is switched off answers 404, not 403. 403 says "this exists and
 // you may not have it"; on an instance where self-update was never provisioned,
