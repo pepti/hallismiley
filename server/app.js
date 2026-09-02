@@ -38,12 +38,11 @@ const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
 const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
-const { register }   = require('./observability/metrics');
+const { register, dbPoolTotal, dbPoolIdle, dbPoolWaiting } = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
 const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
 const { healthCheckFailed } = require('./observability/alerts');
 const { readMemory } = require('./observability/memoryUsage');
-const { trackRequest } = require('./observability/alerts');
 
 const app = express();
 
@@ -437,9 +436,6 @@ app.get('/ready', async (req, res) => {
 
 // ── Prometheus metrics endpoint ───────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
-  // Track request outcome (not an error)
-  trackRequest(false);
-
   // Auth: bearer token if METRICS_TOKEN is set, otherwise localhost only
   const metricsToken = process.env.METRICS_TOKEN;
   if (metricsToken) {
@@ -456,6 +452,14 @@ app.get('/metrics', async (req, res) => {
   }
 
   try {
+    // prom-client gauges are pull-based: refresh the pool numbers at scrape
+    // time or db_pool_* reports 0 forever (ice wiring). Required locally, like
+    // /ready above, so a DB outage cannot take the metrics endpoint with it.
+    const { pool } = require('./config/database');
+    dbPoolTotal.set(pool.totalCount);
+    dbPoolIdle.set(pool.idleCount);
+    dbPoolWaiting.set(pool.waitingCount);
+
     res.set('Content-Type', register.contentType);
     res.end(await register.metrics());
   } catch (err) {
