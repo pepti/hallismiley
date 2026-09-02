@@ -7,6 +7,9 @@ process.env.NODE_ENV        = 'test';
 // Each Jest worker gets its own database (see tests/workerDb.js) so suites
 // running in parallel workers can't clobber each other's fixtures. Under
 // --runInBand JEST_WORKER_ID is '1', so the serial path uses <base>_w1_test.
+// The base is the per-branch one globalSetup pinned into TEST_DATABASE_URL
+// (or the explicit override); in the unit tier, which has no globalSetup, it
+// is derived here and never connected to.
 process.env.DATABASE_URL    = workerDbUrl(process.env.JEST_WORKER_ID || '1').url;
 process.env.DB_SSL          = 'false';
 // Close idle DB connections fast: each suite file gets its own pool (Jest

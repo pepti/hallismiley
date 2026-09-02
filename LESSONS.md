@@ -638,3 +638,9 @@ the front of the list, Bjart was suddenly the one sampled mid-transition.
 Fix: the audit injects `transition: none; animation: none` before sampling.
 Lesson: an audit that mutates the page must freeze motion first, and a
 non-deterministic finding is a finding about the tool, not the page.
+
+### 2026-09-02 — two worktrees running `npm test` shared the same four worker databases _(project)_
+
+`TEST_DATABASE_URL` is in nobody's `.env`, so every `npm test` fell through to the hard-coded `orangesmiley_test` base and the same `orangesmiley_w1..4_test` workers — the per-worker rework isolated workers from each other, not runs from each other. A full run in one worktree while another worktree's run (or an orphaned Jest child: stopping the shell does not stop Jest) was still going produced 106 failures in 13 suites, all 401/500s in `admin.test.js` and friends, because the second globalSetup's `DROP DATABASE` wiped the first run's fixtures mid-suite. The same commit on an isolated `TEST_DATABASE_URL=…/orangesmiley_pr1_test` passed 2702/2702. The 2026-08-10 lesson above ("two agents, one checkout, one test DB") already said "worth making the per-worktree test DB the factory default rather than a thing you remember after being burned" — and it took a second burn.
+
+Fix: the base is now scoped per branch by default (`orangesmiley_<branch-slug>_test`, `tests/workerDb.js`, same idea as `e2e/lib/dbUrl.js`), globalSetup prints which base it resolved, globalTeardown drops the set again, and `npm run test:db:clean` sweeps orphans. Two rules that fell out: the scope goes BEFORE the `_test` suffix (the drop guard) and must leave room for the longest infix under Postgres's 63-byte cap (it truncates silently); and never `dotenv.config()` in test infra to borrow credentials — the Jest main process's env is inherited by every worker, so parse the file and take one key.
