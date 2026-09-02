@@ -47,7 +47,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 
 - **Banned defaults.** Fonts: Inter, Roboto, Open Sans, Arial, system-ui, Space Grotesk — not even in fallback stacks (use bare `serif`/`sans-serif`/`monospace` tails behind the self-hosted faces). Colors: purple/indigo/violet gradients, timid evenly-spread palettes, default Tailwind blue. Layout: centered hero + dual CTAs + three identical feature cards — the cookie-cutter SaaS shell.
 - **Palette discipline.** One dominant color + one sharp accent + neutrals, all through the CSS token system. Here (the **Bjart** default since 2026-08-20, Halli's call): orange / black / white only — the orange ramp dominates (`--gold-light/--gold/--gold-dark` = #EA580C/#C2410C/#9A3412), near-black `--teal` is the sharp accent used sparingly, white and whisper-grey are the neutrals. **`--gold-light` is decorative-only on a light page (3.41 : 1)** — accent-coloured TEXT must use `--accent-ink`.
-- **Make unexpected, context-specific choices.** The default is Bjart — white paper, black ink, one orange, Barlow voice, a themed gradient hero (the waterfall video is retired to an opt-in admin mode), the 4.1 emblem mark unchanged. **Five themes** live in the picker (`themes.css`): `classic`/Bjart (light default) · `light`/Pappír (warm ivory) · `mono` (b/w, orange on actions only) · `ember`/Glóð (the former Ash dark, values intact) · `midnight` (true black + bright orange). Halli picks themes by testing them live, so keep the picker healthy. When a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
+- **Make unexpected, context-specific choices.** The default is **Glóð** since 2026-09-02 (Halli) — the earth palette after sundown; Bjart is the light option — Barlow voice, the 4.1 emblem mark unchanged. `classic` still owns the `:root` token set (no `data-theme`); the visitor default is `DEFAULT_THEME` in `themePrefs.js` + `theme-boot.js`, applied pre-paint. **Three themes** live in the picker (`themes.css`; cut from five on 2026-09-02 — Halli: five is too many to maintain): `ember`/Glóð (the DEFAULT: the earth palette after sundown — brown-black, sand and tan) · `classic`/Bjart (the light option: beige paper, brown ink; owns `:root`) · `midnight`/Miðnætti (high contrast: black, white ink, one bright warm accent, edges as lines). Orange lives on the emblem only (`--brand-mark-*`, identical in every theme). `light` and `mono` are retired ids — migration 094 moved their accounts to classic; the CHECK narrows in a later release (invariant 14). Halli picks themes by testing them live, so keep the picker healthy. When a row of cards is unavoidable, differentiate them (numbering, emphasis, asymmetry).
 
 ## Iceland scene engine ("Úti á Íslandi", 2026-08-21 — INNER PAGES only since 2026-08-22)
 
@@ -69,8 +69,8 @@ inner-page scenes are untouched.
   Sigöldugljúfur (many falls, one river); /verkefni = Landmannalaugar (brand
   as landscape); /um-okkur = glacier at blue hour; /hafa-samband =
   Reynisfjara. (home/tiers/steps defs remain for the dormant home scenes.)
-  Five themes grade the same photos via `--scene-*` tokens (mono = full
-  grayscale).
+  Three themes grade the same photos via `--scene-*` tokens (Miðnætti =
+  the hardest cut, for contrast).
 - **Live ambience, on by default**: `/api/v1/ambience` proxies Open-Meteo
   (10-min server cache, ALWAYS 200 — failure is `{available:false}` and static
   scenes); real sun position computed client-side (sun.js — midnight sun falls

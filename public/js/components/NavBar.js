@@ -91,8 +91,8 @@ export class NavBar {
             <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" focusable="false">
               <defs>
                 <linearGradient id="os-mark-rim" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" style="stop-color: var(--gold-light)"/>
-                  <stop offset="1" style="stop-color: var(--gold-dark)"/>
+                  <stop offset="0" style="stop-color: var(--brand-mark-light)"/>
+                  <stop offset="1" style="stop-color: var(--brand-mark-dark)"/>
                 </linearGradient>
               </defs>
               <path class="lol-nav__logo-mark-plate" d="M16 1 29 8v16L16 31 3 24V8z"
@@ -102,7 +102,8 @@ export class NavBar {
                    the plate edge's light source (Halli's pick 2026-08-10, sample 06).
                    They carry no theme class — a CSS fill declaration would out-rank
                    the presentation attribute and kill the gradient; the gradient's own
-                   stops already ride --gold-light/--gold-dark, so themes still apply. -->
+                   stops ride the --brand-mark-* ramp, which every theme defines as
+                   the same orange, so the mark reads identically on all five. -->
               <rect x="10.2" y="10.5" width="2.5" height="5.4" rx="1.25" fill="url(#os-mark-rim)"/>
               <rect x="19.3" y="10.5" width="2.5" height="5.4" rx="1.25" fill="url(#os-mark-rim)"/>
               <path class="lol-nav__logo-mark-smile" d="M10.4 19c1.6 2.7 3.5 4 5.6 4s4-1.3 5.6-4"
