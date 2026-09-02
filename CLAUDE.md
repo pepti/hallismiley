@@ -21,7 +21,7 @@ Halli's explicit instruction: **all base features and data models stay** — sho
 
 ## Stack (inherited — invariants, do not change)
 
-- Express 4.x, CommonJS server. PostgreSQL via `pg` (dev DB `orangesmiley`, test DB `orangesmiley_test`, user postgres/postgres).
+- Express 4.x, CommonJS server. PostgreSQL via `pg` (dev DB `orangesmiley`, test DBs derived from `orangesmiley_test` — one template + one per Jest worker, `orangesmiley_w<N>_test`; user postgres/postgres).
 - Vanilla JS SPA frontend — **no React/Vue/Svelte, no bundler**.
 - Lucia v3 sessions. One auth system only. (The old "RS256 JWT" line was boilerplate — no JWT code exists; verified 2026-08-22.)
 - Migrations are **entries appended to the array in `server/config/schema.js`** (applied by `npm run migrate` / at boot); the `NNN_name.sql` files under `server/migrations/` are reference copies. Never edit an applied entry (`/migration-new` to add).

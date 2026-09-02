@@ -19,7 +19,7 @@
     "test:smoke": "jest tests/integration/auth.test.js tests/integration/security.test.js tests/integration/shop.test.js tests/integration/contact.test.js",
     "test:hotfix": "npm run test:unit && npm run test:smoke",
     "test:related": "jest --findRelatedTests --passWithNoTests",
-    "test:ci": "node --max-old-space-size=8192 node_modules/jest/bin/jest.js --ci --runInBand --forceExit --detectOpenHandles --coverage",
+    "test:ci": "node --max-old-space-size=8192 node_modules/jest/bin/jest.js --ci --forceExit --coverage",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test e2e/auth.spec.js e2e/navigation.spec.js e2e/business-routes.spec.js",
     "test:e2e:ui": "playwright test --ui",

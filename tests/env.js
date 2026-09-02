@@ -1,10 +1,19 @@
 // Runs in each Jest worker before any modules are loaded.
 // Sets all environment variables that the app reads at require-time.
 
+const { workerDbUrl } = require('./workerDb');
+
 process.env.NODE_ENV        = 'test';
-process.env.DATABASE_URL    = process.env.TEST_DATABASE_URL
-  || 'postgresql://postgres:postgres@localhost:5432/orangesmiley_test';
+// Each Jest worker gets its own database (see tests/workerDb.js) so suites
+// running in parallel workers can't clobber each other's fixtures. Under
+// --runInBand JEST_WORKER_ID is '1', so the serial path uses <base>_w1_test.
+process.env.DATABASE_URL    = workerDbUrl(process.env.JEST_WORKER_ID || '1').url;
 process.env.DB_SSL          = 'false';
+// Close idle DB connections fast: each suite file gets its own pool (Jest
+// module registry per file) and 4 workers run suites concurrently, so at the
+// production 30s idle timeout the lingering pools of finished suites sum past
+// Postgres's max_connections. See server/config/database.js.
+process.env.DB_POOL_IDLE_MS = '1000';
 process.env.ADMIN_USERNAME  = 'testadmin';
 process.env.ADMIN_PASSWORD  = 'testpassword123';
 process.env.ALLOWED_ORIGINS = 'http://localhost:3000';
