@@ -1,5 +1,5 @@
 import { installGlobalErrorReporting } from './services/errorReporter.js';
-import { tryRestoreSession } from './services/auth.js';
+import { tryRestoreSession, isAdmin } from './services/auth.js';
 import { NavBar } from './components/NavBar.js';
 import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
@@ -47,11 +47,16 @@ initTheme();
 syncAmbienceClass(); // body.amb-off mirrors the visitor's live-Iceland pref
 document.body.appendChild(new ThemeSwitcher().render());
 
-// ── Test-environment affordances (non-prod): the in-app feedback widget ──────
-// On TEST, admins can hide the chrome per browser from the theme switcher; the
-// override can never switch it ON (getEffectiveEnv), so the blue TEST badge
-// only ever appears on the real TEST stack. Server gates are untouched either way.
-// Lazy-import so the widget + html2canvas never load on the production bundle.
+// ── The in-app feedback (change-request) widget ──────────────────────────────
+// On TEST it's on for everyone; admins can hide the chrome per browser from the
+// theme switcher, and the override can never switch it ON (getEffectiveEnv), so
+// the blue TEST badge only ever appears on the real TEST stack. Outside TEST it
+// mounts only when an admin switched it on (Admin → Feedback) AND the current
+// user is an admin — customers must never see it, and the submit route
+// re-checks the role anyway (ice #206). Lazy-loaded either way, so a normal
+// production visitor never even fetches the module (or html2canvas). Mounted
+// via the module-scoped singleton so the ThemeSwitcher's TEST toggle controls
+// the same instance.
 const IS_TEST = getEffectiveEnv() === 'test';
 if (IS_TEST) {
   document.body.classList.add('is-test-env');
@@ -59,6 +64,39 @@ if (IS_TEST) {
   import('./components/ChangeRequestWidget.js')
     .then((m) => m.mountChangeRequestWidget())
     .catch((err) => console.error('[test-env] change-request widget failed to load', err));
+} else {
+  let crEnabled = null;   // null = not asked yet; it's a per-deploy setting, so ask once
+  let crModule  = null;   // only ever loaded for an admin on a site that has it on
+
+  const syncChangeRequests = async () => {
+    if (!isAdmin()) { crModule?.syncChangeRequestWidget(); return; } // sign-out tears it down
+    if (crEnabled === null) {
+      try {
+        // The admin-only settings endpoint, deliberately not a public config
+        // route: whether the widget is on is nobody else's business, and only
+        // an admin ever gets this far.
+        const res = await fetch('/api/v1/admin/change-requests/settings', { credentials: 'include' });
+        crEnabled = res.ok ? !!(await res.json())?.enabled : false;
+      } catch {
+        crEnabled = false; // endpoint unreachable → stay quiet
+      }
+    }
+    if (!crEnabled) { crModule?.syncChangeRequestWidget(); return; }
+    crModule = await import('./components/ChangeRequestWidget.js');
+    crModule.setChangeRequestsEnabled(true);
+    crModule.syncChangeRequestWidget();
+  };
+
+  syncChangeRequests().catch((err) => console.error('[change-request] widget failed to load', err));
+  // Mount on admin sign-in / tear down on sign-out, without a reload.
+  window.addEventListener('authchange', () => { syncChangeRequests(); });
+  // Flipping the switch in Admin → Feedback applies immediately — otherwise
+  // turning it on looks like it did nothing until the next full page load.
+  window.addEventListener('changerequestschange', (e) => {
+    crEnabled = !!e.detail?.enabled;
+    crModule?.setChangeRequestsEnabled(crEnabled);
+    syncChangeRequests();
+  });
 }
 
 // ── 4. OAuth redirect landing — show toast for ?error ────────────────────────

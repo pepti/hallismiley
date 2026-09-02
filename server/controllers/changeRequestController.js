@@ -1,6 +1,7 @@
-// Controller for the in-app change-request (feedback) tool (non-prod only).
-// Submit is public (test-env gated at the route) so logged-out testers can file
-// requests; the admin list/status routes are admin-gated.
+// Controller for the in-app change-request (feedback) tool. Submit is gated at
+// the route by changeRequestGate: open to everyone in a non-prod app-env (so
+// logged-out testers can file requests), and on PROD only to admins once the
+// switch below is on. The admin list/status/settings routes are role-gated.
 // (The upstream store also emailed a digest per batch + a reminder; deferred
 // here — the admin inbox is the source of truth. See the feature-port notes.)
 const fs     = require('fs');
@@ -8,6 +9,7 @@ const path   = require('path');
 const crypto = require('crypto');
 
 const ChangeRequest = require('../models/ChangeRequest');
+const Setting       = require('../models/Setting');
 const { changeRequestUploadDir } = require('../config/paths');
 
 const MAX_ITEMS            = 100;
@@ -125,6 +127,34 @@ const changeRequestController = {
       const item = await ChangeRequest.setItemStatus(req.params.itemId, status);
       if (!item) return res.status(404).json({ error: 'Not found', code: 404 });
       return res.json({ item });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // GET /api/v1/admin/change-requests/settings  (admin only)
+  // Powers the switch at the top of Admin → Feedback. `appEnv` is returned
+  // alongside so the UI can say "TEST has it on regardless of this switch".
+  async getSettings(req, res, next) {
+    try {
+      return res.json({
+        enabled: await Setting.getChangeRequestsEnabled(),
+        appEnv:  process.env.APP_ENV || process.env.NODE_ENV || 'production',
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // PATCH /api/v1/admin/change-requests/settings  (admin only)
+  async updateSettings(req, res, next) {
+    try {
+      const { enabled } = req.body || {};
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'enabled must be true or false', code: 400 });
+      }
+      await Setting.setChangeRequestsEnabled(enabled);
+      return res.json({ enabled, appEnv: process.env.APP_ENV || process.env.NODE_ENV || 'production' });
     } catch (err) {
       next(err);
     }

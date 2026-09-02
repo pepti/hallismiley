@@ -1,6 +1,7 @@
-// In-app change-request widget — non-production only (mounted from main.js when
-// the app reports a non-prod app-env, and toggled by the theme switcher's TEST
-// row). Click an element on any page, write a note, and queue it; queued
+// In-app change-request widget. On for everyone in a non-production app-env;
+// on PROD it mounts only for admins, and only once the Admin → Feedback switch
+// is on (main.js decides, the submit route re-checks — ice #206). Also toggled
+// by the theme switcher's TEST row. Click an element on any page, write a note, and queue it; queued
 // requests persist across SPA navigation in localStorage. "Submit all" sends
 // the whole session as one batch to POST /api/v1/change-requests.
 import { t, SUPPORTED_LOCALES } from '../i18n/i18n.js';
@@ -158,6 +159,14 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// main.js adds body.is-test-env only when the server reports a non-prod
+// app-env (or an admin flipped the per-browser override). The widget itself
+// also runs on PROD when an admin switches it on, and there it must stay
+// quiet: no TEST pill, no demo toggle.
+function isTestEnv() {
+  return document.body.classList.contains('is-test-env');
+}
+
 export class ChangeRequestWidget {
   constructor() {
     this.root = null;
@@ -167,6 +176,7 @@ export class ChangeRequestWidget {
     this.email = '';
     this.basket = loadBasket();
     this._onNav = this._onNav.bind(this);
+    this._onLocaleChange = this._onLocaleChange.bind(this);
     this._onPickMove = this._onPickMove.bind(this);
     this._onPickClick = this._onPickClick.bind(this);
     this._onKeydown = this._onKeydown.bind(this);
@@ -178,26 +188,33 @@ export class ChangeRequestWidget {
 
     this.root = document.createElement('div');
     this.root.id = 'cr-widget';
+    // Demo mode exists only to hide the loud TEST chrome for a presentation, so
+    // the toggle is pointless when the widget is running on PROD (admin-enabled
+    // via Admin → Feedback) where there is no test chrome to hide.
     this.root.innerHTML = `
-      <button type="button" class="cr-demo-toggle" id="cr-demo-toggle" aria-pressed="false">${DEMO_ICON}</button>
+      ${isTestEnv() ? `<button type="button" class="cr-demo-toggle" id="cr-demo-toggle" aria-pressed="false">${DEMO_ICON}</button>` : ''}
       <button type="button" class="cr-fab" id="cr-fab" aria-haspopup="dialog" aria-expanded="false">
-        ${FAB_ICON}<span>${esc(t('changeRequest.open'))}</span>
+        ${FAB_ICON}<span id="cr-fab-label">${esc(t('changeRequest.open'))}</span>
         <span class="cr-fab__count" id="cr-count" data-count="0"></span>
       </button>
       <div class="cr-panel" id="cr-panel" role="dialog" aria-label="${esc(t('changeRequest.title'))}" hidden></div>
     `;
     document.body.appendChild(this.root);
     this.root.querySelector('#cr-fab').addEventListener('click', () => this.togglePanel());
-    this.root.querySelector('#cr-demo-toggle').addEventListener('click', () => this.toggleDemoMode());
+    this.root.querySelector('#cr-demo-toggle')?.addEventListener('click', () => this.toggleDemoMode());
     this._updateFab();
     this._syncDemoToggle();
 
     window.addEventListener('popstate', this._onNav);
     window.addEventListener('spa:navigate', this._onNav);
     window.addEventListener('hashchange', this._onNav);
+    window.addEventListener('localechange', this._onLocaleChange);
   }
 
+  // The "TEST" pill belongs to the test environment, not to the widget — on a
+  // PROD site with change requests switched on there is nothing to badge.
   _injectBadge() {
+    if (!isTestEnv()) return;
     const nav = document.querySelector('.lol-nav');
     if (nav && !nav.querySelector('.test-env-badge')) {
       const badge = document.createElement('span');
@@ -233,6 +250,7 @@ export class ChangeRequestWidget {
   // constructor-bound, so removeEventListener matches what mount() added.
   destroy() {
     this.endPick();
+    window.removeEventListener('localechange', this._onLocaleChange);
     window.removeEventListener('popstate', this._onNav);
     window.removeEventListener('spa:navigate', this._onNav);
     window.removeEventListener('hashchange', this._onNav);
@@ -244,6 +262,36 @@ export class ChangeRequestWidget {
   _onNav() {
     // Keep the basket view's page labels fresh when navigating with the panel open.
     if (this.panelOpen && !this.draft) this._renderPanelBody();
+  }
+
+  // The widget is mounted once, outside #app, so the router's re-render never
+  // reaches it: without this its labels keep whichever locale was active at
+  // page load (an English FAB on an Icelandic page). i18n.js fires
+  // 'localechange' after the message table is swapped.
+  _onLocaleChange() {
+    this._refreshLabels();
+  }
+
+  _refreshLabels() {
+    if (!this.root) return;
+    const fabLabel = this.root.querySelector('#cr-fab-label');
+    if (fabLabel) fabLabel.textContent = t('changeRequest.open');
+    this.root.querySelector('#cr-panel')?.setAttribute('aria-label', t('changeRequest.title'));
+    const badge = document.querySelector('.lol-nav .test-env-badge');
+    if (badge) badge.textContent = t('changeRequest.badge');
+    this._syncDemoToggle();
+    // Re-render the open panel (basket or note form) so its copy switches too.
+    // Fold any half-typed draft back into this.draft first — the note form
+    // renders from it, so without this the reporter loses what they typed.
+    if (!this.panelOpen) return;
+    if (this.draft) {
+      const panel = this.root.querySelector('#cr-panel');
+      const note = panel?.querySelector('#cr-note');
+      const elIn = panel?.querySelector('#cr-el');
+      if (note) this.draft.note = note.value;
+      if (elIn) this.draft.element_label = elIn.value;
+    }
+    this._renderPanelBody();
   }
 
   _updateFab() {
@@ -572,4 +620,34 @@ export function mountChangeRequestWidget() {
 export function unmountChangeRequestWidget() {
   _mounted?.destroy();
   _mounted = null;
+}
+
+// Whether the PROD switch (Admin → Feedback) is on. main.js reads it from the
+// admin-only settings endpoint and pushes it in here, so the mount decision
+// lives in one place instead of being duplicated by every caller.
+let _enabledOnProd = false;
+
+export function setChangeRequestsEnabled(enabled) {
+  _enabledOnProd = !!enabled;
+}
+
+// The single answer to "should the widget be on screen right now?": everyone
+// on TEST, admins only elsewhere and only once the switch is on.
+export function shouldShowChangeRequests() {
+  return isTestEnv() || (_enabledOnProd && getUser()?.role === 'admin');
+}
+
+// Mount or tear down to match. Safe to call repeatedly — both halves are
+// idempotent. Used on sign-in/sign-out and by the theme switcher's TEST toggle,
+// which must not tear down a widget that PROD is entitled to keep.
+export function syncChangeRequestWidget() {
+  if (!shouldShowChangeRequests()) { unmountChangeRequestWidget(); return; }
+  // If the environment chrome changed under a live widget — an admin flipping
+  // TEST mode on a PROD site that already had the widget — remount so the demo
+  // toggle and the nav badge match the new state. The basket is in
+  // localStorage, so nothing queued is lost.
+  if (_mounted && isTestEnv() !== !!document.getElementById('cr-demo-toggle')) {
+    unmountChangeRequestWidget();
+  }
+  mountChangeRequestWidget();
 }

@@ -150,6 +150,17 @@ export async function loadLocale(locale) {
   // persistLocaleChoice's job, triggered only by the explicit switcher.
   document.documentElement.lang = locale;
 
+  // Tell long-lived components mounted OUTSIDE #app (change-request widget,
+  // theme switcher, footer) that the message table has been swapped, so they
+  // can relabel themselves. Note this is not the same as 'spa:navigate':
+  // switchLocale() dispatches that one synchronously BEFORE the router awaits
+  // loadLocale(), so a listener there would still read the previous locale
+  // (ice #206).
+  // Guarded: unit tests stub `window` as a bare object (localeLockClient.test.js).
+  if (typeof Event === 'function' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new Event('localechange'));
+  }
+
   // Update og:locale so social scrapers that execute JS see the right locale.
   const ogLocale = document.querySelector('meta[property="og:locale"]');
   if (ogLocale) ogLocale.setAttribute('content', locale === 'is' ? 'is_IS' : 'en_IS');

@@ -34,14 +34,63 @@ export class AdminChangeRequestsView {
           ${FILTERS.map(f => `<button type="button" class="cr-filter${f === this._filter ? ' is-active' : ''}" data-filter="${f}">${t('adminCR.filter_' + f)}</button>`).join('')}
         </div>
       </div>
+      <section class="cr-switch" id="cr-switch" hidden>
+        <label class="cr-switch__label">
+          <input type="checkbox" id="cr-switch-input" />
+          <span>${t('adminCR.switchLabel')}</span>
+        </label>
+        <p class="cr-switch__help" id="cr-switch-help">${t('adminCR.switchHelp')}</p>
+      </section>
       <div id="cr-body"><div class="admin-loading">${t('form.loading')}</div></div>`;
     this._el.querySelectorAll('.cr-filter').forEach(b => b.addEventListener('click', () => {
       this._filter = b.dataset.filter;
       this._el.querySelectorAll('.cr-filter').forEach(x => x.classList.toggle('is-active', x === b));
       this._load();
     }));
-    await this._load();
+    await Promise.all([this._load(), this._loadSwitch()]);
     return renderAdminShell({ activePath: '/admin/feedback', content: this._el });
+  }
+
+  // The PROD on/off switch for the floating widget (ice #206). Admin-only on
+  // the server; the section stays hidden if the endpoint refuses, so a
+  // moderator reading the inbox never sees a control they cannot use.
+  async _loadSwitch() {
+    const sec = this._el.querySelector('#cr-switch');
+    try {
+      const res = await fetch('/api/v1/admin/change-requests/settings', { credentials: 'include' });
+      if (!res.ok) return;
+      const { enabled, appEnv } = await res.json();
+      const input = sec.querySelector('#cr-switch-input');
+      input.checked = !!enabled;
+      if (appEnv && appEnv !== 'production') {
+        sec.querySelector('#cr-switch-help').textContent = t('adminCR.switchTestNote');
+      }
+      input.addEventListener('change', () => this._saveSwitch(input));
+      sec.hidden = false;
+    } catch { /* leave the section hidden */ }
+  }
+
+  async _saveSwitch(input) {
+    const enabled = input.checked;
+    input.disabled = true;
+    try {
+      const token = await getCSRFToken();
+      const res = await fetch('/api/v1/admin/change-requests/settings', {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed');
+      showToast(t(enabled ? 'adminCR.switchOn' : 'adminCR.switchOff'), 'success');
+      // main.js listens: mounts/unmounts the widget without a reload.
+      window.dispatchEvent(new CustomEvent('changerequestschange', { detail: { enabled } }));
+    } catch (err) {
+      input.checked = !enabled;
+      showToast(err.message, 'error');
+    } finally {
+      input.disabled = false;
+    }
   }
 
   async _load() {

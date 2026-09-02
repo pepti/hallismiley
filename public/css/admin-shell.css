@@ -16,7 +16,18 @@
 
 .admin-sidebar {
   position: sticky;
-  top: calc(56px + var(--sp-5));        /* clears the 56px sticky top nav */
+  top: calc(var(--nav-h) + var(--sp-5));   /* clears the sticky top nav */
+  /* Cap at the viewport so a long nav scrolls on its own instead of pinning its
+     top and forcing the whole page to the bottom to reach the last entries
+     (ice #204 — this nav has grown past one screen with the bookkeeping,
+     handbook and product-governance groups). Budget = viewport − nav − sticky
+     offset − shell bottom padding. */
+  max-height: calc(100vh - var(--nav-h) - var(--sp-5) - var(--sp-6));
+  max-height: calc(100dvh - var(--nav-h) - var(--sp-5) - var(--sp-6));
+  overflow-y: auto;
+  overscroll-behavior: contain;            /* wheel at the ends stays in the sidebar */
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;                /* no 240px-column jitter when the bar appears */
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
@@ -28,6 +39,7 @@
 }
 
 .admin-sidebar__back {
+  flex: 0 0 auto;                          /* never squeezed by the scrolling nav */
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
@@ -143,7 +155,7 @@
   .admin-shell__menu-btn { display: inline-flex; }
   /* `relative`, not `static` — un-sticks identically, but keeps the sidebar as
      the containing block for the absolutely-positioned row-tint popover. */
-  .admin-sidebar { position: relative; top: auto; display: none; margin-bottom: var(--sp-4); }
+  .admin-sidebar { position: relative; top: auto; display: none; margin-bottom: var(--sp-4); max-height: none; overflow: visible; }
   .admin-sidebar.is-open { display: flex; }
 }
 

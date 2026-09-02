@@ -53,6 +53,9 @@ export class ThemeSwitcher {
     window.addEventListener('spa:navigate', this._onNav);
     window.addEventListener('popstate', this._onNav);
     window.addEventListener('authchange', this._onAuthChange);
+    // Mounted once outside #app, so the router never relabels it — i18n.js fires
+    // this after the message table is swapped. Never torn down, so no unbind.
+    window.addEventListener('localechange', () => { this._refreshFabLabel(); if (this.open) this._close(); });
     return this.root;
   }
 
@@ -192,7 +195,8 @@ export class ThemeSwitcher {
       return null;
     });
     if (!m) return;
-    if (on) m.mountChangeRequestWidget();
-    else m.unmountChangeRequestWidget();
+    // Not a plain mount/unmount pair: on a PROD site where an admin switched
+    // the widget on, leaving TEST mode must keep it (minus the test chrome).
+    m.syncChangeRequestWidget();
   }
 }
