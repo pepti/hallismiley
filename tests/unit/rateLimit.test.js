@@ -116,3 +116,83 @@ describe('Contact limiter — configuration check', () => {
     expect(postLayer.route.stack.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+// ── Static-asset exemption on the global limiter ──────────────────────────────
+// The global limiter is mounted before express.static and the /assets/* upload
+// mounts, so without this exemption one page load spends ~120 requests on CSS,
+// JS, fonts and scene renditions. See server/utils/staticAsset.js (ice #201).
+
+describe('Static-asset exemption', () => {
+  const { isStaticAsset } = require('../../server/utils/staticAsset');
+
+  test.each([
+    '/css/main.css',
+    '/js/main.js',
+    '/js/i18n/en.json',
+    '/fonts/barlow-500.woff2',
+    '/assets/iceland/thjonusta-1600.avif',
+    '/assets/avatars/avatar-01.svg',
+    '/favicon.svg',
+    '/manifest.json',
+    '/og-image.jpg',
+  ])('exempts %s', (path) => {
+    expect(isStaticAsset({ path })).toBe(true);
+  });
+
+  test.each([
+    '/api/v1/shop/products',
+    '/api/v1/admin/shop/products.json',
+    '/api/v1/mcp',
+    '/api/v1/admin/background/media', // the upload carve-out is METHOD-based in app.js, not a static path
+    '/is/admin/shop/products',
+    '/is/admin/shop/products/abc-123/edit',
+    '/sitemap.xml',                       // dynamic + DB-backed, stays limited
+    '/robots.txt',
+    '/index.html',
+    '/favicon.ico',                       // not a shipped root file
+    '/',
+  ])('does not exempt %s', (path) => {
+    expect(isStaticAsset({ path })).toBe(false);
+  });
+
+  // Regression: ice's first draft of this predicate also matched on file
+  // extension, which made every one of these a free pass around the global
+  // limiter — express.static misses, ssrMeta bails on its own extension check,
+  // and the caller gets an unlimited stream of cheap 404s. Match on location
+  // only, so a static-looking suffix on a non-static path proves nothing.
+  test.each([
+    '/is/catalog.png',
+    '/is/admin/shop/products.json',
+    '/auth/check-email/someone@example.json',
+    '/some/deep/path/style.css',
+    '/assetsfoo/x.css',
+  ])('does not exempt %s — a static-looking suffix is not a static path', (path) => {
+    expect(isStaticAsset({ path })).toBe(false);
+  });
+
+  test('a skipped asset request does not consume the budget', async () => {
+    const app = express();
+    app.use(rateLimit({
+      windowMs: 60_000,
+      max: 2,
+      standardHeaders: true,
+      legacyHeaders: false,
+      skip: isStaticAsset,
+      message: { error: 'Too many requests, please try again later.', code: 429 },
+    }));
+    app.get('/css/main.css', (_req, res) => res.send('body{}'));
+    app.get('/ping', (_req, res) => res.json({ ok: true }));
+
+    // Ten asset hits — none of them should count.
+    for (let i = 0; i < 10; i++) {
+      expect((await request(app).get('/css/main.css')).status).toBe(200);
+    }
+
+    // The full budget is still there for real requests.
+    const first = await request(app).get('/ping');
+    expect(first.status).toBe(200);
+    expect(Number(first.headers['ratelimit-remaining'])).toBe(1);
+    expect((await request(app).get('/ping')).status).toBe(200);
+    expect((await request(app).get('/ping')).status).toBe(429);
+  });
+});

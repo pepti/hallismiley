@@ -29,7 +29,7 @@ async function softAuth(req, res, next) {
 // Light abuse cap. Skipped in dev/test like the other write limiters.
 const submitLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 150, // was 30 — ×5 (ice #201)
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',

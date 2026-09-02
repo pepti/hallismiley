@@ -20,6 +20,7 @@ const { requireRole } = require('../auth/roles');
 const { csrfProtect } = require('../middleware/csrf');
 const { docLimiter } = require('../middleware/booksLimiters');
 const documentService = require('../services/bookkeeping/documentService');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 router.use(requireAuth);
 
@@ -76,7 +77,7 @@ router.patch('/expenses/:id/document', requireRole('admin'), csrfProtect, books.
 // parsing multipart first gives a clean 400 on an oversized file instead of a
 // confusing CSRF failure.
 router.post('/documents', requireRole('admin'),
-  documentService.createDocumentUpload().single('file'), csrfProtect, books.uploadDocument);
+  documentService.createDocumentUpload().single('file'), csrfProtect, verifyImageBytes, books.uploadDocument);
 // Streamed through an authenticated route on purpose: these files live outside the
 // statically-served tree, so this is the ONLY way to read them.
 router.get('/documents/:id', requireView('expenses'), docLimiter, books.getDocument);

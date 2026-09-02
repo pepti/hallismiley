@@ -14,7 +14,7 @@ Authentication uses Lucia v3 session-based cookies. The `auth_session` httpOnly 
 
 Authenticate as admin and start a session.
 
-**Rate limit:** 10 requests / 15 min per IP.
+**Rate limit:** 50 requests / 15 min per IP.
 
 **Request body:**
 ```json
@@ -140,7 +140,7 @@ Return a single project by ID.
 
 Create a new project. **Requires auth.**
 
-**Rate limit:** 30 write requests / 15 min per IP.
+**Rate limit:** 450 write requests / 15 min per IP.
 
 **Request body:**
 ```json
@@ -220,9 +220,9 @@ All errors return JSON:
 
 | Scope | Limit |
 |-------|-------|
-| Global (all endpoints) | 200 req / 15 min |
-| Auth login | 10 req / 15 min |
-| Project writes (POST/PUT/PATCH/DELETE) | 30 req / 15 min |
+| Global (all endpoints, static assets exempt) | 2000 req / 15 min |
+| Auth login | 50 req / 15 min |
+| Writes (POST/PUT/PATCH/DELETE) | 450 req / 15 min |
 
 Rate limit responses use HTTP `429` with standard `RateLimit-*` headers.
 

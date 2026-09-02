@@ -7,6 +7,7 @@ const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
 const { createProductUpload }  = require('../middleware/upload');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 // Admin shop routes require auth; per-view access is gated by path below, so a
 // role can be granted (e.g.) orders-only without products. The product editor's
@@ -47,6 +48,7 @@ router.post('/products/:id/images',
       next();
     });
   },
+  verifyImageBytes,
   adminShop.uploadImage);
 
 router.delete('/products/:id/images/:imageId',

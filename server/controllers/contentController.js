@@ -8,6 +8,7 @@ const multer = require('multer');
 const db     = require('../config/database');
 const logger = require('../logger');
 const { MIME_TO_EXT } = require('../middleware/upload');
+const { verifyUploadedImages } = require('../middleware/verifyImageBytes');
 const { DEFAULT_LOCALE } = require('../config/i18n');
 const { contentUploadDir } = require('../config/paths');
 const { t }   = require('../i18n');
@@ -175,6 +176,9 @@ function uploadImage(req, res, next) {
   upload(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.content.noFileUploaded') });
+    // Bytes must match the accepted MIME type (server/middleware/verifyImageBytes.js).
+    const badBytes = await verifyUploadedImages(req);
+    if (badBytes) return res.status(400).json({ error: badBytes, code: 400 });
 
     const imageUrl = `/assets/content/${req.file.filename}`;
     const merge    = req.query.merge !== 'false';

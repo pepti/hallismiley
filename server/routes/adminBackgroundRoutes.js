@@ -10,6 +10,7 @@ const { requireAuth } = require('../auth/middleware');
 const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
 const { createBackgroundUpload } = require('../middleware/upload');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 const ctrl = require('../controllers/adminBackgroundController');
 const { recordUpload } = require('../services/uploadVolumeAlert');
 
@@ -43,6 +44,7 @@ router.post('/media',
       next();
     });
   },
+  verifyImageBytes,
   // Count the accepted file and, on a large burst, raise a warn row for
   // Admin → Monitoring. This NEVER blocks: the request is already past multer,
   // and recordUpload swallows its own failures. Uploads are carved out of the

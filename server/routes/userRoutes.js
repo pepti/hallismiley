@@ -1,5 +1,6 @@
 const express        = require('express');
 const multer         = require('multer');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 const fs             = require('fs');
 const router         = express.Router();
 const userController = require('../controllers/userController');
@@ -58,7 +59,7 @@ router.use(requireAuth);
 
 router.get('/me',                         userController.getMe);
 router.patch('/me',          csrfProtect, validateProfileUpdate, userController.updateMe);
-router.post('/me/avatar',    csrfProtect, avatarUploadMw, userController.uploadAvatar);
+router.post('/me/avatar',    csrfProtect, avatarUploadMw, verifyImageBytes, userController.uploadAvatar);
 router.patch('/me/password', csrfProtect, validatePasswordChange, userController.changePassword);
 router.get('/me/sessions',                userController.getSessions);
 router.delete('/me/sessions',             csrfProtect, userController.revokeAllSessions);

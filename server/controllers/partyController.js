@@ -2,6 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const db   = require('../config/database');
+const { foldIcelandic } = require('../utils/slug');
 const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
@@ -226,10 +227,9 @@ async function _categoryExists(key) {
 // caller falls back to a generated key — the key is internal plumbing, so it
 // never needs to be pretty, only stable and unique.
 function _slugifyCategoryKey(label) {
-  const folded = String(label || '')
-    .toLowerCase()
-    .replace(/þ/g, 'th').replace(/ð/g, 'd').replace(/æ/g, 'ae')
-    .normalize('NFD').replace(/\p{M}/gu, '');
+  // Same fold as every other generated slug (utils/slug.js); the 40-char
+  // clamp is this key's own rule.
+  const folded = foldIcelandic(label);
   return folded
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')

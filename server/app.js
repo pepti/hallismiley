@@ -213,7 +213,8 @@ app.use(localeMiddleware);
 // before the Iceland scene renditions (multi-width AVIF/WebP srcsets) and the
 // fonts are counted — the 400/15 min budget 429'd ordinary browsing, which
 // renders as broken images and an unstyled page. Base fix 2b6842c, ported
-// 2026-09-01.
+// 2026-09-01; predicate extracted to utils/staticAsset.js with the three root
+// files added and unit-tested (ice #201, 2026-09-02).
 //
 // This is scoping, not loosening, and the scope is exact:
 //   • only GET/HEAD, only paths whose RAW pathname begins with one of the four
@@ -227,14 +228,14 @@ app.use(localeMiddleware);
 //     carry a file extension, so an extensionless '/assets/x' with an HTML
 //     Accept header would otherwise hit the database unthrottled).
 // API, auth, page loads and every write limiter are unchanged.
-const STATIC_ASSET_RE = /^\/(assets|js|css|fonts)\//;
+const { isStaticAsset, STATIC_PREFIX } = require('./utils/staticAsset');
 
 // Bulk background-media uploads are carved out of the global limiter as well.
 // Standing product decision (Halli, 2026-09-01): a large upload must ALWAYS be
 // allowed to finish — throttling one is a broken-product experience, not a
 // safety feature. This route takes one file per request, so an admin dropping a
 // folder of stills spends a request per file and would otherwise burn the whole
-// 400/15 min budget and 429 half-way through the batch.
+// 2000/15 min budget and 429 half-way through the batch.
 //
 // A deliberate exemption, not an oversight (invariant 7): the access control on
 // this route is requireAuth + requireView('background') + CSRF, unchanged — the
@@ -244,13 +245,16 @@ const STATIC_ASSET_RE = /^\/(assets|js|css|fonts)\//;
 const BG_MEDIA_UPLOAD_PATH = '/api/v1/admin/background/media';
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 400,
+  // Raised 400 → 2000 with every other ceiling ×5 (ice #201): the customer
+  // instance's owner drained 400 doing ordinary admin work. Halli accepted the
+  // same raise here, auth routes included (2026-09-02).
+  max: 2000,
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) =>
     process.env.NODE_ENV === 'test' ||
     process.env.NODE_ENV === 'development' ||
-    ((req.method === 'GET' || req.method === 'HEAD') && STATIC_ASSET_RE.test(req.path)) ||
+    ((req.method === 'GET' || req.method === 'HEAD') && isStaticAsset(req)) ||
     (req.method === 'POST' && req.path === BG_MEDIA_UPLOAD_PATH),
   message: { error: 'Too many requests, please try again later.', code: 429 },
 });
@@ -259,7 +263,7 @@ app.use(globalLimiter);
 // ── A01 Broken Access Control: stricter limiter on write endpoints ─────────────
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 90,
+  max: 450, // was 90 — ×5 with the rest (ice #201)
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
@@ -637,9 +641,9 @@ app.get('/{*splat}', (req, res, next) => {
   }
 
   // Asset-path misses are real 404s too, never the SPA shell. These prefixes
-  // are exempt from the global rate limiter (see STATIC_ASSET_RE above), so
-  // they must not fall through to the SSR/DB path.
-  if (STATIC_ASSET_RE.test(req.path)) {
+  // are exempt from the global rate limiter (utils/staticAsset.js — same
+  // regex, KEEP IN SYNC), so they must not fall through to the SSR/DB path.
+  if (STATIC_PREFIX.test(req.path)) {
     return res.status(404).json({ error: 'Not found', code: 404 });
   }
 

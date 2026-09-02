@@ -7,7 +7,7 @@
 // These tests pin the half of that policy that is testable in-process. The
 // limiter itself skips under NODE_ENV=test (server/app.js), so what is asserted
 // here is the alerting contract and the route wiring; the exemption itself is
-// pinned by BG_MEDIA_UPLOAD_PATH in app.js next to the STATIC_ASSET_RE carve-out.
+// pinned by BG_MEDIA_UPLOAD_PATH in app.js next to the isStaticAsset carve-out.
 const fs      = require('fs');
 const path    = require('path');
 const request = require('supertest');
