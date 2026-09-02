@@ -16,7 +16,10 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL ? { rejectUnauthorized: true } : false,
   max: 10,              // max connections in pool
-  idleTimeoutMillis: 30000,
+  // 30s in production; tests set DB_POOL_IDLE_MS=1000 because every Jest
+  // suite file gets its own pool and 4 workers run concurrently — at 30s the
+  // lingering pools of finished suites sum past max_connections (ice #225).
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_MS || '30000', 10),
   connectionTimeoutMillis: 5000,
   // Idle TCP sockets on a cross-region DB get killed by NAT middleboxes;
   // keepalive keeps them warm so the next query doesn't re-handshake.

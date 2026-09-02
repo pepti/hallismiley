@@ -1,10 +1,17 @@
 name: CI
 
+# The long-lived branch of this repo is MASTER. This used to say [main] and
+# CI never ran once (0 Actions runs at 2026-09-02); every "CI green" before
+# that date was a local run.
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
+  schedule:
+    # Once a week even when nothing is pushed: notices a newly-published npm
+    # advisory (npm audit) or a base-image CVE (Trivy) between merges (ice #233).
+    - cron: "17 5 * * 1"
 
 # The workflow only needs to read the repo. Actions are SHA-pinned (with a
 # `# vN` comment dependabot keeps in sync) so a hijacked tag can't run
@@ -12,8 +19,8 @@ on:
 permissions:
   contents: read
 
-# Superseded PR pushes cancel their in-flight run; main runs are NEVER
-# cancelled — a `cancelled` CI conclusion on main would skip the deploy AND
+# Superseded PR pushes cancel their in-flight run; master runs are NEVER
+# cancelled — a `cancelled` CI conclusion on master would skip the deploy AND
 # fire the deploy-blocked alert email for a commit that was simply superseded.
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,7 +30,11 @@ jobs:
   test:
     name: Lint + Integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30: on a contended private-repo runner (2 vCPU) ice measured a
+    # 3.7x run-to-run spread on an identical tree, and a fully green suite
+    # that ran long turned into a red CI run with no failing test (ice #233).
+    # A higher ceiling costs nothing unless hit.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -50,8 +61,12 @@ jobs:
           node-version: 24
           cache: npm
 
+      # --prefer-offline: serve from the setup-node cache instead of
+      # revalidating every package against the registry. --no-audit: the audit
+      # gate is its own explicit step, so the implicit install-time audit is a
+      # duplicate network round trip. --fund: console noise.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --fund=false
 
       - name: Audit dependencies
         run: npm audit --audit-level=high
@@ -61,6 +76,13 @@ jobs:
 
       - name: i18n keys in sync
         run: npm run check:i18n
+
+      # jest.config.js maxWorkers is calibrated against the runner spec; print
+      # the truth on every run (a private-repo ubuntu-latest is 2 vCPU / 7 GB).
+      - name: Runner spec (calibrates maxWorkers — see jest.config.js)
+        run: |
+          echo "vCPU: $(nproc)"
+          free -h | head -2
 
       # The release manifest is what every deployed instance polls to decide
       # what to become, and it is validated by the SAME code the instances run
@@ -76,18 +98,39 @@ jobs:
             --out=/tmp/manifest-dryrun.json
           node scripts/check-manifest.js /tmp/manifest-dryrun.json
 
+      # Jest re-parses, re-instruments and re-generates every server + test file
+      # from cold on every run (plus the transformed lucia/oslo/htmlparser2
+      # chain). Persisting the transform cache skips that. Safe by construction:
+      # Jest keys each entry on file CONTENT, so a stale entry is impossible —
+      # the worst case is a miss. jest.config.js is in the key because the
+      # coverage settings are part of the transform.
+      - name: Restore Jest transform cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/jest-cache
+          key: jest-${{ runner.os }}-${{ hashFiles('package-lock.json', 'babel.config.js', 'jest.config.js') }}-${{ github.sha }}
+          restore-keys: |
+            jest-${{ runner.os }}-${{ hashFiles('package-lock.json', 'babel.config.js', 'jest.config.js') }}-
+
+      # tests/globalSetup.js migrates ONE template database and clones it per
+      # Jest worker (orangesmiley_w1_test … _w4_test); the service container's
+      # POSTGRES_DB above is only the base name the derivation starts from.
       - name: Run tests with coverage
         env:
           NODE_ENV:            test
           TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/orangesmiley_test
           # ADMIN_USERNAME / ADMIN_PASSWORD_HASH are set by tests/env.js
-        run: npm run test:ci
+        run: npm run test:ci -- --cacheDirectory "${{ runner.temp }}/jest-cache"
 
   e2e:
     name: E2E tests (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: test
+    # Deliberately NOT gated on the test job: this job is fully independent
+    # (own checkout, own npm ci, own Postgres, no artifacts flow from test),
+    # and anything gating on CI reads the OVERALL workflow conclusion — a red
+    # test job still fails the run whether or not e2e ran. Running it in
+    # parallel takes its minutes off the critical path (ice #224).
 
     services:
       postgres:
@@ -115,7 +158,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --fund=false
 
       # The browser download from the Playwright CDN intermittently hangs until
       # the job's 30-minute timeout kills it (4× on 2026-08-19) — and on main a
@@ -235,10 +278,9 @@ jobs:
     name: Docker build + boot smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Gate on test — otherwise a green Docker job can mask a red test job
-    # at the workflow-summary level, and the workflow_run trigger in
-    # deploy.yml only sees the overall conclusion.
-    needs: test
+    # Not gated on the test job (ice #233): a workflow conclusion aggregates
+    # ALL its jobs, so a red test job fails the run whether or not this one
+    # ran — the gate only serialised the two and lengthened the critical path.
 
     services:
       postgres:

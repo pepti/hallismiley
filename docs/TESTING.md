@@ -68,6 +68,23 @@ Suites share one database and Jest orders them by cached duration, so a suite's
 4. **Fix the dependency, not the symptom.** No retries, no raised timeouts: make
    the assertion independent of what the previous suite left behind.
 
-## The structural next step (engine work — belongs upstream in rekstrarkerfid)
+## Per-worker databases (landed 2026-09-02, ported from icelandicstore)
 
-Integration runs serially (`maxWorkers: 1`) because all suites share one `orangesmiley_test` DB — `tests/globalSetup.js` documents the race. The estate already solved this shape for Playwright with per-branch e2e DBs (`e2e/lib/dbUrl.js`). Applying the same idea per Jest worker (`orangesmiley_test_w${JEST_WORKER_ID}`, one migrate per worker DB) would parallelize the integration tier and cut the full suite by roughly the worker count. That is a change to the engine's test harness: build it once in the upstream repo and let every instance inherit it — do not hand-build it per instance.
+Integration suites run in **4 parallel Jest workers**, each against its own
+database. `tests/globalSetup.js` migrates ONE template (`orangesmiley_tmpl_test`)
+in a child process, then `CREATE DATABASE … TEMPLATE` clones it per worker
+(`orangesmiley_w1_test` … `_w4_test`, `synchronous_commit = off`);
+`tests/env.js` derives each worker's `DATABASE_URL` via `tests/workerDb.js` by
+inserting the worker id BEFORE the `_test` suffix, so the `_test$` safety guard
+still holds. Within a worker, suites run serially — exactly the old semantics,
+so the ordering rules above are unchanged. Serial fallback: `npm test -- --runInBand`
+(uses `_w1_test` only).
+
+Two rules the port carries: never add an `afterAll` that ends the app pool
+(fire-and-forget analytics/event-log writes land after the last test; the 1 s
+`DB_POOL_IDLE_MS` in `tests/env.js` handles connection release instead), and
+keep the migration in a child process (`CREATE DATABASE … TEMPLATE` refuses
+while any session holds the template).
+
+This is engine work that belongs upstream (ice #225/#233 built it first; the
+base `hallismiley` is read-only) — queued in site-factory/BASE-SYNC.md.

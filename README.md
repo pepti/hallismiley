@@ -82,10 +82,11 @@ The app is served at `http://localhost:3000`.
 
 ```bash
 npm test           # run all tests
-npm run test:ci    # CI mode (--runInBand --forceExit)
+npm run test:ci    # CI mode (--ci --forceExit --coverage, 4 parallel workers)
+npm test -- --runInBand   # serial fallback for debugging cross-suite order
 ```
 
-Tests are integration tests and require a running PostgreSQL instance. Configure `DATABASE_URL` in `.env` before running.
+Tests are integration tests and require a running PostgreSQL instance. `tests/globalSetup.js` migrates one template database (`orangesmiley_tmpl_test`) and clones it per Jest worker (`orangesmiley_w1_test` … `_w4_test`); set `TEST_DATABASE_URL` to point the derivation at another server — the base name must end in `_test`.
 
 ---
 

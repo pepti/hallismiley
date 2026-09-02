@@ -1,0 +1,12 @@
+{
+  "//": "Dev auto-reload (npm run dev). Watch ONLY the backend source plus the two files the server reads at boot: the vanilla-JS frontend under public/ is served statically and is picked up by a browser reload, so it never needs a server restart. Watching the whole tree (public/assets, private-uploads, data/) is heavy on Windows file-watchers and risks spurious restarts on any runtime file write. Ported from icelandicstore.",
+  "watch": ["server", ".env", "config/client.json"],
+  "ext": "js,json,sql",
+  "ignore": [
+    "server/**/*.test.js",
+    "server/**/__tests__/**",
+    "server/changes.json",
+    "server/version.json"
+  ],
+  "delay": 400
+}
