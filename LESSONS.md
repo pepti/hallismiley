@@ -573,3 +573,54 @@ Ported from ice #225/#233. Two traps that would each have cost a run: (1) `globa
 ### 2026-09-02 — this repo stores several files as CRLF; textual anchors written with \n silently miss _(project)_
 
 The first harvest edit script failed on `server/config/database.js` because the file is CRLF on disk (so are `tests/helpers.js`, `ci.yml`, most of `server/`); git normalises on commit, so diffs never show it. Any scripted edit must normalise on read and restore on write, or it reports "anchor not found" on text that is visibly there. Shell heredocs were worse: Git Bash on Windows mangled quoting in three different ways. Ports now go through a node script with count-asserted anchors.
+## 2026-09-02 — an inverted default theme leaves every hardcoded colour pointing the wrong way (project)
+
+Halli: "Bjart has white fonts, that makes no sense." He was right, and it
+was wider than one font. When `:root` flipped from Ash (dark) to Bjart
+(light) on 2026-08-20, the token VALUES flipped with it — but `home.css`
+still carried literal colours for the skills, stats, contact and
+"browse by discipline" sections (`#FFFFFF` titles, a cool `#A9B4C0` grey,
+`#1E2328` ink on a fixed `#EDEBE5` band), written for a charcoal page.
+White on cream: 1.0 : 1. Nobody saw it because the copy under those
+titles was the carpentry portfolio and nobody looked at the section.
+
+Two more of the same shape, exposed by the brown re-hue rather than the
+inversion: the project-card badges took `--gold` / `--teal` as text on a
+fixed-dark pill (bright on Ash, brown / brown-black now — 1.04 : 1), and
+the um-okkur email link used `--gold-dark` as text, which ember documents
+as "gradient tail and border only".
+
+The tool that found them, now `scripts/audit-text-contrast.js`: walk the
+DOM, composite each text node's background through its ancestors, WCAG
+AA per node, per page, per theme. It reported 28 failing rows; a grep for
+hardcoded hex would have found the same lines but not told me which ones
+mattered. Its blind spot is worth knowing: it sees ancestor backgrounds
+only, so text over the scene engine's photo (a *sibling* layer) reports as
+cream-on-cream. Those are judged by screenshot, and the contact hero is
+fine.
+
+The rule that falls out: **no literal text colour outside a fixed-surface
+context**. A fixed-dark surface (the video hero, a badge pill over a
+photo) may carry a fixed-light label — that is the media-hero pattern and
+it is correct by construction. Everything else is a token, or it breaks
+the next time a theme flips.
+
+## 2026-09-02 — the e2e suite quietly tested the other repo (factory)
+
+`npx playwright test` reported 104 failures, every one a `waitForSelector`
+timeout on a login. The CSS was innocent: `playwright.config.js` reuses an
+existing server on port 3000 locally, and 3000 had a 13-hour-old
+`node server/server.js` on it — the **rekstrarkerfid** dev server, whose
+launch.json owns that port. The suite ran this repo's specs against the
+product site's routes and database. The config's own comment predicts
+exactly this; the estate now has two base-scaffolded repos, so it is no
+longer hypothetical.
+
+Do not change the default: CI pins `ALLOWED_ORIGINS` to `localhost:3000`
+for the e2e job. Locally, whenever the sibling is up:
+
+    E2E_PORT=3011 npx playwright test
+
+That boots this repo's own server against its isolated e2e database
+(162 passed, 1.4 min — the reused run took 5.6 min to time out). A run
+that is suddenly slow and fails only on auth is this trap, not a bug.

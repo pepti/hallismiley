@@ -391,7 +391,7 @@
   color: var(--text-secondary);
   font-size: 0.95rem;
 }
-.um-okkur-facts a { color: var(--gold-dark); }
+.um-okkur-facts a { color: var(--accent-ink); }
 
 .um-okkur-cta {
   display: flex; justify-content: center;

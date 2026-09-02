@@ -311,8 +311,11 @@
 /* ────────────────────────────────────────────────────────
    SECTION 4: Projects — champion-style, LIGHT background
    ──────────────────────────────────────────────────────── */
+/* Was a fixed #EDEBE5 with a fixed #1E2328 heading — a light island on the two
+   dark themes, and text tokens picked for the page could not read on it. The
+   surface token keeps it a distinct band on the light themes. */
 .lol-projects {
-  background: #EDEBE5; padding: 80px 0; overflow: hidden;
+  background: var(--bg-surface); padding: 80px 0; overflow: hidden;
 }
 
 .lol-projects__inner {
@@ -325,19 +328,19 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.1rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
-  color: rgba(30,35,40,0.55); margin-bottom: 4px;
+  color: var(--text-muted); margin-bottom: 4px;
 }
 
 .lol-projects__heading {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(2.8rem, 5vw, 4.8rem);
   font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: #1E2328; line-height: 0.9; margin-bottom: 1.4rem;
+  color: var(--text-primary); line-height: 0.9; margin-bottom: 1.4rem;
 }
 
 .lol-projects__desc {
   font-family: 'Barlow', sans-serif;
-  font-size: 0.95rem; color: #5B5A56;
+  font-size: 0.95rem; color: var(--text-secondary);
   line-height: 1.75; max-width: 420px; margin-bottom: 2rem;
 }
 
@@ -356,7 +359,10 @@
   transition: all 200ms ease;
   text-decoration: none; display: inline-block;
 }
-.lol-btn--gold:hover { background: #D4A843; box-shadow: 0 4px 20px rgba(200,152,60,0.4); }
+/* Hover fills were the old dark theme's yellow and cyan, hardcoded; --accent-hover
+   is the contract token for a filled control on hover and keeps its label
+   legible on every theme. */
+.lol-btn--gold:hover { background: var(--accent-hover); box-shadow: var(--glow-around); }
 
 /* Teal button — same as LoL "PLAY NOW" */
 .lol-btn--teal {
@@ -369,7 +375,7 @@
   transition: all 200ms ease;
   text-decoration: none; display: inline-block;
 }
-.lol-btn--teal:hover { background: #0DD4F5; box-shadow: 0 4px 20px rgba(11,196,227,0.4); }
+.lol-btn--teal:hover { background: var(--accent-hover); box-shadow: var(--glow-around); }
 
 /* Category icon row — like LoL champion class icons */
 .lol-projects__categories {
@@ -394,7 +400,7 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.6rem; font-weight: 700;
   letter-spacing: 0.15em; text-transform: uppercase;
-  color: #1E2328;
+  color: var(--text-primary);
 }
 
 /* Right side — circular project preview */
@@ -424,12 +430,12 @@
 .lol-projects__preview-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.4rem; font-weight: 900; font-style: italic;
-  text-transform: uppercase; color: #1E2328;
+  text-transform: uppercase; color: var(--text-primary);
 }
 
 .lol-projects__preview-type {
   font-family: 'Barlow', sans-serif;
-  font-size: 0.75rem; color: #5B5A56; margin-top: 4px;
+  font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;
 }
 
 /* ─────────────────────────────────────────────────────
@@ -467,12 +473,12 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(3rem, 5.5vw, 6rem);
   font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: #FFFFFF; line-height: 0.9; margin-bottom: 1.5rem;
+  color: var(--text-primary); line-height: 0.9; margin-bottom: 1.5rem;
 }
 
 .lol-skills__desc {
   font-family: 'Barlow', sans-serif;
-  font-size: 1rem; color: #A9B4C0;
+  font-size: 1rem; color: var(--text-secondary);
   line-height: 1.8; margin-bottom: 2.5rem;
 }
 
@@ -495,7 +501,7 @@
 .lol-skills__item-value {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.6rem; font-weight: 900; font-style: italic;
-  color: #FFFFFF; line-height: 1;
+  color: var(--text-primary); line-height: 1;
 }
 
 /* Right side — image in diamond clip */
@@ -539,7 +545,7 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.7rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
-  color: #A9B4C0; margin-top: 8px;
+  color: var(--text-muted); margin-top: 8px;
 }
 
 /* ─────────────────────────────────────────────────
@@ -576,12 +582,12 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(2.5rem, 5.5vw, 5.5rem);
   font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: #FFFFFF; line-height: 0.92; margin-bottom: 1.5rem;
+  color: var(--text-primary); line-height: 0.92; margin-bottom: 1.5rem;
 }
 
 .lol-contact__desc {
   font-family: 'Barlow', sans-serif;
-  font-size: 1rem; color: #A9B4C0;
+  font-size: 1rem; color: var(--text-secondary);
   line-height: 1.75; margin-bottom: 3rem;
 }
 
@@ -616,7 +622,7 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase;
-  color: #A9B4C0;
+  color: var(--text-muted);
 }
 .contact-form__input,
 .contact-form__textarea {

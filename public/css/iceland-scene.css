@@ -235,7 +235,10 @@
 /* Contact hero over a photograph: the page-token ink was measured for the
    page background, not foliage — go light-on-scrim like the home hero. */
 .contact-hero--scene .contact-hero__title { color: #FFFFFF; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
-.contact-hero--scene .contact-hero__title-accent { color: var(--gold-light); }
+/* The accent line follows the home hero: --gold-light is the light brown now,
+   which over a dark scrim is the mud the note above warns about. Same tan as
+   the home hero title fill — a fixed light for a fixed-dark surface. */
+.contact-hero--scene .contact-hero__title-accent { color: #C9AE8C; }
 .contact-hero--scene .contact-hero__eyebrow { color: #FDE7D3; }
 .contact-hero--scene .contact-hero__subtitle { color: #F5EDE2; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
 
