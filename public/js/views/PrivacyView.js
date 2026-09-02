@@ -26,8 +26,8 @@ import { t, href, getLocale } from '../i18n/i18n.js';
 // (registered 2026-08-12). Keep it in step with company/COMPANY-LOG.md.
 //
 // KNOWN GAP, deliberately stated rather than papered over: page_views has no
-// prune job, so §5 says the aggregate is kept indefinitely. If Halli wants a
-// retention window there, add the job first and then shorten §5.
+// prune job, so §6 says the aggregate is kept indefinitely. If Halli wants a
+// retention window there, add the job first and then shorten §6.
 
 const COPY = {
   is: {
@@ -78,11 +78,12 @@ const COPY = {
         aðskilið frá vefmælingunum hér að ofan og er varðveitt skemur (sjá 6. kafla).</p>
         <h3>Vafrakökur</h3>
         <p>Vefurinn notar tvenns konar vafrakökur: <strong>nauðsynlegar</strong> (innskráning,
-        tungumálaval, öryggis-token gegn föls beiðnum) sem eru alltaf virkar, og
+        tungumálaval, öryggis-token gegn fölsuðum beiðnum) sem eru alltaf virkar, og
         <strong>mælingavafrakökur þriðja aðila</strong> sem eru <em>aðeins</em> settar ef þú
         samþykkir þær í borðanum sem birtist við fyrstu heimsókn. Hafnir þú þeim eru þær
         aldrei settar; talningin okkar hér að ofan heldur áfram og hún notar enga vafraköku.</p>`],
       ['4. Lagagrundvöllur', `
+        <p>Vinnslan byggir á eftirfarandi heimildum í 6. gr. GDPR (9. gr. laga nr. 90/2018):</p>
         <ul>
           <li><strong>Lögmætir hagsmunir</strong> (6. gr. 1. mgr. f): vefmælingar á eigin þjóni,
           villuskráning og varnir gegn misnotkun. Hagsmunirnir eru að reka öruggan vef sem
@@ -222,6 +223,8 @@ const COPY = {
         accept them in the banner shown on your first visit. If you decline, they are never
         set; our own counting described above continues and uses no cookie at all.</p>`],
       ['4. Legal Bases', `
+        <p>Processing rests on the following bases in GDPR Art. 6 (Art. 9 of Icelandic act no.
+        90/2018):</p>
         <ul>
           <li><strong>Legitimate interests</strong> (Art. 6(1)(f)): first-party analytics, error
           logging and abuse prevention. The interest is running a secure site that works — and
