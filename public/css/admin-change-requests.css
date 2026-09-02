@@ -25,3 +25,22 @@
 .cr-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .cr-badge--open     { background: rgba(180, 140, 0, 0.25); color: #f0c868; }
 .cr-badge--resolved { background: rgba(76, 175, 120, 0.20); color: var(--success); }
+
+/* ── PROD on/off switch for the floating widget (ice #206) ─────────────────── */
+.cr-switch {
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+.cr-switch__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.cr-switch__label input { accent-color: var(--accent-ink, var(--text-primary)); }
+.cr-switch__help { margin: var(--sp-2) 0 0; font-size: 0.85rem; color: var(--text-muted); }

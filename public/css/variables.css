@@ -132,6 +132,10 @@
   --test-blue-rgb: 47, 111, 237;
   --test-glow:     0 0 0 2px rgba(47, 111, 237, 0.55), 0 0 16px 2px rgba(47, 111, 237, 0.45);
 
+  /* Sticky top nav height (.lol-nav in layout.css). Sticky/fixed offsets that
+     must clear the header derive from this token (ice #204). */
+  --nav-h: 56px;
+
   /* Admin-nav row tints — the 12 colours an admin can assign to a sidebar line to
      group related lines (AdminSidebar.js TINT_KEYS). Each token is used twice: as
      a low-alpha wash behind the row and at full chroma for the 3px identity rail.

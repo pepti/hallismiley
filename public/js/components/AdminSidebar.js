@@ -517,7 +517,14 @@ export function renderAdminShell({ activePath, content } = {}) {
     tintPop.hidden = false;
     const r = btn.getBoundingClientRect();
     const a = aside.getBoundingClientRect();
-    tintPop.style.top  = `${r.bottom - a.top + 4}px`;
+    // The aside is a scroll container (admin-shell.css max-height + overflow-y):
+    // the absolute offset is measured from its scrolled content origin, and a
+    // popover hanging below a row near the bottom edge would be clipped — flip
+    // it above the trigger when the visible room below is short (ice #204).
+    const below = r.bottom - a.top + 4;
+    const fits = below + tintPop.offsetHeight <= aside.clientHeight - 4;
+    const top = fits ? below : (r.top - a.top - tintPop.offsetHeight - 4);
+    tintPop.style.top  = `${top + aside.scrollTop}px`;
     tintPop.style.left = `${Math.max(4, Math.min(r.left - a.left, a.width - tintPop.offsetWidth - 4))}px`;
     btn.setAttribute('aria-expanded', 'true');
     document.addEventListener('pointerdown', onTintDocPointerDown);

@@ -52,6 +52,9 @@ const KEYS = {
   bkAccountantName:   'books.accountant_name',
   bkAccountantEmail:  'books.accountant_email',
   bkCoaConfirmedAt:   'books.coa_confirmed_at',
+  // Change-request widget on PROD (admins only; a non-prod app-env always has
+  // it on — see changeRequestGate in middleware/requireTestEnv.js, ice #206).
+  changeRequestsEnabled: 'change_requests.enabled',
 };
 
 // Welcome-invite editable fields + per-locale limits. body allows the rich-text
@@ -122,6 +125,7 @@ const DEFAULTS = {
   // Null until a human confirms the chart of accounts. The books dashboard shows
   // a standing warning while this is unset.
   [KEYS.bkCoaConfirmedAt]:   null,
+  [KEYS.changeRequestsEnabled]: false,
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -425,6 +429,17 @@ class Setting {
     }
 
     return this.getBookkeepingSettings();
+  }
+
+  // ── Change-request widget switch (Admin → Feedback) ────────────────────────
+  static async getChangeRequestsEnabled() {
+    return (await this.get(KEYS.changeRequestsEnabled)) === true;
+  }
+
+  static async setChangeRequestsEnabled(enabled) {
+    if (typeof enabled !== 'boolean') throw new Error('enabled must be true or false');
+    await this.set(KEYS.changeRequestsEnabled, enabled);
+    return enabled;
   }
 }
 
