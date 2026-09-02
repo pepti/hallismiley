@@ -248,11 +248,61 @@ source map, competitor/incumbent tracking, channel briefs).
   listed to him before it runs.
 - Migration chain now ends 093_market_research.
 
+## Harvest 2 — icelandicstore `601b2f2` → here (2026-09-02, five chunks on master)
+
+Halli: "add useful updates from icelandic store". Two surveys sorted ice's 33
+post-08-22 commits; customer-specific work (Regla, Shopify import, AI order/
+shelf vision, multi-store, adoption analytics, `made_to_order`) was NOT ported.
+Ledger: site-factory/BASE-SYNC.md 2026-09-02. Everything below is queued for the
+base (hallismiley is read-only).
+
+- **Tests/CI** (`1536fb2`): Jest runs **4 workers, one database each** —
+  `tests/workerDb.js` derives `orangesmiley_w<N>_test` (worker id BEFORE the
+  `_test` suffix so the safety guard holds); globalSetup migrates ONE template
+  (`orangesmiley_tmpl_test`) in a child process and clones it per worker. Full
+  suite 112 s vs 8m20s serial. Never add an `afterAll pool.end()` (fire-and-
+  forget writes). **CI had never run**: `ci.yml` triggered on `main`, the branch
+  is `master` — fixed, plus weekly cron, Jest transform cache, dependabot
+  `rebase-strategy: disabled` + docker ecosystem. Ice's `main-gate` job was
+  deliberately NOT ported (this repo merges locally; deploy is dispatch-only).
+- **Observability** (`7cf7b1d`): `query()` now feeds the DB circuit breaker
+  (connectivity errors only) and `db_query_duration_seconds`; httpMetrics feeds
+  the error-rate alert; `/metrics` refreshes the pool gauges. The client
+  rate-limit toast ignores the error beacon (feedback loop) and stays silent
+  before the dictionary loads.
+- **Limits/uploads/slugs** (`dcbc501`): **every rate limit ×5, auth included**
+  (Halli 2026-09-02): global 2000/15 min, writes 450, login 50, signup 75, reset
+  25, checkout 50, beacons 100/300. Untouched: the /hafa-samband lead limit,
+  MCP, party, self-update, discount. Static-asset exemption =
+  `server/utils/staticAsset.js` (location-only, never by extension; root files
+  /favicon.svg, /manifest.json, /og-image.jpg; catch-all 404 reuses its regex).
+  `middleware/verifyImageBytes.js` sniffs magic bytes behind EVERY image upload
+  (mismatch → file unlinked, 400; video/PDF untouched). `utils/slug.js` folds
+  ð/þ/æ/ö — GENERATION paths only (news, sales guides, party keys, collections
+  form via the ESM twin `public/js/utils/slug.js`); stored slugs never change.
+- **i18n + admin** (`352b977`): `check:i18n` now also scans every
+  `t('literal')`/`labelKey` in public/js against en.json (a missing key fails
+  CI). `loadLocale()` dispatches **`localechange`** for components mounted
+  outside `#app` (widget, theme switcher). Change-request widget has a **PROD
+  switch**: `change_requests.enabled` setting (Admin → Feedback, admin only),
+  `changeRequestGate` = non-prod app-env OR (switch on AND admin), **404 not
+  403**; the widget then mounts for admins only, without the TEST chrome. Admin
+  sidebar is a capped scroll container (`--nav-h` token) with the tint popover
+  flipping above near the bottom. `stock <= 0` (negative = still sold out).
+- **Latest updates card** (`144559d`): `server/scripts/generate-changes.js`
+  stamps the last 30 non-merge commits into gitignored `server/changes.json` on
+  the BUILD HOST (ci.yml docker job + deploy.yml, `fetch-depth: 50`); opt-out
+  per commit = `[internal]` in the subject or a `Customer-visible: no` body
+  line. `GET /api/v1/system/changes` (admin) sits ABOVE the self-update module
+  gate so instances shipping self-update OFF still get the card. Also landed
+  the **missing `admin-monitoring.css`** — H4 ported the view without its
+  stylesheet.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
 - **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
 - Post-R1 notes: the news list wants a public `/frettir` home (home links into it were removed, not re-homed); `/terms` could take an `/skilmalar` slug; Product-schema `brand` on the hidden shop still says Rekstrarkerfið.
-- **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
+- **CI runs on push to master since 2026-09-02** (it never had: the trigger said `main`); the first real Actions run happens on the next push. **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
 - Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
 - Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.

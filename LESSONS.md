@@ -557,3 +557,19 @@ Fix: a function replacer, `js.replace(marker, () => entry + marker)`. The same
 trap covers `$&`, `` $` ``, `$1`… Rule: when generated text goes through
 `replace()`, pass a function, never a string — a regex literal in SQL is
 exactly the kind of content that contains `$'`.
+
+### 2026-09-02 — CI never ran: the workflow triggered on `main`, the repo's branch is `master` _(factory)_
+
+Three weeks of "CI green" were local runs. `ci.yml` (scaffolded from the base, which uses `main`) listened on `branches: [main]`; this repo was initialised on `master`, so GitHub showed 0 Actions runs while every ledger entry recorded green suites. Found while planning the icelandicstore harvest. Fix here: trigger on `master`. Template fix: `setup.ps1` should write the trigger from the branch it actually creates (or create `main`), and `/status` should compare the workflow's branch filter with `git symbolic-ref refs/remotes/origin/HEAD`.
+
+### 2026-09-02 — a ported view without its stylesheet _(factory)_
+
+The 08-22 H4 harvest ported `AdminMonitoringView.js` and its i18n but not `admin-monitoring.css`: every `mon-*` class rendered unstyled for eleven days and nobody noticed because the page still worked. The 08-22 lesson said "check the import graph of a ported view FIRST" — that graph is JS-only. Add the CSS side: grep the ported view's class prefixes against `public/css/` and the `@import` list in `main.css` before calling the port done.
+
+### 2026-09-02 — per-worker Jest databases: the name must keep the `_test` suffix, and the migration must be a child process _(base)_
+
+Ported from ice #225/#233. Two traps that would each have cost a run: (1) `globalSetup` refuses to drop anything not ending in `_test`, so the worker id goes BEFORE the suffix (`orangesmiley_w2_test`, template `orangesmiley_tmpl_test`), never after; (2) `CREATE DATABASE … TEMPLATE` refuses while any session holds the template, so migrating in-process (the old globalSetup did) would hang the clone — the migration runs as a child `node server/scripts/migrate.js` that has fully exited before the clone starts. And the ice warning that the first parallel validation lost 16 suites to a well-meant `afterAll pool.end()` still applies: the app has fire-and-forget writes that land after the last test. Result here: 2595 tests in 112 s (4 workers) vs 8m20s serial.
+
+### 2026-09-02 — this repo stores several files as CRLF; textual anchors written with \n silently miss _(project)_
+
+The first harvest edit script failed on `server/config/database.js` because the file is CRLF on disk (so are `tests/helpers.js`, `ci.yml`, most of `server/`); git normalises on commit, so diffs never show it. Any scripted edit must normalise on read and restore on write, or it reports "anchor not found" on text that is visibly there. Shell heredocs were worse: Git Bash on Windows mangled quoting in three different ways. Ports now go through a node script with count-asserted anchors.
