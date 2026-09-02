@@ -262,7 +262,8 @@ base (hallismiley is read-only).
   (`orangesmiley_tmpl_test`) in a child process and clones it per worker. Full
   suite 112 s vs 8m20s serial. Never add an `afterAll pool.end()` (fire-and-
   forget writes). **CI had never run**: `ci.yml` triggered on `main`, the branch
-  is `master` — fixed, plus weekly cron, Jest transform cache, dependabot
+  is `master` — fixed, but **Actions is also disabled at repo level** (see the
+  next section); plus weekly cron, Jest transform cache, dependabot
   `rebase-strategy: disabled` + docker ecosystem. Ice's `main-gate` job was
   deliberately NOT ported (this repo merges locally; deploy is dispatch-only).
 - **Observability** (`7cf7b1d`): `query()` now feeds the DB circuit breaker
@@ -303,6 +304,6 @@ base (hallismiley is read-only).
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
 - **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
 - Post-R1 notes: the news list wants a public `/frettir` home (home links into it were removed, not re-homed); `/terms` could take an `/skilmalar` slug; Product-schema `brand` on the hidden shop still says Rekstrarkerfið.
-- **CI runs on push to master since 2026-09-02** (it never had: the trigger said `main`); the first real Actions run happens on the next push. **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
+- **CI still has never run — GitHub Actions is DISABLED on the repo** (`gh api repos/orange-smiley/orangesmiley/actions/permissions` → `enabled:false`; only Dependabot's own runs exist). The `main`→`master` trigger fix (2026-09-02) is in, but the first run needs **Halli to enable Actions** in the repo Settings → Actions → General (a billing/minutes decision; the audit gate will then be red until `npm audit fix` lands — 1 high in browserslist, 1 moderate in sanitize-html as of 2026-09-02). **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.
 - Public IA is `/`, `/thjonusta`, `/verkefni`, `/um-okkur`, `/hafa-samband`, `/personuvernd`. Everything else (party, bio, news, shop, and the `/projects` · `/contact` · `/privacy` aliases) is listed in `server/config/publicSurface.js`: hidden from nav, sitemap and search, still fully functional at its URL.
 - Lighthouse desktop: SEO 100 and a11y 100 across the business routes; performance ~85 (home) / ~92 (`/thjonusta`). The gap is the router importing all 58 view modules eagerly — ENHANCEMENTS proposal #6.

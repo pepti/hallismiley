@@ -560,7 +560,7 @@ exactly the kind of content that contains `$'`.
 
 ### 2026-09-02 — CI never ran: the workflow triggered on `main`, the repo's branch is `master` _(factory)_
 
-Three weeks of "CI green" were local runs. `ci.yml` (scaffolded from the base, which uses `main`) listened on `branches: [main]`; this repo was initialised on `master`, so GitHub showed 0 Actions runs while every ledger entry recorded green suites. Found while planning the icelandicstore harvest. Fix here: trigger on `master`. Template fix: `setup.ps1` should write the trigger from the branch it actually creates (or create `main`), and `/status` should compare the workflow's branch filter with `git symbolic-ref refs/remotes/origin/HEAD`.
+Three weeks of "CI green" were local runs. `ci.yml` (scaffolded from the base, which uses `main`) listened on `branches: [main]`; this repo was initialised on `master`, so GitHub showed 0 Actions runs while every ledger entry recorded green suites. Found while planning the icelandicstore harvest. Fixing the trigger to `master` and pushing produced… still no run: **GitHub Actions is disabled on the repository** (`actions/permissions` → `enabled:false`), which only an owner can flip in Settings → Actions. Dependabot's "Dependabot Updates" runs exist regardless, which is what made the Actions tab look alive. Fix here: trigger on `master` (done) + Halli enables Actions. Template fix: `setup.ps1` should write the trigger from the branch it actually creates (or create `main`), and `/status` should compare the workflow's branch filter with `git symbolic-ref refs/remotes/origin/HEAD`.
 
 ### 2026-09-02 — a ported view without its stylesheet _(factory)_
 
