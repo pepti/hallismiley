@@ -7,7 +7,8 @@ import { t, href, getLocale } from '../i18n/i18n.js';
 // server/controllers/contactController.js actually accepts) and the analytics
 // section (this site records first-party page views with no cookie and no
 // third-party tag unless a GA id is configured — see public/js/consent.js).
-// The kennitala lands once registration completes.
+// Company identity below is live: kt. 470826-1500 (2026-08-11), VSK-nr. 162561
+// (registered 2026-08-12). Keep it in step with company/COMPANY-LOG.md.
 
 const COPY = {
   is: {
@@ -15,7 +16,7 @@ const COPY = {
     sections: [
       ['1. Ábyrgðaraðili', `
         <p>Þessi vefur (<strong>orangesmiley.is</strong>) er rekinn af Orange Smiley ehf.,
-        Hafnarfirði, Íslandi (kennitala: í skráningu). Fyrirspurnir um persónuvernd:
+        Hafnarfirði, Íslandi (kt. 470826-1500, VSK-nr. 162561). Fyrirspurnir um persónuvernd:
         <span data-privacy-email></span></p>`],
       ['2. Hvaða upplýsingum við söfnum', `
         <h3>Fyrirspurnarform</h3>
@@ -60,7 +61,7 @@ const COPY = {
     sections: [
       ['1. Who We Are', `
         <p>This website (<strong>orangesmiley.is</strong>) is operated by Orange Smiley ehf.,
-        Hafnarfjörður, Iceland (company registration: pending). For privacy enquiries,
+        Hafnarfjörður, Iceland (reg. no. 470826-1500, VAT no. 162561). For privacy enquiries,
         contact: <span data-privacy-email></span></p>`],
       ['2. What Data We Collect', `
         <h3>Inquiry form</h3>
