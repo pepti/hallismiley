@@ -1,6 +1,8 @@
 // mountSceneHeader — the inner pages' shared entry to the scene engine: a
 // full-bleed landscape band at the top of `.main`, with the page's existing
-// header markup (eyebrow / h1 / lede) on a frosted panel. Keeping the header
+// header markup (eyebrow / h1 / lede) set directly on the photograph — the
+// frosted plate it used to sit on went on 2026-09-02 (Halli: no boxes behind
+// the headers, text only; iceland-scene.css lights the copy). Keeping the header
 // INSIDE #main-content preserves the skip-nav target and heading order; the
 // band only breaks out visually (.ice-scene--bleed's negative margins).
 //
@@ -14,7 +16,7 @@ export function mountSceneHeader(mainEl, defKey, headerHtml) {
   if (el.classList.contains('ice-scene--empty')) return stage; // no manifest → flat header keeps working
   el.classList.add('ice-scene--bleed');
   const panel = document.createElement('div');
-  panel.className = 'ice-frost ice-band-panel';
+  panel.className = 'ice-band-panel';
   panel.innerHTML = headerHtml;
   stage.contentEl().appendChild(panel);
   mainEl.prepend(el);

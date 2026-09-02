@@ -100,7 +100,10 @@
 
 /* Frosted panel — content surface over a photo. Solid fallback FIRST-CLASS:
    browsers without backdrop-filter get a slightly more opaque plate (same
-   pattern as the nav bar, layout.css). */
+   pattern as the nav bar, layout.css). Currently has NO user: the inner-page
+   band headers wore it until 2026-09-02, when Halli asked for text only on
+   the photograph. Kept as the engine's frost utility for whatever next needs
+   a plate over a scene. */
 .ice-frost {
   background: rgba(var(--bg-nav-rgb), 0.92);
   border: 1px solid var(--border-light);
@@ -225,12 +228,22 @@
 }
 
 /* The band header panel keeps the pages' own header classes working inside
-   it; kill their outer margins so the frost hugs the text. */
+   it; kill their outer margins so the header sits centred in the band. */
 .ice-band-panel > :first-child { margin-top: 0; }
 .ice-band-panel .thjonusta-header,
 .ice-band-panel .um-okkur-header { margin: 0; max-width: none; }
 .ice-band-panel .thjonusta-intro,
 .ice-band-panel .um-okkur-lead { margin-bottom: 0; }
+
+/* Band header copy sits directly on the photograph (Halli, 2026-09-02: no
+   boxes behind the headers). The page tokens' ink was measured for paper —
+   Bjart's is brown — not for sky or foliage, so the copy goes light-on-scrim
+   like the home and contact heroes, on every theme. Element selectors on
+   purpose: the three pages' headers share the shape (eyebrow p, h1, lede p)
+   but not all the class names, and (0,1,1) outranks each page's (0,1,0). */
+.ice-band-panel h1 { color: #FFFFFF; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
+.ice-band-panel p  { color: #F5EDE2; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
+.ice-band-panel header > p:first-child { color: #FDE7D3; }
 
 /* Contact hero over a photograph: the page-token ink was measured for the
    page background, not foliage — go light-on-scrim like the home hero. */
