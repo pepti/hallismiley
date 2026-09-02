@@ -121,17 +121,17 @@ describe('themePrefs — browser → account', () => {
     const { setTheme } = load();
 
     setTheme('classic');
-    expect(store.ws_theme).toBeUndefined();
+    expect(store.ws_theme).toBe('classic');
     expect(attrs['data-theme']).toBeUndefined();
   });
 
-  test('an unknown theme falls back to classic and is never sent to the server', async () => {
-    mockUser = { id: 'u1', theme: 'ember' };
+  test('an unknown theme falls back to the default and the bad value is never sent to the server', async () => {
+    mockUser = { id: 'u1', theme: 'midnight' };
     const { setTheme } = load();
 
-    expect(setTheme('neon-hotdog')).toBe('classic');
+    expect(setTheme('neon-hotdog')).toBe('ember');
     await flushSave();
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'classic' });
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'ember' });
   });
 
   test('anonymous visitors stay browser-local — no account write', async () => {
@@ -255,12 +255,12 @@ describe('themePrefs — browser → account', () => {
 
 describe('themePrefs — account → browser', () => {
   test('adoptAccountTheme applies the theme saved on the account', () => {
-    mockUser = { id: 'u1', theme: 'ember' };
+    mockUser = { id: 'u1', theme: 'midnight' };
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(getTheme()).toBe('ember');
-    expect(attrs['data-theme']).toBe('ember');
+    expect(getTheme()).toBe('midnight');
+    expect(attrs['data-theme']).toBe('midnight');
   });
 
   test('adopting does NOT write back to the server', async () => {
@@ -303,12 +303,12 @@ describe('themePrefs — account → browser', () => {
   // actually on screen — otherwise the pickers highlight the wrong swatch.
   test('the applied theme is reported even when storage is unavailable', () => {
     storageBroken = true;
-    mockUser = { id: 'u1', theme: 'ember' };
+    mockUser = { id: 'u1', theme: 'midnight' };
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(attrs['data-theme']).toBe('ember');
-    expect(getTheme()).toBe('ember');
+    expect(attrs['data-theme']).toBe('midnight');
+    expect(getTheme()).toBe('midnight');
   });
 });
 

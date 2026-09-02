@@ -2,11 +2,12 @@
    Three themes, one switch (picker: public/js/components/ThemeSwitcher.js, and
    the Appearance section in ProfileView):
 
-     classic   — BJART, the light default: beige paper, brown ink, orange on
+     ember     — GLÓÐ, THE DEFAULT since 2026-09-02: the earth palette after
+                 sundown — brown-black page, sand and tan where Bjart has brown.
+     classic   — BJART, the light option: beige paper, brown ink, orange on
                  the mark alone. Its tokens live in variables.css as :root, so
-                 it carries NO data-theme attribute.
-     ember     — GLÓÐ, the dark: the same earth palette after sundown —
-                 brown-black page, sand and tan where Bjart has brown.
+                 it carries NO data-theme attribute — "root" and "default"
+                 are different ideas here (theme-boot.js / themePrefs.js).
      midnight  — MIÐNÆTTI, high contrast: true black, white ink, one bright
                  warm accent, edges drawn as lines rather than shadows.
 

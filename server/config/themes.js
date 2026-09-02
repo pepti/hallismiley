@@ -7,8 +7,9 @@
 //
 // users.theme is NULLABLE and has NO column default: NULL means "this account
 // has never picked a theme", which is deliberately distinct from 'classic'
-// (the :root default, and the value meaning "no data-theme attribute on
-// <html>"). Server code must handle a NULL theme — every account has one until
+// (the :root token set — "no data-theme attribute on <html>" — which since
+// 2026-09-02 is NOT the visitor default: that is 'ember', chosen client-side
+// in themePrefs.js/theme-boot.js; the server has no default of its own). Server code must handle a NULL theme — every account has one until
 // the user opens a picker. Adding a theme needs a new migration to widen the
 // CHECK constraint (084_user_theme_widen is the worked example; read the
 // WARNING on 083 before writing another one).

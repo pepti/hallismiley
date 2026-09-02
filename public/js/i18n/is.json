@@ -1,7 +1,7 @@
 {
   "themeSwitcher.open": "Þema síðu",
   "themeSwitcher.title": "Þema",
-  "themeSwitcher.theme.classic": "Bjart (sjálfgefið)",
+  "themeSwitcher.theme.classic": "Bjart",
   "themeSwitcher.testMode": "TEST-hamur",
   "themeSwitcher.testModeNote": "Aðeins þessi vafri",
   "changeRequest.badge": "TEST",
@@ -2239,7 +2239,7 @@
   "home.heroAriaLabel": "Kynning",
   "home.scrollHint": "Skruna",
   "contact.formAriaLabel": "Fyrirspurnarform",
-  "themeSwitcher.theme.ember": "Glóð",
+  "themeSwitcher.theme.ember": "Glóð (sjálfgefið)",
   "themeSwitcher.theme.midnight": "Miðnætti",
   "admin.nav.updates": "Útgáfur og uppfærslur",
   "admin.updates.title": "Uppfærslur á kerfinu",

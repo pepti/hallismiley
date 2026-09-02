@@ -27,8 +27,8 @@
 
 import { getUser, isAuthenticated, updateProfile, updateCachedUser } from './auth.js';
 
-// Order is the picker's order: the light default, then the dark, then high
-// contrast. 'classic' is BJART (light) since 2026-08-20 — the id outlived the
+// Order is the picker's order: the default (Glóð) first, then the light, then
+// high contrast. 'classic' is BJART (light) since 2026-08-20 — the id outlived the
 // palette it was named for, and is kept because theme-boot.js encodes
 // "classic = no data-theme attribute". The set was cut from five to three on
 // 2026-09-02 (Halli): 'light' and 'mono' are gone from here and from
@@ -36,8 +36,15 @@ import { getUser, isAuthenticated, updateProfile, updateCachedUser } from './aut
 // classic below (getTheme/setTheme both gate on THEMES), and migration 094
 // moved the stored accounts. The users.theme CHECK still admits the old ids
 // on purpose — it narrows in a later release (invariant 14).
-export const THEMES = ['classic', 'ember', 'midnight'];
-const DEFAULT_THEME = 'classic';
+export const THEMES = ['ember', 'classic', 'midnight'];
+// Two ideas that used to be one value. ROOT_THEME is the theme whose tokens
+// ARE :root — it carries no data-theme attribute (invariant 13; theme-boot.js
+// encodes the same rule). DEFAULT_THEME is what a visitor gets with nothing
+// stored: Glóð since 2026-09-02 (Halli). While the two coincided, picking the
+// default deleted the stored key; now every choice is stored explicitly, so
+// changing the default later never flips a choice someone actually made.
+const ROOT_THEME    = 'classic';
+const DEFAULT_THEME = 'ember';
 const THEME_KEY = 'ws_theme';
 const TEST_KEY  = 'ws_test_override';
 const DEMO_KEY  = 'ws_demo_mode';
@@ -89,7 +96,7 @@ export function getTheme() {
 // never waits on the network to repaint.
 export function setTheme(theme, { persist = true } = {}) {
   const next = THEMES.includes(theme) ? theme : DEFAULT_THEME;
-  write(THEME_KEY, next === DEFAULT_THEME ? null : next);
+  write(THEME_KEY, next);
   _current = next;
   applyTheme();
   // Lets the two pickers (switcher popover, profile Appearance section) keep
@@ -237,7 +244,7 @@ export function applyTheme() {
   // classic is the :root default → no attribute. Every other theme (including
   // black-sand) applies everywhere, admin included; the admin CSS is tokenized
   // and themes.css carries the dark-mode admin fixes.
-  if (theme === DEFAULT_THEME) {
+  if (theme === ROOT_THEME) {
     document.documentElement.removeAttribute('data-theme');
   } else {
     document.documentElement.setAttribute('data-theme', theme);

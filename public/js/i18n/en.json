@@ -1,7 +1,7 @@
 {
   "themeSwitcher.open": "Site theme",
   "themeSwitcher.title": "Theme",
-  "themeSwitcher.theme.classic": "Bright (default)",
+  "themeSwitcher.theme.classic": "Bright",
   "themeSwitcher.testMode": "TEST mode",
   "themeSwitcher.testModeNote": "This browser only",
   "changeRequest.badge": "TEST",
@@ -2239,7 +2239,7 @@
   "home.heroAriaLabel": "Introduction",
   "home.scrollHint": "Scroll",
   "contact.formAriaLabel": "Inquiry form",
-  "themeSwitcher.theme.ember": "Ember",
+  "themeSwitcher.theme.ember": "Ember (default)",
   "themeSwitcher.theme.midnight": "Midnight",
   "admin.nav.updates": "Releases & updates",
   "admin.updates.title": "Software updates",
