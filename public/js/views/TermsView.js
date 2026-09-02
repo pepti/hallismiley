@@ -12,7 +12,9 @@ import { t, href, getLocale } from '../i18n/i18n.js';
 //
 // These terms cover THIS WEBSITE only. Subscribing to Rekstrarkerfið is a
 // service agreement between the customer and the company, and does not live
-// on a marketing page. The kennitala lands once registration completes.
+// on a marketing page. Company identity below is live: kt. 470826-1500
+// (2026-08-11), VSK-nr. 162561 (registered 2026-08-12) — keep it in step
+// with company/COMPANY-LOG.md.
 
 const COPY = {
   is: {
@@ -20,7 +22,7 @@ const COPY = {
     sections: [
       ['1. Gildissvið', `
         <p>Þessi vefur (<strong>orangesmiley.is</strong>) er rekinn af Orange Smiley ehf.,
-        Hafnarfirði, Íslandi (kennitala: í skráningu). Með því að nota vefinn samþykkir þú
+        Hafnarfirði, Íslandi (kt. 470826-1500, VSK-nr. 162561). Með því að nota vefinn samþykkir þú
         þessa skilmála. Ef þú samþykkir þá ekki, biðjum við þig að nota ekki vefinn.</p>`],
       ['2. Hvað vefurinn er', `
         <p>Vefurinn kynnir Orange Smiley ehf. og vörur fyrirtækisins, þar á meðal
@@ -63,7 +65,7 @@ const COPY = {
     sections: [
       ['1. Scope', `
         <p>This website (<strong>orangesmiley.is</strong>) is operated by Orange Smiley ehf.,
-        Hafnarfjörður, Iceland (company registration pending). By using the site you accept
+        Hafnarfjörður, Iceland (reg. no. 470826-1500, VAT no. 162561). By using the site you accept
         these terms. If you do not accept them, please do not use the site.</p>`],
       ['2. What this site is', `
         <p>The site presents Orange Smiley ehf. and its products, including Rekstrarkerfið.
