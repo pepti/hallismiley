@@ -37,6 +37,9 @@ Thumbs.db
 # scripts/generate-version.js, never committed (a committed stamp would lie
 # the moment anyone edited code without rebuilding).
 server/version.json
+# Same rule for the recent-changes stamp (server/scripts/generate-changes.js):
+# written on the build host right before docker build, never committed.
+server/changes.json
 
 # Build output
 dist/

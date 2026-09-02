@@ -1,6 +1,10 @@
 // AdminMonitoringView — Admin → Monitoring.
 //
-// Three sections:
+// Four sections:
+//   0. Latest updates — the changes the running build carries, so an admin
+//      waiting for a fix can see it arrive here instead of asking. Comes from
+//      the build stamp (server/scripts/generate-changes.js), not a live feed
+//      (ice #209/#220).
 //   1. Server event log — failures across ALL users, from the database. 5xx
 //      recorded by the central error handler plus the SPA's error-toast beacon.
 //   2. This session's notifications — the sessionStorage toast log, i.e. what
@@ -16,8 +20,32 @@ import { renderAdminShell } from '../components/AdminSidebar.js';
 import { getToastLog, clearToastLog } from '../services/toastLog.js';
 import { toastLogHtml } from '../components/ToastLog.js';
 import { fetchEvents } from '../services/adminEvents.js';
+import { getChanges } from '../services/buildInfo.js';
+import { formatDate, formatDateTime } from '../utils/format.js';
 
 const PAGE_SIZE = 50;
+
+// "Latest updates": how many changes to list, and where a "#203" suffix links.
+const UPDATES_SHOWN = 10;
+const REPO_URL      = 'https://github.com/orange-smiley/orangesmiley';
+
+function updateRowHtml(ch) {
+  // Conventional-commit prefix ("fix(pos): …" → "fix") becomes a small pill;
+  // the rest of the subject is shown as written, minus the "(#203)" suffix
+  // that the PR link already carries.
+  const m = /^([a-z]+)(\([^)]*\))?!?:\s*(.*)$/i.exec(ch.subject || '');
+  const kind  = m ? m[1].toLowerCase() : '';
+  const title = (m ? m[3] : ch.subject || '').replace(/\s*\(#\d+\)\s*$/, '');
+  const pr = Number.isInteger(ch.pr)
+    ? `<a class="mon-update__pr" href="${REPO_URL}/pull/${ch.pr}" target="_blank" rel="noopener">${escHtml(t('adminMonitoring.updatesPr', { pr: ch.pr }))}</a>`
+    : '<span class="mon-update__pr"></span>';
+  return `<li class="mon-update">
+    <span class="mon-update__date">${escHtml(formatDate(ch.date))}</span>
+    <span class="mon-update__kind mon-update__kind--${escHtml(kind)}">${escHtml(kind)}</span>
+    <span class="mon-update__title">${escHtml(title)}</span>
+    ${pr}
+  </li>`;
+}
 
 const OK_STATUSES = new Set(['ok', 'closed']);
 
@@ -93,6 +121,10 @@ export class AdminMonitoringView {
     // the list ends up showing results for a query you already changed. Same
     // pattern as the router's _navSeq.
     this._eventSeq = 0;
+    // null = not loaded yet, or the read failed; _changesLoaded tells the two
+    // apart so the card can show "loading" and "could not load" separately.
+    this._changes = null;
+    this._changesLoaded = false;
   }
 
   async render() {
@@ -108,6 +140,7 @@ export class AdminMonitoringView {
     // never blocks (or error-banners) the rest of the page.
     this._loadEvents();
     this._loadHealth();
+    this._loadUpdates();
     return renderAdminShell({ activePath: '/admin/monitoring', content: el });
   }
 
@@ -126,6 +159,12 @@ export class AdminMonitoringView {
         </div>
         <button type="button" class="btn btn--sm btn--outline" id="mon-refresh">${t('adminMonitoring.refresh')}</button>
       </div>
+
+      <section class="mon-card">
+        <h2 class="mon-card__title">${t('adminMonitoring.updatesSection')}</h2>
+        <p class="mon-card__help">${t('adminMonitoring.updatesHelp')}</p>
+        <div id="mon-updates"></div>
+      </section>
 
       <section class="mon-card">
         <div class="mon-card__head">
@@ -170,6 +209,7 @@ export class AdminMonitoringView {
     this._renderLog();
     this._renderEvents();
     this._renderHealth();
+    this._renderUpdates();
 
     this._el.querySelector('#mon-refresh').addEventListener('click', () => {
       this._renderLog();
@@ -181,6 +221,10 @@ export class AdminMonitoringView {
       this._healthError = null;
       this._renderHealth();
       this._loadHealth();
+      this._changes = null;
+      this._changesLoaded = false;
+      this._renderUpdates();
+      this._loadUpdates();
     });
     this._el.querySelector('#mon-log-clear').addEventListener('click', () => {
       clearToastLog();
@@ -269,6 +313,41 @@ export class AdminMonitoringView {
       t('adminMonitoring.pageRange', { from, to, total: this._eventsTotal });
     this._el.querySelector('#mon-events-prev').disabled = this._eventOffset === 0;
     this._el.querySelector('#mon-events-next').disabled = to >= this._eventsTotal;
+  }
+
+  async _loadUpdates() {
+    // Diagnostic data: a failure here renders inside the card and never
+    // disturbs the rest of the page.
+    const changes = await getChanges().catch(() => null);
+    if (this._destroyed) return;
+    this._changes = changes;
+    this._changesLoaded = true;
+    this._renderUpdates();
+  }
+
+  _renderUpdates() {
+    const host = this._el.querySelector('#mon-updates');
+    if (!host) return;
+    const c = this._changes;
+    let body;
+    if (!this._changesLoaded) {
+      body = `<p class="mon-loading">${t('form.loading')}</p>`;
+    } else if (!c) {
+      body = `<p class="mon-error">${t('adminMonitoring.updatesError')}</p>`;
+    } else if (!c.stamped) {
+      body = `<p class="mon-loading">${t('adminMonitoring.updatesDev')}</p>`;
+    } else if (!(c.changes || []).length) {
+      body = `<p class="mon-loading">${t('adminMonitoring.updatesNone')}</p>`;
+    } else {
+      body = `<ul class="mon-updates">${c.changes.slice(0, UPDATES_SHOWN).map(updateRowHtml).join('')}</ul>`;
+    }
+    const build = c && c.stamped
+      ? `<p class="mon-updates__build">${t('adminMonitoring.updatesBuild', {
+          sha:  `<code>${escHtml(String(c.gitSha || '').slice(0, 7))}</code>`,
+          date: escHtml(formatDateTime(c.builtAt)),
+        })}${c.appEnv ? ` · ${escHtml(String(c.appEnv).toUpperCase())}` : ''}</p>`
+      : '';
+    host.innerHTML = build + body;
   }
 
   async _loadHealth() {

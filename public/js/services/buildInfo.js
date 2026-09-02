@@ -17,3 +17,16 @@ export function getBuildInfo() {
 
 /** Test seam + logout hook: drop the cached answer so the next call refetches. */
 export function resetBuildInfo() { pending = null; }
+
+/**
+ * GET /api/v1/system/changes — build identity + the changes this build carries
+ * (newest first). Backs the "Latest updates" card on Admin → Monitoring.
+ * Admin-only on the server; the page is already admin-gated. Not cached: the
+ * card has its own refresh button.
+ */
+export async function getChanges() {
+  const res  = await fetch('/api/v1/system/changes', { credentials: 'include' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to load changes');
+  return data;
+}
