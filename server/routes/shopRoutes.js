@@ -35,10 +35,10 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// Stricter rate limit on checkout — 10 attempts / 15 min / IP
+// Stricter rate limit on checkout — 50 attempts / 15 min / IP (was 10; ×5, ice #201)
 const checkoutLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',

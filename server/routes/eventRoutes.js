@@ -16,12 +16,12 @@ const { collect }     = require('../controllers/eventLogController');
 const { softAuth }    = require('../middleware/softAuth');
 const { csrfProtect } = require('../middleware/csrf');
 
-// Tighter than the analytics beacon (60/min): error toasts should be rare, and
+// Tighter than the analytics beacon (300/min): error toasts should be rare, and
 // a page stuck in a failure loop must not be able to flood the table. Excess is
 // dropped with a 429 the client ignores.
 const collectLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 20,
+  max: 100, // was 20 — ×5 (ice #201)
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',

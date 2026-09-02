@@ -166,7 +166,7 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
   // ── Static-asset prefixes (base fix 2b6842c, ported 2026-09-01) ───────────
   // /assets, /js, /css and /fonts GETs are exempt from the global rate
-  // limiter (STATIC_ASSET_RE in app.js). Two things must therefore hold, and
+  // limiter (utils/staticAsset.js). Two things must therefore hold, and
   // they are asserted here because the limiter itself is skipped under
   // NODE_ENV=test: a miss under those prefixes must terminate at a cheap JSON
   // 404 rather than reaching the SSR/DB path (ssrMeta only skips paths that

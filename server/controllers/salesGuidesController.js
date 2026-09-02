@@ -1,4 +1,5 @@
 const db  = require('../config/database');
+const { foldSlug } = require('../utils/slug');
 const { t } = require('../i18n');
 
 // Handbók sölufólks — internal sales-staff guides (migration 090).
@@ -43,17 +44,9 @@ const GUIDE_COLS_BOTH = `
   u.display_name AS updated_by_name
 `;
 
+// Icelandic-aware slug generation shared with news (utils/slug.js, ice #229).
 function _slugify(title) {
-  return title
-    .toLowerCase()
-    .replace(/[áàâä]/g, 'a').replace(/[éèêë]/g, 'e').replace(/[íìîï]/g, 'i')
-    .replace(/[óòôö]/g, 'o').replace(/[úùûü]/g, 'u').replace(/[ýÿ]/g, 'y')
-    .replace(/æ/g, 'ae').replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/ö/g, 'o')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 100);
+  return foldSlug(title);
 }
 
 async function _uniqueSlug(base, excludeId = null) {
