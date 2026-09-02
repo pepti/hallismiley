@@ -101,10 +101,17 @@ const AUDIT = () => {
 
   for (const path of PAGES) {
     await pg.goto(BASE + path, { waitUntil: 'networkidle' });
+    // Themes are switched LIVE below, and the site's controls carry
+    // `transition: all 300ms`: sampling 140 ms after a switch read
+    // interpolation frames between two themes' colours — values matching no
+    // token, which came and went between runs and only surfaced once the
+    // default theme stopped being the first one sampled. Freeze motion so a
+    // sample is the settled colour, whatever the theme order.
+    await pg.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
     await pg.waitForTimeout(500);
     for (const th of THEMES) {
       await pg.evaluate(t => document.documentElement.setAttribute('data-theme', t), th);
-      await pg.waitForTimeout(140);
+      await pg.waitForTimeout(200);
       const res = await pg.evaluate(AUDIT);
       for (const r of res) {
         if (r.media) { mediaSeen.add(`${r.tag}.${r.cls} :: ${r.color}`); continue; }

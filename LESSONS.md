@@ -624,3 +624,17 @@ for the e2e job. Locally, whenever the sibling is up:
 That boots this repo's own server against its isolated e2e database
 (162 passed, 1.4 min — the reused run took 5.6 min to time out). A run
 that is suddenly slow and fails only on auth is this trap, not a bug.
+
+## 2026-09-02 — the contrast audit sampled mid-transition, and only a theme reorder exposed it (factory)
+
+`scripts/audit-text-contrast.js` loads each page once and switches themes by
+flipping `data-theme` live, sampling 140 ms later. The site's controls carry
+`transition: all 300ms`, so a sample taken after a switch read interpolation
+frames between two themes' colours — values that matched no token and that
+came and went between runs (a button at 4.33 : 1 in one run, a different
+button at 3.94 in the next). It never showed while `classic` was sampled
+first, on a freshly loaded page; the day Glóð became the default and moved to
+the front of the list, Bjart was suddenly the one sampled mid-transition.
+Fix: the audit injects `transition: none; animation: none` before sampling.
+Lesson: an audit that mutates the page must freeze motion first, and a
+non-deterministic finding is a finding about the tool, not the page.

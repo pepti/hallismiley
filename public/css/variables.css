@@ -128,7 +128,11 @@
   --scene-filter: sepia(0.10) saturate(0.97);
   --scene-scrim: linear-gradient(180deg, rgba(42, 31, 23, 0.34) 0%, rgba(42, 31, 23, 0.18) 40%, rgba(42, 31, 23, 0.52) 100%);
   --scene-scrim-strength: 1;
-  --scene-chip-bg: rgba(42, 31, 23, 0.52);
+  /* 0.65, not the 0.52 the scrim uses: the credit chip is 11px caption text
+     that can land on a white sky, and at 0.52 it composited to 3.24 : 1
+     there. 0.65 clears AA (4.86) over pure white, so it no longer relies
+     on the photograph being dark under it. */
+  --scene-chip-bg: rgba(42, 31, 23, 0.65);
   --scene-chip-fg: #FDFAF4;
   --scene-aurora: 0;
   --hero-gradient:   linear-gradient(155deg, #FDFAF4 0%, #F2EBE0 38%, #E6D7C0 70%, #D8C3A5 100%);
