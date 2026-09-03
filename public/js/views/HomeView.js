@@ -47,7 +47,9 @@ const CATEGORY_ICONS = {
 //   rekstur     — the invoice list: amounts, VSK, what is outstanding.
 //   gervigreind — a change request being written: pick an element on the
 //                 page, describe the change, the AI builds it.
-// 800×800 JPEGs in public/assets/disciplines/, Glóð theme. Halli can replace
+// 800×800 JPEGs in public/assets/disciplines/, content-hashed in the filename:
+// /assets/ is served with max-age=3600, so a tile overwritten under the same
+// name kept showing the old picture for an hour (2026-09-03). Halli can replace
 // any of them from the inline editor (image upload per category).
 const DEFAULT_DISCIPLINE_CONTENT = {
   en: {
@@ -55,10 +57,10 @@ const DEFAULT_DISCIPLINE_CONTENT = {
     heading:     'What we build',
     description: 'One system with four faces. Every customer runs the same core; what differs is how much of it they switch on, and the modules we fit to their business.',
     categories: [
-      { id: 'web',        label: 'Web',        type: 'Sites & content',            img: '/assets/disciplines/vefur.jpg' },
-      { id: 'store',      label: 'Store',      type: 'Catalogue & checkout',       img: '/assets/disciplines/verslun.jpg' },
-      { id: 'operations', label: 'Operations', type: 'Inventory, invoicing & VAT', img: '/assets/disciplines/rekstur.jpg' },
-      { id: 'ai',         label: 'AI',         type: 'Agents that build & operate', img: '/assets/disciplines/gervigreind.jpg' },
+      { id: 'web',        label: 'Web',        type: 'Sites & content',            img: '/assets/disciplines/vefur.7f8d247c.jpg' },
+      { id: 'store',      label: 'Store',      type: 'Catalogue & checkout',       img: '/assets/disciplines/verslun.21ab6017.jpg' },
+      { id: 'operations', label: 'Operations', type: 'Inventory, invoicing & VAT', img: '/assets/disciplines/rekstur.40399c5b.jpg' },
+      { id: 'ai',         label: 'AI',         type: 'Agents that build & operate', img: '/assets/disciplines/gervigreind.fde5f2fa.jpg' },
     ],
   },
   is: {
@@ -66,10 +68,10 @@ const DEFAULT_DISCIPLINE_CONTENT = {
     heading:     'Því sem við smíðum',
     description: 'Eitt kerfi með fjórum hliðum. Allir viðskiptavinir keyra sama kjarnann; það sem er ólíkt er hversu mikið af honum er kveikt á og hvaða einingar við sníðum að rekstrinum.',
     categories: [
-      { id: 'web',        label: 'Vefur',      type: 'Vefir og efnisstjórnun',      img: '/assets/disciplines/vefur.jpg' },
-      { id: 'store',      label: 'Verslun',    type: 'Vörulisti og greiðslur',      img: '/assets/disciplines/verslun.jpg' },
-      { id: 'operations', label: 'Rekstur',    type: 'Lager, reikningar og VSK',    img: '/assets/disciplines/rekstur.jpg' },
-      { id: 'ai',         label: 'Gervigreind', type: 'Umboð sem smíða og reka',    img: '/assets/disciplines/gervigreind.jpg' },
+      { id: 'web',        label: 'Vefur',      type: 'Vefir og efnisstjórnun',      img: '/assets/disciplines/vefur.7f8d247c.jpg' },
+      { id: 'store',      label: 'Verslun',    type: 'Vörulisti og greiðslur',      img: '/assets/disciplines/verslun.21ab6017.jpg' },
+      { id: 'operations', label: 'Rekstur',    type: 'Lager, reikningar og VSK',    img: '/assets/disciplines/rekstur.40399c5b.jpg' },
+      { id: 'ai',         label: 'Gervigreind', type: 'Umboð sem smíða og reka',    img: '/assets/disciplines/gervigreind.fde5f2fa.jpg' },
     ],
   },
 };
