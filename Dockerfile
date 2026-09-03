@@ -18,7 +18,7 @@ FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a5
 # theoretical: the repo's FIRST CI run (2026-09-03, PR #2) red-gated on
 # CVE-2026-14456 (openssl DoS: libcrypto3/libssl3 3.5.7-r0, fixed in 3.5.8-r0)
 # with the newest published node:24-alpine still carrying the vulnerable build.
-#  patches the installed packages from the current Alpine branch
+# `apk upgrade` patches the installed packages from the current Alpine branch
 # repositories, so the pinned digest stays the reproducible base while the
 # security fixes ride on top. Runner stage only: the deps stage contributes
 # node_modules and nothing of its filesystem reaches production.
