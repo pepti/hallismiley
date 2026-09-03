@@ -31,6 +31,7 @@ const path = require('path');
 const db   = require('../config/database');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 const { isHiddenRoute } = require('../config/publicSurface');
+const { clientAppEnv }  = require('../config/appEnv');
 
 // Iceland scene hero preloads — the scene engine's LCP insurance. The JSON
 // twin of public/js/scenes/manifest.js (both written by
@@ -729,9 +730,12 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     `<meta name="robots" content="${esc(robots || 'index, follow')}" id="ssr-robots" />`
   );
   // App environment for the client (drives the in-app feedback widget + TEST
-  // chrome). Explicit APP_ENV wins; otherwise any non-production NODE_ENV is
-  // treated as "test" so the widget is available in dev/staging, hidden in prod.
-  const appEnv = process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'test');
+  // chrome). Stamped from config/appEnv.js — the same predicate the change-
+  // request gate opens on decides what is stamped as "test", so the widget can
+  // never mount on a stack whose submits the gate would 404. (This used to
+  // stamp any non-production NODE_ENV as "test" on its own; a NODE_ENV=staging
+  // stack then showed the widget to everyone while the gate treated it as live.)
+  const appEnv = clientAppEnv();
   html = html.replace(
     /<meta\s+name="app-env"[^>]*>/i,
     `<meta name="app-env" content="${esc(appEnv)}" id="ssr-app-env" />`

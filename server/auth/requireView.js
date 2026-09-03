@@ -6,14 +6,14 @@
 // request resolve the set only once.
 const Role = require('../models/Role');
 const { ALL } = require('./adminViews');
+const { heldRoles } = require('./roles');
 
 function requireView(viewId) {
   return async function viewGuard(req, res, next) {
     try {
       if (!req.user) return res.status(401).json({ error: 'Unauthorized', code: 401 });
       if (!req._resolvedViews) {
-        const held = Array.isArray(req.user.roles) ? req.user.roles : [req.user.role];
-        req._resolvedViews = await Role.getViewsForRoles(held);
+        req._resolvedViews = await Role.getViewsForRoles(heldRoles(req.user));
       }
       const views = req._resolvedViews;
       if (views.includes(ALL) || views.includes(viewId)) return next();

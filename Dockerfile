@@ -22,15 +22,28 @@ FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a5
 # repositories, so the pinned digest stays the reproducible base while the
 # security fixes ride on top. Runner stage only: the deps stage contributes
 # node_modules and nothing of its filesystem reaches production.
-RUN apk upgrade --no-cache
-
-# Drop the npm CLI the base image bundles. The runtime never calls it (CMD,
-# HEALTHCHECK and generate-version.js all run plain node), and its vendored
-# dependency tree (tar, undici, brace-expansion, ip-address, …) is what Trivy
-# flags as HIGH/CRITICAL node-pkg findings on every scan — none of them are
-# our app's dependencies (npm ls shows the patched versions), so the only way
-# to stop shipping them is to not ship npm. Also ~15 MB smaller.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+#
+# The layer must NOT be cacheable across builds. deploy.yml builds with a GHA
+# layer cache, and a RUN whose instruction string and parent digest never
+# change is restored from the first build forever — the packages would be
+# frozen exactly as the pin froze them, with a green Trivy scan from CI's
+# uncached build to hide it. APK_REFRESH gets a fresh value per build
+# (github.run_id) and appears in the instruction, so the cache key changes.
+# (`--no-cache` below is apk's flag — keep no package index — not Docker's.)
+#
+# The same RUN drops the npm CLI the base image bundles. The runtime never
+# calls it (CMD, HEALTHCHECK and generate-version.js all run plain node), and
+# its vendored dependency tree (tar, undici, brace-expansion, ip-address, …)
+# is what Trivy flags as HIGH/CRITICAL node-pkg findings on every scan — none
+# of them are our app's dependencies (npm ls shows the patched versions), so
+# the only way to stop shipping them is to not ship npm. This does NOT make
+# the image smaller: npm lives in the pinned base layer and a delete in a
+# later layer only writes overlay whiteouts, so the bytes are still pushed and
+# pulled. What changes is the merged filesystem — the one Trivy scans and the
+# one a process in this container can reach.
+ARG APK_REFRESH=manual
+RUN echo "apk refresh ${APK_REFRESH}" && apk upgrade --no-cache \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Non-root user for least-privilege container execution
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

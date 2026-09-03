@@ -638,3 +638,19 @@ the front of the list, Bjart was suddenly the one sampled mid-transition.
 Fix: the audit injects `transition: none; animation: none` before sampling.
 Lesson: an audit that mutates the page must freeze motion first, and a
 non-deterministic finding is a finding about the tool, not the page.
+
+## 2026-09-03 — a pinned base-image digest freezes the OS packages inside it (factory)
+
+The repo's first CI run red-gated on CVE-2026-14456 (openssl DoS in libcrypto3/libssl3) with the newest published `node:24-alpine` still carrying the vulnerable build. The digest pin is what makes the build reproducible, and it is also what stops Alpine's fix from ever reaching the image until upstream rebuilds — days, and outside our control. Fix: `apk upgrade --no-cache` in the runner stage, on top of the pin. Every scaffolded customer inherits this Dockerfile and this Trivy gate, so the template needs the same line.
+
+## 2026-09-03 — the bundled npm CLI is what Trivy keeps flagging, and deleting it does not shrink the image (factory)
+
+npm's vendored dependency tree (tar, undici, brace-expansion, ip-address, …) inside `node:*-alpine` is what produces the HIGH/CRITICAL node-pkg findings on every scan; none are the app's own dependencies. The runtime never calls npm (CMD, HEALTHCHECK, generate-version.js are plain node; migrations run at boot; the image has no sshd, so in-container `npm run` never worked anyway), so `rm -rf` it. Two things to know: the image gets no smaller — npm lives in the base layer and a later delete only writes overlay whiteouts — the win is the merged filesystem Trivy scans and a process can reach; and any doc that says `npm run …` inside the container was already fiction (`bootstrap.js`'s header comment), the canonical form is `node server/scripts/<script>.js` from a dev machine against the prod DB.
+
+## 2026-09-03 — a "security update" RUN on a pinned base is frozen by the build cache (factory)
+
+`RUN apk upgrade` directly on a digest-pinned `FROM` has a constant cache key — instruction string and parent digest never change — so a deploy workflow with `cache-from: type=gha` restores the layer from the first build forever. The upgrade runs exactly once and the deployed image is as frozen as the pin, while CI's uncached `docker build` re-runs it and Trivy greenlights a different image than the one pushed. Bust it deliberately: an `ARG APK_REFRESH` consumed in the RUN and fed `github.run_id` from the workflow. `apk --no-cache` is apk's flag, not Docker's, and busts nothing.
+
+## 2026-09-03 — "which environment is this?" was answered in five places with different rules (project)
+
+The change-request gate, ssrMeta's app-env stamp, the settings endpoint, the submit limiter's skip and the MCP env tag each derived the environment on their own. The review of PR #2 caught two of them disagreeing on one request: ssrMeta stamped a NODE_ENV=staging stack as "test" (widget mounted for everyone) while the gate treated it as live (every submit 404). The fix was one `server/config/appEnv.js` with `appEnv()` / `isTestStack()` / `clientAppEnv()` and every consumer deriving from it; the settings endpoint returns the gate's own boolean (`openToEveryone`) so the admin view stops re-deriving the rule. Lesson: when a predicate guards a door AND drives a badge, it must be one function, or the badge will eventually promise a door that is shut.

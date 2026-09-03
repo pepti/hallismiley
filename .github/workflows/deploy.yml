@@ -115,6 +115,7 @@ jobs:
           # self-update checker cannot tell whether a published release is newer
           # than what is running (docs/SELF-UPDATE.md).
           build-args: |
+            APK_REFRESH=${{ github.run_id }}
             GIT_SHA=${{ env.DEPLOY_SHA }}
             BUILT_AT=${{ github.event.repository.updated_at }}
             RELEASE_CHANNEL=stable

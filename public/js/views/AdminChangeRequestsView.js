@@ -59,10 +59,12 @@ export class AdminChangeRequestsView {
     try {
       const res = await fetch('/api/v1/admin/change-requests/settings', { credentials: 'include' });
       if (!res.ok) return;
-      const { enabled, appEnv } = await res.json();
+      // openToEveryone is the server gate's own answer (config/appEnv.js);
+      // this view no longer guesses it from the env string.
+      const { enabled, openToEveryone } = await res.json();
       const input = sec.querySelector('#cr-switch-input');
       input.checked = !!enabled;
-      if (appEnv && appEnv !== 'production') {
+      if (openToEveryone === true) {
         sec.querySelector('#cr-switch-help').textContent = t('adminCR.switchTestNote');
       }
       input.addEventListener('change', () => this._saveSwitch(input));
