@@ -38,10 +38,12 @@ const CATEGORY_ICONS = {
 //
 // DRAFT (2026-09-01): the four lines of work the company sells, replacing the
 // portfolio's disciplines. Since 2026-09-03 (Halli: show examples of our own
-// work) each tile is a screenshot of the product itself, taken from a running
-// instance seeded with the books demo (server/scripts/seed-books-demo.js):
-//   vefur       — this site's /thjonusta page: a page the platform serves.
-//   verslun     — the orders back office with paid/unpaid, fulfilment.
+// work) each tile is a screenshot of the product itself — two from the product
+// site rekstrarkerfi.is (sibling repo, for variety: Halli 2026-09-03) and two
+// from a running instance seeded with the books demo
+// (server/scripts/seed-books-demo.js):
+//   vefur       — rekstrarkerfi.is landing page: a web page the company built.
+//   verslun     — rekstrarkerfi.is "Verslun & pantanir" feature card.
 //   rekstur     — the invoice list: amounts, VSK, what is outstanding.
 //   gervigreind — a change request being written: pick an element on the
 //                 page, describe the change, the AI builds it.
