@@ -10,6 +10,28 @@ RUN npm ci --omit=dev
 # ── Stage 2: production image ─────────────────────────────────────────────────
 FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runner
 
+# Apply Alpine security updates on top of the pinned digest (ice #230).
+#
+# The digest is what makes the build reproducible, and it is also what freezes
+# the OS packages inside it: when Alpine ships a fix, the image stays vulnerable
+# until the upstream Node image is rebuilt — days, and outside our control. Not
+# theoretical: the repo's FIRST CI run (2026-09-03, PR #2) red-gated on
+# CVE-2026-14456 (openssl DoS: libcrypto3/libssl3 3.5.7-r0, fixed in 3.5.8-r0)
+# with the newest published node:24-alpine still carrying the vulnerable build.
+#  patches the installed packages from the current Alpine branch
+# repositories, so the pinned digest stays the reproducible base while the
+# security fixes ride on top. Runner stage only: the deps stage contributes
+# node_modules and nothing of its filesystem reaches production.
+RUN apk upgrade --no-cache
+
+# Drop the npm CLI the base image bundles. The runtime never calls it (CMD,
+# HEALTHCHECK and generate-version.js all run plain node), and its vendored
+# dependency tree (tar, undici, brace-expansion, ip-address, …) is what Trivy
+# flags as HIGH/CRITICAL node-pkg findings on every scan — none of them are
+# our app's dependencies (npm ls shows the patched versions), so the only way
+# to stop shipping them is to not ship npm. Also ~15 MB smaller.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 # Non-root user for least-privilege container execution
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
