@@ -68,17 +68,72 @@ Suites share one database and Jest orders them by cached duration, so a suite's
 4. **Fix the dependency, not the symptom.** No retries, no raised timeouts: make
    the assertion independent of what the previous suite left behind.
 
-## Per-worker databases (landed 2026-09-02, ported from icelandicstore)
+## Per-branch, per-worker databases (landed 2026-09-02, ported from icelandicstore)
 
 Integration suites run in **4 parallel Jest workers**, each against its own
-database. `tests/globalSetup.js` migrates ONE template (`orangesmiley_tmpl_test`)
-in a child process, then `CREATE DATABASE … TEMPLATE` clones it per worker
-(`orangesmiley_w1_test` … `_w4_test`, `synchronous_commit = off`);
-`tests/env.js` derives each worker's `DATABASE_URL` via `tests/workerDb.js` by
-inserting the worker id BEFORE the `_test` suffix, so the `_test$` safety guard
-still holds. Within a worker, suites run serially — exactly the old semantics,
-so the ordering rules above are unchanged. Serial fallback: `npm test -- --runInBand`
-(uses `_w1_test` only).
+database, and the whole set is **scoped to the checked-out branch** so two
+worktrees (or a run plus an orphaned Jest child) never share one.
+
+**Naming** (`tests/workerDb.js`, unit-tested in `tests/unit/workerDb.test.js`):
+
+| Database | Example on branch `feat/harvest-h2` |
+|---|---|
+| Base (never created, only derived from) | `orangesmiley_feat_harvest_h2_test` |
+| Migrated template | `orangesmiley_feat_harvest_h2_tmpl_test` |
+| Worker N | `orangesmiley_feat_harvest_h2_w<N>_test` |
+
+The branch name is lower-cased, every non-alphanumeric run becomes `_`, and the
+slug is trimmed so the longest derived name fits Postgres's 63-byte identifier
+cap (Postgres would otherwise truncate silently). Detached HEAD falls back to
+the worktree directory name; no git at all falls back to the unscoped
+`orangesmiley_test`. Every derived name keeps the `_test` suffix — the
+infixes go BEFORE it — because globalSetup/globalTeardown refuse to drop
+anything else.
+
+**Resolution order for the base:**
+
+1. `TEST_DATABASE_URL` — explicit override, used verbatim. CI pins
+   `…/orangesmiley_test` (a fresh service container per job, so no scoping
+   needed). Use it locally when you want a fixed name, e.g. two runs of the
+   same branch at once.
+2. Otherwise host/port/credentials come from `DATABASE_URL` (process env, then
+   `.env`, read without loading it into the env), else
+   `postgres:postgres@localhost:5432`, and the database NAME is replaced with
+   the per-branch one.
+
+`npm test` prints the resolved base as its first line:
+
+```
+[jest] test database base: orangesmiley_feat_harvest_h2_test on localhost:5432 (from branch) — template …, workers …
+```
+
+**Lifecycle.** `tests/globalSetup.js` resolves the base, pins it into
+`TEST_DATABASE_URL` for the workers, migrates ONE template in a child process,
+then `CREATE DATABASE … TEMPLATE` clones it per worker
+(`synchronous_commit = off`); `tests/env.js` derives each worker's
+`DATABASE_URL` from `JEST_WORKER_ID`. Within a worker, suites run serially —
+exactly the old semantics, so the ordering rules above are unchanged. Serial
+fallback: `npm test -- --runInBand` (uses `_w1_test` only).
+
+**Cleanup.** `tests/globalTeardown.js` drops the template and worker databases
+at the end of every run (they are rebuilt from scratch next time anyway).
+`KEEP_TEST_DB=1 npm test` keeps them so you can inspect a worker DB after a
+failure. A run that is killed before teardown — stopping a shell does NOT stop
+its Jest child — leaves its set behind, one per branch:
+
+```bash
+npm run test:db:clean              # drop every *_w<N>_test / *_tmpl_test (+ legacy orangesmiley_test)
+npm run test:db:clean -- --dry-run # list only
+npm run test:db:clean -- --e2e     # also the Playwright orangesmiley_e2e_*_test databases
+```
+
+Databases with an active session are skipped, never terminated — the script
+cleans orphans, it does not stop someone else's run.
+
+**Still unsafe:** two concurrent runs of the SAME branch (or pinned to the same
+`TEST_DATABASE_URL`) still race in globalSetup's DROP; the advisory lock there
+only serialises the drop/create step. Give one of them its own
+`TEST_DATABASE_URL`.
 
 Two rules the port carries: never add an `afterAll` that ends the app pool
 (fire-and-forget analytics/event-log writes land after the last test; the 1 s

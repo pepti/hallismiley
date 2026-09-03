@@ -12,7 +12,9 @@
 const { Pool } = require('pg');
 const { execFile } = require('child_process');
 const path = require('path');
-const { workerDbUrl, baseTestUrl } = require('./workerDb');
+const {
+  workerDbUrl, resolveTestBaseUrl, templateDbName, adminDbUrl,
+} = require('./workerDb');
 
 // Stable key for pg_advisory_lock on the admin DB. Serialises the DROP/CREATE
 // step across concurrent globalSetup runs (e.g. an editor's auto-test +
@@ -20,18 +22,23 @@ const { workerDbUrl, baseTestUrl } = require('./workerDb');
 // pg_database_datname_index".
 //
 // Note: this lock only covers DROP/CREATE, not migration or test execution.
-// Two truly concurrent `npm test` runs against the same TEST_DATABASE_URL
-// still race — process B's drop can wipe process A's data mid-test. The
-// user-visible failure mode becomes a clean "database does not exist" instead
-// of a pile of cascading FK errors, which is a strict improvement. Per-branch
-// TEST_DATABASE_URL names remain the real answer for concurrent runs.
+// Two truly concurrent `npm test` runs against the SAME base still race —
+// process B's drop can wipe process A's data mid-test. The user-visible
+// failure mode becomes a clean "database does not exist" instead of a pile
+// of cascading FK errors, which is a strict improvement. Since 2026-09-02 the
+// default base is scoped per branch (tests/workerDb.js), so the remaining
+// race is two runs of the same branch at once — or two runs pinned to one
+// explicit TEST_DATABASE_URL.
 const SETUP_LOCK_KEY = 1751215212; // 0x68616c6c — "hall" as int32
 
 module.exports = async function globalSetup(globalConfig) {
-  const baseUrl = baseTestUrl();
+  const { url: baseUrl, name: dbName, source } = resolveTestBaseUrl();
+  // Pin the resolved base for the workers (and globalTeardown): they inherit
+  // this process's env, so every one of them derives from the same string
+  // instead of re-running the git lookup — and they cannot disagree with the
+  // names provisioned here.
+  process.env.TEST_DATABASE_URL = baseUrl;
 
-  const url    = new URL(baseUrl);
-  const dbName = url.pathname.replace(/^\//, '');
   if (!dbName || !/_test$/.test(dbName)) {
     throw new Error(
       `Refusing to drop DB "${dbName}" — name must end in _test for safety.`
@@ -45,21 +52,26 @@ module.exports = async function globalSetup(globalConfig) {
     workers.push(workerDbUrl(i, baseUrl));
   }
 
-  const adminUrl = new URL(baseUrl);
-  adminUrl.pathname = '/postgres';
-
   // The migrated template. Keeps the `_test` suffix so it satisfies the same
   // safety guard as every other database this file touches.
-  const templateName = dbName.replace(/_test$/, '_tmpl_test');
+  const templateName = templateDbName(dbName);
   const templateUrl = (() => {
     const u = new URL(baseUrl);
     u.pathname = `/${templateName}`;
     return u.toString();
   })();
 
+  // Say which base this run uses: the scoped default is derived, so a
+  // collision (or a stray override) should be visible in the run's first line.
+  const host = new URL(baseUrl).host;
+  process.stdout.write(
+    `[jest] test database base: ${dbName} on ${host} (from ${source}) — ` +
+    `template ${templateName}, workers ${workers.map(w => w.name).join(', ')}\n`
+  );
+
   const migrateScript = path.join(__dirname, '..', 'server', 'scripts', 'migrate.js');
 
-  const admin = new Pool({ connectionString: adminUrl.toString() });
+  const admin = new Pool({ connectionString: adminDbUrl(baseUrl) });
   try {
     // Acquire a session-scoped advisory lock so the whole provisioning block
     // runs sequentially even when two `npm test` processes race.

@@ -86,7 +86,7 @@ npm run test:ci    # CI mode (--ci --forceExit --coverage, 4 parallel workers)
 npm test -- --runInBand   # serial fallback for debugging cross-suite order
 ```
 
-Tests are integration tests and require a running PostgreSQL instance. `tests/globalSetup.js` migrates one template database (`orangesmiley_tmpl_test`) and clones it per Jest worker (`orangesmiley_w1_test` … `_w4_test`); set `TEST_DATABASE_URL` to point the derivation at another server — the base name must end in `_test`.
+Tests are integration tests and require a running PostgreSQL instance. The base test database is scoped to the checked-out branch (`orangesmiley_<branch-slug>_test`, so parallel worktrees never share one); `tests/globalSetup.js` migrates one template (`…_tmpl_test`) and clones it per Jest worker (`…_w1_test` … `_w4_test`), prints which base it chose, and `tests/globalTeardown.js` drops the set again (`KEEP_TEST_DB=1` keeps it). Set `TEST_DATABASE_URL` to override the derivation entirely — the name must end in `_test`. Orphans from killed runs: `npm run test:db:clean`. Details: `docs/TESTING.md`.
 
 ---
 
