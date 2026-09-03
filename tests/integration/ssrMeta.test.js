@@ -116,7 +116,7 @@ describe('SSR meta-injection — SPA catch-all', () => {
       }
     );
 
-    test.each(['/is/', '/is/thjonusta', '/is/verkefni', '/is/um-okkur', '/is/hafa-samband', '/is/personuvernd'])(
+    test.each(['/is/', '/is/thjonusta', '/is/um-okkur', '/is/hafa-samband', '/is/personuvernd'])(
       '%s stays indexable',
       async (path) => {
         const res = await request(app).get(path);

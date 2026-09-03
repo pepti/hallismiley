@@ -618,7 +618,6 @@ export class HomeView {
           <h2 class="lol-projects__heading" data-disc-field="heading">${escHtml(d.heading)}</h2>
           <p class="lol-projects__desc" data-disc-field="description">${escHtml(d.description)}</p>
           <div class="lol-projects__btns">
-            <a href="${href('/verkefni')}" class="lol-btn--gold">${t('home.viewAllProjects')}</a>
             <a href="${href('/')}" class="lol-btn--teal" id="contact-btn">${t('home.getInTouch')}</a>
           </div>
           <div class="lol-projects__categories" role="tablist" aria-label="Project disciplines">
@@ -744,7 +743,6 @@ export class HomeView {
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
         <a href="${href('/')}"             class="lol-footer__nav-link">${t('nav.home')}</a>
         <a href="${href('/thjonusta')}"    class="lol-footer__nav-link">${t('nav.thjonusta')}</a>
-        <a href="${href('/verkefni')}"     class="lol-footer__nav-link">${t('nav.projects')}</a>
         <a href="${href('/um-okkur')}"     class="lol-footer__nav-link">${t('nav.umOkkur')}</a>
         <a href="${href('/hafa-samband')}" class="lol-footer__nav-link">${t('nav.hafaSamband')}</a>
       </nav>
