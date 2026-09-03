@@ -85,7 +85,7 @@ describe('Rate limiter — 429 response', () => {
 });
 
 // ── Auth-specific limiter (defined in authRoutes.js) ─────────────────────────
-// We verify the auth limiter config is tight (max=10) by inspecting the route
+// We verify the auth limiter is wired (max=50 since the ×5 raise, ice #201) by inspecting the route
 // definition — the behaviour itself is covered by the dedicated limiter tests above.
 
 describe('Auth limiter — configuration check', () => {

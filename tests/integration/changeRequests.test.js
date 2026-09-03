@@ -101,6 +101,26 @@ describe('POST /api/v1/change-requests — environment gate', () => {
     await enable(false);
     expect((await submit(adminCookie)).status).toBe(404);
   });
+
+  test('an admin granted through the role SET (users.role stays "user") can submit once the switch is on', async () => {
+    // Admin → Roles never touches users.role; the gate must read the set.
+    await db.query(
+      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'admin') ON CONFLICT DO NOTHING`,
+      [userId]
+    );
+    await enable(true);
+    const res = await submit(userCookie);
+    expect(res.status).toBe(201);
+  });
+
+  test('an app-env that is neither test nor development is treated as live (no anonymous door)', async () => {
+    setAppEnv('staging');
+    expect((await submit(null)).status).toBe(404);
+    expect((await submit(adminCookie)).status).toBe(404); // switch is off
+    await enable(true);
+    expect((await submit(adminCookie)).status).toBe(201);
+    expect((await submit(null)).status).toBe(404);
+  });
 });
 
 // ── Admin settings endpoints ─────────────────────────────────────────────────

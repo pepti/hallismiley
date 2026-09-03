@@ -188,7 +188,8 @@ app.post('/api/v1/shop/webhook',
 // Change-request submissions (non-prod) may carry an inline base64 screenshot,
 // so this path gets a larger JSON limit. Mounted BEFORE the global 100 kb
 // parser — once body-parser sets req._body the global parser short-circuits for
-// this path. The route is still 404 in production via requireTestEnv.
+// this path. The route is gated by changeRequestGate: open on test/dev stacks,
+// admins only on the live site once the Admin → Feedback switch is on.
 app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
 
 // Product CSV import posts the whole catalogue as JSON rows, so this path gets a

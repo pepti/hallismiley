@@ -12,21 +12,10 @@ const router    = express.Router();
 const ctrl = require('../controllers/changeRequestController');
 const { changeRequestGate } = require('../middleware/requireTestEnv');
 const { csrfProtect }    = require('../middleware/csrf');
-const { lucia }          = require('../auth/lucia');
-
-// Optional auth — attach req.user if a valid session cookie is present, but
-// don't reject if missing (logged-out testers can file requests).
-async function softAuth(req, res, next) {
-  try {
-    const sid = lucia.readSessionCookie(req.headers.cookie ?? '');
-    if (!sid) return next();
-    const { session, user } = await lucia.validateSession(sid);
-    if (session && user && !user.disabled) { req.user = user; req.session = session; }
-    return next();
-  } catch {
-    return next();
-  }
-}
+// The shared soft auth resolves req.user.roles; the gate decides on the role
+// SET, so a private copy that only attached the user row would 404 every admin
+// granted through Admin → Roles.
+const { softAuth }       = require('../middleware/softAuth');
 
 // Light abuse cap. Skipped in dev/test like the other write limiters.
 const submitLimiter = rateLimit({

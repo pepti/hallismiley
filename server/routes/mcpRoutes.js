@@ -28,7 +28,7 @@ function mcpEnabled() {
 }
 
 // Dark by default: a stack that hasn't opted in behaves as if the route does
-// not exist (404 mirrors requireTestEnv's reveal-nothing posture).
+// not exist (404 mirrors changeRequestGate's reveal-nothing posture).
 router.use((req, res, next) => {
   if (!mcpEnabled()) return res.status(404).json({ error: 'Not found', code: 404 });
   next();
