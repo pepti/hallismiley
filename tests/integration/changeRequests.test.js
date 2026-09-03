@@ -14,6 +14,7 @@
 const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
+const UserRole = require('../../server/models/UserRole');
 const {
   createTestAdminUser,
   createTestRegularUser,
@@ -101,6 +102,35 @@ describe('POST /api/v1/change-requests — environment gate', () => {
     await enable(false);
     expect((await submit(adminCookie)).status).toBe(404);
   });
+
+  test('an admin granted through the role SET (users.role stays "user") can submit once the switch is on', async () => {
+    // Admin → Roles never touches users.role; the gate must read the set.
+    await db.query(
+      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'admin') ON CONFLICT DO NOTHING`,
+      [userId]
+    );
+    // The raw INSERT bypasses UserRole.add's cache invalidation; the role set
+    // is cached per user for 30 s, so drop it explicitly rather than rely on
+    // nothing having resolved this user's roles since cleanTables().
+    UserRole.invalidateUser(userId);
+    await enable(true);
+    const res = await submit(userCookie);
+    expect(res.status).toBe(201);
+  });
+
+  test('an app-env that is neither test nor development is treated as live (no anonymous door)', async () => {
+    // The live-site matrix is pinned above under 'production'; the only new
+    // information here is that 'staging' takes the live branch.
+    setAppEnv('staging');
+    expect((await submit(null)).status).toBe(404);
+    await enable(true);
+    expect((await submit(adminCookie)).status).toBe(201);
+  });
+
+  test('a development app-env opens the anonymous door like test does', async () => {
+    setAppEnv('development');
+    expect((await submit(null)).status).toBe(201);
+  });
 });
 
 // ── Admin settings endpoints ─────────────────────────────────────────────────
@@ -111,7 +141,7 @@ describe('/api/v1/admin/change-requests/settings', () => {
       .get('/api/v1/admin/change-requests/settings')
       .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: false, appEnv: 'production' });
+    expect(res.body).toEqual({ enabled: false, appEnv: 'production', openToEveryone: false });
   });
 
   test('PATCH persists the switch and GET reads it back', async () => {

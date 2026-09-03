@@ -6,7 +6,7 @@
 // the whole session as one batch to POST /api/v1/change-requests.
 import { t, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { showToast } from './Toast.js';
-import { getCSRFToken, getUser } from '../services/auth.js';
+import { getCSRFToken, getUser, isAdmin } from '../services/auth.js';
 import { setDemoMode } from '../services/themePrefs.js';
 
 const BASKET_KEY = 'cr_basket_v1';
@@ -634,7 +634,7 @@ export function setChangeRequestsEnabled(enabled) {
 // The single answer to "should the widget be on screen right now?": everyone
 // on TEST, admins only elsewhere and only once the switch is on.
 export function shouldShowChangeRequests() {
-  return isTestEnv() || (_enabledOnProd && getUser()?.role === 'admin');
+  return isTestEnv() || (_enabledOnProd && isAdmin());
 }
 
 // Mount or tear down to match. Safe to call repeatedly — both halves are

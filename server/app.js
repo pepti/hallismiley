@@ -185,10 +185,12 @@ app.post('/api/v1/shop/webhook',
   express.raw({ type: 'application/json', limit: '1mb' }),
   shopController.handleStripeWebhook);
 
-// Change-request submissions (non-prod) may carry an inline base64 screenshot,
-// so this path gets a larger JSON limit. Mounted BEFORE the global 100 kb
-// parser — once body-parser sets req._body the global parser short-circuits for
-// this path. The route is still 404 in production via requireTestEnv.
+// Change-request submissions may carry an inline base64 screenshot, so this
+// path gets a larger JSON limit. Mounted BEFORE the global 100 kb parser —
+// once body-parser sets req._body the global parser short-circuits for this
+// path. Note this parser also runs before the rate limiters and the route's
+// gate (middleware/changeRequestGate.js): a body on this path is parsed before
+// anything can refuse it, which is the price of the ordering trick above.
 app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
 
 // Product CSV import posts the whole catalogue as JSON rows, so this path gets a
@@ -508,6 +510,11 @@ app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), u
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
 app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  uploadStaticOpts));
+// Change-request screenshots: persistScreenshot (changeRequestController.js)
+// writes under UPLOAD_ROOT/change-requests and links /assets/change-requests/…
+// from the admin inbox. This mount was missing, so on every stack with
+// UPLOAD_ROOT set — which production requires — the link 404ed (PR #2 review).
+app.use('/assets/change-requests', express.static(path.join(UPLOAD_ROOT, 'change-requests'), uploadStaticOpts));
 // Iceland scene renditions — baked (not uploads), but they share the uploads'
 // immutable policy: filenames are content-hashed by build-iceland-scenes.js,
 // so a year of immutable caching is correct where the generic public/ mount

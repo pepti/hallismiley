@@ -10,7 +10,7 @@
  * localStorage value can switch it on when the server says production.
  * Regression guard for the leftover 'test' override that showed the badge on
  * icelandicstore-prod-app (and handed an admin a change-request widget whose
- * submit endpoint 404s there — requireTestEnv).
+ * submit endpoint 404s there — changeRequestGate).
  *
  * The module is authored as ESM but Jest's babel-jest transform (babel.config.js
  * with @babel/preset-env) compiles it to CJS for require(). It reads `document`

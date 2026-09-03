@@ -53,7 +53,7 @@ const KEYS = {
   bkAccountantEmail:  'books.accountant_email',
   bkCoaConfirmedAt:   'books.coa_confirmed_at',
   // Change-request widget on PROD (admins only; a non-prod app-env always has
-  // it on — see changeRequestGate in middleware/requireTestEnv.js, ice #206).
+  // it on — see changeRequestGate in middleware/changeRequestGate.js, ice #206).
   changeRequestsEnabled: 'change_requests.enabled',
 };
 
