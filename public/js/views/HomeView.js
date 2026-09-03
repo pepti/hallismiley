@@ -37,20 +37,26 @@ const CATEGORY_ICONS = {
 // as { en, is } for locale-aware fallback (picked via pick() at load time).
 //
 // DRAFT (2026-09-01): the four lines of work the company sells, replacing the
-// portfolio's disciplines. Imagery is the site's own licensed Iceland set
-// (public/assets/iceland, credited in CREDITS.md from the footer) rather than
-// the timber photos and hotlinked Unsplash placeholders that were here — the
-// tiles are decorative, and the site already speaks in these landscapes.
+// portfolio's disciplines. Since 2026-09-03 (Halli: show examples of our own
+// work) each tile is a screenshot of the product itself, taken from a running
+// instance seeded with the books demo (server/scripts/seed-books-demo.js):
+//   vefur       — this site's /thjonusta page: a page the platform serves.
+//   verslun     — the orders back office with paid/unpaid, fulfilment.
+//   rekstur     — the invoice list: amounts, VSK, what is outstanding.
+//   gervigreind — a change request being written: pick an element on the
+//                 page, describe the change, the AI builds it.
+// 800×800 JPEGs in public/assets/disciplines/, Glóð theme. Halli can replace
+// any of them from the inline editor (image upload per category).
 const DEFAULT_DISCIPLINE_CONTENT = {
   en: {
     eyebrow:     'Browse by',
     heading:     'What we build',
     description: 'One system with four faces. Every customer runs the same core; what differs is how much of it they switch on, and the modules we fit to their business.',
     categories: [
-      { id: 'web',        label: 'Web',        type: 'Sites & content',            img: '/assets/iceland/skogafoss-960.974226bb.jpg' },
-      { id: 'store',      label: 'Store',      type: 'Catalogue & checkout',       img: '/assets/iceland/landmannalaugar-960.c98af1b9.jpg' },
-      { id: 'operations', label: 'Operations', type: 'Inventory, invoicing & VAT', img: '/assets/iceland/sigoldugljufur-960.bc3740d3.jpg' },
-      { id: 'ai',         label: 'AI',         type: 'Agents that build & operate', img: '/assets/iceland/glacier-960.ab82e3c1.jpg' },
+      { id: 'web',        label: 'Web',        type: 'Sites & content',            img: '/assets/disciplines/vefur.jpg' },
+      { id: 'store',      label: 'Store',      type: 'Catalogue & checkout',       img: '/assets/disciplines/verslun.jpg' },
+      { id: 'operations', label: 'Operations', type: 'Inventory, invoicing & VAT', img: '/assets/disciplines/rekstur.jpg' },
+      { id: 'ai',         label: 'AI',         type: 'Agents that build & operate', img: '/assets/disciplines/gervigreind.jpg' },
     ],
   },
   is: {
@@ -58,10 +64,10 @@ const DEFAULT_DISCIPLINE_CONTENT = {
     heading:     'Því sem við smíðum',
     description: 'Eitt kerfi með fjórum hliðum. Allir viðskiptavinir keyra sama kjarnann; það sem er ólíkt er hversu mikið af honum er kveikt á og hvaða einingar við sníðum að rekstrinum.',
     categories: [
-      { id: 'web',        label: 'Vefur',      type: 'Vefir og efnisstjórnun',      img: '/assets/iceland/skogafoss-960.974226bb.jpg' },
-      { id: 'store',      label: 'Verslun',    type: 'Vörulisti og greiðslur',      img: '/assets/iceland/landmannalaugar-960.c98af1b9.jpg' },
-      { id: 'operations', label: 'Rekstur',    type: 'Lager, reikningar og VSK',    img: '/assets/iceland/sigoldugljufur-960.bc3740d3.jpg' },
-      { id: 'ai',         label: 'Gervigreind', type: 'Umboð sem smíða og reka',    img: '/assets/iceland/glacier-960.ab82e3c1.jpg' },
+      { id: 'web',        label: 'Vefur',      type: 'Vefir og efnisstjórnun',      img: '/assets/disciplines/vefur.jpg' },
+      { id: 'store',      label: 'Verslun',    type: 'Vörulisti og greiðslur',      img: '/assets/disciplines/verslun.jpg' },
+      { id: 'operations', label: 'Rekstur',    type: 'Lager, reikningar og VSK',    img: '/assets/disciplines/rekstur.jpg' },
+      { id: 'ai',         label: 'Gervigreind', type: 'Umboð sem smíða og reka',    img: '/assets/disciplines/gervigreind.jpg' },
     ],
   },
 };

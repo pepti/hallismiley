@@ -41,7 +41,12 @@ const WIPE = process.argv.includes('--wipe');
 // Demo rows are tagged so --wipe can find exactly what this script created and
 // leave anything real alone.
 const DEMO_SLUG_PREFIX = 'demo-';
-const DEMO_EMAIL_DOMAIN = '@demo.hallismiley.is';
+const DEMO_EMAIL_DOMAIN = '@demo.orangesmiley.is';
+// The wipe matches ANY demo domain, not the constant above: the constant moved
+// from hallismiley to orangesmiley on 2026-09-03 and a wipe keyed on the new
+// value left the old rows behind, invoices RESTRICT-locked to them, and the
+// re-seed doubled everything. Demo customers are @demo.<anything> by definition.
+const DEMO_WIPE_PATTERN = '%@demo.%';
 
 // A checksum-valid kennitala (modulus-11), not a registered one.
 const SELLER_KENNITALA = '1203894599';
@@ -274,8 +279,8 @@ async function wipe() {
                       WHEN name = 'invoice' THEN 1001 ELSE 1 END`);
     await db.query(
       `DELETE FROM order_items WHERE order_id IN
-         (SELECT id FROM orders WHERE guest_email LIKE $1)`, [`%${DEMO_EMAIL_DOMAIN}`]);
-    await db.query(`DELETE FROM orders WHERE guest_email LIKE $1`, [`%${DEMO_EMAIL_DOMAIN}`]);
+         (SELECT id FROM orders WHERE guest_email LIKE $1)`, [DEMO_WIPE_PATTERN]);
+    await db.query(`DELETE FROM orders WHERE guest_email LIKE $1`, [DEMO_WIPE_PATTERN]);
     await db.query(`DELETE FROM products WHERE slug LIKE $1`, [`${DEMO_SLUG_PREFIX}%`]);
   } finally {
     for (const [table, trig] of guarded) {
