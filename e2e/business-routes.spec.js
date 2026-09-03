@@ -48,7 +48,7 @@ for (const locale of ['is', 'en']) {
 
     test(`the whole nav is walkable in ${locale}`, async ({ page }) => {
       await page.goto(`/${locale}/`);
-      for (const path of ['/thjonusta', '/verkefni', '/um-okkur', '/hafa-samband']) {
+      for (const path of ['/thjonusta', '/um-okkur', '/hafa-samband']) {
         await page.locator(`.lol-nav__center [data-route="${path}"]`).click();
         await expect(page).toHaveURL(new RegExp(`/${locale}${path}$`));
         await page.goto(`/${locale}/`);

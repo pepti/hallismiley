@@ -121,7 +121,7 @@ test.describe('Iceland scene — inner pages', () => {
     // both must land cleanly).
     await page.goto('/is/');
     await expect(page.locator('video.lol-hero__bg')).toBeAttached({ timeout: 10_000 });
-    for (const link of ['thjonusta', 'verkefni', 'um-okkur', 'hafa-samband']) {
+    for (const link of ['thjonusta', 'um-okkur', 'hafa-samband']) {
       await page.locator(`.lol-nav__link[data-route="/${link}"]`).first().click();
       await expect(page.locator('.ice-scene').first()).toBeVisible({ timeout: 10_000 });
     }

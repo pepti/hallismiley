@@ -15,7 +15,6 @@
  */
 
 const express = require('express');
-const { query } = require('../config/database');
 const { forcedLocaleFor } = require('../config/i18n');
 
 const APP_URL = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
@@ -25,7 +24,6 @@ const APP_URL = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\
 const STATIC_ROUTES = [
   { path: '',                 priority: '1.0', changefreq: 'monthly', includeXDefault: true  },
   { path: '/thjonusta',       priority: '0.9', changefreq: 'monthly'                         },
-  { path: '/verkefni',        priority: '0.8', changefreq: 'weekly'                          },
   { path: '/um-okkur',        priority: '0.7', changefreq: 'monthly'                         },
   { path: '/hafa-samband',    priority: '0.7', changefreq: 'monthly'                         },
   { path: '/personuvernd',    priority: '0.3', changefreq: 'yearly'                          },
@@ -41,13 +39,6 @@ function xmlEscape(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-function isoDate(d) {
-  if (!d) return null;
-  const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
 }
 
 // Build a <url> entry with both locales linked via hreflang.
@@ -113,11 +104,10 @@ function urlEntry({ localePath, lastmod, priority = '0.5', changefreq = 'monthly
 }
 
 async function buildSitemap() {
-  // Only projects (the case-study surface) are advertised. News articles and
-  // products still exist and still render — their list pages are hidden, so
-  // linking their details here would contradict the noindex ssrMeta emits.
-  const projectsRes = await query('SELECT id, updated_at FROM projects ORDER BY updated_at DESC');
-
+  // No detail routes are advertised. Projects (case studies) were the one
+  // surface listed here until 2026-09-03, when /verkefni joined the hidden
+  // list (Halli); linking its details now would contradict the noindex
+  // ssrMeta emits, same as news and products before it.
   const urls = [];
 
   // Static pages. Locale-locked routes are derived from config/i18n rather than
@@ -129,16 +119,6 @@ async function buildSitemap() {
       changefreq: r.changefreq,
       includeXDefault: !!r.includeXDefault,
       onlyLocale: forcedLocaleFor(r.path || '/'),
-    }));
-  }
-
-  // Case studies — ID-based routes under the business slug
-  for (const row of projectsRes.rows) {
-    urls.push(urlEntry({
-      localePath: `/verkefni/${row.id}`,
-      lastmod: isoDate(row.updated_at),
-      priority: '0.7',
-      changefreq: 'monthly',
     }));
   }
 

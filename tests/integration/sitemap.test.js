@@ -39,7 +39,7 @@ describe('GET /sitemap.xml', () => {
   });
 
   test('includes both locale variants of every business route', () => {
-    for (const path of ['/', '/thjonusta', '/verkefni', '/um-okkur', '/hafa-samband', '/personuvernd', '/terms']) {
+    for (const path of ['/', '/thjonusta', '/um-okkur', '/hafa-samband', '/personuvernd', '/terms']) {
       const suffix = path === '/' ? '/' : path;
       expect(res.text).toMatch(new RegExp(`<loc>https?://[^<]+/en${suffix}</loc>`));
       expect(res.text).toMatch(new RegExp(`<loc>https?://[^<]+/is${suffix}</loc>`));
@@ -58,8 +58,8 @@ describe('GET /sitemap.xml', () => {
   });
 
   test('each entry has matching hreflang alternates', () => {
-    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/verkefni"/);
-    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/verkefni"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="en" href="[^"]+\/en\/um-okkur"/);
+    expect(res.text).toMatch(/<xhtml:link rel="alternate" hreflang="is" href="[^"]+\/is\/um-okkur"/);
   });
 
   test('home gets an x-default hreflang so search engines know the canonical landing', () => {

@@ -125,7 +125,6 @@ export class NavBar {
       <div class="lol-nav__center" id="nav-menu">
         <a href="${navHref('/')}"             class="lol-nav__link" data-route="/"             data-i18n="nav.home">${t('nav.home')}</a>
         <a href="${navHref('/thjonusta')}"    class="lol-nav__link" data-route="/thjonusta"    data-i18n="nav.thjonusta">${t('nav.thjonusta')}</a>
-        <a href="${navHref('/verkefni')}"     class="lol-nav__link" data-route="/verkefni"     data-i18n="nav.projects">${t('nav.projects')}</a>
         <a href="${navHref('/um-okkur')}"     class="lol-nav__link" data-route="/um-okkur"     data-i18n="nav.umOkkur">${t('nav.umOkkur')}</a>
         <a href="${navHref('/hafa-samband')}" class="lol-nav__link" data-route="/hafa-samband" data-i18n="nav.hafaSamband">${t('nav.hafaSamband')}</a>
         <div class="lol-nav__mobile-extras">

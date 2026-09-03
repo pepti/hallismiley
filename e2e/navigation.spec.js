@@ -99,10 +99,10 @@ test.describe('Hidden surfaces — unlinked but functional', () => {
   test('the public nav offers only the business routes', async ({ page }) => {
     await page.goto('/');
     const nav = page.locator('.lol-nav__center');
-    for (const route of ['/party', '/shop', '/news', '/halli', '/projects', '/contact']) {
+    for (const route of ['/party', '/shop', '/news', '/halli', '/projects', '/contact', '/verkefni']) {
       await expect(nav.locator(`[data-route="${route}"]`)).toHaveCount(0);
     }
-    for (const route of ['/', '/thjonusta', '/verkefni', '/um-okkur', '/hafa-samband']) {
+    for (const route of ['/', '/thjonusta', '/um-okkur', '/hafa-samband']) {
       await expect(nav.locator(`[data-route="${route}"]`)).toHaveCount(1);
     }
   });

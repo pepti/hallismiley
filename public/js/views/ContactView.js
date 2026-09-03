@@ -552,7 +552,6 @@ export class ContactView {
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
         <a href="${href('/')}"              class="lol-footer__nav-link">${t('nav.home')}</a>
         <a href="${href('/thjonusta')}"     class="lol-footer__nav-link">${t('nav.thjonusta')}</a>
-        <a href="${href('/verkefni')}"      class="lol-footer__nav-link">${t('nav.projects')}</a>
         <a href="${href('/um-okkur')}"      class="lol-footer__nav-link">${t('nav.umOkkur')}</a>
         <a href="${href('/hafa-samband')}"  class="lol-footer__nav-link">${t('nav.hafaSamband')}</a>
       </nav>

@@ -22,6 +22,9 @@ const HIDDEN_PUBLIC_ROUTES = [
   '/projects',   // superseded by /verkefni
   '/contact',    // superseded by /hafa-samband
   '/privacy',    // superseded by /personuvernd
+  '/verkefni',   // case studies — hidden 2026-09-03 (Halli). The list page and
+                 // every /verkefni/:id follow by prefix; the admin project
+                 // tools and the detail pages keep working at their URLs.
 ];
 
 // Prefix-aware: '/news' hides '/news/some-slug' too. Locale prefixes are the
