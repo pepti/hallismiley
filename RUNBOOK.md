@@ -431,12 +431,14 @@ Postgres with the matching credentials.
 
 | Setting | Value |
 | --- | --- |
-| Host / port | `localhost:5432` |
-| Admin user / password | `postgres` / `postgres` |
-| Test database name | `hallismiley_test` (auto-created) |
+| Host / port / credentials | from `DATABASE_URL` (`.env`), else `postgres:postgres@localhost:5432` |
+| Base test database name | `orangesmiley_<branch-slug>_test` (auto-created; per-branch since 2026-09-02) |
+| Per run | `…_tmpl_test` + `…_w1_test` … `_w4_test`, dropped again by globalTeardown |
 
 The DB name **must** end in `_test` — `globalSetup` refuses to drop anything
-else as a safety check.
+else as a safety check. `npm test` prints the base it resolved on its first
+line; `npm run test:db:clean` drops databases left behind by killed runs.
+See `docs/TESTING.md` (Per-branch, per-worker databases).
 
 **Quickest path — disposable Postgres in Docker:**
 
