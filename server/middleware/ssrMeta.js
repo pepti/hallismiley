@@ -70,6 +70,9 @@ const ROUTE_META = {
   '/privacy':          { key: 'privacy' },
   '/terms':            { key: 'terms' },
   '/party':            { key: 'party' },
+  // Hidden one-off pages: locale-locked in server/config/i18n.js, absent from
+  // the sitemap, and `noindex` here so a shared link never lands in an index.
+  '/aron13ara':        { key: 'aron13',         noindex: true },
 };
 
 const DEFAULT_META = {
@@ -86,6 +89,9 @@ const DEFAULT_META = {
     privacy:        { title: 'Privacy Policy — Halli Smiley' },
     terms:          { title: 'Terms of Service — Halli Smiley' },
     party:          { title: "Halli's 40th Birthday Party", description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
+    // Icelandic-only page; the en copy exists so a lookup can never fall
+    // through to the home title, but the lock means it is never rendered.
+    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
   },
   is: {
     home:           { title: 'Halli Smiley — Íslenskur smiður & tölvunarfræðingur', description: 'Verkefnasafn Halla, íslensks smiðs og tölvunarfræðings. Tuttugu ára nákvæmni í smíði og grindarsmíði sem sameinast fullgildri vefforritun.' },
@@ -100,6 +106,7 @@ const DEFAULT_META = {
     privacy:        { title: 'Persónuverndarstefna — Halli Smiley' },
     terms:          { title: 'Notkunarskilmálar — Halli Smiley' },
     party:          { title: '40 ára afmæli Halla', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
+    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
   },
 };
 
@@ -624,7 +631,7 @@ function removeById(html, id) {
   return html.replace(selfRe, '');
 }
 
-function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd }) {
+function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots }) {
   if (/<title\b/i.test(html)) {
     html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
   }
@@ -632,6 +639,14 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${esc(description)}" id="ssr-description" />`
   );
+  // Per-route robots directive (ROUTE_META `noindex`). The template's default
+  // "index, follow" is left alone for every route that does not set one.
+  if (robots) {
+    html = html.replace(
+      /<meta\s+name="robots"[^>]*>/i,
+      `<meta name="robots" content="${esc(robots)}" />`
+    );
+  }
   // App environment for the client (drives the in-app feedback widget + TEST
   // chrome). Explicit APP_ENV wins; otherwise any non-production NODE_ENV is
   // treated as "test" so the widget is available in dev/staging, hidden in prod.
@@ -790,8 +805,9 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       if (partyOg) ogImage = partyOg;
     }
 
-    // Breadcrumbs on any non-home page.
-    if (route !== '/') {
+    // Breadcrumbs on any non-home page — except noindex pages, which should
+    // not hand crawlers structured data they were told not to index.
+    if (route !== '/' && !meta?.noindex) {
       let section = null;
       let detailName = null;
       if (route === '/projects' || route === '/news' || route === '/shop') {
@@ -871,6 +887,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   let html = rewriteHead(loadTemplate(), {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
+    robots: staticMeta?.noindex ? 'noindex, nofollow' : null,
   });
   html = injectCrawlerContent(html, crawlerHtml);
 

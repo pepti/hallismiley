@@ -51,6 +51,24 @@ describe('forcedLocaleFor', () => {
     expect(isPartyPath(p)).toBe(false);
   });
 
+  // Hidden one-off pages (IS_ONLY_PAGES) are locked too, but they are NOT
+  // party paths — isPartyPath drives the party API's Icelandic default and
+  // must stay false for them.
+  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
+    'locks the hidden Icelandic-only page %s',
+    (p) => {
+      expect(forcedLocaleFor(p)).toBe('is');
+      expect(isPartyPath(p)).toBe(false);
+    }
+  );
+
+  test.each(['/aron13ara/x', '/en/aron13ara/admin', '/aron13', '/aron13arab'])(
+    'the hidden-page lock is an exact match — %s stays unlocked',
+    (p) => {
+      expect(forcedLocaleFor(p)).toBeNull();
+    }
+  );
+
   test('does not match routes that merely start with the word party', () => {
     // Guards the startsWith('/party/') branch against '/partyoke'-style paths.
     expect(forcedLocaleFor('/partygoers')).toBeNull();

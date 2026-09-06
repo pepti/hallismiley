@@ -22,6 +22,11 @@ describe('GET /sitemap.xml', () => {
     expect(res.headers['content-type']).toMatch(/application\/xml/);
   });
 
+  test('does not advertise the hidden birthday page', () => {
+    // /aron13ara is locale-locked like /party but deliberately unlisted.
+    expect(res.text).not.toMatch(/aron13ara/);
+  });
+
   test('sets CDN-friendly cache headers', () => {
     expect(res.headers['cache-control']).toMatch(/public.*max-age=600.*stale-while-revalidate/);
   });
