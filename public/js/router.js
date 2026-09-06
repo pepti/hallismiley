@@ -29,6 +29,7 @@ import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
 import { PartyMagicLoginView } from './views/PartyMagicLoginView.js';
 import { PartyApproveView }    from './views/PartyApproveView.js';
+import { Aron13View }          from './views/Aron13View.js';
 import { ShopView }              from './views/ShopView.js';
 import { ProductView }           from './views/ProductView.js';
 import { CartView }              from './views/CartView.js';
@@ -107,6 +108,8 @@ const ROUTES = [
   { pattern: '/party/login',     factory: (_, qs) => new PartyMagicLoginView(qs) },
   { pattern: '/party/approve',   factory: (_, qs) => new PartyApproveView(qs) },
   { pattern: '/party',           factory: ()  => new PartyView() },
+  // Hidden Icelandic-only birthday page — no nav link, no sitemap entry.
+  { pattern: '/aron13ara',       factory: ()  => new Aron13View() },
   // Shop + checkout. Section sub-routes (shop-redesign step 2) must precede
   // the generic /shop/:slug pattern so they're not matched as product slugs.
   { pattern: '/shop/products',   factory: (_, qs) => new ShopView({ section: 'products' },  qs) },

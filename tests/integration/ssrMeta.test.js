@@ -213,6 +213,39 @@ describe('SSR meta-injection — SPA catch-all', () => {
   // The page is a birthday landing for an all-Icelandic guest list. English is
   // not published: see server/config/i18n.js forcedLocaleFor.
 
+  // ── Hidden birthday page: Icelandic-only AND noindex ───────────────────────
+  // /aron13ara is a one-off puzzle page for one reader. It is locked through
+  // the same forcedLocaleFor rule as the party pages, kept out of the sitemap,
+  // and carries a noindex robots meta so a shared link never gets indexed.
+
+  describe('birthday page — hidden and Icelandic-only', () => {
+    test('/en/aron13ara and /aron13ara permanently redirect to /is/aron13ara', async () => {
+      for (const path of ['/en/aron13ara', '/aron13ara']) {
+        const res = await request(app).get(path);
+        expect(res.status).toBe(301);
+        expect(res.headers.location).toBe('/is/aron13ara');
+      }
+    });
+
+    test('/is/aron13ara renders its own Icelandic title, noindex, and no breadcrumbs', async () => {
+      const res = await request(app).get('/is/aron13ara');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/<html lang="is"/);
+      expect(res.text).toMatch(/<title id="ssr-title">Til hamingju með 13 ára afmælið, Aron!<\/title>/);
+      expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow" \/>/);
+      expect(res.text).toMatch(/rel="canonical"[^>]*href="https:\/\/www\.hallismiley\.is\/is\/aron13ara"/);
+      expect(res.text).not.toMatch(/hreflang="en"/);
+      expect(res.text).not.toContain('BreadcrumbList');
+      expect(res.text).not.toContain('Verkefnasafn Halla');
+    });
+
+    test('other routes keep the default index, follow directive', async () => {
+      const res = await request(app).get('/en/projects');
+      expect(res.status).toBe(200);
+      expect(res.text).toMatch(/<meta name="robots" content="index, follow" \/>/);
+    });
+  });
+
   describe('party page — locale lock', () => {
     test('/en/party permanently redirects to /is/party', async () => {
       const res = await request(app).get('/en/party');

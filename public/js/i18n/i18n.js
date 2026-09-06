@@ -46,10 +46,23 @@ const PARTY_FORCED_LOCALE = 'is';
  *  when either changes. */
 function isPartyPath(pathname) {
   if (!pathname) return false;
+  const stripped = stripLocalePrefix(pathname);
+  return stripped === '/party' || stripped.startsWith('/party/');
+}
+
+/** Hidden one-off pages published in Icelandic only — exact match, no
+ *  sub-routes. Mirrors server/config/i18n.js IS_ONLY_PAGES; kept in lockstep. */
+const IS_ONLY_PAGES = ['/aron13ara'];
+
+function isIsOnlyPage(pathname) {
+  if (!pathname) return false;
+  return IS_ONLY_PAGES.includes(stripLocalePrefix(pathname));
+}
+
+function stripLocalePrefix(pathname) {
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
-  const stripped = '/' + parts.join('/');
-  return stripped === '/party' || stripped.startsWith('/party/');
+  return '/' + parts.join('/');
 }
 
 /** The locale `pathname` is locked to, or null when it may render in any
@@ -60,7 +73,9 @@ function isPartyPath(pathname) {
  *  Defaults to the current URL so callers on the party page can just ask
  *  `forcedLocaleFor()`. */
 export function forcedLocaleFor(pathname = window.location.pathname) {
-  return isPartyPath(pathname) ? PARTY_FORCED_LOCALE : null;
+  if (isPartyPath(pathname)) return PARTY_FORCED_LOCALE;
+  if (isIsOnlyPage(pathname)) return 'is';
+  return null;
 }
 
 /** Determine locale from locale-lock → ?locale= → explicit saved choice →

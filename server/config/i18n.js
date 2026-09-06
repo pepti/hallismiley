@@ -52,13 +52,25 @@ function isPartyPath(pathname) {
   return isPartyPageRoute(pathname) || isPartyApiPath(pathname);
 }
 
+// Hidden one-off pages published in Icelandic only. Exact match after the
+// locale prefix is stripped — no sub-routes, no prefix matching. Each entry is
+// a page with no nav link and no sitemap entry (see ssrMeta `noindex`).
+//   /aron13ara — Aron's 13th-birthday puzzle page (2026-09-06).
+const IS_ONLY_PAGES = new Set(['/aron13ara']);
+
+function isIsOnlyPage(pathname) {
+  return IS_ONLY_PAGES.has(stripLocale(pathname));
+}
+
 // The locale a path is LOCKED to, or null when it may render in any supported
 // locale. Page routes only — see the note above on why the API is excluded.
 // The single place that answers "is this route locale-locked?" server-side;
 // public/js/i18n/i18n.js mirrors it for the SPA.
 function forcedLocaleFor(pathname) {
   if (!pathname) return null;
-  return isPartyPageRoute(pathname) ? PARTY_FORCED_LOCALE : null;
+  if (isPartyPageRoute(pathname)) return PARTY_FORCED_LOCALE;
+  if (isIsOnlyPage(pathname))     return 'is';
+  return null;
 }
 
 module.exports = {

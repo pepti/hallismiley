@@ -54,7 +54,15 @@ describe('forcedLocaleFor (client mirror of the server rule)', () => {
     }
   );
 
-  test.each(['/projects', '/en/projects', '/shop', '/party-supplies', '/partygoers'])(
+  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
+    'locks the hidden Icelandic-only page %s',
+    (p) => {
+      browseTo(p);
+      expect(i18n.forcedLocaleFor(p)).toBe('is');
+    }
+  );
+
+  test.each(['/projects', '/en/projects', '/shop', '/party-supplies', '/partygoers', '/aron13ara/x', '/aron13arab'])(
     'leaves %s unlocked',
     (p) => {
       browseTo(p);
@@ -105,6 +113,7 @@ describe('href() while browsing normally', () => {
     browseTo('/en/projects', { savedChoice: 'en' });
     await i18n.loadLocale('en');
     expect(i18n.href('/party')).toBe('/is/party');
+    expect(i18n.href('/aron13ara')).toBe('/is/aron13ara');
     expect(i18n.href('/shop')).toBe('/en/shop');
   });
 });
