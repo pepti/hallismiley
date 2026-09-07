@@ -1,0 +1,66 @@
+/* /admin/accounts, /admin/accounts/:id, /admin/commission — customer accounts
+   and the commission statement (views/AdminAccountsView.js, AdminAccountDetailView.js,
+   AdminCommissionView.js). Tokens only (invariant 15). Reuses the .mon-card
+   sections from admin-monitoring.css and the .leads-filter chips. */
+
+.acct-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.acct-table td.num, .acct-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.acct-row { cursor: pointer; }
+.acct-row:hover td, .acct-row:focus-visible td { background: var(--bg-hover); }
+.acct-name { display: block; font-weight: 600; color: var(--text-primary); }
+.acct-slug { display: block; font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); }
+.acct-cell--date { white-space: nowrap; color: var(--text-muted); font-size: 0.85rem; }
+.acct-strong { font-weight: 700; color: var(--text-primary); }
+.acct-total td { border-top: 2px solid var(--border-dim); font-weight: 600; }
+.acct-h2 { margin: var(--sp-5) 0 var(--sp-3); }
+
+/* Lifecycle chips — one wash per phase, all from the status token set. */
+.acct-chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  background: var(--bg-hover); color: var(--text-muted);
+  white-space: nowrap;
+}
+.acct-chip--offered      { color: var(--accent-ink); }
+.acct-chip--signed       { background: var(--warning-dim); color: var(--warning); }
+.acct-chip--provisioning { background: var(--warning-dim); color: var(--warning); }
+.acct-chip--building     { background: var(--warning-dim); color: var(--warning); }
+.acct-chip--live         { background: var(--success-dim); color: var(--success); }
+.acct-chip--paused       { background: var(--bg-hover);    color: var(--text-secondary); }
+.acct-chip--churned      { background: var(--error-dim);   color: var(--error); }
+
+.acct-status { align-self: center; }
+.acct-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+/* Detail form */
+.acct-form { display: flex; flex-direction: column; gap: var(--sp-3); }
+.acct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-3); }
+.acct-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--text-muted); }
+.acct-field span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.acct-field input, .acct-field select, .acct-field textarea {
+  font: inherit; font-size: 0.9rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-dim); border-radius: var(--radius-sm, 4px);
+  background: var(--bg-surface); color: var(--text-primary);
+}
+.acct-field textarea { resize: vertical; }
+.acct-field--wide { max-width: 72ch; }
+.acct-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.acct-inline .acct-field[hidden] { display: none; }
+
+/* Audit trail */
+.acct-audit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.acct-audit li {
+  display: grid; grid-template-columns: 11rem 1fr 1fr auto; gap: var(--sp-3);
+  padding: var(--sp-2) 0; border-top: 1px solid var(--border-light); font-size: 0.85rem;
+}
+.acct-audit li:first-child { border-top: 0; }
+.acct-audit__when { color: var(--text-muted); white-space: nowrap; }
+.acct-audit__what { color: var(--text-primary); font-weight: 600; }
+.acct-audit__detail { color: var(--text-secondary); overflow-wrap: anywhere; }
+.acct-audit__who { color: var(--text-muted); }
+@media (max-width: 720px) {
+  .acct-audit li { grid-template-columns: 1fr; gap: 2px; }
+}

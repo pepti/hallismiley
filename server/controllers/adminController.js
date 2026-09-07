@@ -6,6 +6,8 @@ const { t }              = require('../i18n');
 const Role               = require('../models/Role');
 const UserRole           = require('../models/UserRole');
 const { declineGuest, sendWelcome } = require('../services/partyApproval');
+// Disabling/enabling an account is a staff action (migration 098); best-effort.
+const staffAudit         = require('../services/staffAudit');
 
 const adminController = {
   // GET /api/v1/admin/users?limit=20&offset=0&sort=username&order=asc&q=foo
@@ -231,6 +233,10 @@ const adminController = {
       if (disabled) {
         await lucia.invalidateUserSessions(id);
       }
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: disabled ? 'user.disabled' : 'user.enabled',
+        entityType: 'user', entityId: id, summary: { username: rows[0].username },
+      });
 
       return res.json(rows[0]);
     } catch (err) { next(err); }

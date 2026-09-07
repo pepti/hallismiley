@@ -35,6 +35,10 @@ router.post('/fx-rates', requireRole('admin'), csrfProtect, books.setFxRate);
 // matched before anything could read 'from-order' as an :id.
 router.post('/invoices/from-order/:orderId', requireRole('admin'), csrfProtect,
   books.createInvoiceFromOrder);
+// The company's own revenue: a service-contract invoice to a customer account
+// (ENHANCEMENTS #18). Literal path, so it must sit before '/invoices/:id'.
+router.post('/invoices/service', requireRole('admin'), csrfProtect,
+  books.createServiceInvoice);
 
 router.get('/invoices', requireView('invoices'), books.listInvoices);
 // Server-side CSV export, paged internally so a long history streams rather than

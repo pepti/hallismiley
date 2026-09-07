@@ -918,8 +918,201 @@ async function findById(client, id) {
   return rows[0] || null;
 }
 
+// ── Service-contract invoices (ENHANCEMENTS #18, D-005) ──────────────────────
+
+const TIER_LABEL = { vefur: 'Vefur', verslun: 'Verslun', rekstur: 'Rekstur' };
+const IS_MONTHS = ['janúar', 'febrúar', 'mars', 'apríl', 'maí', 'júní',
+  'júlí', 'ágúst', 'september', 'október', 'nóvember', 'desember'];
+const SERVICE_KINDS = ['build', 'recurring', 'overage'];
+
+/**
+ * Issue an invoice to a customer ACCOUNT (customer_accounts, migration 098) —
+ * the company's own revenue path, which has no order behind it.
+ *
+ *   kind 'build'     — 50% of build_fee_isk: `deposit` true = at signing,
+ *                       false = at go-live (D-005)
+ *   kind 'recurring' — monthly_fee_isk for `period` (YYYY-MM), in advance;
+ *                       `amountNetIsk` overrides for a pro-rated first month
+ *   kind 'overage'   — `units` × `unitPriceIsk` verkeiningar beyond the quota
+ *
+ * Every price is ex-VSK (the customer is a VSK-registered business); 24% VSK is
+ * added on top. Same document machinery as createFromOrder: counter, lines,
+ * journal entry, books audit. Then the commission hook (D-003): build and
+ * recurring kinds record a commission_events row for the account's CURRENT
+ * owner at the account's current rate, in this same transaction — overage and
+ * one-off verk carry no commission.
+ *
+ * @param {object} client  pg client inside a transaction
+ * @param {object} opts    { accountId, kind, deposit?, period?, amountNetIsk?,
+ *                           units?, unitPriceIsk?, issuedAt?, createdBy, requestId? }
+ */
+async function createServiceInvoice(client, opts = {}) {
+  // Required lazily: CustomerAccount → staffAudit and Commission are leaf modules,
+  // but keeping them out of the top-level require list keeps this file's import
+  // graph the same for the order path.
+  const CustomerAccount = require('../../models/CustomerAccount');
+  const Commission = require('../../models/Commission');
+  const staffAudit = require('../staffAudit');
+
+  const {
+    accountId, kind, deposit = true, period = null, amountNetIsk = null,
+    units = null, unitPriceIsk = null, createdBy, requestId = null, series = 'invoice',
+  } = opts;
+  if (!createdBy) throw new InvoiceError('createServiceInvoice requires createdBy', 500);
+  if (!SERVICE_KINDS.includes(kind)) {
+    throw new InvoiceError(`kind must be one of: ${SERVICE_KINDS.join(', ')}`, 400, 'BAD_KIND');
+  }
+
+  // Lock the account for the length of the document so two concurrent issues
+  // for the same account serialise (and so the owner/rate snapshot is stable).
+  const { rows: locked } = await client.query(
+    `SELECT id FROM customer_accounts WHERE id = $1 FOR UPDATE`, [accountId]
+  );
+  if (!locked.length) throw new InvoiceError('Customer account not found', 404, 'ACCOUNT_NOT_FOUND');
+  const account = await CustomerAccount.findByIdUnscoped(accountId, client);
+
+  const seller = await Setting.getBookkeepingSettings(client);
+  if (!seller.seller_complete) {
+    throw new InvoiceError(
+      'Cannot issue invoices yet: the seller name, kennitala and VSK number must be set ' +
+      'in the bookkeeping settings first. An invoice without them is not legally valid.',
+      409, 'SELLER_INCOMPLETE'
+    );
+  }
+
+  const tier = TIER_LABEL[account.tier] || account.tier;
+  let net;
+  let description;
+  if (kind === 'build') {
+    const fee = Number(account.build_fee_isk);
+    if (!Number.isInteger(fee) || fee <= 0) {
+      throw new InvoiceError('The account has no build fee set', 409, 'ACCOUNT_FEES_MISSING');
+    }
+    const half = Math.round(fee / 2);
+    net = deposit ? half : fee - half;
+    description = `Uppsetning Rekstrarkerfisins — ${tier} — ${deposit ? 'innborgun 50% við undirritun' : 'lokagreiðsla 50% við gangsetningu'}`;
+  } else if (kind === 'recurring') {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period || ''))) {
+      throw new InvoiceError('period must be YYYY-MM', 400, 'BAD_PERIOD');
+    }
+    const fee = amountNetIsk != null ? Number(amountNetIsk) : Number(account.monthly_fee_isk);
+    if (!Number.isInteger(fee) || fee <= 0) {
+      throw new InvoiceError('The account has no monthly fee set', 409, 'ACCOUNT_FEES_MISSING');
+    }
+    net = fee;
+    const [y, m] = String(period).split('-').map(Number);
+    description = `Þjónustusamningur — ${tier} — ${IS_MONTHS[m - 1]} ${y}`;
+  } else {
+    const u = Number(units);
+    const p = Number(unitPriceIsk);
+    if (!Number.isInteger(u) || u <= 0 || !Number.isInteger(p) || p <= 0) {
+      throw new InvoiceError('units and unit_price_isk must be positive integers', 400, 'BAD_OVERAGE');
+    }
+    net = u * p;
+    description = `Verkeiningar umfram kvóta — ${u} ein.`;
+  }
+
+  const vatRate = STANDARD_VAT_RATE;
+  const vat = Math.round(net * vatRate / 100);
+  const gross = net + vat;
+  const line = {
+    product_id: null, sku: null, description, quantity: 1,
+    unit_price_gross: gross, vat_rate: vatRate,
+    gross_before_discount: gross, discount_gross: 0,
+    line_net: net, line_vat: vat, line_gross: gross,
+    revenue_account: revenueAccountFor({ vatRate, isService: true }),
+    is_shipping: false,
+  };
+  const totals = {
+    lines: [line], subtotal_net: net, vat_total: vat, total_gross: gross,
+    discount_total: 0, shipping_gross: 0, by_rate: [{ rate: vatRate, net, vat, gross }],
+  };
+
+  const issuedAt = opts.issuedAt ? assertAccountingDate(opts.issuedAt, 'issuedAt') : todayIso();
+  const invoiceNumber = await ledger.nextCounter(client, series);
+  const dueAt = addDays(issuedAt, seller.payment_terms_days);
+
+  const { rows: invRows } = await client.query(
+    `INSERT INTO invoices (
+       series, invoice_number, order_id, user_id,
+       seller_name, seller_kennitala, seller_vat_number, seller_address,
+       customer_name, customer_kennitala, customer_email, customer_address, customer_country,
+       issued_at, due_at, terms_days,
+       original_currency, original_total_gross, fx_rate,
+       subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
+       zero_rate_reason, note, status, created_by,
+       seller_street, seller_city, seller_postal_zone, seller_country
+     ) VALUES ($1,$2,NULL,NULL,$3,$4,$5,$6,$7,$8,$9,'','IS',$10,$11,$12,'ISK',NULL,1,
+               $13,$14,$15,0,0,NULL,$16,'draft',$17,
+               $18,$19,$20,$21)
+     RETURNING *`,
+    [
+      series, invoiceNumber,
+      seller.seller_name, seller.seller_kennitala, seller.seller_vat_number, seller.seller_address,
+      account.name, account.kennitala, account.contact_email,
+      issuedAt, dueAt, seller.payment_terms_days,
+      net, vat, gross,
+      seller.invoice_note, createdBy,
+      // The structured seller block (095), NULL when a part is missing. The
+      // customer parts stay NULL: customer_accounts carries no street address
+      // yet, so a service invoice cannot be exported as UBL until it does.
+      seller.seller_street || null, seller.seller_city || null,
+      seller.seller_postal_zone || null, seller.seller_country || null,
+    ]
+  );
+  await insertLines(client, invRows[0].id, totals.lines);
+  const { rows: issuedRows } = await client.query(
+    `UPDATE invoices SET status = 'issued' WHERE id = $1 RETURNING *`, [invRows[0].id]
+  );
+  const invoice = issuedRows[0];
+
+  const entry = await ledger.postEntry(client, {
+    entryDate: issuedAt,
+    memo: `Reikningur ${invoiceNumber} — ${account.name}`,
+    sourceType: 'invoice',
+    sourceId: invoice.id,
+    createdBy,
+    lines: invoiceJournalLines({ totals, lines: totals.lines }),
+  });
+
+  await audit.record(client, {
+    actorId: createdBy,
+    action: 'invoice.issued',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    requestId,
+    summary: {
+      invoice_number: invoiceNumber, series, account_id: account.id, kind,
+      total_gross: gross, vat_total: vat, journal_entry_number: entry.entry_number,
+    },
+  });
+
+  let commission = null;
+  if (kind !== 'overage') {
+    commission = await Commission.recordForInvoice(client, { account, invoice, kind, issuedAt });
+    if (commission) {
+      await staffAudit.record(client, {
+        actorId: createdBy, requestId,
+        action: 'commission.recorded', entityType: 'account', entityId: account.id,
+        summary: {
+          invoice_id: invoice.id, kind, seller_user_id: account.owner_user_id,
+          rate_bp: commission.rate_bp, amount_isk: Number(commission.amount_isk),
+        },
+      });
+    }
+  }
+
+  logger.info(
+    { invoiceId: invoice.id, invoiceNumber, accountId: account.id, kind, period: entry.period },
+    'service invoice issued'
+  );
+  return { invoice, created: true, commission };
+}
+
 module.exports = {
   InvoiceError,
+  createServiceInvoice,
+  SERVICE_KINDS,
   recordPayment,
   recordRefund,
   recordSettlement,

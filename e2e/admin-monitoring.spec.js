@@ -37,6 +37,9 @@ test.describe('admin monitoring — latest updates card', () => {
     await page.click('#mon-refresh');
     expect((await reloaded).status()).toBe(200);
     await expect(page.locator('#mon-updates .mon-error')).toHaveCount(0);
-    await expect(page.locator('.mon-card')).toHaveCount(4);
+    // Five sections since 2026-09-07: updates, event log, session log, health,
+    // and the staff audit log (migration 098).
+    await expect(page.locator('.mon-card')).toHaveCount(5);
+    await expect(page.locator('#mon-audit')).toBeVisible();
   });
 });

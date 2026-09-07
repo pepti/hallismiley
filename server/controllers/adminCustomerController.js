@@ -9,6 +9,8 @@ const emailService = require('../services/emailService');
 const Customer     = require('../models/Customer');
 const Setting      = require('../models/Setting');
 const { query: dbQuery } = require('../config/database');
+// Inviting a person is a staff action (migration 098 staff_audit_log); best-effort.
+const staffAudit   = require('../services/staffAudit');
 
 const MAX_IMPORT_ROWS = 1000;
 // Bulk delete is bounded so one request can't fan out across the whole base.
@@ -125,6 +127,10 @@ const adminCustomerController = {
         return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
       }
       const { user, resetToken } = await Customer.create(c);
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.invited', entityType: 'user', entityId: user.id,
+        summary: { username: user.username },
+      });
 
       // Invite = the existing password-reset flow as a "set your password" link.
       let invited = false;

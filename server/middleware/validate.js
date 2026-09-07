@@ -813,11 +813,113 @@ function validateMarketStatus(req, res, next) {
   next();
 }
 
+// ── Customer accounts (migration 098) ────────────────────────────────────────
+// Whitelisted body for POST / PATCH /api/v1/admin/accounts. Owner and status
+// have their own rules: `owner_user_id` is only honoured for unscoped callers
+// (controller), `status` moves through the model's transition map.
+const ACCOUNT_TIERS    = ['vefur', 'verslun', 'rekstur'];
+const ACCOUNT_STATUSES = ['lead', 'offered', 'signed', 'provisioning', 'building', 'live', 'paused', 'churned'];
+const ACCOUNT_SLUG_RE  = /^[a-z0-9-]{3,40}$/;
+const KENNITALA_RE     = /^\d{10}$/;
+const ISO_DATE_RE      = /^\d{4}-\d{2}-\d{2}$/;
+const ACCOUNT_TEXT = {           // field → max length
+  name: 200, contact_name: 150, contact_email: 200, contact_phone: 40,
+  repo_name: 100, test_url: 300, prod_url: 300, canonical_host: 200,
+  azure_subscription_id: 100, azure_rg_test: 100, azure_rg_prod: 100,
+  notes: 4000,
+};
+const ACCOUNT_INTS = {           // field → [min, max]
+  build_fee_isk: [0, 1e12], monthly_fee_isk: [0, 1e12], quota_units: [0, 100000],
+  build_rate_bp: [0, 10000], recurring_rate_bp: [0, 10000],
+};
+
+function _accountBody(src, errors, { isCreate }) {
+  const picked = {};
+  for (const [field, max] of Object.entries(ACCOUNT_TEXT)) {
+    const v = src[field];
+    if (v === undefined) continue;
+    if (v === null || v === '') { if (field !== 'name') picked[field] = null; else errors.push({ key: 'validation.account.nameRequired' }); continue; }
+    if (typeof v !== 'string') { errors.push({ key: 'validation.account.fieldInvalid', params: { field } }); continue; }
+    if (v.length > max) { errors.push({ key: 'validation.account.fieldMaxLength', params: { field, n: max } }); continue; }
+    picked[field] = v.trim();
+  }
+  if (src.contact_email && typeof src.contact_email === 'string' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(src.contact_email.trim())) {
+    errors.push({ key: 'validation.account.emailInvalid' });
+  }
+  for (const [field, [min, max]] of Object.entries(ACCOUNT_INTS)) {
+    const v = src[field];
+    if (v === undefined) continue;
+    if (v === null || v === '') { picked[field] = null; continue; }
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < min || n > max) { errors.push({ key: 'validation.account.fieldInvalid', params: { field } }); continue; }
+    picked[field] = n;
+  }
+  for (const field of ['contract_start', 'contract_end']) {
+    const v = src[field];
+    if (v === undefined) continue;
+    if (v === null || v === '') { picked[field] = null; continue; }
+    if (typeof v !== 'string' || !ISO_DATE_RE.test(v)) { errors.push({ key: 'validation.account.fieldInvalid', params: { field } }); continue; }
+    picked[field] = v;
+  }
+  if (src.kennitala !== undefined) {
+    if (src.kennitala === null || src.kennitala === '') picked.kennitala = null;
+    else if (typeof src.kennitala !== 'string' || !KENNITALA_RE.test(src.kennitala.trim())) errors.push({ key: 'validation.account.kennitalaInvalid' });
+    else picked.kennitala = src.kennitala.trim();
+  }
+  if (src.tier !== undefined) {
+    if (typeof src.tier !== 'string' || !ACCOUNT_TIERS.includes(src.tier)) errors.push({ key: 'validation.account.tierInvalid' });
+    else picked.tier = src.tier;
+  }
+  if (isCreate) {
+    if (src.slug !== undefined && src.slug !== null && src.slug !== '') {
+      if (typeof src.slug !== 'string' || !ACCOUNT_SLUG_RE.test(src.slug)) errors.push({ key: 'validation.account.slugInvalid' });
+      else picked.slug = src.slug;
+    }
+    if (src.market_company_id !== undefined && src.market_company_id !== null && src.market_company_id !== '') {
+      const n = Number(src.market_company_id);
+      if (!Number.isInteger(n) || n <= 0) errors.push({ key: 'validation.account.fieldInvalid', params: { field: 'market_company_id' } });
+      else picked.market_company_id = n;
+    }
+    if (src.owner_user_id !== undefined && src.owner_user_id !== null && src.owner_user_id !== '') {
+      if (typeof src.owner_user_id !== 'string' || src.owner_user_id.length > 64) errors.push({ key: 'validation.account.fieldInvalid', params: { field: 'owner_user_id' } });
+      else picked.owner_user_id = src.owner_user_id;
+    }
+    // name + tier are required unless a market company supplies them.
+    if (!picked.market_company_id) {
+      if (!picked.name) errors.push({ key: 'validation.account.nameRequired' });
+      if (!picked.tier) errors.push({ key: 'validation.account.tierInvalid' });
+    }
+  } else if (src.status !== undefined) {
+    if (typeof src.status !== 'string' || !ACCOUNT_STATUSES.includes(src.status)) errors.push({ key: 'validation.account.statusInvalid' });
+    else picked.status = src.status;
+  }
+  return picked;
+}
+
+function validateAccountCreate(req, res, next) {
+  const errors = [];
+  const picked = _accountBody(req.body || {}, errors, { isCreate: true });
+  if (errors.length) return _fail(req, res, errors);
+  req.body = picked;
+  next();
+}
+
+function validateAccountPatch(req, res, next) {
+  const errors = [];
+  const picked = _accountBody(req.body || {}, errors, { isCreate: false });
+  if (!errors.length && Object.keys(picked).length === 0) errors.push({ key: 'validation.account.noFields' });
+  if (errors.length) return _fail(req, res, errors);
+  req.body = picked;
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
   validateLeadUpdate,
   validateMarketStatus,
+  validateAccountCreate,
+  validateAccountPatch,
   validateSignup,
   validatePartyRequest,
   validateResetPassword,

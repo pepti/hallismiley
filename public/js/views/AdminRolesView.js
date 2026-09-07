@@ -23,7 +23,9 @@ const VIEW_GROUP = (() => {
 function groupViews(ids) {
   const buckets = new Map();
   ids.forEach(id => {
-    const g = VIEW_GROUP.get(id) || { groupKey: 'adminRoles.views', order: 99 };
+    // A grantable id with no sidebar line is a PERMISSION (e.g. `allaccounts`
+    // widens the account scope) — shown under its own heading, after the screens.
+    const g = VIEW_GROUP.get(id) || { groupKey: 'adminRoles.permissions', order: 99 };
     if (!buckets.has(g.groupKey)) buckets.set(g.groupKey, { groupKey: g.groupKey, order: g.order, ids: [] });
     buckets.get(g.groupKey).ids.push(id);
   });

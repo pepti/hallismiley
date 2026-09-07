@@ -396,11 +396,56 @@ The 093 research tables finally have a screen. **No migration.**
   `status` overwrites a hand-off on re-import — export without it.
   `tests/integration/market.test.js` pins the safe case.
 
+## Customer accounts + commission (2026-09-07, chunk D; ENHANCEMENTS #17 + #18)
+
+Halli: "Do the proposals." **Migration 098_customer_accounts** (pure expand):
+`customer_accounts` (one row per customer, ONE owning seller — commission
+follows `owner_user_id`), `users.github_login`, `staff_audit_log`
+(books_audit_log's shape + the same immutable trigger; closed vocabulary in
+`server/services/staffAudit.js`), `commission_events` (seller + rate
+SNAPSHOTTED per invoice, `UNIQUE(invoice_id)`), and the seeded roles
+`solumadur` (handbok, leads, accounts, commission) and `verktaki` (handbok,
+accounts, allaccounts). Chain now ends **098**; the books branch's 095/096
+sit before 097 in numeric order (already applied on the dev DB).
+
+- **Scope in both layers**: `server/auth/accountScope.js` (after
+  `requireView`) → `{all:true}` for `'*'` or the `allaccounts` permission,
+  else `{ownerId}`; `CustomerAccount` takes `scope` as a REQUIRED argument of
+  every method and fails closed (throws without one). A foreign id is a 404,
+  never a 403. `allaccounts` is a **permission-only view id**
+  (`PERMISSION_VIEW_IDS` in `adminViews.js`): grantable, no sidebar line — the
+  parity test subtracts it; the role editor shows it under "Heimildir".
+- **Lifecycle** = `CustomerAccount.TRANSITIONS`; a skip is 409; every write
+  (create/update/status/owner/provision-request/commission) lands in
+  `staff_audit_log` with the SAME client. Role grant/revoke, customer
+  invitation and user disable/enable hook the log best-effort (`recordSafe`).
+  Admin reads it at `/api/v1/admin/audit` (a section on `/admin/monitoring`);
+  the account's own trail at `/api/v1/admin/accounts/:id/audit`.
+- **2FA widened**: `utils/adminRole.js userHoldsView(…, 'accounts')` →
+  `user.accounts_holder` at login → `mfaService.isProtected/shouldEnrol`
+  treat it like admin (`tests/unit/mfaProtected.test.js`).
+- **Service invoices** (#18): `invoiceService.createServiceInvoice` — build
+  50%/50% (D-005), recurring month (override for pro-rating), overage; ex VSK
+  + 24%; same counter/lines/journal/books-audit path as orders, account row
+  locked; then `Commission.recordForInvoice` (15% build / 10% recurring,
+  D-003; overage none). Route `POST /api/v1/admin/bookkeeping/invoices/
+  service` (admin). Report `/api/v1/admin/commission` (`requireView(
+  'commission')` + scope): per seller per month, **payable = invoice paid in
+  full** (earned on receipt); CSV.
+- **UI**: `/admin/accounts` (list + create overlay; admin picks the owner),
+  `/admin/accounts/:id` (lifecycle buttons, details form, admin-only owner
+  change + "Gefa út reikning", commission events, audit trail),
+  `/admin/commission`; Markaður's drawer gains "Stofna viðskiptareikning" =
+  the #16 hand-off in one transaction. All in Sölustarf; `admin-accounts.css`.
+- Not built (plan): GitHub teams/rulesets/drift script (#19), verkeiningar
+  metering (#20), payout marking / clawback / tail automation, the seller
+  agreement itself. #17–#20 now exist in `ENHANCEMENTS.md`.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
 - **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
-- **Admin re-shape landed 2026-09-07** (three chunks, sections above: hidden retail lines + Sölustarf/Þjónusta + company overview · Leads inbox = migration 097 · Markaður). Still his: the DRAFT copy those chunks wrote (nav labels, dashboard, leads, markaður, and the **`/personuvernd` §3 + §6 rewrite** — the site now stores enquiries), whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`), and #17/#18 (customer accounts + commission), which stay proposals. Existing admins keep their saved sidebar order until they hit Reset.
+- **Admin re-shape landed 2026-09-07** (three chunks, sections above: hidden retail lines + Sölustarf/Þjónusta + company overview · Leads inbox = migration 097 · Markaður). Still his: the DRAFT copy those chunks wrote (nav labels, dashboard, leads, markaður, and the **`/personuvernd` §3 + §6 rewrite** — the site now stores enquiries), whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`), and the DRAFT copy of chunk D. **#17/#18 landed the same day** (section above): migration chain ends **098_customer_accounts**; the books branch was rebased onto master 2026-09-07 with its 095/096 kept in numeric order (Jest 2864 + Playwright green) and merged the same day (748f28b, next bullet) — the chain reads 094 → 095 → 096 → 097 → 098. Saved sidebar layouts were reset in the dev DB (Halli is the only admin).
 - **Own books into the product, landed 2026-09-07** (D-017/D-018 in `company/DECISIONS.md`, plan `~/.claude/plans/have-my-agents-go-glowing-mist.md`). Halli's call: keep Orange Smiley's statutory books in its own module, **books first on a private instance** (orangesmiley.is has no deployment), **parallel run** for the first VSK period — júlí–ágúst 2026, gjalddagi **5.10.2026** — deriving here and filing manually through the veflykill. Four pieces: the minor-units fix (the expense form sent major units where the API takes minor, so a USD 20.00 invoice typed as `20` booked as USD 0.20 — `public/js/utils/money.js`); **`/admin/books/settings`** (rides the `books` view id, no new RBAC id; confirming the chart of accounts requires a note and stamps who; FX freshness is per currency in use, not EUR alone); **`npm run books:replay`** (a period through the real services, VSK boxes diffed against what was filed, D split domestic/reverse-charge, target DB must end `_replay`); **migration 095** (structured party block + append-only `invoice_ubl_exports` + a Peppol BIS 3.0 emitter at `GET /invoices/:id/ubl.xml` — 11% is category S/11 not AA, exports are G with a reason, rounding drift is BT-114 and >3 kr is refused); **migration 096** (the capture spine: `source_kind` trust ladder + `books_intake`, a queue of proposals whose only exit is the same `createExpense()` the manual form calls, gated by CHECK constraints and CSRF, deliberately no confidence score). Runbooks: `docs/BOOKS-PARALLEL-RUN.md` (generic) + `company/runbooks/books-2026-P4.md` (this period). **Migration chain ends 097_leads**, with the books pair 095/096 landing behind it — independent of 097, so the array order is safe on a fresh database and on one that already has 097. Still owed: a button to issue a statutory invoice from an order (`issueInvoiceForOrder` has no caller — a hard blocker for 2026-P5, due 7.12) and Peppol **inbound**. Halli's, not code's: the VSK veflykill, Bókari's ruling on pre-12.08 expenses and `ACCOUNTANT-QUESTIONS.md` §6, and §2 (art. 12 zero-rating) before any foreign B2B invoice.
 - Post-R1 notes: the news list wants a public `/frettir` home (home links into it were removed, not re-homed); `/terms` could take an `/skilmalar` slug; Product-schema `brand` on the hidden shop still says Rekstrarkerfið.
 - **GitHub Actions is ENABLED on the repo since 2026-09-03** (Halli's call; it had been disabled at repo level, which is why CI never ran — two toggles: Settings → Actions → General "Allow all actions" AND the "Enable Actions on this repository" button on the Actions tab). The `main`→`master` trigger fix (2026-09-02) is in; PR #2 carries the first runs. `npm audit --audit-level=high` is clean as of 2026-09-02 (browserslist + sanitize-html patched via `npm audit fix`), so the first run should be green. **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.

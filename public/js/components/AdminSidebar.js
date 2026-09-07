@@ -53,6 +53,8 @@ export const ADMIN_NAV = [
     { id: 'handbok',   route: '/admin/handbok',   labelKey: 'admin.nav.handbok',   icon: 'book' },
     { id: 'leads',     route: '/admin/leads',     labelKey: 'admin.nav.leads',     icon: 'inbox' },
     { id: 'markadur',  route: '/admin/markadur',  labelKey: 'admin.nav.markadur',  icon: 'chart' },
+    { id: 'accounts',  route: '/admin/accounts',  labelKey: 'admin.nav.accounts',  icon: 'box' },
+    { id: 'commission', route: '/admin/commission', labelKey: 'admin.nav.commission', icon: 'percent' },
     { id: 'customers', route: '/admin/customers', labelKey: 'admin.nav.customers', icon: 'people' },
   ] },
   // Bókhald. Order follows the workflow rather than the alphabet: overview first,
