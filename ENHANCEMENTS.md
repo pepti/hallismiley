@@ -36,6 +36,8 @@ Original proposal kept below for the record.
 
 > ADDENDUM 2026-08-27 (sales-staff program): when this lands, add a grantable `leads` admin view id and grant it to the `solufolk` role (migration 090) so the human sales team works its own lead queue from the same shell as Handbók sölufólks. The Sölustjóri agent's lead-tracking duty currently runs on Halli forwarding the notification emails — this proposal retires that workaround.
 
+> **STATUS: APPROVED + IMPLEMENTED — Halli, 2026-09-07 (admin re-shape, chunk B).** Migration `097_leads` (095/096 belong to the books branch), `server/models/Lead.js` (never-throwing insert alongside the email in `contactController`), `/api/v1/admin/leads` (read + status/note/owner = `requireView('leads')`; delete + CSV = admin; all `no-store`), `/admin/leads` in the Sölustarf group, `leads` appended to `solufolk` by the migration, daily prune at `LEAD_RETENTION_DAYS` = 730, and **`/personuvernd` §3 + §6 rewritten** (DRAFT for Halli) — the old text said the enquiry was not stored. Operator notes: `docs/SALES-STAFF.md`.
+
 ### 3. Deterministic pagination in the bookkeeping archive
 **What.** `server/scripts/books-archive-export.js` pages documents with `ORDER BY created_at LIMIT/OFFSET`. `created_at` is not unique, so a row can repeat across page boundaries; two manifest entries then claim the same `documents/<id>` path, the second copy overwrites the first, and `verify()` fails against the first entry's checksum while the manifest called it verified. Fix: `ORDER BY created_at, id`, or keyset-paginate.
 **Why.** The archive's entire purpose is statutory evidence (lög 145/1994). "The verifier and the archive disagree" is the one failure it must never have. It already caused a real full-suite failure during this build (see `LESSONS.md`).
@@ -128,6 +130,8 @@ Original proposal kept below for the record.
 **Recommendation.** Approve the design now; implement read-only after the site is deployed (a remote connector needs a public HTTPS URL, so it is meaningless before then — same sequencing as proposal 10). Write tools as a separate sign-off.
 
 > STATUS 2026-08-22 (strategy): this connector is the substrate of the one-product-for-all AI-operations model — per-customer monitoring, module management and the feature-request workflow all run over it. Phase 2 (OAuth 2.1 + write tools + feature-request tool) is roadmap item **R5**, the AI ops loop **R8** (`company/REKSTRARKERFI-PLAN.md` §5/§7). Write tools remain a separate Halli sign-off.
+
+> NOTE 2026-09-07: the "no leads tool — leads have no DB rows" premise changed with #2 (migration 097). A read-only `leads` tool (counts + the queue, never the message bodies by default) is a natural candidate for the next tool sign-off; it is NOT added here.
 
 ### 14. In-app AI assistant for the sales handbook
 

@@ -20,6 +20,7 @@ import { fetchDashboard } from '../services/adminBookkeeping.js';
 import { fetchEvents } from '../services/adminEvents.js';
 import { getChanges } from '../services/buildInfo.js';
 import { getGuides, getManageList } from '../services/salesGuides.js';
+import { getLeads } from '../services/leads.js';
 import { updateRowHtml } from '../components/ChangesList.js';
 import { isk } from './booksShared.js';
 
@@ -71,6 +72,15 @@ const CARDS = [
         + stat(t('adminDashboard.booksReceivable'), isk(m.ar_outstanding))
         + stat(t('adminDashboard.booksOverdue', { count: m.ar_overdue_count ?? 0 }), isk(m.ar_overdue), m.ar_overdue > 0 ? 'warn' : '')
         + stat(t('adminDashboard.booksVat'), isk(m.output_vat), m.output_vat > 0 ? 'warn' : '');
+    },
+  },
+  {
+    key: 'leads', title: 'adminDashboard.leads', route: '/admin/leads',
+    gate: () => canSeeView('leads'),
+    load: () => getLeads({ status: 'new', limit: 1 }),
+    render: (data) => {
+      const n = Number(data.total) || 0;
+      return big(String(n), t('adminDashboard.leadsNew', { count: n }), n > 0 ? 'warn' : '');
     },
   },
   {

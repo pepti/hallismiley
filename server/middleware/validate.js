@@ -758,9 +758,50 @@ function validateGuideReorder(req, res, next) {
   next();
 }
 
+// ── Leads inbox (workflow fields only) ───────────────────────────────────────
+// PATCH /api/v1/admin/leads/:id. The body is WHITELISTED to the three workflow
+// fields — name, email, message and the other submission fields are what the
+// visitor wrote and are immutable; anything else sent is dropped, not rejected,
+// so a client carrying a stale row shape keeps working.
+const LEAD_STATUSES = ['new', 'contacted', 'won', 'lost'];
+const MAX_LEAD_NOTE_LEN = 4000;
+
+function validateLeadUpdate(req, res, next) {
+  const src = req.body || {};
+  const errors = [];
+  const picked = {};
+
+  if (src.status !== undefined) {
+    if (typeof src.status !== 'string' || !LEAD_STATUSES.includes(src.status))
+      errors.push({ key: 'validation.lead.statusInvalid' });
+    else picked.status = src.status;
+  }
+  if (src.note !== undefined) {
+    if (src.note === null || src.note === '') picked.note = null;
+    else if (typeof src.note !== 'string') errors.push({ key: 'validation.lead.noteInvalid' });
+    else if (src.note.length > MAX_LEAD_NOTE_LEN)
+      errors.push({ key: 'validation.lead.noteMaxLength', params: { n: MAX_LEAD_NOTE_LEN } });
+    else picked.note = src.note;
+  }
+  if (src.owner_user_id !== undefined) {
+    if (src.owner_user_id === null || src.owner_user_id === '') picked.owner_user_id = null;
+    else if (typeof src.owner_user_id !== 'string' || src.owner_user_id.length > 64)
+      errors.push({ key: 'validation.lead.ownerInvalid' });
+    else picked.owner_user_id = src.owner_user_id;
+  }
+
+  if (!errors.length && Object.keys(picked).length === 0)
+    errors.push({ key: 'validation.lead.noFields' });
+
+  if (errors.length) return _fail(req, res, errors);
+  req.body = picked;
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
+  validateLeadUpdate,
   validateSignup,
   validatePartyRequest,
   validateResetPassword,

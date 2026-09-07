@@ -332,6 +332,38 @@ to do with Orange Smiley as a company". Decisions: hide the retail screens
   `adminDashboard.*`. `e2e/admin-nav-colors.spec.js` tints `invoices` now
   (orders is hidden in view mode); new `e2e/admin-surface.spec.js`.
 
+## Leads inbox — Fyrirspurnir (2026-09-07, chunk B; ENHANCEMENTS #2 + addendum)
+
+Every `/hafa-samband` submission is now a row as well as an email. **Migration
+097_leads** (095/096 are the books branch's — never renumber) creates `leads`
+(PII: name, email, company, phone, platform, message; workflow: `status`
+new|contacted|won|lost, `owner_user_id`, `contacted_at`/`contacted_by` =
+FIRST human touch, never restamped, `note`) and appends `leads` to the seeded
+`solufolk` role (append-only, `@>` guarded — `roles` has no `updated_by`).
+
+- `server/models/Lead.js` — `create()` NEVER throws (contactController fires
+  it alongside the email; a DB failure logs the submission id only). Shape =
+  EventLog. `server/services/leadsCleanup.js` prunes daily at
+  `LEAD_RETENTION_DAYS` (default **730** = the 24 months `/personuvernd` §6
+  now promises; `tests/unit/leadsRetention.test.js` pins it). All statuses
+  prune alike.
+- `/api/v1/admin/leads` (`leadsRoutes.js`): read + PATCH status/note/owner =
+  `requireView('leads')` (the seller's own work product; `validateLeadUpdate`
+  whitelists the body — submission fields are immutable); DELETE (= erasure)
+  and `/export.csv` (bulk PII, `csvCell` formula-neutralised) = admin. Every
+  response `no-store`.
+- UI `/admin/leads` (`AdminLeadsView`, `admin-leads.css`) in Sölustarf after
+  Handbók: chips with counts, search, "Mínar", row → message + actions.
+  `/admin` overview has a Fyrirspurnir card (new count). A `solufolk` user's
+  sidebar is now Handbók + Fyrirspurnir (`e2e/sales-handbook.spec.js`
+  asserts 2; the sales user helper moved to `e2e/lib/salesUser.js`).
+- **`/personuvernd` §3 + §6 rewritten** (IS + EN, DRAFT for Halli): the old
+  text said the enquiry was NOT stored. The file's header rule stands —
+  change the retention number and §6 together.
+- Not done on purpose: no MCP leads tool (separate sign-off, #13 note), no
+  automatic per-seller routing (accounts, #17). Migration chain now ends
+  097_leads.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.

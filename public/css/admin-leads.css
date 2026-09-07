@@ -1,0 +1,68 @@
+/* /admin/leads — Fyrirspurnir, the leads inbox (views/AdminLeadsView.js).
+   Tokens only (invariant 15). Status chips follow the .mon-pill recipe from
+   admin-monitoring.css; a NEW row is emphasised by weight, not colour, so it
+   reads on Miðnætti as well as Bjart. */
+
+.leads-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.leads-filters { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.leads-filter {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit; font-size: 0.8rem;
+  cursor: pointer;
+}
+.leads-filter:hover, .leads-filter:focus-visible { border-color: var(--text-muted); color: var(--text-primary); }
+.leads-filter.is-active { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-muted); }
+.leads-filter__n { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.leads-mine { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: 0.85rem; color: var(--text-secondary); }
+
+.leads-row { cursor: pointer; }
+.leads-row:hover td, .leads-row:focus-visible td { background: var(--bg-hover); }
+.leads-row--new .leads-cell--name { font-weight: 700; color: var(--text-primary); }
+.leads-cell--date { white-space: nowrap; color: var(--text-muted); font-size: 0.85rem; }
+.leads-row.is-open td { border-bottom: 0; }
+
+.leads-chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  background: var(--bg-hover); color: var(--text-secondary);
+  white-space: nowrap;
+}
+.leads-chip--new       { background: var(--bg-hover);    color: var(--accent-ink); }
+.leads-chip--contacted { background: var(--warning-dim); color: var(--warning); }
+.leads-chip--won       { background: var(--success-dim); color: var(--success); }
+.leads-chip--lost      { background: var(--error-dim);   color: var(--error); }
+
+.leads-detail-row td { background: var(--bg-surface); }
+.leads-detail { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) 0 var(--sp-3); }
+.leads-detail__contact { font-size: 0.9rem; color: var(--text-secondary); }
+.leads-detail__contact a { color: var(--accent-ink); }
+.leads-detail__h {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.75rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* The visitor's text, escaped — line breaks survive through CSS, never HTML. */
+.leads-detail__message {
+  margin: 0;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  color: var(--text-primary); line-height: 1.55;
+  max-width: 72ch;
+}
+.leads-detail__meta { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+.leads-detail__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.leads-detail__note { display: flex; flex-direction: column; gap: var(--sp-1); font-size: 0.85rem; color: var(--text-secondary); max-width: 72ch; }
+.leads-detail__note textarea {
+  font: inherit; padding: var(--sp-2);
+  border: 1px solid var(--border-dim); border-radius: var(--radius-sm, 4px);
+  background: var(--bg-primary, transparent); color: var(--text-primary);
+  resize: vertical;
+}
+.leads-retention { margin-top: var(--sp-4); font-size: 0.8rem; color: var(--text-muted); }

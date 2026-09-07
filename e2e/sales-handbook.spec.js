@@ -10,12 +10,8 @@ const { test, expect } = require('@playwright/test');
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { loginAsAdmin } = require('./helpers');
-
-const SALES_USER = {
-  username: 'e2esales',
-  email:    'sales@e2e.test',
-  password: 'SalesPass123',
-};
+// The sales user + login are shared with leads.spec.js (e2e/lib/salesUser.js).
+const { seedSalesUser, loginAsSales } = require('./lib/salesUser');
 
 const GUIDE = {
   slug:    'solusagan-e2e',
@@ -24,31 +20,13 @@ const GUIDE = {
   body:    '<h2>Eitt kerfi</h2><p>Ein áskrift, allt kerfið.</p>',
 };
 
-async function loginAsSales(page) {
-  await page.goto('/');
-  if (await page.locator('[data-testid="nav-user-btn"]').isVisible()) return;
-  await page.locator('[data-testid="nav-signin"]').click();
-  await page.fill('#login-username', SALES_USER.username);
-  await page.fill('#login-password', SALES_USER.password);
-  await page.click('.login-form [type=submit]');
-  await page.waitForSelector('[data-testid="nav-user-btn"]', { timeout: 10_000 });
-}
-
 test.describe('sales handbook (solufolk)', () => {
   test.beforeAll(async () => {
     // Idempotent upserts — global-setup's migrate has already run, so the
     // sales_guides table and the seeded solufolk role exist.
-    const { Scrypt } = require('oslo/password');
-    const hash = await new Scrypt().hash(SALES_USER.password);
+    await seedSalesUser();
     const pool = new Pool({ connectionString: e2eDatabaseUrl(), ssl: false });
     try {
-      await pool.query(
-        `INSERT INTO users (email, username, password_hash, role, email_verified)
-         VALUES ($1, $2, $3, 'solufolk', TRUE)
-         ON CONFLICT (username) DO UPDATE
-           SET password_hash = EXCLUDED.password_hash, role = 'solufolk'`,
-        [SALES_USER.email, SALES_USER.username, hash]
-      );
       await pool.query(
         `INSERT INTO sales_guides (slug, section, title, summary, body, sort_order, published, published_at)
          VALUES ($1, 'sala', $2, $3, $4, 0, TRUE, NOW())
@@ -62,7 +40,7 @@ test.describe('sales handbook (solufolk)', () => {
     }
   });
 
-  test('sales user lands on the handbook with a one-item sidebar and reads a guide', async ({ page }) => {
+  test('sales user lands on the handbook with a two-item sidebar and reads a guide', async ({ page }) => {
     await loginAsSales(page);
 
     // /admin forwards a dashboard-less user to their first visible view.
@@ -70,10 +48,12 @@ test.describe('sales handbook (solufolk)', () => {
     await page.waitForURL('**/admin/handbok', { timeout: 10_000 });
     await expect(page.locator('.admin-title')).toHaveText(/Handbók sölufólks/);
 
-    // Sidebar reconciliation: exactly the Handbók item, none of the rest.
+    // Sidebar reconciliation: exactly Handbók + Fyrirspurnir (the leads inbox,
+    // migration 097), none of the rest.
     const items = page.locator('.admin-sidebar a.admin-sidebar__item');
-    await expect(items).toHaveCount(1);
+    await expect(items).toHaveCount(2);
     await expect(items.first()).toContainText('Handbók');
+    await expect(items.nth(1)).toContainText('Fyrirspurnir');
 
     // The seeded guide card is in the Sala section; open and read it.
     const card = page.locator('.admin-handbok__card', { hasText: GUIDE.title });

@@ -37,6 +37,13 @@ const ADMIN_VIEW_IDS = [
   // news/bookkeeping convention. The seeded `solufolk` role holds exactly
   // this view (migration 090).
   'handbok',
+  // Leads inbox (migration 097). Granting `leads` grants SIGHT OF PII — the
+  // name, email, phone and message of every enquiry — plus the workflow
+  // writes (status / note / owner), which are the seller's own work product.
+  // Delete (erasure) and CSV export (bulk PII) stay hard admin-only
+  // (server/routes/leadsRoutes.js). Migration 097 appends this id to the
+  // seeded `solufolk` role; an accepted decision, like `expenses`/`ar` above.
+  'leads',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +

@@ -24,15 +24,21 @@ const validGuide = {
   section: 'sala',
 };
 
-// Mirror of the migration-090 role seed. Other suites clear non-system roles
-// between tests (adminRoles.test.js), and migrations run once per DB — so this
-// suite re-seeds idempotently with the exact same statement the migration uses.
+// Mirror of the role seeds: 090 creates the role, 097 appends `leads`. Other
+// suites clear non-system roles between tests (adminRoles.test.js), and
+// migrations run once per DB — so this suite re-seeds idempotently with the
+// exact statements the migrations use.
 async function ensureSolufolkRole() {
   await db.query(
     `INSERT INTO roles (name, description, view_access, is_system) VALUES
        ('solufolk', 'Sölufólk — aðgangur að handbók sölufólks',
         '["handbok"]'::jsonb, FALSE)
      ON CONFLICT (name) DO NOTHING`
+  );
+  await db.query(
+    `UPDATE roles SET view_access = view_access || '["leads"]'::jsonb
+      WHERE name = 'solufolk' AND is_system = FALSE
+        AND NOT (view_access @> '["leads"]'::jsonb)`
   );
 }
 
@@ -67,10 +73,10 @@ async function createGuide(cookie, overrides = {}) {
 // ── Migration seed ───────────────────────────────────────────────────────────
 
 describe('solufolk role seed', () => {
-  test('role exists with exactly the handbok view', async () => {
+  test('role exists and holds the handbok view (leads joined it in 097)', async () => {
     const { rows } = await db.query("SELECT view_access, is_system FROM roles WHERE name = 'solufolk'");
     expect(rows[0]).toBeDefined();
-    expect(rows[0].view_access).toEqual(['handbok']);
+    expect(rows[0].view_access).toEqual(expect.arrayContaining(['handbok']));
     expect(rows[0].is_system).toBe(false);
   });
 });

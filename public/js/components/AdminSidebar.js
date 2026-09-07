@@ -47,9 +47,11 @@ export const ADMIN_NAV = [
   // Sölustarf — the sales team's workspace, and the one group a `solufolk`
   // (sales-staff) user sees. Handbók first (it is where a new hire lands);
   // the customer list is the account register the team onboards from
-  // (docs/SALES-STAFF.md). Leads and Markaður join this group as they land.
+  // (docs/SALES-STAFF.md). Fyrirspurnir = the leads inbox (migration 097);
+  // Markaður joins this group when it lands.
   { key: 'staff', group: 'admin.navGroup.staff', items: [
     { id: 'handbok',   route: '/admin/handbok',   labelKey: 'admin.nav.handbok',   icon: 'book' },
+    { id: 'leads',     route: '/admin/leads',     labelKey: 'admin.nav.leads',     icon: 'inbox' },
     { id: 'customers', route: '/admin/customers', labelKey: 'admin.nav.customers', icon: 'people' },
   ] },
   // Bókhald. Order follows the workflow rather than the alphabet: overview first,

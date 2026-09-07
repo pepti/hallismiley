@@ -5,8 +5,8 @@
 // tool tags its payload with the same value (envTag.js).
 //
 // Scope note (ENHANCEMENTS #13, approved 2026-08-22): v1 ships system tools
-// only. Leads are deliberately NOT queryable — this instance stores no lead
-// rows (email-only by design; the leads table is a Job-3 deferral), and
+// only. Leads are deliberately NOT queryable yet — rows exist since migration
+// 097 (2026-09-07), but a leads tool is a separate Halli sign-off — and
 // customer/order detail tools wait for a real need.
 const db = require('../../config/database');
 const { env } = require('../envTag');
