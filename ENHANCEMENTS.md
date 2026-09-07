@@ -158,6 +158,30 @@ Original proposal kept below for the record.
 
 > **STATUS: APPROVED + IMPLEMENTED — Halli, 2026-09-07 (admin re-shape, chunk C).** No migration. `/api/v1/admin/markadur` (`marketRoutes.js`/`marketController.js`: list over `market_companies` ⋈ LATEST `market_financials`, filters + whitelisted sorts, detail with every year; reads = `requireView('markadur')`, all `no-store`), the single write `PATCH /:id/status` shortlist → handed_to_sales / rejected (admin/moderator, race-safe `WHERE status='shortlist'`, 409 otherwise; audit = pino line + `updated_at`), `/admin/markadur` in the Sölustarf group (`AdminMarketView`, drawer; `report_path` rendered as text, never a link). **Not seeded onto `solufolk`** — Halli grants it by hand in `/admin/roles`. Optional later: a two-column `status_changed_at/by` migration if a durable actor is wanted. Caveat: a re-import whose JSON row carries `status` overwrites a hand-off (export without it) — `tests/integration/market.test.js` pins the safe case.
 
+### 17. Customer accounts + staff roles + staff audit log
+
+**What.** The per-customer state of record (`customer_accounts`: slug, kennitala, tier, lifecycle status lead → offered → signed → provisioning → building → live → paused/churned, the owning seller, contact, contract dates, fees, quota, commission rates, repo/URL/Azure identifiers), two seeded staff roles (`solumadur` = owns accounts + earns commission; `verktaki` = services every account, no commission), an append-only `staff_audit_log` (account writes, role grants, invitations, disable/enable, commission), `users.github_login`, row scoping in both layers (a seller sees only their own accounts; `allaccounts` is a permission-only id that widens it), and the 2FA gate widened to anyone holding `accounts`. Filed 2026-09-03 from the operating plan §1a (D-002); the D0 chunk never wrote it here.
+**Why.** Sellers with full autonomy (D-002) need an account to own before anything else — commission, GitHub access and provisioning all key off `owner_user_id`.
+
+> **STATUS: APPROVED + IMPLEMENTED — Halli, 2026-09-07.** Migration **098_customer_accounts** (pure expand: three tables, one column, two roles). `server/models/CustomerAccount.js` (scope is a required argument of every method; foreign ids answer 404), `server/auth/accountScope.js`, `server/services/staffAudit.js` (closed vocabulary, `books_forbid_any_mutation` trigger), `/api/v1/admin/accounts` (`adminAccountRoutes.js`: read/create/patch/provision-request/audit/commission = `requireView('accounts')` + scope; owner change = admin), `/api/v1/admin/audit` (admin) on `/admin/monitoring`, hooks in the roles/customers/users controllers, `utils/adminRole.js userHoldsView` → `mfaService` treats accounts holders like admins. UI `/admin/accounts` + `/admin/accounts/:id` in Sölustarf; Markaður's drawer gains "Stofna viðskiptareikning" (the #16 hand-off, one transaction). NOT here: GitHub teams/rulesets and the drift script (#19), the seller-access runbook.
+
+### 18. Service-contract invoices + commission ledger
+
+**What.** `POST /api/v1/admin/bookkeeping/invoices/service` — the company's own revenue path (the bookkeeping suite could only invoice shop orders): a build-fee instalment (50% at signing / 50% at go-live, D-005), a contract month in advance (pro-rated override allowed), or overage verkeiningar; ex VSK + 24%. `commission_events` written in the invoice's transaction with the owner and rate snapshotted (D-003: 15% build / 10% recurring; overage carries none). Report `GET /api/v1/admin/commission?from&to` per seller per month: accrued vs payable (invoice paid in full — commission is earned on receipt), plus the events and a CSV; scoped like accounts.
+**Why.** D-003's commission cannot be paid by hand for long, and the company had no invoicing path for its own contracts.
+
+> **STATUS: APPROVED + IMPLEMENTED — Halli, 2026-09-07.** `invoiceService.createServiceInvoice` (same counter/lines/journal/books-audit machinery as `createFromOrder`; account row locked for the document), `server/models/Commission.js`, `adminCommissionRoutes.js`, UI: the "Gefa út reikning" card on `/admin/accounts/:id` (admin) and `/admin/commission` (`AdminCommissionView`). Not built on purpose (plan): `paid_at`/payout marking (Halli pays the seller's verktaka invoice outside the app), clawback, split ownership, volume tiers, the 6-month tail on departure (D-003 — recorded, applied by hand at the statement).
+
+### 19. Site-factory generate/provision workflows + deploy guardrails
+
+**What.** `generate-client.yml` + `provision-client.yml` + `provision-client.ps1` in site-factory (claims a pooled subscription, appends to `fleet.json`), `scaffold.js` defaults to `rekstrarkerfid` at a release tag, `deploy.yml` rollback + slot swap + `DEPLOY_ACTORS`, GitHub teams/rulesets per customer repo, the weekly access-drift script. Filed 2026-09-03 (plan §1b, D-009–D-013).
+**Effort.** L. **Risk.** Medium — it arms real deploys. **Recommendation.** After the first signed customer; needs Halli's arming list (SP, subscription pool, release host).
+
+### 20. Verkeiningar metering
+
+**What.** The quota D-001 sells: `einingar:N` labels on customer-repo PRs, `einingar-check.yml` summing the month, the 80 % signal to the seller and customer, overage feeding #18's `overage` invoice. Filed 2026-09-03.
+**Effort.** M. **Recommendation.** With the first customer under contract.
+
 ---
 
 ## Remaining `hallismiley` references

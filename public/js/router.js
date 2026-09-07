@@ -20,6 +20,9 @@ import { AdminBackgroundView } from './views/AdminBackgroundView.js';
 import { AdminChangeRequestsView } from './views/AdminChangeRequestsView.js';
 import { AdminLeadsView }     from './views/AdminLeadsView.js';
 import { AdminMarketView }    from './views/AdminMarketView.js';
+import { AdminAccountsView }  from './views/AdminAccountsView.js';
+import { AdminAccountDetailView } from './views/AdminAccountDetailView.js';
+import { AdminCommissionView } from './views/AdminCommissionView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -105,6 +108,9 @@ const ROUTES = [
   // Not a sidebar item: rides the `books` view id rather than adding one (a new id
   // means a new RBAC grant and a parity-test entry for a screen visited four times a year).
   { pattern: '/admin/books/settings', factory: () => (isAuthenticated() && canSeeView('books')) ? new AdminBooksSettingsView() : new HomeView() },
+  { pattern: '/admin/accounts/:id', factory: (p) => (isAuthenticated() && canSeeView('accounts')) ? new AdminAccountDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/accounts',  factory: ()  => (isAuthenticated() && canSeeView('accounts')) ? new AdminAccountsView() : new HomeView() },
+  { pattern: '/admin/commission', factory: () => (isAuthenticated() && canSeeView('commission')) ? new AdminCommissionView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
   { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
@@ -299,6 +305,8 @@ export class Router {
       '/admin/handbok':    'handbok',
       '/admin/leads':      'leads',
       '/admin/markadur':   'markadur',
+      '/admin/accounts':   'accounts',
+      '/admin/commission': 'commission',
       '/admin/customers':  'customers',
       '/admin/books':      'books',
       '/admin/books/settings': 'books',

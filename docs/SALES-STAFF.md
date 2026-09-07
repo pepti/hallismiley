@@ -10,8 +10,8 @@ operator's guide; the architecture notes live in the migration (090) and
 
 | Piece | Where |
 |---|---|
-| Role | `solufolk` — seeded by migration 090, `view_access: ["handbok", "leads"]` (leads appended by 097), non-system (editable in `/admin/roles`) |
-| View ids | `handbok` — READ of published guides only · `leads` — the inbox: read + the workflow writes (status / note / owner); both in `server/auth/adminViews.js` |
+| Roles | `solufolk` — trainee / handbook + inbox (migration 090; `["handbok", "leads"]`, leads appended by 097) · `solumadur` — owns customer accounts and earns commission (098; `["handbok", "leads", "accounts", "commission"]`) · `verktaki` — services every account, no commission (098; `["handbok", "accounts", "allaccounts"]`). All non-system, editable in `/admin/roles`. |
+| View ids | `handbok` — READ of published guides only · `leads` — the inbox: read + the workflow writes · `accounts` — the seller's OWN customer accounts (row-scoped; also puts the account behind 2FA) · `commission` — their own commission statement · `allaccounts` — permission only: widens `accounts` to every account; all in `server/auth/adminViews.js` |
 | Data | `sales_guides` (sections `grunnur` / `sala` / `thjonusta` / `vara`, IS-canonical + `_en` siblings) · `leads` (migration 097 — every /hafa-samband enquiry; PII, pruned after `LEAD_RETENTION_DAYS` = 730) |
 | API | `/api/v1/admin/handbok` and `/api/v1/admin/leads` — every route authenticated, every response `Cache-Control: no-store` |
 | UI | `/admin/handbok` (library + read; editors get the overlay editor, reorder arrows, drafts) · `/admin/leads` (Fyrirspurnir: filter chips, search, "Mínar", row → message + actions) |

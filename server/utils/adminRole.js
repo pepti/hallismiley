@@ -22,4 +22,22 @@ async function userIsAdminAnywhere(dbQuery, userId) {
   return rows.length > 0;
 }
 
-module.exports = { userIsAdminAnywhere };
+// Does any role this user holds (primary OR set) grant `viewId` — or every
+// view? Used to widen the 2FA gate (mfaService) to accounts holders: a seller
+// who owns customer accounts can reach customer data and, via GitHub, deploy
+// to those customers, so they face the same challenge as an admin
+// (ENHANCEMENTS #17, plan §1a).
+async function userHoldsView(dbQuery, userId, viewId) {
+  const { rows } = await dbQuery(
+    `SELECT 1
+       FROM roles r
+      WHERE (r.name = (SELECT role FROM users WHERE id = $1)
+             OR r.name IN (SELECT role_name FROM user_roles WHERE user_id = $1))
+        AND (r.view_access @> '["*"]'::jsonb OR r.view_access @> $2::jsonb)
+      LIMIT 1`,
+    [userId, JSON.stringify([viewId])]
+  );
+  return rows.length > 0;
+}
+
+module.exports = { userIsAdminAnywhere, userHoldsView };

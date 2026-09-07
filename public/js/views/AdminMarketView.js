@@ -10,10 +10,11 @@
 // link. Theme rule: tokens only (invariant 15).
 import { isAuthenticated, canSeeView, canEdit } from '../services/auth.js';
 import { getCompanies, getCompany, setCompanyStatus } from '../services/market.js';
+import { createAccount } from '../services/accounts.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDate } from '../utils/format.js';
 import { t, href, getLocale } from '../i18n/i18n.js';
-import { navigateReplace } from '../navigate.js';
+import { navigate, navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 
@@ -261,8 +262,7 @@ export class AdminMarketView {
       const { company } = await getCompany(id);
       if (this._drawer?.drawer !== drawer) return;
       drawer.innerHTML = this._drawerHtml(company);
-      drawer.querySelector('[data-close]').addEventListener('click', () => this._close());
-      drawer.querySelectorAll('[data-set-status]').forEach(b => b.addEventListener('click', () => this._hand(company, b.dataset.setStatus)));
+      this._bindDrawer(drawer, company);
       drawer.querySelector('[data-close]').focus();
     } catch (err) {
       drawer.innerHTML = `<p class="admin-error">${escHtml(err.message || t('markadur.loadError'))}</p>`;
@@ -313,11 +313,17 @@ export class AdminMarketView {
 
     const canHand = canEdit();
     const isShort = c.status === 'shortlist';
-    const actions = canHand ? `
+    // The #17 hand-off: a customer account created from the market row (name,
+    // kennitala, tier copied; the row moves to handed_to_sales). Anyone holding
+    // `accounts` may do it for a shortlisted or already handed-off company.
+    const canAccount = canSeeView('accounts') && (isShort || c.status === 'handed_to_sales');
+    const actions = (canHand || canAccount) ? `
       <div class="markadur-drawer__actions">
+        ${canHand ? `
         <button type="button" class="btn btn--sm btn--primary" data-set-status="handed_to_sales" ${isShort ? '' : 'disabled'}>${escHtml(t('markadur.handToSales'))}</button>
-        <button type="button" class="btn btn--sm btn--outline" data-set-status="rejected" ${isShort ? '' : 'disabled'}>${escHtml(t('markadur.reject'))}</button>
-        ${isShort ? '' : `<span class="markadur-drawer__muted">${escHtml(t('markadur.handOnlyShortlist'))}</span>`}
+        <button type="button" class="btn btn--sm btn--outline" data-set-status="rejected" ${isShort ? '' : 'disabled'}>${escHtml(t('markadur.reject'))}</button>` : ''}
+        ${canAccount ? `<button type="button" class="btn btn--sm btn--outline" data-create-account>${escHtml(t('markadur.createAccount'))}</button>` : ''}
+        ${canHand && !isShort ? `<span class="markadur-drawer__muted">${escHtml(t('markadur.handOnlyShortlist'))}</span>` : ''}
       </div>` : '';
 
     const fact = (k, v) => `<div class="markadur-fact"><span>${escHtml(t(k))}</span><strong>${v}</strong></div>`;
@@ -365,12 +371,32 @@ export class AdminMarketView {
         const { company: fresh } = await getCompany(company.id);
         if (this._drawer?.drawer === drawer) {
           drawer.innerHTML = this._drawerHtml(fresh);
-          drawer.querySelector('[data-close]').addEventListener('click', () => this._close());
-          drawer.querySelectorAll('[data-set-status]').forEach(b => b.addEventListener('click', () => this._hand(fresh, b.dataset.setStatus)));
+          this._bindDrawer(drawer, fresh);
         }
       }
     } catch (err) {
       showToast(err.message || t('markadur.statusError'), 'error');
+    }
+  }
+
+  _bindDrawer(drawer, company) {
+    drawer.querySelector('[data-close]').addEventListener('click', () => this._close());
+    drawer.querySelectorAll('[data-set-status]').forEach(b => b.addEventListener('click', () => this._hand(company, b.dataset.setStatus)));
+    drawer.querySelector('[data-create-account]')?.addEventListener('click', () => this._createAccount(company));
+  }
+
+  // POST /api/v1/admin/accounts with the market row: the server copies name,
+  // kennitala and tier_fit and moves the row to handed_to_sales in one
+  // transaction, then we land on the new account.
+  async _createAccount(company) {
+    if (!confirm(t('markadur.createAccountConfirm', { name: company.name }))) return;
+    try {
+      const { account } = await createAccount({ market_company_id: company.id });
+      showToast(t('accounts.created'), 'success');
+      this._close();
+      navigate(href(`/admin/accounts/${account.id}`));
+    } catch (err) {
+      showToast(err.message || t('accounts.saveError'), 'error');
     }
   }
 }

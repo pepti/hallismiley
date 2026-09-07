@@ -7,6 +7,9 @@ const UserRole = require('../models/UserRole');
 const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
 const { t } = require('../i18n');
+// Role grants/revocations are staff actions (migration 098 staff_audit_log).
+// Best-effort here: these handlers are not one transaction with the grant.
+const staffAudit = require('../services/staffAudit');
 
 const NAME_RE  = /^[a-z0-9_-]{2,32}$/;
 const RESERVED = new Set(['admin', 'moderator', 'user']);
@@ -128,6 +131,10 @@ const adminRolesController = {
       if (!added) {
         return res.status(409).json({ error: t(req.locale, 'errors.admin.alreadyMember'), code: 409 });
       }
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'role.granted', entityType: 'user', entityId: userId,
+        summary: { role: name },
+      });
       return res.status(201).json({ ok: true });
     } catch (err) {
       if (err.code === '23503') { // user/role vanished mid-request
@@ -200,6 +207,10 @@ const adminRolesController = {
 
         await client.query('COMMIT');
         UserRole.invalidateUser(userId);
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: userId,
+          summary: { role: name },
+        });
         return res.status(204).send();
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});

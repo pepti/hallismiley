@@ -51,11 +51,28 @@ const ADMIN_VIEW_IDS = [
   // `solufolk`: Halli grants it by hand in /admin/roles when the team should
   // see the shortlist.
   'markadur',
+  // Customer accounts (migration 098, ENHANCEMENTS #17/#18). `accounts` grants
+  // the seller's OWN accounts (row-scoped in the model — server/auth/
+  // accountScope.js); `commission` their own commission report. Holding
+  // `accounts` also puts the account behind the 2FA challenge (mfaService).
+  // Seeded roles: solumadur (handbok, leads, accounts, commission) and
+  // verktaki (handbok, accounts, allaccounts).
+  'accounts',
+  'commission',
+  // PERMISSION-ONLY id: no screen of its own. Widens `accounts` (and the
+  // commission report) from "mine" to every account — the verktaki who
+  // services any customer. Listed in PERMISSION_VIEW_IDS so the sidebar
+  // parity test does not expect a nav item for it.
+  'allaccounts',
 ];
+
+// Grantable ids that gate a SCOPE rather than a screen. The role editor shows
+// them under their own heading; the sidebar never renders them.
+const PERMISSION_VIEW_IDS = ['allaccounts'];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +
 // the set the roles API validates against). Excludes 'roles' — managing roles is
 // a hard admin-only meta-permission; granting it would allow privilege escalation.
 const GRANTABLE_VIEW_IDS = ADMIN_VIEW_IDS.filter(id => id !== 'roles');
 
-module.exports = { ALL, ADMIN_VIEW_IDS, GRANTABLE_VIEW_IDS };
+module.exports = { ALL, ADMIN_VIEW_IDS, GRANTABLE_VIEW_IDS, PERMISSION_VIEW_IDS };

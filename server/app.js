@@ -321,6 +321,12 @@ app.use('/api/v1/admin/markadur', (req, res, next) => {
   }
   next();
 });
+app.use('/api/v1/admin/accounts', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
 app.use('/api/v1/admin/bookkeeping', (req, res, next) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
@@ -608,6 +614,9 @@ app.use('/api/v1/admin/bookkeeping', adminBookkeepingRoutes); // must come befor
 app.use('/api/v1/admin/handbok', require('./routes/salesGuidesRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/leads', require('./routes/leadsRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/markadur', require('./routes/marketRoutes')); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/accounts', require('./routes/adminAccountRoutes')); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/commission', require('./routes/adminCommissionRoutes')); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/audit', require('./routes/adminAuditRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 // Client error beacon + admin event log (harvest 2026-08-22, ice #195). The
