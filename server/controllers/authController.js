@@ -11,7 +11,7 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/e
 const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
 const mfaService          = require('../services/mfaService');
-const { userIsAdminAnywhere } = require('../utils/adminRole');
+const { userIsAdminAnywhere, userHoldsView } = require('../utils/adminRole');
 const { t }               = require('../i18n');
 
 const scrypt = new Scrypt();
@@ -128,6 +128,8 @@ const authController = {
       // an account can hold admin through user_roles while its primary role
       // says 'user', and it must not walk past the 2FA challenge.
       user.admin_anywhere = await userIsAdminAnywhere(dbQuery, user.id);
+      // Sellers holding the `accounts` view are protected like admins (#17).
+      user.accounts_holder = await userHoldsView(dbQuery, user.id, 'accounts');
       if (mfaService.isProtected(user)) {
         const challengeId = await mfaService.createChallenge(user.id, {
           ip: req.ip ?? null,

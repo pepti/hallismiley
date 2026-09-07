@@ -21,6 +21,7 @@ import { getToastLog, clearToastLog } from '../services/toastLog.js';
 import { toastLogHtml } from '../components/ToastLog.js';
 import { fetchEvents } from '../services/adminEvents.js';
 import { getChanges } from '../services/buildInfo.js';
+import { getStaffAudit } from '../services/commission.js';
 import { formatDateTime } from '../utils/format.js';
 // The row renderer is shared with the /admin overview card (components/ChangesList.js).
 import { updateRowHtml } from '../components/ChangesList.js';
@@ -124,12 +125,38 @@ export class AdminMonitoringView {
     this._loadEvents();
     this._loadHealth();
     this._loadUpdates();
+    this._loadStaffAudit();
     return renderAdminShell({ activePath: '/admin/monitoring', content: el });
   }
 
   destroy() {
     this._destroyed = true;
     clearTimeout(this._eventsSearchTimer);
+  }
+
+  // Staff audit log (migration 098): the latest fifty staff actions — account
+  // writes, role grants, invitations, commission — admin-only.
+  async _loadStaffAudit() {
+    const host = this._el.querySelector('#mon-audit');
+    if (!host) return;
+    try {
+      const { entries } = await getStaffAudit({ limit: 50 });
+      if (this._destroyed) return;
+      if (!entries.length) { host.innerHTML = `<p class="mon-loading">${t('adminMonitoring.auditNone')}</p>`; return; }
+      host.innerHTML = `<ul class="acct-audit">${entries.map(e => {
+        const s = e.summary || {};
+        const detail = [s.role, s.username, s.slug, s.from && s.to ? `${s.from} → ${s.to}` : null, s.fields ? s.fields.join(', ') : null]
+          .filter(Boolean).join(' · ');
+        return `<li>
+          <span class="acct-audit__when">${escHtml(formatDateTime(e.created_at))}</span>
+          <span class="acct-audit__what">${escHtml(e.action)}</span>
+          <span class="acct-audit__detail">${escHtml(e.entity_type)}${e.entity_id ? ` #${escHtml(e.entity_id)}` : ''}${detail ? ` — ${escHtml(detail)}` : ''}</span>
+          <span class="acct-audit__who">${escHtml(e.actor_username || '')}</span>
+        </li>`;
+      }).join('')}</ul>`;
+    } catch (err) {
+      if (!this._destroyed) host.innerHTML = `<p class="mon-error">${escHtml(err.message)}</p>`;
+    }
   }
 
   _build() {
@@ -186,6 +213,12 @@ export class AdminMonitoringView {
         <h2 class="mon-card__title">${t('adminMonitoring.healthSection')}</h2>
         <p class="mon-card__help">${t('adminMonitoring.healthHelp')}</p>
         <div id="mon-health"></div>
+      </section>
+
+      <section class="mon-card">
+        <h2 class="mon-card__title">${t('adminMonitoring.auditSection')}</h2>
+        <p class="mon-card__help">${t('adminMonitoring.auditHelp')}</p>
+        <div id="mon-audit"></div>
       </section>
     `;
 

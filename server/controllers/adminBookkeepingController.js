@@ -231,6 +231,41 @@ async function createInvoiceFromOrder(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// POST /api/v1/admin/bookkeeping/invoices/service — the company's own revenue
+// (ENHANCEMENTS #18): a build-fee instalment, a month of the service contract,
+// or overage verkeiningar, issued to a customer ACCOUNT. Admin-only; the
+// commission hook runs inside the same transaction (invoiceService).
+async function createServiceInvoice(req, res, next) {
+  try {
+    const body = req.body || {};
+    const accountId = Number(body.account_id);
+    if (!Number.isInteger(accountId) || accountId <= 0) throw new BadRequest('account_id must be a positive integer');
+    const kind = parseEnum(body.kind, invoiceService.SERVICE_KINDS, 'kind');
+    if (!kind) throw new BadRequest(`kind must be one of: ${invoiceService.SERVICE_KINDS.join(', ')}`);
+    const deposit = body.deposit === undefined ? true : body.deposit === true;
+    const period = body.period ? parseText(body.period, 'period', { maxLen: 7 }) : null;
+    const amountNetIsk = body.amount_net_isk === undefined || body.amount_net_isk === null || body.amount_net_isk === ''
+      ? null : parseAmount(body.amount_net_isk, 'amount_net_isk');
+    const units = body.units === undefined || body.units === '' ? null : Number(body.units);
+    const unitPriceIsk = body.unit_price_isk === undefined || body.unit_price_isk === '' ? null : Number(body.unit_price_isk);
+    const issuedAt = body.issued_at ? assertAccountingDate(body.issued_at, 'issued_at') : undefined;
+
+    const result = await ledger.withTransaction(client =>
+      invoiceService.createServiceInvoice(client, {
+        accountId, kind, deposit, period, amountNetIsk, units, unitPriceIsk, issuedAt,
+        createdBy: req.user.id,
+        requestId: req.requestId || null,
+      })
+    );
+    securityLogger.adminAction(req.user.id, 'books.invoice.service', result.invoice.id, { accountId, kind });
+    res.status(201).json({
+      invoice: await Invoice.findById(result.invoice.id),
+      commission: result.commission,
+      created: true,
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
 // Shared by the payment and refund endpoints — same request shape, opposite
 // direction of travel.
 function parseSettlementBody(req) {
@@ -1870,6 +1905,7 @@ module.exports = {
   listInvoices,
   getInvoice,
   createInvoiceFromOrder,
+  createServiceInvoice,
   recordPayment,
   recordRefund,
   createCreditNote,
