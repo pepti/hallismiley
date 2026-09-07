@@ -10,11 +10,11 @@ operator's guide; the architecture notes live in the migration (090) and
 
 | Piece | Where |
 |---|---|
-| Role | `solufolk` — seeded by migration 090, `view_access: ["handbok"]`, non-system (editable in `/admin/roles`) |
-| View id | `handbok` (`server/auth/adminViews.js`) — grants READ of published guides only |
-| Data | `sales_guides` table: sections `grunnur` / `sala` / `thjonusta` / `vara`, Icelandic-canonical columns with optional `_en` siblings |
-| API | `/api/v1/admin/handbok` — every route authenticated, every response `Cache-Control: no-store` |
-| UI | `/admin/handbok` (library + read); editors additionally get the overlay editor, reorder arrows, drafts |
+| Role | `solufolk` — seeded by migration 090, `view_access: ["handbok", "leads"]` (leads appended by 097), non-system (editable in `/admin/roles`) |
+| View ids | `handbok` — READ of published guides only · `leads` — the inbox: read + the workflow writes (status / note / owner); both in `server/auth/adminViews.js` |
+| Data | `sales_guides` (sections `grunnur` / `sala` / `thjonusta` / `vara`, IS-canonical + `_en` siblings) · `leads` (migration 097 — every /hafa-samband enquiry; PII, pruned after `LEAD_RETENTION_DAYS` = 730) |
+| API | `/api/v1/admin/handbok` and `/api/v1/admin/leads` — every route authenticated, every response `Cache-Control: no-store` |
+| UI | `/admin/handbok` (library + read; editors get the overlay editor, reorder arrows, drafts) · `/admin/leads` (Fyrirspurnir: filter chips, search, "Mínar", row → message + actions) |
 
 Access model: **read** = any role holding the `handbok` view; **edit/drafts** =
 admin or moderator; **delete** = admin only (moderators unpublish instead).
@@ -33,10 +33,32 @@ handbook and sees a one-item sidebar; every other admin API answers 403
 
 The hire sets their password, logs in on the site, and the user menu shows
 "Admin" → they land on the handbook. To verify: their sidebar must show ONLY
-Handbók.
+Handbók and Fyrirspurnir.
 
 Offboarding: `/admin/users` → disable the account (sessions die on next
-check); optionally remove the `solufolk` membership.
+check); optionally remove the `solufolk` membership. Leads they own keep
+`owner_user_id` pointing at the disabled account until someone reassigns
+them (the "Mínar" filter of the next owner will not show them until then).
+
+## Working the lead inbox (`/admin/leads`)
+
+- Every `/hafa-samband` submission lands here the moment it is sent — the
+  notification email still goes to `LEAD_NOTIFY_EMAIL`, the row is the copy
+  that cannot be missed. Newest first; a **new** lead is bold.
+- **Statuses**: Ný → Haft samband → Unnin / Töpuð. The first move out of Ný
+  stamps *who* made contact and *when* (`contacted_at`/`contacted_by`) and is
+  never restamped — it records the first human touch, not the latest.
+- **Ábyrgð (owner)**: "Taka að mér" claims the lead; "Mínar" filters to your
+  own. One owner per lead; nothing routes automatically yet (per-seller
+  routing is a known gap until customer accounts, ENHANCEMENTS #17).
+- **Minnispunktar**: free text per lead, saved with Vista. Plain text only.
+- **Who may do what**: anyone with the `leads` view reads and works the
+  queue; **delete** (which IS the personal-data erasure path) and **CSV
+  export** are admin-only. Every response is `no-store`.
+- **Retention**: rows are deleted automatically 24 months after receipt
+  (`LEAD_RETENTION_DAYS`, `server/services/leadsCleanup.js`) — the promise
+  in `/personuvernd` §6. A visitor's erasure request = delete the row in the
+  inbox (admin) and the email in the mailbox.
 
 ## Content workflow
 
@@ -55,6 +77,6 @@ check); optionally remove the `solufolk` membership.
 
 ## Related proposals (ENHANCEMENTS.md — not implemented)
 
-- **#2 addendum** — leads inbox grantable to `solufolk`.
+- **#2 + addendum** — DONE 2026-09-07 (the inbox above).
 - **#14** — in-app AI assistant grounded in the published guides.
 - **#15** — images/screenshots in guide bodies (auth-served media).

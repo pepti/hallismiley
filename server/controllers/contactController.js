@@ -1,11 +1,14 @@
 // Lead-capture handler for the business contact form (/hafa-samband).
-// Validates the enquiry, notifies the company inbox, and records a
-// no-PII conversion event. Persisting leads to a `leads` table with an
-// admin list view is proposed separately (ENHANCEMENTS.md).
+// Validates the enquiry, notifies the company inbox, persists the lead to
+// the `leads` table (migration 097 — the inbox at /admin/leads), and records
+// a no-PII conversion event. Email and row are independent, fire-and-forget:
+// a database problem never delays the visitor or stops the email, and vice
+// versa. /personuvernd §3 + §6 describe this store — change both together.
 const { randomUUID } = require('crypto');
 const { t }          = require('../i18n');
 const logger         = require('../logger');
 const { AnalyticsEvent } = require('../models/Analytics');
+const Lead           = require('../models/Lead');
 // Held as a module reference rather than a destructured function so the
 // notification can be stubbed in tests (a destructured binding captures the
 // original and ignores any later spy).
@@ -72,6 +75,20 @@ async function submit(req, res, next) {
       platform,
       locale: req.locale,
     }).catch(err => logger.error({ submissionId, err: err.message }, 'lead notification failed'));
+
+    // The inbox row. Lead.create never throws (it logs the id and returns
+    // null), so the email above and the response already sent are untouched
+    // by whatever the database does.
+    Lead.create({
+      submissionId,
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
+      company: company ? company.trim() : null,
+      phone: phone ? phone.trim() : null,
+      platform,
+      locale: req.locale,
+    }).catch(() => {});
 
     AnalyticsEvent.record({
       event_type: 'contact_submit',

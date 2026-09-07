@@ -8,8 +8,11 @@ import { t, href, getLocale } from '../i18n/i18n.js';
 // EVERY factual claim here was read off the code on 2026-09-02, not assumed.
 // If you change any of these, change the policy in the same commit:
 //   - lead form fields ............ server/controllers/contactController.js
-//     (and note it does NOT persist — there is no leads table; the enquiry
-//     leaves as email via Resend. A leads store is ENHANCEMENTS #2.)
+//     Since 2026-09-07 the enquiry IS persisted (migration 097 `leads`,
+//     server/models/Lead.js) alongside the notification email, read by
+//     admins + the sales role at /admin/leads, and pruned after
+//     LEAD_RETENTION_DAYS (default 730 — the "24 months" in §6;
+//     server/services/leadsCleanup.js). Change that number and §6 together.
 //   - page_views columns .......... server/config/schema.js (~1400)
 //   - visitor_token derivation .... server/services/analyticsSalt.js
 //     (SHA-256 of a DAILY salt + ip + user-agent; neither input is stored)
@@ -31,7 +34,7 @@ import { t, href, getLocale } from '../i18n/i18n.js';
 
 const COPY = {
   is: {
-    updated: 'Síðast uppfært: 2. september 2026',
+    updated: 'Síðast uppfært: 7. september 2026',
     sections: [
       ['1. Ábyrgðaraðili', `
         <p>Þessi vefur (<strong>orangesmiley.is</strong>) er rekinn af Orange Smiley ehf.,
@@ -56,10 +59,12 @@ const COPY = {
         <p>Við biðjum um <strong>nafn, netfang og skilaboð</strong>. Þú mátt einnig gefa upp
         <strong>fyrirtæki, símanúmer og hvaða kerfi þú notar í dag</strong> — það er valfrjálst
         og fyrirspurnin er aldrei afgreidd verr þótt reitirnir séu auðir.</p>
-        <p>Fyrirspurnin er <strong>ekki vistuð í gagnagrunni vefsins</strong>. Hún fer sem
-        tölvupóstur í fyrirtækjapósthólfið okkar og lifir þar eins og önnur samskipti. Á sama
-        tíma skráum við eina talningarfærslu sem inniheldur <em>aðeins</em> hvaða kerfi var
-        valið — ekkert nafn, netfang eða skilaboð.</p>
+        <p>Fyrirspurnin er <strong>vistuð í gagnagrunni vefsins</strong> — nafn, netfang,
+        fyrirtæki, sími, kerfið sem þú notar í dag og skilaboðin — og send um leið sem
+        tölvupóstur í fyrirtækjapósthólfið okkar. Í kerfinu sjá hana aðeins stjórnendur
+        fyrirtækisins og sölufólk okkar, og hún er eingöngu notuð til að svara þér og fylgja
+        erindinu eftir. Á sama tíma skráum við eina talningarfærslu sem inniheldur
+        <em>aðeins</em> hvaða kerfi var valið — ekkert nafn, netfang eða skilaboð.</p>
         <h3>Aðgangur og innskráning</h3>
         <p>Ef þú ert með aðgang setur vefurinn örugga <code>httpOnly</code> vafraköku fyrir
         setuna. Hún er nauðsynleg fyrir innskráninguna sjálfa og er ekki notuð til mælinga.</p>
@@ -106,9 +111,10 @@ const COPY = {
         7. kafla.</p>`],
       ['6. Varðveislutími', `
         <ul>
-          <li><strong>Fyrirspurnir</strong> — lifa í fyrirtækjapósthólfinu eins og önnur
-          samskipti. Þar er engin sjálfvirk eyðing; biddu okkur um eyðingu og við verðum við
-          því.</li>
+          <li><strong>Fyrirspurnir</strong> — geymdar í kerfinu í <strong>24 mánuði</strong>
+          frá móttöku og eytt sjálfkrafa eftir það (keyrt daglega). Afritið í
+          fyrirtækjapósthólfinu lifir eins og önnur samskipti. Biddu okkur um eyðingu hvenær
+          sem er og við verðum við því.</li>
           <li><strong>Setuvafrakökur</strong> — renna út eftir <strong>30 daga</strong>, og
           útrunnum setum er eytt sjálfkrafa daglega.</li>
           <li><strong>Villuskráning</strong> — <strong>90 dagar</strong>, síðan er henni eytt
@@ -170,7 +176,7 @@ const COPY = {
     ],
   },
   en: {
-    updated: 'Last updated: 2 September 2026',
+    updated: 'Last updated: 7 September 2026',
     sections: [
       ['1. Who We Are', `
         <p>This website (<strong>orangesmiley.is</strong>) is operated by Orange Smiley ehf.,
@@ -195,10 +201,12 @@ const COPY = {
         <p>We ask for your <strong>name, email address and message</strong>. You may also give
         your <strong>company, phone number and the system you use today</strong> — those are
         optional, and your enquiry is never handled any worse for leaving them blank.</p>
-        <p>The enquiry is <strong>not stored in the website's database</strong>. It is sent as
-        email to our company mailbox and lives there like any other correspondence. At the same
-        time we record a single counting event containing <em>only</em> which system was
-        selected — no name, email address or message.</p>
+        <p>The enquiry is <strong>stored in the website's database</strong> — name, email
+        address, company, phone, the system you use today and the message — and sent at the
+        same time as email to our company mailbox. Inside the system only the company's
+        administrators and our sales staff can see it, and it is used solely to answer you and
+        follow the enquiry up. At the same time we record a single counting event containing
+        <em>only</em> which system was selected — no name, email address or message.</p>
         <h3>Accounts and sign-in</h3>
         <p>If you hold an account, the site sets a secure <code>httpOnly</code> session cookie.
         It is strictly necessary for signing in and is not used for analytics.</p>
@@ -246,8 +254,10 @@ const COPY = {
         not share it with third parties beyond those listed in section 7.</p>`],
       ['6. Data Retention', `
         <ul>
-          <li><strong>Enquiries</strong> — live in the company mailbox like any other
-          correspondence. There is no automatic deletion there; ask us to delete and we will.</li>
+          <li><strong>Enquiries</strong> — kept in the system for <strong>24 months</strong>
+          from receipt and deleted automatically after that (a daily job). The copy in the
+          company mailbox lives on like any other correspondence. Ask us to delete at any time
+          and we will.</li>
           <li><strong>Session cookies</strong> — expire after <strong>30 days</strong>, and
           expired sessions are purged automatically every day.</li>
           <li><strong>Error logs</strong> — <strong>90 days</strong>, then deleted

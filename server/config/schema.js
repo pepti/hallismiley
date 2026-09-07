@@ -4450,6 +4450,56 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `UPDATE users SET theme = 'classic' WHERE theme IN ('light', 'mono')`,
     ],
   },
+  {
+    // Leads inbox (ENHANCEMENTS #2 + the 2026-08-27 addendum; Halli
+    // 2026-09-07). Every /hafa-samband submission is persisted alongside the
+    // notification email (server/controllers/contactController.js), and the
+    // sales team works its own queue at /admin/leads behind the new view id
+    // `leads`. PII TABLE: retention is LEAD_RETENTION_DAYS (default 730 = the
+    // 24 months /personuvernd promises), pruned daily by
+    // server/services/leadsCleanup.js; every API response is no-store.
+    //
+    // 095 and 096 are reserved by the books capture-spine work (in flight on
+    // its own branch); this is 097 on purpose so the two never collide.
+    //
+    // The role grant is append-only and idempotent: `roles` has no updated_by,
+    // so the id is only ever ADDED when absent — an admin who removes it in
+    // /admin/roles is not overruled (migrations never re-run).
+    // Reference copy: server/migrations/097_leads.sql
+    name: '097_leads',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS leads (
+        id               SERIAL PRIMARY KEY,
+        submission_id    UUID         NOT NULL UNIQUE,
+        name             VARCHAR(100) NOT NULL,
+        email            VARCHAR(200) NOT NULL,
+        company          VARCHAR(150),
+        phone            VARCHAR(40),
+        current_platform VARCHAR(20),
+        message          TEXT         NOT NULL,
+        source           VARCHAR(30)  NOT NULL DEFAULT 'hafa-samband',
+        locale           VARCHAR(5),
+        status           VARCHAR(20)  NOT NULL DEFAULT 'new'
+                         CHECK (status IN ('new', 'contacted', 'won', 'lost')),
+        owner_user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
+        contacted_at     TIMESTAMPTZ,
+        contacted_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
+        note             TEXT,
+        created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_created ON leads (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_status  ON leads (status, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_owner   ON leads (owner_user_id) WHERE owner_user_id IS NOT NULL`,
+      `DROP TRIGGER IF EXISTS trg_leads_updated_at ON leads`,
+      `CREATE TRIGGER trg_leads_updated_at BEFORE UPDATE ON leads
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `UPDATE roles
+          SET view_access = view_access || '["leads"]'::jsonb
+        WHERE name = 'solufolk' AND is_system = FALSE
+          AND NOT (view_access @> '["leads"]'::jsonb)`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
