@@ -266,7 +266,7 @@ async function remainingRecoveryCodes(userId) {
 
 module.exports = {
   CHALLENGE_TTL_MS, MAX_CHALLENGE_ATTEMPTS, RECOVERY_CODE_COUNT,
-  isProtected, shouldEnrol,
+  isProtected, shouldEnrol, protectedRole,
   beginEnrolment, confirmEnrolment, disable,
   createChallenge, verifyChallenge,
   consumeRecoveryCode, remainingRecoveryCodes,

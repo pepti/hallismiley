@@ -29,6 +29,10 @@ router.patch('/:id',           requireView('accounts'), accountScope, csrfProtec
 router.patch('/:id/owner',     requireRole('admin'),    csrfProtect, sanitizeBody, ctrl.changeOwner);
 router.post('/:id/provision-request', requireView('accounts'), accountScope, csrfProtect, ctrl.requestProvision);
 router.get('/:id/audit',       requireView('accounts'), accountScope, ctrl.audit);
-router.get('/:id/commission',  requireView('accounts'), accountScope, ctrl.commission);
+// Commission figures are gated on the commission view as well as the account:
+// `allaccounts` widens which ACCOUNTS you see, never which earnings. Without
+// this second gate a `verktaki` (accounts + allaccounts, no commission by
+// design) could read every seller's rates and amounts through this route.
+router.get('/:id/commission',  requireView('accounts'), requireView('commission'), accountScope, ctrl.commission);
 
 module.exports = router;

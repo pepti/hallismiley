@@ -12,6 +12,23 @@ const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
 const mfaService          = require('../services/mfaService');
 const { userIsAdminAnywhere, userHoldsView } = require('../utils/adminRole');
+
+/**
+ * May this account enrol in 2FA? Exactly the set the login path challenges
+ * (mfaService.protectedRole): an admin by either column, or a holder of the
+ * `accounts` view — a seller who owns customer accounts reaches customer data
+ * and deploys to customer instances. Resolved per call because a role grant
+ * takes effect without re-login.
+ */
+async function isEnrolmentEligible(user) {
+  if (!user) return false;
+  const enriched = {
+    ...user,
+    admin_anywhere: await userIsAdminAnywhere(dbQuery, user.id),
+    accounts_holder: await userHoldsView(dbQuery, user.id, 'accounts'),
+  };
+  return mfaService.protectedRole(enriched);
+}
 const { t }               = require('../i18n');
 
 const scrypt = new Scrypt();
@@ -261,7 +278,11 @@ const authController = {
   async totpSetup(req, res, next) {
     try {
       const user = req.user;
-      if (user.role !== 'admin') {
+      // Whoever the LOGIN path challenges must be able to enrol, or the
+      // protection is decorative. That set is admins (primary role or through
+      // user_roles) plus `accounts` holders — the same predicate mfaService
+      // uses, not a primary-role-only test.
+      if (!(await isEnrolmentEligible(user))) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
       }
       if (user.totp_enabled) {
@@ -281,7 +302,11 @@ const authController = {
   async totpConfirm(req, res, next) {
     try {
       const user = req.user;
-      if (user.role !== 'admin') {
+      // Whoever the LOGIN path challenges must be able to enrol, or the
+      // protection is decorative. That set is admins (primary role or through
+      // user_roles) plus `accounts` holders — the same predicate mfaService
+      // uses, not a primary-role-only test.
+      if (!(await isEnrolmentEligible(user))) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
       }
       const { code } = req.body;

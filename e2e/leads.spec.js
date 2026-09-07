@@ -8,16 +8,23 @@ const { loginAsAdmin } = require('./helpers');
 const { seedSalesUser, loginAsSales } = require('./lib/salesUser');
 
 test.describe('leads inbox', () => {
-  const stamp = Date.now();
-  const LEAD = {
-    name:    `E2E Lead ${stamp}`,
-    email:   `lead-${stamp}@e2e.test`,
-    message: 'Við erum með Shopify og vantar bókhald sem talar við búðina. (e2e)',
+  // Built per ATTEMPT, not per module: attempt 0 leaves its lead behind when it
+  // fails before the admin deletes it, and a retry that reuses the name then
+  // matches two rows — the older one already contacted. The retry index makes
+  // every attempt's lead its own.
+  const leadFor = (retry) => {
+    const stamp = `${Date.now()}-${retry}`;
+    return {
+      name:    `E2E Lead ${stamp}`,
+      email:   `lead-${stamp}@e2e.test`,
+      message: 'Við erum með Shopify og vantar bókhald sem talar við búðina. (e2e)',
+    };
   };
 
   test.beforeAll(async () => { await seedSalesUser(); });
 
-  test('visitor submits → sales user works it → admin erases it', async ({ page, browser }) => {
+  test('visitor submits → sales user works it → admin erases it', async ({ page, browser }, testInfo) => {
+    const LEAD = leadFor(testInfo.retry);
     // 1. A visitor (fresh, logged-out context) sends the enquiry.
     const visitor = await browser.newContext();
     const vpage = await visitor.newPage();

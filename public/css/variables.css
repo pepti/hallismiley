@@ -39,6 +39,10 @@
   --bg-nav:      #FDFAF4;
   --bg-nav-rgb:  253, 250, 244;
   --bg-hover:    #E8DECE;
+  /* Modal/drawer backdrop. Not a reading surface, so it is a shade rather
+     than a palette colour — but it still rides the token system, because a
+     light page wants a lighter veil than Miðnætti does. */
+  --overlay:     rgba(38, 26, 16, 0.45);
   /* Bjart is deliberately pattern-free — no tint layer behind content. */
   --bg-tint:     none;
 
