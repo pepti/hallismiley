@@ -47,9 +47,11 @@ function isValidLayout(layout) {
     if (!colors.every(([k, v]) => typeof k === 'string' && k.length <= 64 &&
                                    typeof v === 'string' && v.length <= 16)) return false;
   }
-  // Optional personalization flags (collapsed/hidden sections + hidden lines).
+  // Optional personalization flags (collapsed/hidden sections + hidden lines,
+  // plus `revealedItems` — lines the instance hides by policy that this admin
+  // has switched back on; public/js/components/adminSurface.js).
   // Absent = default; the frontend reconciles meaning, so we just bound them.
-  for (const f of ['collapsed', 'hiddenSections', 'hiddenItems']) {
+  for (const f of ['collapsed', 'hiddenSections', 'hiddenItems', 'revealedItems']) {
     const a = layout[f];
     if (a == null) continue;
     if (!Array.isArray(a) || a.length > 100) return false;

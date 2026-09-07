@@ -7,6 +7,7 @@ import { ContactView }        from './views/ContactView.js';
 import { ThjonustaView }      from './views/ThjonustaView.js';
 import { UmOkkurView }        from './views/UmOkkurView.js';
 import { AdminView }          from './views/AdminView.js';
+import { AdminProjectsView }  from './views/AdminProjectsView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
 import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
 import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
@@ -108,6 +109,8 @@ const ROUTES = [
   { pattern: '/admin/books/ar', factory: () => (isAuthenticated() && canSeeView('ar')) ? new AdminARView() : new HomeView() },
   { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
   { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
+  // The portfolio projects board — unlisted, same gate the old dashboard had.
+  { pattern: '/admin/projects',  factory: ()  => (isAuthenticated() && (canSeeView('dashboard') || canEdit())) ? new AdminProjectsView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },

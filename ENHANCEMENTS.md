@@ -91,6 +91,8 @@ Original proposal kept below for the record.
 **Effort.** S to decide, M to execute. **Risk.** Low if flagged, irreversible if removed.
 **Recommendation.** Halli decides. My suggestion: repurpose news, flag off party and bio, keep shop (it is the Verslun tier demo), and replace skills/stats with business proof points.
 
+> **STATUS 2026-09-07 (partial — the admin side, Halli):** the retail admin screens (products, collections, bins, orders, discounts, sales report, POS till) and the home-background editor are **hidden from the admin sidebar by policy**, not removed: `public/js/components/adminSurface.js` (the admin twin of `publicSurface.js`), revealable per admin in sidebar edit mode, routes live, ids grantable. The projects board moved off `/admin` to the unlisted `/admin/projects`; `/admin` is the company overview. Public-side disposition (party, news, bio, skills/stats) is still his decision.
+
 ### 10. Observability
 
 > **STATUS: substantially delivered in-app (harvest 2026-08-22):** event_logs + client error beacon + /admin/monitoring + retention cleanup came over from icelandicstore #195, and the false-memory-critical alert bug was fixed (#180 port). Remaining from this proposal: App Insights wiring + external availability ping — still with-first-deploy.
