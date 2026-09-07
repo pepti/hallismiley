@@ -684,6 +684,11 @@ snapshot or transaction reasons, every query on it is sequential by definition, 
 writing it as a fan-out buys nothing while hiding that fact. Inherited from the base
 scaffold (`627d845`), so it is queued for the base, not just fixed here.
 
-`Invoice.findDetail()` has the same shape (three `client.query()` calls under one
-`Promise.all`) and is safe today only because every caller lets `client` default to the
-pool. Pass it a transaction client and the warning comes back.
+`Invoice.findDetail()` had the same shape (three `client.query()` calls under one
+`Promise.all`) and was safe only because all four callers in
+`adminBookkeepingController.js` let `client` default to the pool — a latent trap for the
+first caller to pass it a transaction client. Fixed the same day, the same way: three
+sequential `await`s, identical returned object. Confirmed by calling it on a real
+transaction client under `--trace-deprecation` — the pre-fix file warns at the second
+`client.query()`, the fixed one is silent and returns the same document. Also queued for
+the base.
