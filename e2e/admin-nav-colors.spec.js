@@ -18,10 +18,15 @@ async function gotoAndSettle(page, path) {
   await page.waitForLoadState('networkidle');
 }
 
-const ROW   = '[data-item-id="orders"]';
-const TRIG  = '[data-tint-btn="orders"]';
+// A line that is VISIBLE in view mode on this instance — the retail lines
+// (orders, products, …) are hidden by policy (components/adminSurface.js) and
+// only render in edit mode, so a tint on them could not be checked on the
+// live nav link. The second picker test still uses `products` as its other
+// trigger: edit mode renders every line.
+const ROW   = '[data-item-id="invoices"]';
+const TRIG  = '[data-tint-btn="invoices"]';
 const POP   = '.admin-sidebar__tint-pop';
-const LINK  = '.admin-sidebar a[data-route="/admin/shop/orders"]';
+const LINK  = '.admin-sidebar a[data-route="/admin/books/invoices"]';
 
 // Edit mode is a desktop affordance (the toggle is hidden under 640px).
 test.use({ viewport: { width: 1280, height: 900 } });

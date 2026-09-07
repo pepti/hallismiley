@@ -1,7 +1,9 @@
 // AdminSidebar — left-nav "admin shell" that wraps every /admin/* view.
 //
-// A shared sidebar (overview / shop / site / settings groups) plus a content
-// pane. Each admin view builds its own content element as before, then returns
+// A shared sidebar (overview / sales / books / service / product / site /
+// settings groups; the retail "shop" group is hidden by policy — see
+// adminSurface.js) plus a content pane. Each admin view builds its own content
+// element as before, then returns
 // renderAdminShell({ activePath, content }) so the back-office navigation is
 // consistent across every section. Navigation is handled by the router's global
 // anchor interceptor — sidebar links are plain locale-prefixed <a> tags, so they
@@ -19,9 +21,10 @@
 // and links can't break.
 
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
-import { isAdmin, canSeeView } from '../services/auth.js';
+import { isAdmin, canSeeView, hasAllViews } from '../services/auth.js';
 import { getBuildInfo } from '../services/buildInfo.js';
 import { showToast } from './Toast.js';
+import { HIDDEN_ADMIN_VIEWS } from './adminSurface.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
 } from './adminNavLayout.js';
@@ -29,23 +32,31 @@ import {
 // Single source of truth for the admin information architecture. Each group has a
 // stable `key` (used to map a section back to its default i18n title and to home
 // items added in code later). Order here is render order. Routes mirror router.js.
+//
+// Shaped for the business (Halli, 2026-09-07): Orange Smiley is a software
+// company with a sales team, its own books, a change-request service and a
+// product to run — so those are the groups, in that order. The retail base
+// (the `shop` group + pos + background) is still here at the bottom because
+// every id must stay in lockstep with server/auth/adminViews.js (parity test)
+// and the routes stay live; adminSurface.js hides those lines by default.
+// Group KEYS never change once shipped — saved layouts are keyed on them.
 export const ADMIN_NAV = [
   { key: 'overview', group: 'admin.navGroup.overview', items: [
     { id: 'dashboard', route: '/admin',               labelKey: 'admin.nav.dashboard', icon: 'grid' },
   ] },
-  { key: 'shop', group: 'admin.navGroup.shop', items: [
-    { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
-    { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
-    { id: 'bins',        route: '/admin/bins',             labelKey: 'admin.nav.bins',        icon: 'box' },
-    { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
-    { id: 'customers',   route: '/admin/customers',        labelKey: 'admin.nav.customers',   icon: 'people' },
-    { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
-    { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
+  // Sölustarf — the sales team's workspace, and the one group a `solufolk`
+  // (sales-staff) user sees. Handbók first (it is where a new hire lands);
+  // the customer list is the account register the team onboards from
+  // (docs/SALES-STAFF.md). Leads and Markaður join this group as they land.
+  { key: 'staff', group: 'admin.navGroup.staff', items: [
+    { id: 'handbok',   route: '/admin/handbok',   labelKey: 'admin.nav.handbok',   icon: 'book' },
+    { id: 'customers', route: '/admin/customers', labelKey: 'admin.nav.customers', icon: 'people' },
   ] },
   // Bókhald. Order follows the workflow rather than the alphabet: overview first,
-  // then the documents you create. Receivables, VSK, the ledger, payroll and the
-  // counter-sales screen join this group as they are built — an item here must have
-  // a route in router.js and a matching id in server/auth/adminViews.js.
+  // then the documents you create. Payroll stays visible (reiknað endurgjald
+  // from 2027 — Halli); the counter-sales till is retail and policy-hidden.
+  // An item here must have a route in router.js and a matching id in
+  // server/auth/adminViews.js.
   { key: 'books', group: 'admin.navGroup.books', items: [
     { id: 'books',    route: '/admin/books',          labelKey: 'admin.nav.books',    icon: 'book' },
     { id: 'invoices', route: '/admin/books/invoices', labelKey: 'admin.nav.invoices', icon: 'receipt' },
@@ -57,10 +68,11 @@ export const ADMIN_NAV = [
     { id: 'payroll',  route: '/admin/books/payroll',  labelKey: 'admin.nav.payroll',  icon: 'users' },
     { id: 'pos',      route: '/admin/books/pos',      labelKey: 'admin.nav.pos',      icon: 'till' },
   ] },
-  // Handbók sölufólks — the one group a `solufolk` (sales-staff) user sees.
-  // The id must stay in lockstep with server/auth/adminViews.js (parity test).
-  { key: 'staff', group: 'admin.navGroup.staff', items: [
-    { id: 'handbok', route: '/admin/handbok', labelKey: 'admin.nav.handbok', icon: 'book' },
+  // Þjónusta — change requests. In this business they ARE the support product
+  // (a customer asks, AI builds it as a flagged module), so the inbox gets its
+  // own group rather than hiding under "Site".
+  { key: 'service', group: 'admin.navGroup.service', items: [
+    { id: 'feedback', route: '/admin/feedback', labelKey: 'admin.nav.feedback', icon: 'inbox' },
   ] },
   // Vörustýring — governing the product, as distinct from running this site
   // (Halli, 2026-09-01). Which release this instance is on, how it is behaving,
@@ -78,12 +90,21 @@ export const ADMIN_NAV = [
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
     { id: 'background', route: '/admin/background',    labelKey: 'admin.nav.background', icon: 'image' },
-    { id: 'feedback',   route: '/admin/feedback',      labelKey: 'admin.nav.feedback',   icon: 'inbox' },
   ] },
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
     { id: 'users',   route: '/admin/users',   labelKey: 'admin.nav.users',   icon: 'shield' },
     { id: 'roles',   route: '/admin/roles',   labelKey: 'admin.nav.roles',   icon: 'key' },
+  ] },
+  // Verslun — the retail base. Every line is hidden by policy (adminSurface.js),
+  // so this group only appears in edit mode, where an admin can reveal a line.
+  { key: 'shop', group: 'admin.navGroup.shop', items: [
+    { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
+    { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
+    { id: 'bins',        route: '/admin/bins',             labelKey: 'admin.nav.bins',        icon: 'box' },
+    { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
+    { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
+    { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
   ] },
 ];
 
@@ -239,7 +260,28 @@ export function reconcile(saved) {
   const collapsed = cleanFlagList(saved && saved.collapsed, sectionKeys);
   const hiddenSections = cleanFlagList(saved && saved.hiddenSections, sectionKeys);
   const hiddenItems = cleanFlagList(saved && saved.hiddenItems, itemIds);
-  return { v: 1, sections, labels, colors, collapsed, hiddenSections, hiddenItems };
+  // Lines the instance hides by policy that THIS admin has switched back on.
+  // Pruned to the policy set, so an id that leaves the policy is forgotten.
+  const revealedItems = cleanFlagList(saved && saved.revealedItems, HIDDEN_ADMIN_VIEWS);
+  return { v: 1, sections, labels, colors, collapsed, hiddenSections, hiddenItems, revealedItems };
+}
+
+// Does the instance-level hidden set apply to this account? Only to accounts
+// holding every view — a custom role's grant list is already its whole nav,
+// and a role that holds nothing but `orders` must still see Pantanir.
+function policyApplies() { return hasAllViews(); }
+
+// The hidden-line list the renderer sees: the admin's own hides, plus the
+// policy set minus what they have revealed. Keeping the merge here means
+// itemHtml/sectionHtml (and the "the active page always shows" rule) need no
+// knowledge of where a hide came from.
+function effectiveHiddenItems(layout) {
+  if (!policyApplies()) return layout.hiddenItems;
+  const out = new Set(layout.hiddenItems);
+  for (const id of HIDDEN_ADMIN_VIEWS) {
+    if (!layout.revealedItems.includes(id)) out.add(id);
+  }
+  return [...out];
 }
 
 // Section title: custom sections carry an explicit string; default sections show
@@ -329,6 +371,9 @@ function sectionHtml(section, activeId, labels, editing, opts = {}) {
     // Same rule per line: hidden items vanish, but the active one always shows.
     const visibleIds = section.items.filter(id =>
       id === activeId || !(opts.hiddenItems && opts.hiddenItems.includes(id)));
+    // A group whose every line is hidden has nothing to show — no orphan title.
+    // (Verslun by default on this instance; any group an admin hid line by line.)
+    if (!visibleIds.length) return '';
     const itemsHtml = visibleIds.map(id => itemHtml(BY_ID.get(id), activeId, labels, editing, opts)).join('');
     // Collapse is an admin convenience; moderators keep a plain, always-open nav.
     if (!opts.canEdit) {
@@ -461,7 +506,7 @@ export function renderAdminShell({ activePath, content } = {}) {
       activeSectionKey: activeHome ? activeHome.key : null,
       collapsed: working.collapsed,
       hiddenSections: working.hiddenSections,
-      hiddenItems: working.hiddenItems,
+      hiddenItems: effectiveHiddenItems(working),
       colors: working.colors,
     };
     // Outside edit mode, hide sections the role has no items in (e.g. a
@@ -610,9 +655,13 @@ export function renderAdminShell({ activePath, content } = {}) {
     btn.setAttribute('aria-label', label);
     btn.setAttribute('title', label);
   }
+  // One eye toggle per line, two lists behind it: a policy-hidden line flips
+  // its `revealedItems` entry (so re-hiding it returns it to the instance
+  // default, and Reset does too); any other line flips the personal hide.
   function toggleHiddenItem(id) {
     if (!id || !BY_ID.has(id)) return;
-    toggleIn(working.hiddenItems, id);
+    if (policyApplies() && HIDDEN_ADMIN_VIEWS.has(id)) toggleIn(working.revealedItems, id);
+    else toggleIn(working.hiddenItems, id);
     persist();
     renderNav();
   }

@@ -21,31 +21,14 @@ import { getToastLog, clearToastLog } from '../services/toastLog.js';
 import { toastLogHtml } from '../components/ToastLog.js';
 import { fetchEvents } from '../services/adminEvents.js';
 import { getChanges } from '../services/buildInfo.js';
-import { formatDate, formatDateTime } from '../utils/format.js';
+import { formatDateTime } from '../utils/format.js';
+// The row renderer is shared with the /admin overview card (components/ChangesList.js).
+import { updateRowHtml } from '../components/ChangesList.js';
 
 const PAGE_SIZE = 50;
 
-// "Latest updates": how many changes to list, and where a "#203" suffix links.
+// "Latest updates": how many changes to list.
 const UPDATES_SHOWN = 10;
-const REPO_URL      = 'https://github.com/orange-smiley/orangesmiley';
-
-function updateRowHtml(ch) {
-  // Conventional-commit prefix ("fix(pos): …" → "fix") becomes a small pill;
-  // the rest of the subject is shown as written, minus the "(#203)" suffix
-  // that the PR link already carries.
-  const m = /^([a-z]+)(\([^)]*\))?!?:\s*(.*)$/i.exec(ch.subject || '');
-  const kind  = m ? m[1].toLowerCase() : '';
-  const title = (m ? m[3] : ch.subject || '').replace(/\s*\(#\d+\)\s*$/, '');
-  const pr = Number.isInteger(ch.pr)
-    ? `<a class="mon-update__pr" href="${REPO_URL}/pull/${ch.pr}" target="_blank" rel="noopener">${escHtml(t('adminMonitoring.updatesPr', { pr: ch.pr }))}</a>`
-    : '<span class="mon-update__pr"></span>';
-  return `<li class="mon-update">
-    <span class="mon-update__date">${escHtml(formatDate(ch.date))}</span>
-    <span class="mon-update__kind mon-update__kind--${escHtml(kind)}">${escHtml(kind)}</span>
-    <span class="mon-update__title">${escHtml(title)}</span>
-    ${pr}
-  </li>`;
-}
 
 const OK_STATUSES = new Set(['ok', 'closed']);
 

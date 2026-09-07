@@ -299,6 +299,39 @@ base (hallismiley is read-only).
   the **missing `admin-monitoring.css`** — H4 ported the view without its
   stylesheet.
 
+## Admin console re-shaped for the business (2026-09-07, chunk A)
+
+Halli: the inherited admin looked like a webshop back office and had "nothing
+to do with Orange Smiley as a company". Decisions: hide the retail screens
+(never delete), keep payroll, `/admin` becomes a company overview.
+
+- **IA** (`AdminSidebar.js` `ADMIN_NAV`; group KEYS unchanged, one new key):
+  Yfirlit · **Sölustarf** (`staff`: handbok, customers — leads + markadur
+  join in chunks B/C) · Bókhald (payroll visible, pos hidden) · **Þjónusta**
+  (`service`, new: feedback = change requests, the support product) ·
+  Vörustýring · Vefur (analytics; background hidden) · Stillingar · Verslun
+  (`shop`, last — every line hidden). Saved per-admin layouts keep their old
+  placement until that admin hits Reset (same precedent as 2026-09-01).
+- **Hide mechanism** = `public/js/components/adminSurface.js`
+  `HIDDEN_ADMIN_VIEWS` (products, collections, bins, orders, discounts,
+  sales, pos, background), the admin twin of `server/config/publicSurface.js`.
+  Applies only to accounts holding `'*'` (`auth.hasAllViews()`); a role
+  granted only `orders` still sees it. Routes stay live, ids stay in
+  `ADMIN_VIEW_IDS` and grantable. The eye toggle in edit mode writes
+  `revealedItems` into the layout blob (`adminNavRoutes.js` bounds it like the
+  other flag arrays); Reset re-hides. `tests/unit/admin-surface-parity.test.js`
+  keeps the set ⊂ `ADMIN_VIEW_IDS`. An all-hidden group renders no header.
+- **Dashboard**: `AdminView` = cards over EXISTING endpoints, each gated on
+  the view/role its endpoint demands (books 30 days · open change requests ·
+  error count · latest changes via `components/ChangesList.js`, shared with
+  Monitoring · handbook counts · users + pending). The projects board is
+  `AdminProjectsView` at unlisted `/admin/projects` (gate: `dashboard` view or
+  editor). CSS `admin-dashboard.css`, tokens only.
+- Copy (DRAFT, Halli): `admin.navGroup.staff` → Sölustarf, `admin.nav.feedback`
+  → Breytingarbeiðnir, `adminGeneral.store*` → company wording,
+  `adminDashboard.*`. `e2e/admin-nav-colors.spec.js` tints `invoices` now
+  (orders is hidden in view mode); new `e2e/admin-surface.spec.js`.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.

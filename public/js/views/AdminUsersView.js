@@ -37,7 +37,7 @@ export class AdminUsersView {
           <p class="admin-eyebrow">${t('admin.dashboard')}</p>
           <h1 class="admin-title">${t('adminUsers.title')}</h1>
         </div>
-        <a href="${href('/admin')}" class="btn btn--outline" data-route="/admin">← ${t('admin.projects')}</a>
+        <a href="${href('/admin')}" class="btn btn--outline" data-route="/admin">← ${t('admin.nav.dashboard')}</a>
       </div>
       <div class="admin-toolbar">
         <input type="search" id="users-search" class="form-input admin-search"

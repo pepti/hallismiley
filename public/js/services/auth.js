@@ -41,6 +41,10 @@ export function canEdit()         { return getRoles().some(r => r === 'admin' ||
 export function getViews()        { return _user?.views || []; }
 export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
 export function hasAnyAdminView() { return getViews().length > 0; }
+// Holds every view (the admin role resolves to ['*']). The sidebar's
+// hidden-by-policy set (components/adminSurface.js) applies only to these
+// accounts — a custom role's explicit grant list is already its whole nav.
+export function hasAllViews()     { return getViews().includes('*'); }
 
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.
