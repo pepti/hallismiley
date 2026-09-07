@@ -123,3 +123,42 @@ test.describe('Hidden surfaces — unlinked but functional', () => {
   });
 
 });
+
+test.describe('Tab title follows SPA navigation', () => {
+  // The server rewrites <title> per URL, but only on a full page load. Client
+  // navigation never touched document.title, so the tab kept the landing page's
+  // title for a whole session — every inner page read "Orange Smiley —
+  // hugbúnaðarhús knúið gervigreind". utils/pageTitle.js + the router hook fixed
+  // that; tests/unit/pageTitle.test.js pins the strings against the server's,
+  // and this pins that a CLIENT-SIDE navigation actually applies them.
+
+  test('a client-side navigation retitles the tab, matching the SSR title', async ({ page }) => {
+    await page.goto('/is/');
+    await expect(page).toHaveTitle('Orange Smiley — hugbúnaðarhús knúið gervigreind');
+
+    // Navigate the way a visitor does — click the nav, no page load.
+    await page.click('a[href="/is/thjonusta"]');
+    await expect(page).toHaveURL(/\/is\/thjonusta$/);
+    await expect(page).toHaveTitle('Vörur og verð — Orange Smiley');
+
+    // And a direct load of the same URL must agree, or the tab would say one
+    // thing on load and another after a click.
+    await page.goto('/is/thjonusta');
+    await expect(page).toHaveTitle('Vörur og verð — Orange Smiley');
+  });
+
+  test('going back restores the previous title', async ({ page }) => {
+    await page.goto('/is/');
+    await page.click('a[href="/is/um-okkur"]');
+    await expect(page).toHaveTitle('Um okkur — Orange Smiley');
+    await page.goBack();
+    await expect(page).toHaveURL(/\/is\/$/);
+    await expect(page).toHaveTitle('Orange Smiley — hugbúnaðarhús knúið gervigreind');
+  });
+
+  test('the English side is titled in English', async ({ page }) => {
+    await page.goto('/en/');
+    await page.click('a[href="/en/thjonusta"]');
+    await expect(page).toHaveTitle('Products & pricing — Orange Smiley');
+  });
+});
