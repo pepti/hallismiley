@@ -228,8 +228,9 @@ source map, competitor/incumbent tracking, channel briefs).
   per company, `list_type` smb|large, workflow `status`), `market_financials`
   (per company per fiscal year; `admin_cost_ratio` is a GENERATED column =
   skrifstofu- og stjórnunarkostnaður / tekjur, Halli's fit signal),
-  `market_stats` (Hagstofa sizing aggregates). Nothing in the app reads them
-  yet; the admin list view is ENHANCEMENTS #16 (proposal, not implemented).
+  `market_stats` (Hagstofa sizing aggregates). Read in the app since
+  2026-09-07 by **Markaður** (`/admin/markadur`, view id `markadur` — see the
+  chunk-C section below); `market_stats` still has no screen.
 - **Importer**: `npm run market:import -- company/markadur/market.json
   [--dry-run]` (`server/scripts/market-import.js`) — validates every row, one
   transaction per file, idempotent upserts by kennitala / (company, year) /
@@ -363,6 +364,37 @@ FIRST human touch, never restamped, `note`) and appends `leads` to the seeded
 - Not done on purpose: no MCP leads tool (separate sign-off, #13 note), no
   automatic per-seller routing (accounts, #17). Migration chain now ends
   097_leads.
+
+## Markaður — the prospect list (2026-09-07, chunk C; ENHANCEMENTS #16)
+
+The 093 research tables finally have a screen. **No migration.**
+
+- `/api/v1/admin/markadur` (`marketRoutes.js` + `marketController.js`): list =
+  `market_companies c` ⋈ `LATERAL` latest `market_financials` (→ `latest`
+  object, `null` without figures), filters `list_type/sector_group/status/
+  tier_fit/q` (name ILIKE or kennitala prefix), sorts from a fixed map
+  (`fit_score` default desc · `admin_cost_ratio` · `revenue` · `employees` ·
+  `name` · `updated`; anything else 400), `NULLS LAST`; detail = company +
+  every year desc + `sources` + `fit_notes` + `summary` + `report_path` as a
+  string. Reads = `requireView('markadur')`; every response `no-store`.
+- **The one write**: `PATCH /:id/status` with `{status: handed_to_sales |
+  rejected}` (`validateMarketStatus`), admin/moderator, only FROM `shortlist`
+  — `UPDATE … WHERE status='shortlist'` makes it race-safe, anything else is
+  409. Audit = pino info `{companyId, from, to, userId}` + the 093
+  `updated_at` trigger (`researched_by` is the importer's field, not reused).
+- UI `/admin/markadur` (`AdminMarketView`, `admin-markadur.css`) in Sölustarf
+  after Fyrirspurnir: four selects + search, sortable headers with
+  `aria-sort`, money in m.kr., ratio in %, row → drawer (`role=dialog`, ESC /
+  backdrop, focus returns to the row) with facts, summary, notes, all years,
+  sources, and **`report_path` as `<code>` text — never a link** (gitignored
+  PDFs under `company/`). Hand-off buttons render for editors only and are
+  enabled only on a shortlisted row.
+- `markadur` is **not seeded onto `solufolk`** — Halli grants it in
+  `/admin/roles` when the team should see the shortlist (`e2e/markadur.spec.js`
+  asserts the sales user is bounced; flip that test when he does).
+- Importer caveat (header of `market-import.js`): a JSON row that carries
+  `status` overwrites a hand-off on re-import — export without it.
+  `tests/integration/market.test.js` pins the safe case.
 
 ## Where things stand for the next session
 

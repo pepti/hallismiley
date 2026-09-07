@@ -19,6 +19,7 @@ import { AdminSalesView }      from './views/AdminSalesView.js';
 import { AdminBackgroundView } from './views/AdminBackgroundView.js';
 import { AdminChangeRequestsView } from './views/AdminChangeRequestsView.js';
 import { AdminLeadsView }     from './views/AdminLeadsView.js';
+import { AdminMarketView }    from './views/AdminMarketView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -99,6 +100,7 @@ const ROUTES = [
   { pattern: '/admin/handbok/:slug', factory: (p) => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView(p.slug) : new HomeView() },
   { pattern: '/admin/handbok',   factory: ()  => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView() : new HomeView() },
   { pattern: '/admin/leads',     factory: ()  => (isAuthenticated() && canSeeView('leads')) ? new AdminLeadsView() : new HomeView() },
+  { pattern: '/admin/markadur',  factory: ()  => (isAuthenticated() && canSeeView('markadur')) ? new AdminMarketView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
   { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
@@ -292,6 +294,7 @@ export class Router {
       '/admin/bins':       'bins',
       '/admin/handbok':    'handbok',
       '/admin/leads':      'leads',
+      '/admin/markadur':   'markadur',
       '/admin/customers':  'customers',
       '/admin/books':      'books',
       '/admin/books/invoices': 'invoices',

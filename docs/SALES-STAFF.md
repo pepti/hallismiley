@@ -29,7 +29,9 @@ handbook and sees a one-item sidebar; every other admin API answers 403
    This creates an approved, passwordless user and emails them a set-password
    link (`invited_at` is stamped; in dev the link is returned on screen).
 2. **Grant the role** — `/admin/roles` → members board → add the user to
-   **solufolk**.
+   **solufolk**. Optionally tick the **markadur** view on the role so the
+   team also sees the prospect shortlist at `/admin/markadur` (not granted
+   by default — Halli's call).
 
 The hire sets their password, logs in on the site, and the user menu shows
 "Admin" → they land on the handbook. To verify: their sidebar must show ONLY

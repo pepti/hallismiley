@@ -44,6 +44,13 @@ const ADMIN_VIEW_IDS = [
   // (server/routes/leadsRoutes.js). Migration 097 appends this id to the
   // seeded `solufolk` role; an accepted decision, like `expenses`/`ar` above.
   'leads',
+  // Markaður (migration 093 tables, ENHANCEMENTS #16). Granting `markadur`
+  // grants READ of the prospect list — public-source company data, no
+  // persons. The one write (shortlist → handed_to_sales / rejected) is
+  // admin/moderator on top (server/routes/marketRoutes.js). NOT seeded onto
+  // `solufolk`: Halli grants it by hand in /admin/roles when the team should
+  // see the shortlist.
+  'markadur',
 ];
 
 // Views an admin may grant to a custom role (the checkboxes in the role editor +

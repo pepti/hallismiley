@@ -156,6 +156,8 @@ Original proposal kept below for the record.
 **Effort.** S–M — one routes file, one view, one sidebar entry, two locale keys. **Risk.** Low.
 **Recommendation.** Do after the first research pass has filled the tables and Halli has confirmed the size band — the list is only worth a screen once the rows are worth reading.
 
+> **STATUS: APPROVED + IMPLEMENTED — Halli, 2026-09-07 (admin re-shape, chunk C).** No migration. `/api/v1/admin/markadur` (`marketRoutes.js`/`marketController.js`: list over `market_companies` ⋈ LATEST `market_financials`, filters + whitelisted sorts, detail with every year; reads = `requireView('markadur')`, all `no-store`), the single write `PATCH /:id/status` shortlist → handed_to_sales / rejected (admin/moderator, race-safe `WHERE status='shortlist'`, 409 otherwise; audit = pino line + `updated_at`), `/admin/markadur` in the Sölustarf group (`AdminMarketView`, drawer; `report_path` rendered as text, never a link). **Not seeded onto `solufolk`** — Halli grants it by hand in `/admin/roles`. Optional later: a two-column `status_changed_at/by` migration if a durable actor is wanted. Caveat: a re-import whose JSON row carries `status` overwrites a hand-off (export without it) — `tests/integration/market.test.js` pins the safe case.
+
 ---
 
 ## Remaining `hallismiley` references
