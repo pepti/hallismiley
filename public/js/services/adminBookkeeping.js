@@ -39,7 +39,8 @@ async function send(method, path, body) {
 export const fetchDashboard = (params) => get('/dashboard', params);
 export const fetchInvoices = (params) => get('/invoices', params);
 export const fetchInvoice = (id) => get(`/invoices/${encodeURIComponent(id)}`);
-export const fetchBooksSettings = () => get('/settings');
+// `currency` selects which rate history comes back (EUR by default).
+export const fetchBooksSettings = (params) => get('/settings', params);
 
 export const updateBooksSettings = (patch) => send('PATCH', '/settings', patch);
 export const setFxRate = (body) => send('POST', '/fx-rates', body);
@@ -61,6 +62,9 @@ export const issueCreditNote = (invoiceId, body) =>
   send('POST', `/invoices/${encodeURIComponent(invoiceId)}/credit-notes`, body);
 
 export const invoicePdfUrl = (id) => `${BASE}/invoices/${encodeURIComponent(id)}/pdf`;
+// The same document as a Peppol BIS 3.0 (UBL) file. 409 with `problems` when the
+// invoice cannot be expressed conformantly — check `peppol.ready` on the detail first.
+export const invoiceUblUrl = (id) => `${BASE}/invoices/${encodeURIComponent(id)}/ubl.xml`;
 
 // ── Expenses ─────────────────────────────────────────────────────────────────
 
@@ -117,6 +121,52 @@ export async function uploadDocument(file, { kind = 'receipt', note = '' } = {})
 }
 
 export const documentUrl = (id) => `${BASE}/documents/${encodeURIComponent(id)}`;
+
+// ── Intake queue ─────────────────────────────────────────────────────────────
+// A queued document is a PROPOSAL; nothing posts until an admin accepts it with
+// their own figures. accept throws with `err.duplicates` on a 409, like createExpense.
+
+export const fetchIntake = (params) => get('/intake', params);
+export const fetchIntakeItem = (id) => get(`/intake/${encodeURIComponent(id)}`);
+export const fetchIntakeSuggestions = (id) => get(`/intake/${encodeURIComponent(id)}/suggestions`);
+
+export async function uploadToIntake(file) {
+  const token = await getCSRFToken();
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/intake`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { 'X-CSRF-Token': token } : {},
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Upphleðsla mistókst');
+    err.code = data.reason || null;
+    throw err;
+  }
+  return data;
+}
+
+export async function acceptIntake(id, body) {
+  const res = await fetch(`${BASE}/intake/${encodeURIComponent(id)}/accept`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: await csrfHeaders(),
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Beiðni mistókst');
+    if (data.duplicates) err.duplicates = data.duplicates;
+    throw err;
+  }
+  return data;
+}
+
+export const rejectIntake = (id, reason) =>
+  send('POST', `/intake/${encodeURIComponent(id)}/reject`, { reason });
 
 // ── Receivables ──────────────────────────────────────────────────────────────
 

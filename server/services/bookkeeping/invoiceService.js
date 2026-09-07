@@ -123,12 +123,21 @@ function pickCustomer(order) {
     if (cityLine) lines.push(cityLine);
     if (addr.country) lines.push(addr.country);
   }
+  // The same address as PARTS (migration 095). `address` stays exactly the joined
+  // text the PDF has always printed; the parts are what a machine-readable invoice
+  // needs, and they are snapshotted rather than re-derived so an issued document
+  // cannot change meaning when the order's address is edited later.
+  const part = (v, max) => (v ? String(v).trim().slice(0, max) : null) || null;
+  const street = addr ? [addr.line1, addr.line2].filter(Boolean).join(', ') : '';
   return {
     name: String(name).slice(0, 200),
     email,
     address: lines.join('\n'),
     // Country drives the VAT treatment: goods leaving Iceland are zero-rated.
     country: (addr && addr.country_code) || (addr && addr.country) || 'IS',
+    street: part(street, 200),
+    city: part(addr && addr.city, 120),
+    postalZone: part(addr && addr.postal, 20),
   };
 }
 
@@ -428,9 +437,12 @@ async function createFromOrder(client, orderId, opts = {}) {
        issued_at, due_at, terms_days,
        original_currency, original_total_gross, fx_rate,
        subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
-       zero_rate_reason, note, status, created_by
+       zero_rate_reason, note, status, created_by,
+       seller_street, seller_city, seller_postal_zone, seller_country,
+       customer_street, customer_city, customer_postal_zone
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,'draft',$26)
+               $19,$20,$21,$22,$23,$24,$25,'draft',$26,
+               $27,$28,$29,$30,$31,$32,$33)
      RETURNING *`,
     [
       series, invoiceNumber, order.id, order.user_id,
@@ -443,6 +455,12 @@ async function createFromOrder(client, orderId, opts = {}) {
       totals.discount_total, totals.shipping_gross,
       exportSale ? 'Útflutningur — sala til útlanda, 0% VSK. Krefst útflutningsgagna.' : null,
       seller.invoice_note, createdBy,
+      // The structured party block (095). NULL, never '', when a part is missing,
+      // so "not recorded" reads the same on a row from before the migration and on
+      // one issued after it from an order that carried no address.
+      seller.seller_street || null, seller.seller_city || null,
+      seller.seller_postal_zone || null, seller.seller_country || null,
+      customer.street, customer.city, customer.postalZone,
     ]
   );
   await insertLines(client, invRows[0].id, totals.lines);

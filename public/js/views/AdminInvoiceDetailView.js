@@ -11,7 +11,8 @@
 // refund alone, and a goodwill write-off is a credit note alone.
 import { isAuthenticated, canSeeView, isAdmin } from '../services/auth.js';
 import {
-  fetchInvoice, recordPayment, recordRefund, issueCreditNote, invoicePdfUrl, newIdempotencyKey,
+  fetchInvoice, recordPayment, recordRefund, issueCreditNote, invoicePdfUrl, invoiceUblUrl,
+  newIdempotencyKey,
 } from '../services/adminBookkeeping.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
@@ -57,11 +58,41 @@ export class AdminInvoiceDetailView {
       if (generation !== this._generation) return;
       this._invoice = data.invoice;
       this._history = data.history || [];
+      // Whether the document can be emitted as Peppol BIS 3.0, and why not.
+      this._peppol = data.peppol || null;
       this._paint();
     } catch (err) {
       if (generation !== this._generation) return;
       this._el.innerHTML = errorBanner(err.message);
     }
+  }
+
+  // The Peppol (UBL) button: a live link when the server says the document can be
+  // emitted conformantly, a disabled control otherwise — never a link that 409s out
+  // of an <a href>. The reasons render beneath the header (_ublProblemsHtml).
+  _ublActionHtml(inv) {
+    const p = this._peppol;
+    if (!p || p.ready) {
+      return `<a class="btn btn--ghost" href="${escHtml(invoiceUblUrl(inv.id))}">
+                ${escHtml(t('adminBooks.detail.downloadUbl'))}
+              </a>`;
+    }
+    return `<span class="btn btn--ghost is-disabled" aria-disabled="true" title="${escHtml(t('adminBooks.detail.ublNotReady'))}">
+              ${escHtml(t('adminBooks.detail.downloadUbl'))}
+            </span>`;
+  }
+
+  _ublProblemsHtml() {
+    const p = this._peppol;
+    if (!p) return '';
+    const problems = (p.problems || []).map(x => `<li>${escHtml(t(`adminBooks.peppol.${x.code}`))}</li>`).join('');
+    const notes = (p.notes || []).map(n => `<li>${escHtml(n)}</li>`).join('');
+    if (!problems && !notes) return '';
+    return `
+      <p class="admin-shop__hint">
+        ${problems ? `${escHtml(t('adminBooks.detail.ublNotReady'))}<ul>${problems}</ul>` : ''}
+        ${notes ? `${escHtml(t('adminBooks.detail.ublNotes'))}<ul>${notes}</ul>` : ''}
+      </p>`;
   }
 
   _paint() {
@@ -87,8 +118,10 @@ export class AdminInvoiceDetailView {
           <a class="btn btn--ghost" href="${escHtml(invoicePdfUrl(inv.id))}">
             ${escHtml(t('adminBooks.detail.downloadPdf'))}
           </a>
+          ${this._ublActionHtml(inv)}
         </div>
       </div>
+      ${this._ublProblemsHtml()}
 
       <div class="books-columns">
         <section class="books-section">

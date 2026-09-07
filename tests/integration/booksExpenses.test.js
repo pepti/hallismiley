@@ -170,6 +170,22 @@ describe('foreign currency', () => {
     expect(Number(expense.original_amount_gross)).toBe(10000);
     expect(Number(expense.fx_rate)).toBe(150);
   });
+
+  it('takes the amount in MINOR units: USD 20.00 is 2000, and books as 2.778 ISK at 138.90', async () => {
+    // This pins the API contract the expense form must honour. The form used to
+    // send what was typed (20) as if it were minor units, so a USD 20.00 Azure
+    // invoice booked as USD 0.20 ≈ 27 kr — silently, with D and E shrinking
+    // together so the VSK return still looked plausible. Client conversion is
+    // tested in tests/unit/money.client.test.js; this is the server side of it.
+    await FxRate.set({ rateDate: '2026-07-11', currency: 'USD', rate: 138.9, source: 'manual' });
+    const { expense } = await ledger.withTransaction(c =>
+      expenses.createExpense(c, baseExpense({
+        currency: 'USD', amountGross: 2000, expenseDate: '2026-07-11',
+      })));
+    expect(Number(expense.amount_gross)).toBe(2778);
+    expect(Number(expense.original_amount_gross)).toBe(2000);
+    expect(Number(expense.fx_rate)).toBe(138.9);
+  });
 });
 
 describe('duplicate detection', () => {

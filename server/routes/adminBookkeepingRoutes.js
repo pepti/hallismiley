@@ -48,6 +48,12 @@ router.get('/invoices/:id', requireView('invoices'), books.getInvoice);
 // runs BEFORE the view check so rejected attempts count against it too; otherwise
 // only already-authorised traffic is ever throttled.
 router.get('/invoices/:id/pdf', docLimiter, requireView('invoices'), books.getInvoicePdf);
+// The same issued document as a Peppol BIS Billing 3.0 (UBL 2.1 / EN 16931) file.
+// A REPRODUCTION, not a new statutory act, so it rides the PDF's gating; actual
+// transmission over an access point, when it lands, is an act and will be
+// requireRole('admin') + csrfProtect. 409 with named problems when the invoice
+// cannot be expressed conformantly (e.g. issued before migration 095).
+router.get('/invoices/:id/ubl.xml', docLimiter, requireView('invoices'), books.getInvoiceUbl);
 
 router.post('/invoices/:id/payments', requireRole('admin'), csrfProtect, books.recordPayment);
 // A refund is the CASH half of undoing a sale; the credit note is the other half.
@@ -81,6 +87,20 @@ router.post('/documents', requireRole('admin'),
 // Streamed through an authenticated route on purpose: these files live outside the
 // statically-served tree, so this is the ONLY way to read them.
 router.get('/documents/:id', requireView('expenses'), docLimiter, books.getDocument);
+
+// ── Intake (view: expenses) ──────────────────────────────────────────────────
+// A queue row is a PROPOSAL: nothing here posts to the ledger. Accepting one calls
+// the same expenseService.createExpense() the manual form calls, with the operator
+// as created_by — which is why accept is requireRole('admin') + CSRF like every
+// other money write, and why there is no third path into the ledger. Literal
+// '/intake' before '/intake/:id', per the convention above.
+router.get('/intake', requireView('expenses'), books.listIntake);
+router.get('/intake/:id', requireView('expenses'), books.getIntakeItem);
+router.get('/intake/:id/suggestions', requireView('expenses'), books.getIntakeSuggestions);
+router.post('/intake', requireRole('admin'),
+  documentService.createDocumentUpload().single('file'), csrfProtect, verifyImageBytes, books.createIntake);
+router.post('/intake/:id/accept', requireRole('admin'), csrfProtect, books.acceptIntake);
+router.post('/intake/:id/reject', requireRole('admin'), csrfProtect, books.rejectIntake);
 
 // ── Receivables (view: ar) ───────────────────────────────────────────────────
 router.get('/ar/export.csv', docLimiter, requireView('ar'), books.exportAgingCsv);

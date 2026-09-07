@@ -364,7 +364,16 @@ npm run seed:books -- --wipe             # ...replacing what is there
 npm run books:fx -- --date=2026-08-06 --rate=143.20
 npm run books:archive -- --out=./archive/2026
 npm run books:archive -- --verify-only --out=./archive/2026
+npm run books:replay -- --all             # replay recorded periods, diff against the FILED figures
+# GET /api/v1/admin/bookkeeping/invoices/:id/ubl.xml — the same issued invoice as a
+# Peppol BIS Billing 3.0 (UBL 2.1 / EN 16931) document; see server/services/bookkeeping/peppol/
+npm run books:replay -- --case=D:/customer1/2025-P6.json --db=postgresql://…/customer1_replay
 ```
+
+`books:replay` drops and recreates its target schema, so it refuses any database whose
+name does not end in `_replay` (`createdb orangesmiley_replay` once). Cases live in
+`server/fixtures/books-replay/` (this company's own) or outside the repo (a customer's);
+the format and the reason the D-split is diffed are in `server/services/bookkeeping/replayCase.js`.
 
 Tests:
 
@@ -380,12 +389,64 @@ failures across unrelated suites.
 ### First run
 
 The books refuse to issue anything until the seller identity is set, and every screen shows
-a standing warning until it is. In order:
+a standing warning until it is — the warning links to `/admin/books/settings`, where all
+of it is done. In order:
 
-1. Books settings → seller name, kennitala, VSK number, address.
-2. Confirm the chart of accounts (clears the `coa_confirmed_at` warning).
-3. An EUR rate, if you invoice in EUR.
+1. Útgefandi → seller name, kennitala (check-digit validated), VSK number, address.
+2. Confirm the chart of accounts. Confirming **requires a note** saying what was reviewed
+   and against what, and is stamped with who confirmed — the same rule as the payroll
+   year's `source_note`. It clears the `coa_confirmed_at` warning.
+3. A rate for every currency you post in, per document date. The dashboard warns per
+   currency actually in use (a USD supplier invoice with no USD rate is as loud as EUR).
 4. Payroll: enter the year's figures and **confirm** them, if you run payroll.
+
+To run a real VSK period through the books in parallel with the incumbent — the route to
+the first filing this module has ever been checked against — see `BOOKS-PARALLEL-RUN.md`.
+
+### E-invoicing (Peppol BIS Billing 3.0), outbound
+
+An issued invoice can be downloaded as a UBL 2.1 / EN 16931 document from the invoice
+screen (`GET /invoices/:id/ubl.xml`). Three things to know:
+
+- **It needs the address as parts.** Migration 095 snapshots `seller_street/city/postal_zone/
+  country` (from the books settings) and `customer_street/city/postal_zone` (from the order's
+  shipping address) onto every invoice at issue. An invoice issued before 095 — or after it
+  with the parts unset — is **refused by name** (`SELLER_ADDRESS_INCOMPLETE`,
+  `BUYER_ADDRESS_INCOMPLETE`); the printed address is never parsed into a statutory document.
+  `peppol_complete` in the settings is separate from `seller_complete` on purpose.
+- **11% is category S at 11, not "AA"; a zero-rated export is G with the reason.** The books
+  extract VAT per line; EN 16931 wants per-rate `round(taxable × rate)`. The difference
+  (a króna or two) is stated as `PayableRoundingAmount` (BT-114), so the document carries the
+  rule-conformant VAT and the payable the customer actually owes; more than 3 kr. is refused
+  as `VAT_ROUNDING_DRIFT`.
+- **Every emission is recorded** in `invoice_ubl_exports` — the exact bytes and their SHA-256,
+  append-only — with an `invoice.ubl_exported` audit row, so a receiver's verdict can be tied
+  to what was sent. The seller's VSK number is emitted as `IS` + digits (BR-CO-09); whether a
+  real BIS 3.0 receiver accepts that for a non-EU number is the open question, behind one
+  constant in `peppol/identifiers.js`.
+
+### The capture spine — intake queue and the trust ladder
+
+Migration 096 gives every fylgiskjal a **`source_kind`** — how much it can be trusted, a
+different axis from what it is: `peppol` > `embedded_xml` > `extracted` > `manual`. The
+ladder may drive how the entry form pre-fills and what the archive says about provenance.
+It may **never** drive whether a person is required; `tests/integration/booksIntake.test.js`
+has a test named after that.
+
+`books_intake` is a queue of **proposals** (`/admin/books/expenses` → "Í bið"). A row
+touches no account and moves no money. The only way out of it and into the ledger is
+`expenseService.createExpense()` with the accepting admin as `created_by` — the same call
+the manual form makes, in the same transaction, so the duplicate 409, the VAT verdict and
+the period lock behave identically. Accepting uses the figures the operator submitted,
+never the machine's `suggested` block. The database enforces the gate: an `accepted` row
+without an `expense_id` and a `decided_by`, a decided row returned to `pending`, or a
+repointed expense link are all refused by CHECK or trigger. There is deliberately **no
+confidence score** — a number is the seed of an auto-post threshold.
+
+v1 extracts nothing (an upload is the `manual` rung, whatever a client claims). When
+inbound Peppol lands, its parser is a second caller of `intakeService.receive()` with a
+real `suggested` block and `source_kind = 'peppol'`, and nothing else changes.
+`expenses.supplier_vat_number` (also 096) now keeps the number `assessVat()` decided on.
 
 ---
 
@@ -399,8 +460,8 @@ Collected from actually hitting them.
   that a column nothing reads is a column nobody notices is empty.
 - **Test suites share one append-only journal.** There is no DELETE to reset between them,
   so absolute balance assertions drift as tests are added. Assert **deltas**, or claim a
-  private year. Currently claimed: 2018 POS, 2019 reports, 2020 payroll, 2021–2025 VSK,
-  2026 the seed.
+  private year. Currently claimed: 2017 the replay benchmark, 2018 POS, 2019 reports,
+  2020 payroll, 2021–2025 VSK, 2026 the seed.
 - **`ledger_accounts.sort`, not `sort_order`.** `sort_order` exists only on `journal_lines`.
 - **`payroll_rates.tax_year` is capped at 2020–2100**, so a test year must be inside that
   and (if it records a cash payment) in the past.

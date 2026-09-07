@@ -30,6 +30,7 @@
     "seed:books": "node server/scripts/seed-books-demo.js",
     "books:archive": "node server/scripts/books-archive-export.js",
     "books:backfill": "node server/scripts/books-backfill-orders.js",
+    "books:replay": "node server/scripts/books-replay.js",
     "dev:up": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-server.ps1 -Action start",
     "dev:down": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-server.ps1 -Action stop",
     "dev:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-server.ps1 -Action status"
@@ -74,6 +75,7 @@
     "babel-jest": "^30.3.0",
     "chart.js": "^4.5.1",
     "eslint": "^10.8.0",
+    "fast-xml-parser": "^4.5.7",
     "globals": "^17.9.0",
     "husky": "^9.1.7",
     "jest": "^30.4.2",

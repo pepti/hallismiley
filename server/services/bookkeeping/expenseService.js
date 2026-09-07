@@ -252,8 +252,9 @@ async function createExpense(client, input = {}) {
        supplier_name, supplier_kennitala, supplier_country, supplier_invoice_no,
        expense_date, description, amount_net, amount_vat, amount_gross,
        vat_code, vat_deductible, non_deductible_reason, account_id, document_id,
-       original_currency, original_amount_gross, fx_rate, created_by
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       original_currency, original_amount_gross, fx_rate, created_by,
+       supplier_vat_number
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
      RETURNING *`,
     [
       String(supplierName).trim().slice(0, 200), supplierKennitala, supplierCountry,
@@ -262,6 +263,9 @@ async function createExpense(client, input = {}) {
       split.net, split.vat, split.gross,
       verdict.code, verdict.deductible, verdict.reason, account.id, documentId,
       currency, currency === 'ISK' ? null : originalGross, fx.rate, createdBy,
+      // The evidence the deduction rested on (096). assessVat() decided on it above;
+      // until now the books recorded the verdict and threw the number away.
+      String(supplierVatNumber || '').trim().slice(0, 20) || null,
     ]
   );
   const expense = rows[0];

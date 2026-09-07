@@ -37,6 +37,10 @@ const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024; // 15 MB — a scanned multi-page i
 
 const KINDS = ['receipt', 'supplier_invoice', 'bank_statement', 'contract', 'other'];
 
+// How much a document can be TRUSTED — a different axis from what it is. The
+// ladder, top to bottom (migration 096); this release produces the bottom two.
+const SOURCE_KINDS = ['peppol', 'embedded_xml', 'extracted', 'manual'];
+
 class DocumentError extends Error {
   constructor(message, status = 400, code) {
     super(message);
@@ -115,10 +119,14 @@ function absolutePath(relPath) {
  * @param {object} client  pg client inside a transaction
  * @param {object} file    multer file object (already written to disk)
  */
-async function register(client, file, { kind = 'receipt', note = '', createdBy, requestId = null }) {
+async function register(client, file, {
+  kind = 'receipt', note = '', createdBy, requestId = null,
+  sourceKind = 'manual', sourceRef = null, sourceReceivedAt = null,
+}) {
   if (!createdBy) throw new DocumentError('register requires createdBy', 500);
   if (!file) throw new DocumentError('No file was uploaded', 400, 'NO_FILE');
   if (!KINDS.includes(kind)) throw new DocumentError(`Unknown document kind: ${kind}`, 400, 'BAD_KIND');
+  if (!SOURCE_KINDS.includes(sourceKind)) throw new DocumentError(`Unknown document source: ${sourceKind}`, 400, 'BAD_SOURCE');
 
   const checksum = await checksumFile(file.path);
 
@@ -134,9 +142,11 @@ async function register(client, file, { kind = 'receipt', note = '', createdBy, 
 
   const { rows } = await client.query(
     `INSERT INTO books_documents
-       (kind, original_name, file_path, mime_type, byte_size, checksum_sha256, note, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     RETURNING id, kind, original_name, mime_type, byte_size, checksum_sha256, created_at`,
+       (kind, original_name, file_path, mime_type, byte_size, checksum_sha256, note, created_by,
+        source_kind, source_ref, source_received_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     RETURNING id, kind, original_name, mime_type, byte_size, checksum_sha256, created_at,
+               source_kind, source_ref, source_received_at`,
     [
       kind,
       String(file.originalname || 'document').slice(0, 255),
@@ -146,6 +156,9 @@ async function register(client, file, { kind = 'receipt', note = '', createdBy, 
       checksum,
       String(note || '').slice(0, 500),
       createdBy,
+      sourceKind,
+      sourceRef == null ? null : String(sourceRef).slice(0, 500),
+      sourceReceivedAt || null,
     ]
   );
   const document = rows[0];
@@ -214,6 +227,7 @@ module.exports = {
   ALLOWED_MIME,
   MAX_DOCUMENT_BYTES,
   KINDS,
+  SOURCE_KINDS,
   createDocumentUpload,
   checksumFile,
   relativePath,
