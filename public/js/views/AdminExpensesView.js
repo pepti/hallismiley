@@ -15,8 +15,10 @@ import {
   fetchExpenses, fetchAccounts, fetchSuppliers, fetchMissingDocuments,
   previewExpenseVat, createExpense, uploadDocument, attachExpenseDocument,
   documentUrl, expensesCsvUrl,
+  fetchIntake, fetchIntakeSuggestions, uploadToIntake, acceptIntake, rejectIntake,
 } from '../services/adminBookkeeping.js';
 import { escHtml } from '../utils/escHtml.js';
+import { toMinorUnits, amountStep, minorUnitsFor } from '../utils/money.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
@@ -37,6 +39,11 @@ export class AdminExpensesView {
     this._pendingDocumentId = null;
     this._busy = false;
     this._state = { q: '', missingDocument: false, offset: 0, total: 0 };
+    // The intake queue: documents waiting for a person. When one is being
+    // accepted, the entry form posts to /intake/:id/accept instead of /expenses,
+    // with the queued document forced as the fylgiskjal.
+    this._intakeItems = [];
+    this._acceptIntakeId = null;
   }
 
   async render() {
@@ -60,6 +67,7 @@ export class AdminExpensesView {
         </div>
       </div>
       <div id="exp-missing"></div>
+      <div id="exp-intake"></div>
       ${isAdmin() ? this._formShell() : ''}
       <div class="books-filters">
         <input type="search" id="exp-q" autocomplete="off" spellcheck="false"
@@ -73,8 +81,10 @@ export class AdminExpensesView {
     `;
 
     this._wireFilters();
+    this._wireIntake();
     if (isAdmin()) await this._loadFormData();
     this._loadMissing();
+    this._loadIntake();
     this._load();
 
     return renderAdminShell({ activePath: '/admin/books/expenses', content: this._el });
@@ -87,6 +97,7 @@ export class AdminExpensesView {
       <section class="books-section">
         <h2 class="books-section__title">${escHtml(t('adminBooks.expenses.add'))}</h2>
         <form id="exp-form" class="books-form books-form--wide">
+          <div id="exp-accepting"></div>
           <div class="books-form__grid">
             <label>${escHtml(t('adminBooks.expenses.supplier'))}
               <input type="text" name="supplier_name" list="exp-suppliers" maxlength="200" required />
@@ -109,8 +120,8 @@ export class AdminExpensesView {
               <input type="date" name="expense_date" required />
             </label>
             <label>${escHtml(t('adminBooks.expenses.amountGross'))}
-              <input type="number" name="amount_gross" min="1" step="1" required />
-              <small>${escHtml(t('adminBooks.expenses.amountHint'))}</small>
+              <input type="number" name="amount_gross" min="1" step="1" inputmode="decimal" required />
+              <small id="exp-amount-hint">${escHtml(t('adminBooks.expenses.amountHint'))}</small>
             </label>
             <label>${escHtml(t('adminBooks.expenses.currency'))}
               <select name="currency">
@@ -185,6 +196,7 @@ export class AdminExpensesView {
     });
     form.addEventListener('change', (e) => {
       if (watch.includes(e.target.name)) this._refreshVerdict();
+      if (e.target.name === 'currency') this._syncAmountInput(form);
     });
 
     // Upload the receipt as soon as it is chosen, so the entry can reference it.
@@ -209,6 +221,23 @@ export class AdminExpensesView {
     }
 
     form.addEventListener('submit', e => this._submit(e, form, { allowDuplicate: false }));
+  }
+
+  // The amount field follows the currency: whole krónur for ISK, two decimals for
+  // anything else — and the hint says which. "The total actually paid" read as
+  // krónur is exactly how a USD invoice ends up booked a hundredfold too small.
+  _syncAmountInput(form) {
+    const currency = form.querySelector('[name="currency"]').value;
+    const input = form.querySelector('[name="amount_gross"]');
+    const hint = form.querySelector('#exp-amount-hint');
+    const step = amountStep(currency);
+    input.step = step;
+    input.min = step;
+    if (hint) {
+      hint.textContent = currency === 'ISK'
+        ? t('adminBooks.expenses.amountHint')
+        : t('adminBooks.expenses.amountHintForeign', { currency });
+    }
   }
 
   async _refreshVerdict() {
@@ -248,7 +277,7 @@ export class AdminExpensesView {
     this._busy = true;
     if (button) button.disabled = true;
     try {
-      await createExpense({
+      const body = {
         supplier_name: fd.get('supplier_name'),
         supplier_kennitala: fd.get('supplier_kennitala') || null,
         supplier_vat_number: fd.get('supplier_vat_number') || '',
@@ -256,20 +285,29 @@ export class AdminExpensesView {
         supplier_invoice_no: fd.get('supplier_invoice_no') || null,
         description: fd.get('description') || '',
         expense_date: fd.get('expense_date'),
-        amount_gross: Number(fd.get('amount_gross')),
+        // The API takes MINOR units (aurar/cents); the person typed major units.
+        // Sending the field raw booked a USD 20.00 invoice as USD 0.20.
+        amount_gross: toMinorUnits(fd.get('amount_gross'), fd.get('currency')),
         currency: fd.get('currency'),
         vat_code: fd.get('vat_code'),
         account_code: fd.get('account_code'),
         document_id: this._pendingDocumentId,
         allow_duplicate: allowDuplicate,
-      });
-      showToast(t('adminBooks.expenses.saved'), 'success');
+      };
+      // Accepting a queued document: same figures, same validation, same posting —
+      // the server forces the queued file as the fylgiskjal and stamps the row.
+      const accepting = this._acceptIntakeId;
+      if (accepting) await acceptIntake(accepting, body);
+      else await createExpense(body);
+      showToast(t(accepting ? 'adminBooks.intake.accepted' : 'adminBooks.expenses.saved'), 'success');
       form.reset();
       this._pendingDocumentId = null;
       this._el.querySelector('#exp-duplicates').innerHTML = '';
       const status = this._el.querySelector('#exp-file-status');
       if (status) status.textContent = t('adminBooks.expenses.receiptHint');
+      if (accepting) this._cancelAccept();
       this._loadMissing();
+      this._loadIntake();
       this._load();
     } catch (err) {
       if (err.duplicates && err.duplicates.length) {
@@ -303,6 +341,162 @@ export class AdminExpensesView {
   }
 
   // ── Missing receipts ──────────────────────────────────────────────────────
+
+  // ── The intake queue ───────────────────────────────────────────────────────
+  //
+  // A queued document is a PROPOSAL; nothing is booked until an admin opens it
+  // into the entry form, checks every figure and submits. The badge says which
+  // rung of the trust ladder the document came in on (Peppol / XML / read /
+  // manual) — the pre-fill is a time-saver, never a decision.
+
+  async _loadIntake() {
+    const target = this._el.querySelector('#exp-intake');
+    if (!target) return;
+    try {
+      const { items } = await fetchIntake({ status: 'pending', limit: 20 });
+      this._intakeItems = items || [];
+      target.innerHTML = this._intakeHtml();
+    } catch {
+      target.innerHTML = '';
+    }
+  }
+
+  _intakeHtml() {
+    const items = this._intakeItems;
+    const admin = isAdmin();
+    const upload = admin ? `
+      <label class="books-check">
+        <input type="file" id="exp-intake-file"
+               accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,text/xml,application/xml" />
+        ${escHtml(t('adminBooks.intake.upload'))}
+      </label>` : '';
+    if (!items.length && !admin) return '';
+    const rows = items.length ? `
+      <table class="admin-table books-table books-table--tight">
+        <thead><tr>
+          <th>${escHtml(t('adminBooks.intake.colSource'))}</th>
+          <th>${escHtml(t('adminBooks.intake.colDocument'))}</th>
+          <th>${escHtml(t('adminBooks.expenses.supplier'))}</th>
+          <th>${escHtml(t('adminBooks.expenses.date'))}</th>
+          <th class="num">${escHtml(t('adminBooks.expenses.amountGross'))}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${items.map(i => `
+          <tr>
+            <td><span class="books-pill books-pill--${i.source_kind === 'manual' ? 'muted' : 'info'}">${escHtml(t(`adminBooks.intake.source.${i.source_kind}`))}</span></td>
+            <td><a class="books-link" href="${escHtml(documentUrl(i.document_id))}">${escHtml(i.original_name || '')}</a>
+              ${(i.parse_problems || []).length ? `<div class="books-muted">${escHtml(t('adminBooks.intake.parseProblems'))} ${escHtml((i.parse_problems || []).join('; '))}</div>` : ''}</td>
+            <td>${escHtml(i.supplier_name || '—')}${i.supplier_invoice_no ? ` · ${escHtml(i.supplier_invoice_no)}` : ''}</td>
+            <td>${escHtml(i.document_date || '—')}</td>
+            <td class="num">${i.amount_gross ? escHtml(`${i.amount_gross} ${i.currency}`) : '—'}</td>
+            <td class="books-actions">${admin ? `
+              <button type="button" class="btn btn--sm" data-intake-accept="${escHtml(i.id)}">${escHtml(t('adminBooks.intake.open'))}</button>
+              <button type="button" class="btn btn--sm btn--ghost" data-intake-reject="${escHtml(i.id)}">${escHtml(t('adminBooks.intake.reject'))}</button>` : ''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : `<p class="admin-shop__hint">${escHtml(t('adminBooks.intake.empty'))}</p>`;
+    return `
+      <section class="books-section">
+        <h2 class="books-section__title">${escHtml(t('adminBooks.intake.title', { count: items.length }))}</h2>
+        <p class="admin-shop__hint">${escHtml(t('adminBooks.intake.hint'))}</p>
+        ${upload}
+        <div id="exp-intake-status"></div>
+        ${rows}
+      </section>`;
+  }
+
+  _wireIntake() {
+    const box = this._el.querySelector('#exp-intake');
+    if (!box) return;
+    box.addEventListener('change', async (e) => {
+      if (e.target.id !== 'exp-intake-file') return;
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const status = box.querySelector('#exp-intake-status');
+      try {
+        const { intake } = await uploadToIntake(file);
+        showToast(t('adminBooks.intake.uploaded', { name: intake.original_name || file.name }), 'success');
+        await this._loadIntake();
+      } catch (err) {
+        const msg = err.code === 'ALREADY_QUEUED' ? t('adminBooks.intake.alreadyQueued') : err.message;
+        if (status) status.innerHTML = errorBanner(msg);
+        else showToast(msg, 'error');
+      }
+    });
+    box.addEventListener('click', async (e) => {
+      const accept = e.target.closest('[data-intake-accept]');
+      if (accept) { this._startAccept(accept.dataset.intakeAccept); return; }
+      const reject = e.target.closest('[data-intake-reject]');
+      if (reject) {
+        const reason = window.prompt(t('adminBooks.intake.rejectPrompt'));
+        if (reason === null) return;
+        if (!reason.trim()) { showToast(t('adminBooks.intake.rejectPrompt'), 'error'); return; }
+        try {
+          await rejectIntake(reject.dataset.intakeReject, reason.trim());
+          showToast(t('adminBooks.intake.rejected'), 'success');
+          if (this._acceptIntakeId === reject.dataset.intakeReject) this._cancelAccept();
+          this._loadIntake();
+        } catch (err) { showToast(err.message, 'error'); }
+      }
+    });
+  }
+
+  // Open a queued document into the entry form. The suggestion pre-fills what it
+  // can; the operator sees and can change every figure before submitting.
+  async _startAccept(id) {
+    const form = this._el.querySelector('#exp-form');
+    if (!form) return;
+    let suggestion;
+    try {
+      ({ suggestion } = await fetchIntakeSuggestions(id));
+    } catch (err) { showToast(err.message, 'error'); return; }
+    suggestion = suggestion || {};
+    this._acceptIntakeId = id;
+    form.reset();
+    this._pendingDocumentId = null;
+    const set = (name, value) => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (!el || value === null || value === undefined || value === '') return;
+      if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === String(value))) return;
+      el.value = String(value);
+    };
+    set('supplier_name', suggestion.supplier_name);
+    set('supplier_kennitala', suggestion.supplier_kennitala);
+    set('supplier_vat_number', suggestion.supplier_vat_number);
+    set('supplier_country', suggestion.supplier_country);
+    set('supplier_invoice_no', suggestion.supplier_invoice_no);
+    set('expense_date', suggestion.expense_date);
+    set('currency', suggestion.currency || 'ISK');
+    // Minor units on the wire, major units in the field (the same conversion the
+    // form applies on the way out, reversed).
+    if (suggestion.amount_gross) {
+      const cur = form.querySelector('[name="currency"]').value;
+      this._syncAmountInput(form);
+      set('amount_gross', suggestion.amount_gross / minorUnitsFor(cur));
+    }
+    set('account_code', suggestion.account_code);
+    set('vat_code', suggestion.vat_code);
+    this._paintAccepting();
+    this._refreshVerdict();
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  _cancelAccept() {
+    this._acceptIntakeId = null;
+    this._paintAccepting();
+  }
+
+  _paintAccepting() {
+    const box = this._el.querySelector('#exp-accepting');
+    if (!box) return;
+    if (!this._acceptIntakeId) { box.innerHTML = ''; return; }
+    box.innerHTML = `
+      <div class="books-banner books-banner--info">
+        ${escHtml(t('adminBooks.intake.accepting'))}
+        <button type="button" class="btn btn--sm btn--ghost" id="exp-accept-cancel">${escHtml(t('adminBooks.intake.cancelAccept'))}</button>
+      </div>`;
+    box.querySelector('#exp-accept-cancel').addEventListener('click', () => this._cancelAccept());
+  }
 
   async _loadMissing() {
     const target = this._el.querySelector('#exp-missing');

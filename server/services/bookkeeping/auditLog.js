@@ -22,6 +22,11 @@ const logger = require('../../logger');
 // not create a silent second category that nobody ever queries.
 const ACTIONS = [
   'invoice.issued', 'invoice.cancelled', 'invoice.credited',
+  // A UBL (Peppol BIS 3.0) rendering of an issued invoice was produced. Not a new
+  // statutory act — the same document in another serialisation — but the bytes
+  // and their checksum are recorded (invoice_ubl_exports) so a receiver's verdict
+  // can be tied to exactly what was sent.
+  'invoice.ubl_exported',
   'payment.recorded', 'payment.refunded',
   'credit_note.issued',
   'expense.created', 'expense.updated',
@@ -39,6 +44,9 @@ const ACTIONS = [
   'fx.rate_set',
   'coa.updated',
   'document.uploaded',
+  // The intake queue: a document arrived (a PROPOSAL, nothing posted), and a
+  // person accepted it into an expense or rejected it with a reason.
+  'intake.received', 'intake.accepted', 'intake.rejected',
   'bank.imported', 'bank.matched',
   'stripe.synced',
   'archive.exported',

@@ -52,6 +52,23 @@ const KEYS = {
   bkAccountantName:   'books.accountant_name',
   bkAccountantEmail:  'books.accountant_email',
   bkCoaConfirmedAt:   'books.coa_confirmed_at',
+  // Who confirmed the chart of accounts and against what. A confirmation date on
+  // its own silences the only warning that tracks ACCOUNTANT-QUESTIONS §1 — the
+  // note is what makes it a statement someone signed rather than a click.
+  bkCoaConfirmedBy:   'books.coa_confirmed_by',
+  bkCoaConfirmedNote: 'books.coa_confirmed_note',
+  // The seller's address as PARTS, plus Peppol addressing and bank details. The
+  // free-text seller_address stays for the PDF; these are what a machine-readable
+  // invoice (EN 16931 BG-5, BT-34, BT-84/86) needs, and migration 095 snapshots the
+  // address parts onto every invoice at issue like the rest of the seller block.
+  bkSellerStreet:         'books.seller_street',
+  bkSellerCity:           'books.seller_city',
+  bkSellerPostalZone:     'books.seller_postal_zone',
+  bkSellerCountry:        'books.seller_country',
+  bkSellerEndpointScheme: 'books.seller_endpoint_scheme',
+  bkSellerEndpointId:     'books.seller_endpoint_id',
+  bkSellerIban:           'books.seller_iban',
+  bkSellerBic:            'books.seller_bic',
   // Change-request widget on PROD (admins only; a non-prod app-env always has
   // it on — see changeRequestGate in middleware/changeRequestGate.js, ice #206).
   changeRequestsEnabled: 'change_requests.enabled',
@@ -125,6 +142,17 @@ const DEFAULTS = {
   // Null until a human confirms the chart of accounts. The books dashboard shows
   // a standing warning while this is unset.
   [KEYS.bkCoaConfirmedAt]:   null,
+  [KEYS.bkCoaConfirmedBy]:   '',
+  [KEYS.bkCoaConfirmedNote]: '',
+  [KEYS.bkSellerStreet]:         '',
+  [KEYS.bkSellerCity]:           '',
+  [KEYS.bkSellerPostalZone]:     '',
+  [KEYS.bkSellerCountry]:        'IS',
+  // ISO 6523 ICD 0196 — the Icelandic kennitala scheme on the Peppol EAS/ICD list.
+  [KEYS.bkSellerEndpointScheme]: '0196',
+  [KEYS.bkSellerEndpointId]:     '',
+  [KEYS.bkSellerIban]:           '',
+  [KEYS.bkSellerBic]:            '',
   [KEYS.changeRequestsEnabled]: false,
 };
 
@@ -327,7 +355,9 @@ class Setting {
       KEYS.bkSellerName, KEYS.bkSellerKennitala, KEYS.bkSellerVatNumber, KEYS.bkSellerAddress,
       KEYS.bkPaymentTermsDays, KEYS.bkInvoiceNote, KEYS.bkMunicipality,
       KEYS.bkCorporateTaxRate, KEYS.bkAccountantName, KEYS.bkAccountantEmail,
-      KEYS.bkCoaConfirmedAt,
+      KEYS.bkCoaConfirmedAt, KEYS.bkCoaConfirmedBy, KEYS.bkCoaConfirmedNote,
+      KEYS.bkSellerStreet, KEYS.bkSellerCity, KEYS.bkSellerPostalZone, KEYS.bkSellerCountry,
+      KEYS.bkSellerEndpointScheme, KEYS.bkSellerEndpointId, KEYS.bkSellerIban, KEYS.bkSellerBic,
     ], client);
     const str = (val, dflt = '') => (typeof val === 'string' ? val : dflt);
     const terms = Number(v[KEYS.bkPaymentTermsDays]);
@@ -349,6 +379,26 @@ class Setting {
       accountant_name:    str(v[KEYS.bkAccountantName]),
       accountant_email:   str(v[KEYS.bkAccountantEmail]),
       coa_confirmed_at:   typeof v[KEYS.bkCoaConfirmedAt] === 'string' ? v[KEYS.bkCoaConfirmedAt] : null,
+      coa_confirmed_by:   str(v[KEYS.bkCoaConfirmedBy]),
+      coa_confirmed_note: str(v[KEYS.bkCoaConfirmedNote]),
+      seller_street:          str(v[KEYS.bkSellerStreet]),
+      seller_city:            str(v[KEYS.bkSellerCity]),
+      seller_postal_zone:     str(v[KEYS.bkSellerPostalZone]),
+      seller_country:         str(v[KEYS.bkSellerCountry], DEFAULTS[KEYS.bkSellerCountry]) || DEFAULTS[KEYS.bkSellerCountry],
+      seller_endpoint_scheme: str(v[KEYS.bkSellerEndpointScheme], DEFAULTS[KEYS.bkSellerEndpointScheme]) || DEFAULTS[KEYS.bkSellerEndpointScheme],
+      seller_endpoint_id:     str(v[KEYS.bkSellerEndpointId]),
+      seller_iban:            str(v[KEYS.bkSellerIban]),
+      seller_bic:             str(v[KEYS.bkSellerBic]),
+      // Derived, and deliberately SEPARATE from seller_complete: invoices can be
+      // issued on a name, kennitala and VSK number alone. Emitting a Peppol
+      // BIS 3.0 document additionally needs the address as parts (BR-08/BR-09), and
+      // making seller_complete stricter would stop a business invoicing because
+      // its postal code is blank.
+      peppol_complete: Boolean(
+        seller.seller_name.trim() && seller.seller_kennitala.trim() && seller.seller_vat_number.trim()
+        && str(v[KEYS.bkSellerStreet]).trim() && str(v[KEYS.bkSellerCity]).trim()
+        && str(v[KEYS.bkSellerPostalZone]).trim()
+      ),
       // Derived: whether invoices can legally be issued yet. The invoice service
       // checks this rather than duplicating the rule.
       seller_complete: Boolean(
@@ -357,7 +407,9 @@ class Setting {
     };
   }
 
-  static async updateBookkeepingSettings(patch = {}) {
+  // `confirmedBy` is stamped by the CONTROLLER from the session, never read from the
+  // body — it is the answer to "who signed this", so the client does not get a say.
+  static async updateBookkeepingSettings(patch = {}, { confirmedBy = '' } = {}) {
     const has = k => Object.prototype.hasOwnProperty.call(patch, k);
 
     const textField = async (field, key, { maxLen = 200, required = false } = {}) => {
@@ -398,6 +450,32 @@ class Setting {
     await textField('municipality', KEYS.bkMunicipality, { maxLen: 120 });
     await textField('accountant_name', KEYS.bkAccountantName, { maxLen: 200 });
 
+    // Address parts and Peppol addressing (EN 16931 BG-5 / BT-34 / BT-84 / BT-86).
+    await textField('seller_street', KEYS.bkSellerStreet, { maxLen: 200 });
+    await textField('seller_city', KEYS.bkSellerCity, { maxLen: 120 });
+    await textField('seller_postal_zone', KEYS.bkSellerPostalZone, { maxLen: 20 });
+    await textField('seller_endpoint_id', KEYS.bkSellerEndpointId, { maxLen: 50 });
+    if (has('seller_country')) {
+      const c = String(patch.seller_country || '').trim().toUpperCase();
+      if (!/^[A-Z]{2}$/.test(c)) throw new SettingValidationError('seller_country must be a two-letter ISO 3166-1 code (IS)');
+      await this.set(KEYS.bkSellerCountry, c);
+    }
+    if (has('seller_endpoint_scheme')) {
+      const s = String(patch.seller_endpoint_scheme || '').trim();
+      if (!/^\d{4}$/.test(s)) throw new SettingValidationError('seller_endpoint_scheme must be a four-digit ISO 6523 ICD (0196 for a kennitala)');
+      await this.set(KEYS.bkSellerEndpointScheme, s);
+    }
+    if (has('seller_iban')) {
+      const iban = String(patch.seller_iban || '').replace(/\s+/g, '').toUpperCase();
+      if (iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) throw new SettingValidationError('seller_iban does not look like an IBAN');
+      await this.set(KEYS.bkSellerIban, iban);
+    }
+    if (has('seller_bic')) {
+      const bic = String(patch.seller_bic || '').replace(/\s+/g, '').toUpperCase();
+      if (bic && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(bic)) throw new SettingValidationError('seller_bic must be an 8 or 11 character BIC');
+      await this.set(KEYS.bkSellerBic, bic);
+    }
+
     if (has('payment_terms_days')) {
       const n = Number(patch.payment_terms_days);
       if (!Number.isInteger(n) || n < 0 || n > 365) {
@@ -420,11 +498,27 @@ class Setting {
     if (has('coa_confirmed_at')) {
       const raw = patch.coa_confirmed_at;
       if (raw === null || raw === '') {
+        // Revoking clears the whole claim, not just the date — a note with no
+        // confirmation attached would read as one.
         await this.set(KEYS.bkCoaConfirmedAt, null);
+        await this.set(KEYS.bkCoaConfirmedBy, '');
+        await this.set(KEYS.bkCoaConfirmedNote, '');
       } else {
         const d = new Date(String(raw));
         if (Number.isNaN(d.getTime())) throw new SettingValidationError('coa_confirmed_at must be a valid date');
+        // "I checked these" is only worth something if it says against what —
+        // the same rule payroll_rates.source_note enforces for the year's figures.
+        // Confirming silences the only warning that tracks ACCOUNTANT-QUESTIONS §1.
+        const note = typeof patch.coa_confirmed_note === 'string' ? patch.coa_confirmed_note.trim() : '';
+        if (!note) {
+          throw new SettingValidationError(
+            'coa_confirmed_note is required when confirming the chart of accounts — say what was reviewed, and against what'
+          );
+        }
+        if (note.length > 400) throw new SettingValidationError('coa_confirmed_note must be 400 characters or fewer');
         await this.set(KEYS.bkCoaConfirmedAt, d.toISOString().slice(0, 10));
+        await this.set(KEYS.bkCoaConfirmedNote, note);
+        await this.set(KEYS.bkCoaConfirmedBy, String(confirmedBy || '').trim().slice(0, 200));
       }
     }
 

@@ -25,6 +25,8 @@ const documentService = require('../services/bookkeeping/documentService');
 const audit = require('../services/bookkeeping/auditLog');
 const { toCsv, csvHeaders } = require('../utils/csv');
 const bookkeepingPdf = require('../services/bookkeepingPdf');
+const peppol = require('../services/bookkeeping/peppol');
+const intakeService = require('../services/bookkeeping/intakeService');
 const securityLogger = require('../observability/securityLogger');
 const { toIsoDate, todayIso, assertAccountingDate, addDays, DateError } = require('../utils/booksDate');
 const { VatError } = require('../utils/vat');
@@ -154,22 +156,30 @@ function fail(res, err, next) {
 async function getDashboard(req, res, next) {
   try {
     const { from, to } = parseRange(req.query, { defaultDays: 60 });
-    const [metrics, series, settings, fxFreshness] = await Promise.all([
+    const [metrics, series, settings, fxFreshness, fxInUse, intakePending] = await Promise.all([
       Invoice.metrics({ from, to }),
       Invoice.timeseries({ from, to }),
       Setting.getBookkeepingSettings(),
       FxRate.freshness('EUR'),
+      FxRate.freshnessInUse(),
+      intakeService.countPending(db),
     ]);
     res.json({
       range: { from, to },
       metrics,
       timeseries: series,
+      // One number, in front of the operator, is what makes a queue get worked.
+      intake_pending: intakePending,
       // Standing setup warnings, so a blocked first invoice is visible before it
       // is attempted rather than as a failure at the worst moment.
       readiness: {
         seller_complete: settings.seller_complete,
         coa_confirmed_at: settings.coa_confirmed_at,
+        // `fx` is the EUR check the first release shipped, kept for older clients;
+        // `fx_currencies` is one freshness row per currency the books actually
+        // use, which is the one the banner should read (USD was invisible before).
         fx: fxFreshness,
+        fx_currencies: fxInUse,
       },
     });
   } catch (err) { fail(res, err, next); }
@@ -204,7 +214,57 @@ async function getInvoice(req, res, next) {
     const invoice = await Invoice.findDetail(id);
     if (!invoice) return res.status(404).json({ error: 'Invoice not found', code: 404 });
     const history = await audit.forEntity(db, 'invoice', id, 50);
-    res.json({ invoice, history });
+    // Whether this document can be emitted as Peppol BIS 3.0, and why not — so the
+    // screen can disable the button and SAY why, instead of a link that 409s.
+    res.json({ invoice, history, peppol: peppol.check({ invoice }) });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getInvoiceUbl(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'invoice id');
+    const invoice = await Invoice.findDetail(id);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found', code: 404 });
+
+    const settings = await Setting.getBookkeepingSettings();
+    const built = peppol.buildUblInvoice({ invoice, settings });
+    if (!built.ready) {
+      // Same shape as PREFLIGHT_BLOCKED / POSSIBLE_DUPLICATE: the system says what
+      // is wrong rather than producing a document the receiver would bounce.
+      return res.status(409).json({
+        error: 'This invoice cannot be emitted as a Peppol BIS 3.0 document yet',
+        code: 409,
+        reason: 'UBL_NOT_READY',
+        problems: built.problems,
+      });
+    }
+
+    // Record exactly what was emitted, with its checksum, in the same transaction
+    // as the audit row — a receiver's verdict must be attributable to these bytes.
+    await ledger.withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO invoice_ubl_exports
+           (invoice_id, profile, customization_id, byte_size, checksum_sha256, xml, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [invoice.id, built.profile, built.customizationId, built.byteSize, built.checksum, built.xml, req.user.id]
+      );
+      await audit.record(client, {
+        actorId: req.user.id,
+        action: 'invoice.ubl_exported',
+        entityType: 'invoice',
+        entityId: invoice.id,
+        requestId: req.requestId || null,
+        summary: { checksum_sha256: built.checksum, byte_size: built.byteSize, notes: built.notes },
+      });
+    });
+
+    const filename = `reikningur-${invoice.invoice_number}-ubl.xml`;
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    // attachment + no-store, for the same reason as the PDF: a customer's name and
+    // address must not sit in a shared cache or render inline by accident.
+    res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/[^\w.-]/g, '_')}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(built.xml);
   } catch (err) { fail(res, err, next); }
 }
 
@@ -342,17 +402,25 @@ async function getInvoicePdf(req, res, next) {
 
 async function getSettings(req, res, next) {
   try {
-    const [settings, fx] = await Promise.all([
+    // Rate history for ONE currency at a time (the table on the settings screen);
+    // freshness for every currency in use, so a stale USD table is as visible as
+    // a stale EUR one.
+    const currency = parseEnum(req.query.currency, ['EUR', 'USD', 'GBP', 'DKK'], 'currency') || 'EUR';
+    const [settings, fx, fxInUse] = await Promise.all([
       Setting.getBookkeepingSettings(),
-      FxRate.recent('EUR', 30),
+      FxRate.recent(currency, 30),
+      FxRate.freshnessInUse(),
     ]);
-    res.json({ settings, fx_rates: fx });
+    res.json({ settings, fx_rates: fx, fx_currency: currency, fx_freshness: fxInUse });
   } catch (err) { fail(res, err, next); }
 }
 
 async function updateSettings(req, res, next) {
   try {
-    const settings = await Setting.updateBookkeepingSettings(req.body || {});
+    // Who confirmed the chart of accounts comes from the session, not the body.
+    const settings = await Setting.updateBookkeepingSettings(req.body || {}, {
+      confirmedBy: req.user.username || req.user.email || req.user.id,
+    });
     // Log the ACCEPTED field names, not the raw body keys — otherwise an admin can
     // flood the security log with arbitrary strings up to the body limit.
     securityLogger.adminAction(req.user.id, 'books.settings.update', null, {
@@ -436,28 +504,34 @@ async function getExpense(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// The expense body, validated. Shared by the manual form and by accepting an
+// intake item, so the two paths into createExpense() cannot drift apart.
+function parseExpenseBody(req) {
+  const body = req.body || {};
+  return {
+    supplierName: parseText(body.supplier_name, 'supplier_name', { maxLen: 200, required: true }),
+    supplierKennitala: body.supplier_kennitala
+      ? parseText(body.supplier_kennitala, 'supplier_kennitala', { maxLen: 20 }) : null,
+    supplierVatNumber: parseText(body.supplier_vat_number, 'supplier_vat_number', { maxLen: 20 }),
+    supplierCountry: parseText(body.supplier_country, 'supplier_country', { maxLen: 3 }) || 'IS',
+    supplierInvoiceNo: body.supplier_invoice_no
+      ? parseText(body.supplier_invoice_no, 'supplier_invoice_no', { maxLen: 100 }) : null,
+    description: parseText(body.description, 'description', { maxLen: 500 }),
+    expenseDate: assertAccountingDate(body.expense_date, 'expense_date'),
+    amountGross: parseAmount(body.amount_gross, 'amount_gross'),
+    currency: parseEnum(body.currency || 'ISK', ['ISK', 'EUR', 'USD', 'GBP', 'DKK'], 'currency'),
+    vatCode: parseEnum(body.vat_code || 'input_24', expenseService.VAT_CODES, 'vat_code'),
+    accountCode: parseText(body.account_code, 'account_code', { maxLen: 20, required: true }),
+    documentId: body.document_id ? parseId(body.document_id, 'document_id') : null,
+    allowDuplicate: body.allow_duplicate === true,
+    createdBy: req.user.id,
+    requestId: req.requestId || null,
+  };
+}
+
 async function createExpense(req, res, next) {
   try {
-    const body = req.body || {};
-    const payload = {
-      supplierName: parseText(body.supplier_name, 'supplier_name', { maxLen: 200, required: true }),
-      supplierKennitala: body.supplier_kennitala
-        ? parseText(body.supplier_kennitala, 'supplier_kennitala', { maxLen: 20 }) : null,
-      supplierVatNumber: parseText(body.supplier_vat_number, 'supplier_vat_number', { maxLen: 20 }),
-      supplierCountry: parseText(body.supplier_country, 'supplier_country', { maxLen: 3 }) || 'IS',
-      supplierInvoiceNo: body.supplier_invoice_no
-        ? parseText(body.supplier_invoice_no, 'supplier_invoice_no', { maxLen: 100 }) : null,
-      description: parseText(body.description, 'description', { maxLen: 500 }),
-      expenseDate: assertAccountingDate(body.expense_date, 'expense_date'),
-      amountGross: parseAmount(body.amount_gross, 'amount_gross'),
-      currency: parseEnum(body.currency || 'ISK', ['ISK', 'EUR', 'USD', 'GBP', 'DKK'], 'currency'),
-      vatCode: parseEnum(body.vat_code || 'input_24', expenseService.VAT_CODES, 'vat_code'),
-      accountCode: parseText(body.account_code, 'account_code', { maxLen: 20, required: true }),
-      documentId: body.document_id ? parseId(body.document_id, 'document_id') : null,
-      allowDuplicate: body.allow_duplicate === true,
-      createdBy: req.user.id,
-      requestId: req.requestId || null,
-    };
+    const payload = parseExpenseBody(req);
 
     const result = await ledger.withTransaction(client =>
       expenseService.createExpense(client, payload));
@@ -552,6 +626,87 @@ async function uploadDocument(req, res, next) {
         kind, note, ...audit.actorOf(req),
       }));
     res.status(201).json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+// ── Intake queue ─────────────────────────────────────────────────────────────
+// A queued document is a PROPOSAL. Nothing here posts; accept goes through the same
+// expenseService.createExpense() as the manual form, with the operator as created_by.
+
+async function listIntake(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    const status = parseEnum(req.query.status, intakeService.STATUSES, 'status') || 'pending';
+    const result = await intakeService.list(db, { status, limit, offset });
+    res.json({ ...result, status, limit, offset });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getIntakeItem(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'intake id');
+    const item = await intakeService.get(db, id);
+    if (!item) return res.status(404).json({ error: 'Intake item not found', code: 404 });
+    res.json({ intake: item });
+  } catch (err) { fail(res, err, next); }
+}
+
+async function getIntakeSuggestions(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'intake id');
+    res.json(await intakeService.suggest(db, id));
+  } catch (err) { fail(res, err, next); }
+}
+
+async function createIntake(req, res, next) {
+  try {
+    // An upload is the MANUAL rung of the ladder, whatever the request claims: the
+    // higher rungs are earned by a channel (Peppol, embedded XML), never asserted
+    // by a client. v1 extracts nothing, so the proposal is empty.
+    const result = await ledger.withTransaction(client =>
+      intakeService.receive(client, req.file, {
+        sourceKind: 'manual', suggested: {}, parseProblems: [], ...audit.actorOf(req),
+      }));
+    res.status(201).json(result);
+  } catch (err) { fail(res, err, next); }
+}
+
+async function acceptIntake(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'intake id');
+    // The intake's own document is the evidence; whatever the client sends as
+    // document_id is ignored (not validated, not honoured) and the service forces
+    // the queued file.
+    if (req.body && typeof req.body === 'object') delete req.body.document_id;
+    const payload = parseExpenseBody(req);
+    delete payload.documentId;
+    const result = await ledger.withTransaction(client =>
+      intakeService.accept(client, id, {
+        expenseInput: payload, createdBy: req.user.id, requestId: req.requestId || null,
+      }));
+    securityLogger.adminAction(req.user.id, 'books.intake.accept', id, {
+      expense: result.expense.id, account: payload.accountCode, deductible: result.verdict.deductible,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    // Same 409 the manual form gets: the row stays pending, nothing half-done.
+    if (err.code === 'POSSIBLE_DUPLICATE') {
+      return res.status(409).json({
+        error: err.message, code: 409, reason: 'POSSIBLE_DUPLICATE', duplicates: err.duplicates || [],
+      });
+    }
+    fail(res, err, next);
+  }
+}
+
+async function rejectIntake(req, res, next) {
+  try {
+    const id = parseId(req.params.id, 'intake id');
+    const reason = parseText(req.body && req.body.reason, 'reason', { maxLen: 500, required: true });
+    const result = await ledger.withTransaction(client =>
+      intakeService.reject(client, id, { reason, createdBy: req.user.id, requestId: req.requestId || null }));
+    securityLogger.adminAction(req.user.id, 'books.intake.reject', id, { reason: reason.slice(0, 120) });
+    res.json(result);
   } catch (err) { fail(res, err, next); }
 }
 
@@ -1874,6 +2029,13 @@ module.exports = {
   recordRefund,
   createCreditNote,
   getInvoicePdf,
+  getInvoiceUbl,
+  listIntake,
+  getIntakeItem,
+  getIntakeSuggestions,
+  createIntake,
+  acceptIntake,
+  rejectIntake,
   getSettings,
   updateSettings,
   setFxRate,

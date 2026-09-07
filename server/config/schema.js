@@ -4451,6 +4451,226 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
+    // ── 095: the statutory party block, structured ───────────────────────────
+    //
+    // 072 snapshotted the seller and buyer as free text, which is right for the
+    // PDF (Reglugerð 50/1993 asks for a printed address, not a parsed one) and
+    // wrong for a machine-readable invoice. EN 16931 BG-5/BG-8 want the parts:
+    // street, city, postal zone, and a mandatory ISO 3166-1 alpha-2 country.
+    //
+    // The parts already exist upstream — orders.shipping_address is JSONB with
+    // line1/line2/postal/city/country_code — and invoiceService.pickCustomer()
+    // used to throw them away by \n-joining into customer_address. This adds
+    // somewhere for them to land WITHOUT touching the free-text column: the PDF
+    // keeps reading customer_address exactly as today, and nothing reprints
+    // differently.
+    //
+    // Invariant 14 (expand/contract): every column is NULLable with no default
+    // and no CHECK. The previous release's code writes none of them and reads
+    // none of them; it keeps working unchanged against this schema for the
+    // whole length of a slot swap. Historical rows stay NULL forever and the
+    // UBL preflight refuses them by name rather than guessing — parsing a
+    // \n-joined address into a statutory document is exactly the kind of
+    // plausible guess that produces a wrong legal document.
+    name: '095_books_invoice_party_structured',
+    statements: [
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS seller_street        TEXT,
+         ADD COLUMN IF NOT EXISTS seller_city          TEXT,
+         ADD COLUMN IF NOT EXISTS seller_postal_zone   TEXT,
+         ADD COLUMN IF NOT EXISTS seller_country       TEXT,
+         ADD COLUMN IF NOT EXISTS customer_street      TEXT,
+         ADD COLUMN IF NOT EXISTS customer_city        TEXT,
+         ADD COLUMN IF NOT EXISTS customer_postal_zone TEXT`,
+
+      // The Peppol participant identifier the document was addressed to,
+      // snapshotted like everything else in the party block: a customer who later
+      // changes their access point must not retroactively re-address a document
+      // already sent. NULL means "never transmitted over Peppol" — every row today.
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS customer_endpoint_scheme TEXT,
+         ADD COLUMN IF NOT EXISTS customer_endpoint_id     TEXT`,
+
+      // What was actually emitted, and its checksum. This exists for one reason:
+      // the cross-implementation conformance test needs to tie the other side's
+      // parse verdict to EXACT BYTES. "It worked when I tried it" is not a result.
+      // The document is a few KB, and storing it beside the checksum is what makes
+      // the checksum verifiable later — the same "evidence, not convenience"
+      // argument as books_documents (Reglugerð 505/2013 gr. 14).
+      `CREATE TABLE IF NOT EXISTS invoice_ubl_exports (
+         id               TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         invoice_id       TEXT        NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+         profile          TEXT        NOT NULL DEFAULT 'peppol-bis-billing-3.0'
+                                      CHECK (profile IN ('peppol-bis-billing-3.0')),
+         customization_id TEXT        NOT NULL,
+         byte_size        BIGINT      NOT NULL CHECK (byte_size > 0),
+         checksum_sha256  TEXT        NOT NULL,
+         xml              TEXT        NOT NULL,
+         created_by       TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+         created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_invoice_ubl_exports_invoice
+         ON invoice_ubl_exports (invoice_id, created_at DESC)`,
+      `CREATE OR REPLACE FUNCTION books_protect_ubl_export()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         RAISE EXCEPTION 'An emitted UBL document is a record of what was sent and cannot be changed or removed'
+           USING ERRCODE = 'restrict_violation';
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_invoice_ubl_exports_immutable ON invoice_ubl_exports`,
+      `CREATE TRIGGER trg_invoice_ubl_exports_immutable
+         BEFORE UPDATE OR DELETE ON invoice_ubl_exports
+         FOR EACH ROW EXECUTE FUNCTION books_protect_ubl_export()`,
+    ],
+  },
+  {
+    // ── 096: the capture spine ───────────────────────────────────────────────
+    //
+    // 072 gave a document a KIND (receipt, supplier_invoice, …) — what it is. It
+    // never recorded how much it can be TRUSTED, which is a different axis: a
+    // supplier_invoice keyed in by hand from a phone photo and the same
+    // supplier_invoice arriving as signed UBL over an access point are the same
+    // kind and wildly different evidence. source_kind is that axis.
+    //
+    // The ladder is peppol > embedded_xml > extracted > manual. All four values
+    // ship now even though this release can only produce the bottom two: the
+    // ladder is the vocabulary, and widening a CHECK later is a migration nobody
+    // should have to write twice. What the ladder may drive: how a form pre-fills,
+    // how loudly the duplicate check speaks, what the archive says about
+    // provenance. What it may NEVER drive: whether a human is required.
+    //
+    // Invariant 14: source_kind is NOT NULL with a DEFAULT of 'manual', which is
+    // exactly what the previous release's documentService.register() — which does
+    // not know the column exists — produces. Every row it writes during a slot
+    // swap is correctly labelled 'manual', because that is what it is.
+    name: '096_books_capture_spine',
+    statements: [
+      `ALTER TABLE books_documents
+         ADD COLUMN IF NOT EXISTS source_kind TEXT NOT NULL DEFAULT 'manual'
+           CHECK (source_kind IN ('peppol','embedded_xml','extracted','manual'))`,
+      // Where it came from, in the sender's own terms: a Peppol transmission id,
+      // a message id, the filename inside a container. Free text on purpose —
+      // this is provenance, and every channel words it differently.
+      `ALTER TABLE books_documents
+         ADD COLUMN IF NOT EXISTS source_ref         TEXT,
+         ADD COLUMN IF NOT EXISTS source_received_at TIMESTAMPTZ`,
+      `CREATE INDEX IF NOT EXISTS idx_books_documents_source
+         ON books_documents (source_kind, created_at DESC)`,
+
+      // Provenance is evidence, so it freezes with the rest of the row. Extends
+      // the 073 trigger's frozen tuple; safe under expand/contract because nothing
+      // in either release UPDATEs books_documents.
+      `CREATE OR REPLACE FUNCTION books_protect_document()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           RAISE EXCEPTION 'Supporting documents cannot be deleted — they are the 7-year evidence trail (bokhaldslog 145/1994 gr. 20)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF (NEW.file_path, NEW.checksum_sha256, NEW.byte_size, NEW.mime_type, NEW.created_by,
+             NEW.source_kind, NEW.source_ref)
+            IS DISTINCT FROM
+            (OLD.file_path, OLD.checksum_sha256, OLD.byte_size, OLD.mime_type, OLD.created_by,
+             OLD.source_kind, OLD.source_ref)
+         THEN
+           RAISE EXCEPTION 'The stored file behind a supporting document, and where it came from, cannot be swapped; upload a new document instead'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+
+      // The evidence that justified the deduction. assessVat() refuses input VAT
+      // without a supplier VSK number and then the INSERT threw the number away —
+      // the books recorded the verdict and not the fact it rested on. NULLable:
+      // every historical row genuinely does not have it, and backfilling a
+      // statutory field with a guess is worse than leaving it empty.
+      `ALTER TABLE expenses
+         ADD COLUMN IF NOT EXISTS supplier_vat_number TEXT`,
+
+      // ── The intake queue ────────────────────────────────────────────────────
+      //
+      // A row here is a PROPOSAL. It touches no account and moves no money; the
+      // only way out of it and into the ledger is expenseService.createExpense(),
+      // which requires a named person. The CHECKs make that structural rather
+      // than a convention: an 'accepted' row that names no expense and no decider
+      // cannot be written at all. Deliberately no confidence score — a number is
+      // the seed of an auto-post threshold; source_kind is the signal, and it is
+      // categorical rather than tunable.
+      `CREATE TABLE IF NOT EXISTS books_intake (
+         id                  TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         source_kind         TEXT        NOT NULL
+                                         CHECK (source_kind IN ('peppol','embedded_xml','extracted','manual')),
+         source_ref          TEXT,
+         document_id         TEXT        NOT NULL REFERENCES books_documents(id) ON DELETE RESTRICT,
+         status              TEXT        NOT NULL DEFAULT 'pending'
+                                         CHECK (status IN ('pending','accepted','rejected','superseded')),
+         suggested           JSONB       NOT NULL DEFAULT '{}'::jsonb,
+         parse_problems      JSONB       NOT NULL DEFAULT '[]'::jsonb,
+         supplier_name       TEXT,
+         supplier_kennitala  TEXT,
+         supplier_invoice_no TEXT,
+         document_date       DATE,
+         amount_gross        BIGINT      CHECK (amount_gross IS NULL OR amount_gross > 0),
+         currency            TEXT        NOT NULL DEFAULT 'ISK',
+         dedupe_hash         TEXT        NOT NULL,
+         expense_id          TEXT        REFERENCES expenses(id) ON DELETE RESTRICT,
+         decided_by          TEXT        REFERENCES users(id) ON DELETE RESTRICT,
+         decided_at          TIMESTAMPTZ,
+         reject_reason       TEXT        NOT NULL DEFAULT '',
+         created_by          TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         CONSTRAINT books_intake_accepted_has_expense
+           CHECK (status <> 'accepted' OR expense_id IS NOT NULL),
+         CONSTRAINT books_intake_decided_has_actor
+           CHECK (status = 'pending' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL)),
+         CONSTRAINT books_intake_rejected_has_reason
+           CHECK (status <> 'rejected' OR reject_reason <> ''),
+         CONSTRAINT books_intake_pending_is_undecided
+           CHECK (status <> 'pending' OR (expense_id IS NULL AND decided_by IS NULL))
+       )`,
+      // Only ONE pending row per identical delivery. A settled row is deliberately
+      // not covered — the same supplier can legitimately bill the same amount next
+      // month, and that WARNING is expenseService.findPossibleDuplicates' job.
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_books_intake_pending_hash
+         ON books_intake (dedupe_hash) WHERE status = 'pending'`,
+      `CREATE INDEX IF NOT EXISTS idx_books_intake_pending
+         ON books_intake (created_at DESC) WHERE status = 'pending'`,
+      `CREATE INDEX IF NOT EXISTS idx_books_intake_expense ON books_intake (expense_id)`,
+
+      // A decision is final and its link is not repointable — the same rule 075
+      // applies to a settled bank line, for the same gr. 8 reason: the trail from
+      // the ledger back to the source document must not silently change target.
+      `CREATE OR REPLACE FUNCTION books_freeze_intake_decision()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF OLD.status <> 'pending' AND NEW.status = 'pending' THEN
+           RAISE EXCEPTION 'A decided intake item cannot be returned to the queue; enter a correcting document instead'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.expense_id IS NOT NULL AND NEW.expense_id IS DISTINCT FROM OLD.expense_id THEN
+           RAISE EXCEPTION 'This intake item is already linked to an expense; that link cannot be repointed (Reglugerd 505/2013 gr. 8)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.status <> 'pending'
+            AND (NEW.suggested, NEW.source_kind, NEW.document_id)
+                IS DISTINCT FROM (OLD.suggested, OLD.source_kind, OLD.document_id) THEN
+           RAISE EXCEPTION 'The proposal behind a decided intake item cannot be rewritten'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_books_intake_decision_frozen ON books_intake`,
+      `CREATE TRIGGER trg_books_intake_decision_frozen
+         BEFORE UPDATE ON books_intake
+         FOR EACH ROW EXECUTE FUNCTION books_freeze_intake_decision()`,
+      `DROP TRIGGER IF EXISTS trg_books_intake_updated_at ON books_intake`,
+      `CREATE TRIGGER trg_books_intake_updated_at
+         BEFORE UPDATE ON books_intake
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
+  {
     // Leads inbox (ENHANCEMENTS #2 + the 2026-08-27 addendum; Halli
     // 2026-09-07). Every /hafa-samband submission is persisted alongside the
     // notification email (server/controllers/contactController.js), and the

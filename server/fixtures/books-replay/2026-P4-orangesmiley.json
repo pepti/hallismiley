@@ -1,0 +1,34 @@
+{
+  "case": "orangesmiley-2026-P4",
+  "period": "2026-P4",
+  "pending": true,
+  "description": "Orange Smiley ehf., first VSK period (júlí–ágúst 2026), run in parallel with the manual veflykill filing. PENDING until filed: after submission on skatturinn.is, record the boxes AS SUBMITTED under `expected`, add the RSK reference to `filed`, and remove `pending` (docs/BOOKS-PARALLEL-RUN.md §8).",
+  "notes": [
+    "The company's own figures, not a counterparty's: seller identity is public (it is on the site footer).",
+    "Only the opening entry is recorded here so far. The period's expenses are added by Halli from the real documents once Bókari has cleared them (company/runbooks/books-2026-P4.md, Block 0) — amounts as printed, every foreign SaaS bill as reverse_charge_24 with a stub document.",
+    "Real documents never enter this file; `\"document\": \"stub\"` registers a placeholder so the preflight is exercised."
+  ],
+  "settings": {
+    "seller_name": "Orange Smiley ehf.",
+    "seller_kennitala": "4708261500",
+    "seller_vat_number": "162561",
+    "seller_address": "Arnarhraun 4, 220 Hafnarfjörður",
+    "municipality": "Hafnarfjarðarkaupstaður",
+    "coa_confirmed_at": "2026-09-05",
+    "coa_confirmed_note": "Replay case — the chart as seeded by migration 072; only the accounts 2026-P4 touches."
+  },
+  "fx_rates": [],
+  "manual_entries": [
+    {
+      "entry_date": "2026-08-12",
+      "memo": "Stofnefnahagur — innborgað hlutafé",
+      "lines": [
+        { "account_code": "1900", "debit": 500000 },
+        { "account_code": "3100", "credit": 500000 }
+      ]
+    }
+  ],
+  "expenses": [],
+  "pos_sales": [],
+  "expected_preflight": { "blockers": [] }
+}

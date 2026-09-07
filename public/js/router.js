@@ -49,6 +49,7 @@ import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
 import { AdminRolesView }        from './views/AdminRolesView.js';
 import { AdminBinsView }         from './views/AdminBinsView.js';
 import { AdminBooksView }        from './views/AdminBooksView.js';
+import { AdminBooksSettingsView } from './views/AdminBooksSettingsView.js';
 import { AdminInvoicesView }     from './views/AdminInvoicesView.js';
 import { AdminInvoiceDetailView } from './views/AdminInvoiceDetailView.js';
 import { AdminExpensesView }     from './views/AdminExpensesView.js';
@@ -101,6 +102,9 @@ const ROUTES = [
   { pattern: '/admin/handbok',   factory: ()  => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView() : new HomeView() },
   { pattern: '/admin/leads',     factory: ()  => (isAuthenticated() && canSeeView('leads')) ? new AdminLeadsView() : new HomeView() },
   { pattern: '/admin/markadur',  factory: ()  => (isAuthenticated() && canSeeView('markadur')) ? new AdminMarketView() : new HomeView() },
+  // Not a sidebar item: rides the `books` view id rather than adding one (a new id
+  // means a new RBAC grant and a parity-test entry for a screen visited four times a year).
+  { pattern: '/admin/books/settings', factory: () => (isAuthenticated() && canSeeView('books')) ? new AdminBooksSettingsView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
   { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
@@ -297,6 +301,7 @@ export class Router {
       '/admin/markadur':   'markadur',
       '/admin/customers':  'customers',
       '/admin/books':      'books',
+      '/admin/books/settings': 'books',
       '/admin/books/invoices': 'invoices',
       '/admin/books/expenses': 'expenses',
       '/admin/books/ar':       'ar',
