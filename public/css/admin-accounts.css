@@ -20,7 +20,9 @@
   padding: 0.1rem 0.55rem;
   border-radius: 999px;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
-  background: var(--bg-hover); color: var(--text-muted);
+  /* Neutral chip (lead, and any status the map does not cover) — see
+     admin-markadur.css: --text-muted fails 4.5:1 on Gló0 at this size. */
+  background: var(--bg-hover); color: var(--text-secondary);
   white-space: nowrap;
 }
 .acct-chip--offered      { color: var(--accent-ink); }

@@ -99,7 +99,16 @@ const leadsController = {
     _noStore(res);
     try {
       const p = _listParams(req);
-      const leads = await Lead.list({ ...p, limit: 200, offset: 0 });
+      // Page to the end rather than silently truncating: this export backs
+      // retention and erasure work, where a partial file with no signal is
+      // worse than a slow one. Mirrors exportInvoicesCsv.
+      const PAGE = 200;
+      const leads = [];
+      for (let offset = 0; ; offset += PAGE) {
+        const batch = await Lead.list({ ...p, limit: PAGE, offset });
+        leads.push(...batch);
+        if (batch.length < PAGE) break;
+      }
       const header = [
         'id', 'received', 'status', 'name', 'email', 'phone', 'company',
         'current_platform', 'locale', 'owner', 'contacted_at', 'contacted_by', 'note', 'message',

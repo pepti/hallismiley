@@ -58,7 +58,16 @@ test.describe('customer accounts', () => {
     await page.fill('#acct-form [name=build_fee_isk]', '580000');
     await page.fill('#acct-form [name=monthly_fee_isk]', '29000');
     await page.click('#acct-form [type=submit]');
-    await expect(page.locator('#acct-form [name=monthly_fee_isk]')).toHaveValue('29000');
+    // Read the fee back from the SERVER, not from the input we just typed into:
+    // asserting the field still holds what we filled passes even if the save
+    // 500s, which is exactly the failure this line is here to catch. Through
+    // the API rather than a reload — this SPA imports all 58 view modules
+    // eagerly, and a second full load does not fit the 30 s test budget on CI.
+    await expect(page.locator('.toast').first()).toContainText('Vistað');
+    const acctId = page.url().match(/\/admin\/accounts\/(\d+)/)[1];
+    const saved = await page.request.get(`/api/v1/admin/accounts/${acctId}`);
+    expect(saved.status()).toBe(200);
+    expect(Number((await saved.json()).account.monthly_fee_isk)).toBe(29000);
 
     // Lifecycle: lead → offered → signed (the buttons show the allowed steps).
     await page.click('.acct-actions [data-status="offered"]');
@@ -98,7 +107,9 @@ test.describe('customer accounts', () => {
     await page.goto(`/#/admin/accounts/${accounts[0].id}`);
     const trail = page.locator('#acct-audit li');
     await expect(trail.first()).toBeVisible();
-    expect(await trail.count()).toBeGreaterThanOrEqual(5);
+    // Exactly five: created, the fee update, offered, signed, the commission.
+    // `>= 5` also passed when a write was audited twice.
+    await expect(trail).toHaveCount(5);
     await expect(page.locator('#acct-audit')).toContainText('Sölulaun skráð');
     await expect(page.locator('#acct-audit')).toContainText('Reikningur stofnaður');
     await expect(page.locator('#acct-audit')).toContainText('Staða breytt');

@@ -4808,6 +4808,43 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
        ON CONFLICT (name) DO NOTHING`,
     ],
   },
+  {
+    // Review fix (2026-09-07): link a service invoice to its customer account
+    // and make a double-issue impossible in the DATABASE, not just in the UI.
+    // Before this, `createServiceInvoice` had no duplicate guard — the FOR
+    // UPDATE on the account only serialised two concurrent requests, so the
+    // second one allocated a fresh invoice number and a second commission row.
+    // Two immutable revenue invoices for one build deposit, output VSK declared
+    // twice, and double commission; under Reglugerð 505/2013 neither invoice
+    // can be deleted, only credited.
+    //
+    // Pure expand (invariant 14): three nullable columns + two partial unique
+    // indexes that ignore every row the previous release wrote (all NULL).
+    // Reference copy: server/migrations/099_invoice_account_link.sql
+    name: '099_invoice_account_link',
+    statements: [
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS account_id     INTEGER REFERENCES customer_accounts(id) ON DELETE RESTRICT,
+         ADD COLUMN IF NOT EXISTS service_kind   TEXT,
+         ADD COLUMN IF NOT EXISTS service_period DATE`,
+      `CREATE INDEX IF NOT EXISTS idx_invoices_account ON invoices (account_id, issued_at DESC)
+         WHERE account_id IS NOT NULL`,
+      // A cancelled invoice frees the slot so a mistake can be redone; a
+      // CREDITED one does not — the credit note is the correction, and
+      // re-issuing would double the revenue.
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoices_account_build
+         ON invoices (account_id, service_kind)
+         WHERE account_id IS NOT NULL
+           AND service_kind IN ('build_deposit', 'build_final')
+           AND status <> 'cancelled'`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoices_account_period
+         ON invoices (account_id, service_period)
+         WHERE account_id IS NOT NULL
+           AND service_kind = 'recurring'
+           AND service_period IS NOT NULL
+           AND status <> 'cancelled'`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

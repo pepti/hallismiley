@@ -302,7 +302,11 @@ async function createServiceInvoice(req, res, next) {
     if (!Number.isInteger(accountId) || accountId <= 0) throw new BadRequest('account_id must be a positive integer');
     const kind = parseEnum(body.kind, invoiceService.SERVICE_KINDS, 'kind');
     if (!kind) throw new BadRequest(`kind must be one of: ${invoiceService.SERVICE_KINDS.join(', ')}`);
-    const deposit = body.deposit === undefined ? true : body.deposit === true;
+    // Accept the string/number forms a form post or a hand-written client
+    // sends: `deposit === true` alone silently turned "false" AND "true" into
+    // the final instalment.
+    const deposit = body.deposit === undefined ? true
+      : (body.deposit === true || body.deposit === 'true' || body.deposit === 1 || body.deposit === '1');
     const period = body.period ? parseText(body.period, 'period', { maxLen: 7 }) : null;
     const amountNetIsk = body.amount_net_isk === undefined || body.amount_net_isk === null || body.amount_net_isk === ''
       ? null : parseAmount(body.amount_net_isk, 'amount_net_isk');

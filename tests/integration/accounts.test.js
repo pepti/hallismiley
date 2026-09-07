@@ -147,6 +147,34 @@ describe('create + row scope', () => {
     // Unknown market row → 404, nothing created.
     expect((await create(sellerA, { market_company_id: 999999 })).status).toBe(404);
   });
+
+  // Regression (2026-09-07 review): the hand-off read the market row without
+  // checking its status, so creating an account was a back door around
+  // PATCH /markadur/:id/status — which is admin/moderator-only and only fires
+  // FROM shortlist. A seller could hand themselves any candidate in the list,
+  // and hand the SAME shortlisted row to themselves twice.
+  test('hand-off refuses a row that is not shortlisted, and refuses a second hand-off', async () => {
+    await importMarketData({ companies: [
+      { kennitala: '9900000042', name: 'Frumkandídat ehf.', sector_group: 'smasala', list_type: 'smb', status: 'candidate', financials: [] },
+      { kennitala: '9900000043', name: 'Hafnað ehf.', sector_group: 'smasala', list_type: 'smb', status: 'rejected', financials: [] },
+      { kennitala: '9900000044', name: 'Tvígefið ehf.', sector_group: 'smasala', list_type: 'smb', status: 'shortlist', financials: [] },
+    ], stats: [] });
+    const idOf = async (kt) => (await db.query(`SELECT id FROM market_companies WHERE kennitala = $1`, [kt])).rows[0].id;
+
+    // A 404, not a 403: the row is not one this seller may act on, and saying
+    // "forbidden" would confirm it exists.
+    expect((await create(sellerA, { market_company_id: await idOf('9900000042') })).status).toBe(404);
+    expect((await create(sellerA, { market_company_id: await idOf('9900000043') })).status).toBe(404);
+
+    // The shortlisted one works once …
+    const twice = await idOf('9900000044');
+    expect((await create(sellerA, { market_company_id: twice })).status).toBe(201);
+    // … and the row is handed_to_sales now, so a second attempt is refused
+    // rather than creating a duplicate account for the same company.
+    expect((await create(sellerB, { market_company_id: twice })).status).toBe(404);
+    const { rows } = await db.query(`SELECT COUNT(*)::int AS n FROM customer_accounts WHERE market_company_id = $1`, [twice]);
+    expect(rows[0].n).toBe(1);
+  });
 });
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────

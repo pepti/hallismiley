@@ -20,7 +20,7 @@ const logger = require('../logger');
 const ACTIONS = [
   'account.created', 'account.updated', 'account.status_changed', 'account.owner_changed',
   'provision.requested',
-  'role.granted', 'role.revoked',
+  'role.granted', 'role.revoked', 'role.updated',
   'user.invited', 'user.disabled', 'user.enabled',
   'commission.recorded',
 ];

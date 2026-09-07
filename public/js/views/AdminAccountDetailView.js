@@ -49,6 +49,11 @@ const AUDIT_KEY = {
   'commission.recorded': 'accounts.audit.commissionRecorded',
 };
 
+// Unmapped enum values print themselves. Defaulting an unknown tier to "vefur"
+// or an unknown kind to "build" would show a CONFIDENTLY WRONG label, and both
+// of those drive money. Same shape as AdminMarketView's label().
+const label = (map, v) => (map[v] ? t(map[v]) : (v || '—'));
+
 function thisMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -60,6 +65,14 @@ export class AdminAccountDetailView {
     this._el = null;
     this._account = null;
     this._transitions = [];
+    this._destroyed = false;
+  }
+
+  // The router calls destroy() on navigation. _issue() navigates to the new
+  // invoice while its two side panels are still loading, so without this the
+  // late responses paint into a detached tree.
+  destroy() {
+    this._destroyed = true;
   }
 
   async render() {
@@ -77,6 +90,7 @@ export class AdminAccountDetailView {
   async _load() {
     try {
       const { account, transitions } = await getAccount(this._id);
+      if (this._destroyed) return;
       this._account = account;
       this._transitions = transitions || [];
       this._paint();
@@ -102,7 +116,7 @@ export class AdminAccountDetailView {
         <div>
           <p class="admin-eyebrow"><a href="${href('/admin/accounts')}" data-route="/admin/accounts">${escHtml(t('accounts.title'))}</a></p>
           <h1 class="admin-title">${escHtml(a.name)}</h1>
-          <p class="admin-shop__hint"><code>${escHtml(a.slug)}</code>${a.kennitala ? ` · ${escHtml(a.kennitala)}` : ''} · ${escHtml(t(TIER_KEY[a.tier] || 'accounts.tier.vefur'))} · ${escHtml(t('accounts.col.owner'))}: ${escHtml(a.owner_name || '')}</p>
+          <p class="admin-shop__hint"><code>${escHtml(a.slug)}</code>${a.kennitala ? ` · ${escHtml(a.kennitala)}` : ''} · ${escHtml(label(TIER_KEY, a.tier))} · ${escHtml(t('accounts.col.owner'))}: ${escHtml(a.owner_name || '')}</p>
         </div>
         <div class="acct-status">${statusChip(a.status)}</div>
       </div>
@@ -232,7 +246,9 @@ export class AdminAccountDetailView {
       const { account, transitions } = await updateAccount(this._id, body);
       this._account = account; this._transitions = transitions || [];
       showToast(t('accounts.saved'), 'success');
-      this._paint(); this._loadAudit();
+      // _paint() rebuilds the whole card, which empties BOTH side-panel hosts
+      // — reloading only the audit trail left the commission panel blank.
+      this._paint(); this._loadCommission(); this._loadAudit();
     } catch (err) {
       errEl.textContent = err.message || t('accounts.saveError');
     }
@@ -244,7 +260,9 @@ export class AdminAccountDetailView {
       const { account, transitions } = await updateAccount(this._id, { status });
       this._account = account; this._transitions = transitions || [];
       showToast(t('accounts.saved'), 'success');
-      this._paint(); this._loadAudit();
+      // _paint() rebuilds the whole card, which empties BOTH side-panel hosts
+      // — reloading only the audit trail left the commission panel blank.
+      this._paint(); this._loadCommission(); this._loadAudit();
     } catch (err) { showToast(err.message || t('accounts.saveError'), 'error'); }
   }
 
@@ -274,6 +292,11 @@ export class AdminAccountDetailView {
     const errEl = this._el.querySelector('#acct-invoice-error');
     errEl.textContent = '';
     if (!confirm(t('accounts.invoice.confirm'))) return;
+    // A second click while the request is in flight issues a SECOND statutory
+    // invoice, and 505/2013 says an invoice cannot be deleted, only credited.
+    // The 099 unique indexes are the real backstop; this stops the common case.
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       const { invoice } = await issueServiceInvoice(body);
       showToast(t('accounts.invoice.issued', { number: invoice.invoice_number }), 'success');
@@ -281,6 +304,8 @@ export class AdminAccountDetailView {
       navigate(href(`/admin/books/invoices/${invoice.id}`));
     } catch (err) {
       errEl.textContent = err.message || t('accounts.saveError');
+    } finally {
+      if (submitBtn && !this._destroyed) submitBtn.disabled = false;
     }
   }
 
@@ -289,6 +314,7 @@ export class AdminAccountDetailView {
     if (!host) return;
     try {
       const { events } = await getAccountCommission(this._id);
+      if (this._destroyed) return;
       if (!events.length) { host.innerHTML = `<p class="markadur-drawer__muted">${escHtml(t('accounts.commissionNone'))}</p>`; return; }
       host.innerHTML = `<table class="admin-table acct-table"><thead><tr>
           <th>${escHtml(t('commission.col.period'))}</th><th>${escHtml(t('commission.col.kind'))}</th>
@@ -297,7 +323,7 @@ export class AdminAccountDetailView {
           <th class="num">${escHtml(t('commission.col.amount'))}</th><th>${escHtml(t('commission.col.paid'))}</th>
         </tr></thead><tbody>${events.map(e => `<tr>
           <td>${escHtml(String(e.period).slice(0, 7))}</td>
-          <td>${escHtml(t(KIND_KEY[e.kind] || 'accounts.kind.build'))}</td>
+          <td>${escHtml(label(KIND_KEY, e.kind))}</td>
           <td>${escHtml(e.seller_name)}</td>
           <td><a href="${href(`/admin/books/invoices/${e.invoice_id}`)}" data-route="/admin/books/invoices/${escHtml(e.invoice_id)}">#${escHtml(e.invoice_number)}</a></td>
           <td class="num">${escHtml(isk(e.base_amount_isk))}</td>
@@ -315,6 +341,7 @@ export class AdminAccountDetailView {
     if (!host) return;
     try {
       const { entries } = await getAccountAudit(this._id);
+      if (this._destroyed) return;
       if (!entries.length) { host.innerHTML = `<p class="markadur-drawer__muted">—</p>`; return; }
       host.innerHTML = `<ul class="acct-audit">${entries.map(e => {
         const s = e.summary || {};
@@ -323,7 +350,7 @@ export class AdminAccountDetailView {
           : e.action === 'commission.recorded' ? escHtml(`${isk(s.amount_isk)} · ${s.kind}`)
           : e.action === 'account.owner_changed' ? escHtml(`${s.from} → ${s.to}`) : '';
         return `<li><span class="acct-audit__when">${escHtml(formatDateTime(e.created_at))}</span>
-          <span class="acct-audit__what">${escHtml(AUDIT_KEY[e.action] ? t(AUDIT_KEY[e.action]) : e.action)}</span>
+          <span class="acct-audit__what">${escHtml(label(AUDIT_KEY, e.action))}</span>
           <span class="acct-audit__detail">${detail}</span>
           <span class="acct-audit__who">${escHtml(e.actor_username || '')}</span></li>`;
       }).join('')}</ul>`;

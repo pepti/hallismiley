@@ -13,6 +13,11 @@ import { isk } from './AdminAccountsView.js';
 
 const KIND_KEY = { build: 'accounts.kind.build', recurring: 'accounts.kind.recurring' };
 
+// Unmapped enum values print themselves. Defaulting an unknown tier to "vefur"
+// or an unknown kind to "build" would show a CONFIDENTLY WRONG label, and both
+// of those drive money. Same shape as AdminMarketView's label().
+const label = (map, v) => (map[v] ? t(map[v]) : (v || '—'));
+
 function yearRange() {
   const y = new Date().getFullYear();
   return { from: `${y}-01-01`, to: `${y}-12-31` };
@@ -23,6 +28,14 @@ export class AdminCommissionView {
     this._el = null;
     this._range = yearRange();
     this._data = { rows: [], events: [], scope: 'own' };
+    this._loadSeq = 0;
+    this._destroyed = false;
+  }
+
+  // The router calls destroy() on navigation; the range select can leave a
+  // request in flight behind us.
+  destroy() {
+    this._destroyed = true;
   }
 
   async render() {
@@ -67,8 +80,12 @@ export class AdminCommissionView {
   async _load() {
     const summary = this._el.querySelector('#commission-summary');
     const events = this._el.querySelector('#commission-events');
+    // Sequence guard — two range changes in a row must not paint out of order.
+    const seq = ++this._loadSeq;
     try {
-      this._data = await getCommission(this._range);
+      const data = await getCommission(this._range);
+      if (this._destroyed || seq !== this._loadSeq) return;
+      this._data = data;
       this._el.querySelector('#commission-subtitle').textContent =
         this._data.scope === 'all' ? t('commission.subtitleAll') : t('commission.subtitle');
       const rows = this._data.rows || [];
@@ -104,7 +121,7 @@ export class AdminCommissionView {
         </tr></thead><tbody>${evs.map(e => `<tr>
           <td>${escHtml(String(e.period).slice(0, 7))}</td><td>${escHtml(e.seller_name)}</td>
           <td><a href="${href(`/admin/accounts/${e.account_id}`)}" data-route="/admin/accounts/${e.account_id}">${escHtml(e.account_name)}</a></td>
-          <td>${escHtml(t(KIND_KEY[e.kind] || 'accounts.kind.build'))}</td>
+          <td>${escHtml(label(KIND_KEY, e.kind))}</td>
           <td>#${escHtml(e.invoice_number)}</td>
           <td class="num">${escHtml(isk(e.base_amount_isk))}</td>
           <td class="num">${escHtml((Number(e.rate_bp) / 100).toFixed(1))} %</td>
@@ -112,6 +129,7 @@ export class AdminCommissionView {
           <td>${e.invoice_paid ? `<span class="acct-chip acct-chip--live">${escHtml(t('commission.paid'))}</span>` : `<span class="acct-chip acct-chip--lead">${escHtml(t('commission.unpaid'))}</span>`}</td>
         </tr>`).join('')}</tbody></table>` : `<p class="markadur-drawer__muted">${escHtml(t('commission.noEvents'))}</p>`;
     } catch (err) {
+      if (this._destroyed || seq !== this._loadSeq) return;
       summary.innerHTML = `<p class="admin-error">${escHtml(err.message || t('commission.loadError'))}</p>`;
       events.innerHTML = '';
     }

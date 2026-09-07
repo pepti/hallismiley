@@ -13,6 +13,21 @@ const db = require('../config/database');
 
 const KINDS = ['build', 'recurring'];
 
+// "The customer's money is in" — the D-003 test for when commission is EARNED.
+//
+// Money moves in four counters, not one (072's comment on the invoices table
+// spells out why): amount_paid and amount_refunded are the cash legs,
+// amount_credited reverses the SALE. Reading amount_paid alone gets it wrong in
+// BOTH directions — a paid-then-refunded invoice would still pay commission,
+// and an invoice part-credited before payment could never pay any, because the
+// payment is capped at the reduced outstanding and can never reach total_gross.
+// This mirrors invoiceService.outstandingOf(): received cash must cover what is
+// still owed after credits.
+const PAID_IN_FULL = `(
+  i.status <> 'cancelled'
+  AND i.amount_paid - i.amount_refunded >= i.total_gross - i.amount_credited
+)`;
+
 // First day of the invoice month. Takes the ISO date the invoice was issued
 // with ('YYYY-MM-DD') or, defensively, the Date pg hands back for a
 // TIMESTAMPTZ — read in LOCAL components, because that is how the date-only
@@ -26,7 +41,7 @@ function periodOf(value) {
 
 class Commission {
   /** Inside the invoice transaction. Returns the event, or null when nothing is due. */
-  static async recordForInvoice(client, { account, invoice, kind, issuedAt = null }) {
+  static async recordForInvoice(client, { account, invoice, kind, issuedAt }) {
     if (!KINDS.includes(kind)) return null;
     const rateBp = kind === 'build' ? Number(account.build_rate_bp) : Number(account.recurring_rate_bp);
     if (!rateBp) return null;
@@ -37,7 +52,11 @@ class Commission {
          (account_id, seller_user_id, kind, period, base_amount_isk, rate_bp, amount_isk, invoice_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [account.id, account.owner_user_id, kind, periodOf(issuedAt || invoice.issued_at), base, rateBp, amount, invoice.id]
+      // issuedAt is the caller's ISO date string. No fallback to
+      // invoice.issued_at: pg hands that back as a TIMESTAMPTZ Date, and
+      // reading a date-only value through a Date is the trap booksDate.js
+      // documents — on any server east of UTC it lands in the previous month.
+      [account.id, account.owner_user_id, kind, periodOf(issuedAt), base, rateBp, amount, invoice.id]
     );
     return row;
   }
@@ -71,7 +90,7 @@ class Commission {
               e.seller_user_id, COALESCE(u.display_name, u.username) AS seller_name, u.username AS seller_username,
               e.kind, e.period, e.base_amount_isk, e.rate_bp, e.amount_isk, e.invoice_id, e.created_at,
               i.invoice_number, i.status AS invoice_status, i.total_gross, i.amount_paid,
-              (i.status = 'issued' AND i.amount_paid >= i.total_gross) AS invoice_paid
+              ${PAID_IN_FULL} AS invoice_paid
          FROM commission_events e
          JOIN customer_accounts a ON a.id = e.account_id
          JOIN users u ON u.id = e.seller_user_id
@@ -96,7 +115,7 @@ class Commission {
               e.period,
               COUNT(*)::int AS events,
               SUM(e.amount_isk)::bigint AS accrued_isk,
-              SUM(CASE WHEN i.status = 'issued' AND i.amount_paid >= i.total_gross THEN e.amount_isk ELSE 0 END)::bigint AS payable_isk,
+              SUM(CASE WHEN ${PAID_IN_FULL} THEN e.amount_isk ELSE 0 END)::bigint AS payable_isk,
               SUM(CASE WHEN e.kind = 'build' THEN e.amount_isk ELSE 0 END)::bigint AS build_isk,
               SUM(CASE WHEN e.kind = 'recurring' THEN e.amount_isk ELSE 0 END)::bigint AS recurring_isk
          FROM commission_events e

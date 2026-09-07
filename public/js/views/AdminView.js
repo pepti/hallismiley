@@ -163,8 +163,8 @@ export class AdminView {
     el.innerHTML = `
       <div class="admin-header">
         <div>
-          <p class="admin-eyebrow">${t('admin.dashboard')}</p>
-          <h1 class="admin-title">${t('adminDashboard.title')}</h1>
+          <p class="admin-eyebrow">${escHtml(t('admin.dashboard'))}</p>
+          <h1 class="admin-title">${escHtml(t('adminDashboard.title'))}</h1>
           <p class="admin-subtitle">${escHtml(t('adminDashboard.subtitle'))}</p>
         </div>
         ${canEdit() ? `<div class="admin-header__actions">

@@ -965,6 +965,9 @@ async function createServiceInvoice(client, opts = {}) {
 
   // Lock the account for the length of the document so two concurrent issues
   // for the same account serialise (and so the owner/rate snapshot is stable).
+  // The lock serialises two concurrent issues for the same account; it does NOT
+  // stop a second one from proceeding once the first commits, so the real guard
+  // is the partial unique index from migration 099 (caught below).
   const { rows: locked } = await client.query(
     `SELECT id FROM customer_accounts WHERE id = $1 FOR UPDATE`, [accountId]
   );
@@ -1012,6 +1015,13 @@ async function createServiceInvoice(client, opts = {}) {
     description = `Verkeiningar umfram kvóta — ${u} ein.`;
   }
 
+  // What the duplicate guard keys on (migration 099). `service_period` is the
+  // billed month for a contract invoice; build halves are told apart by
+  // `service_kind`; overage is deliberately unguarded (several batches of
+  // verkeiningar in one month are legitimate).
+  const serviceKind = kind === 'build' ? (deposit ? 'build_deposit' : 'build_final') : kind;
+  const servicePeriod = kind === 'recurring' ? `${period}-01` : null;
+
   const vatRate = STANDARD_VAT_RATE;
   const vat = Math.round(net * vatRate / 100);
   const gross = net + vat;
@@ -1032,8 +1042,10 @@ async function createServiceInvoice(client, opts = {}) {
   const invoiceNumber = await ledger.nextCounter(client, series);
   const dueAt = addDays(issuedAt, seller.payment_terms_days);
 
-  const { rows: invRows } = await client.query(
-    `INSERT INTO invoices (
+  let invRows;
+  try {
+    ({ rows: invRows } = await client.query(
+      `INSERT INTO invoices (
        series, invoice_number, order_id, user_id,
        seller_name, seller_kennitala, seller_vat_number, seller_address,
        customer_name, customer_kennitala, customer_email, customer_address, customer_country,
@@ -1041,10 +1053,12 @@ async function createServiceInvoice(client, opts = {}) {
        original_currency, original_total_gross, fx_rate,
        subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
        zero_rate_reason, note, status, created_by,
-       seller_street, seller_city, seller_postal_zone, seller_country
+       seller_street, seller_city, seller_postal_zone, seller_country,
+       account_id, service_kind, service_period
      ) VALUES ($1,$2,NULL,NULL,$3,$4,$5,$6,$7,$8,$9,'','IS',$10,$11,$12,'ISK',NULL,1,
                $13,$14,$15,0,0,NULL,$16,'draft',$17,
-               $18,$19,$20,$21)
+               $18,$19,$20,$21,
+               $22,$23,$24::date)
      RETURNING *`,
     [
       series, invoiceNumber,
@@ -1058,8 +1072,23 @@ async function createServiceInvoice(client, opts = {}) {
       // yet, so a service invoice cannot be exported as UBL until it does.
       seller.seller_street || null, seller.seller_city || null,
       seller.seller_postal_zone || null, seller.seller_country || null,
+      account.id, serviceKind, servicePeriod,
     ]
-  );
+  ));
+  // A duplicate is refused by the DATABASE, not by a check-then-act read: two
+  // requests that both pass a JS-level check can still both reach the INSERT.
+  // 23505 = unique_violation on one of the 099 partial indexes.
+  } catch (err) {
+    if (err && err.code === '23505') {
+      throw new InvoiceError(
+        kind === 'recurring'
+          ? `This account already has a service invoice for ${period}. Credit that one instead of issuing a second.`
+          : 'This account already has that build-fee instalment. Credit that invoice instead of issuing a second.',
+        409, 'DUPLICATE_SERVICE_INVOICE'
+      );
+    }
+    throw err;
+  }
   await insertLines(client, invRows[0].id, totals.lines);
   const { rows: issuedRows } = await client.query(
     `UPDATE invoices SET status = 'issued' WHERE id = $1 RETURNING *`, [invRows[0].id]
