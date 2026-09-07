@@ -84,6 +84,34 @@ Original proposal kept below for the record.
 
 ---
 
+### 21. Shared admin UI kit — and push it down to the base
+
+**What.** A small, framework-free kit of admin primitives under `public/js/components/` and `public/js/utils/`: `debounce`, `localPref`, `pageTitle` (+ a router hook), `listState` (filters ↔ query string), `adminTable` (`sortableTh`/`cycleSort`/`bindSortable`), `adminPager` (`pagerHtml`/`bindPager`/page-size memory), `adminStates` (loading/empty/error + retry + `aria-busy`), `adminFilters` (chips with counts, debounced search), `adminDialog` (native `<dialog>` confirm/prompt) and `modalA11y` (`trapFocus`/`onEscape`/`captureFocus`/`focusFirstInvalid`), plus one `admin-kit.css`. Roughly 925 lines across 11 files, none over 160. Each module exports pure HTML-string builders plus a `bind*()` that attaches ONE delegated listener to a persistent container and returns `detach()` — nothing owns state, nothing owns a node. Four to six flagship views convert to prove it (`AdminUsersView`, `AdminLeadsView`, `AdminMarketView` first); the rest convert opportunistically. Ends with a PR upstreaming the kit to `hallismiley`.
+
+**Why.** Nothing in the estate is reusable at the admin layer. This repo has ~35 admin tables and **4** of them sort; `.admin-pagination` is used by Leads and Markaður and has **zero CSS**, so both pagers render unstyled today; `debounce` exists as ~10 hand-rolled copies at two different delays; there are 27 native `window.confirm()` calls, no focus trap anywhere, no `aria-busy`, no retry affordance, and `router.js` never sets `document.title`, so the browser tab keeps the boot title through every navigation. The cost of this is not theoretical: LedgerLink was scaffolded from `hallismiley` on 2026-09-07, had to hand-roll every affordance for its three new screens, and its design gate then found 23 issues, 3 of them High. The two icelandicstore harvests (2026-08-22, 2026-09-02) took infrastructure and correctness and skipped the affordances, so the base never received them — which is why work that lands only here flows downward to nothing.
+
+**How it respects the invariants.** Vanilla ES modules, no bundler, no framework (#1). `admin-kit.css` carries zero colour literals and loads before `themes.css`, so all three themes ride `html[data-theme]` (#15) — the one deliberate exception is the TOTP QR plate, which must stay literal white or it stops scanning on the dark themes. Server-side gating is untouched; the kit is UX only (#8). New `adminKit.*` keys land in EN and IS in the same commit as first use (#10). The string half of every module is unit-testable under `testEnvironment: 'node'`; the DOM half is covered by Playwright (#9). No migration, no schema change, no new route — the one server change is hardening `adminController.js`'s sort whitelist to 400 on an unknown key like `marketController.js` already does, plus a parity test that the client's sort literals are a subset of the server's exported map.
+
+**Effort.** M — eight branches, each ending lint + `check:i18n` + Jest + Playwright green. **Risk.** Low-to-medium, concentrated in the conversion chunks: `sales-handbook.spec.js` asserts `.admin-error` is absent on a healthy page (so `errorHtml('')` must return `''`), `admin-surface.spec.js` waits on `.dash-card__loading` reaching 0 (so that class must not be renamed), URL sync must use `replaceState` and never `pushState` or `page.goBack()` breaks in every admin spec, and `responsive-screenshots.spec.js` baselines need refreshing where a page-size picker joins the toolbar.
+
+**Recommendation.** Do it, and upstream it. The kit is worth more in `hallismiley` than here — this repo gets tidier, but the base is what every future customer instance is cut from.
+
+> **STATUS: APPROVED — Halli, 2026-09-07.** Sequenced as: defects first (see below), then kit foundations, table kit, states kit, dialog kit, auth/identity, money de-fork, then the base PR. LedgerLink and `rekstrarkerfid` pull from the base afterwards rather than by parallel port, which keeps LedgerLink's `Ledger*` handover boundary clean.
+
+**Defects found while surveying, fixed alongside (branch `feat/admin-kit-defects`).** All verified by inspection, not inferred:
+
+1. **The 2FA enrolment QR was unscannable on the default theme.** `public/css/` had no `totp-*` rules at all — the view came across in the 2026-08-22 harvest without its stylesheet, so the QR rendered with no white plate on Glóð. Ported and re-tokenised into `user-system.css`.
+2. **A seller pushed to enrol in 2FA had no panel to enrol from.** #17 widened `mfaService.protectedRole()` to `accounts_holder`/`admin_anywhere` without widening the UI, which stayed on `profile.role === 'admin'`. New `auth.isMfaProtected()` mirrors the server predicate; `tests/unit/mfaProtectedClient.test.js` pins the two together.
+3. **Every `required` at checkout was inert.** `CheckoutView` set `novalidate` and called `reportValidity()` on no path. Fixed — and a latent one-way bug found next to it: `syncShipping()` cleared `required` and then re-queried `[required]` on the next call, so choosing local pickup and switching back left the address fields permanently optional.
+4. **`LoginModal` leaked a document listener** — an anonymous `keydown` handler added in `mount()` and never removed, so every ESC on the page closed the modal for the rest of the session, and `_resetToPasswordStep()` stacked another one per abandoned 2FA attempt. Now rides the open/close lifecycle.
+5. **Checkout country labels were hardcoded English**, so the IS locale showed an English country list. Moved to `checkout.countryName.<code>` in both locale files.
+6. **`profile.avatarHint` promised "max 2MB"** while code and server both enforce 5MB. Corrected in both locales — a factual correction, not new copy.
+7. **The client CSV writer had drifted from the server's.** `server/utils/csv.js` exempts a plain number from formula-neutralisation (blanket-prefixing turned every negative balance into the text `'-500` and broke numeric import); `downloadCsv.js` did not, despite a comment claiming the two were in step. `tests/unit/csvClientParity.test.js` now pins them to one truth table.
+8. **`OrderHistoryView` hardcoded `'en-GB'`** for dates while the locale-aware `utils/format.js` sat unused, so an Icelandic reader got English month names.
+
+**Dead capability noticed in passing, not built:** `POST /shop/discounts/validate` exists with no client caller; `GET /reports/accountant-pack` has no UI; `issueInvoiceForOrder` still has no caller (already tracked in CLAUDE.md as a 2026-P5 blocker).
+
+
 ## (c) Later / needs a decision first
 
 ### 9. Disposition of the dormant portfolio modules
@@ -183,6 +211,56 @@ Original proposal kept below for the record.
 **Effort.** M. **Recommendation.** With the first customer under contract.
 
 ---
+
+#### The icelandicstore harvest backlog — survey note for #22–#26
+
+The 2026-09-07 survey compared this repo against `icelandicstore@origin/main` (`b3bb35d`) across six surfaces. ⚠ The local icelandicstore clone is parked on `fix/pos-vat-rate`, **141 commits behind** origin/main with 207 dirty entries of real local-only work — read it with `git show origin/main:<path>`, never check it out.
+
+The survey's headline is that **the harvest is not one-directional**. This repo's bookkeeping module is ~14,800 lines and is a system of record — immutability triggers citing Reglugerð 505/2013, period locking, a 39-action audit log, Peppol/UBL, the replay harness — against icelandicstore's ~2,500-line reporting veneer, where every Books screen carries a banner saying the figures are not the official books and `createExpense` is wired only to the seed script. On books, **this repo is upstream**. Where icelandicstore leads is the shop floor. Those are #22–#25. The reverse queue is at the end.
+
+### 22. Barcode scanning at the till and on the floor
+
+**What.** Port `ScanInput.js` (226 lines): a USB keyboard-wedge detector with an auto-focused field firing on Enter *plus* a document-level capture listener for scanners that send no Enter suffix, burst timings (35 ms gap, 60 ms idle flush, minimum length 3), a duplicate-read cooldown, six distinct WebAudio feedback tones synthesised with no asset (ok / error / wrong item / line done / all done / over-scan, told apart by tone count and pitch direction), vibrate patterns, and a reduced-motion-aware flash. It bails whenever an editable element has focus, so it never swallows typing.
+**Why.** `AdminPosView` here is tap-and-search only — no `keydown`, no `.focus()`, no scan path — while its own header comment at line 15 already says "after every scan". That is the difference between ringing up a queue and clicking through one. icelandicstore mounts it in five views and re-focuses after every line added and every completed sale.
+**Effort.** M. **Risk.** Low — additive, one component plus a mount per view. The audio needs a settings pair (`scan_sounds`, `scan_volume`) so a shop floor can turn it off.
+**Recommendation.** Highest-value single item in the backlog, and the cheapest of the four.
+
+### 23. Audited stock adjustments
+
+**What.** An `inventory_adjustments` table, a reason enum mirrored client↔server and re-validated on write, a history endpoint, and batch corrections applied under row lock — one audit row per line.
+**Why.** Stock is written **directly** here, and `adminShopController.js:54-56` says so in a comment: "no inventory-adjustments audit table, so there's nothing to stay consistent with (revisit if an audited stock-adjust feature is ever ported)." This is that revisit. For an ERP sold to Icelandic SMBs, "who changed this count, when, and why" is not optional.
+**Effort.** M — needs a migration. **Risk.** Low. Expand-only, so invariant 14 is satisfied by construction.
+**Recommendation.** Do it with, or just after, #22 — a scanner that corrects stock wants the audit trail underneath it.
+
+### 24. Import wizards with a dry-run stage
+
+**What.** icelandicstore's four-stage customer importer (ingest → map columns → preview → confirm), the invoice merger with fuzzy catalogue matching, the goods-receipt receive/reconcile flow, and `utils/parseSalesReport.js` — delimiter detection, quote-aware splitting, header-row detection that disqualifies numeric and banner rows, and bilingual field hints.
+**Why.** The product import here is CSV-only, parsed in the browser, 9 columns, and update-never-create. Every customer migration starts with someone else's spreadsheet.
+**Effort.** L. **Risk.** Medium — server-side file parsing pulls in dependencies (ExcelJS is already present; `pdf-parse` is not) and a row-cap/preview discipline.
+**Recommendation.** Scope to the customer importer first; the merger is Ísprjón-specific.
+
+### 25. Storefront quality of life
+
+**What.** The stale-basket / shortfall guard (`utils/availability.js`) that blocks checkout on a sold-out line, reorder from order history, order-history depth (expandable line items, delivery-note and invoice PDFs, CSV), quantity steppers with pack/MOQ snapping, kennitala at checkout with admin-configurable requiredness, and the pay-by-invoice path.
+**Why.** One of these is bug-shaped rather than nice-to-have: **a cart line that sells out here goes straight to Stripe.** icelandicstore warns per line, caps the quantity, and disables the checkout button.
+**Effort.** M–L. **Risk.** Low each, but it touches the money path, so it wants its own e2e coverage.
+**Recommendation.** Take the shortfall guard on its own, ahead of the rest.
+
+### 26. Shared site-wide Footer component
+
+**What.** Extract the footer into `components/Footer.js`, mounted once from `main.js` and re-rendered on locale change.
+**Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
+**Effort.** S. **Risk.** Low.
+
+### Reverse queue — this repo → icelandicstore and the base
+
+Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.
+
+- **Consent-banner language bug (icelandicstore).** Its `consent.js` resolves the visitor's locale and then uses it *only* to build the privacy href — every visible string is hardcoded English, so an Icelandic visitor's first interaction with the site is in English. Fixed here. *(The converse is also true and is ours to fix: our banner uses hardcoded hex and ignores the theme, where icelandicstore's uses custom properties.)*
+- **Avatar owner-scoping (icelandicstore).** Its `UPLOADED_AVATAR_RE` is `/^user-\d+-…/` but `users.id` is a UUID text column, so `\d+` can never match and **every uploaded avatar is rejected on PATCH**. Its `uploadAvatar()` also has zero callers, so an icelandicstore user cannot change their picture after signup. Both fixed here.
+- **`verifyImageBytes`** on the avatar upload route — absent from icelandicstore *and* the base. Also orphan-file cleanup on PATCH, `no-store` + `attachment` on invoice PDFs, and `docLimiter` on document routes (icelandicstore rate-limits none of its exports or PDFs).
+- **The books module**, if icelandicstore ever wants real books rather than the reporting veneer.
+
 
 ## Remaining `hallismiley` references
 
