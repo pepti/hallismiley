@@ -1,4 +1,4 @@
-import { isAuthenticated, canEdit, getUser, logout, updateProfile, hasAnyAdminView } from '../services/auth.js';
+import { isAuthenticated, getUser, logout, updateProfile, hasAnyAdminView } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
@@ -268,13 +268,6 @@ export class NavBar {
         <a href="${navHref('/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin">
           ${t('nav.admin')}
         </a>` : ''}
-        ${canEdit() ? `
-        <a href="${navHref('/party/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/party/admin">
-          ${t('nav.partyAdmin')}
-        </a>` : ''}
-        <a href="${navHref('/orders')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/orders">
-          ${t('nav.myOrders')}
-        </a>
         <hr class="lol-nav__dropdown-divider"/>
         <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" data-signout data-testid="nav-signout${suffix}">
           ${t('nav.signOut')}
