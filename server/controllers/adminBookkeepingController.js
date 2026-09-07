@@ -1171,12 +1171,14 @@ async function getAccountantPack(req, res, next) {
     // with each other; only the P&L is period-scoped, which is what a P&L is. Passing
     // {from,to} to the trial balance made it show period movement while the balance
     // sheet showed cumulative — the same account, two different figures.
-    const [tb, pl, bs, jrn] = await Promise.all([
-      reports.trialBalance({ from: null, to }, client),
-      reports.profitAndLoss({ from, to }, client),
-      reports.balanceSheet({ to }, client),
-      reports.journal({ from, to, limit: 200, offset: 0 }, client),
-    ]);
+    // Sequential, not Promise.all: one pg client can only run one query at a time, so
+    // fanning these out over the shared transaction client made pg queue them anyway
+    // and warn (the behaviour is removed in pg@9). Awaiting them in turn is the same
+    // snapshot, the same output and the same wall-clock cost, without the deprecation.
+    const tb = await reports.trialBalance({ from: null, to }, client);
+    const pl = await reports.profitAndLoss({ from, to }, client);
+    const bs = await reports.balanceSheet({ to }, client);
+    const jrn = await reports.journal({ from, to, limit: 200, offset: 0 }, client);
     const vatPeriods = await vatService.listPeriods(client, { limit: 30 });
     await client.query('COMMIT');
 

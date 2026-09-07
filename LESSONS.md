@@ -663,3 +663,27 @@ Fix: the base is now scoped per branch by default (`orangesmiley_<branch-slug>_t
 ## 2026-09-07 — a view's element is not in the document yet when its first fetches come back (base)
 
 The new `/admin` overview fires one fetch per card from `render()` and wrote each result into the card with an `if (!body.isConnected) return;` guard, meant to skip a stale element after a later navigation. Against the dev DB it worked; in Playwright the cards sat on "Hleður…" forever, with every response logged 200 in under 10 ms. The router `await`s `view.render()` and attaches the element AFTERWARDS (inside a view transition when motion is allowed), so a local endpoint answers before the swap and the guard threw the data away — only the slowest card, whose response outran the swap, ever painted. The guard was the bug: writing into a not-yet-attached element is exactly right, and a stale element after navigation is garbage either way. Rule for this SPA: never gate async writes on `isConnected` inside a view; if you need to drop stale work, compare a render generation counter (the books view's `_generation` pattern). Found only because the e2e suite runs on a fresh DB with sub-10 ms responses — a reason to keep e2e in the chunk gate even when the browser check looked fine.
+
+## 2026-09-07 — the snapshot fix for the accountant pack left a Promise.all on ONE pg client (base)
+
+`getAccountantPack` opens a REPEATABLE READ READ ONLY transaction so its four reports
+cannot straddle a posting, and the comment above it records the earlier fix: the reads
+used to fan out over the pool, where each query got its own snapshot. Moving them onto
+one client fixed the snapshot and quietly broke the concurrency — a pg client executes
+one query at a time, so `Promise.all` over `client.query()` only queues them, and pg
+says so: "Calling client.query() when the client is already executing a query is
+deprecated and will be removed in pg@9.0". It printed on every run of
+`tests/integration/adminBookkeeping.test.js` and the suite passed anyway, which is why
+it survived — the trace only names a culprit under `NODE_OPTIONS=--trace-deprecation`
+(here: `reportService.js:231` in `balanceSheet`, called from the controller).
+
+The fix is four sequential `await`s. Nothing is slower: the queries were already
+serialised by the client, so the parallelism was imaginary. Rule: `Promise.all` over
+queries is only ever real on the POOL. The moment a function takes a `client` for
+snapshot or transaction reasons, every query on it is sequential by definition, and
+writing it as a fan-out buys nothing while hiding that fact. Inherited from the base
+scaffold (`627d845`), so it is queued for the base, not just fixed here.
+
+`Invoice.findDetail()` has the same shape (three `client.query()` calls under one
+`Promise.all`) and is safe today only because every caller lets `client` default to the
+pool. Pass it a transaction client and the warning comes back.
