@@ -692,3 +692,29 @@ sequential `await`s, identical returned object. Confirmed by calling it on a rea
 transaction client under `--trace-deprecation` — the pre-fix file warns at the second
 `client.query()`, the fixed one is silent and returns the same document. Also queued for
 the base.
+
+## 2026-09-07 — a Playwright retry is not a fresh run, and a page.reload() costs a third of the test budget (project)
+
+The e2e job on PR #3 failed on both new specs while the same specs passed locally,
+on a runner whose log already said "Playwright OS dependency install failed after
+3 attempts". Two separate lessons came out of it, and only one of them was the
+runner's fault.
+
+**A reload is not free here.** The review added a persistence check to
+`e2e/accounts.spec.js`: save the fees, `page.reload()`, assert the input still holds
+29000. On a healthy machine that is two seconds. This SPA imports all 58 view modules
+eagerly (ENHANCEMENTS #6), so a second full load on a degraded runner ate enough of
+the 30 s per-test budget that a LATER `page.goto` timed out — the failure surfaced
+three assertions away from its cause. The check is better as an API read anyway
+(`page.request.get`): it proves the SERVER stored the value, which is the thing the
+assertion existed to prove, and costs one request. Rule: in a spec that already
+navigates several times, prove persistence through the API, not through a reload.
+
+**A retry re-runs the test body, not the module.** `e2e/leads.spec.js` built its
+lead's name and email from a `Date.now()` at describe-scope. When attempt 0 failed
+after marking the lead contacted but before the admin deleted it, the retry submitted
+a SECOND lead under the same name — and the assertion that the chip reads "Haft
+samband" saw the retry's own brand-new "Ný" row. A retry inherits every row the
+previous attempt left in the database, so any fixture identity that has to be unique
+must be built inside the test from `testInfo.retry`, never at module or describe
+scope. This applies to every spec that writes rows it does not delete on failure.
