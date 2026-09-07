@@ -39,6 +39,14 @@ const STATUS_KEY = {
 };
 const label = (map, v) => (map[v] ? t(map[v]) : (v || '—'));
 
+// market_companies is agent-scraped from third-party sites, so a `website` or
+// a `sources[].url` is untrusted input that lands in an href. escHtml stops the
+// attribute break-out but not the SCHEME: `javascript:…` would still be a
+// clickable script link in the admin. Same rule as utils/sanitizeHtml.js.
+function safeUrl(u) {
+  return (typeof u === 'string' && /^https?:\/\//i.test(u)) ? u : null;
+}
+
 function mkr(v) {
   if (v === null || v === undefined || v === '') return '—';
   const n = Number(v);
@@ -79,6 +87,17 @@ export class AdminMarketView {
     this._searchDebounce = null;
     this._drawer = null;
     this._returnFocus = null;
+    this._loadSeq = 0;
+    this._destroyed = false;
+  }
+
+  // The router calls destroy() on every navigation. Without it the drawer's
+  // document-level keydown listener outlives the view: navigate away with the
+  // drawer open and every later Escape in the SPA runs _close() on dead nodes.
+  destroy() {
+    this._destroyed = true;
+    clearTimeout(this._searchDebounce);
+    this._close();
   }
 
   async render() {
@@ -153,12 +172,19 @@ export class AdminMarketView {
 
   async _load() {
     const body = this._el.querySelector('#markadur-body');
+    // Sequence guard: a debounced search and a filter/sort click can be in
+    // flight together, and the SLOWER one used to win — painting unfiltered
+    // rows under an active filter chip.
+    const seq = ++this._loadSeq;
     try {
-      this._data = await getCompanies(this._params());
+      const data = await getCompanies(this._params());
+      if (this._destroyed || seq !== this._loadSeq) return;
+      this._data = data;
       this._fillSelects();
       this._el.querySelector('#markadur-count').textContent = t('markadur.count', { count: this._data.total });
       this._paintTable();
     } catch (err) {
+      if (this._destroyed || seq !== this._loadSeq) return;
       body.innerHTML = `<p class="admin-error">${escHtml(err.message || t('markadur.loadError'))}</p>`;
     }
   }
@@ -257,7 +283,7 @@ export class AdminMarketView {
     this._onKey = (e) => { if (e.key === 'Escape') this._close(); };
     document.addEventListener('keydown', this._onKey);
     this._el.append(backdrop, drawer);
-    this._drawer = { backdrop, drawer };
+    this._drawer = { backdrop, drawer, companyId: id };
     try {
       const { company } = await getCompany(id);
       if (this._drawer?.drawer !== drawer) return;
@@ -271,11 +297,17 @@ export class AdminMarketView {
 
   _close() {
     if (!this._drawer) return;
+    const id = this._drawer.companyId;
     this._drawer.backdrop.remove();
     this._drawer.drawer.remove();
     this._drawer = null;
     document.removeEventListener('keydown', this._onKey);
-    this._returnFocus?.focus?.();
+    if (this._destroyed) return;
+    // Re-find the row rather than reusing the node captured at open: a
+    // hand-off calls _load(), which rebuilds the tbody, so the captured <tr>
+    // is detached by then and focus would silently drop to <body>.
+    const row = id != null && this._el?.querySelector(`tr.markadur-row[data-id="${id}"]`);
+    (row || this._returnFocus)?.focus?.();
   }
 
   _drawerHtml(c) {
@@ -306,7 +338,9 @@ export class AdminMarketView {
     const sourcesHtml = sources.length
       ? `<ul class="markadur-sources">${sources.map(s => `<li>
           <span class="markadur-sources__type">${escHtml(s.type || '')}</span>
-          ${s.url ? `<a href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escHtml(s.url)}</a>` : ''}
+          ${safeUrl(s.url)
+    ? `<a href="${escHtml(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer">${escHtml(s.url)}</a>`
+    : (s.url ? `<span class="markadur-drawer__muted">${escHtml(s.url)}</span>` : '')}
           ${s.fetched_at ? `<span class="markadur-drawer__muted">${escHtml(formatDate(s.fetched_at))}</span>` : ''}
         </li>`).join('')}</ul>`
       : `<p class="markadur-drawer__muted">—</p>`;
@@ -342,7 +376,9 @@ export class AdminMarketView {
         ${fact('markadur.col.list', escHtml(label(LIST_KEY, c.list_type)))}
         ${fact('markadur.col.tier', escHtml(c.tier_fit ? label(TIER_KEY, c.tier_fit) : '—'))}
         ${fact('markadur.detail.platform', escHtml(c.platform_detected || '—'))}
-        ${fact('markadur.detail.website', c.website ? `<a href="${escHtml(c.website)}" target="_blank" rel="noopener noreferrer">${escHtml(c.website)}</a>` : '—')}
+        ${fact('markadur.detail.website', safeUrl(c.website)
+    ? `<a href="${escHtml(safeUrl(c.website))}" target="_blank" rel="noopener noreferrer">${escHtml(c.website)}</a>`
+    : escHtml(c.website || '—'))}
         ${fact('markadur.detail.researched', escHtml([c.researched_by, c.researched_at ? formatDate(c.researched_at) : null].filter(Boolean).join(' · ') || '—'))}
       </div>
       <h3 class="markadur-drawer__h">${escHtml(t('markadur.detail.summary'))}</h3>

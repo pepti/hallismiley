@@ -25,8 +25,13 @@ export const STATUS_KEY = {
 export const STATUSES = Object.keys(STATUS_KEY);
 export const TIERS = Object.keys(TIER_KEY);
 
+// Unmapped enum values print themselves. Defaulting an unknown tier to "vefur"
+// or an unknown kind to "build" would show a CONFIDENTLY WRONG label, and both
+// of those drive money. Same shape as AdminMarketView's label().
+const label = (map, v) => (map[v] ? t(map[v]) : (v || '—'));
+
 export function statusChip(status) {
-  return `<span class="acct-chip acct-chip--${escHtml(status)}">${escHtml(STATUS_KEY[status] ? t(STATUS_KEY[status]) : status)}</span>`;
+  return `<span class="acct-chip acct-chip--${escHtml(status)}">${escHtml(label(STATUS_KEY, status))}</span>`;
 }
 export function isk(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -43,6 +48,15 @@ export class AdminAccountsView {
     this._page = 1;
     this._data = { accounts: [], total: 0, scope: 'own' };
     this._searchDebounce = null;
+    this._loadSeq = 0;
+    this._destroyed = false;
+  }
+
+  // The router calls destroy() on navigation — without it the debounced
+  // search fires into a detached tree after the view is gone.
+  destroy() {
+    this._destroyed = true;
+    clearTimeout(this._searchDebounce);
   }
 
   async render() {
@@ -95,13 +109,18 @@ export class AdminAccountsView {
 
   async _load() {
     const body = this._el.querySelector('#accounts-body');
+    // Sequence guard — see AdminLeadsView._load().
+    const seq = ++this._loadSeq;
     try {
-      this._data = await getAccounts({ status: this._status || undefined, q: this._q || undefined, page: this._page, limit: PAGE_SIZE });
+      const data = await getAccounts({ status: this._status || undefined, q: this._q || undefined, page: this._page, limit: PAGE_SIZE });
+      if (this._destroyed || seq !== this._loadSeq) return;
+      this._data = data;
       this._paintFilters();
       this._el.querySelector('#accounts-subtitle').textContent =
         this._data.scope === 'all' ? t('accounts.subtitleAll') : t('accounts.subtitle');
       this._paintTable();
     } catch (err) {
+      if (this._destroyed || seq !== this._loadSeq) return;
       body.innerHTML = `<p class="admin-error">${escHtml(err.message || t('accounts.loadError'))}</p>`;
     }
   }
@@ -125,7 +144,7 @@ export class AdminAccountsView {
         </tr></thead>
         <tbody>${rows.map(a => `<tr class="acct-row" data-id="${a.id}" tabindex="0">
           <td><span class="acct-name">${escHtml(a.name)}</span><span class="acct-slug">${escHtml(a.slug)}${a.kennitala ? ` · ${escHtml(a.kennitala)}` : ''}</span></td>
-          <td>${escHtml(t(TIER_KEY[a.tier] || 'accounts.tier.vefur'))}</td>
+          <td>${escHtml(label(TIER_KEY, a.tier))}</td>
           <td>${statusChip(a.status)}</td>
           <td>${escHtml(a.owner_name || '')}</td>
           <td class="num">${escHtml(isk(a.monthly_fee_isk))}</td>

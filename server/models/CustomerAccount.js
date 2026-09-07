@@ -138,7 +138,17 @@ class CustomerAccount {
         `SELECT id, name, kennitala, tier_fit, status FROM market_companies WHERE id = $1 FOR UPDATE`, [marketCompanyId]
       );
       company = rows[0];
-      if (!company) { const e = new Error('Market company not found'); e.status = 404; e.code = 'MARKET_COMPANY_NOT_FOUND'; throw e; }
+      // Only a SHORTLISTED company may become an account, matching the
+      // sanctioned path exactly (marketRoutes PATCH /:id/status is
+      // admin/moderator AND shortlist-only). Without this the hand-off is a
+      // second, ungated door onto market_companies: any `accounts` holder
+      // could pull a candidate or a REJECTED company into sales and read its
+      // details back, or hand the same row over twice. FOR UPDATE above plus
+      // the status flip below make the check race-safe. Not-eligible reads as
+      // not-found, so the endpoint cannot enumerate market ids either.
+      if (!company || company.status !== 'shortlist') {
+        const e = new Error('Market company not found'); e.status = 404; e.code = 'MARKET_COMPANY_NOT_FOUND'; throw e;
+      }
       data = {
         name: data.name || company.name,
         kennitala: data.kennitala || company.kennitala,

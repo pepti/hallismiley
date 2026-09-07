@@ -14,7 +14,21 @@ const { t } = require('../i18n');
 const CustomerAccount = require('../models/CustomerAccount');
 const Commission = require('../models/Commission');
 const staffAudit = require('../services/staffAudit');
+const { hasRole } = require('../auth/roles');
+const { toIsoDate } = require('../utils/booksDate');
 const logger = require('../logger');
+
+// Commission rates decide what the company pays the account's owner, so only an
+// admin may set them — a seller editing their own account must not be able to
+// raise their own percentage. The validator whitelists the fields for shape;
+// this strips them for everyone else, because `req.accountScope.all` is the
+// WRONG test (the seeded `verktaki` is unscoped but earns no commission).
+const RATE_FIELDS = ['build_rate_bp', 'recurring_rate_bp'];
+
+function stripRateFields(req) {
+  if (hasRole(req.user, 'admin')) return;
+  for (const f of RATE_FIELDS) delete req.body[f];
+}
 
 function _noStore(res) { res.setHeader('Cache-Control', 'no-store'); }
 
@@ -96,6 +110,7 @@ const accountsController = {
   async create(req, res, next) {
     _noStore(res);
     try {
+      stripRateFields(req);
       const body = req.body;
       const ownerUserId = (req.accountScope.all && body.owner_user_id) ? String(body.owner_user_id) : req.user.id;
       const account = await withTx(client => CustomerAccount.create(client, {
@@ -118,6 +133,7 @@ const accountsController = {
     try {
       const id = _id(req);
       if (!id) return res.status(400).json({ error: t(req.locale, 'errors.accounts.invalidId'), code: 400 });
+      stripRateFields(req);
       const account = await withTx(client =>
         CustomerAccount.update(client, req.accountScope, id, req.body, staffAudit.actorOf(req)));
       if (!account) return res.status(404).json({ error: t(req.locale, 'errors.accounts.notFound'), code: 404 });
@@ -183,8 +199,12 @@ const accountsController = {
       if (!id) return res.status(400).json({ error: t(req.locale, 'errors.accounts.invalidId'), code: 400 });
       const account = await CustomerAccount.findById(req.accountScope, id);
       if (!account) return res.status(404).json({ error: t(req.locale, 'errors.accounts.notFound'), code: 404 });
+      // Unscoped ON PURPOSE, after the parent account passed the scope check:
+      // an account's history includes commission earned by a PREVIOUS owner,
+      // and hiding it would make the trail lie. The route carries
+      // requireView('commission') so only commission-holders reach it.
       const events = await Commission.events({ all: true }, { accountId: id });
-      return res.json({ events });
+      return res.json({ events: events.map(e => ({ ...e, period: toIsoDate(e.period) })) });
     } catch (err) { next(err); }
   },
 };

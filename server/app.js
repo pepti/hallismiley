@@ -62,11 +62,14 @@ if (process.env.NODE_ENV !== 'test') {
     genReqId(req) {
       return req.requestId || crypto.randomBytes(8).toString('hex');
     },
+    // scrubUrl, not req.url: these message strings bypass the `req` serializer
+    // where the redaction otherwise lives, so a search term or a token in the
+    // query string would land in the log verbatim.
     customSuccessMessage(req, res) {
-      return `${req.method} ${req.url} → ${res.statusCode}`;
+      return `${req.method} ${logger.scrubUrl(req.url)} → ${res.statusCode}`;
     },
     customErrorMessage(req, res, err) {
-      return `${req.method} ${req.url} → ${res.statusCode} — ${err.message}`;
+      return `${req.method} ${logger.scrubUrl(req.url)} → ${res.statusCode} — ${err.message}`;
     },
   }));
 }

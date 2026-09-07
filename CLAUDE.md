@@ -441,11 +441,69 @@ sit before 097 in numeric order (already applied on the dev DB).
   metering (#20), payout marking / clawback / tail automation, the seller
   agreement itself. #17–#20 now exist in `ENHANCEMENTS.md`.
 
+## Review pass on the 2026-09-07 admin work (migration 099)
+
+Halli asked for the day's work to be reviewed and the findings fixed before it
+stood. Three reviewers (security, money/bookkeeping, frontend) went over chunks
+A–D; six high-severity defects were confirmed and fixed on `review/admin-fixes`,
+each with a regression test that fails on the merged code:
+
+- **A seller could set their own commission rate.** `build_rate_bp` /
+  `recurring_rate_bp` were in the create/update whitelist for every `accounts`
+  holder. `stripRateFields()` in `accountsController.js` drops them for anyone
+  but an admin — silently, because a seller has no business being told the
+  field exists.
+- **Commission figures leaked past `requireView('commission')`.**
+  `GET /accounts/:id/commission` was gated on the `accounts` view alone, so the
+  `verktaki` role (accounts + allaccounts) read every seller's earnings. Both
+  views are required now.
+- **The 2FA widening was unreachable.** `mfaService.protectedRole` covered
+  `accounts` holders, but both enrolment endpoints still tested
+  `user.role !== 'admin'` — the users the gate newly protected were the only
+  ones who could not enrol. `isEnrolmentEligible()` now asks the same predicate
+  the gate does.
+- **The market hand-off was a second, ungated door onto `market_companies`.**
+  Creating an account from a market row never checked that row's status, while
+  the sanctioned `PATCH /markadur/:id/status` is admin/moderator AND
+  shortlist-only. `CustomerAccount.create` now requires `shortlist` under the
+  same `FOR UPDATE`; not-eligible answers 404, so ids cannot be enumerated.
+- **`payable` ignored credit notes and refunds.** It compared `amount_paid`
+  against `total_gross`, so a fully refunded invoice still paid commission on
+  money the company had given back. One `PAID_IN_FULL` fragment now nets
+  refunds and credits, shared by `events` and `report`.
+- **Service invoices could be double-issued.** Two clicks issued two statutory
+  documents, and 505/2013 allows no deletion — only a credit note.
+  **Migration 099_invoice_account_link** adds `account_id`, `service_kind` and
+  `service_period` to `invoices` with two partial unique indexes (one build
+  half per account; one recurring invoice per account per month; cancelled rows
+  excluded, overage deliberately not deduplicated — it is metered). The INSERT
+  maps 23505 to a 409 telling the user to credit the first one. The client
+  disables the submit button too, but the index is the guarantee.
+
+Also in the pass: `role.updated` joined the staff-audit vocabulary (widening a
+role's views is the most security-relevant role event there is), `q` joined the
+log URL scrubber and `app.js` now scrubs request URLs in its own success/error
+lines, the leads CSV pages to the end instead of truncating at 200,
+Markaður's scraped `website`/`sources[].url` go through a `https?:` check
+before landing in an `href`, the six new views got `destroy()` and
+stale-paint sequence guards, unmapped enum values print themselves instead of
+a confidently wrong label, `--overlay` became a real per-theme token, and the
+neutral status chips moved to `--text-secondary` (`--text-muted` on
+`--bg-hover` is 4.24:1 on Glóð, under 4.5).
+
+**Migration chain now ends 099_invoice_account_link.** Deferred, and Halli's
+call rather than code's: `customer_accounts` has no address columns, so a
+service invoice can never be Peppol-exported (the 095 emitter needs a party
+block); the build deposit is booked as revenue on issue rather than as a
+prepayment, which is a question for the accountant; and commission payout
+tracking (marking a statement paid, clawback on a later credit note) is still
+unbuilt.
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
 - **Awaiting Halli**: the 13 proposals in `ENHANCEMENTS.md` (#13, the MCP connector, added 2026-08-15), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
-- **Admin re-shape landed 2026-09-07** (three chunks, sections above: hidden retail lines + Sölustarf/Þjónusta + company overview · Leads inbox = migration 097 · Markaður). Still his: the DRAFT copy those chunks wrote (nav labels, dashboard, leads, markaður, and the **`/personuvernd` §3 + §6 rewrite** — the site now stores enquiries), whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`), and the DRAFT copy of chunk D. **#17/#18 landed the same day** (section above): migration chain ends **098_customer_accounts**; the books branch was rebased onto master 2026-09-07 with its 095/096 kept in numeric order (Jest 2864 + Playwright green) and merged the same day (748f28b, next bullet) — the chain reads 094 → 095 → 096 → 097 → 098. Saved sidebar layouts were reset in the dev DB (Halli is the only admin).
+- **Admin re-shape landed 2026-09-07** (three chunks, sections above: hidden retail lines + Sölustarf/Þjónusta + company overview · Leads inbox = migration 097 · Markaður). Still his: the DRAFT copy those chunks wrote (nav labels, dashboard, leads, markaður, and the **`/personuvernd` §3 + §6 rewrite** — the site now stores enquiries), whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`), and the DRAFT copy of chunk D. **#17/#18 landed the same day** (section above): migration chain ends **099_invoice_account_link** (098 landed with #17/#18, 099 with the review pass — section above); the books branch was rebased onto master 2026-09-07 with its 095/096 kept in numeric order (Jest 2864 + Playwright green) and merged the same day (748f28b, next bullet) — the chain reads 094 → 095 → 096 → 097 → 098 → 099. Saved sidebar layouts were reset in the dev DB (Halli is the only admin).
 - **Own books into the product, landed 2026-09-07** (D-017/D-018 in `company/DECISIONS.md`, plan `~/.claude/plans/have-my-agents-go-glowing-mist.md`). Halli's call: keep Orange Smiley's statutory books in its own module, **books first on a private instance** (orangesmiley.is has no deployment), **parallel run** for the first VSK period — júlí–ágúst 2026, gjalddagi **5.10.2026** — deriving here and filing manually through the veflykill. Four pieces: the minor-units fix (the expense form sent major units where the API takes minor, so a USD 20.00 invoice typed as `20` booked as USD 0.20 — `public/js/utils/money.js`); **`/admin/books/settings`** (rides the `books` view id, no new RBAC id; confirming the chart of accounts requires a note and stamps who; FX freshness is per currency in use, not EUR alone); **`npm run books:replay`** (a period through the real services, VSK boxes diffed against what was filed, D split domestic/reverse-charge, target DB must end `_replay`); **migration 095** (structured party block + append-only `invoice_ubl_exports` + a Peppol BIS 3.0 emitter at `GET /invoices/:id/ubl.xml` — 11% is category S/11 not AA, exports are G with a reason, rounding drift is BT-114 and >3 kr is refused); **migration 096** (the capture spine: `source_kind` trust ladder + `books_intake`, a queue of proposals whose only exit is the same `createExpense()` the manual form calls, gated by CHECK constraints and CSRF, deliberately no confidence score). Runbooks: `docs/BOOKS-PARALLEL-RUN.md` (generic) + `company/runbooks/books-2026-P4.md` (this period). **Migration chain ends 097_leads**, with the books pair 095/096 landing behind it — independent of 097, so the array order is safe on a fresh database and on one that already has 097. Still owed: a button to issue a statutory invoice from an order (`issueInvoiceForOrder` has no caller — a hard blocker for 2026-P5, due 7.12) and Peppol **inbound**. Halli's, not code's: the VSK veflykill, Bókari's ruling on pre-12.08 expenses and `ACCOUNTANT-QUESTIONS.md` §6, and §2 (art. 12 zero-rating) before any foreign B2B invoice.
 - Post-R1 notes: the news list wants a public `/frettir` home (home links into it were removed, not re-homed); `/terms` could take an `/skilmalar` slug; Product-schema `brand` on the hidden shop still says Rekstrarkerfið.
 - **GitHub Actions is ENABLED on the repo since 2026-09-03** (Halli's call; it had been disabled at repo level, which is why CI never ran — two toggles: Settings → Actions → General "Allow all actions" AND the "Enable Actions on this repository" button on the Actions tab). The `main`→`master` trigger fix (2026-09-02) is in; PR #2 carries the first runs. `npm audit --audit-level=high` is clean as of 2026-09-02 (browserslist + sanitize-html patched via `npm audit fix`), so the first run should be green. **Push-safe since 2026-08-19**: ENHANCEMENTS #1 is done — `deploy.yml` is dispatch-only with all targets in unset repo variables (guard step fails fast). Arming a real deploy = set the `vars.*` on the GitHub repo; no workflow edit.

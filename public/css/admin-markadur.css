@@ -33,7 +33,9 @@
   padding: 0.1rem 0.55rem;
   border-radius: 999px;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
-  background: var(--bg-hover); color: var(--text-muted);
+  /* Neutral chip (candidate, and any status the map does not cover).
+     --text-muted here is 4.24:1 on Gló0 — --text-secondary is 7.3:1. */
+  background: var(--bg-hover); color: var(--text-secondary);
   white-space: nowrap;
 }
 .markadur-chip--researched      { color: var(--accent-ink); }
@@ -44,7 +46,7 @@
 /* Drawer */
 .markadur-backdrop {
   position: fixed; inset: 0; z-index: 60;
-  background: var(--overlay, rgba(0, 0, 0, 0.45));
+  background: var(--overlay);
 }
 .markadur-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 61;

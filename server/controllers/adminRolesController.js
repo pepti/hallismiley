@@ -68,10 +68,19 @@ const adminRolesController = {
         const verr = validateViewAccess(req.body.view_access);
         if (verr) return res.status(400).json({ error: verr, code: 400 });
       }
+      const before = role.view_access;
       const updated = await Role.update(name, {
         description: typeof req.body.description === 'string' ? req.body.description.slice(0, 200) : undefined,
         view_access: req.body.view_access !== undefined ? [...new Set(req.body.view_access)] : undefined,
       });
+      // Widening a role's view_access is the most security-relevant role event
+      // there is — more than a membership change — so it belongs in the trail.
+      if (req.body.view_access !== undefined) {
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'role.updated', entityType: 'role', entityId: name,
+          summary: { views_before: before, views_after: updated.view_access },
+        });
+      }
       return res.json({ role: updated });
     } catch (err) { next(err); }
   },

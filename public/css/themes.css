@@ -65,6 +65,7 @@ html[data-theme="ember"] {
   --bg-nav-rgb:  20, 15, 12;
   --bg-hover:    #332A22;
   --bg-tint:     none;
+  --overlay:     rgba(0, 0, 0, 0.62);
 
   /* Hairlines in sand at low alpha — the dark counterpart of Bjart's ink. */
   --border:       rgba(230, 205, 168, 0.30);
@@ -170,6 +171,7 @@ html[data-theme="midnight"] {
   --bg-nav-rgb:  0, 0, 0;
   --bg-hover:    #1F1F1F;
   --bg-tint:     none;
+  --overlay:     rgba(0, 0, 0, 0.78);
 
   /* Edges as lines: high alpha, so a border is visible as a border. */
   --border:       rgba(255, 255, 255, 0.55);

@@ -44,6 +44,16 @@ export class AdminLeadsView {
     this._openId = null;
     this._data = { leads: [], total: 0, counts: {}, retentionDays: 730 };
     this._searchDebounce = null;
+    this._loadSeq = 0;
+    this._destroyed = false;
+  }
+
+  // The router calls destroy() on navigation. Without it a debounced search
+  // fires ~250 ms after the view is gone and _load() writes into a detached
+  // tree (or throws on a null #leads-body).
+  destroy() {
+    this._destroyed = true;
+    clearTimeout(this._searchDebounce);
   }
 
   async render() {
@@ -122,13 +132,19 @@ export class AdminLeadsView {
 
   async _load() {
     const body = this._el.querySelector('#leads-body');
+    // Sequence guard: a status chip and the debounced search can be in flight
+    // together, and the slower response used to paint over the newer one.
+    const seq = ++this._loadSeq;
     try {
-      this._data = await getLeads(this._params());
+      const data = await getLeads(this._params());
+      if (this._destroyed || seq !== this._loadSeq) return;
+      this._data = data;
       this._paintFilters();
       this._el.querySelector('#leads-retention').textContent =
         t('leads.retentionNote', { days: this._data.retentionDays });
       this._paintTable();
     } catch (err) {
+      if (this._destroyed || seq !== this._loadSeq) return;
       body.innerHTML = `<p class="admin-error">${escHtml(err.message || t('leads.loadError'))}</p>`;
     }
   }

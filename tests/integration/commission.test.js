@@ -213,3 +213,108 @@ describe('GET /api/v1/admin/commission', () => {
     expect(String(sep.body.rows[0].period)).toMatch(/^2026-09/);
   });
 });
+
+// ── Review fixes, 2026-09-07 ─────────────────────────────────────────────────
+// Each test here pins one defect the three-reviewer pass on this chunk found.
+// They are regression tests: every one of them fails on the code as merged.
+
+describe('regressions', () => {
+  test('a seller cannot set their own commission rate; an admin can', async () => {
+    // The controller whitelist let build_rate_bp / recurring_rate_bp through
+    // from ANY holder of the accounts view, so a seller could create an
+    // account at 90% and invoice themselves the difference.
+    const mine = await request(app).post(ACCOUNTS).set('Cookie', sellerA).send({
+      name: 'Gráðugur ehf.', tier: 'vefur', build_fee_isk: 400000, monthly_fee_isk: 20000,
+      build_rate_bp: 9000, recurring_rate_bp: 9000,
+    });
+    expect(mine.status).toBe(201);
+    expect(Number(mine.body.account.build_rate_bp)).toBe(1500);
+    expect(Number(mine.body.account.recurring_rate_bp)).toBe(1000);
+
+    const bumped = await request(app).patch(`${ACCOUNTS}/${mine.body.account.id}`)
+      .set('Cookie', sellerA).send({ build_rate_bp: 9000 });
+    expect(bumped.status).toBe(200);
+    expect(Number(bumped.body.account.build_rate_bp)).toBe(1500);
+
+    const byAdmin = await request(app).patch(`${ACCOUNTS}/${mine.body.account.id}`)
+      .set('Cookie', adminCookie).send({ build_rate_bp: 2000 });
+    expect(Number(byAdmin.body.account.build_rate_bp)).toBe(2000);
+
+    // And the rate the invoice snapshots is the stored one, not the sent one.
+    const inv = await issue({ account_id: mine.body.account.id, kind: 'build', deposit: true });
+    expect(Number(inv.body.commission.rate_bp)).toBe(2000);
+  });
+
+  test('the account commission tab needs the commission view, not just accounts', async () => {
+    // `verktaki` holds accounts + allaccounts but NOT commission, and the tab
+    // route was gated on the accounts view alone — every seller's earnings.
+    await db.query(
+      `INSERT INTO roles (name, description, view_access, is_system)
+       VALUES ('verktaki', 'Verktaki', '["handbok", "accounts", "allaccounts"]'::jsonb, FALSE)
+       ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`
+    );
+    Role.invalidateCache();
+    const { rows: [seed] } = await db.query(`SELECT id FROM users WHERE username = 'sellera'`);
+    await db.query(
+      `INSERT INTO users (id, email, username, password_hash, role, email_verified)
+       VALUES ($1, $2, $3, (SELECT password_hash FROM users WHERE id = $4), 'verktaki', TRUE)`,
+      ['test-verktaki', 'verktaki1@test.com', 'verktaki1', seed.id]
+    );
+    const cookie = await getTestSessionCookie('test-verktaki');
+
+    await issue({ account_id: account.id, kind: 'build', deposit: true });
+    // The account itself is visible to them (allaccounts) …
+    expect((await request(app).get(`${ACCOUNTS}/${account.id}`).set('Cookie', cookie)).status).toBe(200);
+    // … but the money on it is not.
+    expect((await request(app).get(`${ACCOUNTS}/${account.id}/commission`).set('Cookie', cookie)).status).toBe(403);
+    expect((await request(app).get(COMMISSION).set('Cookie', cookie)).status).toBe(403);
+  });
+
+  test('payable drops when the invoice is credited or refunded', async () => {
+    // `payable` compared amount_paid against total_gross alone, so a fully
+    // credited invoice still paid commission on money the company gave back.
+    const dep = await issue({ account_id: account.id, kind: 'build', deposit: true });
+    const invoiceId = dep.body.invoice.id;
+    await request(app).post(`${BOOKS}/invoices/${invoiceId}/payments`).set('Cookie', adminCookie)
+      .send({ amount: 359600, method: 'bank_transfer', idempotency_key: 'pay-1' });
+
+    let a = await request(app).get(COMMISSION).set('Cookie', sellerA);
+    expect(Number(a.body.rows[0].payable_isk)).toBe(43500);
+
+    const refund = await request(app).post(`${BOOKS}/invoices/${invoiceId}/refunds`).set('Cookie', adminCookie)
+      .send({ amount: 359600, method: 'bank_transfer', reason: 'Hætt við', idempotency_key: 'ref-1' });
+    expect([200, 201]).toContain(refund.status);
+
+    a = await request(app).get(COMMISSION).set('Cookie', sellerA);
+    expect(Number(a.body.rows[0].accrued_isk)).toBe(43500);   // still earned on paper
+    expect(Number(a.body.rows[0].payable_isk)).toBe(0);        // but not payable
+    expect(a.body.events[0].invoice_paid).toBe(false);
+  });
+
+  test('the same build half cannot be invoiced twice', async () => {
+    // Two clicks on "Gefa út reikning" used to issue two statutory invoices,
+    // and 505/2013 says an invoice can only be undone by a credit note.
+    const first = await issue({ account_id: account.id, kind: 'build', deposit: true });
+    expect(first.status).toBe(201);
+    const second = await issue({ account_id: account.id, kind: 'build', deposit: true });
+    expect(second.status).toBe(409);
+    expect(second.body.error).toMatch(/already has that build-fee instalment/);
+    expect(await commissionRows(account.id)).toHaveLength(1);
+
+    // The other half is a different document and still goes through.
+    expect((await issue({ account_id: account.id, kind: 'build', deposit: false })).status).toBe(201);
+  });
+
+  test('the same recurring month cannot be invoiced twice, but the next month can', async () => {
+    expect((await issue({ account_id: account.id, kind: 'recurring', period: '2026-10' })).status).toBe(201);
+    const dup = await issue({ account_id: account.id, kind: 'recurring', period: '2026-10' });
+    expect(dup.status).toBe(409);
+    expect(dup.body.error).toMatch(/already has a service invoice for 2026-10/);
+    expect((await issue({ account_id: account.id, kind: 'recurring', period: '2026-11' })).status).toBe(201);
+  });
+
+  test('overage is not deduplicated — it is metered, and a month can have several', async () => {
+    expect((await issue({ account_id: account.id, kind: 'overage', units: 3, unit_price_isk: 12000 })).status).toBe(201);
+    expect((await issue({ account_id: account.id, kind: 'overage', units: 2, unit_price_isk: 12000 })).status).toBe(201);
+  });
+});
