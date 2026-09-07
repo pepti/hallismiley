@@ -798,10 +798,26 @@ function validateLeadUpdate(req, res, next) {
   next();
 }
 
+// ── Markaður status hand-off ─────────────────────────────────────────────────
+// PATCH /api/v1/admin/markadur/:id/status. The body is exactly { status } and
+// the target is one of the two the app may set; the transition itself
+// (only FROM shortlist) is checked in the controller against the live row.
+const MARKET_TARGET_STATUSES = ['handed_to_sales', 'rejected'];
+
+function validateMarketStatus(req, res, next) {
+  const { status } = req.body || {};
+  if (typeof status !== 'string' || !MARKET_TARGET_STATUSES.includes(status)) {
+    return _fail(req, res, [{ key: 'validation.marketStatus.invalid' }]);
+  }
+  req.body = { status };
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
   validateLeadUpdate,
+  validateMarketStatus,
   validateSignup,
   validatePartyRequest,
   validateResetPassword,

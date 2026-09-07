@@ -10,6 +10,10 @@
 // file is validated first and written in ONE transaction — a bad row anywhere means
 // nothing is written. `status` is a workflow field (sales moves rows to
 // handed_to_sales later), so it is only overwritten when the JSON row carries one.
+// CAVEAT (since /admin/markadur can hand off, 2026-09-07): a row that already
+// reads handed_to_sales / rejected in the app is overwritten by whatever
+// `status` the JSON carries — export the staging file WITHOUT `status` for
+// companies the app has decided on, or a re-import silently undoes the sale.
 // admin_cost_ratio is a GENERATED column and is never written here.
 //
 // JSON shape (financials nested so the agent never needs a company_id):
