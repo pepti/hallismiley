@@ -308,9 +308,12 @@ export class ProfileView {
         </div>
       </section>
 
-      <!-- Two-step verification. Admin-only: the login path challenges that role
-           and no other, so offering it elsewhere would promise protection that
-           never engages. Rendered from the session's totp_enabled flag. -->
+      <!-- Two-step verification. Shown to exactly the accounts the login path
+           challenges — admins by primary role or role SET, and accounts holders
+           (ENHANCEMENTS #17) — because offering it elsewhere would promise
+           protection that never engages, and withholding it from a challenged
+           account locks that account out. The predicate is
+           auth.isMfaProtected(), mirroring mfaService. Rendered from the session's totp_enabled flag. -->
       ${isMfaProtected() ? `
       <section class="profile-section" id="totp-section" data-testid="totp-section">
         <h2 class="profile-section__title">${t('profile.twoStepTitle')}</h2>
