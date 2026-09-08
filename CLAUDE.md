@@ -571,6 +571,104 @@ produced a commission to reclaim) and is silent on a sale that was credited
 and refunded. Netting-only, capped at 12 months, keeps the promise that the
 seller never owes the company cash. That is a contract term, so it is Halli’s
 call, not code’s — put to him as **D-019**.
+## Shared admin UI kit (2026-09-08, ENHANCEMENTS #21 — merged `ecd85f5`, upstreamed as base PR #153)
+
+Halli asked why LedgerLink's admin screens lacked affordances icelandicstore has
+had since June. Six read-only comparison sweeps answered it, and the answer was
+structural rather than a missed harvest:
+
+- **LedgerLink was scaffolded from `hallismiley`, not from here.** site-factory's
+  `DEFAULT_BASE` is the base, so work landing only in an instance reaches no
+  future scaffold. The 08-22 and 09-02 harvests took infrastructure and
+  correctness and skipped the **affordances**, so the base never got them either.
+- **No repo in the estate had a shared admin UI layer.** ice hand-rolls 5
+  near-identical table implementations; this repo had ~35 admin tables of which
+  **4** sorted; LedgerLink's three new screens hand-rolled everything and its
+  design gate then found 23 issues, 3 High.
+- ⚠ **The ice checkout is 141 commits stale** (parked on `fix/pos-vat-rate`, 207
+  dirty entries of real local-only work). Read it with
+  `git show origin/main:<path>` @ `b3bb35d`. **Never check that tree out.**
+- **The harvest is NOT one-directional.** Our books module is ~14,800 lines and
+  is a system of record; ice's is a ~2,500-line reporting veneer whose screens
+  say so on their face and whose `createExpense` is wired only to the seed
+  script. **On books we are upstream.** Ice leads on the shop floor only.
+
+**The kit** (`utils/debounce.js`, `utils/localPref.js`, `utils/listState.js`,
+`utils/pageTitle.js`, `components/adminTable.js`, `components/adminPager.js`,
+`css/admin-kit.css`, `format.formatRelative`). Every module = pure functions
+returning HTML strings + a `bind*()` attaching **ONE delegated listener to a
+container that outlives the repaint**. That shape is dictated by
+`testEnvironment: 'node'` with no jsdom — the string half is unit-testable, the
+DOM half is Playwright's — and by the house style of repainting `innerHTML`
+wholesale, which a node-owning component would fight.
+
+- `listState` uses **`replaceState` only, never `pushState`**: a pushState per
+  settled keystroke would bury the page the user came from and break every spec
+  calling `goBack()`. Page SIZE is deliberately NOT in the URL — it is a personal
+  habit, so it lives in localStorage and a shared link honours the recipient's.
+- `adminPager.PAGE_SIZES` tops out at **200 because `leadsController` clamps
+  `limit` to [1,200]**. Offering more would let the client request a page the
+  server silently truncates, and the pager would then lie about the page count.
+- `sortableTh` emits a real `<button>` inside the `<th>` (WAI-ARIA pattern), not
+  `tabindex="0"` on the `th`. `aria-sort` stays on the `th`.
+- `admin-kit.css` loads after the per-screen sheets and **before `themes.css`**,
+  and carries zero colour literals.
+- **`.admin-pagination` had NO CSS anywhere** before this — Leads and Markaður
+  had been shipping unstyled inline pagers.
+
+**`AdminUsersView` is the converted reference** (86 lines removed, 68 added;
+gained page-size memory, shareable URLs, a showing-range, accessible names on
+the glyph-only controls, and a `destroy()` that cancels a queued search).
+`e2e/admin-list-kit.spec.js` (13 tests) covers what node cannot see.
+**AdminLeadsView and AdminMarketView are NOT converted yet** — both were touched
+by PR #3, so re-read them before starting.
+
+**Eight defects fixed alongside**, all verified in a running browser:
+2FA QR unscannable on Glóð (no `totp-*` CSS existed — the view came across in
+the 08-22 harvest without its stylesheet) · the enrolment gate (see below) ·
+checkout `required` inert under `novalidate`, plus a latent one-way bug where
+`syncShipping()` cleared `required` then re-queried `[required]` so local pickup
+and back left the address fields permanently optional · `LoginModal` leaking a
+document keydown listener per mount and per abandoned-2FA re-mount · hardcoded
+English country labels · `avatarHint` promising 2MB against an enforced 5MB ·
+the client CSV writer having drifted from the server's `PLAIN_NUMBER` exemption ·
+`OrderHistoryView` hardcoding `'en-GB'`.
+
+**The 2FA gate is now mirrored on both sides and must stay that way.**
+`auth.isMfaProtected()` = `isAdmin() || canSeeView('accounts')`, mirroring
+`mfaService.protectedRole`. #17 widened the server without widening the UI, so a
+seller was pushed to enrol with no panel; PR #3's review pass found the same
+defect from the endpoint side the same day. **Both halves were needed** — a UI
+that renders the panel and an API that accepts the request.
+`tests/unit/mfaProtectedClient.test.js` pins the two together. If either side
+widens again, widen both.
+
+**`pageTitle` mirrors `ssrMeta.js` and the test PARSES that file.** The router
+never set `document.title` on client navigation, so the tab kept the landing
+title all session. The mirror is enforced, not hoped for: the parity test reads
+`ROUTE_META`/`DEFAULT_META` out of the server source and fails on drift —
+including a guard that the parser itself still matches, so refactoring
+`ssrMeta.js` cannot silently make it assert nothing. Hidden portfolio routes
+(`/verkefni`, `/projects`) diverge from SSR **on purpose** and are listed as such.
+
+**Upstreamed: base PR #153** (merged `e43666b`). The kit plus all eight defects,
+each re-confirmed on the base — including #2 in its narrower `admin_anywhere`
+form. **No view is converted there** on purpose. Note the base **auto-deploys to
+Azure on green CI on `main`**, unlike here, and it has **zero e2e coverage of
+checkout**, so that path was verified by hand before merging. Ledger entry:
+`site-factory/BASE-SYNC.md` 2026-09-08.
+
+**Still open on this programme**: the Leads/Markaður conversions, then the states
+kit, dialog kit (port LedgerLink's `LedgerAdminBits.js` — native `<dialog>`,
+abort-on-dismiss, 15 s write timeout, backdrop dismissal keyed off `mousedown` so
+a text-drag does not discard input), auth/identity (`AccessGateView` +
+`storefrontGate`, `_redirectAfterLogin`, exporting `ICONS`), and the money
+de-fork. **ENHANCEMENTS #22–#26** carry the real ice harvest backlog and need
+Halli: scanning (`ScanInput.js`), audited stock adjustments, import wizards,
+storefront QoL — of which **a sold-out cart line currently goes straight to
+Stripe** — and a shared `Footer`.
+
+
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
