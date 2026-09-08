@@ -12,21 +12,10 @@ function _esc(s) {
 }
 
 // ISO-3166 alpha-2 country list (subset — Iceland + EU/EEA + a few others).
-const COUNTRIES = [
-  { code: 'IS', name: 'Iceland' },
-  { code: 'DK', name: 'Denmark' },
-  { code: 'NO', name: 'Norway' },
-  { code: 'SE', name: 'Sweden' },
-  { code: 'FI', name: 'Finland' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'FR', name: 'France' },
-  { code: 'NL', name: 'Netherlands' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'IE', name: 'Ireland' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'US', name: 'United States' },
-];
+// Display names live in the locale files under checkout.countryName.<code>;
+// they used to be hardcoded English here, so the IS locale showed an English list.
+const COUNTRIES = ['IS', 'DK', 'NO', 'SE', 'FI', 'DE', 'FR', 'NL', 'ES', 'IT', 'IE', 'GB', 'US']
+  .map(code => ({ code }));
 
 export class CheckoutView {
   constructor() {
@@ -145,7 +134,7 @@ export class CheckoutView {
               </div>
               <label>${t('checkout.country')}
                 <select name="country" required autocomplete="shipping country">
-                  ${COUNTRIES.map(c => `<option value="${c.code}" ${c.code === 'IS' ? 'selected' : ''}>${_esc(c.name)}</option>`).join('')}
+                  ${COUNTRIES.map(c => `<option value="${c.code}" ${c.code === 'IS' ? 'selected' : ''}>${_esc(t('checkout.countryName.' + c.code))}</option>`).join('')}
                 </select>
               </label>
               <label>${t('checkout.phone')}
@@ -187,12 +176,17 @@ export class CheckoutView {
     const submitBtn = this._view.querySelector('#shop-checkout-submit');
     const errorEl = this._view.querySelector('#shop-checkout-error');
 
+    // Captured ONCE, before the first sync mutates them: setting .required = false
+    // removes the attribute, so a later querySelectorAll('[required]') finds nothing
+    // and switching back to flat_rate would leave the address fields optional.
+    const addressRequired = [...addressFieldset.querySelectorAll('input[required], select[required]')];
     const syncShipping = () => {
       const method = form.elements['shipping_method'].value;
       this._shippingMethod = method;
       const requiresAddr = method === 'flat_rate';
       addressFieldset.style.display = requiresAddr ? '' : 'none';
-      for (const inp of addressFieldset.querySelectorAll('input[required], select[required]')) {
+      addressFieldset.disabled = !requiresAddr;
+      for (const inp of addressRequired) {
         inp.required = requiresAddr;
       }
       const shippingAmt = requiresAddr
@@ -210,6 +204,14 @@ export class CheckoutView {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.textContent = '';
+      // The form carries `novalidate` and nothing was enforcing the constraints,
+      // so every `required` on the guest-email and shipping-address fields was
+      // inert: an empty address POSTed and came back as a server 400 with no
+      // indication of which field was wrong. reportValidity() both reports and
+      // focuses the first offender. Runs BEFORE the button is disabled, so a
+      // rejected submit leaves the form usable.
+      if (!form.reportValidity()) return;
+
       submitBtn.disabled = true;
       submitBtn.textContent = t('checkout.redirecting');
 

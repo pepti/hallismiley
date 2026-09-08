@@ -61,6 +61,7 @@ import {
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
 import { trackPageView } from './services/usage.js';
+import { titleForRoute } from './utils/pageTitle.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -331,6 +332,13 @@ export class Router {
     this.navBar.setActive(pattern || '/');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Tab title. SSR sets it on a full load; client navigation never did, so
+    // the tab kept the landing page's title for the whole session. A view that
+    // knows its own subject (an article, a product) wins by setting
+    // `documentTitle`; everything else is routed by pattern.
+    document.title = (typeof view.documentTitle === 'string' && view.documentTitle)
+      ? view.documentTitle
+      : titleForRoute(pattern || path, getLocale());
 
     // Anonymous page-view beacon. Placed after the commit point (past the
     // stale-nav guard and the locale/admin redirects) so it fires exactly once
