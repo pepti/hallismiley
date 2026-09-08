@@ -499,7 +499,7 @@ prepayment, which is a question for the accountant; and commission payout
 tracking (marking a statement paid, clawback on a later credit note) is still
 unbuilt.
 
-## The three deferred items, built 2026-09-08 (migrations 100 + 101)
+## The three deferred items, built 2026-09-08 (migrations 100 – 102)
 
 Halli: "Have my agents build solutions to these 3 things" — the items the
 2026-09-07 review pass had left as his call. Bókari designed both bookkeeping
@@ -559,18 +559,51 @@ found a live money bug on the way.
 
 **Migration chain now ends 101_books_deferred_revenue** (100 → 101).
 
-**Item three is NOT built and needs Halli’s decision.** Sölustjóri designed
-commission payout tracking + clawback in full (statements as a running
-balance, immutable payouts, `payee_kind` for verktaki/launþegi/internal), but
-building it contradicts **D-003**, which records "No clawback of commission
-already paid", and the seller agreement template already exists as DRÖG
-(D-007, `company/contracts/templates/solusamningur-verktaka.md` clause 5.3
-with `[[ENDURGREIÐSLA_MÁNUÐIR]] = 0`). Sölustjóri’s reconciliation: D-003’s
-promise is about CHURN and bad debt (a customer who stops paying never
-produced a commission to reclaim) and is silent on a sale that was credited
-and refunded. Netting-only, capped at 12 months, keeps the promise that the
-seller never owes the company cash. That is a contract term, so it is Halli’s
-call, not code’s — put to him as **D-019**.
+- **Migration 102 — commission statements, payouts and clawback.** Halli
+  decided the open question on 2026-09-08: clawback **nets against future
+  statements for 12 months and the company never invoices a seller for cash**.
+  Recorded as **D-019** amending D-003, with contract clause 5.3 split in two
+  (churn creates no claim; a credited-and-refunded sale is recomputed and set
+  off) and `[[ENDURGREIÐSLA_MÁNUÐIR]]` set to 12. D-019 is not a reversal:
+  D-003’s "no clawback" is about CHURN and bad debt, and is silent on money
+  the company did receive and later gave back.
+
+  The unit is the seller-month STATEMENT over a running balance —
+  `Σ payable_now(event) + Σ adjustments − Σ payouts`. Payability is DERIVED,
+  so pinning events to a payout would need un-pinning; clawback is simply that
+  equation going down. Two properties carry the design: the windows are **set
+  differences, not date ranges** (global unique indexes on `adjustment_id` and
+  `payout_id`), so a late payment, a backdated payout or a skipped month lands
+  on the NEXT statement rather than falling between two; and **no statement is
+  ever reopened**. The arithmetic is a CHECK constraint, not a convention, so a
+  composer bug fails the INSERT instead of producing a statement someone
+  invoices against. Statements, lines, payouts and adjustments are append-only
+  on `books_forbid_any_mutation`; only `amount_paid_isk` moves, being a counter.
+
+  **A narrowing security fix rode along**: the commission routes used
+  `accountScope`, which grants all-access to the `allaccounts` permission —
+  while `adminAccountRoutes` states the opposite intent in its own comment. New
+  `server/auth/commissionScope.js` honours only a true admin, so a hand-granted
+  `allaccounts` + `commission` role can no longer read every seller’s earnings.
+
+  `users.payee_kind` forks the payment: a **contractor** is a verktakagreiðsla
+  against their own invoice; an **employee** is gross pay that must go through
+  payroll (a `bank_transfer` is refused 409, because withholding is the payroll
+  module’s job); **internal** — Halli owning his own accounts — is an
+  attribution that is structurally unpayable. Every write is hard admin: a
+  seller must never generate their own statement or record their own payout.
+
+**Migration chain now ends 102_commission_settlement** (100 → 101 → 102).
+
+**Still Halli’s, not code’s**: the lawyer on whether netting-only set-off is
+enforceable without an express repayment right (clause 5.4 is DRÖG); Bókari on
+whether a written-off balance is a taxable benefit to the seller and a
+deductible loss to the company, plus the verktakamiði questions in the design;
+and the accountant on `docs/ACCOUNTANT-QUESTIONS.md` §11. **Not built, by
+design**: the 6-month tail in contract clause 4.3 has no code behind it —
+`recordForInvoice` snapshots the owner at issue, so an owner change moves all
+future commission immediately. Until it is built the tail is a monthly
+`manual_credit` adjustment; it is worth its own proposal.
 ## Shared admin UI kit (2026-09-08, ENHANCEMENTS #21 — merged `ecd85f5`, upstreamed as base PR #153)
 
 Halli asked why LedgerLink's admin screens lacked affordances icelandicstore has
