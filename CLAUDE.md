@@ -499,6 +499,78 @@ prepayment, which is a question for the accountant; and commission payout
 tracking (marking a statement paid, clawback on a later credit note) is still
 unbuilt.
 
+## The three deferred items, built 2026-09-08 (migrations 100 + 101)
+
+Halli: "Have my agents build solutions to these 3 things" — the items the
+2026-09-07 review pass had left as his call. Bókari designed both bookkeeping
+pieces and ruled on the accounting question; Sölustjóri designed the third and
+found a live money bug on the way.
+
+- **The commission payability bug (merged first, no migration).** Sölustjóri
+  found that the 099 `PAID_IN_FULL` fix was still wrong, and that the
+  regression test written for it hid the hole by issuing a REFUND only.
+  Undoing a sale properly is TWO facts — a credit note for the document, a
+  refund for the cash — and with both, `paid - refunded >= gross - credited`
+  reads 0 >= 0 and paid FULL commission on a sale that no longer existed. An
+  invoice never paid at all and fully credited read the same way, vacuously.
+  `PAID_IN_FULL` gained an explicit `surviving gross > 0` guard, and payable
+  became an AMOUNT (`PAYABLE_NOW_ISK`) rather than an all-or-nothing flag:
+  credit half the invoice and half the commission was never earned.
+
+- **Migration 100 — the buyer party block.** 098 gave the company a customer
+  of record and 095 gave an invoice a structured party block; nothing
+  connected them, so `createServiceInvoice` wrote `customer_address = ''` and
+  `customer_country = 'IS'` as literals. Two consequences, and the REPORTED
+  one was the lesser: no service invoice could be Peppol-exported, and the PDF
+  of every service invoice printed **no buyer address at all** — a defect in
+  the statutory document. Seven party columns on `customer_accounts` +
+  `customer_vat_number` (BT-48) on `invoices`; the account holds the CURRENT
+  value, the invoice keeps the value AS AT ISSUE (Reglugerð 505/2013 gr. 9).
+  Statement 3 brings the 095/099/100 columns INSIDE the 072 immutability
+  trigger’s frozen tuple — otherwise the snapshot argument is only half true.
+  New `peppol/party.js` is ONE rule with two callers (the account screen and
+  the export preflight), so "ready" and the 409 can never disagree;
+  `invoice_ready` (statutory minimum: a kennitala) gates ISSUING and
+  `peppol_complete` gates only the export, mirroring Setting’s own split.
+  **Behaviour change**: an ORDER-path invoice can no longer be UBL-exported —
+  `pickCustomer` has no kennitala to record, so BT-49 (mandatory in Peppol)
+  can neither be given nor derived. Every UBL document we had ever emitted was
+  missing it while claiming BIS 3.0 conformance. The shop is hidden here and
+  nothing transmits, so nothing breaks; a B2B order path would need to capture
+  a kennitala.
+
+- **Migration 101 — the build deposit is a prepayment.** D-005 already said
+  "the deposit sits as a customer prepayment until then"; only the first half
+  of that sentence was implemented, so revenue and equity were overstated by
+  the deposit net between signing and go-live (l. nr. 3/2006 11. + 26. gr.).
+  Lykill **2150 Fyrirframinnheimtar tekjur**, plus a release entry
+  (`source_type = revenue_recognition`) that issuing the final build half
+  posts in the same transaction. **VSK does not move**: under l. nr. 50/1988
+  13. gr. the deposit is skattskyld velta in the period its invoice is dated,
+  so 2150 carries `vat_code = output_24` and `vatService.ADVANCE_TURNOVER_
+  ACCOUNTS` counts it in reitur A — deferring the net without that drops box A
+  while box D keeps the 24%, which is worse than the original bug. Crediting a
+  RELEASED deposit goes against `recognised_into_account`, never 2150; the
+  standing invariant is that **2150 never goes debit**. Nothing to restate:
+  no deposit invoice exists anywhere and 2026-P4 has no sales.
+  `docs/ACCOUNTANT-QUESTIONS.md` §11 asks the accountant to confirm the account
+  code and answer 25. gr. (áfangaaðferð) before a build straddles áramót.
+  D-005 carries an implementation addendum.
+
+**Migration chain now ends 101_books_deferred_revenue** (100 → 101).
+
+**Item three is NOT built and needs Halli’s decision.** Sölustjóri designed
+commission payout tracking + clawback in full (statements as a running
+balance, immutable payouts, `payee_kind` for verktaki/launþegi/internal), but
+building it contradicts **D-003**, which records "No clawback of commission
+already paid", and the seller agreement template already exists as DRÖG
+(D-007, `company/contracts/templates/solusamningur-verktaka.md` clause 5.3
+with `[[ENDURGREIÐSLA_MÁNUÐIR]] = 0`). Sölustjóri’s reconciliation: D-003’s
+promise is about CHURN and bad debt (a customer who stops paying never
+produced a commission to reclaim) and is silent on a sale that was credited
+and refunded. Netting-only, capped at 12 months, keeps the promise that the
+seller never owes the company cash. That is a contract term, so it is Halli’s
+call, not code’s — put to him as **D-019**.
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
