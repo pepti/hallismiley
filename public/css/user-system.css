@@ -630,3 +630,56 @@
 
   .profile-section__header-row { flex-direction: column; align-items: flex-start; gap: var(--sp-3); }
 }
+
+/* ── Two-step verification (Profile) ────────────────────────────────────────
+   Ported from icelandicstore (its #138/#147) — the view came across in the
+   2026-08-22 harvest without its stylesheet, so the whole enrolment flow has
+   been rendering unstyled since. Re-tokenised onto this palette. */
+
+.totp-steps { margin: 0 0 var(--sp-3); padding-left: 1.25rem; }
+.totp-steps li { margin-bottom: var(--sp-2); }
+
+/* The QR sits on its own white plate ON PURPOSE, and this is the one place in
+   the file that may carry a colour literal. The generated SVG is black modules
+   on transparent; a QR that inherits the page palette looks tidy and stops
+   scanning on every dark theme — and Glóð is the default. The plate also keeps
+   the quiet zone intact against a dark page. Do not tokenise this. */
+.totp-qr {
+  display: inline-block;
+  padding: var(--sp-3);
+  background: #fff;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  margin-bottom: var(--sp-3);
+}
+.totp-qr img { display: block; width: 200px; height: 200px; }
+
+.totp-manual { margin-bottom: var(--sp-3); }
+.totp-manual summary { cursor: pointer; color: var(--accent-ink); }
+
+/* Monospace + generous tracking: this key gets copied by eye onto a phone. */
+.totp-key code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  word-break: break-all;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+}
+
+.totp-recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--sp-2);
+  list-style: none;
+  padding: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+}
+.totp-recovery-codes code {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}

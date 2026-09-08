@@ -1,4 +1,4 @@
-import { isAuthenticated, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
+import { isAuthenticated, isMfaProtected, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
@@ -55,7 +55,7 @@ export class ProfileView {
       this._bindPassword(el);
       this._bindSessions(el, sessions);
       this._bindTheme(el);
-      if (profile.role === 'admin') {
+      if (isMfaProtected()) {
         this._renderTotp(el);
       }
 
@@ -311,7 +311,7 @@ export class ProfileView {
       <!-- Two-step verification. Admin-only: the login path challenges that role
            and no other, so offering it elsewhere would promise protection that
            never engages. Rendered from the session's totp_enabled flag. -->
-      ${profile.role === 'admin' ? `
+      ${isMfaProtected() ? `
       <section class="profile-section" id="totp-section" data-testid="totp-section">
         <h2 class="profile-section__title">${t('profile.twoStepTitle')}</h2>
         <div id="totp-body"></div>

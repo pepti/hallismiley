@@ -6,8 +6,15 @@ import { t, href }       from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { listRoles } from '../services/adminRoles.js';
+import { sortableTh, cycleSort, bindSortable } from '../components/adminTable.js';
+import { pagerHtml, bindPager } from '../components/adminPager.js';
+import { readListState, syncListState, readPageSize, writePageSize } from '../utils/listState.js';
+import { debounce } from '../utils/debounce.js';
 
-const PAGE_SIZE = 20;
+// Was a fixed 20 — a size the picker does not offer. The list remembers the
+// admin's own choice now, defaulting to the nearest offered value.
+const DEFAULT_SIZE = 25;
+const VIEW_ID = 'users';
 
 function formatDate(str) {
   if (!str) return '—';
@@ -16,11 +23,24 @@ function formatDate(str) {
 
 export class AdminUsersView {
   constructor() {
-    this._page  = 1;
+    // Seeded from the query string, so a reload — or a link pasted to a
+    // colleague — lands on the same page, sort and search.
+    const st = readListState({ page: 1, q: '', sort: 'created_at', dir: 'desc' });
+    this._page  = Math.max(1, st.page);
     this._total = 0;
     this._roles = [];
-    this._sort  = { field: 'created_at', dir: 'desc' }; // matches the default server order
-    this._q     = '';
+    this._sort  = { field: st.sort, dir: st.dir === 'asc' ? 'asc' : 'desc' }; // default matches the server order
+    this._q     = st.q;
+    this._limit = readPageSize(VIEW_ID, DEFAULT_SIZE);
+    this._detach = [];
+  }
+
+  // Page, sort and search are shareable; page SIZE is a personal habit, so it
+  // lives in localStorage and is deliberately absent from the URL.
+  _syncUrl() {
+    syncListState(href('/admin/users'),
+      { page: this._page, q: this._q, sort: this._sort.field, dir: this._sort.dir },
+      { page: 1, q: '', sort: 'created_at', dir: 'desc' });
   }
 
   async render() {
@@ -53,6 +73,23 @@ export class AdminUsersView {
 
     this._el = el;
     this._bindSearch();
+
+    // Both bind to elements that survive _load()'s innerHTML repaint — the
+    // table WRAP (the thead inside it is rebuilt every load) and the pager host.
+    this._detach.push(bindSortable(el.querySelector('#users-table-wrap'), (field) => {
+      this._sort = cycleSort(this._sort, field);
+      this._page = 1;
+      this._syncUrl();
+      this._load();
+    }));
+    this._detach.push(bindPager(el.querySelector('#pagination'), {
+      onPage: (n) => { this._page = n; this._syncUrl(); this._load(); },
+      onPageSize: (n) => {
+        this._limit = n; this._page = 1;
+        writePageSize(VIEW_ID, n);
+        this._syncUrl(); this._load();
+      },
+    }));
     await this._load();
     return renderAdminShell({ activePath: '/admin/users', content: el });
   }
@@ -63,8 +100,8 @@ export class AdminUsersView {
     try {
       const [data, rolesData] = await Promise.all([
         adminGetUsers({
-          offset: (this._page - 1) * PAGE_SIZE,
-          limit:  PAGE_SIZE,
+          offset: (this._page - 1) * this._limit,
+          limit:  this._limit,
           sort:   this._sort.field,
           order:  this._sort.dir,
           ...(this._q ? { q: this._q } : {}),
@@ -108,13 +145,13 @@ export class AdminUsersView {
       <table class="admin-table admin-users-table">
         <thead>
           <tr>
-            ${this._sortableTh('username',   t('adminUsers.username'))}
-            ${this._sortableTh('email',      t('adminUsers.email'))}
-            ${this._sortableTh('role',       t('adminUsers.role'))}
-            ${this._sortableTh('verified',   t('adminUsers.verified'))}
-            ${this._sortableTh('status',     t('adminUsers.status'))}
-            ${this._sortableTh('party',      t('adminUsers.party'))}
-            ${this._sortableTh('created_at', t('orders.date'))}
+            ${sortableTh(t('adminUsers.username'), 'username', this._sort)}
+            ${sortableTh(t('adminUsers.email'), 'email', this._sort)}
+            ${sortableTh(t('adminUsers.role'), 'role', this._sort)}
+            ${sortableTh(t('adminUsers.verified'), 'verified', this._sort)}
+            ${sortableTh(t('adminUsers.status'), 'status', this._sort)}
+            ${sortableTh(t('adminUsers.party'), 'party', this._sort)}
+            ${sortableTh(t('orders.date'), 'created_at', this._sort)}
             <th class="admin-table__actions-col">${t('adminUsers.actions')}</th>
           </tr>
         </thead>
@@ -200,45 +237,6 @@ export class AdminUsersView {
       btn.addEventListener('click', () => this._onApproveUser(btn));
     });
 
-    this._bindSort();
-  }
-
-  // Render a sortable <th>. The arrow is always present (opacity hidden until
-  // active) so column widths don't jump as the user clicks around.
-  _sortableTh(field, label) {
-    const isActive = this._sort.field === field;
-    const arrow    = isActive && this._sort.dir === 'desc' ? '▼' : '▲';
-    const ariaSort = !isActive ? 'none' : (this._sort.dir === 'asc' ? 'ascending' : 'descending');
-    const cls      = 'sortable' + (isActive ? ' is-active' : '');
-    return `<th data-sort-field="${escHtml(field)}" class="${cls}" aria-sort="${ariaSort}" tabindex="0">${escHtml(label)}<span class="admin-table__sort-arrow" aria-hidden="true">${arrow}</span></th>`;
-  }
-
-  // Click cycle on a column: new column → asc, same column toggles asc ↔ desc.
-  // Two-state (no "clear") so the default Date column can also be inverted to
-  // ascending instead of being stuck on its initial desc.
-  _cycleSort(field) {
-    if (this._sort.field !== field) return { field, dir: 'asc' };
-    return { field, dir: this._sort.dir === 'asc' ? 'desc' : 'asc' };
-  }
-
-  // Delegated sort handler on the table head. Sorting is server-side, so a
-  // click resets to page 1 and re-fetches the whole (re-ordered) list.
-  _bindSort() {
-    const thead = this._el.querySelector('.admin-users-table thead');
-    if (!thead) return;
-    const handler = (e) => {
-      const th = e.target.closest('th[data-sort-field]');
-      if (!th || !thead.contains(th)) return;
-      if (e.type === 'keydown') {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-      }
-      this._sort = this._cycleSort(th.dataset.sortField);
-      this._page = 1;
-      this._load();
-    };
-    thead.addEventListener('click', handler);
-    thead.addEventListener('keydown', handler);
   }
 
   // Debounced search: one request after the user pauses typing, not per
@@ -247,19 +245,24 @@ export class AdminUsersView {
   _bindSearch() {
     const input = this._el.querySelector('#users-search');
     if (!input) return;
-    let timer;
-    input.addEventListener('input', () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const next = input.value.trim();
-        if (next === this._q) return;
-        this._q    = next;
-        this._page = 1;
-        this._load();
-      }, 250);
+    this._search = debounce(() => {
+      const next = input.value.trim();
+      if (next === this._q) return;
+      this._q    = next;
+      this._page = 1;
+      this._syncUrl();
+      this._load();
     });
+    input.addEventListener('input', this._search);
   }
 
+  destroy() {
+    // A queued search must not fire against a torn-down DOM, and the delegated
+    // listeners go with the view.
+    if (this._search) this._search.cancel();
+    this._detach.forEach((off) => off());
+    this._detach = [];
+  }
   async _onApproveUser(btn) {
     const userId = btn.dataset.userId;
     const action = btn.dataset.approveAction === 'decline' ? 'decline' : 'approve';
@@ -330,29 +333,8 @@ export class AdminUsersView {
   }
 
   _renderPagination() {
-    const pages = Math.ceil(this._total / PAGE_SIZE);
-    const pag   = this._el.querySelector('#pagination');
-    if (pages <= 1) { pag.innerHTML = ''; return; }
-
-    pag.innerHTML = '';
-    const prev = document.createElement('button');
-    prev.className   = 'btn btn--sm btn--ghost';
-    prev.textContent = `← ${t('form.previous')}`;
-    prev.disabled    = this._page <= 1;
-    prev.addEventListener('click', () => { this._page--; this._load(); });
-
-    const info = document.createElement('span');
-    info.className   = 'pagination__info';
-    info.textContent = `${this._page} / ${pages}`;
-
-    const next = document.createElement('button');
-    next.className   = 'btn btn--sm btn--ghost';
-    next.textContent = `${t('form.next')} →`;
-    next.disabled    = this._page >= pages;
-    next.addEventListener('click', () => { this._page++; this._load(); });
-
-    pag.appendChild(prev);
-    pag.appendChild(info);
-    pag.appendChild(next);
+    this._el.querySelector('#pagination').innerHTML = pagerHtml({
+      page: this._page, total: this._total, pageSize: this._limit, showSizePicker: true,
+    });
   }
 }

@@ -46,6 +46,14 @@ export function hasAnyAdminView() { return getViews().length > 0; }
 // accounts — a custom role's explicit grant list is already its whole nav.
 export function hasAllViews()     { return getViews().includes('*'); }
 
+// Mirrors server/services/mfaService.js protectedRole(): admin (primary role
+// OR role set — getRoles() covers both, which is the `admin_anywhere` case),
+// or an accounts holder. ENHANCEMENTS #17 widened the SERVER gate to sellers
+// who own customer accounts without widening the enrolment UI, so a seller was
+// pushed to enrol and had no panel to enrol from. The server stays the
+// authority; this exists so the two cannot drift silently again.
+export function isMfaProtected() { return isAdmin() || canSeeView('accounts'); }
+
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.
 //

@@ -1,6 +1,7 @@
 // OrderHistoryView — logged-in user's past orders. Route: #/orders
 import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
+import { formatDate } from '../utils/format.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -10,9 +11,9 @@ function _esc(s) {
 
 function _formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
+  // Was hardcoded 'en-GB', so an Icelandic reader got English month names.
+  // formatDate reads window.__locale (the app language), not the OS locale.
+  return formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export class OrderHistoryView {
