@@ -318,3 +318,56 @@ describe('regressions', () => {
     expect((await issue({ account_id: account.id, kind: 'overage', units: 2, unit_price_isk: 12000 })).status).toBe(201);
   });
 });
+
+// ── Payability, the proportional rule (2026-09-08) ───────────────────────────
+// The first version of PAID_IN_FULL compared cash against gross and was fixed
+// to net credits and refunds. That fix was still wrong, and its own regression
+// test hid the hole: it issued a REFUND only. A refund done properly is TWO
+// facts — a credit note reverses the sale, a refund records the cash — and with
+// both, `paid - refunded >= gross - credited` reads 0 >= 0 and pays full
+// commission on a sale that no longer exists.
+describe('payability nets credits, not just refunds', () => {
+  const creditNote = (invoiceId, amountGross, reason = 'Hætt við') =>
+    request(app).post(`${BOOKS}/invoices/${invoiceId}/credit-notes`)
+      .set('Cookie', adminCookie).send({ amount_gross: amountGross, reason });
+  const refund = (invoiceId, amount, key) =>
+    request(app).post(`${BOOKS}/invoices/${invoiceId}/refunds`)
+      .set('Cookie', adminCookie).send({ amount, method: 'bank_transfer', reason: 'Hætt við', idempotency_key: key });
+  const pay = (invoiceId, amount, key) =>
+    request(app).post(`${BOOKS}/invoices/${invoiceId}/payments`)
+      .set('Cookie', adminCookie).send({ amount, method: 'bank_transfer', idempotency_key: key });
+  const payable = async () =>
+    Number((await request(app).get(COMMISSION).set('Cookie', sellerA)).body.rows[0].payable_isk);
+
+  test('a fully credited AND refunded invoice pays no commission', async () => {
+    const dep = await issue({ account_id: account.id, kind: 'build', deposit: true });
+    const id = dep.body.invoice.id;
+    await pay(id, 359600, 'p1');
+    expect(await payable()).toBe(43500);
+
+    // The correct way to undo a sale: credit the document, refund the cash.
+    expect([200, 201]).toContain((await creditNote(id, 359600)).status);
+    expect([200, 201]).toContain((await refund(id, 359600, 'r1')).status);
+
+    const res = await request(app).get(COMMISSION).set('Cookie', sellerA);
+    expect(Number(res.body.rows[0].accrued_isk)).toBe(43500); // the accrual is history
+    expect(Number(res.body.rows[0].payable_isk)).toBe(0);     // the earning is not
+  });
+
+  test('a half-credited invoice pays half the commission, not all of it', async () => {
+    const dep = await issue({ account_id: account.id, kind: 'build', deposit: true });
+    const id = dep.body.invoice.id;
+    // Credit half, then the customer settles what is actually still owed.
+    expect([200, 201]).toContain((await creditNote(id, 179800, 'Hálfur samningur')).status);
+    await pay(id, 179800, 'p2');
+    // The surviving share of the sale is settled, so commission is earned — but
+    // only on the surviving share: 43500 × (359600-179800)/359600 = 21750.
+    expect(await payable()).toBe(21750);
+  });
+
+  test('an unpaid invoice pays nothing however it is credited', async () => {
+    const dep = await issue({ account_id: account.id, kind: 'build', deposit: true });
+    expect([200, 201]).toContain((await creditNote(dep.body.invoice.id, 359600)).status);
+    expect(await payable()).toBe(0);
+  });
+});

@@ -23,9 +23,38 @@ const KINDS = ['build', 'recurring'];
 // payment is capped at the reduced outstanding and can never reach total_gross.
 // This mirrors invoiceService.outstandingOf(): received cash must cover what is
 // still owed after credits.
+// "The customer’s money is in, and the sale still stands." Two tests, not one.
+//
+// Money moves in four counters, not one: amount_paid and amount_refunded are the
+// CASH legs; amount_credited reverses the SALE. Undoing a sale properly is two
+// facts (issueCreditNote says so in its own header) — a credit note for the
+// document, a refund for the money — so any test that reads only one of them is
+// wrong in both directions.
+//
+// The surviving share of the sale is `total_gross - amount_credited`. Requiring
+// cash >= surviving share is necessary but NOT sufficient: credit everything and
+// the comparison becomes 0 >= 0, which is vacuously true, so a fully credited
+// invoice — even one that was never paid at all — read as paid in full. Hence
+// the explicit `> 0` guard.
+const SURVIVING_GROSS = `(i.total_gross - i.amount_credited)`;
 const PAID_IN_FULL = `(
   i.status <> 'cancelled'
-  AND i.amount_paid - i.amount_refunded >= i.total_gross - i.amount_credited
+  AND ${SURVIVING_GROSS} > 0
+  AND i.amount_paid - i.amount_refunded >= ${SURVIVING_GROSS}
+)`;
+
+// What of an event’s accrued commission is EARNED right now. Commission follows
+// the sale proportionally: credit half the invoice and half the commission was
+// never earned, however the rest was settled. D-003 earns on receipt, and money
+// handed back was never received in any sense that survives.
+//
+// ROUND() on numeric is half-away-from-zero and every operand is >= 0 here, so it
+// agrees with Math.round in JS. Never recompute this in JS from floats.
+const PAYABLE_NOW_ISK = `(
+  CASE WHEN NOT ${PAID_IN_FULL} THEN 0
+       ELSE ROUND(e.amount_isk::numeric * ${SURVIVING_GROSS}::numeric
+                  / NULLIF(i.total_gross, 0)::numeric)::bigint
+  END
 )`;
 
 // First day of the invoice month. Takes the ISO date the invoice was issued
@@ -90,7 +119,7 @@ class Commission {
               e.seller_user_id, COALESCE(u.display_name, u.username) AS seller_name, u.username AS seller_username,
               e.kind, e.period, e.base_amount_isk, e.rate_bp, e.amount_isk, e.invoice_id, e.created_at,
               i.invoice_number, i.status AS invoice_status, i.total_gross, i.amount_paid,
-              ${PAID_IN_FULL} AS invoice_paid
+              ${PAID_IN_FULL} AS invoice_paid, ${PAYABLE_NOW_ISK} AS payable_now_isk
          FROM commission_events e
          JOIN customer_accounts a ON a.id = e.account_id
          JOIN users u ON u.id = e.seller_user_id
@@ -103,7 +132,7 @@ class Commission {
     return rows;
   }
 
-  /** Per seller per month: accrued vs payable (invoice fully paid). */
+  /** Per seller per month: accrued vs payable (the settled, uncredited share). */
   static async report(scope, { from = null, to = null } = {}) {
     const params = [];
     const clauses = [];
@@ -115,7 +144,7 @@ class Commission {
               e.period,
               COUNT(*)::int AS events,
               SUM(e.amount_isk)::bigint AS accrued_isk,
-              SUM(CASE WHEN ${PAID_IN_FULL} THEN e.amount_isk ELSE 0 END)::bigint AS payable_isk,
+              SUM(${PAYABLE_NOW_ISK})::bigint AS payable_isk,
               SUM(CASE WHEN e.kind = 'build' THEN e.amount_isk ELSE 0 END)::bigint AS build_isk,
               SUM(CASE WHEN e.kind = 'recurring' THEN e.amount_isk ELSE 0 END)::bigint AS recurring_isk
          FROM commission_events e
@@ -132,5 +161,7 @@ class Commission {
 
 Commission.KINDS = KINDS;
 Commission.periodOf = periodOf;
+Commission.PAID_IN_FULL = PAID_IN_FULL;
+Commission.PAYABLE_NOW_ISK = PAYABLE_NOW_ISK;
 
 module.exports = Commission;
