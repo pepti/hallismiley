@@ -54,6 +54,11 @@ const PAYMENT_ACCOUNTS = {
 };
 
 const AR_ACCOUNT = '1100';
+// Fyrirframinnheimtar tekjur (migration 101). A build deposit is invoiced
+// before the work is delivered, so its net is a LIABILITY until go-live
+// (l. nr. 3/2006, 26. gr.) even though it is skattskyld velta on the invoice
+// date (l. nr. 50/1988, 13. gr.). Two clocks, one document.
+const DEFERRED_REVENUE_ACCOUNT = '2150';
 const VAT_OUTPUT_ACCOUNT = { 24: '2200', 11: '2210' };
 
 // Which revenue account a line belongs in. Zero-rated turnover is tracked in its
@@ -884,9 +889,20 @@ async function issueCreditNote(client, invoiceId, opts = {}) {
   );
   const revenueTotal = revRows.reduce((a, r) => a + Number(r.net), 0);
   const revenueShares = allocateProportional(creditNet, revRows.map(r => Number(r.net)));
+  // A deposit that has already been RECOGNISED is credited against the account
+  // its net was recognised INTO, not against the deferred account. Crediting
+  // 2150 a second time would drive a liability to a debit balance and leave
+  // 290.000 of recognised revenue standing against a sale that no longer
+  // exists. Unreleased deposits still credit 2150, which is correct: that is
+  // where their net still sits. The invariant either way is that 2150 never
+  // goes debit.
+  const netAccountFor = code =>
+    (invoice.revenue_recognised_at && code === DEFERRED_REVENUE_ACCOUNT && invoice.recognised_into_account)
+      ? invoice.recognised_into_account
+      : code;
   revRows.forEach((r, i) => {
     if (revenueShares[i] > 0) {
-      legs.push({ accountCode: r.revenue_account, debit: revenueShares[i], memo: 'Sala bakfærð' });
+      legs.push({ accountCode: netAccountFor(r.revenue_account), debit: revenueShares[i], memo: 'Sala bakfærð' });
     }
   });
   if (revenueTotal === 0 && creditNet > 0) {
@@ -1081,7 +1097,13 @@ const { invoiceableProblems } = require('./peppol/party');
     unit_price_gross: gross, vat_rate: vatRate,
     gross_before_discount: gross, discount_gross: 0,
     line_net: net, line_vat: vat, line_gross: gross,
-    revenue_account: revenueAccountFor({ vatRate, isService: true }),
+    // The account this line’s NET is credited to — a revenue account normally,
+    // deferred income for a prepayment on work not yet delivered. The column
+    // name says "revenue_account" because renaming it would touch POS, the
+    // reports and the archive export for no behavioural gain.
+    revenue_account: (kind === 'build' && deposit)
+      ? DEFERRED_REVENUE_ACCOUNT
+      : revenueAccountFor({ vatRate, isService: true }),
     is_shipping: false,
   };
   const totals = {
@@ -1188,14 +1210,89 @@ const { invoiceableProblems } = require('./peppol/party');
     }
   }
 
+  // Issuing the FINAL build half IS the delivery under D-005, so it releases
+  // the deposit from deferred income into revenue — in this same transaction.
+  // No deposit, or one already released, is a no-op.
+  let recognition = null;
+  if (kind === 'build' && !deposit) {
+    const { rows: dep } = await client.query(
+      `SELECT i.id, i.invoice_number, i.subtotal_net, i.amount_credited, i.total_gross,
+              (SELECT vat_rate FROM invoice_lines WHERE invoice_id = i.id LIMIT 1) AS vat_rate
+         FROM invoices i
+        WHERE i.account_id = $1 AND i.service_kind = 'build_deposit'
+          AND i.status <> 'cancelled' AND i.revenue_recognised_at IS NULL
+        LIMIT 1`,
+      [account.id]
+    );
+    if (dep.length) {
+      recognition = await recogniseDeposit(client, {
+        depositInvoice: dep[0], recogniseAt: issuedAt, createdBy,
+      });
+    }
+  }
+
   logger.info(
-    { invoiceId: invoice.id, invoiceNumber, accountId: account.id, kind, period: entry.period },
+    { invoiceId: invoice.id, invoiceNumber, accountId: account.id, kind, period: entry.period,
+      recognisedIsk: recognition ? recognition.released : null },
     'service invoice issued'
   );
-  return { invoice, created: true, commission };
+  return { invoice, created: true, commission, recognition };
 }
 
+/**
+ * Release a build deposit from deferred income into revenue. Called when the
+ * FINAL build invoice is issued — that is the delivery under D-005 — inside
+ * the same transaction.
+ *
+ * Deliberately a SECOND entry rather than a reversal of the deposit’s original
+ * entry: reversing would pull the net out of box A in the deposit’s period,
+ * which 13. gr. does not allow, and becomes impossible once that period is
+ * filed and locked. The release nets to zero in box A (credit 4110, debit
+ * 2150), so turnover is counted exactly once, in the right period.
+ */
+async function recogniseDeposit(client, { depositInvoice, recogniseAt, createdBy = null }) {
+  if (!depositInvoice) return null;
+  // Claim it race-safely, the same idiom as the markadur hand-off: no row, no
+  // entry, so two concurrent callers cannot both release the same deposit.
+  const intoAccount = revenueAccountFor({
+    vatRate: Number(depositInvoice.vat_rate) || STANDARD_VAT_RATE, isService: true,
+  });
+  const { rows: claimed } = await client.query(
+    `UPDATE invoices SET revenue_recognised_at = $2::date, recognised_into_account = $3
+      WHERE id = $1 AND revenue_recognised_at IS NULL
+      RETURNING id, subtotal_net, amount_credited, total_gross`,
+    [depositInvoice.id, recogniseAt, intoAccount]
+  );
+  if (!claimed.length) return null;
+
+  // Release what was actually DEFERRED, read from the stored invoice — never a
+  // recomputed round(build_fee/2), because the fee may have changed between
+  // the two halves. Net off anything already credited, and floor at zero.
+  const row = claimed[0];
+  const creditedNet = Number(row.total_gross) > 0
+    ? Math.round(Number(row.subtotal_net) * Number(row.amount_credited || 0) / Number(row.total_gross))
+    : 0;
+  const released = Math.max(Number(row.subtotal_net) - creditedNet, 0);
+  if (released === 0) return null;
+
+  const entry = await ledger.postEntry(client, {
+    entryDate: recogniseAt,
+    memo: `Innlausn innborgunar — reikningur ${depositInvoice.invoice_number} tekjufærður við gangsetningu`,
+    sourceType: 'revenue_recognition',
+    sourceId: depositInvoice.id,
+    createdBy,
+    lines: [
+      { accountCode: DEFERRED_REVENUE_ACCOUNT, debit: released, memo: 'Innborgun innleyst' },
+      { accountCode: intoAccount, credit: released, memo: 'Tekjufærsla við afhendingu' },
+    ],
+  });
+  await client.query(`UPDATE invoices SET revenue_recognised_entry_id = $2 WHERE id = $1`,
+    [depositInvoice.id, entry.id]);
+  return { released, entryId: entry.id, intoAccount };
+}
 module.exports = {
+  recogniseDeposit,
+  DEFERRED_REVENUE_ACCOUNT,
   InvoiceError,
   createServiceInvoice,
   SERVICE_KINDS,

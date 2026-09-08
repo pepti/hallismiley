@@ -2124,6 +2124,7 @@
   "adminBooks.ledger.sourceType.stripe": "Stripe",
   "adminBooks.ledger.sourceType.payroll": "Payroll",
   "adminBooks.ledger.sourceType.pos": "Counter sale",
+  "adminBooks.ledger.sourceType.revenue_recognition": "Revenue recognition",
   "adminBooks.ledger.sourceType.opening": "Opening balance",
   "adminBooks.ledger.accountFilter": "Account",
   "adminBooks.ledger.accountPlaceholder": "e.g. 1900",
