@@ -66,3 +66,32 @@
 @media (max-width: 720px) {
   .acct-audit li { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* Field groups on the account detail form (migration 100). The form went past
+   twenty fields when the buyer party block landed, and the billing block is
+   filled in once, at onboarding, from a different source than the contract. */
+.acct-group { border: 0; padding: 0; margin: 0 0 1.5rem; }
+.acct-group > legend {
+  padding: 0;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.acct-group__help {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.82rem; color: var(--text-secondary);
+}
+
+/* Readiness notices. Tokens only (invariant 15) — checked on Glóð, Bjart and
+   Miðnætti; --warning/--success carry their own -dim wash in every theme. */
+.acct-notice {
+  margin: 0 0 0.85rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.acct-notice--warn { background: var(--warning-dim); color: var(--warning); border-color: var(--warning); }
+.acct-notice--ok   { background: var(--success-dim); color: var(--success); border-color: var(--success); }
+.acct-notice p  { margin: 0; }
+.acct-notice ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.acct-notice li { margin: 0.15rem 0; }

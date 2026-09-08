@@ -224,7 +224,8 @@ describe('regressions', () => {
     // from ANY holder of the accounts view, so a seller could create an
     // account at 90% and invoice themselves the difference.
     const mine = await request(app).post(ACCOUNTS).set('Cookie', sellerA).send({
-      name: 'Gráðugur ehf.', tier: 'vefur', build_fee_isk: 400000, monthly_fee_isk: 20000,
+      name: 'Gráðugur ehf.', tier: 'vefur', kennitala: '9900000052',
+      build_fee_isk: 400000, monthly_fee_isk: 20000,
       build_rate_bp: 9000, recurring_rate_bp: 9000,
     });
     expect(mine.status).toBe(201);

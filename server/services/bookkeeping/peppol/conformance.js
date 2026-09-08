@@ -4,6 +4,7 @@
 // refusal naming the part, never a parse of the free-text column.
 
 const { countryCode, digits } = require('./identifiers');
+const { buyerPartyProblems, buyerOfInvoice } = require('./party');
 const { computeTotals } = require('./vatCategory');
 
 // |BT-114| above this is not two rounding conventions disagreeing; it is an
@@ -41,14 +42,12 @@ function check({ invoice } = {}) {
     add('SELLER_ADDRESS_INCOMPLETE', 'seller_address',
       'The invoice carries no structured seller address (issued before migration 095, or the parts were not set in the books settings at issue). It cannot be derived from the printed address.');
   }
-  if (!String(invoice.customer_street || '').trim() || !String(invoice.customer_city || '').trim()
-      || !String(invoice.customer_postal_zone || '').trim()) {
-    add('BUYER_ADDRESS_INCOMPLETE', 'customer_address',
-      'The invoice carries no structured buyer address (issued before migration 095, or from an order without one). It cannot be derived from the printed address.');
-  }
-  if (!countryCode(invoice.customer_country)) {
-    add('BUYER_COUNTRY_INVALID', 'customer_country', `"${invoice.customer_country}" is not a two-letter ISO 3166-1 country code.`);
-  }
+  // The buyer party, through the SHARED rule (peppol/party.js) so that what the
+  // account screen calls ready and what this refuses can never drift apart.
+  // Note BUYER_ENDPOINT_MISSING is new: BT-49 is mandatory in Peppol, nothing
+  // in the codebase ever wrote customer_endpoint_id, and a B2C shop order has
+  // no addressable buyer at all — the same reason RECEIPT_SERIES exists.
+  problems.push(...buyerPartyProblems(buyerOfInvoice(invoice)));
   if (lines.some(l => Number(l.vat_rate) === 0) && !invoice.zero_rate_reason) {
     add('ZERO_RATE_WITHOUT_REASON', 'zero_rate_reason', 'A 0% line needs the export reason (BR-G-10); a domestic 0% line is a data error.');
   }

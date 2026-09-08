@@ -33,6 +33,11 @@ const TRANSITIONS = {
 // Fields a seller may write (create + patch). Owner and status have their own paths.
 const EDITABLE = [
   'name', 'kennitala', 'tier', 'contact_name', 'contact_email', 'contact_phone',
+  // The buyer party block (migration 100). Seller-editable on purpose:
+  // collecting a billing address is onboarding work, not a commission rate.
+  // The account.updated audit row records which fields changed.
+  'street', 'city', 'postal_zone', 'country', 'vat_number',
+  'endpoint_scheme', 'endpoint_id',
   'repo_name', 'test_url', 'prod_url', 'canonical_host',
   'azure_subscription_id', 'azure_rg_test', 'azure_rg_prod',
   'contract_start', 'contract_end',
@@ -43,6 +48,7 @@ const EDITABLE = [
 const COLUMNS = `
   a.id, a.slug, a.kennitala, a.name, a.market_company_id, a.tier, a.status, a.owner_user_id,
   a.contact_name, a.contact_email, a.contact_phone,
+  a.street, a.city, a.postal_zone, a.country, a.vat_number, a.endpoint_scheme, a.endpoint_id,
   a.repo_name, a.test_url, a.prod_url, a.canonical_host,
   a.azure_subscription_id, a.azure_rg_test, a.azure_rg_prod,
   a.contract_start, a.contract_end,

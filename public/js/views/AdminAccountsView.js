@@ -195,6 +195,18 @@ export class AdminAccountsView {
               <input class="news-editor__input" name="contact_email" type="email" maxlength="200">
             </label>
           </div>
+          <div class="news-editor__row">
+            <label class="news-editor__label">${escHtml(t('accounts.field.street'))}
+              <input class="news-editor__input" name="street" type="text" maxlength="200">
+            </label>
+            <label class="news-editor__label">${escHtml(t('accounts.field.postalZone'))}
+              <input class="news-editor__input" name="postal_zone" type="text" maxlength="20">
+            </label>
+            <label class="news-editor__label">${escHtml(t('accounts.field.city'))}
+              <input class="news-editor__input" name="city" type="text" maxlength="120">
+            </label>
+          </div>
+          <p class="news-editor__help">${escHtml(t('accounts.billingHelp'))}</p>
           ${users.length ? `<label class="news-editor__label">${escHtml(t('accounts.field.owner'))}
             <select class="news-editor__input" name="owner_user_id"><option value="">${escHtml(t('accounts.ownerSelf'))}</option>${users.map(u => `<option value="${escHtml(u.id)}">${escHtml(u.display_name || u.username)}</option>`).join('')}</select>
           </label>` : ''}

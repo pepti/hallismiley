@@ -16,24 +16,48 @@ import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import { TIER_KEY, STATUS_KEY, TIERS, statusChip, isk } from './AdminAccountsView.js';
 
-const FIELDS = [
-  ['name', 'accounts.field.name', 'text'],
-  ['kennitala', 'accounts.field.kennitala', 'text'],
-  ['contact_name', 'accounts.field.contactName', 'text'],
-  ['contact_email', 'accounts.field.contactEmail', 'email'],
-  ['contact_phone', 'accounts.field.contactPhone', 'text'],
-  ['build_fee_isk', 'accounts.field.buildFee', 'number'],
-  ['monthly_fee_isk', 'accounts.field.monthlyFee', 'number'],
-  ['quota_units', 'accounts.field.quota', 'number'],
-  ['contract_start', 'accounts.field.contractStart', 'date'],
-  ['contract_end', 'accounts.field.contractEnd', 'date'],
-  ['repo_name', 'accounts.field.repo', 'text'],
-  ['test_url', 'accounts.field.testUrl', 'url'],
-  ['prod_url', 'accounts.field.prodUrl', 'url'],
-  ['canonical_host', 'accounts.field.canonicalHost', 'text'],
-  ['azure_subscription_id', 'accounts.field.azureSubscription', 'text'],
-  ['azure_rg_test', 'accounts.field.azureRgTest', 'text'],
-  ['azure_rg_prod', 'accounts.field.azureRgProd', 'text'],
+// Grouped rather than one flat wall: migration 100 took this form past twenty
+// fields, and "Reikningsupplýsingar" is a section a person fills in once, at
+// onboarding, from a different source than the contract or the hosting.
+// Still ONE <form> and one Save button — the groups are <fieldset>s, so _save()
+// and its FormData are untouched.
+const FIELD_GROUPS = [
+  ['accounts.group.company', [
+    ['name', 'accounts.field.name', 'text'],
+    ['kennitala', 'accounts.field.kennitala', 'text'],
+  ]],
+  ['accounts.group.contact', [
+    ['contact_name', 'accounts.field.contactName', 'text'],
+    ['contact_email', 'accounts.field.contactEmail', 'email'],
+    ['contact_phone', 'accounts.field.contactPhone', 'text'],
+  ]],
+  // The buyer party block. These go on the invoice verbatim and are FROZEN
+  // there at issue, which is what accounts.billingHelp tells the admin.
+  ['accounts.group.billing', [
+    ['street', 'accounts.field.street', 'text'],
+    ['postal_zone', 'accounts.field.postalZone', 'text'],
+    ['city', 'accounts.field.city', 'text'],
+    ['country', 'accounts.field.country', 'text'],
+    ['vat_number', 'accounts.field.vatNumber', 'text'],
+    ['endpoint_scheme', 'accounts.field.endpointScheme', 'text'],
+    ['endpoint_id', 'accounts.field.endpointId', 'text'],
+  ]],
+  ['accounts.group.contract', [
+    ['build_fee_isk', 'accounts.field.buildFee', 'number'],
+    ['monthly_fee_isk', 'accounts.field.monthlyFee', 'number'],
+    ['quota_units', 'accounts.field.quota', 'number'],
+    ['contract_start', 'accounts.field.contractStart', 'date'],
+    ['contract_end', 'accounts.field.contractEnd', 'date'],
+  ]],
+  ['accounts.group.system', [
+    ['repo_name', 'accounts.field.repo', 'text'],
+    ['test_url', 'accounts.field.testUrl', 'url'],
+    ['prod_url', 'accounts.field.prodUrl', 'url'],
+    ['canonical_host', 'accounts.field.canonicalHost', 'text'],
+    ['azure_subscription_id', 'accounts.field.azureSubscription', 'text'],
+    ['azure_rg_test', 'accounts.field.azureRgTest', 'text'],
+    ['azure_rg_prod', 'accounts.field.azureRgProd', 'text'],
+  ]],
 ];
 const RATE_FIELDS = [
   ['build_rate_bp', 'accounts.field.buildRate'],
@@ -73,6 +97,21 @@ export class AdminAccountDetailView {
   // late responses paint into a detached tree.
   destroy() {
     this._destroyed = true;
+  }
+
+  // The buyer party as the SERVER judges it (accountsController._withReadiness →
+  // peppol/party.js), never re-derived here — a second copy of the rule on the
+  // client is how a screen ends up saying "ready" while the export 409s.
+  _peppolNoticeHtml() {
+    const a = this._account || {};
+    const problems = a.peppol_problems || [];
+    if (!problems.length) {
+      return `<p class="acct-notice acct-notice--ok">${escHtml(t('accounts.peppolReady'))}</p>`;
+    }
+    return `<div class="acct-notice acct-notice--warn">
+      <p>${escHtml(t('accounts.peppolMissing'))}</p>
+      <ul>${problems.map(p => `<li>${escHtml(t(`accounts.peppol.${p.code}`))}</li>`).join('')}</ul>
+    </div>`;
   }
 
   async render() {
@@ -130,17 +169,22 @@ export class AdminAccountDetailView {
       <section class="mon-card">
         <h2 class="mon-card__title">${escHtml(t('accounts.details'))}</h2>
         <form id="acct-form" class="acct-form" novalidate>
-          <div class="acct-grid">
-            <label class="acct-field"><span>${escHtml(t('accounts.field.tier'))}</span>
-              <select name="tier">${TIERS.map(x => `<option value="${x}" ${a.tier === x ? 'selected' : ''}>${escHtml(t(TIER_KEY[x]))}</option>`).join('')}</select>
-            </label>
-            ${FIELDS.map(([name, key, type]) => `<label class="acct-field"><span>${escHtml(t(key))}</span>
-              <input name="${name}" type="${type}" value="${escHtml(a[name] == null ? '' : (type === 'date' ? String(a[name]).slice(0, 10) : a[name]))}" ${type === 'number' ? 'min="0" step="1"' : ''}>
-            </label>`).join('')}
-            ${admin ? RATE_FIELDS.map(([name, key]) => `<label class="acct-field"><span>${escHtml(t(key))}</span>
-              <input name="${name}" type="number" min="0" max="10000" step="1" value="${escHtml(a[name] ?? '')}">
-            </label>`).join('') : ''}
-          </div>
+          ${FIELD_GROUPS.map(([legend, fields]) => `
+          <fieldset class="acct-group">
+            <legend>${escHtml(t(legend))}</legend>
+            ${legend === 'accounts.group.billing' ? `<p class="acct-group__help">${escHtml(t('accounts.billingHelp'))}</p>${this._peppolNoticeHtml()}` : ''}
+            <div class="acct-grid">
+              ${legend === 'accounts.group.company' ? `<label class="acct-field"><span>${escHtml(t('accounts.field.tier'))}</span>
+                <select name="tier">${TIERS.map(x => `<option value="${x}" ${a.tier === x ? 'selected' : ''}>${escHtml(t(TIER_KEY[x]))}</option>`).join('')}</select>
+              </label>` : ''}
+              ${fields.map(([name, key, type]) => `<label class="acct-field"><span>${escHtml(t(key))}</span>
+                <input name="${name}" type="${type}" value="${escHtml(a[name] == null ? '' : (type === 'date' ? String(a[name]).slice(0, 10) : a[name]))}" ${type === 'number' ? 'min="0" step="1"' : ''}>
+              </label>`).join('')}
+              ${legend === 'accounts.group.contract' && admin ? RATE_FIELDS.map(([name, key]) => `<label class="acct-field"><span>${escHtml(t(key))}</span>
+                <input name="${name}" type="number" min="0" max="10000" step="1" value="${escHtml(a[name] ?? '')}">
+              </label>`).join('') : ''}
+            </div>
+          </fieldset>`).join('')}
           <label class="acct-field acct-field--wide"><span>${escHtml(t('accounts.field.notes'))}</span>
             <textarea name="notes" rows="4" maxlength="4000">${escHtml(a.notes || '')}</textarea>
           </label>
@@ -182,7 +226,11 @@ export class AdminAccountDetailView {
           <label class="acct-field" data-for="overage"><span>${escHtml(t('accounts.invoice.unitPrice'))}</span>
             <input name="unit_price_isk" type="number" min="1" step="1">
           </label>
-          <button type="submit" class="btn btn--primary btn--sm">${escHtml(t('accounts.invoice.issue'))}</button>
+          ${a.invoice_ready === false
+            ? `<p class="acct-notice acct-notice--warn">${escHtml(t('accounts.invoiceBlocked'))}</p>`
+            : ''}
+          <button type="submit" class="btn btn--primary btn--sm"
+                  ${a.invoice_ready === false ? `disabled title="${escHtml(t('accounts.invoiceBlocked'))}"` : ''}>${escHtml(t('accounts.invoice.issue'))}</button>
           <p class="admin-shop__error" id="acct-invoice-error" role="alert"></p>
         </form>
       </section>` : ''}

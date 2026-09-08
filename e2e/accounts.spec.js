@@ -15,6 +15,9 @@ const { seedSalesUser, loginAsSales } = require('./lib/salesUser');
 
 const STAMP = Date.now();
 const NAME = `E2E Viðskiptavinur ${STAMP}`;
+// customer_accounts.kennitala is UNIQUE and the e2e database survives between
+// runs, so a hardcoded one passes in isolation and collides on the second run.
+const KENNITALA = `99${String(STAMP).slice(-8)}`;
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -49,6 +52,13 @@ test.describe('customer accounts', () => {
     await page.click('#accounts-new');
     await page.fill('#acct-create-form [name=name]', NAME);
     await page.selectOption('#acct-create-form [name=tier]', 'verslun');
+    // The buyer party (migration 100). The kennitala is the statutory minimum
+    // and the issue button stays disabled without it; the address is what makes
+    // the invoice Peppol-exportable and what the PDF prints.
+    await page.fill('#acct-create-form [name=kennitala]', KENNITALA);
+    await page.fill('#acct-create-form [name=street]', 'Bæjargata 5');
+    await page.fill('#acct-create-form [name=postal_zone]', '101');
+    await page.fill('#acct-create-form [name=city]', 'Reykjavík');
     await page.click('#acct-create-form [type=submit]');
     await page.waitForURL(/\/admin\/accounts\/\d+/, { timeout: 10_000 });
     await expect(page.locator('.admin-title')).toHaveText(NAME);

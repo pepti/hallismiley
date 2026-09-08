@@ -322,6 +322,8 @@
   "validation.account.statusInvalid": "staða verður að vera ein af: lead, offered, signed, provisioning, building, live, paused, churned",
   "validation.account.slugInvalid": "slóðarhluti verður að vera 3–40 lágstafir, tölustafir eða bandstrik",
   "validation.account.kennitalaInvalid": "kennitala verður að vera 10 tölustafir",
+  "validation.account.endpointSchemeInvalid": "auðkennisskrá verður að vera fjórir tölustafir (0196 fyrir kennitölu)",
+  "validation.account.countryInvalid": "land verður að vera tveggja stafa ISO-kóði (t.d. IS)",
   "validation.account.emailInvalid": "contact_email verður að vera gilt netfang",
   "validation.account.fieldInvalid": "{field} er ógilt",
   "validation.account.fieldMaxLength": "{field} má mest vera {n} stafir",

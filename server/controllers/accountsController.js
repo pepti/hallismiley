@@ -16,6 +16,7 @@ const Commission = require('../models/Commission');
 const staffAudit = require('../services/staffAudit');
 const { hasRole } = require('../auth/roles');
 const { toIsoDate } = require('../utils/booksDate');
+const { buyerPartyProblems, buyerOfAccount, invoiceableProblems } = require('../services/bookkeeping/peppol/party');
 const logger = require('../logger');
 
 // Commission rates decide what the company pays the account's owner, so only an
@@ -28,6 +29,25 @@ const RATE_FIELDS = ['build_rate_bp', 'recurring_rate_bp'];
 function stripRateFields(req) {
   if (hasRole(req.user, 'admin')) return;
   for (const f of RATE_FIELDS) delete req.body[f];
+}
+
+// Two readiness answers, deliberately separate — the same split Setting makes
+// between seller_complete and peppol_complete. `invoice_ready` is the STATUTORY
+// minimum and gates issuing; `peppol_complete` gates only the downstream export,
+// so a missing postal code can never stop the company invoicing. Both come from
+// peppol/party.js — the same rules the export preflight applies — so the screen
+// and the 409 can never disagree.
+function _withReadiness(account) {
+  if (!account) return account;
+  const invoiceProblems = invoiceableProblems(account);
+  const peppolProblems = buyerPartyProblems(buyerOfAccount(account));
+  return {
+    ...account,
+    invoice_ready: invoiceProblems.length === 0,
+    invoice_problems: invoiceProblems,
+    peppol_complete: peppolProblems.length === 0,
+    peppol_problems: peppolProblems,
+  };
 }
 
 function _noStore(res) { res.setHeader('Cache-Control', 'no-store'); }
@@ -100,7 +120,7 @@ const accountsController = {
       if (!id) return res.status(400).json({ error: t(req.locale, 'errors.accounts.invalidId'), code: 400 });
       const account = await CustomerAccount.findById(req.accountScope, id);
       if (!account) return res.status(404).json({ error: t(req.locale, 'errors.accounts.notFound'), code: 404 });
-      return res.json({ account, transitions: CustomerAccount.TRANSITIONS[account.status] || [] });
+      return res.json({ account: _withReadiness(account), transitions: CustomerAccount.TRANSITIONS[account.status] || [] });
     } catch (err) { next(err); }
   },
 
@@ -137,7 +157,7 @@ const accountsController = {
       const account = await withTx(client =>
         CustomerAccount.update(client, req.accountScope, id, req.body, staffAudit.actorOf(req)));
       if (!account) return res.status(404).json({ error: t(req.locale, 'errors.accounts.notFound'), code: 404 });
-      return res.json({ account, transitions: CustomerAccount.TRANSITIONS[account.status] || [] });
+      return res.json({ account: _withReadiness(account), transitions: CustomerAccount.TRANSITIONS[account.status] || [] });
     } catch (err) {
       if (sendError(req, res, err)) return;
       next(err);

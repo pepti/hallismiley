@@ -321,6 +321,8 @@
   "validation.account.statusInvalid": "status must be one of: lead, offered, signed, provisioning, building, live, paused, churned",
   "validation.account.slugInvalid": "slug must be 3–40 lowercase letters, digits or hyphens",
   "validation.account.kennitalaInvalid": "kennitala must be 10 digits",
+  "validation.account.endpointSchemeInvalid": "endpoint scheme must be four digits (0196 for a kennitala)",
+  "validation.account.countryInvalid": "country must be a two-letter ISO code (e.g. IS)",
   "validation.account.emailInvalid": "contact_email must be a valid email address",
   "validation.account.fieldInvalid": "{field} is invalid",
   "validation.account.fieldMaxLength": "{field} must be at most {n} characters",
