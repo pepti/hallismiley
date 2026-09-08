@@ -23,6 +23,9 @@ const ACTIONS = [
   'role.granted', 'role.revoked', 'role.updated',
   'user.invited', 'user.disabled', 'user.enabled',
   'commission.recorded',
+  // Settlement (migration 102 / D-019): issuing a statement, recording that it
+  // was paid, and any manual move of a balance. All three move real money.
+  'commission.statement_issued', 'commission.payout_recorded', 'commission.adjustment_recorded',
 ];
 
 /**

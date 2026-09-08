@@ -4987,6 +4987,224 @@ ON CONFLICT (code) DO NOTHING`,
                          'reversal','stripe','bank','pos','revenue_recognition'))`,
     ],
   },
+  {
+    // ── 102: commission statements, payouts, adjustments ───────────────────
+    // Sölustjóri's design; D-019 (2026-09-08, amending D-003) is the decision.
+    // 098 built the ACCRUAL ledger but nothing recorded that a seller had been
+    // PAID. The unit of settlement is the seller-month statement over a running
+    // balance: payability is DERIVED, so an event payable in month M can stop
+    // being payable in M+2 when a credit note lands, and pinning events to a
+    // payout would need un-pinning — the clawback problem one level down.
+    //
+    //   balance = Σ payable_now(event) + Σ adjustments − Σ payouts
+    //
+    // Clawback is not a separate mechanism; it is that equation going down.
+    // Per D-019 it nets against future statements for 12 months and the
+    // company never invoices a seller for cash — hence no receivable table.
+    //
+    // commission_events keeps its UNIQUE(invoice_id): it is the only thing
+    // stopping a re-issue writing two commission rows for one invoice. If a
+    // later release needs several, expand with `reversal_of` + a partial
+    // unique index FIRST; a bare DROP CONSTRAINT keeps old code running while
+    // silently removing a guarantee it relies on.
+    // Reference copy: server/migrations/102_commission_settlement.sql
+    name: '102_commission_settlement',
+    statements: [
+      `ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS payee_kind       TEXT,
+  ADD COLUMN IF NOT EXISTS payee_kennitala  TEXT,
+  ADD COLUMN IF NOT EXISTS payee_vat_number TEXT`,
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_payee_kind_valid`,
+      `ALTER TABLE users ADD CONSTRAINT users_payee_kind_valid
+  CHECK (payee_kind IS NULL OR payee_kind IN ('contractor', 'employee', 'internal'))`,
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_payee_kennitala_shape`,
+      `ALTER TABLE users ADD CONSTRAINT users_payee_kennitala_shape
+  CHECK (payee_kennitala IS NULL OR payee_kennitala ~ '^[0-9]{10}$')`,
+      `CREATE TABLE IF NOT EXISTS commission_statements (
+  id                    BIGSERIAL   PRIMARY KEY,
+  seller_user_id        TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  period                DATE        NOT NULL,
+  cutoff_at             TIMESTAMPTZ NOT NULL,
+  previous_statement_id BIGINT      REFERENCES commission_statements(id) ON DELETE RESTRICT,
+  payee_kind            TEXT        NOT NULL DEFAULT 'contractor'
+                                    CHECK (payee_kind IN ('contractor', 'employee', 'internal')),
+  payee_kennitala       TEXT,
+  payee_vat_number      TEXT,
+  opening_balance_isk   BIGINT      NOT NULL,
+  earned_isk            BIGINT      NOT NULL DEFAULT 0 CHECK (earned_isk >= 0),
+  clawback_isk          BIGINT      NOT NULL DEFAULT 0 CHECK (clawback_isk >= 0),
+  adjustment_isk        BIGINT      NOT NULL DEFAULT 0,
+  settled_isk           BIGINT      NOT NULL DEFAULT 0 CHECK (settled_isk >= 0),
+  closing_balance_isk   BIGINT      NOT NULL,
+  minimum_isk           BIGINT      NOT NULL DEFAULT 25000 CHECK (minimum_isk >= 0),
+  payable_isk           BIGINT      NOT NULL CHECK (payable_isk >= 0),
+  carried_isk           BIGINT      NOT NULL,
+  amount_paid_isk       BIGINT      NOT NULL DEFAULT 0 CHECK (amount_paid_isk >= 0),
+  currency              TEXT        NOT NULL DEFAULT 'ISK' CHECK (currency = 'ISK'),
+  note                  TEXT        NOT NULL DEFAULT '',
+  issued_by             TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  issued_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_statements_period_first_day
+    CHECK (EXTRACT(DAY FROM period) = 1),
+  CONSTRAINT commission_statements_balance
+    CHECK (closing_balance_isk =
+           opening_balance_isk + earned_isk - clawback_isk + adjustment_isk - settled_isk),
+  CONSTRAINT commission_statements_split
+    CHECK (closing_balance_isk = payable_isk + carried_isk),
+  CONSTRAINT commission_statements_paid_within
+    CHECK (amount_paid_isk <= payable_isk),
+  CONSTRAINT commission_statements_internal_never_payable
+    CHECK (payee_kind <> 'internal' OR payable_isk = 0)
+)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_statements_seller_period
+  ON commission_statements (seller_user_id, period)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_statements_chain
+  ON commission_statements (previous_statement_id)
+  WHERE previous_statement_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_statements_genesis
+  ON commission_statements (seller_user_id)
+  WHERE previous_statement_id IS NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_statements_seller
+  ON commission_statements (seller_user_id, period DESC)`,
+      `CREATE TABLE IF NOT EXISTS commission_adjustments (
+  id             BIGSERIAL   PRIMARY KEY,
+  seller_user_id TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  account_id     INTEGER     REFERENCES customer_accounts(id) ON DELETE SET NULL,
+  kind           TEXT        NOT NULL CHECK (kind IN ('writeoff', 'manual_credit', 'manual_debit')),
+  amount_isk     BIGINT      NOT NULL CHECK (amount_isk <> 0),
+  reason         TEXT        NOT NULL CHECK (length(btrim(reason)) >= 3),
+  effective_on   DATE        NOT NULL,
+  created_by     TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_adjustments_sign CHECK (
+    (kind = 'writeoff'      AND amount_isk > 0) OR
+    (kind = 'manual_credit' AND amount_isk > 0) OR
+    (kind = 'manual_debit'  AND amount_isk < 0)
+  )
+)`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_adjustments_seller
+  ON commission_adjustments (seller_user_id, id)`,
+      `CREATE TABLE IF NOT EXISTS commission_payouts (
+  id                    BIGSERIAL   PRIMARY KEY,
+  statement_id          BIGINT      NOT NULL REFERENCES commission_statements(id) ON DELETE RESTRICT,
+  seller_user_id        TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  amount_isk            BIGINT      NOT NULL CHECK (amount_isk > 0),
+  paid_on               DATE        NOT NULL,
+  method                TEXT        NOT NULL CHECK (method IN ('bank_transfer', 'payroll', 'other')),
+  reference             TEXT        NOT NULL DEFAULT '',
+  seller_invoice_number TEXT,
+  seller_invoice_date   DATE,
+  seller_vat_isk        BIGINT      NOT NULL DEFAULT 0 CHECK (seller_vat_isk >= 0),
+  expense_id            TEXT        REFERENCES expenses(id) ON DELETE SET NULL,
+  idempotency_key       TEXT        NOT NULL,
+  note                  TEXT        NOT NULL DEFAULT '',
+  created_by            TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_payouts_idempotency
+  ON commission_payouts (idempotency_key)`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_payouts_statement ON commission_payouts (statement_id, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_payouts_seller    ON commission_payouts (seller_user_id, id)`,
+      `CREATE TABLE IF NOT EXISTS commission_statement_lines (
+  id                  BIGSERIAL   PRIMARY KEY,
+  statement_id        BIGINT      NOT NULL REFERENCES commission_statements(id) ON DELETE RESTRICT,
+  line_kind           TEXT        NOT NULL CHECK (line_kind IN ('earned', 'clawback', 'adjustment', 'payout')),
+  commission_event_id BIGINT      REFERENCES commission_events(id)      ON DELETE RESTRICT,
+  adjustment_id       BIGINT      REFERENCES commission_adjustments(id) ON DELETE RESTRICT,
+  payout_id           BIGINT      REFERENCES commission_payouts(id)     ON DELETE RESTRICT,
+  account_id          INTEGER     REFERENCES customer_accounts(id) ON DELETE RESTRICT,
+  invoice_id          TEXT        REFERENCES invoices(id) ON DELETE RESTRICT,
+  description         TEXT        NOT NULL DEFAULT '',
+  payable_before_isk  BIGINT      NOT NULL DEFAULT 0,
+  payable_after_isk   BIGINT      NOT NULL DEFAULT 0,
+  amount_isk          BIGINT      NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_statement_lines_one_source
+    CHECK (num_nonnulls(commission_event_id, adjustment_id, payout_id) = 1),
+  CONSTRAINT commission_statement_lines_kind_source CHECK (
+    (line_kind IN ('earned', 'clawback') AND commission_event_id IS NOT NULL) OR
+    (line_kind = 'adjustment'            AND adjustment_id       IS NOT NULL) OR
+    (line_kind = 'payout'                AND payout_id           IS NOT NULL)
+  ),
+  CONSTRAINT commission_statement_lines_delta CHECK (
+    line_kind NOT IN ('earned', 'clawback')
+    OR amount_isk = payable_after_isk - payable_before_isk
+  ),
+  CONSTRAINT commission_statement_lines_sign CHECK (
+    (line_kind = 'earned'     AND amount_isk > 0) OR
+    (line_kind = 'clawback'   AND amount_isk < 0) OR
+    (line_kind = 'payout'     AND amount_isk < 0) OR
+    (line_kind = 'adjustment' AND amount_isk <> 0)
+  )
+)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_lines_event
+  ON commission_statement_lines (statement_id, commission_event_id)
+  WHERE commission_event_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_lines_event_latest
+  ON commission_statement_lines (commission_event_id, statement_id DESC)
+  WHERE commission_event_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_lines_adjustment
+  ON commission_statement_lines (adjustment_id) WHERE adjustment_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_lines_payout
+  ON commission_statement_lines (payout_id) WHERE payout_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_lines_statement
+  ON commission_statement_lines (statement_id, id)`,
+      `DROP TRIGGER IF EXISTS trg_commission_statement_lines_immutable ON commission_statement_lines`,
+      `CREATE TRIGGER trg_commission_statement_lines_immutable
+  BEFORE UPDATE OR DELETE ON commission_statement_lines
+  FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `DROP TRIGGER IF EXISTS trg_commission_adjustments_immutable ON commission_adjustments`,
+      `CREATE TRIGGER trg_commission_adjustments_immutable
+  BEFORE UPDATE OR DELETE ON commission_adjustments
+  FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `DROP TRIGGER IF EXISTS trg_commission_payouts_immutable ON commission_payouts`,
+      `CREATE TRIGGER trg_commission_payouts_immutable
+  BEFORE UPDATE OR DELETE ON commission_payouts
+  FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `CREATE OR REPLACE FUNCTION commission_statement_guard()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'commission_statements rows cannot be deleted'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  IF NEW.id <> OLD.id
+     OR NEW.seller_user_id      <> OLD.seller_user_id
+     OR NEW.period              <> OLD.period
+     OR NEW.cutoff_at           <> OLD.cutoff_at
+     OR NEW.previous_statement_id IS DISTINCT FROM OLD.previous_statement_id
+     OR NEW.payee_kind          <> OLD.payee_kind
+     OR NEW.payee_kennitala     IS DISTINCT FROM OLD.payee_kennitala
+     OR NEW.payee_vat_number    IS DISTINCT FROM OLD.payee_vat_number
+     OR NEW.opening_balance_isk <> OLD.opening_balance_isk
+     OR NEW.earned_isk          <> OLD.earned_isk
+     OR NEW.clawback_isk        <> OLD.clawback_isk
+     OR NEW.adjustment_isk      <> OLD.adjustment_isk
+     OR NEW.settled_isk         <> OLD.settled_isk
+     OR NEW.closing_balance_isk <> OLD.closing_balance_isk
+     OR NEW.minimum_isk         <> OLD.minimum_isk
+     OR NEW.payable_isk         <> OLD.payable_isk
+     OR NEW.carried_isk         <> OLD.carried_isk
+     OR NEW.issued_by           <> OLD.issued_by
+     OR NEW.issued_at           <> OLD.issued_at
+     OR NEW.note IS DISTINCT FROM OLD.note THEN
+    RAISE EXCEPTION 'A commission statement is immutable once issued; only amount_paid_isk may change'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_commission_statements_guard ON commission_statements`,
+      `CREATE TRIGGER trg_commission_statements_guard
+  BEFORE UPDATE OR DELETE ON commission_statements
+  FOR EACH ROW EXECUTE FUNCTION commission_statement_guard()`,
+      `DROP TRIGGER IF EXISTS trg_commission_statements_updated_at ON commission_statements`,
+      `CREATE TRIGGER trg_commission_statements_updated_at
+  BEFORE UPDATE ON commission_statements
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

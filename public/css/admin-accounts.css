@@ -95,3 +95,18 @@
 .acct-notice p  { margin: 0; }
 .acct-notice ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 .acct-notice li { margin: 0.15rem 0; }
+
+/* Commission settlement (migration 102; D-019). Tokens only — measured on
+   Glóð, Bjart and Miðnætti. A negative balance is the company's CLAIM and must
+   read as one: silently rendering it like every other figure is how a clawback
+   gets lost. The selectors carry a `td`/`span` so they beat `.admin-table td`,
+   which sets a colour of its own. */
+td.acct-amount--neg, span.acct-amount--neg { color: var(--error); font-variant-numeric: tabular-nums; }
+td.acct-amount--pos, span.acct-amount--pos { color: var(--success); font-variant-numeric: tabular-nums; }
+.acct-figures { margin: 0.75rem 0 1.25rem; }
+.acct-figures td:first-child { color: var(--text-secondary); }
+.acct-h2-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; margin-top: 2rem;
+}
+.acct-h2-row .acct-h2 { margin: 0; }
