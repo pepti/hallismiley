@@ -8,6 +8,12 @@ import { SOCIAL_LOGIN_ENABLED } from '../utils/features.js';
 export class LoginModal {
   constructor() {
     this._overlay = null;
+    // One stable reference for the life of the modal. mount() used to add an
+    // ANONYMOUS keydown listener to document and never remove it, so every ESC
+    // anywhere on the page closed the modal for the rest of the session — and
+    // because _resetToPasswordStep() re-mounts, an abandoned 2FA attempt stacked
+    // another one each time. The listener rides the open/close lifecycle now.
+    this._onKeydown = (e) => { if (e.key === 'Escape') this.close(); };
   }
 
   mount() {
@@ -61,7 +67,6 @@ export class LoginModal {
     overlay.querySelector('.modal__close').addEventListener('click', () => this.close());
     overlay.addEventListener('click', e => { if (e.target === overlay) this.close(); });
     overlay.querySelector('.login-form').addEventListener('submit', e => this._onSubmit(e));
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') this.close(); });
 
     overlay.querySelector('#login-forgot-link').addEventListener('click', () => this.close());
     overlay.querySelector('#login-signup-link').addEventListener('click', () => this.close());
@@ -80,6 +85,7 @@ export class LoginModal {
     // Refresh OAuth returnTo on every open — the modal mounts once but the
     // user's current path may have changed since the last open.
     this._refreshOAuthReturnTo();
+    document.addEventListener('keydown', this._onKeydown);
     requestAnimationFrame(() => this._overlay.classList.add('open'));
     this._overlay.querySelector('#login-username').focus();
   }
@@ -99,6 +105,8 @@ export class LoginModal {
   }
 
   close() {
+    // Safe before the guard: removing a handler that was never added is a no-op.
+    document.removeEventListener('keydown', this._onKeydown);
     if (!this._overlay) return;
     this._overlay.classList.remove('open');
     const errEl = this._overlay.querySelector('.form-error');

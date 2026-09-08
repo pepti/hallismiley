@@ -1,0 +1,163 @@
+/* ── Admin UI kit ───────────────────────────────────────────────────────────
+   Shared primitives for the admin lists: sortable headers, the pager, states.
+   Loaded after the per-screen admin sheets and BEFORE themes.css, so
+   html[data-theme] still out-specifies everything here.
+
+   Invariant 15: zero colour literals in this file. Every colour is a token, so
+   the same rules hold on Glóð, Bjart and Miðnætti. */
+
+/* ── Sortable header button ──────────────────────────────────────────────────
+   A real <button> inside the <th> (WAI-ARIA sortable-table pattern), reset back
+   to looking like the header text it replaced. The existing
+   `.admin-table th.sortable` / `.admin-table__sort-arrow` rules in layout.css
+   still do the colour and arrow work — this only undoes button chrome. */
+.admin-table__sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-table__sort-btn:hover { color: var(--text-primary); }
+.admin-table__sort-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Sticky header, opt-in per table via .admin-table-wrap--sticky.
+   The background MUST be a token: a hardcoded #fff here is the classic
+   invariant-15 failure — perfect on Bjart, a white bar across Glóð and
+   Miðnætti. */
+.admin-table-wrap--sticky { max-height: 70vh; overflow: auto; }
+.admin-table-wrap--sticky thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
+
+/* ── Pager ───────────────────────────────────────────────────────────────────
+   `.admin-pagination` was already emitted by two views and had no CSS anywhere,
+   so both shipped as unstyled inline buttons. */
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  /* Wraps rather than overflowing once the size picker joins the row at 375px. */
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-dim);
+}
+.admin-pagination__info,
+.admin-pagination__count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+.admin-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.admin-pagination__count { min-width: 5.5em; text-align: center; }
+.admin-pagination__size {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.admin-pagination__size .form-input--sm {
+  width: auto;
+  padding: 2px var(--sp-2);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .admin-pagination { justify-content: center; }
+  .admin-pagination__info { order: 3; width: 100%; text-align: center; }
+}
+
+/* ── States ──────────────────────────────────────────────────────────────────
+   `.admin-loading` and `.admin-error` already exist in layout.css; these are the
+   pieces that did not: a retry affordance, and skeleton rows for admin. */
+.admin-error__retry { margin-left: var(--sp-3); }
+
+.admin-state {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Skeleton rows. `.skeleton` exists in components.css but was public-side only;
+   its shimmer is token-derived here so it does not glow on the dark themes. */
+.admin-skeleton__bar {
+  height: 0.85em;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--bg-hover) 0%,
+    var(--border-light) 50%,
+    var(--bg-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: admin-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes admin-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+/* utils/motion.js gates the JS; this covers the CSS half. */
+@media (prefers-reduced-motion: reduce) {
+  .admin-skeleton__bar { animation: none; }
+}
+
+/* ── Filter chips ────────────────────────────────────────────────────────────
+   The active state must not be carried by colour alone (WCAG 1.4.1): weight and
+   border change too, and the tint is the reinforcement rather than the signal. */
+.admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-3);
+  border: 1px solid var(--border-dim);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.admin-chip:hover { color: var(--text-primary); border-color: var(--border); }
+.admin-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.admin-chip[aria-pressed="true"] {
+  border-width: 2px;
+  border-color: var(--gold);
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--accent-amber-dim);
+  /* Keep the box the same size as the unpressed chip despite the 2px border. */
+  padding: 3px calc(var(--sp-3) - 1px);
+}
+.admin-chip__n {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.75;
+}

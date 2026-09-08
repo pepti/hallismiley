@@ -42,6 +42,16 @@ export function getViews()        { return _user?.views || []; }
 export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
 export function hasAnyAdminView() { return getViews().length > 0; }
 
+// Mirrors server/services/mfaService.js: the 2FA gate protects an admin by
+// PRIMARY role or by role SET (`admin_anywhere`), and isAdmin() already reads
+// the set — but ProfileView gated its enrolment panel on the primary role
+// alone, so a set-only admin was challenged with no way to comply.
+//
+// An instance that widens the server predicate must widen this in step. Orange
+// Smiley, for example, adds `|| canSeeView('accounts')` for sellers who reach
+// customer data (its ENHANCEMENTS #17).
+export function isMfaProtected() { return isAdmin(); }
+
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.
 //
