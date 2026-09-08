@@ -141,6 +141,40 @@ function pickCustomer(order) {
   };
 }
 
+// The customer_accounts twin of pickCustomer (migration 100). A service invoice
+// used to write customer_address = '' and customer_country = 'IS' as literals,
+// which meant the PDF of every service invoice printed NO BUYER ADDRESS AT ALL
+// — bookkeepingPdf prints splitLines(customer_address) — as well as making a
+// UBL export impossible. Both are fixed by the same data.
+//
+// Snapshot, never a live read: Reglugerð 505/2013 gr. 9 means an address
+// corrected in 2027 must not change what a 2026 document says.
+function pickAccountCustomer(account) {
+  const part = (v, max) => (v ? String(v).trim().slice(0, max) : null) || null;
+  const street = part(account.street, 200);
+  const city = part(account.city, 120);
+  const postalZone = part(account.postal_zone, 20);
+  const country = part(account.country, 2) || 'IS';
+  // The printed block, in the shape pickCustomer produces: street, then
+  // "postcode city", then the country only when it is not Iceland.
+  const lines = [];
+  if (street) lines.push(street);
+  const cityLine = [postalZone, city].filter(Boolean).join(' ');
+  if (cityLine) lines.push(cityLine);
+  if (country && country !== 'IS') lines.push(country);
+  return {
+    name: String(account.name || '').slice(0, 200),
+    kennitala: account.kennitala || null,
+    email: account.contact_email || null,
+    address: lines.join('\n'),
+    country,
+    street, city, postalZone,
+    vatNumber: part(account.vat_number, 20),
+    endpointScheme: part(account.endpoint_scheme, 4),
+    endpointId: part(account.endpoint_id, 50),
+  };
+}
+
 // Iceland is not in the EU VAT area, so a sale shipped abroad is an export and
 // zero-rated — but only against proof of export. Anything shipped within Iceland,
 // and any service, stays at the standard rate.
@@ -951,6 +985,7 @@ async function createServiceInvoice(client, opts = {}) {
   // but keeping them out of the top-level require list keeps this file's import
   // graph the same for the order path.
   const CustomerAccount = require('../../models/CustomerAccount');
+const { invoiceableProblems } = require('./peppol/party');
   const Commission = require('../../models/Commission');
   const staffAudit = require('../staffAudit');
 
@@ -982,6 +1017,22 @@ async function createServiceInvoice(client, opts = {}) {
       409, 'SELLER_INCOMPLETE'
     );
   }
+
+  // The buyer-side twin of the refusal above, and it rests on the same argument:
+  // an invoice that does not identify the buyer is not one the buyer can deduct
+  // the input VAT on, so issuing it with a blank would inherit our defect to the
+  // customer. Deliberately the STATUTORY minimum only — a missing postal code or
+  // Peppol endpoint must NOT block issuing. That is a separate, downstream
+  // question answered at export time by peppol/conformance.js, and an invoice is
+  // a document the company must always be able to produce.
+  const buyerProblems = invoiceableProblems(account);
+  if (buyerProblems.length) {
+    throw new InvoiceError(
+      `Cannot issue: ${buyerProblems.map(x => x.message).join(' ')}`,
+      409, 'ACCOUNT_BUYER_INCOMPLETE'
+    );
+  }
+  const buyer = pickAccountCustomer(account);
 
   const tier = TIER_LABEL[account.tier] || account.tier;
   let net;
@@ -1054,24 +1105,30 @@ async function createServiceInvoice(client, opts = {}) {
        subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
        zero_rate_reason, note, status, created_by,
        seller_street, seller_city, seller_postal_zone, seller_country,
+       customer_street, customer_city, customer_postal_zone,
+       customer_endpoint_scheme, customer_endpoint_id, customer_vat_number,
        account_id, service_kind, service_period
-     ) VALUES ($1,$2,NULL,NULL,$3,$4,$5,$6,$7,$8,$9,'','IS',$10,$11,$12,'ISK',NULL,1,
-               $13,$14,$15,0,0,NULL,$16,'draft',$17,
-               $18,$19,$20,$21,
-               $22,$23,$24::date)
+     ) VALUES ($1,$2,NULL,NULL,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'ISK',NULL,1,
+               $15,$16,$17,0,0,NULL,$18,'draft',$19,
+               $20,$21,$22,$23,
+               $24,$25,$26,$27,$28,$29,
+               $30,$31,$32::date)
      RETURNING *`,
     [
       series, invoiceNumber,
       seller.seller_name, seller.seller_kennitala, seller.seller_vat_number, seller.seller_address,
-      account.name, account.kennitala, account.contact_email,
+      buyer.name, buyer.kennitala, buyer.email, buyer.address, buyer.country,
       issuedAt, dueAt, seller.payment_terms_days,
       net, vat, gross,
       seller.invoice_note, createdBy,
-      // The structured seller block (095), NULL when a part is missing. The
-      // customer parts stay NULL: customer_accounts carries no street address
-      // yet, so a service invoice cannot be exported as UBL until it does.
+      // The structured party block (095/100), NULL when a part is missing.
+      // Both sides are SNAPSHOTS: an issued invoice is corrected by credit
+      // note, never by an edit, so it must not read through to a row that can
+      // still change.
       seller.seller_street || null, seller.seller_city || null,
       seller.seller_postal_zone || null, seller.seller_country || null,
+      buyer.street, buyer.city, buyer.postalZone,
+      buyer.endpointScheme, buyer.endpointId, buyer.vatNumber,
       account.id, serviceKind, servicePeriod,
     ]
   ));

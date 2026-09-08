@@ -82,15 +82,27 @@ function buildUblInvoice({ invoice, settings = {} }) {
   });
 
   const customer = party({
-    endpoint: invoice.customer_endpoint_id
-      ? ids.endpointId({ scheme: invoice.customer_endpoint_scheme, id: invoice.customer_endpoint_id })
-      : null,
+    // BT-49, mandatory in Peppol (PEPPOL-EN16931-R010). This used to emit null
+    // whenever customer_endpoint_id was unset — which was ALWAYS, because
+    // nothing in the codebase wrote that column, so every document we produced
+    // claimed BIS 3.0 conformance while missing a mandatory field. An explicit
+    // endpoint wins; otherwise the kennitala IS the address under 0196, exactly
+    // as on the seller side.
+    endpoint: ids.endpointId({
+      scheme: invoice.customer_endpoint_scheme,
+      id: invoice.customer_endpoint_id,
+      kennitala: invoice.customer_kennitala,
+    }),
     name: invoice.customer_name,
     street: invoice.customer_street,
     city: invoice.customer_city,
     postalZone: invoice.customer_postal_zone,
     country: buyerCountry,
-    vatId: null, // the buyer's VSK number is not recorded on the invoice
+    // BT-48. Absent on a domestic sale (24% is category S and needs no buyer
+    // VAT id) and present for reverse charge, where BR-AE-* requires it.
+    // Routed through the same VAT_ID_ENCODING constant as the seller, so the
+    // two parties can never be encoded differently.
+    vatId: ids.vatId(invoice.customer_vat_number, buyerCountry),
     legalId: ids.legalEntityId(invoice.customer_kennitala),
     email: invoice.customer_email || null,
   });

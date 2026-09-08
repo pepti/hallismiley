@@ -99,7 +99,11 @@ describe('buildUblInvoice — header and parties', () => {
     expect(p.PostalAddress.Country.IdentificationCode).toBe('IS'); // from "Ísland"
     expect(p.PartyLegalEntity.CompanyID['@schemeID']).toBe('0196');
     expect(val(p.PartyLegalEntity.CompanyID)).toBe('1203894599');
-    expect(p.EndpointID).toBeUndefined(); // no Peppol address recorded for this buyer
+    // BT-49 derives from the buyer's kennitala under 0196 when no explicit
+    // endpoint was recorded (migration 100). This used to assert `undefined`:
+    // nothing ever wrote customer_endpoint_id, so EVERY document we emitted
+    // omitted a field Peppol makes mandatory while claiming BIS 3.0 conformance.
+    expect(p.EndpointID).toMatchObject({ '@schemeID': '0196', '#text': '1203894599' });
     expect(p.Contact.ElectronicMail).toBe('thor@example.is');
   });
 

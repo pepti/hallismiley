@@ -826,6 +826,10 @@ const ACCOUNT_TEXT = {           // field → max length
   name: 200, contact_name: 150, contact_email: 200, contact_phone: 40,
   repo_name: 100, test_url: 300, prod_url: 300, canonical_host: 200,
   azure_subscription_id: 100, azure_rg_test: 100, azure_rg_prod: 100,
+  // The buyer party block (migration 100). Lengths mirror
+  // Setting.updateBookkeepingSettings, so the two sides of an invoice are
+  // bounded identically.
+  street: 200, city: 120, postal_zone: 20, vat_number: 20, endpoint_id: 50,
   notes: 4000,
 };
 const ACCOUNT_INTS = {           // field → [min, max]
@@ -865,6 +869,19 @@ function _accountBody(src, errors, { isCreate }) {
     if (src.kennitala === null || src.kennitala === '') picked.kennitala = null;
     else if (typeof src.kennitala !== 'string' || !KENNITALA_RE.test(src.kennitala.trim())) errors.push({ key: 'validation.account.kennitalaInvalid' });
     else picked.kennitala = src.kennitala.trim();
+  }
+  // BT-55. Uppercased before the shape test so "is" is a typo, not a refusal;
+  // the DB CHECK admits NULL or two capitals and nothing else.
+  if (src.country !== undefined) {
+    if (src.country === null || src.country === '') picked.country = null;
+    else if (typeof src.country !== 'string' || !/^[A-Za-z]{2}$/.test(src.country.trim())) errors.push({ key: 'validation.account.countryInvalid' });
+    else picked.country = src.country.trim().toUpperCase();
+  }
+  // BT-49-1: an ISO 6523 ICD / Peppol EAS code. 0196 is the kennitala.
+  if (src.endpoint_scheme !== undefined) {
+    if (src.endpoint_scheme === null || src.endpoint_scheme === '') picked.endpoint_scheme = null;
+    else if (typeof src.endpoint_scheme !== 'string' || !/^[0-9]{4}$/.test(src.endpoint_scheme.trim())) errors.push({ key: 'validation.account.endpointSchemeInvalid' });
+    else picked.endpoint_scheme = src.endpoint_scheme.trim();
   }
   if (src.tier !== undefined) {
     if (typeof src.tier !== 'string' || !ACCOUNT_TIERS.includes(src.tier)) errors.push({ key: 'validation.account.tierInvalid' });
