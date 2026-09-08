@@ -41,6 +41,7 @@ class VatReturnError extends Error {
   }
 }
 
+const ADVANCE_TURNOVER_ACCOUNTS = ['2150'];
 const OUTPUT_VAT_ACCOUNTS = ['2200', '2210'];
 const INPUT_VAT_ACCOUNT = '1310';
 const VAT_SETTLEMENT_ACCOUNT = '2290'; // Virðisaukaskattur til greiðslu
@@ -87,8 +88,18 @@ async function deriveReturn(client, period) {
 
   // Revenue is a credit balance, so turnover is credit − debit (a credit note
   // debits revenue back, which is exactly the reduction the return should show).
+  //
+  // ADVANCE_TURNOVER_ACCOUNTS is why this is not a plain type test. A customer
+  // prepayment is a LIABILITY under l. nr. 3/2006 26. gr. but skattskyld velta
+  // in the period the invoice is dated under l. nr. 50/1988 13. gr. — two
+  // different clocks for the same money. Without it, deferring the deposit
+  // would drop box A by the net while box D kept the 24%, producing a return
+  // where output VAT exceeds 24% of a turnover figure that is not there.
+  // An explicit list, never a type test: 2200/2210 are ALSO liabilities
+  // carrying an output_* vat_code, and they are the TAX, not the velta.
   const turnoverFor = code => rows
-    .filter(r => r.type === 'revenue' && r.vat_code === code)
+    .filter(r => (r.type === 'revenue' || ADVANCE_TURNOVER_ACCOUNTS.includes(r.code))
+               && r.vat_code === code)
     .reduce((a, r) => a + (Number(r.credit) - Number(r.debit)), 0);
 
   // Output VAT is a liability: credit − debit. Input VAT is an asset: debit − credit.
@@ -127,7 +138,8 @@ async function deriveReturn(client, period) {
   // Per-account detail, so the screen can show WHERE each box came from and an
   // accountant can trace a figure without re-running the query by hand.
   const byAccount = rows
-    .filter(r => r.type === 'revenue' || OUTPUT_VAT_ACCOUNTS.includes(r.code) || r.code === INPUT_VAT_ACCOUNT)
+    .filter(r => r.type === 'revenue' || ADVANCE_TURNOVER_ACCOUNTS.includes(r.code)
+             || OUTPUT_VAT_ACCOUNTS.includes(r.code) || r.code === INPUT_VAT_ACCOUNT)
     .map(r => ({
       code: r.code,
       vat_code: r.vat_code,
@@ -613,7 +625,7 @@ async function getFiledReturn(client, period) {
   };
 }
 
-module.exports = {
+module.exports = { ADVANCE_TURNOVER_ACCOUNTS,
   VatReturnError,
   OUTPUT_VAT_ACCOUNTS,
   INPUT_VAT_ACCOUNT,

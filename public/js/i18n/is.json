@@ -2124,6 +2124,7 @@
   "adminBooks.ledger.sourceType.stripe": "Stripe",
   "adminBooks.ledger.sourceType.payroll": "Laun",
   "adminBooks.ledger.sourceType.pos": "Sölukassi",
+  "adminBooks.ledger.sourceType.revenue_recognition": "Innlausn innborgunar",
   "adminBooks.ledger.sourceType.opening": "Stofnstaða",
   "adminBooks.ledger.accountFilter": "Lykill",
   "adminBooks.ledger.accountPlaceholder": "t.d. 1900",

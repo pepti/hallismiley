@@ -90,7 +90,11 @@ describe('POST /invoices/service', () => {
     const { rows: lines } = await db.query(`SELECT description, line_net, line_vat, revenue_account FROM invoice_lines WHERE invoice_id = $1`, [inv.id]);
     expect(lines).toHaveLength(1);
     expect(lines[0].description).toMatch(/Uppsetning Rekstrarkerfisins — Verslun — innborgun 50%/);
-    expect(lines[0].revenue_account).toBe('4110');
+    // 2150, not 4110, since migration 101: a deposit invoiced before the work is
+    // delivered is a customer prepayment (l. nr. 3/2006 26. gr.), released into
+    // revenue when the final half is issued. The commission below is unaffected —
+    // it accrues on the invoice's net, whichever account holds it.
+    expect(lines[0].revenue_account).toBe('2150');
 
     const { rows: audit } = await db.query(`SELECT summary FROM books_audit_log WHERE action = 'invoice.issued' AND entity_id = $1`, [inv.id]);
     expect(audit[0].summary.account_id).toBe(account.id);

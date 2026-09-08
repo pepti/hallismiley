@@ -325,6 +325,8 @@ async function createServiceInvoice(req, res, next) {
     res.status(201).json({
       invoice: await Invoice.findById(result.invoice.id),
       commission: result.commission,
+      // The deferred-income release, when this final half triggered one (101).
+      recognition: result.recognition || null,
       created: true,
     });
   } catch (err) { fail(res, err, next); }
