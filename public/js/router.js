@@ -1,4 +1,3 @@
-import { titleForRoute } from './utils/pageTitle.js';
 import { HomeView }           from './views/HomeView.js';
 import { ProjectsView }       from './views/ProjectsView.js';
 import { ProjectDetailView }  from './views/ProjectDetailView.js';
@@ -62,6 +61,7 @@ import {
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
 import { trackPageView } from './services/usage.js';
+import { titleForRoute } from './utils/pageTitle.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
@@ -339,7 +339,6 @@ export class Router {
     document.title = (typeof view.documentTitle === 'string' && view.documentTitle)
       ? view.documentTitle
       : titleForRoute(pattern || path, getLocale());
-
 
     // Anonymous page-view beacon. Placed after the commit point (past the
     // stale-nav guard and the locale/admin redirects) so it fires exactly once
