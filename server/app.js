@@ -627,6 +627,11 @@ app.use('/api/v1/content',    contentRoutes);
 // MCP connector (ships dark: MCP_ENABLED unset → 404 before auth). Bearer-only
 // (middleware/mcpAuth.js reads no cookies — the documented reason the router
 // omits csrfProtect). Ported from icelandicstore #188; ENHANCEMENTS #13.
+// Mount ORDER: this sits after sanitizeBody and after globalLimiter (above),
+// so tool arguments are tag-stripped and MCP traffic counts against the IP
+// limit — the router's header comment used to claim the opposite (fixed
+// 2026-09-11, docs/mcp.md). Moving it above those two is a decision, not a
+// tidy-up: it would exempt MCP from two global protections (invariant 7).
 app.use('/api/v1/mcp', require('./routes/mcpRoutes'));
 app.use('/api/v1/events',     require('./routes/eventRoutes'));
 app.use('/api/v1/admin/mcp-tokens', require('./routes/mcpAdminRoutes')); // before the /api/v1/admin catch-all

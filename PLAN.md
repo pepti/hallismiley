@@ -1,6 +1,6 @@
 # Orange Smiley public site — build plan
 
-**Status:** Jobs 1–3 complete; stopped for Halli's approval of `ENHANCEMENTS.md`. Since then: self-update module built + merged 2026-08-10 (six phases — see CLAUDE.md and `docs/SELF-UPDATE.md`). **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\Projects\hallismiley` @ `562c637`.
+**Status:** Jobs 1–3 complete; stopped for Halli's approval of `ENHANCEMENTS.md`. Since then: self-update module (merged 2026-08-11), the 2026-08-19 base-sync, Iceland scenes, harvests 1 and 2, R1, the admin re-shape, leads, Markaður, customer accounts + commission — latest migrations 100–102 landed 2026-09-08. **CLAUDE.md is the running head; the dated sections below are frozen records** (status line refreshed 2026-09-11). **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\Projects\hallismiley` @ `562c637`.
 
 Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `company/ORANGE-SMILEY-PLAN.md` (same folder — gitignored, inside this repo).
 
@@ -15,10 +15,10 @@ Not a customer migration — this is Orange Smiley ehf.'s own public instance (m
 
 ## Job 2 — Re-skin + re-organize (presentation/navigation, not capability)
 
-One branch + worktree per chunk, lint + i18n + tests green per chunk, merge to main (Halli reviews history post-hoc — his call 2026-08-09). Chunk order:
+One branch + worktree per chunk, lint + i18n + tests green per chunk, merge to master (Halli reviews history post-hoc — his call 2026-08-09). Chunk order:
 
 1. **B `feat/is-default-locale`** — `PUBLIC_DEFAULT_LOCALE='is'` for the visitor-facing role only; `DEFAULT_LOCALE='en'` stays as content-fallback/storage dimension (party module depends on it).
-2. **A `feat/orange-brand`** — retoken `:root` values (orange ~#F97316, warm neutrals, one dark accent), `lava` theme → orange-dark variant, wordmark + smiley SVG, favicon/og-image.
+2. **A `feat/orange-brand`** — retoken `:root` values (orange ~#F97316, warm neutrals, one dark accent), `lava` theme → orange-dark variant, wordmark + smiley SVG, favicon/og-image. *(As planned; no `lava` theme id ever shipped — the outcome table below records what landed, and the theme set has since been cut to three, CLAUDE.md.)*
 3. **C `feat/business-ia`** — routes `/thjonusta`, `/verkefni` (projects module repurposed as case studies), `/um-okkur`, `/hafa-samband`, `/personuvernd`; new home hero "Allt kerfið þitt á einum stað" (static, video removed); NavBar → business links; IS-first DRAFT copy.
 4. **D `feat/hide-portfolio-surfaces`** — `server/config/publicSurface.js` single source of truth; noindex on hidden routes (`/party`, `/halli`, `/news`, `/shop`, …); sitemap = business routes only; specs assert "hidden from nav, still functional".
 5. **E `feat/lead-capture`** — contact plumbing extended (name, company, email, phone, current platform, message), pino instead of console.log, notification email, limiter 5/hr/IP. Leads DB table + admin view deferred to Job 3.
@@ -27,7 +27,7 @@ One branch + worktree per chunk, lint + i18n + tests green per chunk, merge to m
 
 ## Job 3 — ENHANCEMENTS.md → STOP for Halli ✅ written
 
-12 numbered proposals in `ENHANCEMENTS.md`, categorized quick-wins / architectural-now / later. **Implement nothing without approval.** The one to read first is #1: the inherited `deploy.yml` still targets Halli's personal Azure resources and must be neutralized before this repo is pushed anywhere.
+12 numbered proposals in `ENHANCEMENTS.md` (26 by 2026-09-11), categorized quick-wins / architectural-now / later. **Implement nothing without approval.** The one to read first is #1: the inherited `deploy.yml` still targets Halli's personal Azure resources and must be neutralized before this repo is pushed anywhere.
 
 ## Job 2 outcome (all seven chunks merged)
 
@@ -41,7 +41,7 @@ One branch + worktree per chunk, lint + i18n + tests green per chunk, merge to m
 | F | `feat/seo-jsonld` | Organization + Service JSON-LD, business privacy policy, a11y 94→100 |
 | G | `feat/e2e-business-routes` | 18-test bilingual route walk, spec adaptations, final sweep |
 
-Acceptance: 2012 Jest + 109 Playwright green · lint clean · i18n in sync · invariant hook clean · Lighthouse SEO 100 / a11y 100 on the business routes.
+Acceptance (2026-08-09 counts): 2012 Jest + 109 Playwright green · lint clean · i18n in sync · invariant hook clean · Lighthouse SEO 100 / a11y 100 on the business routes.
 
 ## Known intentional oddities
 
@@ -64,7 +64,7 @@ photographic grading, View Transitions, and the live ambience layer (real
 Hafnarfjörður weather via /api/v1/ambience + local solar position + aurora).
 His Facebook-saved photos had no usage rights → shipped photos are Commons
 CC0/CC BY equivalents, credited in /assets/iceland/CREDITS.md. Migration chain
-now ends 086_landing_background_scene. Copy on toggles/alt-texts is DRAFT
+now ends 086_landing_background_scene *(superseded: 089 reverted the scene default the next day; the chain ends 102 as of 2026-09-08)*. Copy on toggles/alt-texts is DRAFT
 pending Halli, like all copy.
 
 ## Product name (decided 2026-08-20)

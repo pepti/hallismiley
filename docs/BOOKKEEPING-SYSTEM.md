@@ -52,12 +52,20 @@ server/services/bookkeeping/
   posService.js            counter sales
   documentService.js       fylgiskjöl — upload, checksum, private storage
   auditLog.js              who did what (closed action vocabulary)
+  intakeService.js         the capture spine: proposals in, createExpense() out (096)
+  intakeShape.js           the intake row's validated shape
+  replay.js, replayCase.js the replay benchmark (books:replay) and its case format
+  peppol/                  UBL 2.1 / BIS 3.0 emitter (095): ublInvoice, party, vatCategory,
+                           identifiers, conformance, xml, index
 
+server/models/Commission.js                        seller commission on service invoices (098/102)
 server/controllers/adminBookkeepingController.js   the whole HTTP surface
 server/routes/adminBookkeepingRoutes.js            gating
 server/services/bookkeepingPdf.js                  invoice, receipt and payslip PDFs
 server/scripts/books-fetch-fx.js                   exchange rates
 server/scripts/books-archive-export.js             the 7-year archive (see gr. 20)
+server/scripts/books-backfill-orders.js            issue invoices for historical paid orders
+server/scripts/books-replay.js                     replay a recorded period into a *_replay DB
 server/scripts/seed-books-demo.js                  demo data for a software business
 
 public/js/views/AdminBooksView.js         overview
@@ -69,13 +77,22 @@ public/js/views/AdminBankView.js
 public/js/views/AdminLedgerView.js
 public/js/views/AdminPayrollView.js
 public/js/views/AdminPosView.js
+public/js/views/AdminBooksSettingsView.js  /admin/books/settings — seller identity, chart confirmation, FX
+public/js/views/AdminCommissionView.js    /admin/commission — statements, payouts (view id commission)
 public/js/views/booksShared.js            isk(), status pills, readiness banner
 ```
 
 Schema lives in `server/config/schema.js` — migrations **072** (foundation), 073
 (expenses), 074 (product VAT rate), 075 (reconciliation), 076 (payroll lifecycle), 077
-(counter sales). The `.sql` files under `server/migrations/` are generated mirrors for
-human reading; **schema.js wins** if they ever disagree.
+(counter sales), 078 (payroll integrity triggers), 079 (POS idempotency), **095**
+(structured party block + `invoice_ubl_exports`), **096** (capture spine: `source_kind`
++ `books_intake`), 099 (`invoices.account_id` / `service_kind` / `service_period` +
+the double-issue indexes), **100** (buyer party from `customer_accounts`, the 072 guard
+widened to the new columns), **101** (`2150 Fyrirframinnheimtar tekjur`: the build
+deposit as deferred revenue, released on the final half), plus the commission ledger in
+098 and 102 (`commission_events`, statements, payouts, clawback). The `.sql` files under
+`server/migrations/` are generated mirrors for human reading; **schema.js wins** if
+they ever disagree.
 
 ---
 
@@ -135,7 +152,7 @@ to be careful.
 | Requirement | Where it lives |
 |---|---|
 | Reglugerð 505/2013 gr. 8 — an identifiable person behind every entry | `created_by` NOT NULL with ON DELETE RESTRICT, plus `books_audit_log` |
-| gr. 9 — posted entries are append-only | `books_forbid_posted_entry_mutation`, `books_forbid_posted_line_mutation`, `books_forbid_line_insert_into_posted`, `books_protect_issued_invoice`, `books_protect_expense`, `books_protect_payroll_run`, `books_protect_payslip` |
+| gr. 9 — posted entries are append-only | `books_forbid_posted_entry_mutation`, `books_forbid_posted_line_mutation`, `books_forbid_line_insert_into_posted`, `books_protect_issued_invoice` (extended by migration 100 to the structured party columns), `books_protect_issued_invoice_line`, `books_forbid_invoice_line_insert_into_issued`, `books_protect_expense`, `books_protect_document`, `books_protect_payroll_run`, `books_protect_payslip`, `books_protect_payroll_rates`; `books_forbid_any_mutation` on the commission statement tables (102) |
 | gr. 14 — áreiðanleiki (reliability) of stored documents | SHA-256 on every upload, re-verified on every read and on every archive export |
 | gr. 16 — a gapless number series per document type | `bookkeeping_counters` under a row lock |
 | Reglugerð 50/1993 — what a sales document must show | snapshotted onto the invoice row at issue, and printed from that row, so a reprint years later reproduces the document as issued |
@@ -319,6 +336,32 @@ The day's takings are split by tender because that is how a drawer is counted �
 figure should equal what is physically there, and the card figure what the acquirer will
 settle. One total answers neither question.
 
+### Service invoices and the build deposit (migrations 099 – 101)
+
+`invoiceService.createServiceInvoice()` issues a company's own service documents against a
+`customer_accounts` row: the build halves (50 % / 50 %), the recurring month, overage. Two
+partial unique indexes (099) make a double issue a 409 rather than a second statutory
+document. The buyer party comes from the account (100); the invoice keeps the value **as
+at issue**.
+
+The first build half is a **prepayment**, not revenue (101): it is credited to
+`2150 Fyrirframinnheimtar tekjur` and released into revenue by a `revenue_recognition`
+entry that issuing the final half posts in the same transaction. VSK does **not** wait —
+`2150` carries `vat_code = output_24` and `vatService.ADVANCE_TURNOVER_ACCOUNTS` counts it
+into reitur A in the period the deposit invoice is dated (l. nr. 50/1988 13. gr.). The
+standing invariant: **2150 never goes debit**; crediting a released deposit goes against
+the account it was recognised into.
+
+### Commission (migrations 098 and 102)
+
+Not a books area in the RBAC sense (view id `commission`, its own scope in
+`server/auth/commissionScope.js`), but it posts nothing and derives everything from the
+invoice ledger, so it belongs in the "what does this post" picture: `Commission.recordForInvoice`
+snapshots seller and rate per service invoice; payability is an **amount**
+(`PAYABLE_NOW_ISK`, netting credit notes and refunds proportionally) rather than a flag;
+102 adds seller-month statements over a running balance, payouts and clawback by set-off.
+Details: CLAUDE.md (2026-09-07/08 sections) and `docs/ACCOUNTANT-QUESTIONS.md` §11.
+
 ---
 
 ## Security model
@@ -337,7 +380,8 @@ being given what each person earns.
 
 `ADMIN_VIEW_IDS` in `server/auth/adminViews.js` must stay 1:1 with `ADMIN_NAV` in
 `AdminSidebar.js` — a unit test enforces the parity, because an id with no screen is
-ungrantable and a screen with no id is a dead link.
+ungrantable and a screen with no id is a dead link. The one sanctioned exception is
+`PERMISSION_VIEW_IDS` (`allaccounts`): grantable, no sidebar line, subtracted by the test.
 
 Other notes:
 
@@ -345,8 +389,10 @@ Other notes:
   later outside every declared prefix cannot inherit only `requireAuth`.
 - `export.csv` paths are declared **before** any `:id`/`:code` pattern that would swallow
   them.
-- PDF and document routes carry a tighter `docLimiter`, placed **before** the view check so
-  refused attempts count against it too.
+- PDF and CSV routes carry a tighter `docLimiter`, placed **before** the view check so
+  refused attempts count against it too. One route is the other way round —
+  `GET /documents/:id` has `requireView('expenses')` first (`adminBookkeepingRoutes.js`,
+  noted 2026-09-11) — so a refused fetch of a fylgiskjal does NOT count against the limiter.
 - Every CSV cell goes through formula neutralisation (`utils/csv.js`). Guest checkout names
   and supplier names typed off a paper invoice are attacker-controlled, and an export is a
   real delivery mechanism into a bookkeeper's spreadsheet.
@@ -378,13 +424,15 @@ the format and the reason the D-split is diffed are in `server/services/bookkeep
 Tests:
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_books_test \
-  npx jest --runInBand
+npm test                                            # 4 workers, a database each
+npx jest tests/integration/booksReports.test.js     # one suite, still on its own worker DB
 ```
 
-The `TEST_DATABASE_URL` is not optional advice. Jest's globalSetup **drops** the test
-database, so two sessions sharing `hallismiley_test` produce a hundred nondeterministic
-failures across unrelated suites.
+Since 2026-09-02 the test databases are derived per branch and per Jest worker
+(`tests/workerDb.js`: `orangesmiley_<branch>_w<N>_test`, migrated from one template), so
+two worktrees never share one and `TEST_DATABASE_URL` is only needed to pin a fixed name —
+see `docs/TESTING.md`. The old advice here (a hand-named `hallismiley_books_test` and
+`--runInBand`) predates that.
 
 ### First run
 

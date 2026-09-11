@@ -1,5 +1,18 @@
 # Self-update module — build plan for Claude Code
 
+> **Superseded — frozen (banner added 2026-09-11).** All six phases shipped and
+> merged 2026-08-11 (`64457ef`); the living description is `docs/SELF-UPDATE.md`.
+> Where the phases landed: 0 → `server/config/clientConfig.js` + `config/client.json`;
+> 1 → `scripts/generate-version.js`, `server/config/version.js`, `GET /api/v1/system/version`;
+> 2 → migration **081_system_updates** (not the base's 082) + `server/services/updateChecker.js`;
+> 3 → `updateApplier.js`, the apply/rollback routes, stack invariant 14;
+> 4 → `AdminUpdatesView.js` + `admin-updates.css`; 5 → `.github/workflows/promote.yml`,
+> `scripts/build-manifest.js`, `scripts/check-manifest.js`; 6 → `docs/SELF-UPDATE.md`,
+> `docs/UPSTREAM-SELF-UPDATE.md`. One premise in Phase 2 was wrong: there was no
+> "existing SSRF-allowlist mechanism" — `server/services/outboundAllowlist.js` was
+> written for this feature (LESSONS.md 2026-08-10). The body below is the plan as
+> written and is not maintained.
+
 Upgrade the Orange Smiley product with a **fleet update mechanism**: a release channel published by CI, an in-app updater module with three modes (`managed` / `auto` / `manual`), and an admin UI surface. Build it here first, then upstream to the base (HalliProjects) flag-gated — this is engine capability, not an Orange Smiley special. Business context: `company/ORANGE-SMILEY-PLAN.md` §4 (one engine, many instances; fan-out gap) — this module IS the code-update half of that fan-out.
 
 Execute phases in order; each ends with lint + `check:i18n` + tests green on a feature branch, Halli merges. All stack invariants apply (vanilla JS SPA, CommonJS, migrations appended to `server/config/schema.js` never edited, pino only, error envelope, csrf/RBAC server-side first, Jest on real Postgres, EN+IS keys synced).

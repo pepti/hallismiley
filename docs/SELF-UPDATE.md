@@ -4,7 +4,8 @@ How a deployed instance of this engine learns that a newer release exists, and
 how it gets there.
 
 This exists because of the fan-out problem: one engine, many instances
-(`ORANGE-SMILEY-PLAN.md` §4). Without it, shipping a security fix to N customers
+(the business plan, `company/ORANGE-SMILEY-PLAN.md` §4 — a gitignored folder
+inside this repo, not a tracked file). Without it, shipping a security fix to N customers
 is N manual deploys, and the honest answer to "is customer X patched?" is "let
 me look". With it, every instance knows what it is, what it could be, and who
 decides.
@@ -173,14 +174,16 @@ an older instance.
 ## Releasing
 
 ```
-merge to main → CI → deploy.yml pushes :sha-<gitSha>, prints the digest
+merge to master → CI → deploy.yml (manual dispatch — nothing auto-deploys here)
+                       pushes :sha-<gitSha>, prints the digest
               → promote.yml: that sha → canary
               → Orange Smiley's own instances soak 24–48 h
               → promote.yml: the SAME sha → stable
 ```
 
 `promote.yml` retags an existing digest with `az acr import` and **never
-builds**. Rebuilding the same commit produces different bytes (timestamps, base
+builds** (note: it sets up Node 20 for `scripts/build-manifest.js` while
+`ci.yml` and the `Dockerfile` are on 24 — a known drift, 2026-09-11). Rebuilding the same commit produces different bytes (timestamps, base
 image drift) and silently discards the soak. We are the canary; customers are
 not.
 
@@ -232,7 +235,10 @@ Per **instance**:
 | PATCH | `/api/v1/system/settings` | admin + CSRF |
 | POST | `/api/v1/system/updates/:id/apply` | admin + CSRF + rate limit |
 | POST | `/api/v1/system/updates/:id/rollback` | admin + CSRF + rate limit |
+| GET | `/api/v1/system/changes` | admin — sits **above** the module gate, so it answers even when self-update is disabled (the "Latest updates" card on Admin → Monitoring reads it) |
 
+Everything except `/changes` answers `404` while `modules.selfUpdate.enabled`
+is off (the base ships it off; this instance ships it on, `managed`).
 Reads are delegable — an ops role can watch a fleet. Writes are hard admin:
 applying an update restarts the instance, and so does changing how updates
 arrive. Nothing here is public: "which version" is also "which published CVEs

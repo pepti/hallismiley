@@ -19,7 +19,8 @@ operator's guide; the architecture notes live in the migration (090) and
 Access model: **read** = any role holding the `handbok` view; **edit/drafts** =
 admin or moderator; **delete** = admin only (moderators unpublish instead).
 A `solufolk` user who logs in and opens Admin is forwarded straight to the
-handbook and sees a one-item sidebar; every other admin API answers 403
+handbook and sees a two-item sidebar (Handbók + Fyrirspurnir, since migration
+097 appended `leads` to the role); every other admin API answers 403
 (verified in `tests/integration/salesGuides.test.js` and
 `e2e/sales-handbook.spec.js`).
 

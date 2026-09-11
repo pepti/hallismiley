@@ -1322,7 +1322,18 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
-    // Shop redesign step 1 — see docs/SHOP_REDESIGN.md.
+    // (Comment-only edit 2026-09-11 — the SQL statements below are untouched;
+    // invariant 4 guards the statements, and migrate.js keys applied
+    // migrations on `name`, not content.)
+    // Shop redesign step 1 (the base's 2026-05 storefront plan; its doc was
+    // retired 2026-09-11 — the shop is a hidden surface on this instance, see
+    // server/config/publicSurface.js). What the plan said the service columns
+    // mean, since nothing else records it: is_bookable = "true ⇒ triggers a
+    // post-checkout scheduling follow-up" (that follow-up was build-order
+    // step 5 and was NEVER built; adminBookkeepingController reads the flag as
+    // is_service for the POS picker instead); duration_minutes /
+    // delivery_format describe a service SKU; a service's stock_count is NULL
+    // = always available.
     //
     // The existing products.category (from 024_product_variants) held
     // apparel-style values like 'apparel', 'accessories', 'roof_box'. The

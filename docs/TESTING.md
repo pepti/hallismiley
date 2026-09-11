@@ -1,27 +1,27 @@
 # Test tiers — run the right suite for the change
 
-_Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suite run). The tiers change the **inner loop**; the merge gate is unchanged — every chunk still merges only with the FULL suite green, and CI (`test:ci`) still runs everything._
+_Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suite run). The tiers change the **inner loop**; the merge gate is unchanged — every chunk still merges only with the FULL suite green, and CI (`test:ci`) still runs everything. Test counts below were re-measured 2026-09-11 — the unit and smoke tiers were RUN that day, the full and e2e suites were counted statically (see "Measuring the suite"); the timings are still the 2026-08-24 dev-machine figures._
 
 ## The tiers (timings measured 2026-08-24 on the dev machine)
 
 | Command | What | Size / time | DB |
 |---|---|---|---|
-| `npm run test:unit` | All of `tests/unit/` via `jest.unit.config.js` — no globalSetup (no DB drop/migrate), parallel workers | 981 tests, **~8 s** | none |
-| `npm run test:smoke` | Critical-path integration specs: auth, security (CSRF/RBAC/headers/envelope), shop, contact (lead capture) | 112 tests, **~28 s** | yes |
+| `npm run test:unit` | All of `tests/unit/` via `jest.unit.config.js` — no globalSetup (no DB drop/migrate), parallel workers | 1283 tests at runtime (978 declared in 67 files — `.each` tables expand), **~8 s** | none |
+| `npm run test:smoke` | Critical-path integration specs: auth, security (CSRF/RBAC/headers/envelope), shop, contact (lead capture) | 112 tests at runtime (110 declared), **~28 s** | yes |
 | `npm run test:hotfix` | unit + smoke, in that order | **~36 s** | yes |
 | `npm run test:related -- <files…>` | Jest picks every test that (statically) depends on the named source files | varies — see caveat below | maybe |
-| `npm test` | Everything (unit + all integration, serial) | ~2012 tests, minutes | yes |
-| `npm run test:e2e:smoke` | Playwright: auth, navigation, business-routes | subset of 109 | yes |
-| `npm run test:e2e` | Full Playwright suite | 109 tests | yes |
+| `npm test` | Everything (unit + all integration) in **4 parallel Jest workers, one database each** (`jest.config.js` `maxWorkers: 4`; `npm test -- --runInBand` for serial) | 2647 declared tests in 139 files; not re-timed since the 2026-09-02 parallel split (6 min 37 s serial on 2026-08-24) | yes |
+| `npm run test:e2e:smoke` | Playwright: auth, navigation, business-routes | 33 of the 178 | yes |
+| `npm run test:e2e` | Full Playwright suite (one `chromium` project) | 178 declared tests in 26 spec files | yes |
 
-**`test:related` caveat** (measured 2026-08-24): for a *leaf* file (a util, a client script) the related set is small and fast. For a *core* file required by `app.js`'s route tree (services, models, middleware), the related set is most of the integration suite — ~6.7 min for `discountEngine.js` (1201 tests). That is the true blast radius, but locally it defeats the purpose: for core-file fixes run `test:hotfix` and let CI's full run be the wide net.
+**`test:related` caveat** (measured 2026-08-24, serially on one shared database — before the per-worker split below; the absolute times are stale, the shape of the argument is not): for a *leaf* file (a util, a client script) the related set is small and fast. For a *core* file required by `app.js`'s route tree (services, models, middleware), the related set is most of the integration suite — ~6.7 min for `discountEngine.js` (1201 tests). That is the true blast radius, but locally it defeats the purpose: for core-file fixes run `test:hotfix` and let CI's full run be the wide net.
 
 ## The hotfix workflow (production bug)
 
 1. **Reproduce as a failing test first** — in the tier where it belongs (a controller bug → integration spec; pure logic → unit).
 2. Fix it.
 3. Run `npm run test:hotfix`; add `npm run test:related -- <every file you touched>` when the touched files are leaf modules (see the caveat above — for core files, hotfix + CI is the right pair). Total cost ≈ one minute.
-4. Push the branch — CI runs the full suite with coverage exactly as before. CI green is still the deploy gate; the tiers only buy you a fast, high-confidence local loop.
+4. Push the branch — CI runs the full suite with coverage exactly as before. CI green is the **merge** gate; nothing deploys from CI in this repo (`deploy.yml` is `workflow_dispatch` only — see `docs/DEPLOYMENT.md`). The tiers only buy you a fast, high-confidence local loop.
 5. If the fix touched auth, payments, RBAC, migrations, or the error envelope: run the full local suite anyway before pushing. Those surfaces are why the smoke tier exists, but they deserve the whole net.
 
 ## Rules
@@ -33,9 +33,13 @@ _Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suit
 
 ## Hunting an intermittent failure
 
-Suites share one database and Jest orders them by cached duration, so a suite's
-*neighbours* change between runs — which is how an order-dependent test fails
-"one run in three" with no code change (LESSONS.md 2026-08-27).
+Since 2026-09-02 each Jest worker has its own database (see the next section),
+so suites in *different* workers cannot see each other's rows. Within a worker
+suites still run serially, and Jest assigns suites to workers by cached
+duration, so a suite's *neighbours inside its worker* change between runs —
+which is how an order-dependent test still fails "one run in three" with no
+code change (LESSONS.md 2026-08-27; that entry predates the per-worker split,
+when every suite shared one database).
 
 1. **Capture the whole run, then grep.** `npm test *> jest.log` in PowerShell.
    Trimming the stream (`Select-Object -Last N`) keeps the summary and throws
@@ -143,3 +147,45 @@ while any session holds the template).
 
 This is engine work that belongs upstream (ice #225/#233 built it first; the
 base `hallismiley` is read-only) — queued in site-factory/BASE-SYNC.md.
+
+## What CI actually runs (`.github/workflows/ci.yml`, read 2026-09-11)
+
+Triggers: push and pull request to **`master`** (the long-lived branch — the
+file said `main` until 2026-09-02 and CI had never run), plus a weekly cron
+(`17 5 * * 1`) so a new npm advisory or base-image CVE is noticed between
+merges. There is **no `paths` / `paths-ignore` filter**: a markdown-only
+commit or pull request runs the whole workflow.
+
+Three independent jobs on `ubuntu-latest`, each with its own
+`postgres:16-alpine` service container (databases `orangesmiley_test`,
+`orangesmiley_e2e`, `orangesmiley_smoke`) and Node **24** (`node-version: 24`
+— the same major as the digest-pinned `Dockerfile` base image; the two move
+together):
+
+| Job | Steps |
+|---|---|
+| `test` — Lint + Integration tests | `npm ci` · `npm audit --audit-level=high` · `npm run lint` · `npm run check:i18n` · runner spec · release-manifest schema · Jest transform cache · `npm run test:ci` (coverage) |
+| `e2e` — E2E tests (Playwright) | Chromium install (cached) · `npm run test:e2e` against a booted server |
+| `docker` — Docker build + boot smoke test | image build · Trivy (`HIGH,CRITICAL`, `ignore-unfixed`) · boot with `UPLOAD_ROOT` and `DB_SSL=false` declared · readiness probe |
+
+The jobs are deliberately not gated on each other. The `test` job has a
+45-minute ceiling because a contended 2-vCPU runner showed a 3.7× run-to-run
+spread on an identical tree.
+
+## Measuring the suite
+
+The counts in the tier table are static declarations, not runtime totals:
+`test.each` tables and loop-generated cases expand at runtime, so the executed
+number is never lower than the declared one. Re-measure rather than copy a
+number forward:
+
+```bash
+find tests -name "*.test.js" | wc -l
+grep -rhoE "^\s*(test|it)(\.(only|skip|each|concurrent|todo))?\s*[(\`]" tests --include=*.test.js | wc -l
+find e2e -name "*.spec.js" | wc -l
+grep -rhoE "(^|[^.\w])(test|it)(\.(only|skip|fixme|slow))?\s*\(\s*['\"\`]" e2e --include=*.spec.js | wc -l
+```
+
+2026-09-11 @ `8baa090`: 139 files / 2647 declarations (unit 978, integration
+1669) and 26 spec files / 178 declarations. Runtime is higher: the unit tier ran
+1283 and the smoke tier 112 that day, so expect the full suite well above 2647.
