@@ -1,290 +1,169 @@
-# Deployment Guide — Halli Smiley
+# Deployment — Orange Smiley (orangesmiley.is)
 
-This guide covers deploying the app to **Azure App Service** (Linux container)
-with **Azure Container Registry** and **Azure Database for PostgreSQL Flexible
-Server**. Deploys are triggered from GitHub Actions using OIDC federated
-credentials — no long-lived Azure secrets in the repo.
+**State as of 2026-09-11: this repo has no deployed instance.** The company
+Azure tenant exists (COMPANY-LOG, gitignored), but **no provisioning or deploy
+happens without Halli's explicit go-ahead** (CLAUDE.md). Everything below
+describes what the repo's workflows and boot code actually do today, so that
+arming a deploy later is a matter of setting variables, not editing YAML.
 
-For routine operational tasks (rollbacks, log access, common incidents),
-see [`RUNBOOK.md`](../RUNBOOK.md). For environment variable reference, see
-[`.env.example`](../.env.example).
+This file was rewritten 2026-09-11. The previous version was the HalliProjects
+base's guide to the owner's personal `hallismiley-*` Azure resources and an
+auto-deploy pipeline this repo deliberately removed; it also set an env var
+nothing reads (`REQUIRE_EMAIL_VERIFICATION`) and SMTP settings the app has not
+used since it moved to Resend.
 
----
-
-## Prerequisites
-
-- Azure subscription with permission to create resource groups, registries,
-  databases, and app services.
-- `az` CLI installed and logged in (`az login`).
-- A GitHub repository for the app (this guide assumes `pepti/hallismiley`).
-- DNS control for your custom domain (only needed for custom-domain step).
-
-The names below match the current production deployment. Swap them for your
-own if you are deploying a fork.
-
-| Resource | Name | Region |
-| --- | --- | --- |
-| Resource group | `hallismiley-rg` | West Europe |
-| App Service plan | `hallismiley-plan` (B1 Linux) | West Europe |
-| App Service | `hallismiley-app` | West Europe |
-| Container registry | `hallismileyacr` | West Europe |
-| Postgres Flexible Server | `hallismiley-db` | North Europe (West Europe was restricted) |
-| Storage account | `hallismileyfs` (uploads file share) | West Europe |
+For routine operations see [`RUNBOOK.md`](../RUNBOOK.md); for every env var
+see [`.env.example`](../.env.example); for the release channel see
+[`SELF-UPDATE.md`](SELF-UPDATE.md).
 
 ---
 
-## 1. Resource provisioning
+## 1. What runs in CI (`.github/workflows/ci.yml`)
 
-```bash
-# Resource group
-az group create --name hallismiley-rg --location westeurope
+Push and pull request to **`master`** (the long-lived branch; it said `main`
+until 2026-09-02 and CI had never run) plus a weekly cron. No `paths-ignore`:
+docs-only changes run the full workflow. Three independent jobs, each with its
+own `postgres:16-alpine` service, all on Node 24:
 
-# Container registry (Basic SKU is fine for a single app)
-az acr create --resource-group hallismiley-rg --name hallismileyacr \
-  --sku Basic --admin-enabled false
+1. `test` — `npm audit --audit-level=high`, lint, `check:i18n`, runner spec,
+   release-manifest schema, Jest with coverage.
+2. `e2e` — Playwright against a booted server.
+3. `docker` — image build, Trivy (`HIGH,CRITICAL`, unfixed ignored), boot
+   smoke test with `UPLOAD_ROOT` and `DB_SSL=false` declared, readiness probe.
 
-# App Service plan + app (Linux, B1)
-az appservice plan create --resource-group hallismiley-rg --name hallismiley-plan \
-  --is-linux --sku B1
-az webapp create --resource-group hallismiley-rg --plan hallismiley-plan \
-  --name hallismiley-app \
-  --deployment-container-image-name hallismileyacr.azurecr.io/hallismiley:latest
+**CI green is the merge gate. Nothing deploys from CI.**
 
-# Grant the App Service permission to pull from ACR using its managed identity
-az webapp identity assign --resource-group hallismiley-rg --name hallismiley-app
-APP_PRINCIPAL_ID=$(az webapp identity show \
-  --resource-group hallismiley-rg --name hallismiley-app --query principalId -o tsv)
-ACR_ID=$(az acr show --name hallismileyacr --query id -o tsv)
-az role assignment create --assignee "$APP_PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID"
-```
+## 2. The image (`Dockerfile`)
 
----
+- Two-stage build on `node:24-alpine@sha256:d32cdf61…` (digest-pinned; both
+  stages). **The Node major in the Dockerfile, `ci.yml`'s `node-version: 24`
+  and the CLAUDE.md invariant move together** — dependabot's docker ecosystem
+  is configured not to major-bump the base image on its own.
+- `apk upgrade` runs behind `ARG APK_REFRESH` (deploy passes the run id so the
+  layer is not served from cache); the bundled npm CLI is removed from the
+  runtime image (LESSONS 2026-09-03).
+- `scripts/generate-version.js` writes `server/version.json` from the build
+  args `APP_VERSION` / `GIT_SHA` / `BUILT_AT` / `RELEASE_CHANNEL` — this is the
+  identity the self-update checker compares against a published release. A
+  local build without the args reports `version: "dev"`.
+- Runs as `appuser`, `EXPOSE 3000`, `HEALTHCHECK` on the liveness route,
+  `CMD node server/server.js`. Migrations (`server/scripts/migrate.js`) run at
+  boot; there is no separate migration step.
 
-## 2. Postgres Flexible Server
+Known drift (not fixed here): `promote.yml` sets up Node **20** for the
+manifest builder while everything else is on 24.
 
-```bash
-az postgres flexible-server create \
-  --resource-group hallismiley-rg --name hallismiley-db \
-  --location northeurope \
-  --tier Burstable --sku-name Standard_B1ms \
-  --storage-size 32 --version 16 \
-  --admin-user halliadmin --admin-password '<STRONG_PASSWORD>' \
-  --public-access 0.0.0.0  # Allow other Azure services; lock down further if needed
+## 3. The deploy workflow (`.github/workflows/deploy.yml`) — dispatch-only, inert
 
-az postgres flexible-server db create \
-  --resource-group hallismiley-rg --server-name hallismiley-db \
-  --database-name hallismiley
-```
+Neutralised 2026-08-19 (ENHANCEMENTS #1). Trigger is `workflow_dispatch`
+**only**; the base's auto-deploy-on-green-CI `workflow_run` trigger was
+deliberately dropped and re-adding it is a decision for when the company stack
+exists. Every target is a repository variable; the first step is a guard that
+fails before login if any is unset, so a dispatch today touches nothing:
 
-Add your current IP to the server's firewall during initial setup if you need
-to connect via `psql` from your laptop:
+| Setting | Kind | Used for |
+|---|---|---|
+| `ACR_NAME`, `IMAGE_NAME`, `WEBAPP_NAME`, `RESOURCE_GROUP` | `vars.*` (required by the guard) | registry, image name, App Service, resource group |
+| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | `secrets.*` | OIDC federated login (no long-lived Azure secret) |
+| `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` + `RESEND_API_KEY` | `vars.*` + `secrets.*` (optional) | the deploy-failed alert email; skipped cleanly when unset |
 
-```bash
-MY_IP=$(curl -s ifconfig.me)
-az postgres flexible-server firewall-rule create \
-  --resource-group hallismiley-rg --name hallismiley-db \
-  --rule-name dev-laptop --start-ip-address "$MY_IP" --end-ip-address "$MY_IP"
-```
+What a dispatched run does once armed: checkout at the dispatched SHA
+(`fetch-depth: 50`) → `node server/scripts/generate-changes.js` (stamps the
+"Latest updates" card) → Azure login → `az acr login` → Buildx build + push
+tagged `:latest`, `:<sha>`, `:sha-<sha>` (single-arch manifest, `provenance:
+false`) → print the digest → **Trivy on the pushed image, before the web app
+is pointed at it** → `azure/webapps-deploy` → `az webapp restart` (the tag
+update alone does not reliably swap the container on slot-less tiers).
 
----
+Arming = set the variables/secrets on the GitHub repo. No workflow edit.
+Whether they are set is a GitHub setting — read it there, do not infer it from
+this file.
 
-## 3. Persistent uploads — Azure Files
+## 4. The release channel (`.github/workflows/promote.yml`) — dispatch-only
 
-The container is read-only by default; uploaded media must live on a mounted
-volume that survives container restarts and image swaps.
+Retags an already-built image **by digest** to `canary` or `stable` and
+regenerates the channel manifest every instance polls (`docs/SELF-UPDATE.md`).
+Inputs: `sha` (the full SHA deploy.yml built), `channel`, `critical`,
+`min_compatible`, `dry_run`. It needs two more repository variables than
+deploy.yml: `RELEASE_STORAGE_ACCOUNT` and `RELEASE_CONTAINER` (the blob
+container that serves `stable.json` / `canary.json`), checked at the start
+unless `dry_run`. Rollout discipline is in the file header: promote to canary,
+soak on Orange Smiley's own instances 24–48 h, promote the SAME sha to stable.
 
-```bash
-az storage account create \
-  --resource-group hallismiley-rg --name hallismileyfs \
-  --sku Standard_LRS --kind StorageV2 \
-  --https-only true --min-tls-version TLS1_2
-az storage share-rm create \
-  --resource-group hallismiley-rg --storage-account hallismileyfs \
-  --name uploads --quota 100
+The manifest's changelog section comes from `CHANGELOG.md` by `## [version]`
+heading (`scripts/build-manifest.js`), with the version from `package.json` —
+a missing section publishes an empty changelog silently, so keep the heading
+for the version being promoted.
 
-az webapp config storage-account add \
-  --resource-group hallismiley-rg --name hallismiley-app \
-  --custom-id uploads --storage-type AzureFiles \
-  --account-name hallismileyfs --share-name uploads \
-  --access-key "$(az storage account keys list -g hallismiley-rg -n hallismileyfs --query '[0].value' -o tsv)" \
-  --mount-path /app/uploads
-```
+## 5. What the container needs at boot
 
-**Windows / Git Bash gotcha:** if `--mount-path /app/uploads` errors with
-"contains invalid characters", prefix the command with `MSYS_NO_PATHCONV=1`
-so MSYS doesn't rewrite the Linux path.
+`server/server.js` refuses to start (exit 1, before listening) without:
 
----
+| Variable | Note |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `ALLOWED_ORIGINS` | comma-separated CORS origins |
+| `CSRF_SECRET` | 32+ random chars |
+| `NODE_ENV` | `production` on every deployed stack (also on TEST stacks — it is not the environment label) |
+| `RESEND_API_KEY` | **required when `APP_ENV=production`** — a silent mail transport would no-op verification, resets and receipts while returning 200 |
+| `UPLOAD_ROOT` | required when `NODE_ENV=production` (`server/config/paths.js` throws) — the persistent uploads mount, e.g. `/app/uploads` |
 
-## 4. GitHub Actions OIDC trust
+Also set on any real instance:
 
-This lets `.github/workflows/deploy.yml` log into Azure without storing any
-long-lived secrets in the repo.
+| Variable | Why |
+|---|---|
+| `APP_ENV` | `production` / `test` — the environment label (`server/config/appEnv.js`); drives the RESEND rule above, the MCP `[TEST]/[PROD]` tag and the change-request gate |
+| `APP_URL` | links in every transactional email; **the code default is the base's `https://www.hallismiley.is`** (`emailService.js`) |
+| `EMAIL_FROM` | sender; **the code default is the base's `halli@hallismiley.is`** — set `info@orangesmiley.is` (CLAUDE.md) |
+| `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`) |
+| `DB_SSL` | TLS is **on by default in production**; `false` is the documented opt-out for a plain-TCP Postgres (CI only, never Azure) |
+| `METRICS_TOKEN` | bearer for `GET /metrics`; blank = localhost only |
+| `PORT` | App Service sets `8080` for Linux containers; default 3000 |
+| `BOOKS_UPLOAD_ROOT` | the books' fylgiskjöl — point OUTSIDE the checkout on a backed-up disk |
+| `SELF_UPDATE_TRIGGER_URL` | the platform's deployment webhook; without it an update can be recorded but not applied |
+| `MCP_ENABLED` etc. | see `docs/mcp.md` |
 
-```bash
-# Create an Azure AD application + service principal for GitHub
-az ad app create --display-name hallismiley-github-deploy
-APP_ID=$(az ad app list --display-name hallismiley-github-deploy --query "[0].appId" -o tsv)
-az ad sp create --id "$APP_ID"
-SP_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
+nothing reads them (the mail transport is Resend).
 
-# Role assignments
-SUB_ID=$(az account show --query id -o tsv)
-az role assignment create --assignee "$SP_ID" --role AcrPush --scope "$ACR_ID"
-az role assignment create --assignee "$SP_ID" --role Contributor \
-  --scope "/subscriptions/$SUB_ID/resourceGroups/hallismiley-rg/providers/Microsoft.Web/sites/hallismiley-app"
+## 6. Provisioning, when Halli says go
 
-# Federated credential — trust the main branch
-az ad app federated-credential create --id "$APP_ID" --parameters '{
-  "name": "github-main-branch",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:pepti/hallismiley:ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
+The shape is the base's: Azure App Service (Linux container) pulling from an
+Azure Container Registry with its managed identity (`AcrPull`), Azure
+Database for PostgreSQL Flexible Server (v16, TLS), an Azure Files share
+mounted at `/app/uploads`, OIDC federated credential for the GitHub repo with
+subject `repo:orange-smiley/orangesmiley:ref:refs/heads/master`, HTTPS-only,
+FTPS disabled. Resource names, regions and SKUs are decided at provisioning
+time and recorded in the gitignored `company/` folder and as the `vars.*`
+above — this file will not carry them until they exist. The `azure-ops` skill
+holds the fleet provisioning pattern.
 
-# Repo secrets used by deploy.yml
-gh secret set AZURE_CLIENT_ID       --body "$APP_ID"
-gh secret set AZURE_TENANT_ID       --body "$(az account show --query tenantId -o tsv)"
-gh secret set AZURE_SUBSCRIPTION_ID --body "$SUB_ID"
-```
+Bookkeeping note (RUNBOOK → Bókhald): Azure has no Iceland region, so the
+yearly books archive to media in Iceland is the compliance step, not a nicety.
 
----
-
-## 5. App Settings (environment variables)
-
-Set everything via `az webapp config appsettings set` so the values survive
-container restarts and are visible in the portal. See `.env.example` for the
-authoritative list and descriptions.
-
-```bash
-# Required
-az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
-  --settings \
-    NODE_ENV=production \
-    PORT=8080 \
-    DB_SSL=true \
-    DATABASE_URL="postgresql://halliadmin:$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' '<password>')@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require" \
-    ALLOWED_ORIGINS="https://hallismiley.is,https://www.hallismiley.is,https://hallismiley-app.azurewebsites.net" \
-    CSRF_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
-    APP_URL="https://www.hallismiley.is" \
-    UPLOAD_ROOT="/app/uploads" \
-    REQUIRE_EMAIL_VERIFICATION=true \
-    METRICS_TOKEN="$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")"
-
-# Email (SMTP password must be set out-of-band — never commit)
-az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
-  --settings SMTP_USER=halli@hallismiley.is
-# Then manually via portal: SMTP_PASS=<google-app-password>
-
-# OAuth (Google sign-in)
-az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
-  --settings \
-    GOOGLE_CLIENT_ID=<from-google-console> \
-    GOOGLE_CLIENT_SECRET=<from-google-console> \
-    GOOGLE_REDIRECT_URI=https://www.hallismiley.is/auth/google/callback
-```
-
-Enable HTTPS-only and turn off the legacy FTPS endpoint:
-
-```bash
-az webapp update --resource-group hallismiley-rg --name hallismiley-app --https-only true
-az webapp config set --resource-group hallismiley-rg --name hallismiley-app --ftps-state Disabled
-```
-
----
-
-## 6. First deploy + DB migration
-
-The CI workflow (`.github/workflows/ci.yml`) runs on every push and pull
-request to `main`. The Deploy workflow (`.github/workflows/deploy.yml`) is
-gated on CI: it runs only after CI completes successfully on `main`.
-
-```bash
-# Push to main (or merge a PR)
-git push origin main
-```
-
-The CI workflow runs lint + `npm audit` + integration tests + E2E + Docker
-build. On success, Deploy auto-triggers via `workflow_run`, builds the image,
-pushes to ACR, points the App Service at it, and force-restarts. Migrations
-run automatically at container startup via `server/scripts/migrate.js` — no
-manual step.
-
-To trigger Deploy without waiting for a CI run (emergency override):
-
-```bash
-gh workflow run "Deploy to Azure" --ref main
-```
-
----
-
-## 7. Custom domain + SSL
-
-```bash
-# Add the apex and www records in your DNS provider:
-#   hallismiley.is        →  A     <azure-app-ip-from-portal>
-#   www.hallismiley.is    →  CNAME hallismiley-app.azurewebsites.net
-# Then validate ownership:
-az webapp config hostname add --resource-group hallismiley-rg \
-  --webapp-name hallismiley-app --hostname www.hallismiley.is
-az webapp config hostname add --resource-group hallismiley-rg \
-  --webapp-name hallismiley-app --hostname hallismiley.is
-
-# Provision App Service Managed Certificates (free) for both:
-az webapp config ssl create --resource-group hallismiley-rg \
-  --name hallismiley-app --hostname www.hallismiley.is
-az webapp config ssl create --resource-group hallismiley-rg \
-  --name hallismiley-app --hostname hallismiley.is
-
-# Bind both certs SNI to enforce HTTPS:
-for HOST in www.hallismiley.is hallismiley.is; do
-  THUMB=$(az webapp config ssl list --resource-group hallismiley-rg \
-            --query "[?subjectName=='$HOST'].thumbprint | [0]" -o tsv)
-  az webapp config ssl bind --resource-group hallismiley-rg \
-    --name hallismiley-app --certificate-thumbprint "$THUMB" --ssl-type SNI
-done
-```
-
-Remember to add the HTTPS origins to `ALLOWED_ORIGINS` (step 5) or CORS will
-reject browser requests.
-
----
-
-## 8. Verifying the deployment
+## 7. Verifying a deployment
 
 | Check | URL | Expected |
-| --- | --- | --- |
-| Liveness | `GET /health` | `200 {"status":"ok", ...}` |
-| Readiness (DB + system) | `GET /ready` | `200 {"status":"ok", ...}` |
-| Prometheus metrics | `GET /metrics` | `200 text/plain` (requires `Authorization: Bearer <METRICS_TOKEN>` if set) |
+|---|---|---|
+| Liveness | `GET /health` | `200 {"status":"ok","uptime":…,"timestamp":…}` — **no DB check** |
+| Readiness (DB + breaker + memory) | `GET /ready` | `200 {"status":"ok", "checks": {…}}`; `503` while not ready |
+| Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` |
+| Build identity | `GET /api/v1/system/version` (session with the `updates` view) | `gitSha` = the dispatched SHA |
+| Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
 
-A healthy deploy returns `200` on `/ready` once the container has finished
-booting and connected to Postgres. If `/ready` returns `503` after a deploy,
-tail the container logs via `az webapp log tail` (see RUNBOOK).
+## 8. Rollback
 
----
+Image-pin: point the App Service at a previous `:sha-<sha>` tag and restart
+(RUNBOOK → Rollback). Git revert + merge only runs CI; a deploy is still a
+dispatch. Migrations are forward-only and must be expand/contract (stack
+invariant 14), so an image rollback never needs a schema rollback within one
+release.
 
-## 9. Rollback
+## 9. First admin
 
-See [`RUNBOOK.md` → Rollback Procedures](../RUNBOOK.md#rollback-procedures)
-for the canonical procedure. Summary: point the App Service at a previous
-image tag from ACR and force-restart — no CI rerun, no rebuild, ~1 minute end
-to end.
-
----
-
-## Initial admin user
-
-There is no public sign-up for admin accounts. To create the first admin run
-the bootstrap script with `ADMIN_USERNAME` and `ADMIN_PASSWORD` in the
-environment — locally against the prod DB:
-
-```bash
-DATABASE_URL='postgresql://halliadmin:<pw>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require' \
-DB_SSL=true \
-ADMIN_USERNAME=halli ADMIN_PASSWORD='<strong-password>' \
-node server/scripts/bootstrap.js
-```
-
-Keep the credentials in a password manager — there is no recovery flow
-without database access.
+No public sign-up for admins. Run the bootstrap against the target database
+with **all three** of `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` set —
+`server/scripts/bootstrap.js` creates no admin and exits 0 if any is missing —
+or `node server/scripts/setup-admin.js <username> <email> <password>`, which
+writes the user row directly (scrypt hash). Admin accounts must then enrol in
+TOTP from the profile (2FA is enforced for admins and `accounts` holders).

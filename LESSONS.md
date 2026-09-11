@@ -703,7 +703,7 @@ runner's fault.
 **A reload is not free here.** The review added a persistence check to
 `e2e/accounts.spec.js`: save the fees, `page.reload()`, assert the input still holds
 29000. On a healthy machine that is two seconds. This SPA imports all 58 view modules
-eagerly (ENHANCEMENTS #6), so a second full load on a degraded runner ate enough of
+(65 as of 2026-09-11) eagerly (ENHANCEMENTS #6), so a second full load on a degraded runner ate enough of
 the 30 s per-test budget that a LATER `page.goto` timed out — the failure surfaced
 three assertions away from its cause. The check is better as an API read anyway
 (`page.request.get`): it proves the SERVER stored the value, which is the thing the
@@ -718,3 +718,43 @@ samband" saw the retry's own brand-new "Ný" row. A retry inherits every row the
 previous attempt left in the database, so any fixture identity that has to be unique
 must be built inside the test from `testInfo.retry`, never at module or describe
 scope. This applies to every spec that writes rows it does not delete on failure.
+
+## 2026-09-11 — a docs sync: what the drift audit found that a reader would have paid for
+
+Every tracked markdown file was checked against the code (three read-only audits
+by doc family, each finding carrying a source line; every claim rewritten was
+re-verified by hand). Three lessons, tagged.
+
+**factory — `setup.ps1` still tells a scaffolded repo to run `/strip-base`, and
+generates RSA keys nothing reads.** The template's setup script ends with
+"Next: claude then run /strip-base" and creates `keys/private.pem`; on this repo
+the first is the one command CLAUDE.md bans in bold and the second is a
+leftover of a JWT layer that never existed. A scaffold's setup script is the
+first thing a new session runs, so a stale line there is a trap on every future
+customer repo. (Not fixed in the docs PR — it is a script, flagged for the
+template.)
+
+**project — a number copied forward is how every stale figure got there.** The
+docs carried five different test counts (2012, 981, 112, 109, 2864), a "58 view
+modules" figure repeated in three files, and a "22 console.log calls" from an
+early survey. None was wrong when written; all were copied into later text
+without re-measuring. Rule adopted: a live figure in a doc carries its date and
+the command that produced it (`docs/TESTING.md` → "Measuring the suite"), and
+the CHANGELOG is the only place a historical count belongs without a caveat.
+
+**base — a code comment can be as wrong as a doc, and a port copies both.**
+`server/routes/mcpRoutes.js` opened with "Mounted in app.js BEFORE sanitizeBody
+and BEFORE the global IP rate limiter"; `app.js` mounts it after both, and
+`docs/mcp.md` repeated the claim because it was ported from icelandicstore
+alongside the comment. The consequences (tool arguments are HTML-stripped, MCP
+traffic counts against the global IP limit) are exactly what the paragraph was
+written to prevent, and nobody had looked because the comment said it was
+handled. When porting, verify the mount-order claims against the target's
+`app.js`, not against the source repo's comment.
+
+The two inherited audits (`PRE_LAUNCH_AUDIT.md`, `SECURITY_AUDIT_2026-04-16.md`)
+and `SELF-UPDATE-PLAN.md` are frozen with dated banners rather than edited;
+`docs/SHOP_REDESIGN.md` was deleted (the portfolio storefront plan, never this
+repo's). The release-manifest builder keys its changelog section off
+`## [<package.json version>]`, and `CHANGELOG.md` was still the base's
+`[1.0.0]` — a promoted release would have shipped an empty changelog silently.

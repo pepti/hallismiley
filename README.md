@@ -1,213 +1,148 @@
-# Halli Smiley
+# Orange Smiley — company site (orangesmiley.is)
 
-Personal portfolio of Halli — an Icelandic carpenter and computer scientist. Showcases twenty years of precision joinery and timber framing alongside full-stack software engineering work.
+The public instance of **Orange Smiley ehf.**: the company site of an AI-driven
+software agency serving Icelandic SMBs, and the seed of its customer portal.
+Its product, **Rekstrarkerfið**, has its own site (`rekstrarkerfi.is`, sibling
+repo `rekstrarkerfid`). This repo dogfoods the site factory: it was scaffolded
+2026-08-09 from the HalliProjects base (`hallismiley` @ `562c637`) with every
+base module kept — shop, bookkeeping, admin + RBAC, projects, news, party — and
+the surfaces that do not fit the business hidden from nav, sitemap and search
+but left functional (`server/config/publicSurface.js`).
 
-Live site: **https://www.hallismiley.is**
+`CLAUDE.md` is the authoritative project memory (conventions, every programme
+that has landed, what is still Halli's to decide). `PLAN.md` is the build plan,
+`ENHANCEMENTS.md` the proposal queue, `LESSONS.md` the lessons log,
+`CHANGELOG.md` the release notes the promote workflow reads.
+
+**There is no deployed instance yet** — see `docs/DEPLOYMENT.md`.
 
 ---
 
-## Tech Stack
+## Tech stack (read from the repo 2026-09-11)
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js 20 |
-| Framework | Express 4.18 |
-| Database | PostgreSQL 16 |
-| Frontend | Vanilla JS SPA (MVC + Component pattern) |
-| Auth | RS256 JWT (access + refresh tokens) |
-| Deployment | Azure App Service (Linux container, image pushed to Azure Container Registry) |
+| Runtime | Node.js **24** (`Dockerfile` `node:24-alpine`, digest-pinned; `ci.yml` `node-version: 24` — the two move together) |
+| Framework | Express **5** (`^5.2.1`, CommonJS; catch-alls are `'/{*splat}'`) |
+| Database | PostgreSQL 16 via `pg`; migrations are the array in `server/config/schema.js`, applied at boot (chain ends `102_commission_settlement`) |
+| Frontend | Vanilla JS SPA — ES modules, no framework, no bundler; three themes (`ember`/Glóð default, `classic`/Bjart, `midnight`/Miðnætti); IS is the visitor default locale, EN mirrors it |
+| Auth | **Lucia v3 server-side sessions** (`auth_session` cookie), csrf-csrf double-submit, admin TOTP; no JWT layer |
+| Email | Resend (`RESEND_API_KEY`); sender `EMAIL_FROM` |
+| Payments | Stripe (shop checkout; the shop is a hidden surface here) |
+| Security | helmet/CSP, hpp, express-rate-limit, sanitize-html, RBAC view ids (`server/auth/adminViews.js`), pino with secret scrubbing |
+| Deployment | Docker image → Azure App Service via a **dispatch-only** GitHub workflow (nothing auto-deploys) |
 
 ---
 
-## Prerequisites
-
-- Node.js 20+
-- PostgreSQL 16+
-- OpenSSL (for generating RSA keys)
-
----
-
-## Local Setup
-
-**1. Clone and install dependencies**
+## Local setup
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/hallismiley.git
-cd hallismiley
+git clone https://github.com/orange-smiley/orangesmiley.git
+cd orangesmiley
 npm install
-```
-
-**2. Configure environment variables**
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in all values. See [Environment Variables](#environment-variables) below.
-
-**3. Generate RSA keys**
-
-```bash
-mkdir -p keys
-openssl genrsa -out keys/private.pem 2048
-openssl rsa -in keys/private.pem -pubout -out keys/public.pem
-```
-
-**4. Create the database and run migrations**
-
-```bash
-createdb hallismiley        # or create via psql
+cp .env.example .env      # then fill DATABASE_URL, ALLOWED_ORIGINS, CSRF_SECRET
+createdb orangesmiley     # dev DB (postgres/postgres locally)
 npm run migrate
+npm run dev               # nodemon on http://localhost:3000
 ```
 
-**5. (Optional) Seed sample data**
+`setup.ps1` bundles these steps on Windows, but two of its steps are stale
+(2026-09-11): it generates RSA keys under `keys/` that nothing reads (there is
+no JWT layer), and it ends by telling you to run `/strip-base` — **never do
+that on this repo** (CLAUDE.md). Detached dev server: `npm run dev:up` /
+`dev:down` / `dev:status` (`scripts/dev-server.ps1`, reads `PORT` from `.env`).
 
-```bash
-npm run seed
-```
+First admin: `node server/scripts/setup-admin.js <username> <email> <password>`
+(writes the user row directly with a scrypt hash), or `npm run bootstrap` with
+all three of `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` set (with any of
+them missing it migrates, creates no admin and exits 0). Admins then enrol in
+TOTP from the profile.
 
-**6. Start the development server**
-
-```bash
-npm run dev       # nodemon — auto-restarts on changes
-# or
-npm start         # plain node
-```
-
-The app is served at `http://localhost:3000`.
+Other scripts worth knowing: `npm run seed` (demo content), `seed:books`
+(demo books, refuses in production), `books:fx` / `books:archive` /
+`books:replay` (`RUNBOOK.md` → Bókhald), `market:import` (CLAUDE.md →
+Markaður), `check:i18n` (run before pushing locale changes).
 
 ---
 
-## Running Tests
+## Running tests
 
 ```bash
-npm test           # run all tests
-npm run test:ci    # CI mode (--ci --forceExit --coverage, 4 parallel workers)
-npm test -- --runInBand   # serial fallback for debugging cross-suite order
+npm run lint
+npm run check:i18n
+npm run test:unit          # ~8 s, no database
+npm run test:smoke         # auth + security + shop + contact, ~30 s
+npm test                   # everything, 4 Jest workers with a database each
+npm run test:e2e           # Playwright (one chromium project)
+npm test -- --runInBand    # serial fallback for debugging cross-suite order
 ```
 
-Tests are integration tests and require a running PostgreSQL instance. The base test database is scoped to the checked-out branch (`orangesmiley_<branch-slug>_test`, so parallel worktrees never share one); `tests/globalSetup.js` migrates one template (`…_tmpl_test`) and clones it per Jest worker (`…_w1_test` … `_w4_test`), prints which base it chose, and `tests/globalTeardown.js` drops the set again (`KEEP_TEST_DB=1` keeps it). Set `TEST_DATABASE_URL` to override the derivation entirely — the name must end in `_test`. Orphans from killed runs: `npm run test:db:clean`. Details: `docs/TESTING.md`.
+Integration tests need a reachable Postgres. The base test database is scoped
+to the checked-out branch (`orangesmiley_<branch-slug>_test`, so parallel
+worktrees never share one); `tests/globalSetup.js` migrates one template
+(`…_tmpl_test`) and clones it per Jest worker (`…_w1_test` … `_w4_test`),
+prints which base it chose, and `tests/globalTeardown.js` drops the set again
+(`KEEP_TEST_DB=1` keeps it). Set `TEST_DATABASE_URL` to override the derivation
+entirely — the name must end in `_test`. Orphans from killed runs:
+`npm run test:db:clean`. Playwright uses its own per-branch
+`orangesmiley_e2e_<branch>_test` (`e2e/lib/dbUrl.js`). Tiers, counts and what
+CI runs: `docs/TESTING.md`.
 
 ---
 
-## Environment Variables
+## Environment variables
 
-All variables are documented in `.env.example`. Key ones:
+All variables are documented in `.env.example`. The ones the server refuses to
+boot without (`server/server.js` `REQUIRED_ENV`):
 
 | Variable | Description |
 |----------|-------------|
-| `PORT` | HTTP port (default `3000`) |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `DB_SSL` | Set `true` for hosted PostgreSQL (Azure, Supabase, Render, etc.) |
-| `ADMIN_USERNAME` | Admin login username |
-| `ADMIN_PASSWORD_HASH` | bcrypt hash — generate with `setup-admin.js` |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins |
-| `PRIVATE_KEY` | RS256 private key (newlines as `\n`) |
-| `PUBLIC_KEY` | RS256 public key (newlines as `\n`) |
+| `ALLOWED_ORIGINS` | comma-separated CORS origins |
+| `CSRF_SECRET` | 32+ random characters |
+| `NODE_ENV` | `development` / `test` / `production` — `production` on every deployed stack |
+| `RESEND_API_KEY` | required when `APP_ENV=production` |
+| `UPLOAD_ROOT` | required when `NODE_ENV=production` (`server/config/paths.js`) |
+
+Frequently set: `APP_ENV` (the environment label: `test` or `production`),
+`APP_URL` and `EMAIL_FROM` (the code defaults are still the base's
+`www.hallismiley.is` / `halli@hallismiley.is` — set `info@orangesmiley.is`
+here), `LEAD_NOTIFY_EMAIL`, `DB_SSL` (TLS defaults ON in production), `PORT`
+(default 3000), `METRICS_TOKEN`, `BOOKS_UPLOAD_ROOT`, `MCP_ENABLED`
+(`docs/mcp.md`), `CLIENT_CONFIG_*` overrides of `config/client.json`.
 
 ---
 
-## Admin Access
+## Deployment
 
-The admin panel (`/admin`) requires a seeded admin account. To create or reset it:
+`.github/workflows/ci.yml` runs on every push and pull request to **`master`**
+(lint, audit, i18n, Jest, Playwright, Docker build + Trivy + boot smoke); a
+docs-only change runs all of it. **CI green is the merge gate.**
+`.github/workflows/deploy.yml` is `workflow_dispatch` only and fails at its
+first step until the `vars.ACR_NAME / IMAGE_NAME / WEBAPP_NAME / RESOURCE_GROUP`
+repository variables and the `AZURE_*` OIDC secrets exist — arming it is a
+GitHub-settings change, not a workflow edit, and happens only on Halli's
+go-ahead. `promote.yml` publishes a built image to the `canary` / `stable`
+release channel that the self-update module polls (`docs/SELF-UPDATE.md`).
+Full detail, boot requirements and the rollback shape: `docs/DEPLOYMENT.md`;
+operations: `RUNBOOK.md`.
 
-```bash
-node server/scripts/setup-admin.js
-```
-
-The script prompts for a username and password, hashes the password with bcrypt, and prints the values to add to your `.env`.
-
----
-
-## Deployment on Azure App Service
-
-Production is on **Azure App Service** (Linux container, B1 plan), with images
-pushed to **Azure Container Registry** and a managed **Azure Database for
-PostgreSQL Flexible Server**. Deploys are fully automated via GitHub Actions
-using OIDC federated credentials — no long-lived secrets in the repo.
-
-See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full first-time-setup
-guide (resource provisioning, OIDC trust, custom domain, Azure Files mount for
-uploads). The summary for routine work:
-
-1. Push to `main`. The `CI` workflow (`.github/workflows/ci.yml`) runs lint +
-   `npm audit` + integration tests + E2E + Docker build.
-2. On CI success, the `Deploy to Azure` workflow (`.github/workflows/deploy.yml`)
-   auto-triggers via `workflow_run`, builds the image, pushes to ACR
-   (`hallismileyacr.azurecr.io/hallismiley:<sha>`), and updates the App Service
-   container reference + restarts.
-3. Migrations run automatically at container startup via `server/scripts/migrate.js`
-   — no manual migration step.
-
-Manual deploy (emergency override, bypasses CI gate):
-```bash
-gh workflow run "Deploy to Azure" --ref main
-```
+Backups: none to document until an instance exists (Azure Database for
+PostgreSQL Flexible Server provides PITR when it does; the yearly books archive
+to media in Iceland is the compliance step regardless — `RUNBOOK.md` → Bókhald).
 
 ---
 
-## Database Backup Strategy
+## Where things are
 
-Production data lives in **Azure Database for PostgreSQL Flexible Server**
-(`hallismiley-db`), which provides automatic, encrypted backups managed by
-Azure — no application-side cron required.
-
-**Automatic backups (Azure):**
-- Daily full + log backups for point-in-time restore.
-- Default retention: 7 days (configurable up to 35 days).
-- Geo-redundant storage is available but not currently enabled on this server.
-
-**Inspect current backup settings:**
-```bash
-az postgres flexible-server show \
-  --resource-group hallismiley-rg --name hallismiley-db \
-  --query "{retention:backup.backupRetentionDays, geoRedundant:backup.geoRedundantBackup}"
-```
-
-**Point-in-time restore (PITR):**
-```bash
-az postgres flexible-server restore \
-  --resource-group hallismiley-rg \
-  --name hallismiley-db-restore-$(date +%Y%m%d) \
-  --source-server hallismiley-db \
-  --restore-time "2026-05-12T12:00:00Z"
-```
-Restores create a new server; swap the App Service's `DATABASE_URL` to point
-at the restored server once it's healthy.
-
-**Ad-hoc logical dump (locally, against the prod DB):**
-```bash
-pg_dump "postgresql://halliadmin:<url-encoded-pw>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require" \
-  --no-acl --no-owner -F c -f backup_$(date +%Y%m%d).dump
-```
-
-**Restore an ad-hoc dump into a dev/staging server:**
-```bash
-pg_restore --clean --no-acl --no-owner \
-  -d "postgresql://USER:PW@HOST:5432/DBNAME?sslmode=require" \
-  backup_YYYYMMDD.dump
-```
-
----
-
-## Environment-Specific Configuration
-
-| Variable | Development | Staging | Production |
-|----------|-------------|---------|------------|
-| `NODE_ENV` | `development` | `staging` | `production` |
-| `DB_SSL` | `false` (local PG) | `true` (hosted) | `true` (hosted) |
-| `ALLOWED_ORIGINS` | `http://localhost:3000` | staging URL | `https://www.hallismiley.is` |
-| `SENTRY_DSN` | leave blank | optional | set for error tracking |
-| Cookie `secure` flag | off (http ok) | on | on |
-| HTTPS redirect | disabled | enabled | enabled |
-
-**Conventions:**
-- Never commit `.env` — only `.env.example` is tracked.
-- Staging should mirror production env vars as closely as possible.
-- Rotate RSA keys (`PRIVATE_KEY`/`PUBLIC_KEY`) independently per environment — never share keys across environments.
-- Use `LOG_LEVEL=debug` locally for verbose output; leave unset (defaults to `info`) in production.
-
----
+| | |
+|---|---|
+| `server/` | Express app (`app.js` mounts, `routes/`, `controllers/`, `services/`, `models/`, `server/config/schema.js` migrations, `mcp/`) |
+| `public/` | the SPA (`js/router.js`, `js/views/`, `js/components/`, `js/i18n/{en,is}.json`, `css/themes.css`) |
+| `tests/` | Jest unit + integration (real Postgres); `e2e/` Playwright |
+| `docs/` | API, bookkeeping, books parallel run, accountant questions, deployment, MCP, sales staff, self-update, SLO, testing |
+| `company/` | gitignored — business plan, decisions, logs, market research staging |
+| `.claude/` | gitignored — agents, commands, rules (`stack-invariants.md`) |
 
 ## License
 

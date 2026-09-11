@@ -1322,7 +1322,9 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
-    // Shop redesign step 1 — see docs/SHOP_REDESIGN.md.
+    // Shop redesign step 1 (the base's 2026-05 storefront plan; its doc was
+    // retired 2026-09-11 — the shop is a hidden surface on this instance, see
+    // server/config/publicSurface.js).
     //
     // The existing products.category (from 024_product_variants) held
     // apparel-style values like 'apparel', 'accessories', 'roof_box'. The

@@ -1,5 +1,6 @@
 -- Migration: 045_shop_sections
--- Shop redesign step 1 — see docs/SHOP_REDESIGN.md.
+-- Shop redesign step 1 (the base's 2026-05 storefront plan; its doc was
+-- retired 2026-09-11 — the shop is a hidden surface on this instance).
 --
 -- The existing products.category (from 024_product_variants) held apparel-style
 -- values like 'apparel', 'accessories', 'roof_box'. The redesign treats those

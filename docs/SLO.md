@@ -90,7 +90,11 @@ What matters for the SLO is how the app behaves when each dependency is down:
   - **Fast burn** — consuming budget ≥ **14.4×** (≈2% of the budget in 1 h) → page immediately.
   - **Slow burn** — consuming budget ≥ **6×** (≈5% in 6 h) → notify.
 - **Policy:** when a window's budget is exhausted, **reliability work takes priority over features** until the SLO recovers.
-- TODO — record where the alert definitions live.
+- Where the alert definitions live today (read 2026-09-11): `server/observability/alerts.js` —
+  a flat **5 % error rate over a 5-minute window** (with a request-volume floor), **90 %
+  memory**, and **5 failed logins per IP in 5 minutes**, delivered through `ALERT_WEBHOOK_URL`
+  and the loud-mail path. The 14.4× / 6× burn-rate alerts above have **no code counterpart**;
+  they stay here as the target for when an APM sink exists (ENHANCEMENTS #10).
 
 ---
 

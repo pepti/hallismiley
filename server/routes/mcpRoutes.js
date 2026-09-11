@@ -1,8 +1,11 @@
 // MCP endpoint — POST /api/v1/mcp (Streamable HTTP, stateless; see
 // server/mcp/transport.js).
 //
-// Mounted in app.js BEFORE sanitizeBody and BEFORE the global IP rate limiter
-// (reasons documented at the mount), so this router carries its own:
+// Mounted in app.js AFTER sanitizeBody and AFTER the global IP rate limiter
+// (this comment said the opposite until 2026-09-11 — it was ported verbatim
+// from icelandicstore; see docs/mcp.md for the two consequences: tool
+// arguments are tag-stripped, and MCP traffic also counts against the global
+// IP limit). Independently of that, this router carries its own:
 //   • feature gate (MCP_ENABLED — dark by default, per-stack opt-in),
 //   • pre-auth IP limiter (deters token guessing),
 //   • bearer-only auth (middleware/mcpAuth.js — never reads cookies, which is
