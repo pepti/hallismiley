@@ -50,7 +50,7 @@
 
 ## 1. Purpose and Scope
 
-This Secure Development Lifecycle ("S-SDLC") defines the security activities that wrap around every change shipped to `hallismiley.is`. It applies to:
+This Secure Development Lifecycle ("S-SDLC") defines the security activities that wrap around every change shipped to `orangesmiley.is` (no instance exists yet; the process applies to `master` regardless). It applies to:
 
 - All server code under `server/` (Express app, middleware, routes, controllers, models, scripts).
 - All client code under `public/` (vanilla JS SPA, HTML, CSS).
@@ -320,13 +320,13 @@ Half-day block, owned by SC:
 
 **Purpose:** Ship the sprint's work without surprises.
 
-**Entry criteria:** All PRs merged to `main`. CI green on the merge commit.
+**Entry criteria:** All PRs merged to `master`. CI green on the merge commit.
 
 ### 11.1 Pre-Deploy Checklist
 
 Run the `/pre-deploy` slash command on Day 12 (Fri of Week 2). It verifies:
 
-1. CI is green on the head of `main`.
+1. CI is green on the head of `master`.
 2. No HIGH/CRITICAL CVEs in `npm audit`.
 3. Any new migration is reversible-in-principle (per `RUNBOOK.md § Database Migration Rollback`).
 4. Any new env var is present in both Azure App Service config and `.env.example`.
@@ -340,8 +340,8 @@ Run the `/pre-deploy` slash command on Day 12 (Fri of Week 2). It verifies:
 ### 11.2 Deploy Window
 
 - **Window:** Friday 15:00–17:00 Atlantic/Reykjavik. No deploys after 17:00 Friday, no deploys on weekends except for security hot-fixes (see Exception Process).
-- **Mechanism:** Push to `main` (already done at this point) → CI runs → Deploy workflow auto-fires via `workflow_run` → image built and pushed to `hallismileyacr.azurecr.io/hallismiley:<sha>` → App Service container ref updated → restart. Migrations run at container startup.
-- **Smoke tests:** Within 5 minutes of restart, hit `/health`, log in as test user, load `/`, `/projects`, `/about`. If any fail → rollback per `RUNBOOK.md § Rollback Procedures`.
+- **Mechanism (corrected 2026-09-11):** merge to `master` (already done at this point) → CI runs → an operator DISPATCHES `Deploy to Azure` by hand (`deploy.yml` is `workflow_dispatch` only; nothing auto-fires — `docs/DEPLOYMENT.md` §3) → image built and pushed to `<ACR_NAME>.azurecr.io/<IMAGE_NAME>:<sha>` → App Service container ref updated → restart. Migrations run at container startup.
+- **Smoke tests:** Within 5 minutes of restart, hit `/ready` (not `/health` — it never checks the database), log in as test user, load `/`, `/thjonusta`, `/hafa-samband`. If any fail → rollback per `RUNBOOK.md § Rollback Procedures`.
 
 ### 11.3 Rollback Triggers
 
@@ -406,7 +406,7 @@ When a security incident is suspected or confirmed:
 ### 12.3 Vulnerability Disclosure
 
 Publish `SECURITY.md` at repo root (action item in Sprint 1) with:
-- Contact: `security@hallismiley.is` (set up an alias)
+- Contact: `security@orangesmiley.is` (set up an alias; the address does not exist yet)
 - PGP key (optional but recommended)
 - Scope: production deployment, source code, dependencies (not third-party services)
 - Acknowledgment SLA: 5 business days
@@ -643,7 +643,7 @@ Saved as `docs/sprints/2026-SNN-planning.md` on Day 1 of each sprint.
 
 Captured by `/pre-deploy`. The version-of-record is the slash command's prompt in `.claude/commands/pre-deploy.md`; this section is the human-readable summary.
 
-- [ ] CI green on `main` HEAD
+- [ ] CI green on `master` HEAD
 - [ ] `npm audit --production` shows 0 HIGH/CRITICAL
 - [ ] New migrations reviewed; reversal documented
 - [ ] New env vars present in App Service config and `.env.example`
@@ -668,7 +668,7 @@ The S-SDLC implements NIST SP 800-218 (Secure Software Development Framework) v1
 - **PO.5 (Implement and maintain secure environments for development):** Section 9 (Implement: pre-commit hooks, secret hygiene), Azure App Service per `docs/DEPLOYMENT.md`.
 
 ### Protect the Software (PS)
-- **PS.1 (Protect all forms of code from unauthorized access and tampering):** GitHub branch protection on `main` (action item Sprint 1), signed commits encouraged, ACR access via OIDC.
+- **PS.1 (Protect all forms of code from unauthorized access and tampering):** GitHub branch protection on `master` (not in force as of 2026-09-11 — the branch answers "not protected"; still an action item), signed commits encouraged, ACR access via OIDC.
 - **PS.2 (Provide a mechanism for verifying software release integrity):** Image SHA-tagged in ACR; `RUNBOOK.md` rollback uses SHA.
 - **PS.3 (Archive and protect each software release):** ACR retains tagged images; git tags per release.
 
@@ -742,7 +742,6 @@ A story is "security done" only when all apply (in addition to functional DoD):
 |---------|------|--------|--------|
 | 1.0 | 2026-05-23 | Halli | Initial S-SDLC, effective 2026-05-25. |
 | 1.1 | 2026-08-27 | Öryggisvörður (approved by Halli) | §5 cadence ownership: weekly/monthly/quarterly/annual rows executed or flagged by the `security-sdl-sweep` scheduled task run as Öryggisvörður. The site-factory/template mirror of this doc is deliberately NOT updated — divergence to be reconciled by a later /retro or base-sync. |
-
 | 1.2 | 2026-09-11 | Docs sync (Claude, for Halli's review) | Project retitled to Orange Smiley; §9 hooks, §10.1 gates and §13 tooling matrix corrected to what the repo actually runs (lint-only husky, no secret scan, ESLint 10 flat config, Dependabot + Trivy in use, `/csp-report` live); artefact directories marked not instantiated; sprint calendar marked historical; `main` → `master`. |
 
 Future revisions are tracked here. The SDLC is reviewed quarterly at the verification day of the sprint containing the quarter boundary; major changes require an ADR.

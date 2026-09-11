@@ -126,6 +126,15 @@ Also set on any real instance:
 Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
 nothing reads them (the mail transport is Resend).
 
+**Blocker with no env knob (2026-09-11):** in `server/app.js` the
+`NODE_ENV === 'production'` block holds `const CANONICAL_HOST =
+'www.hallismiley.is'` and 301-redirects every request whose `Host` differs
+(only `/health` and `/ready` are exempt). It reads no variable, so a first
+deploy of this repo would redirect all traffic — `orangesmiley.is` included —
+to the base owner's personal site. Deriving it from `APP_URL` (as
+`ssrMeta.js` and `sitemapRoutes.js` already do) is a one-line code change on
+the cutover checklist in `ENHANCEMENTS.md`; it must land before any deploy.
+
 ## 6. Provisioning, when Halli says go
 
 The shape is the base's: Azure App Service (Linux container) pulling from an
@@ -138,6 +147,46 @@ time and recorded in the gitignored `company/` folder and as the `vars.*`
 above — this file will not carry them until they exist. The `azure-ops` skill
 holds the fleet provisioning pattern.
 
+Three recipes from the base's guide that are still correct and worth keeping
+(placeholders as in `RUNBOOK.md`):
+
+- **Reaching the managed Postgres from a laptop** (needed by the prod shop
+  seed, the first-admin bootstrap and any `psql`): add your IP to the server
+  firewall first, and URL-encode the password in `DATABASE_URL` —
+  `node -e "console.log(encodeURIComponent(process.argv[1]))" '<password>'`.
+
+  ```bash
+  MY_IP=$(curl -s ifconfig.me)
+  az postgres flexible-server firewall-rule create \
+    --resource-group <RESOURCE_GROUP> --name <DB_SERVER> \
+    --rule-name dev-laptop --start-ip-address "$MY_IP" --end-ip-address "$MY_IP"
+  ```
+
+- **Mounting the uploads share from Git Bash on Windows.** If
+  `az webapp config storage-account add … --mount-path /app/uploads` fails
+  with "contains invalid characters", prefix the command with
+  `MSYS_NO_PATHCONV=1` — MSYS rewrites the Linux path otherwise.
+
+- **Custom domain + free managed certificates** (for the day
+  `orangesmiley.is` points here; see the cutover checklist at the end of
+  `ENHANCEMENTS.md`): DNS = `A` record for the apex to the App Service IP and
+  `CNAME www → <WEBAPP_NAME>.azurewebsites.net`, then
+
+  ```bash
+  for HOST in www.<host> <host>; do
+    az webapp config hostname add --resource-group <RESOURCE_GROUP> --webapp-name <WEBAPP_NAME> --hostname "$HOST"
+    az webapp config ssl create      --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> --hostname "$HOST"
+    THUMB=$(az webapp config ssl list --resource-group <RESOURCE_GROUP> \
+              --query "[?subjectName=='$HOST'].thumbprint | [0]" -o tsv)
+    az webapp config ssl bind --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> \
+      --certificate-thumbprint "$THUMB" --ssl-type SNI
+  done
+  ```
+
+  **Then add the new HTTPS origins to `ALLOWED_ORIGINS`** (a boot-fatal
+  variable) or CORS rejects every browser request twenty minutes after the
+  domain goes live.
+
 Bookkeeping note (RUNBOOK → Bókhald): Azure has no Iceland region, so the
 yearly books archive to media in Iceland is the compliance step, not a nicety.
 
@@ -148,7 +197,7 @@ yearly books archive to media in Iceland is the compliance step, not a nicety.
 | Liveness | `GET /health` | `200 {"status":"ok","uptime":…,"timestamp":…}` — **no DB check** |
 | Readiness (DB + breaker + memory) | `GET /ready` | `200 {"status":"ok", "checks": {…}}`; `503` while not ready |
 | Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` |
-| Build identity | `GET /api/v1/system/version` (session with the `updates` view) | `gitSha` = the dispatched SHA |
+| Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — it is on here) | `gitSha` = the dispatched SHA |
 | Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
 
 ## 8. Rollback

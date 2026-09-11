@@ -6,9 +6,11 @@ is tracked in CLAUDE.md); this repo has no deployed instance yet.
 
 This document covers the **public and authentication** endpoints in detail and
 ends with an **inventory of every mounted router** so the admin surface is at
-least findable. The admin API (≈370 routes across the `/api/v1/admin/*`
-routers) is documented by its route files and the feature docs they point at,
-not here. Read 2026-09-11 against `server/app.js` and `server/routes/`.
+least findable. The admin API (207 route declarations across the `/api/v1/admin/*`
+routers, of 353 in `server/routes/` altogether — counted 2026-09-11 by
+summing `grep -cE '^\s*router\.(get|post|put|patch|delete)\('` over
+`server/routes/*.js`) is documented by its route files and the feature docs
+they point at, not here. Read 2026-09-11 against `server/app.js` and `server/routes/`.
 
 Auth endpoints are mounted at `/auth`; everything else is under `/api/v1/`.
 Authenticated endpoints require a valid session cookie (`auth_session`)
@@ -25,8 +27,8 @@ automatically. No tokens are stored in the frontend.
 
 ### CSRF — required on every state-changing request
 
-Every write route (POST/PUT/PATCH/DELETE, including `POST /auth/logout`)
-carries `csrfProtect` (`server/middleware/csrf.js`). Fetch a token first and
+Every session-authenticated write route (POST/PUT/PATCH/DELETE, including
+`POST /auth/logout`) carries `csrfProtect` (`server/middleware/csrf.js`). Fetch a token first and
 send it back as the `X-CSRF-Token` header:
 
 ```
@@ -34,9 +36,13 @@ GET /api/v1/csrf-token            →  200 { "token": "…" }
 ```
 
 The token is bound to a `SameSite=Strict` cookie (`secure` in production).
-A missing or stale token answers `403` in the standard error envelope. The one
-router that legitimately omits `csrfProtect` is the bearer-only MCP endpoint
-(`docs/mcp.md`).
+A missing or stale token answers `403` in the standard error envelope. Routes
+that deliberately omit `csrfProtect` (read 2026-09-11, `grep -L csrfProtect`):
+the bearer-only MCP endpoint (`docs/mcp.md`), the public lead form
+`POST /api/v1/contact` and the analytics beacon `POST /api/v1/analytics/collect`
+(both anonymous, rate-limited, and write only their own row), and the
+read-only routers. Note the asymmetry: the client-error beacon
+`POST /api/v1/events/collect` DOES carry `csrfProtect`.
 
 ### POST /auth/login
 
@@ -103,13 +109,13 @@ Use this on page load to restore session state.
 
 | Route | Gate / limiter |
 |---|---|
-| `POST /auth/signup` | 75 / 15 min per IP, validated body |
+| `POST /auth/signup` | 75 / 10 min per IP, validated body |
 | `POST /auth/verify-email` | — |
-| `POST /auth/resend-verification` | 5 / 15 min per IP |
-| `POST /auth/forgot-password`, `POST /auth/reset-password` | 25 / 15 min per IP |
+| `POST /auth/resend-verification` | 5 / minute per IP |
+| `POST /auth/forgot-password`, `POST /auth/reset-password` | 25 / hour per IP |
 | `POST /auth/totp/setup`, `/totp/confirm`, `/totp/disable` | session + CSRF |
-| `GET /auth/check-username/:username`, `GET /auth/check-email/:email` | check limiter |
-| `POST /auth/party-magic-login` | magic-login limiter (hidden party module) |
+| `GET /auth/check-username/:username`, `GET /auth/check-email/:email` | 150 / hour per IP |
+| `POST /auth/party-magic-login` | 50 / 15 min per IP (hidden party module) |
 | `GET /auth/google`, `/google/callback`, `/facebook`, `/facebook/callback` | `socialLoginGate` — answer `404` unless `SOCIAL_LOGIN_ENABLED=true` (OFF on this instance: no OAuth app configured) |
 
 ---
@@ -229,9 +235,10 @@ Every other error returns the envelope from `server/middleware/errorHandler.js`:
 | Global (all endpoints; static assets exempt by location, `utils/staticAsset.js`) | 2000 / 15 min per IP | `server/app.js` |
 | Writes (POST/PUT/PATCH/DELETE) | 450 / 15 min per IP | `server/app.js` |
 | Auth login (+ TOTP step) | 50 / 15 min per IP | `authRoutes.js` |
-| Signup | 75 / 15 min per IP | `authRoutes.js` |
-| Password reset (forgot + reset) | 25 / 15 min per IP | `authRoutes.js` |
-| Resend verification | 5 / 15 min per IP | `authRoutes.js` |
+| Signup | 75 / 10 min per IP | `authRoutes.js` |
+| Password reset (forgot + reset) | 25 / hour per IP | `authRoutes.js` |
+| Resend verification | 5 / minute per IP | `authRoutes.js` |
+| Username/email availability checks | 150 / hour per IP | `authRoutes.js` |
 | Contact / lead form | 5 / hour per IP | `contactRoutes.js` |
 | Shop checkout | 50 / 15 min per IP | `shopRoutes.js` |
 | Client error beacon / analytics beacon | 100 / 300 per window | `eventRoutes.js`, `analyticsRoutes.js` |
@@ -245,8 +252,10 @@ Rate-limit responses use HTTP `429` with standard `RateLimit-*` headers.
 ## Router inventory (`server/app.js` mounts, in mount order)
 
 Gates are the router's own (`requireAuth`, `requireRole`, `requireView(id)` —
-view ids in `server/auth/adminViews.js`); every `/api/v1/admin/*` router is
-mounted before the generic `/api/v1/admin` catch-all.
+view ids in `server/auth/adminViews.js`). Most `/api/v1/admin/*` routers are
+mounted before the generic `/api/v1/admin` router, but `mcp-tokens` and
+`events` are mounted AFTER it (their inline comments claim otherwise) — it
+works today only because `adminRoutes.js` has no handler on those paths.
 
 | Mount | File | Gate | Feature doc |
 |---|---|---|---|
@@ -256,14 +265,14 @@ mounted before the generic `/api/v1/admin` catch-all.
 | `/api/v1/users` | `userRoutes.js` | session | — |
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
 | `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (non-prod, or switch on + admin) | — |
-| `/api/v1/system` | `systemRoutes.js` | `/version`, `/changes` admin; updates behind the module gate | `docs/SELF-UPDATE.md` |
+| `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |
 | `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface) | — |
 | `/api/v1/admin/analytics` | `analyticsAdminRoutes.js` | `analytics` view | — |
 | `/api/v1/admin/general-settings` | `adminGeneralSettingsRoutes.js` | `general` view | — |
 | `/api/v1/admin/discounts` | `adminDiscountRoutes.js` | admin views (hidden) | — |
 | `/api/v1/admin/background` | `adminBackgroundRoutes.js` | admin (hidden) | — |
 | `/api/v1/admin/change-requests` | `adminChangeRequestRoutes.js` | `feedback` view | — |
-| `/api/v1/admin/nav-config` | `adminNavRoutes.js` | session (per-admin layout) | — |
+| `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
 | `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
 | `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view | `docs/SALES-STAFF.md` |

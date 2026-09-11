@@ -107,7 +107,9 @@ boot without (`server/server.js` `REQUIRED_ENV`):
 Frequently set: `APP_ENV` (the environment label: `test` or `production`),
 `APP_URL` and `EMAIL_FROM` (the code defaults are still the base's
 `www.hallismiley.is` / `halli@hallismiley.is` — set `info@orangesmiley.is`
-here), `LEAD_NOTIFY_EMAIL`, `DB_SSL` (TLS defaults ON in production), `PORT`
+here; and `server/app.js` `CANONICAL_HOST` is a hardcoded production 301 to
+the base's host with no env override — see `docs/DEPLOYMENT.md` §5),
+`LEAD_NOTIFY_EMAIL`, `DB_SSL` (TLS defaults ON in production), `PORT`
 (default 3000), `METRICS_TOKEN`, `BOOKS_UPLOAD_ROOT`, `MCP_ENABLED`
 (`docs/mcp.md`), `CLIENT_CONFIG_*` overrides of `config/client.json`.
 

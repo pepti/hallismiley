@@ -1,8 +1,8 @@
 # Runbook — Orange Smiley
 
 Operational procedures for the deployment on Azure App Service — **which does
-not exist yet** (2026-09-11: no instance is provisioned; deploy is a manual
-dispatch that fails at its guard until Halli arms it — `docs/DEPLOYMENT.md`).
+not exist yet** (`docs/DEPLOYMENT.md` owns that fact and its date; deploy is a
+manual dispatch that fails at its guard until Halli arms it).
 Until then the Azure sections below are the base's procedures with the
 resource names replaced by placeholders. The placeholders are the repository
 variables `deploy.yml` reads; read the live values from GitHub → Settings →
@@ -46,7 +46,7 @@ az webapp restart \
   --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME>
 ```
 
-Verify with `curl -I https://<host>/health` once the restart settles
+Verify with `curl https://<host>/ready` (NOT `/health`, which never checks the database) once the restart settles
 (~30–60s on the B1 tier; brief unavailability during the swap).
 
 > A rollback re-deploys the previous Docker image but does NOT revert the
@@ -75,6 +75,45 @@ not wait for CI and it will not run from CI; its first step fails with
 ```bash
 gh workflow run "Deploy to Azure" --ref master
 ```
+
+---
+
+## Backups and restore (when an instance exists)
+
+Azure Database for PostgreSQL Flexible Server takes daily full + log backups
+for point-in-time restore on its own (default retention 7 days, configurable
+to 35; geo-redundant storage is a per-server option). Read the live setting:
+
+```bash
+az postgres flexible-server show \
+  --resource-group <RESOURCE_GROUP> --name <DB_SERVER> \
+  --query "{retention:backup.backupRetentionDays, geoRedundant:backup.geoRedundantBackup}"
+```
+
+**Point-in-time restore creates a NEW server** — repoint the App Service's
+`DATABASE_URL` at it once it is healthy:
+
+```bash
+az postgres flexible-server restore \
+  --resource-group <RESOURCE_GROUP> \
+  --name <DB_SERVER>-restore-$(date +%Y%m%d) \
+  --source-server <DB_SERVER> \
+  --restore-time "2026-05-12T12:00:00Z"
+```
+
+**Ad-hoc logical dump / restore** (host-independent; works against the dev DB
+today — note the laptop needs a firewall rule to reach the managed server,
+`docs/DEPLOYMENT.md` §6):
+
+```bash
+pg_dump "postgresql://<db-admin>:<url-encoded-pw>@<DB_SERVER>.postgres.database.azure.com:5432/<dbname>?sslmode=require" \
+  --no-acl --no-owner -F c -f backup_$(date +%Y%m%d).dump
+pg_restore --clean --no-acl --no-owner \
+  -d "postgresql://USER:PW@HOST:5432/DBNAME?sslmode=require" backup_YYYYMMDD.dump
+```
+
+The books' fylgiskjöl live outside the database (`BOOKS_UPLOAD_ROOT`) and the
+yearly archive to media in Iceland (Bókhald below) is the statutory copy.
 
 ---
 
@@ -395,13 +434,16 @@ Two probes, and they answer different questions (`server/app.js`):
 
 ```bash
 curl https://<host>/health     # liveness: 200 whenever the process is up
-curl https://<host>/ready      # readiness: 200 only when the DB, breaker and memory are fine
+curl https://<host>/ready      # readiness: 200 only when the DB answers, the pool is not backed up and the breaker is closed
 ```
 
 `/health` answers `{ "status": "ok", "uptime": 12345, "timestamp": "…" }` and
 **never checks the database** — a 200 there with a dead Postgres is normal.
 `/ready` answers `200` with a `checks` object (database, pool, circuit
-breaker, memory, event-loop lag) or `503` with the failing check named. The
+breaker, memory, event-loop lag) or `503` with the failing check named — only
+the database check, `pool.waitingCount > 5` and an open breaker flip it to
+503; memory and event-loop lag are reported for visibility and never do
+(`server/app.js`), so an OOM loop shows up in the restart count, not here. The
 previous version of this section documented a `"database"` key on `/health`
 that does not exist (fixed 2026-09-11).
 

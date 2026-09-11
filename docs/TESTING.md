@@ -1,20 +1,20 @@
 # Test tiers — run the right suite for the change
 
-_Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suite run). The tiers change the **inner loop**; the merge gate is unchanged — every chunk still merges only with the FULL suite green, and CI (`test:ci`) still runs everything. Test counts below were re-measured 2026-09-11 (see "Measuring the suite"); the timings are still the 2026-08-24 dev-machine figures._
+_Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suite run). The tiers change the **inner loop**; the merge gate is unchanged — every chunk still merges only with the FULL suite green, and CI (`test:ci`) still runs everything. Test counts below were re-measured 2026-09-11 — the unit and smoke tiers were RUN that day, the full and e2e suites were counted statically (see "Measuring the suite"); the timings are still the 2026-08-24 dev-machine figures._
 
 ## The tiers (timings measured 2026-08-24 on the dev machine)
 
 | Command | What | Size / time | DB |
 |---|---|---|---|
-| `npm run test:unit` | All of `tests/unit/` via `jest.unit.config.js` — no globalSetup (no DB drop/migrate), parallel workers | 978 declared tests in 67 files, **~8 s** | none |
-| `npm run test:smoke` | Critical-path integration specs: auth, security (CSRF/RBAC/headers/envelope), shop, contact (lead capture) | 110 declared tests, **~28 s** | yes |
+| `npm run test:unit` | All of `tests/unit/` via `jest.unit.config.js` — no globalSetup (no DB drop/migrate), parallel workers | 1283 tests at runtime (978 declared in 67 files — `.each` tables expand), **~8 s** | none |
+| `npm run test:smoke` | Critical-path integration specs: auth, security (CSRF/RBAC/headers/envelope), shop, contact (lead capture) | 112 tests at runtime (110 declared), **~28 s** | yes |
 | `npm run test:hotfix` | unit + smoke, in that order | **~36 s** | yes |
 | `npm run test:related -- <files…>` | Jest picks every test that (statically) depends on the named source files | varies — see caveat below | maybe |
-| `npm test` | Everything (unit + all integration) in **4 parallel Jest workers, one database each** (`jest.config.js` `maxWorkers: 4`; `npm test -- --runInBand` for serial) | 2647 declared tests in 139 files, ~2 min | yes |
+| `npm test` | Everything (unit + all integration) in **4 parallel Jest workers, one database each** (`jest.config.js` `maxWorkers: 4`; `npm test -- --runInBand` for serial) | 2647 declared tests in 139 files; not re-timed since the 2026-09-02 parallel split (6 min 37 s serial on 2026-08-24) | yes |
 | `npm run test:e2e:smoke` | Playwright: auth, navigation, business-routes | 33 of the 178 | yes |
 | `npm run test:e2e` | Full Playwright suite (one `chromium` project) | 178 declared tests in 26 spec files | yes |
 
-**`test:related` caveat** (measured 2026-08-24): for a *leaf* file (a util, a client script) the related set is small and fast. For a *core* file required by `app.js`'s route tree (services, models, middleware), the related set is most of the integration suite — ~6.7 min for `discountEngine.js` (1201 tests). That is the true blast radius, but locally it defeats the purpose: for core-file fixes run `test:hotfix` and let CI's full run be the wide net.
+**`test:related` caveat** (measured 2026-08-24, serially on one shared database — before the per-worker split below; the absolute times are stale, the shape of the argument is not): for a *leaf* file (a util, a client script) the related set is small and fast. For a *core* file required by `app.js`'s route tree (services, models, middleware), the related set is most of the integration suite — ~6.7 min for `discountEngine.js` (1201 tests). That is the true blast radius, but locally it defeats the purpose: for core-file fixes run `test:hotfix` and let CI's full run be the wide net.
 
 ## The hotfix workflow (production bug)
 
@@ -187,4 +187,5 @@ grep -rhoE "(^|[^.\w])(test|it)(\.(only|skip|fixme|slow))?\s*\(\s*['\"\`]" e2e -
 ```
 
 2026-09-11 @ `8baa090`: 139 files / 2647 declarations (unit 978, integration
-1669) and 26 spec files / 178 declarations.
+1669) and 26 spec files / 178 declarations. Runtime is higher: the unit tier ran
+1283 and the smoke tier 112 that day, so expect the full suite well above 2647.

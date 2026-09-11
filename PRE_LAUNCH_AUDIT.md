@@ -5,8 +5,11 @@
 > hallismiley codebase — Node 20, Express 4, RS256 JWT auth, a `keys/` directory,
 > `data/portfolio.db.json`. None of that exists in this repo (Node 24, Express 5,
 > Lucia sessions, no keys). Its CRITICAL findings about the private key are moot
-> here; its file references do not resolve. Kept as provenance; the body below
-> is not maintained. Current security posture: `SECURE_SDLC.md`.
+> here; its file references do not resolve, and its praise of `/health` for
+> "verifying database connectivity" is wrong for this code — `/health` is
+> liveness only, `/ready` checks the database (`RUNBOOK.md` → Health Check).
+> Kept as provenance; the body below is not maintained. Current security
+> posture: `SECURE_SDLC.md`.
 
 **Date:** 2026-03-30
 **Stack:** Node.js 20 · Express 4.18 · PostgreSQL · Vanilla JS SPA

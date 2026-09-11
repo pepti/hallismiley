@@ -21,9 +21,10 @@ and `server/mcp/registry.js` read them):
 
 - `MCP_ENABLED=true` — without it the endpoint answers 404 before auth.
 - `MCP_ALLOWED_SCOPES` — the environment's access ceiling: `read` (default
-  when unset) or `read,write`. v1 ships read-only tools regardless; the
-  ceiling exists so future write tools are a per-environment decision, not a
-  deploy.
+  when unset) or `read,write`. **Production stays `read` until there is a
+  reason not to** (write tools are a separate Halli sign-off, ENHANCEMENTS
+  #13). v1 ships read-only tools regardless; the ceiling exists so future
+  write tools are a per-environment decision, not a deploy.
 - Optional: `MCP_TOKEN_TTL_DAYS` (default 90, `mcpAdminController.js`),
   `MCP_RATE_LIMIT_MAX` (default 300 requests / 15 min / token, keyed by token
   id in `mcpRoutes.js`).
@@ -65,8 +66,8 @@ Exactly two tools are registered on this instance:
 Every response carries `_environment` (`server/mcp/envTag.js`). Leads are
 deliberately NOT queryable yet — that needs its own sign-off (ENHANCEMENTS
 #13 note) — and customer/order/bookkeeping tools wait for a real need. The
-icelandicstore connector this was ported from ships thirteen commerce and
-finance tools; none of them exist here.
+icelandicstore connector this was ported from ships fourteen commerce and
+finance tools besides `environment_info`; none of them exist here.
 
 ## Design notes (for maintainers)
 

@@ -719,42 +719,37 @@ previous attempt left in the database, so any fixture identity that has to be un
 must be built inside the test from `testInfo.retry`, never at module or describe
 scope. This applies to every spec that writes rows it does not delete on failure.
 
-## 2026-09-11 — a docs sync: what the drift audit found that a reader would have paid for
+## 2026-09-11 — the template's setup script tells every scaffold to run /strip-base and mints keys nothing reads (factory)
 
-Every tracked markdown file was checked against the code (three read-only audits
-by doc family, each finding carrying a source line; every claim rewritten was
-re-verified by hand). Three lessons, tagged.
+`setup.ps1` ends with "Next: claude then run /strip-base" and creates
+`keys/private.pem`. On this repo the first is the one command CLAUDE.md bans in
+bold, and the second is a leftover of a JWT layer that never existed. A
+scaffold's setup script is the first thing a new session runs, so a stale
+line there is a trap on every future customer repo. Found by the 2026-09-11
+docs sync; not fixed there (it is a script, and the template owns it).
 
-**factory — `setup.ps1` still tells a scaffolded repo to run `/strip-base`, and
-generates RSA keys nothing reads.** The template's setup script ends with
-"Next: claude then run /strip-base" and creates `keys/private.pem`; on this repo
-the first is the one command CLAUDE.md bans in bold and the second is a
-leftover of a JWT layer that never existed. A scaffold's setup script is the
-first thing a new session runs, so a stale line there is a trap on every future
-customer repo. (Not fixed in the docs PR — it is a script, flagged for the
-template.)
+## 2026-09-11 — a number copied forward is how every stale figure got there (project)
 
-**project — a number copied forward is how every stale figure got there.** The
-docs carried five different test counts (2012, 981, 112, 109, 2864), a "58 view
-modules" figure repeated in three files, and a "22 console.log calls" from an
-early survey. None was wrong when written; all were copied into later text
-without re-measuring. Rule adopted: a live figure in a doc carries its date and
-the command that produced it (`docs/TESTING.md` → "Measuring the suite"), and
-the CHANGELOG is the only place a historical count belongs without a caveat.
+The docs carried five different test counts (2012, 981, 112, 109, 2864), a
+"58 view modules" figure repeated in three files, and "22 console.log calls"
+from an early survey. None was wrong when written; all were copied into later
+text without re-measuring. Rule adopted: a live figure in a doc carries its
+date and the command that produced it (`docs/TESTING.md` → "Measuring the
+suite"), and the CHANGELOG is the only place a historical count belongs
+without a caveat. Corollary found the same day: a static `test(` count is a
+floor — the unit tier ran 1283 against 978 declarations because `.each`
+tables expand.
 
-**base — a code comment can be as wrong as a doc, and a port copies both.**
+## 2026-09-11 — a code comment can be as wrong as a doc, and a port copies both (base)
+
 `server/routes/mcpRoutes.js` opened with "Mounted in app.js BEFORE sanitizeBody
 and BEFORE the global IP rate limiter"; `app.js` mounts it after both, and
 `docs/mcp.md` repeated the claim because it was ported from icelandicstore
 alongside the comment. The consequences (tool arguments are HTML-stripped, MCP
 traffic counts against the global IP limit) are exactly what the paragraph was
 written to prevent, and nobody had looked because the comment said it was
-handled. When porting, verify the mount-order claims against the target's
-`app.js`, not against the source repo's comment.
-
-The two inherited audits (`PRE_LAUNCH_AUDIT.md`, `SECURITY_AUDIT_2026-04-16.md`)
-and `SELF-UPDATE-PLAN.md` are frozen with dated banners rather than edited;
-`docs/SHOP_REDESIGN.md` was deleted (the portfolio storefront plan, never this
-repo's). The release-manifest builder keys its changelog section off
+handled. When porting, verify mount-order claims against the target's
+`app.js`, not against the source repo's comment. The related trap: the
+release-manifest builder keys its changelog section off
 `## [<package.json version>]`, and `CHANGELOG.md` was still the base's
 `[1.0.0]` — a promoted release would have shipped an empty changelog silently.
