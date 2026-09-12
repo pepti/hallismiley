@@ -90,7 +90,7 @@ router.post('/documents', requireRole('admin'),
   documentService.createDocumentUpload().single('file'), csrfProtect, verifyImageBytes, books.uploadDocument);
 // Streamed through an authenticated route on purpose: these files live outside the
 // statically-served tree, so this is the ONLY way to read them.
-router.get('/documents/:id', requireView('expenses'), docLimiter, books.getDocument);
+router.get('/documents/:id', docLimiter, requireView('expenses'), books.getDocument);
 
 // ── Intake (view: expenses) ──────────────────────────────────────────────────
 // A queue row is a PROPOSAL: nothing here posts to the ledger. Accepting one calls

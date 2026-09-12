@@ -46,10 +46,9 @@ npm run migrate
 npm run dev               # nodemon on http://localhost:3000
 ```
 
-`setup.ps1` bundles these steps on Windows, but two of its steps are stale
-(2026-09-11): it generates RSA keys under `keys/` that nothing reads (there is
-no JWT layer), and it ends by telling you to run `/strip-base` — **never do
-that on this repo** (CLAUDE.md). Detached dev server: `npm run dev:up` /
+`setup.ps1` bundles these steps on Windows (its RSA-key step and its
+`/strip-base` hint were removed 2026-09-12 — never run `/strip-base` on this
+repo, CLAUDE.md). Detached dev server: `npm run dev:up` /
 `dev:down` / `dev:status` (`scripts/dev-server.ps1`, reads `PORT` from `.env`).
 
 First admin: `node server/scripts/setup-admin.js <username> <email> <password>`
@@ -107,8 +106,8 @@ boot without (`server/server.js` `REQUIRED_ENV`):
 Frequently set: `APP_ENV` (the environment label: `test` or `production`),
 `APP_URL` and `EMAIL_FROM` (the code defaults are still the base's
 `www.hallismiley.is` / `halli@hallismiley.is` — set `info@orangesmiley.is`
-here; and `server/app.js` `CANONICAL_HOST` is a hardcoded production 301 to
-the base's host with no env override — see `docs/DEPLOYMENT.md` §5),
+here; in production the canonical-host 301 in `server/app.js` derives its
+host from `APP_URL`, so the same setting fixes both),
 `LEAD_NOTIFY_EMAIL`, `DB_SSL` (TLS defaults ON in production), `PORT`
 (default 3000), `METRICS_TOKEN`, `BOOKS_UPLOAD_ROOT`, `MCP_ENABLED`
 (`docs/mcp.md`), `CLIENT_CONFIG_*` overrides of `config/client.json`.

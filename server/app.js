@@ -362,12 +362,20 @@ if (process.env.NODE_ENV === 'production') {
     next();
   });
 
-  // Canonicalize host → www.hallismiley.is. Prevents duplicate-content
-  // indexing across apex (hallismiley.is), the Azure default hostname
-  // (hallismiley-app.azurewebsites.net), and any legacy aliases.
+  // Canonicalize the host. Prevents duplicate-content indexing across the
+  // apex, the Azure default hostname (<app>.azurewebsites.net) and any legacy
+  // aliases. The host comes from APP_URL — the same source ssrMeta.js,
+  // sitemapRoutes.js and the email links use — so one setting names the
+  // site. Until 2026-09-12 this was the literal 'www.hallismiley.is' with no
+  // override, which would have 301-redirected a first deploy of this repo to
+  // the base owner's personal site (docs sync, PR #4). The literal stays as
+  // the fallback for an instance that never set APP_URL, matching ssrMeta.
   // Skip probes so Azure load-balancer health checks still reach /health
   // and /ready regardless of which hostname they use.
-  const CANONICAL_HOST = 'www.hallismiley.is';
+  const CANONICAL_HOST = (() => {
+    try { return new URL(process.env.APP_URL || 'https://www.hallismiley.is').host.toLowerCase(); }
+    catch { return 'www.hallismiley.is'; }
+  })();
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();
     const host = (req.headers.host || '').toLowerCase();

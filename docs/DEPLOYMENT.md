@@ -50,8 +50,7 @@ own `postgres:16-alpine` service, all on Node 24:
   `CMD node server/server.js`. Migrations (`server/scripts/migrate.js`) run at
   boot; there is no separate migration step.
 
-Known drift (not fixed here): `promote.yml` sets up Node **20** for the
-manifest builder while everything else is on 24.
+`promote.yml` sets up the same Node 24 (it was on 20 until 2026-09-12).
 
 ## 3. The deploy workflow (`.github/workflows/deploy.yml`) — dispatch-only, inert
 
@@ -126,14 +125,12 @@ Also set on any real instance:
 Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
 nothing reads them (the mail transport is Resend).
 
-**Blocker with no env knob (2026-09-11):** in `server/app.js` the
-`NODE_ENV === 'production'` block holds `const CANONICAL_HOST =
-'www.hallismiley.is'` and 301-redirects every request whose `Host` differs
-(only `/health` and `/ready` are exempt). It reads no variable, so a first
-deploy of this repo would redirect all traffic — `orangesmiley.is` included —
-to the base owner's personal site. Deriving it from `APP_URL` (as
-`ssrMeta.js` and `sitemapRoutes.js` already do) is a one-line code change on
-the cutover checklist in `ENHANCEMENTS.md`; it must land before any deploy.
+**Canonical host = `APP_URL`'s host** (since 2026-09-12): in production
+`server/app.js` 301-redirects every request whose `Host` differs from the host
+part of `APP_URL` (only `/health` and `/ready` are exempt). Until then it was
+the literal `www.hallismiley.is` with no override, which would have sent a
+first deploy's traffic to the base owner's site; the literal remains only as
+the fallback when `APP_URL` is unset — so set `APP_URL` on every instance.
 
 ## 6. Provisioning, when Halli says go
 

@@ -15,9 +15,27 @@ portfolio site) lives in the `hallismiley` repo, not here.
 
 ---
 
-## [0.1.0] — Unreleased (2026-08-09 → 2026-09-08)
+## [0.1.0] — Unreleased (2026-08-09 → 2026-09-12)
 
 No instance of this repo has been deployed; every entry below is on `master`.
+
+### 2026-09-12
+
+- Follow-ups to the docs sync: the production canonical-host 301 derives from
+  `APP_URL` (was the literal `www.hallismiley.is`); `promote.yml` on Node 24;
+  `setup.ps1` no longer generates unused RSA keys or suggests `/strip-base`;
+  the MCP panel's connector name and the bearer realm say `orangesmiley`;
+  `GET /documents/:id` rate-limits before the view check; `railway.toml` and
+  the unused `nodemailer` dependency removed; the CI e2e job waits for the
+  runner's background `apt-get` instead of failing on its lock.
+
+### 2026-09-11
+
+- Docs sync (PR #4): every tracked markdown file checked against the code;
+  README, docs/DEPLOYMENT.md and CHANGELOG.md rewritten for this repo;
+  docs/SHOP_REDESIGN.md deleted; the inherited audits and SELF-UPDATE-PLAN
+  frozen with banners; a lockfile-only `npm audit fix` (multer, nodemailer,
+  sharp, qs).
 
 ### 2026-09-08
 

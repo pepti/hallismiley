@@ -753,3 +753,17 @@ handled. When porting, verify mount-order claims against the target's
 release-manifest builder keys its changelog section off
 `## [<package.json version>]`, and `CHANGELOG.md` was still the base's
 `[1.0.0]` — a promoted release would have shipped an empty changelog silently.
+
+## 2026-09-12 — the e2e runner was not flaky, it was racing the image's own apt-get (factory)
+
+Four of five master runs on 2026-09-08 and every attempt on PR #4 failed the
+Playwright OS-deps step with exit 100 before a single test ran. The log line
+that mattered was not the mirror warning the step was written for but
+ — the GitHub runner image starts its own apt-get at boot, and our
+three bounded attempts all fired inside its window and gave up instantly.
+The 2026-08-19 mirror pin could not see it because it fixed a different
+failure. Fix: a wait-for-lock step ( on the apt/dpkg locks) plus
+ so apt waits instead of failing, and a sleep instead
+of a competing  between attempts. Lesson: when a retry loop
+fails three times in under a second each, read the FIRST error line, not the
+retry banner — a bounded retry hides an instant failure as a hang.

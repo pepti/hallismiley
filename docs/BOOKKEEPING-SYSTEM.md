@@ -389,10 +389,9 @@ Other notes:
   later outside every declared prefix cannot inherit only `requireAuth`.
 - `export.csv` paths are declared **before** any `:id`/`:code` pattern that would swallow
   them.
-- PDF and CSV routes carry a tighter `docLimiter`, placed **before** the view check so
-  refused attempts count against it too. One route is the other way round —
-  `GET /documents/:id` has `requireView('expenses')` first (`adminBookkeepingRoutes.js`,
-  noted 2026-09-11) — so a refused fetch of a fylgiskjal does NOT count against the limiter.
+- PDF, CSV and document routes carry a tighter `docLimiter`, placed **before** the view
+  check so refused attempts count against it too (`GET /documents/:id` was the one
+  exception until 2026-09-12).
 - Every CSV cell goes through formula neutralisation (`utils/csv.js`). Guest checkout names
   and supplier names typed off a paper invoice are attacker-controlled, and an export is a
   real delivery mechanism into a bookkeeper's spreadsheet.

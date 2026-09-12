@@ -85,10 +85,12 @@ jobs:
           # promoted, not from main-as-of-now.
           ref: ${{ inputs.sha }}
 
+      # Same major as ci.yml and the Dockerfile (24) — the manifest builder was
+      # validated on 20 here until 2026-09-12 while everything else ran on 24.
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Check the fleet variables are configured
         run: |
