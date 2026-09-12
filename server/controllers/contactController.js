@@ -1,10 +1,16 @@
 // Contact form handler
-// Validates enquiries. In the base this is a STUB: it records an analytics event
-// and logs a correlation id, and delivers nothing (docs/API.md). An instance
-// that needs an inbox wires Resend in here (orangesmiley stores leads + mails).
+// Validates enquiries, answers the visitor, then e-mails the submission to every
+// verified, enabled admin (the same recipient rule shopController uses for
+// booking notices) and records a no-PII analytics event. Until 2026-09-12 this
+// was a stub that delivered nothing. Delivery is best-effort and never changes
+// the response: the visitor has already been told the message was received, so
+// a mail failure is an error line for the operator, not a 500 for the visitor.
 const { randomUUID } = require('crypto');
 const { t }          = require('../i18n');
+const logger         = require('../logger');
+const db             = require('../config/database');
 const { AnalyticsEvent } = require('../models/Analytics');
+const { sendContactNotification } = require('../services/emailService');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -41,12 +47,43 @@ async function submit(req, res, next) {
     }
 
     // Log a correlation ID only — name, email, and message body are PII and
-    // must not be written to aggregated log stores. Delivery (Resend) is not
-    // wired in the base — see the header comment.
+    // must not be written to aggregated log stores.
     const submissionId = randomUUID();
-    console.log(`[Contact] Submission received: id=${submissionId} topic=${normalizedTopic || 'none'}`);
+    logger.info({ submissionId, topic: normalizedTopic || 'none' }, '[contact] submission received');
 
     res.status(200).json({ message: t(req.locale, 'errors.contact.messageReceivedFull') });
+
+    // Deliver to the admins, after the response. Recipients are looked up per
+    // submission (an admin added yesterday gets today's enquiry). Failures are
+    // logged with the id only.
+    (async () => {
+      const { rows } = await db.query(
+        `SELECT email FROM users
+          WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin')
+            AND email_verified = TRUE AND disabled = FALSE
+            AND email IS NOT NULL`
+      );
+      const adminEmails = rows.map(r => r.email).filter(Boolean);
+      if (!adminEmails.length) {
+        logger.warn({ submissionId }, '[contact] no verified admin to deliver to');
+        return;
+      }
+      await sendContactNotification({
+        submissionId,
+        adminEmails,
+        name: name.trim(),
+        email: email.trim(),
+        message: message.trim(),
+        topic: normalizedTopic,
+        locale: req.locale,
+      });
+    })().catch(err => logger.error(
+      // Resend's validation errors quote the offending field, which could be
+      // the visitor's address — redact anything address-shaped before it lands
+      // in an aggregated log.
+      { submissionId, err: String(err && err.message || err).replace(/[^\s@<>]+@[^\s@<>]+/g, '<email>') },
+      '[contact] delivery failed'
+    ));
 
     // Fire-and-forget conversion event (no PII — topic only). Reached only on
     // the success path, so honeypot/validation failures are never counted.

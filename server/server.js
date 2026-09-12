@@ -28,6 +28,7 @@ if (missing.length) {
 const logger = require('./logger');
 const app    = require('./app');
 const { pool } = require('./config/database');
+const { checkMemory } = require('./observability/alerts');
 const { migrate } = require('./scripts/migrate');
 const { startEventLogCleanup } = require('./services/eventLogCleanup');
 const { startTokenCleanup } = require('./services/tokenCleanup');
@@ -82,6 +83,12 @@ async function start() {
   // Start periodic cleanup of expired sessions (runs every 24h)
   const cleanupTimer = startTokenCleanup();
 
+  // Heap watch: the 'High memory usage' alert in observability/alerts.js had no
+  // caller until 2026-09-12 — /ready reported memory but nothing alerted on it.
+  // Once a minute, unref'd so it never keeps a shutting-down process alive.
+  const memoryTimer = setInterval(checkMemory, 60_000);
+  memoryTimer.unref();
+
   // Ask the release channel whether anything newer than this image exists.
   // No-ops on a dev build (no release identity to compare against), and never
   // applies anything on its own unless this instance is in `auto` mode.
@@ -92,6 +99,7 @@ async function start() {
     logger.info({ signal }, '[server] Shutting down gracefully');
     server.close(async () => {
       clearInterval(cleanupTimer);
+      clearInterval(memoryTimer);
       updateChecker?.stop();
       logger.info('[server] HTTP server closed');
       await pool.end();

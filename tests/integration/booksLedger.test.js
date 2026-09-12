@@ -71,12 +71,22 @@ describe('chart of accounts', () => {
   });
 
   it('flags the statutory non-deductible input-VAT accounts', async () => {
-    // Entertainment (risna) and staff meals are two of the four statutory
-    // exclusions; encoding them on the COA lets the UI warn before the claim.
+    // Entertainment (risna), staff meals and passenger cars (6610, migration
+    // 085) are three of the four statutory exclusions; encoding them on the COA
+    // lets the UI warn before the claim. 6600 stays deductible for commercial
+    // vehicles — the split is the whole point of 085.
     const { rows } = await db.query(
       `SELECT code FROM ledger_accounts WHERE input_vat_blocked ORDER BY code`
     );
-    expect(rows.map(r => r.code)).toEqual(expect.arrayContaining(['6900', '6910']));
+    expect(rows.map(r => r.code)).toEqual(expect.arrayContaining(['6610', '6900', '6910']));
+    expect(rows.map(r => r.code)).not.toContain('6600');
+    const { rows: veh } = await db.query(
+      `SELECT code, vat_code, input_vat_blocked FROM ledger_accounts WHERE code IN ('6600','6610') ORDER BY code`
+    );
+    expect(veh).toEqual([
+      { code: '6600', vat_code: 'input_24', input_vat_blocked: false },
+      { code: '6610', vat_code: 'none', input_vat_blocked: true },
+    ]);
   });
 
   it('refuses to post to an unknown account code', async () => {

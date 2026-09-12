@@ -36,8 +36,8 @@ things worth a look:
 - `4100` Sala vöru 24% vs `4110` Sala þjónustu 24% — the split exists because goods and
   services are zero-rated differently on export. Is one revenue account per rate enough,
   or do you want revenue split by line of business as well?
-- `6900` Risna og gjafir and `6910` Fæði starfsmanna are flagged `input_vat_blocked`, so
-  input VAT on them is refused with a reason recorded. Are those the right two, and are
+- `6900` Risna og gjafir, `6910` Fæði starfsmanna and `6610` Rekstur fólksbifreiða (migration 085) are flagged `input_vat_blocked`, so
+  input VAT on them is refused with a reason recorded. Are those the right three, and are
   there others?
 - `1990` Óvissureikningur is where a payment with no obvious home is parked visibly rather
   than guessed at. Are you happy with that as the practice?
@@ -171,13 +171,23 @@ already VSK-registered (our reading is that it does not, but it is in the code).
 **Current behaviour.** Input VAT is refused, with the reason recorded on the expense,
 when:
 
-1. the account is flagged `input_vat_blocked` (currently risna/gifts and staff meals),
+1. the account is flagged `input_vat_blocked` (currently 6900 risna/gifts, 6910 staff meals and 6610 passenger cars),
 2. the supplier has **no VSK number** on the document — a till receipt without one does
    not prove input tax,
 3. the vat_code is `exempt` or `none`,
-4. the expense is a passenger car or its running costs (via the account flag `input_vat_blocked` — seeded TRUE only on 6900 risna and 6910 fæði). **Found 2026-09-12:** `6600 Bifreiðakostnaður` is seeded `input_24` with the flag FALSE while its own description says "Innskattur er EKKI frádráttarbær af fólksbifreið undir 5.000 kg" — so today a passenger-car fuel receipt with a supplier VSK number booked to 6600 deducts 24 % input VAT, the opposite of the description. The rule is dormant until 6600 is either flagged, or split into a blocked passenger-car account and an `input_24` commercial-vehicle account.
+4. the expense is a passenger car or its running costs — account `6610 Rekstur
+   fólksbifreiða` is flagged `input_vat_blocked` (migration 085, 2026-09-12);
+   `6600 Rekstur atvinnubifreiða` stays `input_24` for sendi-/vörubifreiðar. The
+   072 seed had 6600 deductible with a description saying the opposite; 085
+   resolved it by splitting rather than flipping, so existing 6600 lines keep
+   their meaning.
 
-   **What we need back on 6600:** which of those two shapes the accountant wants (l. nr. 50/1988 16. gr. 3. mgr. blocks fólksbifreiðar; sendibifreiðar and vörubifreiðar are deductible). The chart is data (`ledger_accounts`), so the fix is a migration that flips the flag or adds an account — no code.
+   **What we need back on 6600/6610:** is the split right — 6600 `input_24` for
+   sendi-/vörubifreiðar (with the under-5.000-kg exclusive-use condition left to
+   the bookkeeper), 6610 blocked for all fólksbifreiðar — and do you want the
+   5.000 kg / exclusive-use test enforced as its own account or as a note? The
+   account descriptions cite l. nr. 50/1988 16. gr. 3. mgr. and rg. 192/1993 from
+   memory; confirm the exact tölul. before they are treated as authoritative.
 
 Number 2 is the one that surprises people: a receipt-less or VSK-number-less purchase
 still gets recorded as an expense, at its **full gross**, with `vat_deductible = false`

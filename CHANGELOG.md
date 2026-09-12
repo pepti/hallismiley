@@ -24,6 +24,20 @@ sessions, hosting is Azure; see the `[Unreleased]` entries.
 Everything merged to `main` since the 1.0.0 release, by date (one line per
 merged PR or chunk, taken from the merge subjects and branch names).
 
+### 2026-09-12
+
+- Docs back in step with the code, and the defects the sync found (#154): every
+  markdown file verified against source and the live Azure/GitHub state;
+  canonical host from `APP_URL`; MCP realm/alias say `hallismiley`; `docLimiter`
+  first on `/documents/:id`; `deploy.yml` pushes `:sha-<sha>` + build-args;
+  `promote.yml` on Node 24; CI waits for the runner's apt lock; scheduled
+  non-blocking Trivy scan; `nodemailer` and `railway.toml` gone.
+- The leftovers (#156): migration 085 splits vehicle costs (6600 commercial,
+  6610 passenger cars blocked); the expense form converts to minor units; the
+  contact form delivers to the admins; the error-rate and memory alerts get
+  their inputs; the HTTPS redirect targets the canonical host; the books
+  settings screen `/admin/books/settings` comes upstream from orangesmiley.
+
 ### 2026-09-07 → 09-08
 
 - Shared admin UI kit + eight defect fixes found alongside it (#153, upstreamed

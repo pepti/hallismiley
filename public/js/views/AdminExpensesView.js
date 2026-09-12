@@ -17,6 +17,7 @@ import {
   documentUrl, expensesCsvUrl,
 } from '../services/adminBookkeeping.js';
 import { escHtml } from '../utils/escHtml.js';
+import { toMinorUnits, amountStep } from '../utils/money.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
@@ -109,7 +110,7 @@ export class AdminExpensesView {
               <input type="date" name="expense_date" required />
             </label>
             <label>${escHtml(t('adminBooks.expenses.amountGross'))}
-              <input type="number" name="amount_gross" min="1" step="1" required />
+              <input type="number" name="amount_gross" id="exp-amount" min="1" step="1" inputmode="decimal" required />
               <small>${escHtml(t('adminBooks.expenses.amountHint'))}</small>
             </label>
             <label>${escHtml(t('adminBooks.expenses.currency'))}
@@ -209,6 +210,18 @@ export class AdminExpensesView {
     }
 
     form.addEventListener('submit', e => this._submit(e, form, { allowDuplicate: false }));
+
+    // The amount is typed in MAJOR units of the chosen currency and sent in
+    // minor units (utils/money.js). The input's step follows the currency so a
+    // fractional ISK or a third decimal of EUR cannot be entered at all.
+    const syncAmountStep = () => {
+      const amount = form.querySelector('#exp-amount');
+      const step = amountStep(form.elements.currency.value);
+      amount.step = step;
+      amount.min = step;
+    };
+    form.elements.currency.addEventListener('change', syncAmountStep);
+    syncAmountStep();
   }
 
   async _refreshVerdict() {
@@ -256,7 +269,9 @@ export class AdminExpensesView {
         supplier_invoice_no: fd.get('supplier_invoice_no') || null,
         description: fd.get('description') || '',
         expense_date: fd.get('expense_date'),
-        amount_gross: Number(fd.get('amount_gross')),
+        // Sending the field raw booked a EUR 20.00 invoice as EUR 0.20 — the
+        // API takes minor units (the defect the 2026-09-12 docs sync recorded).
+        amount_gross: toMinorUnits(fd.get('amount_gross'), fd.get('currency')),
         currency: fd.get('currency'),
         vat_code: fd.get('vat_code'),
         account_code: fd.get('account_code'),

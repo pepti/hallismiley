@@ -83,6 +83,21 @@ export function errorBanner(message) {
 // Today and the year's first day, in ISO form, for date-input defaults. Local calendar
 // components (not toISOString, which would shift a day at a positive UTC offset). Shared
 // by the ledger and payroll screens rather than copied into each.
+// Percent ⇄ fraction for the settings form: the API stores corporate_tax_rate
+// as a fraction (0.20), a person types 20.
+export function pctToRate(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return n / 100;
+}
+
+export function rateToPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  // Trailing zeros stripped so 20 does not read as 20.0000.
+  return String(Number((n * 100).toFixed(4)));
+}
+
 export function isoToday() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

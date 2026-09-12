@@ -295,12 +295,19 @@ app.use((req, res, next) => {
 });
 
 // Redirect HTTP → HTTPS in production (skip the probes so internal health checks
-// aren't redirected — the canonical-host middleware below exempts the same two)
+// aren't redirected — the canonical-host middleware below exempts the same two).
+// The target host is the CANONICAL one, not the request's Host header: echoing
+// the header let a client choose where its own 301 pointed (harmless behind
+// Azure's front end, which sets Host, but a reflected value in a redirect is
+// the kind of thing the next reviewer flags). One hop now covers both scheme
+// and host.
 if (process.env.NODE_ENV === 'production') {
+  const CANONICAL_HOST = resolveCanonicalHost(process.env.APP_URL);
+  logger.info({ canonicalHost: CANONICAL_HOST, appUrl: process.env.APP_URL || null }, 'Canonical-host redirect armed');
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();
     if (req.headers['x-forwarded-proto'] !== 'https') {
-      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+      return res.redirect(301, `https://${CANONICAL_HOST}${req.url}`);
     }
     next();
   });
@@ -314,8 +321,6 @@ if (process.env.NODE_ENV === 'production') {
   // boot so a wrong APP_URL is visible in the first lines of the log tail.
   // Skip probes so Azure load-balancer health checks still reach /health
   // and /ready regardless of which hostname they use.
-  const CANONICAL_HOST = resolveCanonicalHost(process.env.APP_URL);
-  logger.info({ canonicalHost: CANONICAL_HOST, appUrl: process.env.APP_URL || null }, 'Canonical-host redirect armed');
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();
     const host = (req.headers.host || '').toLowerCase();

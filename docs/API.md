@@ -197,12 +197,14 @@ Same gate as POST. **Response:** `204 No Content`. **Errors:** `401` · `403` ·
 
 ### POST /api/v1/contact
 
-Submit a contact form message. **In this repo the handler is a stub**: it
-validates, records a no-PII analytics event and logs a correlation id — it
-delivers nothing anywhere (`server/controllers/contactController.js` — its header
-says so since 2026-09-12; it also still uses `console.log`, against invariant 6).
-Instances that need a real inbox implement it themselves (orangesmiley stores
-leads and e-mails them).
+Submit a contact form message. Validates, answers the visitor, then (since
+2026-09-12) e-mails the submission to every verified, enabled admin via Resend
+with Reply-To set to the visitor (`emailService.sendContactNotification`; the
+same recipient rule as booking notices) and records a no-PII analytics event.
+Delivery is best-effort after the response: a mail failure is a pino error line
+carrying the submission id only, never a 500. With no `RESEND_API_KEY` the send
+is a logged no-op. (Until 2026-09-12 the handler was a stub that delivered
+nothing.) orangesmiley additionally stores the submission as a lead.
 
 **Rate limit:** 10 / hour per IP (`contactRoutes.js`).
 
@@ -279,7 +281,7 @@ because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | `bins` view | — |
 | `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view | — |
 | `/api/v1/admin/customer-notes` | `adminCustomerNotesRoutes.js` | `customers` view | — |
-| `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (68 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views for reads; **admin for every write** (the one non-admin POST, `/expenses/preview-vat`, posts nothing) | `docs/BOOKKEEPING-SYSTEM.md` |
+| `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (68 routes; `GET /settings?currency=` also returns `fx_freshness` per currency in use) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views for reads; **admin for every write** (the one non-admin POST, `/expenses/preview-vat`, posts nothing) | `docs/BOOKKEEPING-SYSTEM.md` |
 | `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |

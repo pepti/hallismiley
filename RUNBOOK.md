@@ -235,15 +235,16 @@ The books refuse to issue documents until the seller identity is set, and every 
 screen shows a standing warning until each step is done. That is the mechanism, not a
 nag.
 
-1. **Seller identity**: seller name, kennitala, VSK number, address. **There is no
-   settings screen in the base** (orangesmiley built one; it never came upstream) —
-   set them through the API, `PATCH /api/v1/admin/bookkeeping/settings`
-   (`server/routes/adminBookkeepingRoutes.js`), with a CSRF token. Nothing can be
-   invoiced without these — an invoice without them is not a valid sales document
-   under Reglugerð 50/1993.
-2. **Confirm the chart of accounts.** Clears the `coa_confirmed_at` warning (same
-   PATCH). Take the chart to the accountant first; changing an account code after
-   entries exist is expensive, because history cannot be re-pointed.
+1. **Seller identity**: seller name, kennitala, VSK number, address — on
+   `/admin/books/settings` (the "Stillingar" button on the books overview; ported
+   from orangesmiley on 2026-09-12; the API behind it is
+   `PATCH /api/v1/admin/bookkeeping/settings`). Nothing can be invoiced without
+   these — an invoice without them is not a valid sales document under Reglugerð
+   50/1993.
+2. **Confirm the chart of accounts** on the same screen (the chart is rendered
+   above the button). Clears the `coa_confirmed_at` warning. Take the chart to the
+   accountant first; changing an account code after entries exist is expensive,
+   because history cannot be re-pointed.
 3. **EUR rate**, if invoicing in EUR: `npm run books:fx -- --date=YYYY-MM-DD --rate=NNN.NN`.
    An EUR invoice is **blocked** with no rate on file, or with a rate older than 14 days
    (`FxRate.MAX_STALENESS_DAYS`), rather than guessing one.
@@ -480,11 +481,12 @@ Every error is a pino line in the container log (`az webapp log tail`).
 Sentry receives it only if `SENTRY_DSN` is set — it is not on the live site
 (read 2026-09-12). The in-app alerts (`server/observability/alerts.js`) write to
 the security log and post to a webhook only if `ALERT_WEBHOOK_URL` is set.
-Two of them cannot fire in this repo: `checkMemory()` is never called, and
-`trackRequest()` is only called from `/metrics` with `false`, so the 5 %
-error-rate alert has no input — a code defect, not an operator setting. The
-alerts that do work: brute-force login (5 failures / 5 min per IP) and the
-`/ready` database failure.
+Four alerts exist and all four can fire since 2026-09-12: brute-force login
+(5 failures / 5 min per IP), the `/ready` database failure, high error rate
+(> 5 % of 50+ requests in the rolling window — fed from `httpMetrics.js` on
+every response) and high memory (heap ratio over the threshold, checked once a
+minute from `server.js`). Before that date the last two had no caller and could
+never fire.
 
 ### Event log (Admin → Monitoring)
 

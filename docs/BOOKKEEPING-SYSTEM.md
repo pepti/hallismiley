@@ -80,7 +80,10 @@ Schema lives in `server/config/schema.js` — migrations **072** (foundation), 0
 reparented onto a draft run, every figure and the attribution of a final run are
 frozen, and a used year's rates including `municipal_rate` / `source_note` /
 `confirmed_by` are frozen — read 078, not 076, for the current bodies), **079** (POS
-idempotency — a partial unique index on caller-supplied `client:` payment keys). The
+idempotency — a partial unique index on caller-supplied `client:` payment keys), **085**
+(vehicle accounts, 2026-09-12 — 6600 stays the deductible commercial-vehicle account, new
+blocked `6610 Rekstur fólksbifreiða`; the chart is corrected by migration, never by editing
+072). The
 `.sql` files under `server/migrations/` are generated mirrors for human reading;
 **schema.js wins** if they ever disagree.
 
@@ -161,7 +164,7 @@ Two properties worth stating outright because they constrain everything else:
 
 ## Money
 
-Whole ISK, as BIGINT, everywhere in the books — no float in the money path. A foreign-currency original is captured in **that currency's minor units** (EUR 20.00 is `2000`; `utils/fx.js`, `expenseService.js`), then converted at the captured rate. Known defect (2026-09-12): the base's expense form sends the typed major figure straight through, so EUR 20.00 typed as `20` books as EUR 0.20 — orangesmiley fixed it on 2026-09-07 (`public/js/utils/money.js`); the fix has not come upstream.
+Whole ISK, as BIGINT, everywhere in the books — no float in the money path. A foreign-currency original is captured in **that currency's minor units** (EUR 20.00 is `2000`; `utils/fx.js`, `expenseService.js`), then converted at the captured rate. The expense form converts at the edge (`public/js/utils/money.js`, the ESM twin of `MINOR_UNITS` — keep the two tables in sync): a person types `20.00`, the API receives `2000`, and the input's step follows the currency. Until 2026-09-12 the base form sent the typed figure raw, so EUR 20.00 booked as EUR 0.20.
 
 `pg` returns BIGINT as a **string**, so every read path coerces with `Number()`. When you
 add a query, coerce.
@@ -387,16 +390,17 @@ hundred nondeterministic failures across unrelated suites.
 ### First run
 
 The books refuse to issue anything until the seller identity is set, and every screen shows
-a standing warning until it is. **The base has no books settings screen** —
-`AdminBooksView` renders the readiness banner and the dashboard tiles, no settings form;
-`updateBooksSettings` / `setFxRate` exist in
-`public/js/services/adminBookkeeping.js` but no view calls them (orangesmiley built
-`/admin/books/settings` on 2026-09-07; it has not come upstream). In order, through the API:
+a standing warning until it is. The screen is `/admin/books/settings`
+(`AdminBooksSettingsView`, reached from the "Stillingar" button on the overview;
+ported from orangesmiley 2026-09-12 and narrowed to what this base's
+`Setting.updateBookkeepingSettings` accepts — no Peppol party block, and the chart
+confirmation is a date only). Reads ride the `books` view, writes are admin. In order:
 
-1. `PATCH /api/v1/admin/bookkeeping/settings` → seller name, kennitala, VSK number, address.
-2. Confirm the chart of accounts (same endpoint; clears the `coa_confirmed_at` warning).
-3. An EUR rate, if you invoice in EUR: `npm run books:fx` or `POST …/fx-rates`; a rate
-   older than 14 days is refused (`FxRate.MAX_STALENESS_DAYS`).
+1. Útgefandi → seller name, kennitala, VSK number, address (`PATCH …/settings`).
+2. Bókhaldslykill → read the chart, then confirm (clears the `coa_confirmed_at` warning).
+3. Gengi → an EUR rate, if you invoice in EUR (`POST …/fx-rates`, or `npm run
+   books:fx`); the screen shows freshness per currency IN USE, and a rate older than
+   14 days is refused (`FxRate.MAX_STALENESS_DAYS`).
 4. Payroll: enter the year's figures and **confirm** them, if you run payroll.
 
 ---

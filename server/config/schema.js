@@ -4101,6 +4101,38 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
       `CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id)`,
     ],
   },
+  {
+    // 085 — the vehicle-cost account contradiction found by the 2026-09-12 docs
+    // sync: 072 seeded 6600 Bifreiðakostnaður as input_24 with
+    // input_vat_blocked FALSE while its own description said passenger-car
+    // input VAT is NOT deductible — so a fólksbifreið fuel receipt booked there
+    // deducted 24 %. L. nr. 50/1988 16. gr. 3. mgr. denies input VAT on the
+    // acquisition, running and lease of fólksbifreiðar outright, while sendi-
+    // og vörubifreiðar are deductible (under 5.000 kg only on exclusive
+    // business use, rg. 192/1993) — two vehicle classes with opposite answers
+    // cannot share one account when the block is a per-account flag. So: split
+    // rather than flip. 6600 stays the deductible commercial-vehicle account
+    // (every 6600 line already posted DID deduct, and keeps its meaning) and
+    // 6610 is the blocked passenger-car account, written like 6900/6910. The
+    // rename of 6600 is guarded on the original label + description so an
+    // admin-edited row is left alone (the chart is data — 072 header comment).
+    // Design: Bókari, 2026-09-12; the accountant confirms the split afterwards
+    // (docs/ACCOUNTANT-QUESTIONS.md §7).
+    name: '085_books_vehicle_accounts',
+    statements: [
+      `INSERT INTO ledger_accounts (code, name, name_en, type, vat_code, input_vat_blocked, sort, description) VALUES
+         ('6600','Rekstur atvinnubifreiða','Commercial vehicle costs','expense','input_24',FALSE,670,
+          'Sendi- og vörubifreiðar: innskattur frádráttarbær (undir 5.000 kg aðeins við eingöngu atvinnunot, rg. 192/1993). Fólksbifreiðar fara á 6610')
+       ON CONFLICT (code) DO UPDATE
+         SET name = EXCLUDED.name, name_en = EXCLUDED.name_en, description = EXCLUDED.description
+         WHERE ledger_accounts.name = 'Bifreiðakostnaður'
+           AND ledger_accounts.description = 'Innskattur er EKKI frádráttarbær af fólksbifreið undir 5.000 kg'`,
+      `INSERT INTO ledger_accounts (code, name, name_en, type, vat_code, input_vat_blocked, sort, description) VALUES
+         ('6610','Rekstur fólksbifreiða','Passenger car costs','expense','none',TRUE,675,
+          'Innskattur ekki frádráttarbær af öflun, rekstri og leigu fólksbifreiða (l. nr. 50/1988 16. gr. 3. mgr.)')
+       ON CONFLICT (code) DO NOTHING`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
