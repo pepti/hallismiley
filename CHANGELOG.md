@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to Halli Smiley (the HalliProjects base) are documented
-here, newest first, written from the merge commits on `main`.
+here, newest first, written from the merge and squash commits on `main`.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). The heading of
 a version section is load-bearing: `scripts/build-manifest.js` extracts the
@@ -12,7 +12,10 @@ below as the current release** (and an instance already on 1.0.0 would never
 see an update). The release step is one commit: bump `package.json` and rename
 `## [Unreleased]` to `## [<version>] — <date>`. Dated sub-sections inside a
 version use `###` only — a `## <date>` heading would be parsed as a version
-string and end the section.
+string and end the section. Everything under a version heading is published
+verbatim — which is why the note about the 1.0.0 items that no longer describe
+the code sits HERE, above the sections: routing is pushState, auth is Lucia
+sessions, hosting is Azure; see the `[Unreleased]` entries.
 
 ---
 
@@ -21,7 +24,7 @@ string and end the section.
 Everything merged to `main` since the 1.0.0 release, by date (one line per
 merged PR or chunk, taken from the merge subjects and branch names).
 
-### 2026-09-08
+### 2026-09-07 → 09-08
 
 - Shared admin UI kit + eight defect fixes found alongside it (#153, upstreamed
   from orangesmiley): `debounce`, `localPref`, `pageTitle` + router hook,
@@ -106,7 +109,7 @@ merged PR or chunk, taken from the merge subjects and branch names).
 - Party: sortable guest tables, per-option RSVP status, editable activity
   headings with EN→IS auto-translate, Icelandic default, inline-edit RSVP
   labels (#54–#60); dependency patch `sanitize-html` 2.17.4 (#61); the
-  2026-05-12 batch of PR merges (#20, #33–#50): CI-gated deploy, stale Railway
+  2026-05-08 → 05-12 batch of PR merges (#20, #33–#50): CI-gated deploy, stale Railway
   references stripped (migration 043), local test-DB setup doc, deprecated
   actions bumped, npm audit high.
 - Home hero inline edit (#31); party stat cards, hero cover upload, logistics
@@ -163,6 +166,3 @@ Initial production release.
 - Railway deployment config with Docker multi-stage build and Node.js healthcheck
 - HTTPS redirect in production, non-root Docker user
 - Comprehensive integration test suite (auth, projects, contact, rate limits, security)
-
-*(Several 1.0.0 items no longer describe the code: routing is pushState, auth is
-Lucia sessions, hosting is Azure — see the `[Unreleased]` entries above.)*

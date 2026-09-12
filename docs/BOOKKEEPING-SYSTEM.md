@@ -225,7 +225,7 @@ Each area is a view id, a service, a screen, and a set of postings.
 
 ### Invoices
 
-Issued from a paid order (`POST /invoices/from-order/:orderId`, `invoiceService.createFromOrder`) — there is no standalone invoice path in the base. Snapshots seller and customer detail at issue.
+Issued from a paid order (`POST /invoices/from-order/:orderId`, `invoiceService.createFromOrder`) — there is no standalone invoice path in the base. (Counter-sale receipts, `series = 'receipt'`, are the other row kind in the `invoices` table — `posService.js`, migration 077 — so a grep finds two INSERTs.) Snapshots seller and customer detail at issue.
 Payments, refunds and credit notes are separate facts:
 
 - a **payment** is cash in,
@@ -388,7 +388,8 @@ hundred nondeterministic failures across unrelated suites.
 
 The books refuse to issue anything until the seller identity is set, and every screen shows
 a standing warning until it is. **The base has no books settings screen** —
-`AdminBooksView` only renders the banner; `updateBooksSettings` / `setFxRate` exist in
+`AdminBooksView` renders the readiness banner and the dashboard tiles, no settings form;
+`updateBooksSettings` / `setFxRate` exist in
 `public/js/services/adminBookkeeping.js` but no view calls them (orangesmiley built
 `/admin/books/settings` on 2026-09-07; it has not come upstream). In order, through the API:
 
@@ -425,7 +426,7 @@ Collected from actually hitting them.
 - **`git fetch` before pushing.** A concurrent session pushed eleven commits to this branch
   mid-work, including fixes to code this module owns.
 - **`reverseEntry` returns a wrapper**, `{ reversal, ... }` — not the entry.
-- **Migration 076's tail comment says "072 seeded no payroll rates either" — wrong.** 072 seeds
+- **Migration 076's tail comment says "Deliberately none, and 072 seeded none either." — wrong.** 072 seeds
   the 2026 `payroll_rates` row (the one `ACCOUNTANT-QUESTIONS.md` §3 describes). The
   comment cannot be edited (applied migration); the docs are right, it is not.
 - **`products.active`, not `is_active`.**

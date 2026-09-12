@@ -5,7 +5,7 @@ other host to the host part of `APP_URL`).
 
 This document covers the **public and authentication** endpoints in detail and
 ends with an **inventory of every mounted router** so the admin surface is at
-least findable. The admin API (35 mounts in `server/app.js`; 298 route declarations across
+least findable. The admin API (28 router mounts in `server/app.js`; 298 route declarations across
 `server/routes/*.js`, 68 of them the books, 58 the party module — counted 2026-09-12 by summing
 `grep -cE '^\s*router\.(get|post|put|patch|delete)\('` over `server/routes/*.js`)
 is documented by its route files and the feature docs they point at, not here.
@@ -27,9 +27,12 @@ automatically. No tokens are stored in the frontend.
 
 ### CSRF — required on every session-authenticated write
 
-Every session-authenticated write route (POST/PUT/PATCH/DELETE, including
-`POST /auth/logout`) carries `csrfProtect` (`server/middleware/csrf.js`). Fetch a
-token first and send it back as the `X-CSRF-Token` header:
+Every session-authenticated write route that changes state (POST/PUT/PATCH/DELETE,
+including `POST /auth/logout`) carries `csrfProtect` (`server/middleware/csrf.js`).
+Three session-gated POSTs omit it BY DESIGN because they write nothing —
+`/api/v1/admin/customers/import/preview`, `/api/v1/admin/customers/send-invites/render`
+and `/api/v1/admin/shop/products/import/preview` (each says so in its route
+comment). Fetch a token first and send it back as the `X-CSRF-Token` header:
 
 ```
 GET /api/v1/csrf-token            →  200 { "token": "…" }
@@ -38,8 +41,9 @@ GET /api/v1/csrf-token            →  200 { "token": "…" }
 The token is bound to a `SameSite=Strict` cookie (`secure` in production). A
 missing or stale token answers `403` in the standard error envelope. Routes
 that deliberately omit `csrfProtect`: the bearer-only MCP endpoint
-(`docs/mcp.md`), the anonymous contact form and analytics beacon, the Stripe
-webhook (signature-verified instead), and the read-only routers.
+(`docs/mcp.md`), the anonymous contact form, the analytics beacon and the client
+error beacon (`POST /api/v1/events`), the Stripe webhook (signature-verified
+instead), and the read-only routers.
 
 ### POST /auth/login
 
@@ -222,7 +226,9 @@ Every other error returns the envelope from `server/middleware/errorHandler.js`:
 { "error": "Human-readable message", "code": 400 }
 ```
 
-## Rate limits (`express-rate-limit`; every limiter is skipped when `NODE_ENV` is `test` or `development`)
+## Rate limits (`express-rate-limit`)
+
+Skip rules differ by file, and the difference matters when developing locally: the app-level limiters in `server/app.js` (global, writes) and the shop/events/change-request/analytics ones skip when `NODE_ENV` is `test` **or** `development`; the auth (`authRoutes.js`), MCP (`mcpRoutes.js`), party (`partyRoutes.js`) and contact (`contactRoutes.js`) limiters skip under `test` **only**, so a dev server enforces them.
 
 | Scope | Limit | Where |
 |-------|-------|-------|
@@ -234,7 +240,11 @@ Every other error returns the envelope from `server/middleware/errorHandler.js`:
 | Resend verification | 1 / minute per IP | `authRoutes.js` |
 | Username/email availability checks | 30 / hour per IP | `authRoutes.js` |
 | Contact | 10 / hour per IP | `contactRoutes.js` |
-| Books PDF/CSV/document routes | `docLimiter` | `server/middleware/booksLimiters.js` |
+| Party: access request / approval action / e-mail blast / uploads | 5 per h · 20 per h · 10 per h · 1000 / 15 min per IP | `partyRoutes.js` |
+| Shop: checkout / discount lookup | 10 / 15 min · 30 / 15 min per IP | `shopRoutes.js` |
+| Client error beacon (`POST /api/v1/events`) | 20 / minute per IP | `eventRoutes.js` |
+| MCP pre-auth (per IP, before the bearer is checked) | 60 / 15 min | `mcpRoutes.js` |
+| Books PDF/CSV/document downloads (12 GETs) | `docLimiter` — 60 / 15 min per IP | `server/middleware/booksLimiters.js` |
 | MCP (per token) | 300 / 15 min (`MCP_RATE_LIMIT_MAX`) | `mcpRoutes.js` |
 | Self-update apply/rollback | 10 / 15 min | `systemRoutes.js` |
 
@@ -269,7 +279,7 @@ because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | `bins` view | — |
 | `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view | — |
 | `/api/v1/admin/customer-notes` | `adminCustomerNotesRoutes.js` | `customers` view | — |
-| `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (68 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views; admin for issuing | `docs/BOOKKEEPING-SYSTEM.md` |
+| `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (68 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views for reads; **admin for every write** (the one non-admin POST, `/expenses/preview-vat`, posts nothing) | `docs/BOOKKEEPING-SYSTEM.md` |
 | `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |

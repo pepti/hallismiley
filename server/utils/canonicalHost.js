@@ -12,18 +12,23 @@
  *
  * Only the host is used (scheme is forced to https by the redirect itself);
  * a port survives so a local production-mode boot on :3000 still works.
- * Anything unparsable falls back to the base's own host, matching ssrMeta.
+ * UNSET falls back to the base's own host, matching ssrMeta. SET BUT
+ * UNPARSABLE throws — "APP_URL=orangesmiley.is" (no scheme) is a one-character
+ * mistake that would otherwise silently reproduce the defect this file fixes,
+ * with the redirect aimed at another owner's domain. A boot failure with the
+ * value in the message is the safer outcome (the same posture as REQUIRED_ENV
+ * in server/server.js).
  */
 const DEFAULT_HOST = 'www.hallismiley.is';
 
 function resolveCanonicalHost(appUrl, fallback = DEFAULT_HOST) {
-  if (typeof appUrl !== 'string' || appUrl.trim() === '') return fallback;
-  try {
-    const host = new URL(appUrl.trim()).host.toLowerCase();
-    return host || fallback;
-  } catch {
-    return fallback;
+  if (appUrl == null || (typeof appUrl === 'string' && appUrl.trim() === '')) return fallback;
+  let host = '';
+  try { host = new URL(String(appUrl).trim()).host.toLowerCase(); } catch { /* handled below */ }
+  if (!host) {
+    throw new TypeError(`APP_URL is set but is not an absolute URL with a host: ${JSON.stringify(appUrl)} — expected e.g. https://www.example.is`);
   }
+  return host;
 }
 
 module.exports = { resolveCanonicalHost, DEFAULT_HOST };

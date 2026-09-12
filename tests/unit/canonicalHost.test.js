@@ -25,9 +25,13 @@ describe('resolveCanonicalHost', () => {
     expect(resolveCanonicalHost('http://localhost:3000')).toBe('localhost:3000');
   });
 
-  test('an unparsable APP_URL falls back instead of throwing at boot', () => {
-    expect(resolveCanonicalHost('not a url')).toBe(DEFAULT_HOST);
-    expect(resolveCanonicalHost('www.example.is')).toBe(DEFAULT_HOST); // no scheme → not a URL
+  test('a SET but unparsable APP_URL throws (fail closed) instead of redirecting to the base host', () => {
+    // "www.example.is" with no scheme is the realistic typo; silently falling
+    // back would aim every production request of that instance at
+    // hallismiley.is — the defect this resolver exists to remove.
+    expect(() => resolveCanonicalHost('not a url')).toThrow(/APP_URL is set but/);
+    expect(() => resolveCanonicalHost('www.example.is')).toThrow(/www\.example\.is/);
+    expect(() => resolveCanonicalHost('https://')).toThrow(TypeError);
   });
 
   test('a custom fallback is honoured', () => {

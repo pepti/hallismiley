@@ -31,7 +31,7 @@ own if you are deploying a fork.
 | Resource | Name | Region |
 | --- | --- | --- |
 | Resource group | `hallismiley-rg` | West Europe |
-| App Service plan | `hallismiley-plan` (B1 Linux, one worker, **no deployment slots** — read 2026-09-12) | West Europe |
+| App Service plan | `hallismiley-plan` (B1 Linux, one worker, **no deployment slots** — read 2026-09-12; the worker is SHARED with `ferdabox-app`, so a scale-up or a memory problem is both sites') | West Europe |
 | App Service | `hallismiley-app` | West Europe |
 | Container registry | `hallismileyacr` | West Europe |
 | Postgres Flexible Server | `hallismiley-db` | North Europe (West Europe was restricted) |
@@ -202,7 +202,7 @@ az webapp config appsettings set --resource-group hallismiley-rg --name hallismi
 az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
   --settings \
     RESEND_API_KEY=<from-resend> \
-    EMAIL_FROM=halli@hallismiley.is
+    EMAIL_FROM=noreply@hallismiley.is   # the live value (read 2026-09-12); the code default is halli@hallismiley.is
 
 # OAuth (Google sign-in) — only if SOCIAL_LOGIN_ENABLED=true
 az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \

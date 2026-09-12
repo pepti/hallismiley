@@ -7,8 +7,8 @@
 > the server-accepted MIME, `server/middleware/upload.js`; bytes are still not
 > sniffed), 3.2 (`resetLimiter` on forgot/reset, `server/routes/authRoutes.js`),
 > 3.3 + 3.4 + 3.16 (`REQUIRED_ENV` in `server/server.js` — `CSRF_SECRET` and
-> `NODE_ENV` are boot-fatal, no fallback secret; limiters skip only under
-> `test`/`development`), 3.5 + 3.6 (`server/middleware/sanitize.js` recurses and
+> `NODE_ENV` are boot-fatal, no fallback secret; the auth limiters skip only
+> under `test`), 3.5 + 3.6 (`server/middleware/sanitize.js` recurses and
 > keeps rich-text fields through an allowlist sanitizer), 3.7 (`securityLogger`
 > wired into auth, OAuth, bookkeeping, MCP and alerts), 3.8–3.10
 > (`contactController` logs an id only; `emailService` logs no links;

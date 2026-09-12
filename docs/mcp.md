@@ -68,7 +68,8 @@ the list is exactly these two, so adding one means widening that test:
 Every response carries `_environment` (`server/mcp/envTag.js`). Order, stock,
 customer and bookkeeping tools were deliberately left out of v1 (the header of
 `system.js` says so); the icelandicstore connector this was ported from ships
-fourteen such tools, and none of them exist here.
+eighteen tools (counted 2026-09-12, three of them write tools), and none of
+them exist here.
 
 ## Design notes (for maintainers)
 

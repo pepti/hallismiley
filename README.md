@@ -128,7 +128,7 @@ The script hashes the password (Scrypt) and upserts the `users` row with role `a
 
 ## Deployment on Azure App Service
 
-Production is on **Azure App Service** (Linux container, B1 plan, one worker, no deployment slots — read 2026-09-12), with images pushed to **Azure Container Registry** and a managed **Azure Database for PostgreSQL Flexible Server**. Deploys are automated via GitHub Actions with OIDC federated credentials — no long-lived Azure secrets in the repo.
+Production is on **Azure App Service** (Linux container, B1 plan, one worker shared with `ferdabox-app`, no deployment slots — read 2026-09-12), with images pushed to **Azure Container Registry** and a managed **Azure Database for PostgreSQL Flexible Server**. Deploys are automated via GitHub Actions with OIDC federated credentials — no long-lived Azure secrets in the repo.
 
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full first-time-setup guide (resource provisioning, OIDC trust, custom domain, Azure Files mount for uploads) and for what the workflows actually do. The summary for routine work:
 

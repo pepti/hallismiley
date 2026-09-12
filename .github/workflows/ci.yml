@@ -24,8 +24,10 @@ jobs:
     name: Lint + Integration tests
     runs-on: ubuntu-latest
     # Serial Jest (maxWorkers: 1) with coverage ran 1366 s of the old 1800 s
-    # budget on 2026-09-12; a slow runner would have cancelled the run and,
-    # on main, fail-closed the deploy for no reason.
+    # budget on the 2026-09-08 PR run (34205854404) and 515 s on the merge
+    # three hours later — a 2.6× spread on the same suite. A slow runner
+    # would have cancelled the run and, on main, fail-closed the deploy for
+    # no reason.
     timeout-minutes: 45
 
     services:

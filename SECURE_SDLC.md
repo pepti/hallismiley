@@ -76,7 +76,7 @@ The S-SDLC is grounded in seven principles. Every activity, gate, and artifact i
 
 **P1. Shift Left.** Security defects are cheapest to fix at design time, ~10× more expensive at code-review, ~100× in production. Threat modeling precedes implementation; static analysis runs on every commit; security review is part of code review, not after.
 
-**P2. Defence in Depth.** No single control is trusted. Authentication is enforced at the session layer (Lucia) and the API layer (JWT). XSS is defended at the input layer (sanitize-html), the output layer (`escHtml`), and the transport layer (CSP). One layer's failure does not become an incident.
+**P2. Defence in Depth.** No single control is trusted. Authentication is enforced at the session layer (Lucia sessions, the only mechanism — the "API layer (JWT)" this sentence used to name never existed) and the authorisation layer (RBAC `requireRole` / `requireView` on every admin route). XSS is defended at the input layer (sanitize-html), the output layer (`escHtml`), and the transport layer (CSP). One layer's failure does not become an incident.
 
 **P3. Least Privilege.** Every role, every token, every database connection has only the permissions it needs. Admin actions require admin roles; party guests cannot upload SVGs; the Azure managed identity has scoped ACR pull rights only.
 
@@ -154,13 +154,15 @@ A sprint is **14 calendar days, Monday 00:00 → Sunday 23:59 (Atlantic/Reykjavi
 
 | Cadence | Activity | Owner |
 |---------|----------|-------|
-| **Daily** | Sentry alerts triaged, Prometheus dashboards checked | SC |
+| **Daily** | Log tail / Admin → Monitoring event log checked (Sentry is not wired — `SENTRY_DSN` unset — and nothing scrapes `/metrics`) | SC |
 | **Per-PR** | `/security-check` slash command, automated CI gates | Rev |
 | **Weekly** | `npm audit` (also runs in CI on every push) | Dev |
 | **Bi-weekly (sprint)** | Threat model new features, sprint deploy, risk register triage | SC |
 | **Monthly** | Dependency upgrade sprint half-day, secret rotation check, access review | SC + EL |
 | **Quarterly** | Internal security audit (next: 2026-07-16), SDLC review | SC |
 | **Annually** | External penetration test (scheduled: 2026 Q4), DR exercise, key rotation | SC + EL |
+
+The weekly, monthly, quarterly and annual rows are executed or flagged-when-due by **Öryggisvörður** (the estate's security SDL agent, `~.claudeagentsoryggisvordur.md`) via the Monday 07:45 `security-sdl-sweep` scheduled task, logging to `ProjectsORYGGIS-LOG.md`; the per-PR rows remain enforced by `/security-check` + the CI gates in §10.1.
 
 ---
 
@@ -225,7 +227,7 @@ A sprint is **14 calendar days, Monday 00:00 → Sunday 23:59 (Atlantic/Reykjavi
 
 1. **Architecture Decision Record (ADR).** If the story changes how a security control works (e.g., adds a new auth flow, introduces a new encryption requirement, changes session management), write a one-page ADR in `docs/adr/NNNN-title.md`. Template: Context · Decision · Consequences · Alternatives considered · Security implications.
 2. **Review against the invariants in `CLAUDE.md`.** Lucia owns sessions; CSRF on all state-changing routes; vanilla JS only; etc. If the design conflicts with an invariant, the design changes — or the invariant changes via explicit ADR and PR.
-3. **Cryptography review.** No new crypto algorithm choices without explicit review. Use Lucia's primitives (Scrypt for passwords), `crypto.randomBytes(32)` for tokens, `jose` library for JWT. Never roll custom crypto.
+3. **Cryptography review.** No new crypto algorithm choices without explicit review. Use oslo's Scrypt (via Lucia) for passwords, `crypto.randomBytes(32)` for tokens, sha256 for stored token hashes (MCP, magic links). There is no JWT and no `jose` in the tree. Never roll custom crypto.
 4. **Dependency selection.** New dependencies require a one-line justification in the ADR or PR description: *why this package, last release date, weekly downloads, known CVEs, license*.
 
 **Exit criteria:** ADR is committed (if required); no open architecture concerns flagged by SC.
@@ -255,7 +257,7 @@ A sprint is **14 calendar days, Monday 00:00 → Sunday 23:59 (Atlantic/Reykjavi
    - Threat-model reference (if Phase 2 ran)
    - "How this was tested" section
    - Self-assessment against `/security-check` invariants
-5. **Secrets discipline.** Anything that looks like a secret goes in env vars. Never commit `keys/`. RSA keys rotate independently per environment. Admin credentials live in the `users` table as a Scrypt hash, written by `node server/scripts/setup-admin.js <username> <email> <password>` — there is no `ADMIN_PASSWORD_HASH` env var.
+5. **Secrets discipline.** Anything that looks like a secret goes in env vars. `keys/` stays gitignored although nothing reads it (a vestige of the JWT boilerplate — the "RSA keys rotate per environment" rule that stood here had nothing to rotate). Admin credentials live in the `users` table as a Scrypt hash, written by `node server/scripts/setup-admin.js <username> <email> <password>` — there is no `ADMIN_PASSWORD_HASH` env var.
 6. **Migrations are forward-only and sequential.** Use `/migration-new <name>`. Never edit an applied migration. Always add a new one. Migrations run automatically at container startup (see `docs/DEPLOYMENT.md`).
 7. **AI-assist guardrails.** When using Claude / Copilot / similar to generate code, the generated output is treated as a junior PR — review it, don't trust it. Especially scrutinise generated regex, SQL, and crypto.
 
@@ -383,7 +385,7 @@ Rollback procedure: `RUNBOOK.md § Pin App Service to a previous image SHA`. Tar
 | Signal | Tool | Threshold | Routed to |
 |--------|------|-----------|-----------|
 | Application errors | Sentry | Any new issue or volume spike | Email + Slack |
-| Request latency | prom-client / Azure Monitor | p95 > 1s sustained 5 min | Slack |
+| Request latency | prom-client / Azure Monitor — **not wired**: nothing scrapes `/metrics`, no Azure Monitor alert exists (read 2026-09-12) | p95 > 1s sustained 5 min | Slack |
 | 5xx rate | prom-client | > 1% for 5 min | Slack |
 | Failed login spike | securityLogger | > 50 failures in 5 min from single IP | Slack |
 | CSRF rejections | securityLogger | > 10 in 1 min | Slack |
@@ -443,8 +445,8 @@ Tools currently in use or planned. "Status" re-read from the repo on 2026-09-12 
 | Secret scanning | GitHub native only | GitHub-side: read the repo settings; **no pre-commit hook** | |
 | SAST (deep) | Semgrep (community rules) | **Planned (Sprint 3)** | Run on PR + weekly cron |
 | DAST | OWASP ZAP Baseline | **Planned (Sprint 4)** | Manual sprint-verification day, then automate |
-| Runtime errors | Sentry | In use | Backend Node SDK |
-| Metrics | prom-client + Azure Monitor | In use | `/metrics` endpoint |
+| Runtime errors | Sentry | Code present, **not wired** (`SENTRY_DSN` unset live) — errors go to the pino log and `event_logs` | Backend Node SDK |
+| Metrics | prom-client | Exposed, **unscraped** (`/metrics` behind `METRICS_TOKEN`; no dashboard, no Azure Monitor) | `/metrics` endpoint |
 | Structured logs | pino + pino-http | In use | Redaction rules cover password, token, secret, cookie |
 | Security event log | `server/observability/securityLogger.js` | Wired | auth, OAuth, bookkeeping, MCP and alerts call it; audit 3.7 closed |
 | Web Application Firewall | Azure Front Door / App Service WAF | **Evaluate Sprint 5** | Adds rule-based filtering in front of App Service |

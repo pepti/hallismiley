@@ -175,7 +175,9 @@ when:
 2. the supplier has **no VSK number** on the document — a till receipt without one does
    not prove input tax,
 3. the vat_code is `exempt` or `none`,
-4. the expense is a passenger car or its running costs (via the account flag `input_vat_blocked` — seeded TRUE only on 6900 risna and 6910 fæði; no vehicle account is flagged yet, so this rule is dormant until one is added).
+4. the expense is a passenger car or its running costs (via the account flag `input_vat_blocked` — seeded TRUE only on 6900 risna and 6910 fæði). **Found 2026-09-12:** `6600 Bifreiðakostnaður` is seeded `input_24` with the flag FALSE while its own description says "Innskattur er EKKI frádráttarbær af fólksbifreið undir 5.000 kg" — so today a passenger-car fuel receipt with a supplier VSK number booked to 6600 deducts 24 % input VAT, the opposite of the description. The rule is dormant until 6600 is either flagged, or split into a blocked passenger-car account and an `input_24` commercial-vehicle account.
+
+   **What we need back on 6600:** which of those two shapes the accountant wants (l. nr. 50/1988 16. gr. 3. mgr. blocks fólksbifreiðar; sendibifreiðar and vörubifreiðar are deductible). The chart is data (`ledger_accounts`), so the fix is a migration that flips the flag or adds an account — no code.
 
 Number 2 is the one that surprises people: a receipt-less or VSK-number-less purchase
 still gets recorded as an expense, at its **full gross**, with `vat_deductible = false`

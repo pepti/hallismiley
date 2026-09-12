@@ -43,8 +43,9 @@ answers: `curl -s https://www.hallismiley.is/ready` must show `uptime` reset to
 seconds, and `az webapp config container show -g hallismiley-rg -n hallismiley-app
 --query linuxFxVersion` must name the tag you pinned (~30–60s on the B1 tier —
 no slots, read 2026-09-12; brief unavailability during the swap). The `weekly-purge`
-task keeps only ~10 tags (see Container Registry Housekeeping) — record the tag you
-are rolling back to, confirm it still exists, and lock it for the window.
+task keeps every tag younger than 14 days plus the 10 newest older ones (see
+Container Registry Housekeeping) — record the tag you are rolling back to, confirm
+it still exists, and lock it for the window.
 
 > A rollback re-deploys the previous Docker image but does NOT revert the
 > database. If the rollback target used a different schema, run a corrective
@@ -109,7 +110,7 @@ Backup Strategy, 7-day retention): a restore creates a new server and
 
 ## Container Registry Housekeeping
 
-A scheduled ACR task named `weekly-purge` (created 2026-06-10) lives in Azure —
+A scheduled ACR task named `weekly-purge` (created 2026-06-11 UTC) lives in Azure —
 not in this repo — and prunes old images from `hallismileyacr` every Sunday at
 03:00 UTC. Its step, read from the task on 2026-09-12:
 `acr purge --filter 'hallismiley:.*' --ago 14d --keep 10 --untagged` — keep the
@@ -263,7 +264,8 @@ nag.
    til greiðslu`, dated the last day of the period — `vatService.js`). Paying
    Skatturinn is a separate event with no endpoint: record the bank line as
    `explained` against 2290 in reconciliation, or post a manual entry
-   Dr 2290 / Cr 1900.
+   Dr 2290 / Cr 1900 **dated the payment date** — the filed period is locked
+   (`books_assert_period_open`), so a back-dated entry is refused.
 
 **Unlocking a filed period** is audited and reverses the settlement entry on its own date.
 Do it only to correct a real error, and expect the correction to be visible in the journal

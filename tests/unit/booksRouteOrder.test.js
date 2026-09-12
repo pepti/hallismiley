@@ -1,16 +1,19 @@
 /**
  * Middleware order on the bookkeeping document routes.
  *
- * `docLimiter` (server/middleware/booksLimiters.js) exists to bound the cost
- * of the streaming/PDF/CSV endpoints per IP. It only does that if it runs
- * BEFORE the view/role guard: placed after `requireView(...)`, an
- * unauthenticated caller is answered by the guard (a cheap 401/403) and
- * never counted, while an authenticated caller is counted — the inverse of
- * what a limiter in front of a file-serving route is for, and it leaves the
- * guard itself unbounded. `GET /documents/:id` had it the wrong way round
- * until 2026-09-12; this test fails on that code.
+ * `docLimiter` (server/middleware/booksLimiters.js, 60 / 15 min per IP)
+ * bounds the cost of the streaming/PDF/CSV endpoints. `router.use(requireAuth)`
+ * already precedes every route, so anonymous traffic never reaches it in
+ * either order; what the order decides is whether an AUTHENTICATED caller who
+ * lacks the view is counted before the guard runs (and before the guard's
+ * role lookup) or can hit the guard unbounded. Eleven sibling routes put the
+ * limiter first; `GET /documents/:id` had it after the guard until 2026-09-12.
+ * This test fails on that code.
  *
- * Inspects the router's own stack (no server boot, no database).
+ * Inspects the router's own stack — no server boot, no database. Requiring
+ * the router does evaluate `documentService.createDocumentUpload()`, which
+ * mkdirs the (gitignored) books upload directory once; harmless and
+ * idempotent.
  */
 const router = require('../../server/routes/adminBookkeepingRoutes');
 const { docLimiter } = require('../../server/middleware/booksLimiters');

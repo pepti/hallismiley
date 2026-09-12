@@ -92,8 +92,10 @@ jobs:
       # promote.yml resolves when it retags a digest onto a release channel —
       # until 2026-09-12 that tag was never pushed, so promote could never
       # find an image). The build-args are what the Dockerfile stamps into
-      # server/version.json; without them every deployed image reported
-      # `1.0.0 / unknown / dev` on /api/v1/system/version. APP_VERSION is
+      # server/version.json; without them every deployed image carried
+      # `1.0.0 / unknown / dev` (visible on /api/v1/system/version wherever the
+      # self-update module is on — here it is off, so the route is 404 and the
+      # stamp shows only in the boot log). APP_VERSION is
       # deliberately not passed — the Dockerfile reads it from package.json.
       - name: Build and push Docker image
         id: build
