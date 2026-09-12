@@ -6,6 +6,7 @@ const {
   httpRequestSize,
   httpResponseSize,
 } = require('./metrics');
+const { trackRequest } = require('./alerts');
 
 /**
  * Normalize an Express request path to a low-cardinality route label.
@@ -49,6 +50,12 @@ function httpMetricsMiddleware(req, res, next) {
     if (resSize > 0) {
       httpResponseSize.observe({ method, route, status_code: status }, resSize);
     }
+
+    // Feed the rolling error-rate window (fires a 'High error rate' alert past
+    // 5 % over 50+ requests). This is the single place that sees every request;
+    // until 2026-09-12 nothing called trackRequest with a real outcome, so the
+    // alert had no input. (Same wiring as orangesmiley 7cf7b1d.)
+    trackRequest(res.statusCode >= 500);
   });
 
   next();

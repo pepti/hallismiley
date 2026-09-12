@@ -56,6 +56,13 @@
   "email.bookingNotification.button": "Opna pöntunarstjórn",
   "email.bookingNotification.footer": "Þessi tilkynning er send einu sinni á hverja greiða pöntun með bókanlegum atriðum. Pantanir með birgðum eru ekki snertar.",
   "email.bookingNotification.unknownCustomer": "Viðskiptavinur (enginn netfang skráð)",
+  "email.contact.subject": "Ný fyrirspurn frá {name}",
+  "email.contact.heading": "Ný fyrirspurn",
+  "email.contact.body": "Fyrirspurn barst í gegnum hafa-samband eyðublaðið á vefnum. Svaraðu einfaldlega þessum pósti til að hafa samband.",
+  "email.contact.nameLabel": "Nafn",
+  "email.contact.emailLabel": "Netfang",
+  "email.contact.topicLabel": "Efni",
+  "email.contact.messageLabel": "Skilaboð",
 
   "email.rsvpNotification.subject.new": "Nýtt RSVP frá {name}",
   "email.rsvpNotification.subject.update": "RSVP uppfært: {name}",

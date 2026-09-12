@@ -44,6 +44,7 @@ import { AdminCollectionsView }  from './views/AdminCollectionsView.js';
 import { AdminRolesView }        from './views/AdminRolesView.js';
 import { AdminBinsView }         from './views/AdminBinsView.js';
 import { AdminBooksView }        from './views/AdminBooksView.js';
+import { AdminBooksSettingsView } from './views/AdminBooksSettingsView.js';
 import { AdminInvoicesView }     from './views/AdminInvoicesView.js';
 import { AdminInvoiceDetailView } from './views/AdminInvoiceDetailView.js';
 import { AdminExpensesView }     from './views/AdminExpensesView.js';
@@ -94,6 +95,9 @@ const ROUTES = [
   { pattern: '/admin/books/pos', factory: () => (isAuthenticated() && canSeeView('pos')) ? new AdminPosView() : new HomeView() },
   { pattern: '/admin/books/vat', factory: () => (isAuthenticated() && canSeeView('vat')) ? new AdminVatView() : new HomeView() },
   { pattern: '/admin/books/ar', factory: () => (isAuthenticated() && canSeeView('ar')) ? new AdminARView() : new HomeView() },
+  // Not a sidebar item: rides the `books` view id rather than adding one (a new id
+  // means a new RBAC grant and a parity-test entry for a screen visited four times a year).
+  { pattern: '/admin/books/settings', factory: () => (isAuthenticated() && canSeeView('books')) ? new AdminBooksSettingsView() : new HomeView() },
   { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
   { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
@@ -277,6 +281,7 @@ export class Router {
       '/admin/bins':       'bins',
       '/admin/customers':  'customers',
       '/admin/books':      'books',
+      '/admin/books/settings': 'books',
       '/admin/books/invoices': 'invoices',
       '/admin/books/expenses': 'expenses',
       '/admin/books/ar':       'ar',

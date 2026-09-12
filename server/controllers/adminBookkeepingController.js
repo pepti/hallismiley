@@ -342,11 +342,16 @@ async function getInvoicePdf(req, res, next) {
 
 async function getSettings(req, res, next) {
   try {
-    const [settings, fx] = await Promise.all([
+    // Rate history for ONE currency at a time (the table on the settings screen);
+    // freshness for every currency in use, so a stale USD table is as visible as
+    // a stale EUR one.
+    const currency = parseEnum(req.query.currency, ['EUR', 'USD', 'GBP', 'DKK'], 'currency') || 'EUR';
+    const [settings, fx, fxInUse] = await Promise.all([
       Setting.getBookkeepingSettings(),
-      FxRate.recent('EUR', 30),
+      FxRate.recent(currency, 30),
+      FxRate.freshnessInUse(),
     ]);
-    res.json({ settings, fx_rates: fx });
+    res.json({ settings, fx_rates: fx, fx_currency: currency, fx_freshness: fxInUse });
   } catch (err) { fail(res, err, next); }
 }
 

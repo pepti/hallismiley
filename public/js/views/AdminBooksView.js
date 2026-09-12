@@ -44,6 +44,9 @@ export class AdminBooksView {
             <option value="365">${escHtml(t('adminBooks.range365'))}</option>
           </select>
         </label>
+        <div class="books-actions">
+          <a class="btn btn--ghost" href="${escHtml(href('/admin/books/settings'))}">${escHtml(t('adminBooks.settings.link'))}</a>
+        </div>
       </div>
       <div id="books-readiness"></div>
       <div id="books-body"><div class="admin-loading">${escHtml(t('form.loading'))}</div></div>

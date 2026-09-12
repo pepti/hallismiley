@@ -56,6 +56,13 @@
   "email.bookingNotification.button": "Open Order Admin",
   "email.bookingNotification.footer": "This notification fires once per paid order with bookable items. Stock-tracked items are unaffected.",
   "email.bookingNotification.unknownCustomer": "Customer (no email on file)",
+  "email.contact.subject": "New enquiry from {name}",
+  "email.contact.heading": "New enquiry",
+  "email.contact.body": "An enquiry came in through the website's contact form. Just reply to this email to respond.",
+  "email.contact.nameLabel": "Name",
+  "email.contact.emailLabel": "Email",
+  "email.contact.topicLabel": "Topic",
+  "email.contact.messageLabel": "Message",
 
   "email.rsvpNotification.subject.new": "New RSVP from {name}",
   "email.rsvpNotification.subject.update": "RSVP updated: {name}",

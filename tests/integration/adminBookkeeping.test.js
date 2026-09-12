@@ -148,6 +148,14 @@ describe('authorization', () => {
 
   it('admin can do all of it', async () => {
     await request(app).get(`${BASE}/settings`).set('Cookie', adminCookie).expect(200);
+    // The settings screen asks for one currency's history and every currency's
+    // freshness (ported from orangesmiley 2026-09-12); an unknown currency is 400.
+    const usd = await request(app).get(`${BASE}/settings?currency=USD`).set('Cookie', adminCookie).expect(200);
+    expect(usd.body.fx_currency).toBe('USD');
+    expect(Array.isArray(usd.body.fx_rates)).toBe(true);
+    expect(Array.isArray(usd.body.fx_freshness)).toBe(true);
+    for (const f of usd.body.fx_freshness) expect(f).toEqual(expect.objectContaining({ currency: expect.any(String), has_rate: expect.any(Boolean), ok: expect.any(Boolean) }));
+    await request(app).get(`${BASE}/settings?currency=XXX`).set('Cookie', adminCookie).expect(400);
     await request(app).patch(`${BASE}/settings`)
       .set('Cookie', adminCookie).send({ payment_terms_days: 30 }).expect(200);
   });

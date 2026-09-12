@@ -109,5 +109,27 @@ class FxRate {
   }
 }
 
+// Freshness for every currency the books actually use — rates entered, or
+// documents captured in that currency — so a stale USD table is as visible as a
+// stale EUR one. ISK is the reporting currency and never listed.
+FxRate.freshnessInUse = async function freshnessInUse(client = db) {
+  const { rows } = await client.query(
+    `SELECT DISTINCT currency FROM (
+       SELECT currency          FROM fx_rates
+       UNION SELECT original_currency FROM expenses
+       UNION SELECT original_currency FROM invoices
+     ) s
+     WHERE currency IS NOT NULL AND currency <> 'ISK'
+     ORDER BY currency`
+  );
+  const out = [];
+  for (const r of rows) {
+    let cur;
+    try { cur = assertSupportedCurrency(r.currency); } catch { continue; } // a legacy code we no longer know
+    out.push(await this.freshness(cur, client));
+  }
+  return out;
+};
+
 FxRate.MAX_STALENESS_DAYS = MAX_STALENESS_DAYS;
 module.exports = FxRate;

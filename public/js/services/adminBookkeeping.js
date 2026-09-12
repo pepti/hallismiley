@@ -39,7 +39,7 @@ async function send(method, path, body) {
 export const fetchDashboard = (params) => get('/dashboard', params);
 export const fetchInvoices = (params) => get('/invoices', params);
 export const fetchInvoice = (id) => get(`/invoices/${encodeURIComponent(id)}`);
-export const fetchBooksSettings = () => get('/settings');
+export const fetchBooksSettings = (params) => get('/settings', params);
 
 export const updateBooksSettings = (patch) => send('PATCH', '/settings', patch);
 export const setFxRate = (body) => send('POST', '/fx-rates', body);
