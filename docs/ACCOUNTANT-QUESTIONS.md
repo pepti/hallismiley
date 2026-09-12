@@ -37,7 +37,7 @@ things worth a look:
   services are zero-rated differently on export. Is one revenue account per rate enough,
   or do you want revenue split by line of business as well?
 - `6900` Risna og gjafir, `6910` Fæði starfsmanna and `6610` Rekstur fólksbifreiða (migration 085) are flagged `input_vat_blocked`, so
-  input VAT on them is refused with a reason recorded. Are those the right two, and are
+  input VAT on them is refused with a reason recorded. Are those the right three, and are
   there others?
 - `1990` Óvissureikningur is where a payment with no obvious home is parked visibly rather
   than guessed at. Are you happy with that as the practice?
@@ -171,7 +171,7 @@ already VSK-registered (our reading is that it does not, but it is in the code).
 **Current behaviour.** Input VAT is refused, with the reason recorded on the expense,
 when:
 
-1. the account is flagged `input_vat_blocked` (currently risna/gifts and staff meals),
+1. the account is flagged `input_vat_blocked` (currently 6900 risna/gifts, 6910 staff meals and 6610 passenger cars),
 2. the supplier has **no VSK number** on the document — a till receipt without one does
    not prove input tax,
 3. the vat_code is `exempt` or `none`,

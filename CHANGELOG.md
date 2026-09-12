@@ -32,7 +32,7 @@ merged PR or chunk, taken from the merge subjects and branch names).
   first on `/documents/:id`; `deploy.yml` pushes `:sha-<sha>` + build-args;
   `promote.yml` on Node 24; CI waits for the runner's apt lock; scheduled
   non-blocking Trivy scan; `nodemailer` and `railway.toml` gone.
-- The leftovers (#155): migration 085 splits vehicle costs (6600 commercial,
+- The leftovers (#156): migration 085 splits vehicle costs (6600 commercial,
   6610 passenger cars blocked); the expense form converts to minor units; the
   contact form delivers to the admins; the error-rate and memory alerts get
   their inputs; the HTTPS redirect targets the canonical host; the books

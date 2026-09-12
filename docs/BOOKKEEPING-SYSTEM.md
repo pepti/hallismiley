@@ -75,12 +75,15 @@ public/js/views/booksShared.js            isk(), status pills, readiness banner
 
 Schema lives in `server/config/schema.js` — migrations **072** (foundation), 073
 (expenses), 074 (product VAT rate), 075 (reconciliation), 076 (payroll lifecycle), 077
-(counter sales), **085** (vehicle accounts — 6600 stays the deductible commercial-vehicle account, new blocked `6610 Rekstur fólksbifreiða`; the chart is corrected by migration, never by editing 072), **078** (payroll integrity — séreign employee/employer totals on
+(counter sales), **078** (payroll integrity — séreign employee/employer totals on
 `payroll_runs`, and it re-defines all three 076 payroll guards: a payslip cannot be
 reparented onto a draft run, every figure and the attribution of a final run are
 frozen, and a used year's rates including `municipal_rate` / `source_note` /
 `confirmed_by` are frozen — read 078, not 076, for the current bodies), **079** (POS
-idempotency — a partial unique index on caller-supplied `client:` payment keys). The
+idempotency — a partial unique index on caller-supplied `client:` payment keys), **085**
+(vehicle accounts, 2026-09-12 — 6600 stays the deductible commercial-vehicle account, new
+blocked `6610 Rekstur fólksbifreiða`; the chart is corrected by migration, never by editing
+072). The
 `.sql` files under `server/migrations/` are generated mirrors for human reading;
 **schema.js wins** if they ever disagree.
 

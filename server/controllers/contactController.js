@@ -77,7 +77,13 @@ async function submit(req, res, next) {
         topic: normalizedTopic,
         locale: req.locale,
       });
-    })().catch(err => logger.error({ submissionId, err: err.message }, '[contact] delivery failed'));
+    })().catch(err => logger.error(
+      // Resend's validation errors quote the offending field, which could be
+      // the visitor's address — redact anything address-shaped before it lands
+      // in an aggregated log.
+      { submissionId, err: String(err && err.message || err).replace(/[^\s@<>]+@[^\s@<>]+/g, '<email>') },
+      '[contact] delivery failed'
+    ));
 
     // Fire-and-forget conversion event (no PII — topic only). Reached only on
     // the success path, so honeypot/validation failures are never counted.
