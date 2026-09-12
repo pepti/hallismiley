@@ -8,11 +8,6 @@ npm install
 Write-Host "Creating dev database 'orangesmiley' (ignore error if it exists)..."
 try { createdb orangesmiley } catch { Write-Host "  createdb skipped/failed - create it manually if needed." }
 
-Write-Host "Generating RSA keys..."
-New-Item -ItemType Directory -Force -Path keys | Out-Null
-openssl genrsa -out keys/private.pem 2048
-openssl rsa -in keys/private.pem -pubout -out keys/public.pem
-
 if (Test-Path .env.example) {
   if (-not (Test-Path .env)) {
     Copy-Item .env.example .env
@@ -32,6 +27,6 @@ if (Test-Path data/SECRET-SCAN-FINDINGS.txt) {
 }
 
 Write-Host ""
-Write-Host "Setup complete. Next:  claude   then run /strip-base"
+Write-Host "Setup complete. Next:  claude   then run /status  (never /strip-base on this repo - CLAUDE.md)"
 Write-Host "Dev server (detached): npm run dev:up / dev:down / dev:status"
 Write-Host "Tip: in Claude Code, run /hooks to confirm the PostToolUse + Stop hooks are wired."

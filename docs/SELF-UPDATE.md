@@ -182,8 +182,7 @@ merge to master → CI → deploy.yml (manual dispatch — nothing auto-deploys 
 ```
 
 `promote.yml` retags an existing digest with `az acr import` and **never
-builds** (note: it sets up Node 20 for `scripts/build-manifest.js` while
-`ci.yml` and the `Dockerfile` are on 24 — a known drift, 2026-09-11). Rebuilding the same commit produces different bytes (timestamps, base
+builds**. Rebuilding the same commit produces different bytes (timestamps, base
 image drift) and silently discards the soak. We are the canary; customers are
 not.
 

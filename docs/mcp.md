@@ -41,17 +41,15 @@ Revocation is immediate.
 ## Connecting each client
 
 - **Claude Code** — the create-token panel prints the exact command,
-  `claude mcp add --transport http <name> <endpoint> --header "Authorization: Bearer mcp_…"`.
-  Known wart (2026-09-11): the panel still names the connector
-  `icelandicstore-<env>` (`public/js/views/AdminMcpSettingsView.js:94`, ported
-  verbatim) — rename it locally; the name is only the client-side label.
+  `claude mcp add --transport http orangesmiley-<env> <endpoint> --header "Authorization: Bearer mcp_…"`
+  (the connector name is only the client-side label; it said
+  `icelandicstore-<env>` until 2026-09-12).
 - **claude.ai / Claude Desktop** — custom connectors authenticate via OAuth,
   which is **not built**. The 401s carry a plain `WWW-Authenticate: Bearer`
   and deliberately do NOT advertise an RFC 9728 `resource_metadata` URL
   (`server/middleware/mcpAuth.js:9-11` — advertising discovery with no
   `/.well-known` document behind it would make OAuth clients fail confusingly
-  rather than cleanly; the realm string there also still reads
-  `icelandicstore-mcp`). Until OAuth lands these clients need a local
+  rather than cleanly; realm `orangesmiley-mcp`). Until OAuth lands these clients need a local
   `mcp-remote` bridge that adds the bearer header.
 
 ## Tools (v1 — read-only, `server/mcp/tools/system.js`)
