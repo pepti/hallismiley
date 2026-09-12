@@ -1,8 +1,10 @@
 # Shop redesign — multi-section storefront
 
-**Status:** Plan, not yet implemented.
+**Status:** Shipped — all five build-order steps are live (status corrected 2026-09-12; the line said "not yet implemented" until then).
 **Owner:** Halli.
-**Last updated:** 2026-05-17.
+**Last updated:** 2026-05-17 (plan); 2026-09-12 (status + the paths below corrected to what shipped).
+
+> **What shipped, with evidence:** step 1 = migration `045_shop_sections` (the `.sql` mirror under `server/migrations/`, authoritative copy in `server/config/schema.js`) + the admin product form; step 2 = `/shop/products`, `/shop/tech`, `/shop/carpentry` in `public/js/router.js` with the tab bar in `ShopView.js`; step 3 = per-section filter configs in `public/js/components/ShopFilters.js`; step 4 = `LANDING_ROWS` in `ShopView.js`; step 5 = `sendBookingNotification()` in `server/services/emailService.js`, fired from `shopController.js` for a paid order with a bookable line (the "Halli reaches out" v1). Not built: the carpentry **region** filter (carpentry got price, delivery format and subcategory). The section query is `GET /api/v1/shop/products?category=…` (`server/routes/shopRoutes.js`; the `?category=` values are whitelisted in `shopController.js`).
 
 ## Goal
 
@@ -47,13 +49,13 @@ Each section keeps the existing search/sort UI but with section-aware filters:
 
 - **Products:** in-stock toggle, price range (current behavior).
 - **Tech services:** duration filter (1h / half-day / full-day), format (remote / in-person / hybrid).
-- **Carpentry:** type (consultation vs commissioned work), region.
+- **Carpentry:** type (consultation vs commissioned work), region. *(Shipped as price + delivery format + subcategory; no region filter.)*
 
 Filters that don't apply to a section don't render — markup driven by a per-section filter config.
 
 ## Data model — migration
 
-Single new sequential migration under `server/scripts/migrations/`. Extends the existing `products` table:
+Single new sequential migration — as shipped, entry `045_shop_sections` in the `migrations` array of `server/config/schema.js` (mirror: `server/migrations/045_shop_sections.sql`; there is no `server/scripts/migrations/`). It extends the existing `products` table. The SQL below is the plan; what shipped differs in three ways: the pre-existing `products.category` (from migration 024, apparel values) was **renamed to `subcategory`** rather than a new column added, the new `category` carries a `CHECK` constraint on the three values, and the index is named `idx_products_category`.
 
 ```sql
 ALTER TABLE products
@@ -79,7 +81,7 @@ ALTER TABLE products
 CREATE INDEX products_category_idx ON products (category);
 ```
 
-Existing apparel rows backfill cleanly with `category = 'product'` and the service fields NULL. No data loss, no API contract rewrite — `GET /api/products?category=tech_service` becomes the section query.
+Existing apparel rows backfill cleanly with `category = 'product'` and the service fields NULL. No data loss, no API contract rewrite — `GET /api/v1/shop/products?category=tech_service` is the section query (the plan wrote `/api/products`, a path that does not exist).
 
 Admin product form: add a category dropdown; show/hide service-specific fields based on selection.
 

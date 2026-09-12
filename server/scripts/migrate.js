@@ -17,9 +17,12 @@ async function migrate() {
   let lockHeld = false;
   try {
     // ── Serialise concurrent runners ────────────────────────────────────────
-    // Since PROD moved to a tier with deployment slots, two containers can boot
-    // at once against the SAME database: the staging slot warming up while the
-    // production slot still serves. Both call this runner. Without a lock they
+    // Instances scaffolded from this base run on slotted App Service tiers, where
+    // two containers can boot at once against the SAME database: the staging
+    // slot warming up while the production slot still serves. Both call this
+    // runner. (The base itself is B1 with no slots — read 2026-09-12 — so here
+    // the lock is insurance, not a live race; the comment used to say PROD had
+    // moved to a slotted tier, which was icelandicstore's stack, not this one.) Without a lock they
     // race — the "already applied?" SELECT can pass in both before either
     // INSERT lands, so a migration runs twice (its second run failing on an
     // existing object and crash-looping the new container).

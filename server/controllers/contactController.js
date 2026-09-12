@@ -1,6 +1,7 @@
 // Contact form handler
-// Validates and forwards enquiries. Wire up nodemailer or a mail API (e.g. Resend)
-// to forward submissions to your inbox.
+// Validates enquiries. In the base this is a STUB: it records an analytics event
+// and logs a correlation id, and delivers nothing (docs/API.md). An instance
+// that needs an inbox wires Resend in here (orangesmiley stores leads + mails).
 const { randomUUID } = require('crypto');
 const { t }          = require('../i18n');
 const { AnalyticsEvent } = require('../models/Analytics');
@@ -40,8 +41,8 @@ async function submit(req, res, next) {
     }
 
     // Log a correlation ID only — name, email, and message body are PII and
-    // must not be written to aggregated log stores.  Wire in Resend/nodemailer
-    // here to actually deliver the submission to your inbox.
+    // must not be written to aggregated log stores. Delivery (Resend) is not
+    // wired in the base — see the header comment.
     const submissionId = randomUUID();
     console.log(`[Contact] Submission received: id=${submissionId} topic=${normalizedTopic || 'none'}`);
 

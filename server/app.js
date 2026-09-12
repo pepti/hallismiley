@@ -38,6 +38,7 @@ const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
 const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
+const { resolveCanonicalHost } = require('./utils/canonicalHost');
 const { register }   = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
 const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
@@ -304,12 +305,17 @@ if (process.env.NODE_ENV === 'production') {
     next();
   });
 
-  // Canonicalize host → www.hallismiley.is. Prevents duplicate-content
-  // indexing across apex (hallismiley.is), the Azure default hostname
-  // (hallismiley-app.azurewebsites.net), and any legacy aliases.
+  // Canonicalize the host. Prevents duplicate-content indexing across the
+  // apex (hallismiley.is), the Azure default hostname
+  // (hallismiley-app.azurewebsites.net), and any legacy aliases. The host is
+  // the one in APP_URL (server/utils/canonicalHost.js) — it was a literal
+  // until 2026-09-12, which sent every production request of an instance on
+  // another domain to hallismiley.is. The resolved value is logged once at
+  // boot so a wrong APP_URL is visible in the first lines of the log tail.
   // Skip probes so Azure load-balancer health checks still reach /health
   // and /ready regardless of which hostname they use.
-  const CANONICAL_HOST = 'www.hallismiley.is';
+  const CANONICAL_HOST = resolveCanonicalHost(process.env.APP_URL);
+  logger.info({ canonicalHost: CANONICAL_HOST, appUrl: process.env.APP_URL || null }, 'Canonical-host redirect armed');
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();
     const host = (req.headers.host || '').toLowerCase();

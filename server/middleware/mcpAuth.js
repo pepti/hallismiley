@@ -15,7 +15,7 @@
 const McpToken = require('../models/McpToken');
 
 function unauthorized(req, res) {
-  res.set('WWW-Authenticate', 'Bearer realm="icelandicstore-mcp"');
+  res.set('WWW-Authenticate', 'Bearer realm="hallismiley-mcp"');
   return res.status(401).json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } });
 }
 
