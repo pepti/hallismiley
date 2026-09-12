@@ -2,8 +2,9 @@
 -- Shop redesign step 1 (the base's 2026-05 storefront plan; its doc was
 -- retired 2026-09-11 — the shop is a hidden surface on this instance).
 -- Column semantics from that plan: is_bookable = "true ⇒ post-checkout
--- scheduling follow-up" (never built; the books read it as is_service for the
--- POS picker), duration_minutes / delivery_format describe a service SKU,
+-- scheduling follow-up" (built: sendBookingNotification() in emailService.js,
+-- fired from shopController; the books also read it as is_service for the POS
+-- picker), duration_minutes / delivery_format describe a service SKU,
 -- stock_count NULL on a service = always available.
 --
 -- The existing products.category (from 024_product_variants) held apparel-style
