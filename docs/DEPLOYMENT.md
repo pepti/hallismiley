@@ -168,13 +168,13 @@ gh secret set AZURE_TENANT_ID       --body "$(az account show --query tenantId -
 gh secret set AZURE_SUBSCRIPTION_ID --body "$SUB_ID"
 ```
 
-These three are the only repository secrets that exist (read 2026-09-12). Two
-more things the workflows can use are **not** set:
-
-- `RESEND_API_KEY` as a repository secret — without it the two alert jobs in
-  `deploy.yml` skip their e-mail step (see §6). This is a different store from
-  the App Service setting of the same name.
-- The four repository **variables** `promote.yml` needs (§6b).
+Plus `RESEND_API_KEY` as a repository secret (set 2026-09-12, evening) — the
+two alert jobs in `deploy.yml` e-mail through it (see §6). This is a different
+store from the App Service setting of the same name; it was copied from there
+(`az webapp config appsettings list … --query "[?name=='RESEND_API_KEY'].value"
+-o tsv` into `gh secret set RESEND_API_KEY --body`). Those four are the only
+repository secrets. Still **not** set: the four repository **variables**
+`promote.yml` needs (§6b).
 
 ---
 
@@ -221,22 +221,19 @@ the canonical tags, the sitemap **and, in production, the canonical-host 301**
 (`server/app.js` derives the host from it); `METRICS_TOKEN` gates `/metrics`.
 
 **`APP_ENV`** is the deployment's own label (`test` on a TEST stack,
-`production` here; unset on the live site as of 2026-09-12). Every reader
+`production` here — set on the live site on 2026-09-12, evening). Every reader
 (`requireTestEnv.js`, `ssrMeta.js`, the MCP env tag) already resolves to
 production when it is unset under `NODE_ENV=production`, so setting
 `APP_ENV=production` changes exactly one thing: it **arms the boot guard** in
-`server/server.js` that refuses to start without `RESEND_API_KEY`. Order of
-operations if you set it: confirm `RESEND_API_KEY` is present in the app
-settings (it is, as of 2026-09-12), then add `APP_ENV=production` in the same
-`appsettings set`. Never set `APP_ENV=test` on the live site — that would
-switch on the TEST chrome and the change-request widget for every visitor.
+`server/server.js` that refuses to start without `RESEND_API_KEY` — which is
+why it is set together with that key, never before it. Never set
+`APP_ENV=test` on the live site — that would switch on the TEST chrome and the
+change-request widget for every visitor.
 
 **Do not set** `SMTP_USER`, `SMTP_PASS` or `REQUIRE_EMAIL_VERIFICATION`: nothing
 in the code reads them (the mail transport is Resend; e-mail verification is
-optional in code, not env-gated). All three are still present on the live App
-Service from an earlier version of this guide (read 2026-09-12) — harmless, and
-removing them is optional; batch it with a real settings change since each
-write restarts the app.
+optional in code, not env-gated). They sat on the live App Service from an
+earlier version of this guide until 2026-09-12, when they were deleted.
 
 Enable HTTPS-only and turn off the legacy FTPS endpoint:
 
@@ -276,9 +273,10 @@ succeed (red **or cancelled**) and **deliberately exits 1** so the Deploy run
 shows red — that red run IS the alert that merged code is not live.
 `alert-deploy-failed` runs when the `deploy` job errored (`always()` is what
 lets it observe the failure). Both try to e-mail `halli@hallismiley.is` via
-Resend and **skip the e-mail cleanly when the `RESEND_API_KEY` repository
-secret is unset — which it is (2026-09-12)**, so today the run colour is the
-only signal. On a healthy deploy both jobs show `skipped`; that is normal.
+Resend; the `RESEND_API_KEY` repository secret exists since 2026-09-12
+(evening), so the e-mail is real — without it the step skips cleanly and the
+run colour is the only signal. On a healthy deploy both jobs show `skipped`;
+that is normal.
 Recovery after red CI: fix, re-run (`gh run rerun <ci-run-id> --failed` re-fires
 `workflow_run` on completion); never dispatch `deploy.yml` over a red CI run.
 
@@ -378,8 +376,10 @@ self-update module ships off and there is no `config/client.json` — so do not
 use it as the check.
 
 There is no App Insights, metric alert or availability test on this
-subscription (read 2026-09-12), and the App Service health-check path is
-unset, so nothing in Azure notices a `/ready` 503 on its own.
+subscription (read 2026-09-12). The App Service health-check path is `/health`
+(set 2026-09-12, evening): Azure recycles the instance if the PROCESS stops
+answering, and nothing in Azure notices a `/ready` 503 on its own — which is
+the intended split, a database problem is not fixed by a restart.
 
 ---
 

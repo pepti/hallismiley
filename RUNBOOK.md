@@ -459,8 +459,10 @@ The previous version of this section documented a `"database"` key on
 `/health` that never existed (fixed 2026-09-12).
 
 `/ready`'s `uptime` is the cheapest proof that a deploy actually swapped the
-container: it resets to seconds. The App Service health-check path is unset
-(read 2026-09-12), so Azure itself never acts on a `/ready` 503.
+container: it resets to seconds. The App Service health-check path is `/health`
+(set 2026-09-12): Azure pings the LIVENESS probe, so a dead process gets the
+instance recycled, while a `/ready` 503 (a database problem) is deliberately
+NOT something Azure restarts the container for — a restart would not fix it.
 
 ### Merged but not live
 
@@ -468,9 +470,10 @@ A **red `Deploy to Azure` run** is one of two things (`.github/workflows/deploy.
 `alert-ci-blocked` fired because CI on `main` was not `success` — including
 **cancelled** — and the job exits 1 on purpose so the run shows red; or
 `alert-deploy-failed` because the `deploy` job itself errored. Both try to
-e-mail `halli@hallismiley.is` via Resend and **skip the e-mail silently unless
-the `RESEND_API_KEY` repository secret exists — it does not (2026-09-12)**, so
-the run colour is the only alert. On a healthy deploy both alert jobs show
+e-mail `halli@hallismiley.is` via Resend — the `RESEND_API_KEY` repository
+secret exists since 2026-09-12 (evening), so the e-mail is real; without the
+secret the step skips silently and the run colour is the only alert. On a
+healthy deploy both alert jobs show
 `skipped`. Recovery: fix CI and re-run it (`gh run rerun <ci-run-id> --failed`
 re-fires `workflow_run` on completion), or the emergency dispatch above — never
 dispatch over a red CI run to skip it.
