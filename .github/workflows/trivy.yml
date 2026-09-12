@@ -1,0 +1,63 @@
+name: Container scan (Trivy)
+
+# Scheduled, NON-BLOCKING image CVE scan — the open item from
+# PRE_LAUNCH_AUDIT.md DO1 and SECURE_SDLC.md §13 ("Container scanning:
+# planned"). It builds the same Dockerfile CI builds, scans the result for
+# HIGH/CRITICAL vulnerabilities with a fix available, and files them in the
+# repo's Security tab as SARIF. It never fails: `exit-code: '0'`, so a new
+# CVE in the Node base image shows up as a finding, not as a red run that
+# blocks a deploy nobody was watching. Making it a merge gate is a separate
+# decision (it would go into ci.yml's docker job) — this workflow touches
+# neither ci.yml nor deploy.yml.
+#
+# Monday 05:00 UTC = 05:00 Reykjavik (Iceland keeps UTC all year), an hour
+# before dependabot's Monday run so a scan finding and its fix PR land in the
+# same morning.
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # upload-sarif needs this and nothing else
+
+concurrency:
+  group: trivy-scan
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Build image and scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The same image deploy.yml pushes, built locally and never pushed. The
+      # build-args are what deploy.yml passes, so the stamp inside the image
+      # says where it came from; nothing reads them during a scan.
+      - name: Build the image
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --build-arg RELEASE_CHANNEL=scan \
+            -t hallismiley:scan .
+
+      - name: Trivy — HIGH/CRITICAL with a fix available
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: hallismiley:scan
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload findings to the Security tab
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image

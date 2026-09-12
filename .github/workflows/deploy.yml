@@ -80,7 +80,23 @@ jobs:
       # artifact a plain single-arch manifest — the default (an OCI index with
       # an attestation child) would change what the weekly ACR purge sees and
       # what App Service pulls.
+      # BUILT_AT is stamped here, not read off the repository (its updated_at
+      # moves on every push, not on this build).
+      - name: Stamp the build time
+        id: stamp
+        run: echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # Three tags on one digest: `latest` (what a manual `docker pull`
+      # expects), `:<sha>` (what App Service is pointed at below — the
+      # RUNBOOK rollback recipe pins this form), and `:sha-<sha>` (what
+      # promote.yml resolves when it retags a digest onto a release channel —
+      # until 2026-09-12 that tag was never pushed, so promote could never
+      # find an image). The build-args are what the Dockerfile stamps into
+      # server/version.json; without them every deployed image reported
+      # `1.0.0 / unknown / dev` on /api/v1/system/version. APP_VERSION is
+      # deliberately not passed — the Dockerfile reads it from package.json.
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -88,9 +104,26 @@ jobs:
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            GIT_SHA=${{ env.DEPLOY_SHA }}
+            BUILT_AT=${{ steps.stamp.outputs.built_at }}
+            RELEASE_CHANNEL=stable
           tags: |
             hallismileyacr.azurecr.io/hallismiley:latest
             hallismileyacr.azurecr.io/hallismiley:${{ env.DEPLOY_SHA }}
+            hallismileyacr.azurecr.io/hallismiley:sha-${{ env.DEPLOY_SHA }}
+
+      # The digest is what promote.yml and the ACR purge operate on; having it
+      # in the run summary means a rollback or a promotion can be checked
+      # against what was actually pushed without querying the registry.
+      - name: Record image digest
+        run: |
+          {
+            echo "### Image"
+            echo "- digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- tags: \`latest\`, \`${DEPLOY_SHA}\`, \`sha-${DEPLOY_SHA}\`"
+            echo "- built at: ${{ steps.stamp.outputs.built_at }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3

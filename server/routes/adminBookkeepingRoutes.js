@@ -79,7 +79,7 @@ router.post('/documents', requireRole('admin'),
   documentService.createDocumentUpload().single('file'), csrfProtect, books.uploadDocument);
 // Streamed through an authenticated route on purpose: these files live outside the
 // statically-served tree, so this is the ONLY way to read them.
-router.get('/documents/:id', requireView('expenses'), docLimiter, books.getDocument);
+router.get('/documents/:id', docLimiter, requireView('expenses'), books.getDocument);
 
 // ── Receivables (view: ar) ───────────────────────────────────────────────────
 router.get('/ar/export.csv', docLimiter, requireView('ar'), books.exportAgingCsv);
