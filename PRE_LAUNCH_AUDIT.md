@@ -1,5 +1,22 @@
 # Pre-Launch Audit Report — HalliSmiley
 
+> **Point-in-time record, frozen (banner added 2026-09-12).** This audit is of
+> the March 2026 codebase — Node 20, Express 4, RS256 JWT with a `keys/`
+> directory, Railway hosting. None of that is the code today (Node 24, Express 5,
+> Lucia sessions, Azure App Service). Checked against the code on 2026-09-12:
+> CRITICAL-1/2/3 (private key and `.env` handling) are **moot** — no JWT or key
+> mechanism exists, `.gitignore` covers `keys/`, `*.pem` and `.env`, and
+> `.env.example` is committed; IMPORTANT-S1 (`rejectUnauthorized`) closed in
+> `server/config/database.js`; S3 (script `unsafe-inline`) closed in
+> `server/app.js`'s CSP; S4 (`Permissions-Policy`) closed in `server/app.js`;
+> Q3/Q4/D1/D2/P1/R2/C1/C2/DO3 closed (pool shutdown, serial Jest, migration
+> runner + `schema_migrations`, tests run the real migrations, compression,
+> Docker `HEALTHCHECK`, `REQUIRED_ENV`, `data/` ignored, migrations at boot).
+> **Still open from DO1:** container image CVE scanning is a scheduled,
+> non-blocking `trivy.yml` since 2026-09-12, not a CI gate. The Railway items
+> (DO2 and others) describe a platform the site left in 2026-04. The body below
+> is not maintained. Current security posture: `SECURE_SDLC.md`.
+
 **Date:** 2026-03-30
 **Stack:** Node.js 20 · Express 4.18 · PostgreSQL · Vanilla JS SPA
 **Auditor:** Manual review of all 65+ source files

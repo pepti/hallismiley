@@ -1,12 +1,29 @@
 # Secure Development Lifecycle (S-SDLC)
 
 **Project:** Halli Smiley — `hallismiley.is`
-**Version:** 1.0
+**Version:** 1.1
 **Effective:** 2026-05-25
 **Cadence:** Two-week sprints (Monday → Sunday, 14 days)
 **Owner:** Halli (Security Champion + Engineering Lead)
 **Frameworks:** NIST SSDF v1.1 (SP 800-218) · OWASP SAMM v2.0 · OWASP ASVS 4.0 L1/L2
-**Related docs:** `SECURITY_AUDIT_2026-04-16.md`, `PRE_LAUNCH_AUDIT.md`, `RUNBOOK.md`, `docs/DEPLOYMENT.md`, `docs/API.md`
+**Related docs:** `SECURITY_AUDIT_2026-04-16.md` and `PRE_LAUNCH_AUDIT.md` (both frozen point-in-time records), `RUNBOOK.md`, `docs/DEPLOYMENT.md`, `docs/API.md`
+
+> **Reality check, 2026-09-12.** This document describes a process; the repo
+> instantiates part of it. What exists: ESLint 10 (flat config, no security
+> plugin), `npm audit --audit-level=high` and `check:i18n` in CI, Jest +
+> Playwright in CI, Docker build + boot smoke in CI, Dependabot (npm, docker,
+> github-actions — weekly Monday 06:00 Reykjavik), husky hooks that run
+> `npm run lint` and nothing else, pino redaction, the `/csp-report` endpoint,
+> a scheduled non-blocking Trivy image scan (`trivy.yml`, added 2026-09-12; not a
+> merge gate), and the Monday `security-sdl-sweep`. What does **not** exist: any
+> gitleaks/secret-scan gate, `docs/sprints/`, `docs/threat-models/`, `docs/adr/`,
+> `docs/incidents/`, `docs/postmortems/`, `docs/exceptions/`, `RISK_REGISTER.md`,
+> `SECURITY.md`, Semgrep, ZAP, JWT/`jose` (auth is Lucia sessions only). Branch
+> protection on `main` (PS.1) is a rule with an EMPTY required-check list and
+> `enforce_admins: false` — unmet. The quarterly internal audit scheduled for
+> 2026-07-16 has not run (the newest artefact is the 2026-04-16 audit, whose
+> banner now lists what is closed), and the 2026 Q4 pentest has no vendor. The
+> sprint calendar in §17 ended 2026-08-16 and has not been renewed.
 
 ---
 
@@ -228,17 +245,17 @@ A sprint is **14 calendar days, Monday 00:00 → Sunday 23:59 (Atlantic/Reykjavi
 **Activities:**
 
 1. **Coding standards.** Follow the conventions in `CLAUDE.md` — kebab-case files, PascalCase component classes, camelCase functions, pino logging (never `console.log` in committed code), typed-error pattern with central middleware formatting.
-2. **Pre-commit hooks.** Husky pre-commit runs:
-   - ESLint (security plugin enabled)
-   - `npm run check:i18n` if locale files touched
-   - Secret scan (gitleaks pattern) — prevents accidental commit of `.env` content, RSA keys, or `*.pem` files.
+2. **Pre-commit hooks.** Husky pre-commit and pre-push each run exactly `npm run lint`
+   (`.husky/pre-commit`, `.husky/pre-push`, read 2026-09-12). There is no i18n hook and no
+   secret scan; `check:i18n` runs in CI, and secrets are kept out by `.gitignore`
+   (`.env*`, `keys/`, `*.pem`) plus review. A gitleaks hook remains a to-do.
 3. **Branching.** Feature branches off `main`. Branch naming: `feature/<short-slug>`, `fix/<short-slug>`, `security/<short-slug>`. Security fixes get the `security/` prefix so they are visible in the PR list at a glance.
 4. **Pull request.** Small, focused PRs (target < 400 LoC diff). Description must include:
    - Linked story / risk register ID
    - Threat-model reference (if Phase 2 ran)
    - "How this was tested" section
    - Self-assessment against `/security-check` invariants
-5. **Secrets discipline.** Anything that looks like a secret goes in env vars. Never commit `keys/`. RSA keys rotate independently per environment. Admin password lives only as `ADMIN_PASSWORD_HASH` (bcrypt) generated via `node server/scripts/setup-admin.js`.
+5. **Secrets discipline.** Anything that looks like a secret goes in env vars. Never commit `keys/`. RSA keys rotate independently per environment. Admin credentials live in the `users` table as a Scrypt hash, written by `node server/scripts/setup-admin.js <username> <email> <password>` — there is no `ADMIN_PASSWORD_HASH` env var.
 6. **Migrations are forward-only and sequential.** Use `/migration-new <name>`. Never edit an applied migration. Always add a new one. Migrations run automatically at container startup (see `docs/DEPLOYMENT.md`).
 7. **AI-assist guardrails.** When using Claude / Copilot / similar to generate code, the generated output is treated as a junior PR — review it, don't trust it. Especially scrutinise generated regex, SQL, and crypto.
 
@@ -260,12 +277,13 @@ A sprint is **14 calendar days, Monday 00:00 → Sunday 23:59 (Atlantic/Reykjavi
 
 | Gate | Tool | Configured in | Blocks merge if … |
 |------|------|---------------|-------------------|
-| Lint | ESLint 8 + eslint-plugin-security | `.eslintrc` | Any error severity rule fails |
+| Lint | ESLint 10 (flat config, no security plugin installed) | `eslint.config.js` | Any error severity rule fails |
 | Dependency audit | `npm audit --audit-level=high` | `.github/workflows/ci.yml` | Any HIGH or CRITICAL CVE in the resolved tree |
 | Integration tests | Jest (hits real Postgres) | `ci.yml` | Any test fails or coverage drops below baseline |
 | E2E tests | Playwright (Chromium) | `ci.yml` | Any spec fails |
-| Docker build | `docker build .` | `ci.yml` | Build fails |
-| Secret scan | gitleaks pre-commit + CI re-run | pre-commit + CI | Any pattern matches |
+| Docker build + boot smoke | `docker build .` + a production-mode boot with `/health` and `/ready` probed | `ci.yml` (`docker` job) | Build or boot fails. Image CVE scanning is a separate scheduled, non-blocking `trivy.yml` (SARIF to the Security tab) — not a merge gate |
+| i18n keys in sync | `npm run check:i18n` | `ci.yml` | Any missing or extra locale key |
+| Secret scan | **not implemented** (no gitleaks hook, no CI step) | — | — |
 | Type checks | (n/a — no TS) | — | — |
 
 ### 10.2 Manual Code Review (every PR, blocking)
@@ -286,7 +304,7 @@ Half-day block, owned by SC:
 1. **Full SAST sweep.** Run `npm audit`, ESLint security ruleset on the whole repo (not just diff), and an `rg`-based search for the patterns called out in `SECURITY_AUDIT_2026-04-16.md` Section 2 — `innerHTML`, `outerHTML`, `insertAdjacentHTML`, raw string concatenation into SQL, `eval`, `exec`, `spawn`, `readFile` with user-derived paths, hardcoded secrets.
 2. **DAST sweep (manual).** Use ZAP Baseline scan or Burp Community against the staging or local environment. Triage findings.
 3. **Authenticated session review.** Confirm session cookie still carries `httpOnly`, `secure`, `sameSite=strict`. Inspect Set-Cookie headers manually.
-4. **CSP violation review.** Check the `/csp-report` endpoint (once implemented per Section 15 below) for any new violations introduced this sprint.
+4. **CSP violation review.** Check the `/csp-report` endpoint (implemented — `server/app.js`, `reportUri` + handler; reports land in the pino log at warn) for any new violations introduced this sprint.
 5. **Log review.** Grep production pino logs for any new emergence of `console.log` output, accidentally-logged tokens, or PII patterns (email regex, phone regex).
 6. **Update risk register** with anything found.
 
@@ -414,29 +432,29 @@ Publish `SECURITY.md` at repo root (action item in Sprint 1) with:
 
 ## 13. Tooling Matrix
 
-Tools currently in use or planned. "Status" reflects state as of 2026-05-23.
+Tools currently in use or planned. "Status" re-read from the repo on 2026-09-12 (the 2026-05-23 column was stale).
 
 | Category | Tool | Status | Notes |
 |----------|------|--------|-------|
-| Static analysis (lint) | ESLint 8 + eslint-plugin-security | In use | Husky pre-commit + CI |
+| Static analysis (lint) | ESLint 10, flat config | In use | Husky pre-commit/pre-push + CI; **no security plugin** |
 | Dependency audit | `npm audit` | In use | CI fails on HIGH+ |
-| Dependency updates | GitHub Dependabot | **Planned (Sprint 1)** | Enable in repo settings |
-| Container scanning | Trivy | **Planned (Sprint 2)** | Add to `ci.yml` after docker build step |
-| Secret scanning | gitleaks (pre-commit) + GitHub native | In use (GH) / **Planned (Sprint 1)** for pre-commit | |
+| Dependency updates | GitHub Dependabot | In use | `.github/dependabot.yml`: npm + docker + github-actions, weekly Monday 06:00 Reykjavik, PR limit 5, docker ignores Node majors |
+| Container scanning | Trivy | Scheduled, non-blocking (`.github/workflows/trivy.yml`, 2026-09-12) | Weekly + dispatch, SARIF to the Security tab; making it a `ci.yml` gate is a later decision |
+| Secret scanning | GitHub native only | GitHub-side: read the repo settings; **no pre-commit hook** | |
 | SAST (deep) | Semgrep (community rules) | **Planned (Sprint 3)** | Run on PR + weekly cron |
 | DAST | OWASP ZAP Baseline | **Planned (Sprint 4)** | Manual sprint-verification day, then automate |
 | Runtime errors | Sentry | In use | Backend Node SDK |
 | Metrics | prom-client + Azure Monitor | In use | `/metrics` endpoint |
 | Structured logs | pino + pino-http | In use | Redaction rules cover password, token, secret, cookie |
-| Security event log | `server/observability/securityLogger.js` | Partially wired | Audit finding 3.7 — full wiring planned Sprint 2 |
+| Security event log | `server/observability/securityLogger.js` | Wired | auth, OAuth, bookkeeping, MCP and alerts call it; audit 3.7 closed |
 | Web Application Firewall | Azure Front Door / App Service WAF | **Evaluate Sprint 5** | Adds rule-based filtering in front of App Service |
 | Penetration test | External vendor (TBD) | **Annual — schedule for 2026-Q4** | |
-| Threat modeling | STRIDE on paper / markdown | In use | Stored in `docs/threat-models/` |
-| ADR template | `docs/adr/` markdown | **Planned (Sprint 1)** | Template added to `docs/adr/0000-template.md` |
-| Risk register | Markdown table in `RISK_REGISTER.md` | **Planned (Sprint 1)** | Triaged bi-weekly |
+| Threat modeling | STRIDE on paper / markdown | Not instantiated | `docs/threat-models/` does not exist |
+| ADR template | `docs/adr/` markdown | Not instantiated | |
+| Risk register | Markdown table in `RISK_REGISTER.md` | Not instantiated | |
 | Incident log | `docs/incidents/` | Folder TBD | Created at first incident |
-| Postmortem template | `docs/postmortems/0000-template.md` | **Planned (Sprint 2)** | |
-| Vulnerability disclosure | `SECURITY.md` | **Planned (Sprint 1)** | |
+| Postmortem template | `docs/postmortems/0000-template.md` | Not instantiated | |
+| Vulnerability disclosure | `SECURITY.md` | Not instantiated | |
 
 ---
 
@@ -456,7 +474,7 @@ Measured per sprint, reviewed at sprint retro, trended quarterly.
 | Successful rollbacks within target time (< 5 min) | 100% of attempted | Sprint deploy notes |
 | Postmortem published within 5 business days of resolution | 100% | `docs/postmortems/` dates |
 | Dependency lag — production deps > 6 months behind latest stable | < 10 | `npm outdated` snapshot |
-| Test coverage (server) | ≥ 80% | Jest coverage report |
+| Test coverage (server) | ≥ 80% aspiration; the ENFORCED floor is `lines: 62` in `jest.config.js` (post-i18n baseline, target back to 70) | `npm run test:ci` coverage thresholds |
 | Test coverage on auth/middleware/security paths specifically | ≥ 95% | Jest coverage report (path filter) |
 
 ---
@@ -512,6 +530,8 @@ Process exists to be applied; it also exists to be bent when reality requires it
 ---
 
 ## 17. Sprint Calendar (Next Six Sprints)
+
+> Historical: this calendar ended 2026-08-16 and has not been renewed. Work lands as PRs on `main`.
 
 | Sprint | Start (Mon) | End (Sun) | Verification day (Wed W2) | Deploy day (Fri W2) | Sprint theme |
 |--------|-------------|-----------|---------------------------|---------------------|--------------|
@@ -726,9 +746,10 @@ A story is "security done" only when all apply (in addition to functional DoD):
 | Version | Date | Author | Change |
 |---------|------|--------|--------|
 | 1.0 | 2026-05-23 | Halli | Initial S-SDLC, effective 2026-05-25. |
+| 1.1 | 2026-09-12 | Docs sync (Claude, for Halli's review; Öryggisvörður reviewed) | Reality-check banner; §5 cadence ownership by the Monday `security-sdl-sweep`; §9 hooks, §10.1 gates and §13 tooling corrected to what the repo runs (lint-only husky, no secret scan, ESLint 10 flat config, Dependabot in use, Trivy scheduled non-blocking, `/csp-report` live, securityLogger wired); Scrypt, no JWT; coverage floor 62; artefact directories marked not instantiated; sprint calendar marked ended; PS.1 branch protection recorded as unmet. |
 
 Future revisions are tracked here. The SDLC is reviewed quarterly at the verification day of the sprint containing the quarter boundary; major changes require an ADR.
 
 ---
 
-*End of Secure Development Lifecycle v1.0.*
+*End of Secure Development Lifecycle v1.1.*

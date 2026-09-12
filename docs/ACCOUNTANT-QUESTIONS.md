@@ -175,7 +175,7 @@ when:
 2. the supplier has **no VSK number** on the document — a till receipt without one does
    not prove input tax,
 3. the vat_code is `exempt` or `none`,
-4. the expense is a passenger car or its running costs (via the account flag).
+4. the expense is a passenger car or its running costs (via the account flag `input_vat_blocked` — seeded TRUE only on 6900 risna and 6910 fæði; no vehicle account is flagged yet, so this rule is dormant until one is added).
 
 Number 2 is the one that surprises people: a receipt-less or VSK-number-less purchase
 still gets recorded as an expense, at its **full gross**, with `vat_deductible = false`

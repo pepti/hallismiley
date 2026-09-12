@@ -58,6 +58,7 @@ server/routes/adminBookkeepingRoutes.js            gating
 server/services/bookkeepingPdf.js                  invoice, receipt and payslip PDFs
 server/scripts/books-fetch-fx.js                   exchange rates
 server/scripts/books-archive-export.js             the 7-year archive (see gr. 20)
+server/scripts/books-backfill-orders.js            issue invoices for historical paid orders (npm run books:backfill)
 server/scripts/seed-books-demo.js                  demo data for a software business
 
 public/js/views/AdminBooksView.js         overview
@@ -74,8 +75,14 @@ public/js/views/booksShared.js            isk(), status pills, readiness banner
 
 Schema lives in `server/config/schema.js` — migrations **072** (foundation), 073
 (expenses), 074 (product VAT rate), 075 (reconciliation), 076 (payroll lifecycle), 077
-(counter sales). The `.sql` files under `server/migrations/` are generated mirrors for
-human reading; **schema.js wins** if they ever disagree.
+(counter sales), **078** (payroll integrity — séreign employee/employer totals on
+`payroll_runs`, and it re-defines all three 076 payroll guards: a payslip cannot be
+reparented onto a draft run, every figure and the attribution of a final run are
+frozen, and a used year's rates including `municipal_rate` / `source_note` /
+`confirmed_by` are frozen — read 078, not 076, for the current bodies), **079** (POS
+idempotency — a partial unique index on caller-supplied `client:` payment keys). The
+`.sql` files under `server/migrations/` are generated mirrors for human reading;
+**schema.js wins** if they ever disagree.
 
 ---
 
@@ -135,7 +142,7 @@ to be careful.
 | Requirement | Where it lives |
 |---|---|
 | Reglugerð 505/2013 gr. 8 — an identifiable person behind every entry | `created_by` NOT NULL with ON DELETE RESTRICT, plus `books_audit_log` |
-| gr. 9 — posted entries are append-only | `books_forbid_posted_entry_mutation`, `books_forbid_posted_line_mutation`, `books_forbid_line_insert_into_posted`, `books_protect_issued_invoice`, `books_protect_expense`, `books_protect_payroll_run`, `books_protect_payslip` |
+| gr. 9 — posted entries are append-only | `books_forbid_posted_entry_mutation`, `books_forbid_posted_line_mutation`, `books_forbid_line_insert_into_posted`, `books_protect_issued_invoice`, `books_protect_issued_invoice_line`, `books_forbid_invoice_line_insert_into_issued`, `books_forbid_any_mutation` (payments, credit notes, VSK returns, the audit log), `books_protect_expense`, `books_protect_document`, `books_freeze_settled_link`, `books_protect_payroll_run`, `books_protect_payslip`, `books_protect_payroll_rates` |
 | gr. 14 — áreiðanleiki (reliability) of stored documents | SHA-256 on every upload, re-verified on every read and on every archive export |
 | gr. 16 — a gapless number series per document type | `bookkeeping_counters` under a row lock |
 | Reglugerð 50/1993 — what a sales document must show | snapshotted onto the invoice row at issue, and printed from that row, so a reprint years later reproduces the document as issued |
@@ -154,7 +161,7 @@ Two properties worth stating outright because they constrain everything else:
 
 ## Money
 
-Whole ISK, as BIGINT, everywhere. There is no minor unit and no float in the money path.
+Whole ISK, as BIGINT, everywhere in the books — no float in the money path. A foreign-currency original is captured in **that currency's minor units** (EUR 20.00 is `2000`; `utils/fx.js`, `expenseService.js`), then converted at the captured rate. Known defect (2026-09-12): the base's expense form sends the typed major figure straight through, so EUR 20.00 typed as `20` books as EUR 0.20 — orangesmiley fixed it on 2026-09-07 (`public/js/utils/money.js`); the fix has not come upstream.
 
 `pg` returns BIGINT as a **string**, so every read path coerces with `Number()`. When you
 add a query, coerce.
@@ -218,7 +225,7 @@ Each area is a view id, a service, a screen, and a set of postings.
 
 ### Invoices
 
-Issued from a paid order, or standalone. Snapshots seller and customer detail at issue.
+Issued from a paid order (`POST /invoices/from-order/:orderId`, `invoiceService.createFromOrder`) — there is no standalone invoice path in the base. Snapshots seller and customer detail at issue.
 Payments, refunds and credit notes are separate facts:
 
 - a **payment** is cash in,
@@ -369,22 +376,26 @@ npm run books:archive -- --verify-only --out=./archive/2026
 Tests:
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_books_test \
-  npx jest --runInBand
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_books_test npm test
 ```
 
-The `TEST_DATABASE_URL` is not optional advice. Jest's globalSetup **drops** the test
-database, so two sessions sharing `hallismiley_test` produce a hundred nondeterministic
-failures across unrelated suites.
+The suite is serial by configuration (`jest.config.js` `maxWorkers: 1`; `--runInBand`
+adds nothing). The `TEST_DATABASE_URL` is not optional advice. Jest's globalSetup
+**drops** the test database, so two sessions sharing `hallismiley_test` produce a
+hundred nondeterministic failures across unrelated suites.
 
 ### First run
 
 The books refuse to issue anything until the seller identity is set, and every screen shows
-a standing warning until it is. In order:
+a standing warning until it is. **The base has no books settings screen** —
+`AdminBooksView` only renders the banner; `updateBooksSettings` / `setFxRate` exist in
+`public/js/services/adminBookkeeping.js` but no view calls them (orangesmiley built
+`/admin/books/settings` on 2026-09-07; it has not come upstream). In order, through the API:
 
-1. Books settings → seller name, kennitala, VSK number, address.
-2. Confirm the chart of accounts (clears the `coa_confirmed_at` warning).
-3. An EUR rate, if you invoice in EUR.
+1. `PATCH /api/v1/admin/bookkeeping/settings` → seller name, kennitala, VSK number, address.
+2. Confirm the chart of accounts (same endpoint; clears the `coa_confirmed_at` warning).
+3. An EUR rate, if you invoice in EUR: `npm run books:fx` or `POST …/fx-rates`; a rate
+   older than 14 days is refused (`FxRate.MAX_STALENESS_DAYS`).
 4. Payroll: enter the year's figures and **confirm** them, if you run payroll.
 
 ---
@@ -399,8 +410,8 @@ Collected from actually hitting them.
   that a column nothing reads is a column nobody notices is empty.
 - **Test suites share one append-only journal.** There is no DELETE to reset between them,
   so absolute balance assertions drift as tests are added. Assert **deltas**, or claim a
-  private year. Currently claimed: 2018 POS, 2019 reports, 2020 payroll, 2021–2025 VSK,
-  2026 the seed.
+  private year. Currently claimed: 2017 backfill, 2018 POS, 2019 reports, 2020 payroll,
+  2021–2025 VSK, 2026 the seed.
 - **`ledger_accounts.sort`, not `sort_order`.** `sort_order` exists only on `journal_lines`.
 - **`payroll_rates.tax_year` is capped at 2020–2100**, so a test year must be inside that
   and (if it records a cash payment) in the past.
@@ -414,6 +425,9 @@ Collected from actually hitting them.
 - **`git fetch` before pushing.** A concurrent session pushed eleven commits to this branch
   mid-work, including fixes to code this module owns.
 - **`reverseEntry` returns a wrapper**, `{ reversal, ... }` — not the entry.
+- **Migration 076's tail comment says "072 seeded no payroll rates either" — wrong.** 072 seeds
+  the 2026 `payroll_rates` row (the one `ACCOUNTANT-QUESTIONS.md` §3 describes). The
+  comment cannot be edited (applied migration); the docs are right, it is not.
 - **`products.active`, not `is_active`.**
 - **Inline `node -e` with Icelandic text, backticks or `$` gets mangled by bash.** Write the
   script to a file and run it.

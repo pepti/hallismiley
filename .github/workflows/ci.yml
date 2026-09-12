@@ -23,7 +23,10 @@ jobs:
   test:
     name: Lint + Integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Serial Jest (maxWorkers: 1) with coverage ran 1366 s of the old 1800 s
+    # budget on 2026-09-12; a slow runner would have cancelled the run and,
+    # on main, fail-closed the deploy for no reason.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -66,7 +69,7 @@ jobs:
         env:
           NODE_ENV:            test
           TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/hallismiley_test
-          # ADMIN_USERNAME / ADMIN_PASSWORD_HASH are set by tests/env.js
+          # ADMIN_USERNAME / ADMIN_PASSWORD are set by tests/env.js
         run: npm run test:ci
 
   e2e:
@@ -140,6 +143,27 @@ jobs:
           # dead mirror costs seconds, not the whole step budget.
           printf 'Acquire::http::Timeout "15";\nAcquire::https::Timeout "15";\nAcquire::Retries "2";\n' \
             | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          # The runner image starts its own apt-get in the background (image
+          # provisioning / unattended upgrades). Seen on orangesmiley on
+          # 2026-09-11: every install attempt died instantly with "Could not
+          # get lock /var/lib/apt/lists/lock. It is held by process N
+          # (apt-get)" — exit 100 three times in a row, on four of five runs.
+          # Preventive here (same runner image, same steps): make apt wait for
+          # the lock instead of failing, and wait for the holder to finish
+          # before the first attempt.
+          printf 'DPkg::Lock::Timeout "300";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-lock >/dev/null
+
+      - name: Wait for the runner's background apt-get to finish
+        run: |
+          for i in $(seq 1 60); do
+            if sudo fuser /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+              [ "$i" = 1 ] && echo "apt lock held by the runner's own apt-get — waiting"
+              sleep 5
+            else
+              echo "apt locks free after $(( (i - 1) * 5 ))s"; exit 0
+            fi
+          done
+          echo "::warning::apt lock still held after 5 minutes — continuing; DPkg::Lock::Timeout covers the rest"
 
       - name: Resolve Playwright version
         id: playwright-version
@@ -195,7 +219,9 @@ jobs:
               exit 0
             fi
             echo "::warning::Playwright OS dep install attempt ${attempt} failed or hung after 3 minutes — retrying"
-            sudo apt-get update || true
+            # Not `apt-get update`: install-deps runs its own update, and a
+            # second one here only re-contends for the apt lock.
+            sleep 15
           done
           echo "::error::Playwright OS dependency install failed after 3 attempts"
           exit 1

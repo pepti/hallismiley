@@ -14,7 +14,7 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 - Auth: **Lucia v3** sessions. (The old "RS256 JWT (access + refresh)" line was boilerplate — no JWT code exists in this tree; verified 2026-08-22, the same finding icelandicstore made on its copy of the claim.)
 - Security: helmet, csrf-csrf, hpp, express-rate-limit, sanitize-html, cors
 - Observability: pino + pino-http (logs), Sentry (errors), prom-client (metrics)
-- Email: Resend (primary) + nodemailer (fallback)
+- Email: Resend only (`server/services/emailService.js`; no transport when `RESEND_API_KEY` is unset — a loud no-op, not a fallback)
 - Payments: Stripe
 - Tests: Jest (integration, hits real Postgres) + Playwright (e2e)
 - Lint: ESLint 10 (flat config, `eslint.config.js`) + Husky pre-commit
@@ -40,12 +40,12 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 ## Security non-negotiables
 
 - CSRF is enforced via `csrf-csrf` on all state-changing routes. Don't disable per-route without leaving a comment + linking the reason.
-- Rate limits live in `server/middleware/` (or similar) — tighten, don't loosen.
+- Rate limits live where they are applied — `server/app.js` (global + writes), `server/routes/*.js` (auth, contact, party, shop, MCP, system) and `server/middleware/booksLimiters.js` — tighten, don't loosen.
 - Helmet CSP is configured; if a feature needs a new script/style source, extend the CSP allowlist explicitly rather than relaxing it globally.
-- RSA keys: never commit. `keys/` is gitignored. Rotate independently per environment.
+- `keys/` stays gitignored; nothing in the code reads it (a vestige of the JWT boilerplate this repo never had).
 - `.env` is never committed; only `.env.example` is tracked.
-- Admin password is stored as a bcrypt hash in `ADMIN_PASSWORD_HASH`. Generate via `node server/scripts/setup-admin.js`.
-- Full security posture: see `SECURITY_AUDIT_2026-04-16.md` at repo root.
+- Admin credentials live in the `users` table (Scrypt hash, oslo via Lucia); there is no `ADMIN_PASSWORD_HASH` env var. Create or reset with `node server/scripts/setup-admin.js <username> <email> <password>`, or `npm run bootstrap` with `ADMIN_USERNAME` + `ADMIN_EMAIL` + `ADMIN_PASSWORD` all set.
+- Full security posture: see `SECURE_SDLC.md` (the 2026-04-16 audit is a frozen point-in-time record).
 
 ## Conventions
 
@@ -53,12 +53,12 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 - Error handling: throw typed errors → central error middleware formats response.
 - File names: kebab-case for files, PascalCase for component classes, camelCase for functions.
 - i18n: keys live in JSON locale files; run `npm run check:i18n` before pushing translation-touching changes.
-- Tests live alongside the code under test, or under `__tests__/`. E2E specs under `e2e/`.
+- Tests live under `tests/unit/` and `tests/integration/` — Jest collects ONLY those two trees (`jest.config.js` `testMatch`), so a test next to its source or under `__tests__/` never runs. E2E specs under `e2e/`.
 - `data/` (gitignored, absent on fresh clones) holds local seed data and fixtures.
 
 ## Deployment summary
 
-Push to `main` → CI (lint + `npm audit` + Jest + Playwright + docker build) → on green, `Deploy to Azure` workflow auto-runs via `workflow_run` → image pushed to `hallismileyacr.azurecr.io/hallismiley:<sha>` → App Service container ref updated → restart. Migrations run at container startup.
+Push to `main` (any file — CI has no paths filter, so a docs-only merge deploys too) → CI (lint + `npm audit` + `check:i18n` + Jest + Playwright + docker build) → on green, `Deploy to Azure` workflow auto-runs via `workflow_run` → image pushed to `hallismileyacr.azurecr.io/hallismiley:<sha>` (also `:latest`, `:sha-<sha>`) → App Service container ref updated → restart. Migrations run at container startup. A red Deploy run after red CI is the designed alert (`docs/DEPLOYMENT.md` §6).
 
 Emergency manual deploy:
 ```bash
@@ -78,8 +78,9 @@ Full deployment guide: `docs/DEPLOYMENT.md`. Operational runbook: `RUNBOOK.md`.
   guard exists. **Read this before touching anything under `/admin/books`.**
 - `docs/ACCOUNTANT-QUESTIONS.md` — the open questions only an accountant can answer,
   with the current behaviour stated for each. Two of them affect real figures.
-- `SECURITY_AUDIT_2026-04-16.md` — security posture
-- `PRE_LAUNCH_AUDIT.md` — launch checklist
+- `SECURE_SDLC.md` — the security process (living)
+- `SECURITY_AUDIT_2026-04-16.md` — frozen point-in-time record (banner says what is since fixed)
+- `PRE_LAUNCH_AUDIT.md` — frozen point-in-time record (2026-03-30)
 
 ## Things that have bitten us before
 

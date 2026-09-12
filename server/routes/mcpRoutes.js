@@ -1,8 +1,13 @@
 // MCP endpoint — POST /api/v1/mcp (Streamable HTTP, stateless; see
 // server/mcp/transport.js).
 //
-// Mounted in app.js BEFORE sanitizeBody and BEFORE the global IP rate limiter
-// (reasons documented at the mount), so this router carries its own:
+// Mounted in app.js AFTER sanitizeBody, AFTER the global IP rate limiter and
+// AFTER the production HTTP→HTTPS redirect (this header claimed the opposite
+// until 2026-09-12 — it was written for icelandicstore's mount position; see
+// docs/mcp.md for the consequences: tool arguments are tag-stripped and MCP
+// traffic also counts against the global IP limit. Moving the mount up would
+// exempt MCP from those two protections and needs its own review.)
+// Independently of that, this router carries its own:
 //   • feature gate (MCP_ENABLED — dark by default, per-stack opt-in),
 //   • pre-auth IP limiter (deters token guessing),
 //   • bearer-only auth (middleware/mcpAuth.js — never reads cookies, which is
@@ -34,11 +39,13 @@ router.use((req, res, next) => {
   next();
 });
 
-// TLS guard. This router is mounted ABOVE the app-wide HTTP→HTTPS redirect (it
-// has to be, to clear sanitizeBody and the global limiter), so it would
-// otherwise be the one data-serving route that answers plain HTTP in
-// production — handing back customer and finance data to a request whose bearer
-// token crossed the wire in clear. Refuse instead of redirecting: an MCP client
+// TLS guard. In this repo the router is mounted BELOW the app-wide HTTP→HTTPS
+// redirect (corrected 2026-09-12 — see the header), so the redirect fires first
+// in production and this guard is a second line; it stays because it is
+// order-proof and because an instance that mounts the router earlier would
+// otherwise serve bearer-authenticated data over plain HTTP — handing back
+// customer and finance data to a request whose bearer token crossed the wire
+// in clear. Refuse instead of redirecting: an MCP client
 // posting JSON-RPC cannot follow a 301, and a silent downgrade is the failure
 // mode worth being loud about. Azure terminates TLS at the front end, so the
 // signal is x-forwarded-proto (trust proxy is set in production).
