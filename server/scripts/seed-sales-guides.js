@@ -191,7 +191,7 @@ const GUIDES = [
     body: `
 <p>Rekstrarkerfið er selt í þremur þjónustuleiðum — þrepum. Þau eru ekki þrjár vörur heldur mismunandi stórir skammtar af sama kerfinu; viðskiptavinur getur alltaf fært sig upp síðar. Nákvæm eiginleikaskipting er í vöruhlutanum (<em>Hvað er í hverju þrepi</em>); hér er sölusjónarhornið.</p>
 <h2>Verðin — mikilvægasta reglan fyrst</h2>
-<p>Verðin hér að neðan eru <strong>DRÖG — óstaðfest</strong> þar til Halli staðfestir þau. Þau eru sömu drög og birtast á þjónustusíðu vefsins. Í samtali máttu nefna þau sem viðmið, en alltaf með fyrirvara: „endanlegt verð kemur í tilboðinu“. Skriflegt verð kemur aðeins frá Halla.</p>
+<p>Verðin hér að neðan eru <strong>DRÖG — óstaðfest</strong> þar til Halli staðfestir þau. Þau eru ekki birt á orangesmiley.is, svo vísaðu viðskiptavini ekki þangað eftir verði. Í samtali máttu nefna þau sem viðmið, en alltaf með fyrirvara: „endanlegt verð kemur í tilboðinu“. Skriflegt verð kemur aðeins frá Halla.</p>
 <h2>Vefur — 39 þ.kr./mán (DRÖG)</h2>
 <p><em>Fyrir fyrirtæki sem vilja af Wix eða WordPress.</em></p>
 <p>Heimasíða og efnisstjórnun, íslenska og enska, leitarvélabestun og fyrirspurnarform — og breytingabeiðnir afgreiddar á dögum. Hentar þjónustufyrirtækjum, iðnaðarmönnum, félögum og öllum sem vilja trausta heimasíðu án þess að hugsa um tækni. Sölumerki: heimasíðan er gömul, enginn þorir að breyta henni, vefstofan svarar seint eða rukkar tímagjald fyrir hverja smábreytingu.</p>
@@ -460,9 +460,9 @@ const GUIDES = [
     sort_order: 0,
     title: 'Hvað er í hverju þrepi — ítarlega',
     summary:
-      'Nákvæma eiginleikataflan, eins og hún birtist á þjónustusíðunni: hvað öll þrep innihalda, hvað bætist við í Verslun og hvað er aðeins í Rekstri. Þetta er heimildin þegar viðskiptavinur spyr „er X innifalið?“ — lofaðu engu sem er ekki hér.',
+      'Nákvæma eiginleikataflan: hvað öll þrep innihalda, hvað bætist við í Verslun og hvað er aðeins í Rekstri. Þetta er heimildin þegar viðskiptavinur spyr „er X innifalið?“ — lofaðu engu sem er ekki hér.',
     body: `
-<p>Þessi leið speglar eiginleikatöfluna á þjónustusíðu vefsins — hún er heimildin þín þegar viðskiptavinur spyr „er þetta innifalið?“. Ef eiginleiki er ekki hér, þá er hann ekki innifalinn og þú lofar honum ekki (sjá <em>Hvað þú lofar aldrei</em>). Verðin eru DRÖG þar til Halli staðfestir: Vefur 39, Verslun 59, Rekstur 79 þ.kr./mán. Hvert þrep inniheldur allt úr þrepinu á undan.</p>
+<p>Þessi leið geymir eiginleikatöfluna fyrir þrepin — hún er heimildin þín þegar viðskiptavinur spyr „er þetta innifalið?“. Ef eiginleiki er ekki hér, þá er hann ekki innifalinn og þú lofar honum ekki (sjá <em>Hvað þú lofar aldrei</em>). Verðin eru DRÖG þar til Halli staðfestir: Vefur 39, Verslun 59, Rekstur 79 þ.kr./mán. Hvert þrep inniheldur allt úr þrepinu á undan.</p>
 <h2>Í öllum þrepum (Vefur, Verslun og Rekstur)</h2>
 <ul>
 <li><strong>Heimasíða og efnisstjórnun</strong> — vefur fyrirtækisins með stjórnborði þar sem viðskiptavinurinn breytir sjálfur texta og myndum, án forritara.</li>

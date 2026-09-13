@@ -744,9 +744,17 @@ R1 layout had made the product the page's h1. Rebuilt on
   now, not `height`. The fixed band clipped long headers on phones (this page
   by 69px at 320px; `/um-okkur` by 21px already on master). LESSONS.md
   2026-09-13.
-- Not touched: the home `_products()` card still links to the page top (the
-  router has no in-page anchors), the DB-seeded home skills copy, and
-  ContactView's demo-led wording.
+- **Review pass (PR, same day)**: the home `_products()` card now opens
+  rekstrarkerfi.is in a new tab too (`public/js/utils/productSite.js` is the one
+  place that builds the URL; `common.opensNewTab` is the shared screen-reader
+  note). **Migration 104_sales_guides_services_page** rewrites the two seeded
+  sales guides that told sellers the prices and tier table "appear on the
+  services page" — exact-sentence `replace()`, guarded on `updated_by IS NULL`
+  like 091/092. **The migration chain now ends 104.** Open for Halli: the
+  guides quote 39/59/79 þ.kr./mán while the rekstrarkerfi.is DRAFT prices are
+  a build price plus a monthly contract — two draft price models.
+- Not touched: the DB-seeded home skills copy and ContactView's demo-led
+  wording.
 
 ## Where things stand for the next session
 

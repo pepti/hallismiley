@@ -93,7 +93,8 @@
   max-width: 60ch;
 }
 
-.home-products__cta { display: inline-block; }
+.home-products__cta { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.home-products__cta-icon { font-size: 1.05em; line-height: 1; }
 
 /* ── Home: tier teaser ── */
 .home-tiers,
@@ -434,7 +435,7 @@
   margin-bottom: var(--sp-6);
 }
 
-/* Screen-reader-only helper (used by the tier matrix) */
+/* Screen-reader-only helper (the new-tab notes on the product links) */
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
