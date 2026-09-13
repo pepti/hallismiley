@@ -1,3 +1,4 @@
+const os = require('os');
 const { defineConfig, devices } = require('@playwright/test');
 const { e2eDatabaseUrl } = require('./e2e/lib/dbUrl');
 
@@ -14,12 +15,28 @@ process.env.E2E_DATABASE_URL = E2E_DATABASE_URL;
 const PORT = process.env.E2E_PORT || '3000';
 const BASE_URL = `http://localhost:${PORT}`;
 
+// Workers on CI = the runner's CPUs, not a fixed 4. This repo is private, so
+// GitHub gives it the 2-vCPU Linux runner, and that one machine also carries
+// Postgres and the Node server. Four Chromium workers on it did not finish the
+// suite any sooner — they only stretched every test: the longest flows ran
+// 30–37 s against the 30 s timeout and failed on almost every master run from
+// 2026-09-08 (accounts.spec.js:46, leads.spec.js:26). Measured locally with
+// the whole run pinned to one core: 4 workers → 1670 s of summed test time in
+// 7.3 min, 2 workers → 822 s in 7.0 min. Same wall clock, half the time each
+// test spends inside its budget. Locally the count stays 4.
+const CI_WORKERS = Math.max(1, Math.min(4, os.availableParallelism()));
+
 module.exports = defineConfig({
   testDir: './e2e',
   timeout: 30_000,
-  workers: 4,
+  workers: process.env.CI ? CI_WORKERS : 4,
   retries: process.env.CI ? 1 : 0,
-  reporter: [['html', { open: 'never' }]],
+  // CI also gets the list reporter: every test's duration lands in the job
+  // log, so the next test creeping toward the timeout is visible on a green
+  // run instead of only in the report artifact of a red one.
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never' }]]
+    : [['html', { open: 'never' }]],
 
   use: {
     baseURL: BASE_URL,

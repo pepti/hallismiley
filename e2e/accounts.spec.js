@@ -10,8 +10,9 @@
 const { test, expect } = require('@playwright/test');
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
-const { loginAsAdmin } = require('./helpers');
+const { TEST_ADMIN } = require('./helpers');
 const { seedSalesUser, loginAsSales } = require('./lib/salesUser');
+const { signInViaApi } = require('./lib/accounts');
 
 const STAMP = Date.now();
 const NAME = `E2E Viðskiptavinur ${STAMP}`;
@@ -44,7 +45,9 @@ test.describe('customer accounts', () => {
   });
 
   test('create → fees → signed → deposit invoice → commission', async ({ page }) => {
-    await loginAsAdmin(page);
+    // Through the API, not the modal: the homepage load + modal cost ~10 s of
+    // this flow's 30 s budget on the CI runner (e2e/lib/accounts.js).
+    await signInViaApi(page, TEST_ADMIN);
     await page.goto('/#/admin/accounts');
     await expect(page.locator('.admin-title')).toHaveText(/Viðskiptareikningar/);
 

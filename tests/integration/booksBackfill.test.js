@@ -15,8 +15,9 @@ let adminId;
 let productId;
 const VALID_KENNITALA = '1203894599';
 
-// Its own year again — 2017 is unclaimed (2018 POS, 2019 reports, 2020 payroll,
-// 2021-2025 VSK, 2026 seed).
+// Its own year again — April 2017 (2018 POS, 2019 reports, 2020 payroll,
+// 2021-2025 VSK, 2026 seed). booksReplay also posts in 2017, in P1 (Jan–Feb);
+// the assertions here are per-day movements, so the two do not collide.
 const PAID_DAY = '2017-04-10';
 
 async function paidOrder(amount, paidAt, suffix) {

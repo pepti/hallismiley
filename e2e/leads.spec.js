@@ -4,8 +4,9 @@
 // the admin deletes it so re-runs start clean. The e2e server runs with
 // NODE_ENV=test, so the contact form's 5/hour limiter is off.
 const { test, expect } = require('@playwright/test');
-const { loginAsAdmin } = require('./helpers');
-const { seedSalesUser, loginAsSales } = require('./lib/salesUser');
+const { TEST_ADMIN } = require('./helpers');
+const { SALES_USER, seedSalesUser } = require('./lib/salesUser');
+const { signInViaApi } = require('./lib/accounts');
 
 test.describe('leads inbox', () => {
   // Built per ATTEMPT, not per module: attempt 0 leaves its lead behind when it
@@ -37,8 +38,10 @@ test.describe('leads inbox', () => {
     await expect(vpage.locator('#contact-page-status')).not.toHaveClass(/error/);
     await visitor.close();
 
-    // 2. The sales user sees it as new.
-    await loginAsSales(page);
+    // 2. The sales user sees it as new. Signed in through the API, not the
+    // modal: this flow is three people long, and two homepage loads plus two
+    // modal logins were a third of its 30 s budget on CI (e2e/lib/accounts.js).
+    await signInViaApi(page, SALES_USER);
     await page.goto('/#/admin/leads');
     await expect(page.locator('.admin-title')).toHaveText(/Fyrirspurnir/);
     const row = page.locator('tr.leads-row', { hasText: LEAD.name });
@@ -66,7 +69,7 @@ test.describe('leads inbox', () => {
 
     // 5. The admin deletes it through the inbox so re-runs start clean.
     await page.context().clearCookies();
-    await loginAsAdmin(page);
+    await signInViaApi(page, TEST_ADMIN);
     await page.goto('/#/admin/leads');
     const adminRow = page.locator('tr.leads-row', { hasText: LEAD.name });
     await expect(adminRow).toBeVisible({ timeout: 10_000 });

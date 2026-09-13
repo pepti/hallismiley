@@ -10,7 +10,12 @@
 // click, so a naive implementation either swallows the selection or needs two
 // clicks to move the popover between rows.
 const { test, expect } = require('@playwright/test');
-const { loginAsAdmin } = require('./helpers');
+const { seedAdminUser, signInViaApi } = require('./lib/accounts');
+
+// Tints live in the per-admin layout blob, which admin-surface.spec.js also
+// writes (Reset). Its own admin keeps another worker's Reset from wiping a
+// tint between the save and the reload this spec checks (e2e/lib/accounts.js).
+const COLORS_ADMIN = { username: 'e2ecolorsadmin', email: 'colors-admin@e2e.test', password: 'ColorsAdmin123' };
 
 // The base helpers have no gotoAndSettle — same behaviour inlined.
 async function gotoAndSettle(page, path) {
@@ -37,8 +42,10 @@ async function enterEditMode(page) {
 }
 
 test.describe('admin nav — row colours', () => {
+  test.beforeAll(async () => { await seedAdminUser(COLORS_ADMIN); });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await signInViaApi(page, COLORS_ADMIN);
     await gotoAndSettle(page, '/admin');
     await enterEditMode(page);
     // Start from a known state — a previous test may have left tints behind.

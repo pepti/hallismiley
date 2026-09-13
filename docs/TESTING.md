@@ -72,6 +72,50 @@ when every suite shared one database).
 4. **Fix the dependency, not the symptom.** No retries, no raised timeouts: make
    the assertion independent of what the previous suite left behind.
 
+   Watch for **cumulative** figures. A balance sheet as at a date and a ledger's
+   opening balance include every earlier year, so a suite's "own year" does not
+   protect them. `booksReports` failed whenever `booksReplay` (2017 share
+   capital, 500.000 on 1900 / 3100) ran before it in the same worker — CI run
+   34763226590. Compare cumulative figures with the journal as it stands.
+
+## Hunting a CI-only e2e timeout
+
+Playwright specs that pass locally and time out on CI (fixed 2026-09-13:
+`accounts.spec.js:46` and `leads.spec.js:26` had failed on almost every master
+run since 2026-09-08; `admin-surface.spec.js:70` sometimes).
+
+1. **Read the traces, not the error.** A red run uploads `playwright-report`
+   with the first retry's trace. `gh run download <run> -n playwright-report`;
+   each `data/*.zip` holds `test.trace` (every step with start and end times)
+   and `*-trace.network`. Per-test durations for the whole run are in the zip
+   embedded in `index.html` (`<template id="playwrightReportBase64">`). Those
+   showed no hang: each full `page.goto` cost 3–4 s (the router imports every
+   view module eagerly — 160 JS requests), a simple click up to 2.5 s, and the
+   two flows simply ran 30–37 s.
+2. **Starve the machine locally to reproduce.** Pin the whole run (server,
+   workers, browsers — children inherit it) to one or two cores from
+   PowerShell. The inner double quotes need the single-quoted string:
+
+   ```powershell
+   cmd /c 'start "e2e" /affinity 1 /wait /b cmd /c "set E2E_PORT=3011&& set CI=true&& npx playwright test --retries=0 --workers=4"'
+   ```
+
+   On one core, 4 workers summed 1670 s of test time in 7.3 min and 2 workers
+   822 s in 7.0 min: same wall clock, every test twice as long.
+3. **Workers follow the CPUs on CI.** This repo is private, so GitHub runs it
+   on the 2-vCPU Linux runner. `playwright.config.js` sets CI workers to
+   `os.availableParallelism()` (capped at 4); locally it stays 4. The CI log now
+   uses the list reporter too, so every test's duration is visible on a GREEN
+   run and the next test creeping toward 30 s shows up before it fails.
+4. **Per-account state is shared across workers.** `users.admin_nav_config` is
+   one row per admin. Two specs that wrote the sidebar layout as `testadmin`
+   raced: one worker's Reset landed between the other's save and reload. A spec
+   that writes per-user state gets its own account (`e2e/lib/accounts.js`
+   `seedAdminUser`).
+5. **Sign in without the homepage when sign-in is not the test.**
+   `signInViaApi()` posts to `/auth/login` (CSRF is off for the test server) and
+   shares the page's cookies; the modal stays covered by `auth.spec.js`.
+
 ## Per-branch, per-worker databases (landed 2026-09-02, ported from icelandicstore)
 
 Integration suites run in **4 parallel Jest workers**, each against its own
@@ -165,7 +209,7 @@ together):
 | Job | Steps |
 |---|---|
 | `test` — Lint + Integration tests | `npm ci` · `npm audit --audit-level=high` · `npm run lint` · `npm run check:i18n` · runner spec · release-manifest schema · Jest transform cache · `npm run test:ci` (coverage) |
-| `e2e` — E2E tests (Playwright) | Chromium install (cached) · `npm run test:e2e` against a booted server |
+| `e2e` — E2E tests (Playwright) | Chromium install (cached) · `npm run test:e2e` against a booted server, workers = the runner's CPUs (2), list + html reporters |
 | `docker` — Docker build + boot smoke test | image build · Trivy (`HIGH,CRITICAL`, `ignore-unfixed`) · boot with `UPLOAD_ROOT` and `DB_SSL=false` declared · readiness probe |
 
 The jobs are deliberately not gated on each other. The `test` job has a

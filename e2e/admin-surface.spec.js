@@ -5,13 +5,17 @@
 // /admin dashboard's move from the portfolio projects board to the company
 // overview (the board lives on, unlisted, at /admin/projects).
 //
-// The admin's layout blob is shared across specs, so every test starts AND
-// ends on Reset — a leaked `revealedItems` would change the anchor counts
-// other specs assert on.
+// The layout blob is per admin, and this spec writes it (reveal, Reset), so it
+// runs as its own admin (e2e/lib/accounts.js): on the shared `testadmin`,
+// admin-nav-colors.spec.js's Reset on another worker wiped the reveal between
+// its save and the reload (CI, 2026-09). Every test still starts AND ends on
+// Reset, so one test's `revealedItems` never leaks into the next.
 const { test, expect } = require('@playwright/test');
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
-const { loginAsAdmin } = require('./helpers');
+const { seedAdminUser, signInViaApi } = require('./lib/accounts');
+
+const SURFACE_ADMIN = { username: 'e2esurfaceadmin', email: 'surface-admin@e2e.test', password: 'SurfaceAdmin123' };
 
 const ORDERS_LINK = '.admin-sidebar a[data-route="/admin/shop/orders"]';
 const PAYROLL_LINK = '.admin-sidebar a[data-route="/admin/books/payroll"]';
@@ -44,8 +48,10 @@ async function resetLayout(page) {
 }
 
 test.describe('admin nav — hidden-by-policy retail lines', () => {
+  test.beforeAll(async () => { await seedAdminUser(SURFACE_ADMIN); });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await signInViaApi(page, SURFACE_ADMIN);
     await gotoAndSettle(page, '/admin');
     await resetLayout(page);
   });
