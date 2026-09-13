@@ -35,14 +35,15 @@ test.describe('Navigation — basic page loads', () => {
     }
   });
 
-  test('homepage hero shows the waterfall video by default', async ({ page }) => {
-    // Halli's call (2026-08-22, the hallismiley-layout revert): the waterfall
-    // video hero is the default again. Scene/gradient/photo/plain remain
-    // admin-selectable, so this asserts the DEFAULT, not the only possibility.
+  test('homepage hero shows the background video by default', async ({ page }) => {
+    // Halli's call (2026-08-22, the hallismiley-layout revert): the video hero
+    // is the default again. Scene/gradient/photo/plain remain admin-selectable,
+    // so this asserts the DEFAULT, not the only possibility. The clip itself
+    // changed 2026-09-13 (Halli): the waterfall gave way to hero-dc7df.
     await page.goto('/');
     const video = page.locator('video.lol-hero__bg');
     await expect(video).toBeAttached();
-    await expect(video.locator('source')).toHaveAttribute('src', /waterfall/);
+    await expect(video.locator('source')).toHaveAttribute('src', /\/assets\/videos\/hero-dc7df-v1\.mp4$/);
     // The dark veil is what keeps the fixed light hero copy legible.
     await expect(page.locator('.lol-hero__overlay')).toBeAttached();
     // No scene layers in video mode.

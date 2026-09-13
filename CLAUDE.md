@@ -98,6 +98,16 @@ satisfies invariant 15 by construction. Content still wearing carpentry-era
 copy (skills/stats rows, Unsplash discipline placeholders, contact page) is
 Halli's content pass, not a bug.
 
+**Hero clip swapped 2026-09-13** (Halli): the waterfall gave way to
+`public/assets/videos/hero-dc7df-v1.mp4`, re-encoded from his
+`pictures/iceland-originals/done videos/imagine-dc7df.mp4` (H.264 CRF 21,
+audio and embedded cover art stripped, faststart; 1168×768, 6 s, 2.9 MB —
+the same byte budget as the old clip). The generic `public/` mount caches
+1 h, so a new clip gets a NEW filename rather than overwriting. The first and
+last frames differ in zoom, so the loop visibly resets. The hidden `/halli`
+page (`HalliView`) still plays the waterfall on purpose, and
+`e2e/navigation.spec.js` pins the home clip's filename.
+
 ## Factory commands
 
 `/status` · `/base-diff` (engine drift vs base HEAD) · `/test-plan` · `/audit` · `/retro` · `/e2e` · `/i18n-sync` — plus base commands `/security-check`, `/pre-deploy`, `/migration-new`. (`/strip-base`, `/clone-ui`, `/import-data` exist but do not apply to this build — see the warning above.)
