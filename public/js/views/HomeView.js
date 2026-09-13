@@ -312,7 +312,7 @@ export class HomeView {
     } else if (bg.mode === 'video') {
       bgEl = `<video class="lol-hero__bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
         <!-- TODO (production): move this video to a CDN to avoid serving large assets through Node.js -->
-        <source src="/assets/videos/waterfall-bk-v1.mp4" type="video/mp4">
+        <source src="/assets/videos/hero-dc7df-v1.mp4" type="video/mp4">
       </video>`;
     }
     // The veil exists to hold text legible over MEDIA. Over the gradient it
