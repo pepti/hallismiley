@@ -88,7 +88,8 @@ inner-page scenes are untouched.
 ## Homepage = the hallismiley composition (2026-08-22)
 
 Halli's call: revert all the way back to the Halli Smiley homepage layout and
-iterate from there — **dark waterfall-video hero, light Bjart site** below it.
+iterate from there — **dark video hero, light Bjart site** below it (the
+clip was the waterfall until 2026-09-13; see the next paragraph).
 `HomeView` renders hero → news → projects → skills → stats → contact →
 footer again; the business `_tiers()`/`_steps()` sections (and the scene
 band mount) are the dormant methods now, kept with their i18n for the coming
@@ -99,14 +100,20 @@ copy (skills/stats rows, Unsplash discipline placeholders, contact page) is
 Halli's content pass, not a bug.
 
 **Hero clip swapped 2026-09-13** (Halli): the waterfall gave way to
-`public/assets/videos/hero-dc7df-v1.mp4`, re-encoded from his
+`public/assets/videos/hero-dc7df-v2.mp4`, encoded from his
 `pictures/iceland-originals/done videos/imagine-dc7df.mp4` (H.264 CRF 21,
-audio and embedded cover art stripped, faststart; 1168×768, 6 s, 2.9 MB —
-the same byte budget as the old clip). The generic `public/` mount caches
-1 h, so a new clip gets a NEW filename rather than overwriting. The first and
-last frames differ in zoom, so the loop visibly resets. The hidden `/halli`
-page (`HalliView`) still plays the waterfall on purpose, and
-`e2e/navigation.spec.js` pins the home clip's filename.
+audio and embedded cover art stripped, faststart; 1168×768, 5 s, 2.4 MB).
+The source is a continuous push-in, so a plain loop snapped from full zoom
+back to the wide shot every cycle; v2 is a **crossfade loop** — source frames
+24–144, with the last second dissolved into the first (the filter graph is in
+the review PR's description; re-derive from the ORIGINAL, never from v2).
+`hero-dc7df-v2-poster.jpg` is v2's first frame. The generic `public/` mount
+caches 1 h, so a new clip gets a NEW filename rather than overwriting.
+**The hero obeys `utils/motion.js`**: under reduced motion or Save-Data it
+renders without `autoplay`, with `preload="none"`, and shows the poster;
+`_initHeroVideo` follows a live OS-setting change both ways. The hidden
+`/halli` page (`HalliView`) still plays the waterfall on purpose.
+`e2e/navigation.spec.js` pins the clip's filename and the still state.
 
 ## Factory commands
 

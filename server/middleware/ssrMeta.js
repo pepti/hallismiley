@@ -42,8 +42,8 @@ try { SCENE_MANIFEST = require('../config/sceneManifest.json'); } catch { /* not
 // Route (locale-stripped) → scene image id — kept in step with the
 // assignments in public/js/scenes/sceneDefs.js.
 const ROUTE_SCENE_IMAGES = {
-  // No '/' entry: the home hero is the waterfall video again (2026-08-22
-  // revert) — preloading a 200KB+ AVIF the page never paints would burn the
+  // No '/' entry: the home hero is a video again (2026-08-22 revert; the
+  // clip is hero-dc7df since 2026-09-13) — preloading a 200KB+ AVIF the page never paints would burn the
   // LCP budget it was meant to protect.
   '/thjonusta': 'sigoldugljufur',
   '/verkefni': 'landmannalaugar',
