@@ -43,11 +43,36 @@ test.describe('Navigation — basic page loads', () => {
     await page.goto('/');
     const video = page.locator('video.lol-hero__bg');
     await expect(video).toBeAttached();
-    await expect(video.locator('source')).toHaveAttribute('src', /\/assets\/videos\/hero-dc7df-v1\.mp4$/);
+    await expect(video.locator('source')).toHaveAttribute('src', /\/assets\/videos\/hero-dc7df-v2\.mp4$/);
+    await expect(video).toHaveAttribute('poster', /\/assets\/videos\/hero-dc7df-v2-poster\.jpg$/);
+    await expect(video).toHaveAttribute('autoplay', '');
     // The dark veil is what keeps the fixed light hero copy legible.
     await expect(page.locator('.lol-hero__overlay')).toBeAttached();
     // No scene layers in video mode.
     await expect(page.locator('.lol-hero--scene')).toHaveCount(0);
+  });
+
+  test('homepage hero video stays still under reduced motion, and follows a live change', async ({ page }) => {
+    // The clip is a continuous camera push-in. Like every animated surface it
+    // asks utils/motion.js first: reduced motion shows the poster, downloads
+    // nothing, and starts only if the visitor turns the setting off.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    const video = page.locator('video.lol-hero__bg');
+    await expect(video).toBeAttached();
+    await expect(video).not.toHaveAttribute('autoplay', /.*/);
+    await expect(video).toHaveAttribute('preload', 'none');
+    await expect(video).toHaveAttribute('poster', /hero-dc7df-v2-poster\.jpg$/);
+    // Give autoplay every chance to misbehave before asserting it did not.
+    await page.waitForTimeout(500);
+    expect(await video.evaluate((v) => v.paused)).toBe(true);
+    expect(await video.evaluate((v) => v.currentTime)).toBe(0);
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await expect.poll(() => video.evaluate((v) => !v.paused)).toBe(true);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(() => video.evaluate((v) => v.paused)).toBe(true);
   });
 
   test('Projects page loads and shows project cards', async ({ page }) => {

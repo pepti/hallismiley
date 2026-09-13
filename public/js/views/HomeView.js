@@ -6,6 +6,14 @@ import { escHtml } from '../utils/escHtml.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 import { SceneStage } from '../scenes/SceneStage.js';
 import { productSiteUrl } from '../utils/productSite.js';
+import { motionAllowed, onMotionChange } from '../utils/motion.js';
+
+// The home hero clip and its still. The poster is the loop's first frame, so
+// the switch between the still (reduced motion, Save-Data, before the first
+// frame decodes) and playback never jumps. A new clip gets a new filename:
+// the generic public/ static mount caches for an hour.
+const HERO_VIDEO_SRC    = '/assets/videos/hero-dc7df-v2.mp4';
+const HERO_VIDEO_POSTER = '/assets/videos/hero-dc7df-v2-poster.jpg';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -281,8 +289,8 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
-  // ── Load landing background config (admin-configurable; the WATERFALL
-  // VIDEO is the default again — Halli's call (2026-08-22), reverting the
+  // ── Load landing background config (admin-configurable; the HERO VIDEO
+  // is the default again — Halli's call (2026-08-22), reverting the
   // one-day scene default. Scene/gradient/photo/plain all remain available
   // through the admin background settings, so nothing admins could pick was
   // lost. ──
@@ -311,9 +319,13 @@ export class HomeView {
     if (bg.mode === 'photo' && bg.photo_url) {
       bgEl = `<div class="lol-hero__photobg" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${escHtml(bg.photo_url)}')" aria-hidden="true"></div>`;
     } else if (bg.mode === 'video') {
-      bgEl = `<video class="lol-hero__bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+      // Reduced motion or Save-Data: no autoplay and no download — the
+      // poster stands in as a still. _initHeroVideo follows a live change of
+      // the OS setting in either direction.
+      const moving = motionAllowed();
+      bgEl = `<video class="lol-hero__bg"${moving ? ' autoplay' : ''} muted loop playsinline preload="${moving ? 'auto' : 'none'}" poster="${HERO_VIDEO_POSTER}" aria-hidden="true">
         <!-- TODO (production): move this video to a CDN to avoid serving large assets through Node.js -->
-        <source src="/assets/videos/hero-dc7df-v1.mp4" type="video/mp4">
+        <source src="${HERO_VIDEO_SRC}" type="video/mp4">
       </video>`;
     }
     // The veil exists to hold text legible over MEDIA. Over the gradient it
@@ -837,9 +849,11 @@ export class HomeView {
   destroy() {
     this._scenes.forEach((s) => s.destroy());
     this._scenes = [];
+    if (this._unsubHeroMotion) { this._unsubHeroMotion(); this._unsubHeroMotion = null; }
   }
 
   _initHeroVideo(view) {
+    if (this._unsubHeroMotion) { this._unsubHeroMotion(); this._unsubHeroMotion = null; }
     const video = view.querySelector('.lol-hero__bg');
     if (!video) return;
 
@@ -850,10 +864,26 @@ export class HomeView {
     video.muted       = true;
     video.playsInline = true;
 
+    // The clip is a continuous camera move, so it obeys utils/motion.js like
+    // every other animated surface: reduced motion (or Save-Data) keeps the
+    // poster still, and flipping the OS setting mid-visit starts or stops it.
+    this._unsubHeroMotion = onMotionChange(() => {
+      if (motionAllowed()) {
+        video.preload = 'auto';
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    });
+    if (!motionAllowed()) {
+      video.pause();
+      return;
+    }
+
     requestAnimationFrame(() => {
       video.play().catch(() => {
         const resume = () => {
-          video.play().catch(() => {});
+          if (motionAllowed()) video.play().catch(() => {});
           document.removeEventListener('click',      resume);
           document.removeEventListener('touchstart', resume);
         };
