@@ -107,8 +107,8 @@ const ROUTE_META = {
 
 const DEFAULT_META = {
   en: {
-    home:           { title: 'Orange Smiley — AI-driven software company', description: 'Icelandic software company driven by AI. We build and operate Rekstrarkerfið — website, store, inventory and invoicing in one system.' },
-    thjonusta:      { title: 'Products & pricing — Orange Smiley', description: 'Rekstrarkerfið is our first product: website, store, inventory and invoicing in one Icelandic system. Three tiers, flat monthly subscription.' },
+    home:           { title: 'Orange Smiley — AI-driven software company', description: 'Icelandic software company driven by AI. We build software for small and medium businesses: custom systems, websites, online stores and Rekstrarkerfið.' },
+    thjonusta:      { title: 'Services — Orange Smiley', description: 'Software for small and medium businesses: custom systems, websites, online stores, integrations and automation. Rekstrarkerfið is our ready-made system for retail and operations.' },
     umOkkur:        { title: 'About us — Orange Smiley', description: 'Orange Smiley ehf. is an Icelandic software company: a solo founder assisted by AI agents, building and operating systems for Icelandic SMBs.' },
     projects:       { title: 'Our work — Orange Smiley', description: 'Case studies of systems we have built and operate — including a full Shopify-to-own-platform migration for an Icelandic wholesaler.' },
     halli:          { title: 'About Halli — Where Wood Meets Code', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
@@ -123,8 +123,8 @@ const DEFAULT_META = {
     party:          { title: "Halli's 40th Birthday Party", description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
   },
   is: {
-    home:           { title: 'Orange Smiley — hugbúnaðarhús knúið gervigreind', description: 'Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum og rekum Rekstrarkerfið — vef, verslun, lager og reikninga í einu kerfi.' },
-    thjonusta:      { title: 'Vörur og verð — Orange Smiley', description: 'Rekstrarkerfið er fyrsta varan okkar: vefur, verslun, lager og reikningar í einu íslensku kerfi. Þrjár leiðir, föst mánaðaráskrift.' },
+    home:           { title: 'Orange Smiley — hugbúnaðarhús knúið gervigreind', description: 'Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum hugbúnað fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefi, vefverslanir og Rekstrarkerfið.' },
+    thjonusta:      { title: 'Þjónusta — Orange Smiley', description: 'Hugbúnaður fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefir, vefverslanir, tengingar og sjálfvirkni. Rekstrarkerfið er tilbúin lausn fyrir verslun og rekstur.' },
     umOkkur:        { title: 'Um okkur — Orange Smiley', description: 'Orange Smiley ehf. er íslenskt hugbúnaðarfyrirtæki: einn stofnandi með aðstoð gervigreindarumboða sem smíðar og rekur kerfi fyrir íslensk fyrirtæki.' },
     projects:       { title: 'Verkefnin okkar — Orange Smiley', description: 'Umfjöllun um kerfi sem við höfum smíðað og rekum — þar á meðal flutning íslenskrar heildverslunar af Shopify yfir á eigið kerfi.' },
     halli:          { title: 'Um Halla — Þar sem viður mætir kóða', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
@@ -466,7 +466,20 @@ function websiteSchema() {
   };
 }
 
-// The three service tiers as an OfferCatalog. Emitted on / and /thjonusta.
+// What the company sells, as an OfferCatalog. Emitted on / and /thjonusta.
+// Halli (2026-09-13): Orange Smiley builds any software a small or medium
+// business needs, so the catalogue lists the services first and nests
+// Rekstrarkerfið's three tiers as one product catalogue inside it.
+// Mirrors thjonusta.service.* in the locale files; change them together.
+const SERVICE_OFFERINGS = [
+  { en: 'Custom systems',             is: 'Sérsmíðuð kerfi' },
+  { en: 'Websites and online stores', is: 'Vefir og vefverslanir' },
+  { en: 'Integrations',               is: 'Tengingar milli kerfa' },
+  { en: 'Automation and AI',          is: 'Sjálfvirkni og gervigreind' },
+  { en: 'Moving off legacy systems',  is: 'Flutningur af eldri kerfum' },
+  { en: 'Hosting and maintenance',    is: 'Hýsing og viðhald' },
+];
+
 // Prices are DRAFT until Halli confirms them, so no `price` is published —
 // an unconfirmed number in structured data is worse than none, because
 // search engines will surface it as if it were a commitment.
@@ -500,15 +513,25 @@ function serviceSchema(locale) {
     inLanguage: isIS ? 'is-IS' : 'en-US',
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
-      name: isIS ? 'Þjónustuleiðir' : 'Service tiers',
-      itemListElement: SERVICE_TIERS.map(tier => ({
-        '@type': 'Offer',
-        itemOffered: {
-          '@type': 'Service',
-          name: tier.name,
-          description: isIS ? tier.is : tier.en,
+      name: isIS ? 'Þjónusta' : 'Services',
+      itemListElement: [
+        ...SERVICE_OFFERINGS.map(service => ({
+          '@type': 'Offer',
+          itemOffered: { '@type': 'Service', name: isIS ? service.is : service.en },
+        })),
+        {
+          '@type': 'OfferCatalog',
+          name: 'Rekstrarkerfið',
+          itemListElement: SERVICE_TIERS.map(tier => ({
+            '@type': 'Offer',
+            itemOffered: {
+              '@type': 'Service',
+              name: tier.name,
+              description: isIS ? tier.is : tier.en,
+            },
+          })),
         },
-      })),
+      ],
     },
   };
 }

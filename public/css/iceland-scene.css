@@ -17,8 +17,14 @@
    bands size themselves. Heights are set in CSS, present from the first
    paint, so the JS mount changes nothing geometrically → CLS ≈ 0. */
 .ice-scene--hero { position: absolute; inset: 0; }
+/* min-height, not height: on a phone a long page header is taller than the
+   band, and a fixed height let it spill over the photo edge and under the
+   place chip (measured 2026-09-13: /thjonusta by 69px at 320px wide,
+   /um-okkur by 21px). The band keeps its shape wherever the header fits,
+   and the header is in the markup from the first paint, so CLS is unchanged. */
 .ice-scene--band {
-  height: clamp(340px, 46vh, 560px);
+  display: flex;
+  min-height: clamp(340px, 46vh, 560px);
 }
 
 .ice-scene__media {
@@ -150,16 +156,22 @@
 
 /* ── Scene band as a page header (inner pages, chunk 2) ──────────────────── */
 .ice-scene--band .ice-scene__content {
+  flex: 1;
+  height: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--sp-6) var(--sp-5);
+  /* The bottom pad clears the absolutely placed place chip. */
+  padding: var(--sp-6) var(--sp-5) calc(var(--sp-6) + 24px);
 }
 .ice-band-panel {
   max-width: 52em;
   padding: var(--sp-5) var(--sp-6);
+}
+@media (max-width: 600px) {
+  .ice-band-panel { padding: var(--sp-3) 0; }
 }
 
 /* ── Scene as a section backdrop (home tiers + steps) ────────────────────────

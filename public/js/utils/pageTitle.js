@@ -25,7 +25,7 @@ const SITE = { en: 'Orange Smiley', is: 'Orange Smiley' };
 // Route pattern (as ROUTES in router.js declares it) → full title per locale.
 const PUBLIC_TITLES = {
   '/':              { en: 'Orange Smiley — AI-driven software company', is: 'Orange Smiley — hugbúnaðarhús knúið gervigreind' },
-  '/thjonusta':     { en: 'Products & pricing — Orange Smiley',         is: 'Vörur og verð — Orange Smiley' },
+  '/thjonusta':     { en: 'Services — Orange Smiley',                   is: 'Þjónusta — Orange Smiley' },
   '/um-okkur':      { en: 'About us — Orange Smiley',                   is: 'Um okkur — Orange Smiley' },
   '/hafa-samband':  { en: 'Contact — Orange Smiley',                    is: 'Hafa samband — Orange Smiley' },
   '/personuvernd':  { en: 'Privacy Policy — Orange Smiley',             is: 'Persónuverndarstefna — Orange Smiley' },

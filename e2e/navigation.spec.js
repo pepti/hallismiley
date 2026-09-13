@@ -139,12 +139,12 @@ test.describe('Tab title follows SPA navigation', () => {
     // Navigate the way a visitor does — click the nav, no page load.
     await page.click('a[href="/is/thjonusta"]');
     await expect(page).toHaveURL(/\/is\/thjonusta$/);
-    await expect(page).toHaveTitle('Vörur og verð — Orange Smiley');
+    await expect(page).toHaveTitle('Þjónusta — Orange Smiley');
 
     // And a direct load of the same URL must agree, or the tab would say one
     // thing on load and another after a click.
     await page.goto('/is/thjonusta');
-    await expect(page).toHaveTitle('Vörur og verð — Orange Smiley');
+    await expect(page).toHaveTitle('Þjónusta — Orange Smiley');
   });
 
   test('going back restores the previous title', async ({ page }) => {
@@ -159,6 +159,6 @@ test.describe('Tab title follows SPA navigation', () => {
   test('the English side is titled in English', async ({ page }) => {
     await page.goto('/en/');
     await page.click('a[href="/en/thjonusta"]');
-    await expect(page).toHaveTitle('Products & pricing — Orange Smiley');
+    await expect(page).toHaveTitle('Services — Orange Smiley');
   });
 });

@@ -12,7 +12,7 @@ const { test, expect } = require('@playwright/test');
 // route → the heading text that proves the right view rendered, per locale.
 const ROUTES = [
   { path: '',              is: 'Við smíðum hugbúnað',   en: 'We build software' },
-  { path: '/thjonusta',    is: 'Rekstrarkerfið',        en: 'Rekstrarkerfið' },
+  { path: '/thjonusta',    is: 'Hugbúnaður fyrir',      en: 'Software for' },
   { path: '/verkefni',     is: 'Verkefni',              en: 'Projects' },
   { path: '/um-okkur',     is: 'Lítil stofa',           en: 'Small studio' },
   { path: '/hafa-samband', is: null,                    en: null },  // form-led page, asserted below
@@ -64,10 +64,7 @@ test.describe('locale behaviour', () => {
     // drawer, and that copy is hidden on a desktop viewport.
     await page.locator('.lol-nav__right .lol-nav__lang-opt[data-locale="en"]').click();
     await expect(page).toHaveURL(/\/en\/thjonusta$/);
-    // The h1 is the product name, identical in both locales — it would pass
-    // here without the locale having switched at all. The tier heading under
-    // it is the nearest thing on the page that is actually translated.
-    await expect(page.locator('h2').filter({ hasText: 'One subscription' })).toBeVisible();
+    await expect(page.locator('h1.thjonusta-title')).toContainText('Software for small and medium businesses');
   });
 
   test('an unprefixed business path serves Icelandic to a visitor with no signal', async ({ browser }) => {
@@ -78,6 +75,34 @@ test.describe('locale behaviour', () => {
     const res = await page.goto('/');
     expect(res.url()).toMatch(/\/is\/$/);
     await ctx.close();
+  });
+});
+
+test.describe('services page', () => {
+  test('it sells the company\'s software work first, the product second', async ({ page }) => {
+    // Halli (2026-09-13): Orange Smiley builds any software a small or medium
+    // business needs. Rekstrarkerfið is one product, so it must not be the
+    // page's subject — the h1 names the offering and the product sits below
+    // the services.
+    await page.goto('/is/thjonusta');
+    await expect(page.locator('h1.thjonusta-title')).not.toContainText('Rekstrarkerfið');
+    await expect(page.locator('.service-list > .service-item')).toHaveCount(6);
+    await expect(page.locator('.service-item--lead')).toHaveCount(1);
+    await expect(page.locator('.thjonusta-steps__item')).toHaveCount(3);
+    await expect(page.locator('#thjonusta-product-title')).toHaveText('Rekstrarkerfið');
+
+    const order = await page.evaluate(() => {
+      const services = document.querySelector('.thjonusta-services');
+      const product = document.querySelector('.thjonusta-product');
+      return services.compareDocumentPosition(product) & Node.DOCUMENT_POSITION_FOLLOWING;
+    });
+    expect(order).toBeTruthy();
+  });
+
+  test('the closing call to action leads to the lead form', async ({ page }) => {
+    await page.goto('/is/thjonusta');
+    await page.locator('.thjonusta-cta__button').click();
+    await expect(page).toHaveURL(/\/is\/hafa-samband$/);
   });
 });
 
