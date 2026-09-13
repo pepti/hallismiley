@@ -3,8 +3,8 @@
 // library. Two pieces of config live in site_content (locale 'en', read
 // publicly via GET /api/v1/content/:key):
 //   landing_background → { mode, photo_url, veil_percent }
-//     mode: 'video' (the waterfall — the default again since 2026-08-22,
-//           the hallismiley-layout revert) | 'scene' (the Iceland scene
+//     mode: 'video' (the hero clip, hero-dc7df since 2026-09-13 — the
+//           default again since the 2026-08-22 revert) | 'scene' (the Iceland scene
 //           engine, public/js/scenes/) | 'gradient' (the themed
 //           --hero-gradient) | 'photo' (a library image) | 'plain'
 //     This DEFAULT is what the admin editor reports when no row exists yet,
