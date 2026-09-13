@@ -94,6 +94,9 @@ function getClient() {
 
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
 
+// `title` is escaped here for every sender: since 2026-09-12 the contact form
+// feeds a visitor-typed name into a subject, and "</title><…>" in a name must
+// not break out of the head of the HTML an admin's mail client renders.
 function emailShell(title, bodyHtml, locale = 'en') {
   const footer = t(locale, 'email.footer', { appUrl: APP_URL });
   return `<!DOCTYPE html>
@@ -101,7 +104,7 @@ function emailShell(title, bodyHtml, locale = 'en') {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#0a0a0a;font-family:'Segoe UI',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0a;">

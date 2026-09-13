@@ -89,8 +89,11 @@ Schema lives in `server/config/schema.js` — migrations **072** (foundation), 0
 + `books_intake`), 099 (`invoices.account_id` / `service_kind` / `service_period` +
 the double-issue indexes), **100** (buyer party from `customer_accounts`, the 072 guard
 widened to the new columns), **101** (`2150 Fyrirframinnheimtar tekjur`: the build
-deposit as deferred revenue, released on the final half), plus the commission ledger in
-098 and 102 (`commission_events`, statements, payouts, clawback). The `.sql` files under
+deposit as deferred revenue, released on the final half), **103** (vehicle accounts,
+2026-09-13 from the base's 085 — 6600 stays the deductible commercial-vehicle account, new
+blocked `6610 Rekstur fólksbifreiða`; the chart is corrected by migration, never by editing
+072), plus the commission ledger in 098 and 102 (`commission_events`, statements,
+payouts, clawback). The `.sql` files under
 `server/migrations/` are generated mirrors for human reading; **schema.js wins** if
 they ever disagree.
 
@@ -107,7 +110,8 @@ journal_lines     entry_id, account_id, debit, credit, memo, vat_rate, sort_orde
 ```
 
 `ledger_accounts` is the chart: code, name, type (asset/liability/equity/revenue/expense),
-`vat_code`, `input_vat_blocked`, `is_active`.
+`vat_code`, `input_vat_blocked` (TRUE on 6610 fólksbifreiðar, 6900 risna and 6910 fæði —
+the statutory input-VAT exclusions, refused with a reason on the expense), `is_active`.
 
 ### Posting
 

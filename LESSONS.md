@@ -768,3 +768,22 @@ failure. Fix: a wait-for-lock step (`fuser` on the apt/dpkg locks) plus
 of a competing `apt-get update` between attempts. Lesson: when a retry loop
 fails three times in under a second each, read the FIRST error line, not the
 retry banner — a bounded retry hides an instant failure as a hang.
+
+## 2026-09-12 — a seed row can contradict its own description, and the flag is what the code reads _(base)_
+
+The 2026-09-12 docs sync of the base found that migration 072 seeded
+`6600 Bifreiðakostnaður` as `input_24` with `input_vat_blocked = FALSE` while
+the row's own description said "Innskattur er EKKI frádráttarbær af
+fólksbifreið undir 5.000 kg" — so a passenger-car fuel receipt with a supplier
+VSK number booked to 6600 deducted 24 % input VAT, the opposite of what the
+description promised (l. nr. 50/1988 16. gr. 3. mgr.). Nobody had read the
+flag against the prose; the tests pinned only 6900/6910. The base fixed it as
+migration 085 (Bókari's design): split rather than flip — 6600 stays the
+deductible commercial-vehicle account with a corrected label, and a new
+blocked 6610 Rekstur fólksbifreiða takes the passenger cars — because every
+6600 line already posted DID deduct and must keep its meaning. Ported here as
+103 on 2026-09-13 (the number differs: the two migration chains diverged at
+080 and this repo already has an 085). Lesson: when a chart-of-accounts row
+carries both a machine flag and a human description, the test must assert the
+flag, and a description that states a rule the flag does not enforce is a bug,
+not documentation.
