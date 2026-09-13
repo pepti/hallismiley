@@ -352,30 +352,36 @@ app.use((req, res, next) => {
 });
 
 // Redirect HTTP → HTTPS in production (skip the probes so internal health checks
-// aren't redirected — the canonical-host middleware below exempts the same two)
+// aren't redirected — the canonical-host middleware below exempts the same two).
+// The target host is the CANONICAL one, not the request's Host header: echoing
+// the header let a client choose where its own 301 pointed (harmless behind
+// Azure's front end, which sets Host, but a reflected value in a redirect is
+// the kind of thing the next reviewer flags). One hop now covers both scheme
+// and host.
 if (process.env.NODE_ENV === 'production') {
+  // The canonical host comes from APP_URL — the same source ssrMeta.js,
+  // sitemapRoutes.js and the email links use — so one setting names the
+  // site. Until 2026-09-12 this was the literal 'www.hallismiley.is' with no
+  // override, which would have 301-redirected a first deploy of this repo to
+  // the base owner's personal site (docs sync, PR #4). The literal stays as
+  // the fallback for an instance that never set APP_URL, matching ssrMeta.
+  // Resolved once, above both redirects, so they agree on the target.
+  const CANONICAL_HOST = (() => {
+    try { return new URL(process.env.APP_URL || 'https://www.hallismiley.is').host.toLowerCase(); }
+    catch { return 'www.hallismiley.is'; }
+  })();
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();
     if (req.headers['x-forwarded-proto'] !== 'https') {
-      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+      return res.redirect(301, `https://${CANONICAL_HOST}${req.url}`);
     }
     next();
   });
 
   // Canonicalize the host. Prevents duplicate-content indexing across the
   // apex, the Azure default hostname (<app>.azurewebsites.net) and any legacy
-  // aliases. The host comes from APP_URL — the same source ssrMeta.js,
-  // sitemapRoutes.js and the email links use — so one setting names the
-  // site. Until 2026-09-12 this was the literal 'www.hallismiley.is' with no
-  // override, which would have 301-redirected a first deploy of this repo to
-  // the base owner's personal site (docs sync, PR #4). The literal stays as
-  // the fallback for an instance that never set APP_URL, matching ssrMeta.
-  // Skip probes so Azure load-balancer health checks still reach /health
-  // and /ready regardless of which hostname they use.
-  const CANONICAL_HOST = (() => {
-    try { return new URL(process.env.APP_URL || 'https://www.hallismiley.is').host.toLowerCase(); }
-    catch { return 'www.hallismiley.is'; }
-  })();
+  // aliases. Skip probes so Azure load-balancer health checks still reach
+  // /health and /ready regardless of which hostname they use.
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();
     const host = (req.headers.host || '').toLowerCase();
