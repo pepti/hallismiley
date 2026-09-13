@@ -5,6 +5,7 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 ## Company/product split (Halli, 2026-08-22)
 
 - **Orange Smiley = the company**; THIS repo/site is the **company site**: what the company does + its products (content pass = roadmap R1, not yet done — the current /thjonusta tier matrix eventually moves to the product site).
+- **Orange Smiley sells any software a small or medium business needs** (Halli, 2026-09-13) — custom systems, websites and stores, integrations, automation, migration, hosting. Rekstrarkerfið is ONE product it sells, not the whole offering; `/thjonusta` was rebuilt as the services page that day (section below). The "company sells ONE product" line in plan §1 carries a note saying so.
 - **Rekstrarkerfið = the product** — ONE product for all: one shared core for every customer + per-customer custom features as AI-built/AI-maintained flagged modules, managed via the MCP connector (feature requests flow through the same AI workflow). Positioning: against fit-everyone standard ERP.
 - **Canonical product core = sibling repo `C:\Users\Notandi\claude\Projects\rekstrarkerfid`** (scaffolded from the base 2026-08-22; serves rekstrarkerfi.is). Customers are generated from IT; HalliProjects retires as upstream after the transition (criteria in `company/REKSTRARKERFI-PLAN.md` §8).
 - Strategy docs: `company/REKSTRARKERFI-PLAN.md` (product plan + roadmap R0–R8) and `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md` (product-site build brief); company plan §1/§4/§7 rewritten same day.
@@ -199,7 +200,8 @@ is DRAFT awaiting his approval — he edits it in place via the inline editors.*
   point at hidden surfaces. `_tiers()`/`_steps()` stay dormant.
 - **C, /thjonusta**: products page — h1 is the product, the tier matrix is a
   section under it (`thjonusta.tiersTitle` = the page's old h1). Moves to
-  rekstrarkerfi.is at R2; comment in the view says so.
+  rekstrarkerfi.is at R2; comment in the view says so. **Superseded
+  2026-09-13** — see the services-page section below.
 - **D, legacy brand**: ContactView defaults, its footer (5 business routes,
   /personuvernd), the 7 server email strings, pdfService fallback, and a full
   TermsView rewrite (IS-first, company as legal entity).
@@ -701,6 +703,36 @@ Halli: scanning (`ScanInput.js`), audited stock adjustments, import wizards,
 storefront QoL — of which **a sold-out cart line currently goes straight to
 Stripe** — and a shared `Footer`.
 
+
+## /thjonusta = the company's services page (2026-09-13)
+
+Halli, looking at the page: "orange smiley does not only sell
+rekstrarkerfið, it sells any software to medium/small size companies." The
+R1 layout had made the product the page's h1. Rebuilt on
+`content/thjonusta-services`; **all new copy is DRAFT for Halli**.
+
+- **Order**: h1 "Hugbúnaður fyrir lítil og meðalstór fyrirtæki" → *Hvað við
+  smíðum* (six `thjonusta.service.<id>.name/desc`, the first — custom
+  systems — full width, the rest numbered) → *Hvernig við vinnum* (three
+  steps: fixed price for the build, never hourly; one monthly fee after) →
+  Rekstrarkerfið as the ready-made product with the UNCHANGED tier cards,
+  DRÖG chips and 12-row matrix (tier names are h3 now) → closing CTA to
+  `/hafa-samband`.
+- **Titles**: "Þjónusta — Orange Smiley" / "Services — Orange Smiley" in
+  `ssrMeta.js` and its `pageTitle.js` mirror; home description, static
+  `index.html` head and `manifest.json` no longer say the company builds
+  Rekstrarkerfið alone.
+- **JSON-LD**: the Service's OfferCatalog lists the six services and nests
+  Rekstrarkerfið's tiers as an inner OfferCatalog. `SERVICE_OFFERINGS` in
+  `ssrMeta.js` mirrors the locale names — change them together. Still no
+  `price` in structured data.
+- **Scene engine fix that rode along**: `.ice-scene--band` is `min-height`
+  now, not `height`. The fixed band clipped long headers on phones (this page
+  by 69px at 320px; `/um-okkur` by 21px already on master). LESSONS.md
+  2026-09-13.
+- Not touched: the home `_products()` card still links to the page top (the
+  router has no in-page anchors), the DB-seeded home skills copy, and
+  ContactView's demo-led wording.
 
 ## Where things stand for the next session
 

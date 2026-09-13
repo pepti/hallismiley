@@ -787,3 +787,15 @@ blocked 6610 Rekstur fólksbifreiða takes the passenger cars — because every
 carries both a machine flag and a human description, the test must assert the
 flag, and a description that states a rule the flag does not enforce is a bug,
 not documentation.
+
+## 2026-09-13 — a fixed-height photo band hides overflow until the copy gets longer _(project)_
+
+Rewriting the /thjonusta header (a three-line h1 on a phone plus a longer
+lede) pushed it 69px past the bottom of the Iceland scene band at 320px
+wide, under the place chip. The band had `height: clamp(340px, 46vh,
+560px)` and `overflow: hidden` on the stage, so nothing visibly broke on a
+desktop and no test measured it; /um-okkur was already 21px over at 320px on
+master. Fixed in the engine (`min-height` + a flex column, bottom pad for the
+chip) rather than by trimming copy, because Halli edits the copy. Lesson:
+any container that holds editable copy over a photo needs a minimum height,
+never a fixed one, and a copy change deserves one narrow-viewport look.

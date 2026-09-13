@@ -232,15 +232,20 @@
   color: var(--text-secondary);
 }
 
-/* The tier block sits a level under the product it prices, so its heading is
-   smaller than the page h1 and the type walks down from there. */
-.thjonusta-tiers__header {
+/* The page walks down from the h1: what we build, how we work, the one
+   ready-made product with its prices, then a closing call to action. Each
+   section shares one header treatment so the type steps stay consistent. */
+.thjonusta-section {
+  margin-bottom: var(--sp-8);
+}
+
+.thjonusta-section__header {
   max-width: 46em;
   margin: 0 auto var(--sp-6);
   text-align: center;
 }
 
-.thjonusta-tiers__title {
+.thjonusta-section__title {
   font-family: var(--font-display);
   font-size: clamp(1.4rem, 3vw, 2rem);
   font-weight: 800;
@@ -248,10 +253,146 @@
   margin-bottom: var(--sp-3);
 }
 
-.thjonusta-tiers__intro {
+.thjonusta-section__intro {
   font-size: 1rem; line-height: 1.65;
   color: var(--text-secondary);
 }
+.thjonusta-section__intro + .thjonusta-section__intro { margin-top: var(--sp-3); }
+
+/* What we build — an editorial numbered list rather than a card row. The
+   first entry is the core offering and spans the full width; the rest carry
+   a ghosted numeral and a rule on the left, so no two read as the same. */
+.service-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--sp-5) var(--sp-6);
+  padding: 0; margin: 0;
+}
+
+.service-item {
+  position: relative;
+  padding: var(--sp-4) 0 var(--sp-4) var(--sp-5);
+  border-left: 2px solid var(--border);
+}
+
+.service-item__num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.9rem; font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+  margin-bottom: var(--sp-2);
+}
+
+.service-item__name {
+  font-family: var(--font-display);
+  font-size: 1.2rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.service-item__desc {
+  font-size: 0.95rem; line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.service-item--lead {
+  grid-column: 1 / -1;
+  padding: var(--sp-6) var(--sp-6) var(--sp-6) var(--sp-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.service-item--lead .service-item__name {
+  font-size: clamp(1.4rem, 2.6vw, 1.8rem); font-weight: 800;
+}
+.service-item--lead .service-item__desc {
+  font-size: 1.02rem;
+  max-width: 62ch;
+}
+
+/* How we work — three numbered steps */
+.thjonusta-steps__list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--sp-6);
+  padding: 0; margin: 0;
+}
+
+.thjonusta-steps__num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--accent-amber-dim);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 800; font-size: 1.1rem;
+  margin-bottom: var(--sp-3);
+}
+
+.thjonusta-steps__title {
+  font-family: var(--font-display);
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.thjonusta-steps__desc {
+  font-size: 0.95rem; line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* The ready-made product. A rule above sets it apart from the bespoke work. */
+.thjonusta-product {
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-light);
+}
+
+.thjonusta-product__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem; letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
+}
+
+.thjonusta-product__tagline {
+  font-family: var(--font-display);
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--accent-ink);
+  margin-bottom: var(--sp-3);
+}
+
+/* Closing call to action */
+.thjonusta-cta {
+  max-width: 46em;
+  margin: 0 auto var(--sp-6);
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+}
+
+.thjonusta-cta__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 2.6vw, 1.8rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-3);
+}
+
+.thjonusta-cta__text {
+  font-size: 1rem; line-height: 1.65;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-5);
+}
+
+.thjonusta-cta__button { display: inline-block; }
 
 .tier-cards {
   display: grid;

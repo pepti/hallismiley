@@ -1,7 +1,7 @@
 {
   "name": "Orange Smiley",
   "short_name": "Orange Smiley",
-  "description": "Orange Smiley — íslenskt hugbúnaðarhús knúið gervigreind. Smíðar og rekur Rekstrarkerfið.",
+  "description": "Orange Smiley — íslenskt hugbúnaðarhús knúið gervigreind. Smíðar hugbúnað fyrir lítil og meðalstór fyrirtæki.",
   "start_url": "/",
   "display": "standalone",
   "theme_color": "#E8853D",
