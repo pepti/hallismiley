@@ -71,11 +71,11 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('#contact-page-form')).toBeAttached();
   });
 
-  test('services page is reachable from the navbar and shows the three tiers', async ({ page }) => {
+  test('services page is reachable from the navbar and lists the services', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-route="/thjonusta"]').click();
-    await expect(page.locator('.tier-card')).toHaveCount(3);
-    await expect(page.locator('.tier-card__draft').first()).toBeVisible();
+    await expect(page.locator('.service-list > .service-item')).toHaveCount(6);
+    await expect(page.locator('.thjonusta-product__link')).toBeVisible();
   });
 
   test('no JavaScript errors on homepage', async ({ page }) => {

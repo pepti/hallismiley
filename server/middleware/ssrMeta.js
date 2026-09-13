@@ -468,8 +468,10 @@ function websiteSchema() {
 
 // What the company sells, as an OfferCatalog. Emitted on / and /thjonusta.
 // Halli (2026-09-13): Orange Smiley builds any software a small or medium
-// business needs, so the catalogue lists the services first and nests
-// Rekstrarkerfið's three tiers as one product catalogue inside it.
+// business needs, so the catalogue lists the services and then Rekstrarkerfið
+// as one product, pointing at its own site. No tiers and no prices here:
+// those live on rekstrarkerfi.is (Halli, 2026-09-13), and an unconfirmed
+// number in structured data reads as a commitment.
 // Mirrors thjonusta.service.* in the locale files; change them together.
 const SERVICE_OFFERINGS = [
   { en: 'Custom systems',             is: 'Sérsmíðuð kerfi' },
@@ -478,27 +480,6 @@ const SERVICE_OFFERINGS = [
   { en: 'Automation and AI',          is: 'Sjálfvirkni og gervigreind' },
   { en: 'Moving off legacy systems',  is: 'Flutningur af eldri kerfum' },
   { en: 'Hosting and maintenance',    is: 'Hýsing og viðhald' },
-];
-
-// Prices are DRAFT until Halli confirms them, so no `price` is published —
-// an unconfirmed number in structured data is worse than none, because
-// search engines will surface it as if it were a commitment.
-const SERVICE_TIERS = [
-  {
-    name: 'Vefur',
-    en: 'Company website, contact form, Icelandic and English, SEO.',
-    is: 'Heimasíða fyrirtækisins, hafðu-samband form, íslenska og enska, leitarvélabestun.',
-  },
-  {
-    name: 'Verslun',
-    en: 'Everything in Vefur plus catalog, cart, payments, orders, inventory and barcodes.',
-    is: 'Allt í Vef auk vörulista, körfu, greiðslna, pantana, lagers og strikamerkja.',
-  },
-  {
-    name: 'Rekstur',
-    en: 'Everything in Verslun plus invoicing, VAT, receivables ledger and goods receiving.',
-    is: 'Allt í Verslun auk reikningagerðar, VSK, viðskiptamannabókhalds og vörumóttöku.',
-  },
 ];
 
 function serviceSchema(locale) {
@@ -520,16 +501,12 @@ function serviceSchema(locale) {
           itemOffered: { '@type': 'Service', name: isIS ? service.is : service.en },
         })),
         {
-          '@type': 'OfferCatalog',
-          name: 'Rekstrarkerfið',
-          itemListElement: SERVICE_TIERS.map(tier => ({
-            '@type': 'Offer',
-            itemOffered: {
-              '@type': 'Service',
-              name: tier.name,
-              description: isIS ? tier.is : tier.en,
-            },
-          })),
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name: 'Rekstrarkerfið',
+            url: `https://rekstrarkerfi.is/${isIS ? 'is' : 'en'}/`,
+          },
         },
       ],
     },

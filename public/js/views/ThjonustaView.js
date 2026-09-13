@@ -1,38 +1,26 @@
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { initReveal } from '../utils/reveal.js';
 
 // The company's services page (2026-09-13). Halli: Orange Smiley sells any
 // software a small or medium business needs, not only Rekstrarkerfið — so the
-// page leads with what the company builds, then how it works, and only then
-// presents Rekstrarkerfið as the ready-made product with its tiers.
+// page leads with what the company builds, then how it works, and then says
+// in a few lines what Rekstrarkerfið is.
 //
-// All copy is DRAFT until Halli approves it. Prices come from i18n values
-// marked DRAFT too (thjonusta.draft chip is rendered next to every price).
+// No product pricing on the company site (Halli, 2026-09-13): the tiers,
+// prices and feature matrix live on the product site. A visitor who wants to
+// know more is sent there in a new tab.
+//
+// All copy is DRAFT until Halli approves it.
+
+// The product site. Both locales exist there under the same prefixes as here.
+const PRODUCT_SITE = 'https://rekstrarkerfi.is';
 
 // What the company builds. The first entry is the core offering and renders
 // wide; the rest are numbered so the row never reads as identical cards.
 const SERVICES = ['custom', 'web', 'integrations', 'automation', 'migration', 'operations'];
 
 const STEPS = ['1', '2', '3'];
-
-const TIERS = ['Vefur', 'Verslun', 'Rekstur'];
-
-// Feature matrix: i18n key → which tiers include it (index into TIERS).
-const FEATURES = [
-  ['thjonusta.featWebsite',   [0, 1, 2]],
-  ['thjonusta.featI18n',      [0, 1, 2]],
-  ['thjonusta.featSeo',       [0, 1, 2]],
-  ['thjonusta.featLeadForm',  [0, 1, 2]],
-  ['thjonusta.featCatalog',   [1, 2]],
-  ['thjonusta.featCheckout',  [1, 2]],
-  ['thjonusta.featCustomers', [1, 2]],
-  ['thjonusta.featBarcode',   [1, 2]],
-  ['thjonusta.featInvoicing', [2]],
-  ['thjonusta.featLedger',    [2]],
-  ['thjonusta.featReceiving', [2]],
-  ['thjonusta.featSupport',   [0, 1, 2]],
-];
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -55,33 +43,7 @@ export class ThjonustaView {
         <p class="thjonusta-steps__desc">${t(`thjonusta.step${n}Desc`)}</p>
       </li>`).join('');
 
-    const tierMeta = [
-      { name: t('home.tierVefurName'),   price: t('thjonusta.vefurPrice'),   tagline: t('thjonusta.vefurTagline') },
-      { name: t('home.tierVerslunName'), price: t('thjonusta.verslunPrice'), tagline: t('thjonusta.verslunTagline') },
-      { name: t('home.tierReksturName'), price: t('thjonusta.reksturPrice'), tagline: t('thjonusta.reksturTagline') },
-    ];
-
-    const cards = tierMeta.map((tier, i) => `
-      <article class="tier-card${i === 1 ? ' tier-card--featured' : ''}">
-        <h3 class="tier-card__name">${tier.name}</h3>
-        <p class="tier-card__price">
-          <span class="tier-card__amount">${tier.price}</span>
-          <span class="tier-card__unit">${t('thjonusta.perMonth')}</span>
-        </p>
-        <span class="tier-card__draft">${t('thjonusta.draft')}</span>
-        <p class="tier-card__tagline">${tier.tagline}</p>
-        <a href="${href('/hafa-samband')}" class="btn btn--primary tier-card__cta">${t('thjonusta.cta')}</a>
-      </article>`).join('');
-
-    const matrixRows = FEATURES.map(([key, tiers]) => `
-      <tr>
-        <th scope="row">${t(key)}</th>
-        ${TIERS.map((_, i) => `
-          <td class="${tiers.includes(i) ? 'tier-matrix__yes' : 'tier-matrix__no'}">
-            <span aria-hidden="true">${tiers.includes(i) ? '✓' : '—'}</span>
-            <span class="sr-only">${tiers.includes(i) ? t('thjonusta.included') : t('thjonusta.notIncluded')}</span>
-          </td>`).join('')}
-      </tr>`).join('');
+    const productUrl = `${PRODUCT_SITE}/${getLocale() === 'en' ? 'en' : 'is'}/`;
 
     view.innerHTML = `
       <main class="main thjonusta-page" id="main-content">
@@ -100,33 +62,17 @@ export class ThjonustaView {
           <ol class="thjonusta-steps__list">${steps}</ol>
         </section>
 
-        <!-- Rekstrarkerfið is one product the company sells, presented here
-             because the product has no site of its own yet. When
-             rekstrarkerfi.is ships (roadmap R2) the tiers and matrix move
-             there and what stays here is a short product block with a link. -->
         <section class="thjonusta-section thjonusta-product" aria-labelledby="thjonusta-product-title">
           <div class="thjonusta-section__header">
             <p class="thjonusta-product__eyebrow">${t('thjonusta.productEyebrow')}</p>
             <h2 class="thjonusta-section__title" id="thjonusta-product-title">${t('thjonusta.productName')}</h2>
-            <p class="thjonusta-product__tagline">${t('thjonusta.tiersTitle')}</p>
             <p class="thjonusta-section__intro">${t('thjonusta.productIntro')}</p>
-            <p class="thjonusta-section__intro">${t('thjonusta.tiersIntro')}</p>
+            <p class="thjonusta-section__intro">${t('thjonusta.productCore')}</p>
+            <a href="${productUrl}" target="_blank" rel="noopener" class="btn btn--primary thjonusta-product__link">
+              ${t('thjonusta.productLink')}<span class="sr-only"> ${t('thjonusta.opensNewTab')}</span>
+              <span class="thjonusta-product__link-icon" aria-hidden="true">↗</span>
+            </a>
           </div>
-          <div class="tier-cards">${cards}</div>
-
-          <div class="tier-matrix-wrap">
-            <table class="tier-matrix">
-              <thead>
-                <tr>
-                  <th scope="col">${t('thjonusta.matrixFeature')}</th>
-                  ${tierMeta.map(tier => `<th scope="col">${tier.name}</th>`).join('')}
-                </tr>
-              </thead>
-              <tbody>${matrixRows}</tbody>
-            </table>
-          </div>
-
-          <p class="thjonusta-setup-note">${t('thjonusta.setupNote')}</p>
         </section>
 
         <section class="thjonusta-cta" aria-labelledby="thjonusta-cta-title">
@@ -144,7 +90,7 @@ export class ThjonustaView {
           <h1 class="thjonusta-title">${t('thjonusta.title')}</h1>
           <p class="thjonusta-intro">${t('thjonusta.intro')}</p>
         </header>`);
-    view.querySelectorAll('.service-item, .tier-card')
+    view.querySelectorAll('.service-item')
       .forEach((el, i) => el.classList.add('ice-reveal', 'ice-reveal--d' + Math.min((i % 3) + 1, 3)));
     this._reveal = initReveal(view);
     return view;

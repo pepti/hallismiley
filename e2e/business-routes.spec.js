@@ -106,22 +106,23 @@ test.describe('services page', () => {
   });
 });
 
-test.describe('service tiers', () => {
-  test('the pricing page shows three tiers, each marked DRAFT', async ({ page }) => {
+test.describe('Rekstrarkerfið on the services page', () => {
+  // Halli (2026-09-13): no product tiers or prices on the company site —
+  // only what Rekstrarkerfið is, and a way on to its own site in a new tab.
+  test('shows no tiers, prices or feature matrix', async ({ page }) => {
     await page.goto('/is/thjonusta');
-    await expect(page.locator('.tier-card')).toHaveCount(3);
-    // Prices are unconfirmed until Halli signs off — the chip must be on every
-    // card, so nobody mistakes the placeholder for a quote.
-    await expect(page.locator('.tier-card__draft')).toHaveCount(3);
-    await expect(page.locator('.tier-card__draft').first()).toContainText(/DRÖG/);
-    // The feature matrix distinguishes the tiers rather than repeating them.
-    await expect(page.locator('.tier-matrix tbody tr')).toHaveCount(12);
+    await expect(page.locator('#thjonusta-product-title')).toBeVisible();
+    await expect(page.locator('.tier-card, .tier-matrix')).toHaveCount(0);
+    await expect(page.locator('main')).not.toContainText(/þ\.kr\.|DRÖG/);
   });
 
-  test('every tier CTA leads to the lead form', async ({ page }) => {
-    await page.goto('/is/thjonusta');
-    await page.locator('.tier-card__cta').first().click();
-    await expect(page).toHaveURL(/\/is\/hafa-samband$/);
-    await expect(page.locator('#contact-page-form')).toBeVisible();
-  });
+  for (const locale of ['is', 'en']) {
+    test(`the product link opens rekstrarkerfi.is/${locale}/ in a new tab`, async ({ page }) => {
+      await page.goto(`/${locale}/thjonusta`);
+      const link = page.locator('.thjonusta-product__link');
+      await expect(link).toHaveAttribute('href', `https://rekstrarkerfi.is/${locale}/`);
+      await expect(link).toHaveAttribute('target', '_blank');
+      await expect(link).toHaveAttribute('rel', /noopener/);
+    });
+  }
 });

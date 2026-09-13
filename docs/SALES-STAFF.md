@@ -74,7 +74,9 @@ them (the "Mínar" filter of the next owner will not show them until then).
 - The seed script `server/scripts/seed-sales-guides.js` inserts the initial guide set
   as drafts; it is idempotent (`ON CONFLICT (slug) DO NOTHING`) and never
   overwrites edited guides.
-- Keep guides consistent with the live `/thjonusta` tier matrix and the
+- Keep guides consistent with the tier matrix on the product site
+  (rekstrarkerfi.is, `VerdskraView.js` in the sibling `rekstrarkerfid` repo —
+  the company site shows no tiers since 2026-09-13) and the
   company plans; prices in guides stay DRAFT-marked until Halli confirms
   pricing. The Söluþjálfari agent owns this consistency sweep.
 
