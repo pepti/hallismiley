@@ -243,7 +243,9 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
 // are escaped here — the upstream tag-stripper only removes well-formed `<…>`, so
 // an unterminated tag would otherwise reach the recipient as live markup.
 function buildInviteEmailHtml({ subject, heading, body, link, locale = 'en' }) {
-  return emailShell(escapeHtml(subject), `
+  // emailShell escapes the <title> itself (2026-09-12); escaping here too
+  // double-encoded an "&" in an invite subject. Heading is still escaped below.
+  return emailShell(subject, `
     <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
       ${body}
