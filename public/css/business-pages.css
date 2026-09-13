@@ -232,8 +232,8 @@
   color: var(--text-secondary);
 }
 
-/* The page walks down from the h1: what we build, how we work, the one
-   ready-made product with its prices, then a closing call to action. Each
+/* The page walks down from the h1: what we build, how we work, what the
+   ready-made product is, then a closing call to action. Each
    section shares one header treatment so the type steps stay consistent. */
 .thjonusta-section {
   margin-bottom: var(--sp-8);
@@ -360,12 +360,13 @@
   margin-bottom: var(--sp-2);
 }
 
-.thjonusta-product__tagline {
-  font-family: var(--font-display);
-  font-size: 1.1rem; font-weight: 700;
-  color: var(--accent-ink);
-  margin-bottom: var(--sp-3);
+/* The product has its own site; the company site only says what it is and
+   sends the visitor there in a new tab (no prices here, Halli 2026-09-13). */
+.thjonusta-product__link {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-5);
 }
+.thjonusta-product__link-icon { font-size: 1.05em; line-height: 1; }
 
 /* Closing call to action */
 .thjonusta-cta {
@@ -393,112 +394,6 @@
 }
 
 .thjonusta-cta__button { display: inline-block; }
-
-.tier-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--sp-5);
-  margin-bottom: var(--sp-8);
-}
-
-.tier-card {
-  position: relative;
-  display: flex; flex-direction: column; align-items: flex-start;
-  padding: var(--sp-6) var(--sp-5);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-}
-.tier-card::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: var(--accent-gradient);
-  opacity: 0.35;
-}
-.tier-card--featured {
-  border-color: var(--gold);
-  box-shadow: var(--glow-around);
-}
-.tier-card--featured::before { opacity: 1; }
-
-.tier-card__name {
-  font-family: var(--font-display);
-  font-size: 1.4rem; font-weight: 800;
-  color: var(--text-primary);
-}
-
-.tier-card__price { margin: var(--sp-3) 0 var(--sp-1); }
-.tier-card__amount {
-  font-family: var(--font-display);
-  font-size: 2.4rem; font-weight: 800;
-  color: var(--gold);
-}
-.tier-card__unit {
-  font-size: 0.85rem; font-weight: 600;
-  /* --text-secondary, not --text-muted: "þ.kr./mán" is part of the price, and
-     at 13.6px the muted ink only reaches 3.84:1 against the card. */
-  color: var(--text-secondary);
-  margin-left: var(--sp-1);
-}
-
-/* DRAFT chip — prices unconfirmed until Halli signs off */
-.tier-card__draft {
-  display: inline-block;
-  font-size: 0.62rem; font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--teal-dim);
-  color: var(--teal);
-  margin-bottom: var(--sp-4);
-}
-
-.tier-card__tagline {
-  font-size: 0.92rem; line-height: 1.6;
-  color: var(--text-secondary);
-  flex: 1;
-  margin-bottom: var(--sp-5);
-}
-
-.tier-card__cta { align-self: stretch; text-align: center; }
-
-/* Feature matrix */
-.tier-matrix-wrap { overflow-x: auto; margin-bottom: var(--sp-5); }
-
-.tier-matrix {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-lg);
-}
-
-.tier-matrix th,
-.tier-matrix td {
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--border-light);
-  font-size: 0.9rem;
-  text-align: left;
-  color: var(--text-primary);
-}
-.tier-matrix thead th {
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--text-primary);
-  background: var(--bg-elevated);
-}
-.tier-matrix tbody th { font-weight: 500; color: var(--text-secondary); }
-.tier-matrix td { text-align: center; }
-.tier-matrix__yes span[aria-hidden] { color: var(--success); font-weight: 700; }
-.tier-matrix__no  span[aria-hidden] { color: var(--text-muted); }
-
-.thjonusta-setup-note {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  text-align: center;
-}
 
 /* ── /um-okkur ── */
 .um-okkur-story {

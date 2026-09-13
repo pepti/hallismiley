@@ -474,28 +474,26 @@ describe('business JSON-LD', () => {
     expect(res.text).toMatch(/"name":\s*"Orange Smiley ehf\."/);
   });
 
-  test('the services page carries the tier catalogue', async () => {
+  test('the services page carries the service catalogue', async () => {
     const res = await request(app).get('/is/thjonusta');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/"@type":"OfferCatalog"/);
-    for (const tier of ['Vefur', 'Verslun', 'Rekstur']) {
-      expect(res.text).toMatch(new RegExp(`"name":"${tier}"`));
-    }
   });
 
   test('the catalogue lists the company\'s services, with Rekstrarkerfið as one product in it', async () => {
-    // Orange Smiley sells any software a small business needs (Halli,
-    // 2026-09-13), so the tiers are nested under the product, not the whole
-    // catalogue.
+    // Orange Smiley sells any software a small business needs, and the
+    // product's tiers and prices live on its own site (Halli, 2026-09-13).
     const res = await request(app).get('/is/thjonusta');
     const block = (res.text.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [])
       .find(b => b.includes('OfferCatalog'));
     const service = JSON.parse(block.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, ''));
     const items = service.hasOfferCatalog.itemListElement;
     expect(items.map(i => i.itemOffered?.name).filter(Boolean)).toContain('Sérsmíðuð kerfi');
-    const product = items.find(i => i['@type'] === 'OfferCatalog');
-    expect(product.name).toBe('Rekstrarkerfið');
-    expect(product.itemListElement.map(i => i.itemOffered.name)).toEqual(['Vefur', 'Verslun', 'Rekstur']);
+    const product = items.find(i => i.itemOffered?.name === 'Rekstrarkerfið');
+    expect(product.itemOffered.url).toBe('https://rekstrarkerfi.is/is/');
+    for (const tier of ['Vefur', 'Verslun', 'Rekstur']) {
+      expect(block).not.toMatch(new RegExp(`"name":"${tier}"`));
+    }
   });
 
   test('no unconfirmed price is published as structured data', async () => {

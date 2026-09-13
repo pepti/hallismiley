@@ -4,7 +4,7 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 
 ## Company/product split (Halli, 2026-08-22)
 
-- **Orange Smiley = the company**; THIS repo/site is the **company site**: what the company does + its products (content pass = roadmap R1, not yet done — the current /thjonusta tier matrix eventually moves to the product site).
+- **Orange Smiley = the company**; THIS repo/site is the **company site**: what the company does + its products (content pass = roadmap R1, done 2026-09-01). The /thjonusta tier matrix left the company site on 2026-09-13; tiers and prices live on rekstrarkerfi.is only.
 - **Orange Smiley sells any software a small or medium business needs** (Halli, 2026-09-13) — custom systems, websites and stores, integrations, automation, migration, hosting. Rekstrarkerfið is ONE product it sells, not the whole offering; `/thjonusta` was rebuilt as the services page that day (section below). The "company sells ONE product" line in plan §1 carries a note saying so.
 - **Rekstrarkerfið = the product** — ONE product for all: one shared core for every customer + per-customer custom features as AI-built/AI-maintained flagged modules, managed via the MCP connector (feature requests flow through the same AI workflow). Positioning: against fit-everyone standard ERP.
 - **Canonical product core = sibling repo `C:\Users\Notandi\claude\Projects\rekstrarkerfid`** (scaffolded from the base 2026-08-22; serves rekstrarkerfi.is). Customers are generated from IT; HalliProjects retires as upstream after the transition (criteria in `company/REKSTRARKERFI-PLAN.md` §8).
@@ -40,7 +40,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 - Read-only references — never modify: `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system) and `C:\Users\Notandi\claude\Projects\hallismiley` (the HalliProjects base; folder renamed from `HalliProjects` 2026-08-23). The base was temporarily writable for the 2026-08-19 base-upgrade program (13 PRs, ledger: site-factory/BASE-SYNC.md); that program is closed and the read-only rule is back in force — base writes need Halli's explicit say-so again.
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
-- Prices on `/thjonusta` (39–79 þ.kr./mán) are placeholders marked DRAFT until Halli confirms.
+- Tier prices (39–79 þ.kr./mán) are placeholders marked DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli).
 - `APP_URL`/canonical host still references hallismiley.is in places — intentional until orangesmiley.is is registered; tracked in PLAN.md.
 - Log surprises in `LESSONS.md` (tagged factory/base/project) so `/retro` can harvest them.
 
@@ -715,17 +715,21 @@ R1 layout had made the product the page's h1. Rebuilt on
   smíðum* (six `thjonusta.service.<id>.name/desc`, the first — custom
   systems — full width, the rest numbered) → *Hvernig við vinnum* (three
   steps: fixed price for the build, never hourly; one monthly fee after) →
-  Rekstrarkerfið as the ready-made product with the UNCHANGED tier cards,
-  DRÖG chips and 12-row matrix (tier names are h3 now) → closing CTA to
+  Rekstrarkerfið in two paragraphs plus a "Nánar á rekstrarkerfi.is" button
+  (`target=_blank`, locale-matched `/is/` or `/en/`) → closing CTA to
   `/hafa-samband`.
+- **No product tiers or prices on this site** (Halli, same day, second
+  pass): the tier cards, DRÖG chips, 12-row matrix and setup note were
+  removed with their `thjonusta.*` keys and CSS. They live on
+  rekstrarkerfi.is.
 - **Titles**: "Þjónusta — Orange Smiley" / "Services — Orange Smiley" in
   `ssrMeta.js` and its `pageTitle.js` mirror; home description, static
   `index.html` head and `manifest.json` no longer say the company builds
   Rekstrarkerfið alone.
-- **JSON-LD**: the Service's OfferCatalog lists the six services and nests
-  Rekstrarkerfið's tiers as an inner OfferCatalog. `SERVICE_OFFERINGS` in
-  `ssrMeta.js` mirrors the locale names — change them together. Still no
-  `price` in structured data.
+- **JSON-LD**: the Service's OfferCatalog lists the six services and then
+  Rekstrarkerfið as one offer with its product-site `url`, no tiers.
+  `SERVICE_OFFERINGS` in `ssrMeta.js` mirrors the locale names — change
+  them together. No `price` in structured data.
 - **Scene engine fix that rode along**: `.ice-scene--band` is `min-height`
   now, not `height`. The fixed band clipped long headers on phones (this page
   by 69px at 320px; `/um-okkur` by 21px already on master). LESSONS.md
@@ -737,7 +741,7 @@ R1 layout had made the product the page's h1. Rebuilt on
 ## Where things stand for the next session
 
 - **Company/product split decided 2026-08-22** (section above): R1 is DONE (section above, copy pending Halli's review); next is R2 (product-site build in the sibling `rekstrarkerfid` repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`). The base PR upstreaming `promote.yml` is prepared, pending Halli.
-- **Awaiting Halli**: the 20 proposals in `ENHANCEMENTS.md` not yet fully implemented (26 exist as of 2026-09-11; #1, #2, #13, #16, #17, #18 are done; #9, #10 and #21 partially — the same status line as the file's own header), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices on `/thjonusta`. (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
+- **Awaiting Halli**: the 20 proposals in `ENHANCEMENTS.md` not yet fully implemented (26 exist as of 2026-09-11; #1, #2, #13, #16, #17, #18 are done; #9, #10 and #21 partially — the same status line as the file's own header), all DRAFT copy in the locale files **including everything R1 wrote**, and the tier prices (on rekstrarkerfi.is now). (#5 client.config and #7 portal are now roadmap items R4/R6 — still not implemented without his sign-off.)
 - **Admin re-shape landed 2026-09-07** (three chunks, sections above: hidden retail lines + Sölustarf/Þjónusta + company overview · Leads inbox = migration 097 · Markaður). Still his: the DRAFT copy those chunks wrote (nav labels, dashboard, leads, markaður, and the **`/personuvernd` §3 + §6 rewrite** — the site now stores enquiries), whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`), and the DRAFT copy of chunk D. **#17/#18 landed the same day** (section above): migration chain ended **099_invoice_account_link** that day (098 landed with #17/#18, 099 with the review pass — section above; 100–102 followed on 2026-09-08, the chain ends **102** now); the books branch was rebased onto master 2026-09-07 with its 095/096 kept in numeric order (Jest 2864 + Playwright green on 2026-09-07) and merged the same day (748f28b, next bullet) — the chain reads 094 → 095 → 096 → 097 → 098 → 099. Saved sidebar layouts were reset in the dev DB (Halli is the only admin).
 - **Own books into the product, landed 2026-09-07** (D-017/D-018 in `company/DECISIONS.md`, plan `~/.claude/plans/have-my-agents-go-glowing-mist.md`). Halli's call: keep Orange Smiley's statutory books in its own module, **books first on a private instance** (orangesmiley.is has no deployment), **parallel run** for the first VSK period — júlí–ágúst 2026, gjalddagi **5.10.2026** — deriving here and filing manually through the veflykill. Four pieces: the minor-units fix (the expense form sent major units where the API takes minor, so a USD 20.00 invoice typed as `20` booked as USD 0.20 — `public/js/utils/money.js`); **`/admin/books/settings`** (rides the `books` view id, no new RBAC id; confirming the chart of accounts requires a note and stamps who; FX freshness is per currency in use, not EUR alone); **`npm run books:replay`** (a period through the real services, VSK boxes diffed against what was filed, D split domestic/reverse-charge, target DB must end `_replay`); **migration 095** (structured party block + append-only `invoice_ubl_exports` + a Peppol BIS 3.0 emitter at `GET /invoices/:id/ubl.xml` — 11% is category S/11 not AA, exports are G with a reason, rounding drift is BT-114 and >3 kr is refused); **migration 096** (the capture spine: `source_kind` trust ladder + `books_intake`, a queue of proposals whose only exit is the same `createExpense()` the manual form calls, gated by CHECK constraints and CSRF, deliberately no confidence score). Runbooks: `docs/BOOKS-PARALLEL-RUN.md` (generic) + `company/runbooks/books-2026-P4.md` (this period). **Migration chain ended 097_leads** at that point (102 now), with the books pair 095/096 landing behind it — independent of 097, so the array order is safe on a fresh database and on one that already has 097. Still owed: a button to issue a statutory invoice from an order (`issueInvoiceForOrder` has no caller — a hard blocker for 2026-P5, due 7.12) and Peppol **inbound**. Halli's, not code's: the VSK veflykill, Bókari's ruling on pre-12.08 expenses and `ACCOUNTANT-QUESTIONS.md` §6, and §2 (art. 12 zero-rating) before any foreign B2B invoice.
 - **Base-sync 2026-09-13** (branch `base-sync/2026-09-13`): four hallismiley fixes of 2026-09-12 (base commits f8d7ea3 + 60918cc) ported — **migration 103_books_vehicle_accounts** (the base's 085: 6600 renamed Rekstur atvinnubifreiða and kept deductible, new blocked 6610 Rekstur fólksbifreiða; the 072 seed had contradicted its own description — LESSONS.md 2026-09-12), the once-a-minute `checkMemory` timer in `server.js` (the memory alert had no caller), `emailShell` escaping its `<title>`, and the production HTTP→HTTPS redirect targeting `CANONICAL_HOST` instead of echoing the request's Host. **The migration chain now ends 103.** The settings screen, money.js, lead mail and trackRequest in the same base commits were already here (they went upstream FROM this repo). Accountant: confirm the 6600/6610 split (`docs/ACCOUNTANT-QUESTIONS.md` §7).

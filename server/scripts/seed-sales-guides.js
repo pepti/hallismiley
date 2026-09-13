@@ -539,8 +539,9 @@ if (require.main === module) {
 //   Shopify+apps+agency stack), §3 (tier packaging, DRAFT prices), §4 (one core,
 //   per-customer instance + own database, repo-per-client isolation), §5/§6
 //   (AI ops model, CI gates + canary soak on own instances, Halli approves).
-// - public/js/i18n/is.json thjonusta.* keys + public/js/views/ThjonustaView.js
-//   FEATURES matrix (exact tier rows: featWebsite/featI18n/featSeo/featLeadForm/
+// - the tier copy then on /thjonusta (thjonusta.* keys + ThjonustaView.js
+//   FEATURES; removed from the company site 2026-09-13, the matrix now lives
+//   on rekstrarkerfi.is) (exact tier rows: featWebsite/featI18n/featSeo/featLeadForm/
 //   featSupport = all tiers; featCatalog/featCheckout/featCustomers/featBarcode =
 //   Verslun+Rekstur; featInvoicing/featLedger/featReceiving = Rekstur only;
 //   thjonusta.draft, setupNote, taglines) and umOkkur.story1–3 (dogfooding,
