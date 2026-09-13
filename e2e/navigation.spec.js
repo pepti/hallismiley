@@ -20,13 +20,19 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.lol-hero__title')).toContainText('that runs businesses');
   });
 
-  test('the homepage names its products, and the product card leads to them', async ({ page }) => {
-    await page.goto('/is/');
-    const card = page.locator('.home-products__card');
-    await expect(card).toHaveCount(1);
-    await expect(card.locator('.home-products__name')).toHaveText('Rekstrarkerfið');
-    await card.locator('.home-products__cta').click();
-    await expect(page).toHaveURL(/\/is\/thjonusta$/);
+  test('the homepage names its products, and the product card leads to the product site', async ({ page }) => {
+    // Halli (2026-09-13): anyone who wants to know more about Rekstrarkerfið
+    // goes to its own site in a new tab; the company site carries no tiers.
+    for (const locale of ['is', 'en']) {
+      await page.goto(`/${locale}/`);
+      const card = page.locator('.home-products__card');
+      await expect(card).toHaveCount(1);
+      await expect(card.locator('.home-products__name')).toHaveText('Rekstrarkerfið');
+      const cta = card.locator('.home-products__cta');
+      await expect(cta).toHaveAttribute('href', `https://rekstrarkerfi.is/${locale}/`);
+      await expect(cta).toHaveAttribute('target', '_blank');
+      await expect(cta).toHaveAttribute('rel', /noopener/);
+    }
   });
 
   test('homepage hero shows the waterfall video by default', async ({ page }) => {

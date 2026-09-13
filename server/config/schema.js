@@ -5250,6 +5250,27 @@ END; $$ LANGUAGE plpgsql`,
        ON CONFLICT (code) DO NOTHING`,
     ],
   },
+  {
+    // 2026-09-13: /thjonusta stopped showing Rekstrarkerfið's tiers and prices
+    // (Halli), but two seeded sales guides still told sellers the prices and the
+    // feature table "appear on the website's services page". A seller following
+    // them would send a prospect to a page with neither. The seed script is
+    // ON CONFLICT DO NOTHING, so fixing its text alone never reaches rows that
+    // already exist. Each UPDATE replaces one exact sentence, only where the
+    // guide was never saved by a person (updated_by IS NULL — the 091/092 guard;
+    // salesGuidesController stamps it on every edit), and only where the old
+    // sentence is still present, so a re-run is a no-op. Pure data, no schema.
+    // Reference copy: server/migrations/104_sales_guides_services_page.sql
+    name: '104_sales_guides_services_page',
+    statements: [
+      `UPDATE sales_guides SET body = replace(body, ' Þau eru sömu drög og birtast á þjónustusíðu vefsins.', ' Þau eru ekki birt á orangesmiley.is, svo vísaðu viðskiptavini ekki þangað eftir verði.')
+       WHERE slug = 'threpin-thrju' AND updated_by IS NULL AND position(' Þau eru sömu drög og birtast á þjónustusíðu vefsins.' in body) > 0`,
+      `UPDATE sales_guides SET summary = replace(summary, 'Nákvæma eiginleikataflan, eins og hún birtist á þjónustusíðunni:', 'Nákvæma eiginleikataflan:')
+       WHERE slug = 'hvad-er-i-hverju-threpi' AND updated_by IS NULL AND position('Nákvæma eiginleikataflan, eins og hún birtist á þjónustusíðunni:' in summary) > 0`,
+      `UPDATE sales_guides SET body = replace(body, 'Þessi leið speglar eiginleikatöfluna á þjónustusíðu vefsins — hún er heimildin þín', 'Þessi leið geymir eiginleikatöfluna fyrir þrepin — hún er heimildin þín')
+       WHERE slug = 'hvad-er-i-hverju-threpi' AND updated_by IS NULL AND position('Þessi leið speglar eiginleikatöfluna á þjónustusíðu vefsins — hún er heimildin þín' in body) > 0`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

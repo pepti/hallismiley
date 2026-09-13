@@ -5,6 +5,7 @@ import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 import { SceneStage } from '../scenes/SceneStage.js';
+import { productSiteUrl } from '../utils/productSite.js';
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -356,7 +357,8 @@ export class HomeView {
   // today; the grid takes a second card without restructuring, which is the
   // whole point of listing products rather than pitching the one we have.
   // Deep product marketing lives on the product's own site — this card's job
-  // is to say what Rekstrarkerfið is and hand the visitor to /thjonusta.
+  // is to say what Rekstrarkerfið is and hand the visitor to rekstrarkerfi.is
+  // in a new tab (Halli, 2026-09-13; /thjonusta no longer presents the product).
   _products() {
     return `
     <section class="home-products" aria-labelledby="home-products-title">
@@ -370,7 +372,10 @@ export class HomeView {
           <h3 class="home-products__name">${t('home.productRekstrarName')}</h3>
           <p class="home-products__tagline">${t('home.productRekstrarTagline')}</p>
           <p class="home-products__desc">${t('home.productRekstrarDesc')}</p>
-          <a href="${href('/thjonusta')}" class="btn btn--primary home-products__cta">${t('home.productRekstrarCta')}</a>
+          <a href="${productSiteUrl(getLocale())}" target="_blank" rel="noopener" class="btn btn--primary home-products__cta">
+            ${t('home.productRekstrarCta')}<span class="sr-only"> ${t('common.opensNewTab')}</span>
+            <span class="home-products__cta-icon" aria-hidden="true">↗</span>
+          </a>
         </article>
       </div>
     </section>`;

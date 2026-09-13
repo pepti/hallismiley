@@ -1,6 +1,7 @@
 import { t, href, getLocale } from '../i18n/i18n.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { initReveal } from '../utils/reveal.js';
+import { productSiteUrl } from '../utils/productSite.js';
 
 // The company's services page (2026-09-13). Halli: Orange Smiley sells any
 // software a small or medium business needs, not only Rekstrarkerfið — so the
@@ -12,9 +13,6 @@ import { initReveal } from '../utils/reveal.js';
 // know more is sent there in a new tab.
 //
 // All copy is DRAFT until Halli approves it.
-
-// The product site. Both locales exist there under the same prefixes as here.
-const PRODUCT_SITE = 'https://rekstrarkerfi.is';
 
 // What the company builds. The first entry is the core offering and renders
 // wide; the rest are numbered so the row never reads as identical cards.
@@ -43,7 +41,7 @@ export class ThjonustaView {
         <p class="thjonusta-steps__desc">${t(`thjonusta.step${n}Desc`)}</p>
       </li>`).join('');
 
-    const productUrl = `${PRODUCT_SITE}/${getLocale() === 'en' ? 'en' : 'is'}/`;
+    const productUrl = productSiteUrl(getLocale());
 
     view.innerHTML = `
       <main class="main thjonusta-page" id="main-content">
@@ -69,7 +67,7 @@ export class ThjonustaView {
             <p class="thjonusta-section__intro">${t('thjonusta.productIntro')}</p>
             <p class="thjonusta-section__intro">${t('thjonusta.productCore')}</p>
             <a href="${productUrl}" target="_blank" rel="noopener" class="btn btn--primary thjonusta-product__link">
-              ${t('thjonusta.productLink')}<span class="sr-only"> ${t('thjonusta.opensNewTab')}</span>
+              ${t('thjonusta.productLink')}<span class="sr-only"> ${t('common.opensNewTab')}</span>
               <span class="thjonusta-product__link-icon" aria-hidden="true">↗</span>
             </a>
           </div>
