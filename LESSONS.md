@@ -799,3 +799,20 @@ master. Fixed in the engine (`min-height` + a flex column, bottom pad for the
 chip) rather than by trimming copy, because Halli edits the copy. Lesson:
 any container that holds editable copy over a photo needs a minimum height,
 never a fixed one, and a copy change deserves one narrow-viewport look.
+
+## 2026-09-13 — four Playwright workers on a two-CPU runner made every test twice as long _(project)_
+
+`accounts.spec.js:46` and `leads.spec.js:26` failed on almost every master CI
+run from 2026-09-08 and passed locally. The traces showed no hang: each full
+SPA load took 3–4 s on the runner, and the two multi-step flows ran 30–37 s
+against a 30 s timeout. `workers: 4` was chosen on a 32-core dev machine; the
+private repo's GitHub runner has 2 vCPUs and also hosts Postgres and the
+server. Pinned to one core locally, 4 workers and 2 workers finished in the
+same wall time, but each test took twice as long with 4 — oversubscription
+bought no throughput, only timeout exposure. CI workers now follow
+`os.availableParallelism()`. Two more causes rode along: specs sharing one
+admin's sidebar layout raced across workers (admin-surface.spec.js:70), and a
+Jest books suite compared a cumulative balance with a single-year one, so it
+failed only when another suite's 2017 postings shared its worker database.
+Lesson: a worker count is a property of the machine, not the suite, and a
+timeout failure deserves its trace before its timeout gets raised.

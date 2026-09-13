@@ -33,6 +33,15 @@ const VALID_KENNITALA = '1203894599';
 
 // Its own year, well clear of the seed and of every other books suite, so the
 // range-filtered assertions in here can be absolute within that window.
+//
+// Range-filtered ONLY. A balance sheet as at 31.12.2019 and a ledger's opening
+// balance are cumulative, so they include every EARLIER year — and other suites
+// do post there (booksReplay opens 2017 with 500.000 of share capital on 1900 /
+// 3100; booksPos claims 2018). Jest shares one database per worker, so whether
+// those rows exist here depends on which files landed on this worker first: an
+// absolute cumulative figure passed or failed by file order (CI run 34763226590,
+// off by exactly that 500.000). Cumulative checks below compare against the
+// history as it stands, never against this suite's postings alone.
 const YEAR = 2019;
 const D = day => `${YEAR}-06-${String(day).padStart(2, '0')}`;
 const RANGE = { from: `${YEAR}-01-01`, to: `${YEAR}-12-31` };
@@ -206,13 +215,20 @@ describe('balance sheet', () => {
     const bs = await reports.balanceSheet({ to: RANGE.to });
     expect(bs.balanced).toBe(true);
     expect(bs.difference).toBe(0);
-    // Nothing in the books posts to an equity account, so ALL of equity here is the
-    // derived figure. That is the design: no year-end close.
-    expect(bs.equity_total).toBe(bs.retained_earnings);
+    // Retained earnings are DERIVED, never posted: there is no year-end close, so
+    // nothing ever writes to 3200 Óráðstafað eigið fé. Other equity accounts can
+    // legitimately carry postings — share capital (3100) is paid in, and
+    // booksReplay's 2017 opening entry does exactly that — so equity is those
+    // posted accounts plus the derived figure, and the sheet balances only
+    // because the derived figure is there.
+    expect(bs.equity.find(a => a.code === '3200')).toBeUndefined();
+    const postedEquity = bs.equity.reduce((a, x) => a + x.amount, 0);
+    expect(bs.equity_total).toBe(postedEquity + bs.retained_earnings);
+    expect(bs.asset_total).toBe(bs.liability_total + postedEquity + bs.retained_earnings);
     const { rows } = await db.query(
       `SELECT COUNT(*)::int AS n FROM journal_lines jl
          JOIN ledger_accounts la ON la.id = jl.account_id
-        WHERE la.type = 'equity'`
+        WHERE la.code = '3200'`
     );
     expect(rows[0].n).toBe(0);
   });
@@ -236,7 +252,13 @@ describe('account ledger', () => {
     const led = await reports.accountLedger({ accountCode: '1900', from: RANGE.from, to: RANGE.to });
     const movement = led.lines.reduce((a, l) => a + l.debit - l.credit, 0);
     expect(led.opening_balance + movement).toBe(led.closing_balance);
-    expect(led.closing_balance).toBe(await accountBalance('1900', RANGE));
+    // The ledger is cumulative: opening = everything before the range, closing =
+    // everything up to its end. Ties to the journal as it stands, whatever other
+    // suites posted in earlier years; the in-range movement is this suite's own.
+    const beforeYear = await accountBalance('1900', { to: `${YEAR - 1}-12-31` });
+    expect(led.opening_balance).toBe(beforeYear);
+    expect(movement).toBe(await accountBalance('1900', RANGE));
+    expect(led.closing_balance).toBe(await accountBalance('1900', { to: RANGE.to }));
   });
 
   it('carries an opening balance forward rather than starting from zero', async () => {
@@ -246,9 +268,10 @@ describe('account ledger', () => {
     const late = await reports.accountLedger({
       accountCode: '1900', from: D(15), to: RANGE.to,
     });
-    expect(late.opening_balance).toBe(248_000);
+    const beforeYear = await accountBalance('1900', { to: `${YEAR - 1}-12-31` });
+    expect(late.opening_balance).toBe(beforeYear + 248_000);
     expect(late.lines).toHaveLength(0);
-    expect(late.closing_balance).toBe(248_000);
+    expect(late.closing_balance).toBe(beforeYear + 248_000);
   });
 
   it('404s on an unknown account instead of returning an empty ledger', async () => {
