@@ -1,6 +1,6 @@
 # Orange Smiley public site — build plan
 
-**Status:** Jobs 1–3 complete; stopped for Halli's approval of `ENHANCEMENTS.md`. Since then: self-update module (merged 2026-08-11), the 2026-08-19 base-sync, Iceland scenes, harvests 1 and 2, R1, the admin re-shape, leads, Markaður, customer accounts + commission — latest migrations 100–102 landed 2026-09-08. **CLAUDE.md is the running head; the dated sections below are frozen records** (status line refreshed 2026-09-11). **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\Projects\hallismiley` @ `562c637`.
+**Status:** Jobs 1–3 complete (2026-08-09). Every programme since is recorded in `docs/HISTORY.md` (dated, indexed); what is open now is the **Status** section at the end of this file; the rules each programme established are in `docs/ARCHITECTURE.md`. **Created:** 2026-08-09. Base: `C:SERSNOTANDIAUDEPROJECTSHALLISMILEY` @ `562C637`.
 
 Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `company/ORANGE-SMILEY-PLAN.md` (same folder — gitignored, inside this repo).
 
@@ -91,7 +91,7 @@ R1 company-site content pass (copy needs Halli) — nothing else changes here.
 Five chunks on master (A brand core → B homepage → C /thjonusta → D legacy
 brand → E admin group). The site now presents Orange Smiley ehf., an
 AI-driven software company, with Rekstrarkerfið as its first product.
-Details in CLAUDE.md; every line of new copy is **DRAFT pending Halli**.
+Details in `docs/HISTORY.md#r1`; every line of new copy is **DRAFT pending Halli**.
 
 Two things worth carrying forward:
 
@@ -104,3 +104,73 @@ Two things worth carrying forward:
   homepage's links into the hidden `/news` were removed), an `/skilmalar`
   slug for `/terms`, and the Product-schema `brand` on the hidden shop
   surface, which still names the product as the brand of every SKU.
+
+## Status (2026-09-17)
+
+Moved here from CLAUDE.md's "Where things stand" on 2026-09-17; the dated
+narratives it summarised are in `docs/HISTORY.md` (linked per bullet), the
+rules they established in `docs/ARCHITECTURE.md`. Update this section when a
+chunk lands; add a HISTORY entry for the story.
+
+**Awaiting Halli**
+
+- DRAFT copy everywhere it is marked: R1 ([r1](docs/HISTORY.md#r1)), the admin
+  re-shape nav/dashboard labels ([admin-reshape](docs/HISTORY.md#admin-reshape)),
+  leads and Markaður screens, the `/personuvernd` §3 + §6 rewrite (the site now
+  stores enquiries — [leads](docs/HISTORY.md#leads)), the services page
+  ([services-page](docs/HISTORY.md#services-page)). He edits in place via the
+  inline editors.
+- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #13, #16, #17, #18 done; #9, #10, #21
+  partial; the rest need his sign-off before any implementation. #5 and #7 are
+  roadmap items R4/R6.
+- Publish the 14 seeded sales guides ([sales-staff](docs/HISTORY.md#sales-staff));
+  decide whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`,
+  then flip `e2e/markadur.spec.js`).
+- Tier prices (39/59/79 þ.kr./mán DRAFT) now live on rekstrarkerfi.is only; the
+  sales guides quote them while the product site drafts a build-price-plus-
+  monthly model — two draft price models to reconcile
+  ([services-page](docs/HISTORY.md#services-page)).
+- Decisions that are his, not code's: the lawyer on netting-only set-off
+  (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
+  accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK
+  veflykill for the 2026-P4 parallel run (gjalddagi 5.10.2026); plan §6 ("no
+  salaries") vs hiring; the base PR upstreaming `promote.yml`.
+- Next programme: R2, the product-site build in the sibling `rekstrarkerfid`
+  repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`.
+
+**Open technical items**
+
+- Books: a button to issue a statutory invoice from an order
+  (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
+  Peppol inbound; the 6-month commission tail (contract 4.3) has no code —
+  monthly `manual_credit` until built ([migrations-100-102](docs/HISTORY.md#migrations-100-102)).
+- UI kit programme: convert `AdminLeadsView` and `AdminMarketView`; then the
+  states kit, the dialog kit (port LedgerLink's `LedgerAdminBits.js`: native
+  `<dialog>`, abort-on-dismiss, 15 s write timeout, backdrop dismissal keyed
+  off `mousedown` so a text-drag does not discard input), auth/identity pieces
+  and the money de-fork
+  ([ui-kit](docs/HISTORY.md#ui-kit)). A sold-out cart line still goes straight
+  to Stripe (ENHANCEMENTS #25).
+- Post-R1 notes: a public `/frettir` home for the news list; an `/skilmalar`
+  slug for `/terms`; Product-schema `brand` on the hidden shop still says
+  Rekstrarkerfið.
+- Performance: Lighthouse desktop SEO 100 / a11y 100 on the business routes;
+  performance ~85 (home) / ~92 (`/thjonusta`) because `router.js` imports all
+  65 view modules eagerly (ENHANCEMENTS #6).
+- `APP_URL`/canonical still hallismiley.is until orangesmiley.is is registered
+  (the 301 derives from `APP_URL` since 2026-09-12).
+- Still a decision, not code: MCP arguments pass through `sanitizeBody` and the
+  global IP limit (moving the mount would exempt MCP from two protections).
+
+**CI / deploy state**
+
+- GitHub Actions enabled since 2026-09-03 (two repo-level toggles); the
+  `main`→`master` trigger fix is in; CI green is the merge gate; Playwright
+  workers match the runner's CPUs since 2026-09-13.
+- `deploy.yml` is dispatch-only with all targets in unset repo variables
+  (ENHANCEMENTS #1); arming a deploy = set the `vars.*`, no workflow edit; no
+  deploy without Halli. `npm audit --audit-level=high` clean (last advisory
+  cleared 2026-09-14, fast-xml-parser 5).
+- Latest base-sync 2026-09-13: migration 103 (vehicle accounts), memory watch
+  timer, escaped mail title, canonical HTTPS redirect — accountant to confirm
+  the 6600/6610 split (§7).
