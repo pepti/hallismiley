@@ -816,3 +816,37 @@ Jest books suite compared a cumulative balance with a single-year one, so it
 failed only when another suite's 2017 postings shared its worker database.
 Lesson: a worker count is a property of the machine, not the suite, and a
 timeout failure deserves its trace before its timeout gets raised.
+
+## 2026-09-17 — the running head became the changelog because a chunk's write-up had nowhere else to go _(factory)_
+
+**What happened.** Halli asked whether the markdown files are structured so a
+new feature request is fast to locate. CLAUDE.md was 776 lines, of which about
+50 were rules and the rest sixteen dated chunk write-ups plus a status section.
+Every session loaded ~65 KB to get a tenth of it, and the rules that a request
+actually needs ("`Lead.create` never throws", "the 2FA gate is mirrored on
+both sides", "2150 never goes debit") were only findable by grep, each inside
+the narrative of the chunk that established it. There was no per-domain map
+at all: the router inventory in `docs/API.md` was the de-facto index and its
+"Feature doc" column pointed into CLAUDE.md history sections.
+
+**Why.** Every chunk ends with a write-up, and CLAUDE.md was the only file
+that every session reads, so the write-ups accreted there. The same pressure
+produced icelandicstore's `docs/HISTORY.md` — 125 entries, no index.
+
+**What we did.** `docs/HISTORY.md` takes the write-ups verbatim, dated and
+indexed (date · entry · domains · headline) with explicit `<a id>` anchors;
+`docs/ARCHITECTURE.md` maps twenty domains to their routes, controllers,
+models, services, views, CSS, tests and migrations, and carries each domain's
+"Rules that must hold" with a link to the history entry that explains it;
+CLAUDE.md is rules plus a one-line-per-domain map (109 lines);
+`tests/unit/architectureIndex.test.js` fails CI when a routes/controller/model/
+view file is not in the index, when a listed path does not exist, or when a
+history link does not resolve. A read-only review compared the old file's
+rules against the new files before merge.
+
+**Lesson.** A write-up and a rule are different documents with different
+readers; the running head must hold only rules, and the index must be
+test-enforced or it rots by the second chunk. For the factory: scaffold
+`docs/ARCHITECTURE.md` + `docs/HISTORY.md` + the parity test from day one,
+and put the "recording a chunk" rule in the template CLAUDE.md. Harvest
+candidates: icelandicstore (index its HISTORY.md), the base (has neither).

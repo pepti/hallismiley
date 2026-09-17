@@ -9,8 +9,10 @@ base module kept — shop, bookkeeping, admin + RBAC, projects, news, party — 
 the surfaces that do not fit the business hidden from nav, sitemap and search
 but left functional (`server/config/publicSurface.js`).
 
-`CLAUDE.md` is the authoritative project memory (conventions, every programme
-that has landed, what is still Halli's to decide). `PLAN.md` is the build plan,
+`CLAUDE.md` holds the rules and a domain map; `docs/ARCHITECTURE.md` is the
+per-domain index a feature request starts from (files, the rules that must
+hold, history links); `docs/HISTORY.md` is every programme that has landed,
+dated and indexed. `PLAN.md` is the build plan and current status,
 `ENHANCEMENTS.md` the proposal queue, `LESSONS.md` the lessons log,
 `CHANGELOG.md` the release notes the promote workflow reads.
 
@@ -24,7 +26,7 @@ that has landed, what is still Halli's to decide). `PLAN.md` is the build plan,
 |-------|-----------|
 | Runtime | Node.js **24** (`Dockerfile` `node:24-alpine`, digest-pinned; `ci.yml` `node-version: 24` — the two move together) |
 | Framework | Express **5** (`^5.2.1`, CommonJS; catch-alls are `'/{*splat}'`) |
-| Database | PostgreSQL 16 via `pg`; migrations are the array in `server/config/schema.js`, applied at boot (chain ends `102_commission_settlement`) |
+| Database | PostgreSQL 16 via `pg`; migrations are the array in `server/config/schema.js`, applied at boot (chain ends `104_sales_guides_services_page`) |
 | Frontend | Vanilla JS SPA — ES modules, no framework, no bundler; three themes (`ember`/Glóð default, `classic`/Bjart, `midnight`/Miðnætti); IS is the visitor default locale, EN mirrors it |
 | Auth | **Lucia v3 server-side sessions** (`auth_session` cookie), csrf-csrf double-submit, admin TOTP; no JWT layer |
 | Email | Resend (`RESEND_API_KEY`); sender `EMAIL_FROM` |
@@ -138,10 +140,11 @@ to media in Iceland is the compliance step regardless — `RUNBOOK.md` → Bókh
 
 | | |
 |---|---|
+| `docs/ARCHITECTURE.md` | **start here** — per-domain map: routes, controllers, models, views, tests, migrations, the rules that must hold, history links |
 | `server/` | Express app (`app.js` mounts, `routes/`, `controllers/`, `services/`, `models/`, `server/config/schema.js` migrations, `mcp/`) |
 | `public/` | the SPA (`js/router.js`, `js/views/`, `js/components/`, `js/i18n/{en,is}.json`, `css/themes.css`) |
 | `tests/` | Jest unit + integration (real Postgres); `e2e/` Playwright |
-| `docs/` | API, bookkeeping, books parallel run, accountant questions, deployment, MCP, sales staff, self-update, SLO, testing |
+| `docs/` | ARCHITECTURE (domain index), HISTORY (dated programmes), API, bookkeeping, books parallel run, accountant questions, deployment, MCP, sales staff, self-update, SLO, testing |
 | `company/` | gitignored — business plan, decisions, logs, market research staging |
 | `.claude/` | gitignored — agents, commands, rules (`stack-invariants.md`) |
 

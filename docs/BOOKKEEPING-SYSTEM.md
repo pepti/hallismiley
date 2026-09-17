@@ -364,7 +364,7 @@ invoice ledger, so it belongs in the "what does this post" picture: `Commission.
 snapshots seller and rate per service invoice; payability is an **amount**
 (`PAYABLE_NOW_ISK`, netting credit notes and refunds proportionally) rather than a flag;
 102 adds seller-month statements over a running balance, payouts and clawback by set-off.
-Details: CLAUDE.md (2026-09-07/08 sections) and `docs/ACCOUNTANT-QUESTIONS.md` §11.
+Details: `docs/HISTORY.md` (accounts-commission, review-099, migrations-100-102) and `docs/ACCOUNTANT-QUESTIONS.md` §11.
 
 ---
 
