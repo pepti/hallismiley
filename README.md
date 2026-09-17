@@ -61,8 +61,8 @@ TOTP from the profile.
 
 Other scripts worth knowing: `npm run seed` (demo content), `seed:books`
 (demo books, refuses in production), `books:fx` / `books:archive` /
-`books:replay` (`RUNBOOK.md` → Bókhald), `market:import` (CLAUDE.md →
-Markaður), `check:i18n` (run before pushing locale changes).
+`books:replay` (`RUNBOOK.md` → Bókhald), `market:import` (`docs/ARCHITECTURE.md`
+§7 Markaður), `check:i18n` (run before pushing locale changes).
 
 ---
 

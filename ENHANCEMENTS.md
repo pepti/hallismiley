@@ -96,7 +96,7 @@ Original proposal kept below for the record.
 
 **Recommendation.** Do it, and upstream it. The kit is worth more in `hallismiley` than here — this repo gets tidier, but the base is what every future customer instance is cut from.
 
-> **STATUS: APPROVED — Halli, 2026-09-07. PARTIALLY IMPLEMENTED — merged `ecd85f5` 2026-09-08, upstreamed as base PR #153.** Landed: the eight defects below, `utils/debounce.js`, `utils/localPref.js`, `utils/listState.js`, `utils/pageTitle.js`, `components/adminTable.js`, `components/adminPager.js`, `css/admin-kit.css`, `format.formatRelative`, and `AdminUsersView` as the converted reference (`e2e/admin-list-kit.spec.js`). Still open: the Leads/Markaður conversions, the states kit, the dialog kit, auth/identity, the money de-fork (CLAUDE.md, "Shared admin UI kit"). Sequenced as: defects first (see below), then kit foundations, table kit, states kit, dialog kit, auth/identity, money de-fork, then the base PR. LedgerLink and `rekstrarkerfid` pull from the base afterwards rather than by parallel port, which keeps LedgerLink's `Ledger*` handover boundary clean.
+> **STATUS: APPROVED — Halli, 2026-09-07. PARTIALLY IMPLEMENTED — merged `ecd85f5` 2026-09-08, upstreamed as base PR #153.** Landed: the eight defects below, `utils/debounce.js`, `utils/localPref.js`, `utils/listState.js`, `utils/pageTitle.js`, `components/adminTable.js`, `components/adminPager.js`, `css/admin-kit.css`, `format.formatRelative`, and `AdminUsersView` as the converted reference (`e2e/admin-list-kit.spec.js`). Still open: the Leads/Markaður conversions, the states kit, the dialog kit, auth/identity, the money de-fork (`docs/HISTORY.md#ui-kit`; open items in `PLAN.md` → Status). Sequenced as: defects first (see below), then kit foundations, table kit, states kit, dialog kit, auth/identity, money de-fork, then the base PR. LedgerLink and `rekstrarkerfid` pull from the base afterwards rather than by parallel port, which keeps LedgerLink's `Ledger*` handover boundary clean.
 
 **Defects found while surveying, fixed alongside (branch `feat/admin-kit-defects`).** All verified by inspection, not inferred:
 
@@ -109,7 +109,7 @@ Original proposal kept below for the record.
 7. **The client CSV writer had drifted from the server's.** `server/utils/csv.js` exempts a plain number from formula-neutralisation (blanket-prefixing turned every negative balance into the text `'-500` and broke numeric import); `downloadCsv.js` did not, despite a comment claiming the two were in step. `tests/unit/csvClientParity.test.js` now pins them to one truth table.
 8. **`OrderHistoryView` hardcoded `'en-GB'`** for dates while the locale-aware `utils/format.js` sat unused, so an Icelandic reader got English month names.
 
-**Dead capability noticed in passing, not built:** `POST /shop/discounts/validate` exists with no client caller; `GET /reports/accountant-pack` has no UI; `issueInvoiceForOrder` still has no caller (already tracked in CLAUDE.md as a 2026-P5 blocker).
+**Dead capability noticed in passing, not built:** `POST /shop/discounts/validate` exists with no client caller; `GET /reports/accountant-pack` has no UI; `issueInvoiceForOrder` still has no caller (tracked in `PLAN.md` → Status as a 2026-P5 blocker).
 
 
 ## (c) Later / needs a decision first

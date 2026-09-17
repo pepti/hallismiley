@@ -293,7 +293,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   stays the content/storage dimension (the party module depends on it); the
   switcher choice lives in the `locale_choice` cookie.
 - `check:i18n` also scans every `t('literal')`/`labelKey` in `public/js`
-  against `en.json` — a missing key fails CI ([harvest-2](HISTORY.md#harvest-2)).
+  against `public/js/i18n/en.json` — a missing key fails CI ([harvest-2](HISTORY.md#harvest-2)).
 - `loadLocale()` dispatches `localechange` for components mounted outside
   `#app` ([harvest-2](HISTORY.md#harvest-2)).
 - Two column conventions coexist: news bodies are `_is` siblings, sales guides
@@ -557,7 +557,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   SSR titles on purpose ([r1](HISTORY.md#r1)).
 - News wants a public `/frettir` home (the home links were removed, not
   re-homed) — open item in `PLAN.md`.
-- Slug folding (ð/þ/æ/ö) applies on GENERATION only; stored slugs never change
+- Slug folding (ð/þ/æ/ö, `server/utils/slug.js` and its ESM twin
+  `public/js/utils/slug.js`) applies on GENERATION only; stored slugs never change
   ([harvest-2](HISTORY.md#harvest-2)).
 
 **History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2)
@@ -620,7 +621,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - This instance is `managed` on `stable`: records updates, installs nothing,
   and has no `SELF_UPDATE_TRIGGER_URL`, so it could not install one yet.
 - `generate-changes.js` stamps the last 30 non-merge commits into gitignored
-  `changes.json` in `server/` on the BUILD HOST (ci.yml docker job + deploy.yml,
+  server/changes.json (gitignored) on the BUILD HOST (ci.yml docker job + deploy.yml,
   `fetch-depth: 50`); `GET /system/changes` sits ABOVE the module gate so
   instances with self-update OFF still get the card; `[internal]` /
   `Customer-visible: no` opt a commit out [harvest-2](HISTORY.md#harvest-2).
@@ -773,6 +774,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   disabled` + docker ecosystem; ice's `main-gate` job was deliberately NOT
   ported (this repo merges locally; deploy is dispatch-only) [harvest-2](HISTORY.md#harvest-2).
 - `deploy.yml` is dispatch-only with unset targets; no deploy without Halli.
+- **Upstream cross-cutting improvements.** site-factory's `DEFAULT_BASE` is
+  `hallismiley`, so work landing only in an instance reaches no future scaffold
+  (LedgerLink was scaffolded without the admin affordances this repo had for
+  months). A shared kit, a security fix or an engine change goes to the base as
+  a PR on Halli's say-so; note the base auto-deploys on green `main`
+  ([ui-kit](HISTORY.md#ui-kit)).
 - `hallismiley` and `icelandicstore` are read-only. The ice checkout is 141
   commits stale (parked on `fix/pos-vat-rate` with 207 dirty entries of real
   local-only work) — never check that tree out; read it with

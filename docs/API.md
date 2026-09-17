@@ -280,17 +280,17 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (76 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views; admin for issuing | `docs/BOOKKEEPING-SYSTEM.md` |
 | `/api/v1/admin/handbok` | `salesGuidesRoutes.js` | `handbok` view; admin/moderator edit | `docs/SALES-STAFF.md` |
 | `/api/v1/admin/leads` | `leadsRoutes.js` | `leads` view; delete + CSV admin | `docs/SALES-STAFF.md` |
-| `/api/v1/admin/markadur` | `marketRoutes.js` | `markadur` view; status PATCH admin/moderator | `ARCHITECTURE.md` §7 · `HISTORY.md#markadur` |
-| `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | `ARCHITECTURE.md` §8 · `HISTORY.md#accounts-commission` |
-| `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | `ARCHITECTURE.md` §8 · `HISTORY.md#migrations-100-102` |
-| `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | `ARCHITECTURE.md` §8 · `HISTORY.md#accounts-commission` |
+| `/api/v1/admin/markadur` | `marketRoutes.js` | `markadur` view; status PATCH admin/moderator | [ARCHITECTURE §7](ARCHITECTURE.md#7-markaður--market-research-and-the-prospect-list) · [HISTORY](HISTORY.md#markadur) |
+| `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
+| `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#migrations-100-102) |
+| `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
-| `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | `ARCHITECTURE.md` §13 · `HISTORY.md#harvest-1` |
+| `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
 | `/api/v1/admin/mcp-tokens` | `mcpAdminRoutes.js` | admin | `docs/mcp.md` |
-| `/api/v1/admin/events` | `adminEventRoutes.js` | admin (`requireRole`) | `ARCHITECTURE.md` §13 · `HISTORY.md#harvest-1` |
-| `/api/v1/ambience` | `ambienceRoutes.js` | public, always 200 (`{available:false}` on failure) | `ARCHITECTURE.md` §4 · `HISTORY.md#scene-engine` |
+| `/api/v1/admin/events` | `adminEventRoutes.js` | admin (`requireRole`) | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
+| `/api/v1/ambience` | `ambienceRoutes.js` | public, always 200 (`{available:false}` on failure) | [ARCHITECTURE §4](ARCHITECTURE.md#4-themes-scenes-ambience) · [HISTORY](HISTORY.md#scene-engine) |
 | `/api/v1/news` | `newsRoutes.js` | public reads (hidden surface) | — |
 | `/api/v1/party` | `partyRoutes.js` | party module (hidden) | — |
 | `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface) | — |
