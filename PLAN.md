@@ -1,6 +1,6 @@
 # Orange Smiley public site — build plan
 
-**Status:** Jobs 1–3 complete (2026-08-09). Every programme since is recorded in `docs/HISTORY.md` (dated, indexed); what is open now is the **Status** section at the end of this file; the rules each programme established are in `docs/ARCHITECTURE.md`. **Created:** 2026-08-09. Base: `C:SERSNOTANDIAUDEPROJECTSHALLISMILEY` @ `562C637`.
+**Status:** Jobs 1–3 complete (2026-08-09). Every programme since is recorded in `docs/HISTORY.md` (dated, indexed); what is open now is the **Status** section at the end of this file; the rules each programme established are in `docs/ARCHITECTURE.md`. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\Projects\hallismiley` @ `562c637`.
 
 Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `company/ORANGE-SMILEY-PLAN.md` (same folder — gitignored, inside this repo).
 
@@ -64,7 +64,7 @@ photographic grading, View Transitions, and the live ambience layer (real
 Hafnarfjörður weather via /api/v1/ambience + local solar position + aurora).
 His Facebook-saved photos had no usage rights → shipped photos are Commons
 CC0/CC BY equivalents, credited in /assets/iceland/CREDITS.md. Migration chain
-now ends 086_landing_background_scene *(superseded: 089 reverted the scene default the next day; the chain ends 102 as of 2026-09-08)*. Copy on toggles/alt-texts is DRAFT
+now ends 086_landing_background_scene *(superseded: 089 reverted the scene default the next day; the chain ends 104 as of 2026-09-13; `server/config/schema.js` is the truth)*. Copy on toggles/alt-texts is DRAFT
 pending Halli, like all copy.
 
 ## Product name (decided 2026-08-20)

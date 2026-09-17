@@ -13,30 +13,31 @@ items go to `PLAN.md` → Status. `CLAUDE.md` changes only when a *rule* changes
 `tests/unit/architectureIndex.test.js` checks that every link between the two
 files resolves.
 
-Domain ids in the index are the section numbers of `docs/ARCHITECTURE.md`.
+Which domains an entry touches is read from the `**History**:` footers in `docs/ARCHITECTURE.md`, not kept here.
 
 ## Index
 
-| Date | Entry | Domains | Headline |
-|---|---|---|---|
-| 2026-08-09 | [Build status](#build-status) | 20 | Jobs 1–3: scaffold without strip, seven re-skin chunks, ENHANCEMENTS written and stopped for Halli |
-| 2026-08-10 | [Self-update module](#self-update) | 14 | Fleet update mechanism; `config/client.json` seam; this instance is `managed` on `stable`; origin of invariant 14 |
-| 2026-08-19 | [Base-sync 2026-08-19](#base-sync) | 1, 20 | Migrations 080–083 (never the base's numbering); admin TOTP; Node 24 + Express 5; social login OFF here |
-| 2026-08-21 | [Iceland scene engine](#scene-engine) | 4 | Licensed Commons photos + CREDITS.md; 250 KB AVIF budget; scene assignments; ambience always 200 |
-| 2026-08-22 | [Homepage = the hallismiley composition](#homepage) | 3 | Home reverted to the base layout; hero fixed dark on every theme; 2026-09-13 hero clip swap + reduced-motion still |
-| 2026-08-22 | [Harvest 1 (icelandicstore → here + base)](#harvest-1) | 13, 15, 20 | Migrations 087 (event logs) + 088 (MCP tokens); isolated per-branch e2e DBs; ice back-port queue |
-| 2026-08-27 | [Sales-staff program](#sales-staff) | 10 | Migration 090 `sales_guides` (IS-canonical, `_en` siblings); role `solufolk`; guides seeded as drafts awaiting Halli |
-| 2026-09-01 | [R1 — company-site content pass](#r1) | 2, 3 | Brand core, homepage, /thjonusta, legacy strings, Vörustýring group; migrations 091/092 move SEEDED copy (`updated_by IS NULL` guard) |
-| 2026-09-01 | [Market-research program](#market-research) | 7 | Migration 093 `market_*`; importer; named companies never in git; Halli's list/sector/source decisions |
-| 2026-09-02 | [Harvest 2 (icelandicstore `601b2f2`)](#harvest-2) | 5, 16, 18, 20 | 4 Jest workers; every rate limit ×5; `staticAsset.js`; `verifyImageBytes`; slug folding; `changeRequestGate` PROD switch; latest-updates card |
-| 2026-09-07 | [Admin console re-shaped](#admin-reshape) | 2 | Sölustarf / Þjónusta groups; `HIDDEN_ADMIN_VIEWS` (hide, never delete); `/admin` = company overview |
-| 2026-09-07 | [Leads inbox — Fyrirspurnir](#leads) | 6 | Migration 097 `leads`; `Lead.create` never throws; 730-day retention tied to `/personuvernd` §6; delete + CSV admin-only |
-| 2026-09-07 | [Markaður — the prospect list](#markadur) | 7 | `/admin/markadur` over the 093 tables; the one write is shortlist → handed_to_sales/rejected, race-safe; `report_path` never a link |
-| 2026-09-07 | [Customer accounts + commission](#accounts-commission) | 8, 9 | Migration 098; scope required and fails closed; `allaccounts` permission-only; service invoices + commission events; 2FA widened |
-| 2026-09-07 | [Review pass (migration 099)](#review-099) | 1, 8, 9 | Six high-severity fixes: rate fields, commission gate, enrolment gate, hand-off gate, payable netting, double-issue index |
-| 2026-09-08 | [The three deferred items (migrations 100–102)](#migrations-100-102) | 8, 9 | Payable is an amount; buyer party block (100); deposit is a prepayment, 2150 never debit (101); statements/payouts/clawback (102); `commissionScope` |
-| 2026-09-08 | [Shared admin UI kit (ENHANCEMENTS #21)](#ui-kit) | 1, 2, 3 | The kit (`adminTable`, `adminPager`, `listState`…); eight defects; 2FA gate mirrored both sides; `pageTitle` mirrors `ssrMeta.js`; base PR #153 |
-| 2026-09-13 | [/thjonusta = the services page](#services-page) | 3, 10 | Company sells any SMB software; no tiers or prices on this site; `SERVICE_OFFERINGS` mirror; migration 104 rewrites two seeded guides |
+| Date | Entry | Headline |
+|---|---|---|
+| 2026-08-09 | [Build status](#build-status) | Jobs 1–3: scaffold without strip, seven re-skin chunks, ENHANCEMENTS written and stopped for Halli |
+| 2026-08-10 | [Self-update module](#self-update) | Fleet update mechanism; `config/client.json` seam; this instance is `managed` on `stable`; origin of invariant 14 |
+| 2026-08-19 | [Base-sync 2026-08-19](#base-sync) | Migrations 080–083 (never the base's numbering); admin TOTP; Node 24 + Express 5; social login OFF here |
+| 2026-08-21 | [Iceland scene engine](#scene-engine) | Licensed Commons photos + CREDITS.md; 250 KB AVIF budget; scene assignments; ambience always 200 |
+| 2026-08-22 | [Homepage = the hallismiley composition](#homepage) | Home reverted to the base layout; hero fixed dark on every theme; 2026-09-13 hero clip swap + reduced-motion still |
+| 2026-08-22 | [Harvest 1 (icelandicstore → here + base)](#harvest-1) | Migrations 087 (event logs) + 088 (MCP tokens); isolated per-branch e2e DBs; ice back-port queue |
+| 2026-08-27 | [Sales-staff program](#sales-staff) | Migration 090 `sales_guides` (IS-canonical, `_en` siblings); role `solufolk`; guides seeded as drafts awaiting Halli |
+| 2026-09-01 | [R1 — company-site content pass](#r1) | Brand core, homepage, /thjonusta, legacy strings, Vörustýring group; migrations 091/092 move SEEDED copy (`updated_by IS NULL` guard) |
+| 2026-09-01 | [Market-research program](#market-research) | Migration 093 `market_*`; importer; named companies never in git; Halli's list/sector/source decisions |
+| 2026-09-02 | [Harvest 2 (icelandicstore `601b2f2`)](#harvest-2) | 4 Jest workers; every rate limit ×5; `staticAsset.js`; `verifyImageBytes`; slug folding; `changeRequestGate` PROD switch; latest-updates card |
+| 2026-09-07 | [Admin console re-shaped](#admin-reshape) | Sölustarf / Þjónusta groups; `HIDDEN_ADMIN_VIEWS` (hide, never delete); `/admin` = company overview |
+| 2026-09-07 | [Leads inbox — Fyrirspurnir](#leads) | Migration 097 `leads`; `Lead.create` never throws; 730-day retention tied to `/personuvernd` §6; delete + CSV admin-only |
+| 2026-09-07 | [Markaður — the prospect list](#markadur) | `/admin/markadur` over the 093 tables; the one write is shortlist → handed_to_sales/rejected, race-safe; `report_path` never a link |
+| 2026-09-07 | [Customer accounts + commission](#accounts-commission) | Migration 098; scope required and fails closed; `allaccounts` permission-only; service invoices + commission events; 2FA widened |
+| 2026-09-07 | [Review pass (migration 099)](#review-099) | Six high-severity fixes: rate fields, commission gate, enrolment gate, hand-off gate, payable netting, double-issue index |
+| 2026-09-08 | [The three deferred items (migrations 100–102)](#migrations-100-102) | Payable is an amount; buyer party block (100); deposit is a prepayment, 2150 never debit (101); statements/payouts/clawback (102); `commissionScope` |
+| 2026-09-08 | [Shared admin UI kit (ENHANCEMENTS #21)](#ui-kit) | The kit (`adminTable`, `adminPager`, `listState`…); eight defects; 2FA gate mirrored both sides; `pageTitle` mirrors `ssrMeta.js`; base PR #153 |
+| 2026-09-13 | [/thjonusta = the services page](#services-page) | Company sells any SMB software; no tiers or prices on this site; `SERVICE_OFFERINGS` mirror; migration 104 rewrites two seeded guides |
+| 2026-09-17 | [Docs restructure — ARCHITECTURE, HISTORY, parity test](#docs-restructure) | CLAUDE.md 776 → ~100 lines of rules; this file + `docs/ARCHITECTURE.md`; `architectureIndex.test.js`; review pass fixed 8 findings |
 
 ---
 
@@ -767,3 +768,39 @@ R1 layout had made the product the page's h1. Rebuilt on
 - Not touched: the DB-seeded home skills copy and ContactView's demo-led
   wording.
 
+<a id="docs-restructure"></a>
+## 2026-09-17 — Docs restructure: ARCHITECTURE index, HISTORY, parity test (PR #9 + review fixes)
+
+Halli asked whether the markdown files were structured so a new feature
+request is fast to locate. They were not: CLAUDE.md was 776 lines, about 120
+of them rules and the rest sixteen dated chunk write-ups plus a status
+section; there was no per-domain map anywhere, and `docs/API.md`'s "Feature
+doc" column pointed into CLAUDE.md history sections.
+
+- **`docs/ARCHITECTURE.md`** — twenty domains, each with its files, a "Rules
+  that must hold" block (every rule linking the entry here that explains it)
+  and its history entries. Rules stay next to the domain they govern; a flat
+  "standing facts" list was the first draft and was rejected because that is
+  how rules get dropped in a copy edit.
+- **This file** — the write-ups moved verbatim (a second read-only pass
+  confirmed byte-identity), date-prefixed with `<a id>` anchors and an index.
+- **CLAUDE.md** — rules, a domain map, a doc map, the "recording a chunk"
+  rule and a one-line status pointer.
+- **`tests/unit/architectureIndex.test.js`** — every path in the index
+  exists (bare names resolve against the tracked tree, not line position);
+  every routes/controller/model/service/middleware/auth/util/view/component/
+  client-service/util file is in the index; migrations are cited and applied
+  in both directions; ARCHITECTURE numbered headings equal CLAUDE.md's domain
+  rows; the HISTORY index table equals the anchors; links from ARCHITECTURE,
+  PLAN and API resolve. Set-difference assertions, so a failure names every
+  offender in one message.
+- **Knowledge-preservation review before merge** found 53 rule statements the
+  extraction had dropped and 4 stated wrongly; all folded in. **The
+  /code-review pass after merge** found eight more: a sed escape had
+  corrupted PLAN.md's base path and SHA (a form-feed byte and uppercase),
+  three dangling references to deleted CLAUDE.md sections, API.md pointers
+  outside the test's guard, the `DEFAULT_BASE` upstreaming rule surviving only
+  here, a duplicated Status in CLAUDE.md, and a test that was positional,
+  one-directional and 962 cases wide. Fixed in the follow-up PR.
+- LESSONS.md 2026-09-17 carries the factory lesson: scaffold ARCHITECTURE +
+  HISTORY + the parity test from day one.

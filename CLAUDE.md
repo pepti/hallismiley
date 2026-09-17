@@ -68,28 +68,28 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 
 Full per-domain index (files, the rules that must hold, history links): **`docs/ARCHITECTURE.md`**. `tests/unit/architectureIndex.test.js` fails CI when a routes/controller/model/view file is missing from it.
 
-| # | Domain | Entry points |
-|---|---|---|
-| 1 | [Auth, users, RBAC, 2FA](docs/ARCHITECTURE.md#1-auth-users-rbac-2fa) | `authRoutes.js`, `adminViews.js`, `mfaService.js` |
-| 2 | [Admin shell + UI kit](docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit) | `AdminSidebar.js`, `adminSurface.js`, `adminTable.js` |
-| 3 | [Public site + SEO](docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo) | `HomeView.js`, `ssrMeta.js`, `publicSurface.js` |
-| 4 | [Themes, scenes, ambience](docs/ARCHITECTURE.md#4-themes-scenes-ambience) | `themes.css`, `theme-boot.js`, `public/js/scenes/` |
-| 5 | [i18n](docs/ARCHITECTURE.md#5-i18n) | `public/js/i18n/`, `scripts/check-i18n-keys.js` |
-| 6 | [Leads](docs/ARCHITECTURE.md#6-leads--fyrirspurnir) | `leadsRoutes.js`, `Lead.js`, `AdminLeadsView.js` |
-| 7 | [Markaður](docs/ARCHITECTURE.md#7-markaður--market-research-and-the-prospect-list) | `marketRoutes.js`, `market-import.js`, `AdminMarketView.js` |
-| 8 | [Accounts, commission, staff audit](docs/ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) | `CustomerAccount.js`, `Commission.js`, `accountScope.js` |
-| 9 | [Bookkeeping](docs/ARCHITECTURE.md#9-bookkeeping--invoices-vsk-peppol-intake-settings-replay-payroll) | `services/bookkeeping/`, `docs/BOOKKEEPING-SYSTEM.md` |
-| 10 | [Sales handbook](docs/ARCHITECTURE.md#10-sales-handbook--handbók-sölufólks) | `salesGuidesRoutes.js`, `docs/SALES-STAFF.md` |
-| 11 | [Shop (hidden)](docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) | `shopRoutes.js`, `stripeService.js` |
-| 12 | [News, projects, party (hidden)](docs/ARCHITECTURE.md#12-news-projects-party-bio-hidden-portfolio) | `newsRoutes.js`, `partyRoutes.js`, `HalliView.js` |
-| 13 | [Monitoring](docs/ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) | `EventLog.js`, `AdminMonitoringView.js`, `docs/SLO.md` |
-| 14 | [Self-update](docs/ARCHITECTURE.md#14-self-update) | `systemRoutes.js`, `docs/SELF-UPDATE.md` |
-| 15 | [MCP](docs/ARCHITECTURE.md#15-mcp-connector) | `mcpRoutes.js`, `server/mcp/`, `docs/mcp.md` |
-| 16 | [Change requests](docs/ARCHITECTURE.md#16-change-requests--breytingarbeiðnir) | `changeRequestGate.js`, `ChangeRequestWidget.js` |
-| 17 | [Content, settings, background](docs/ARCHITECTURE.md#17-content-settings-background) | `contentController.js`, `Setting.js` |
-| 18 | [Uploads, media](docs/ARCHITECTURE.md#18-uploads-and-media) | `upload.js`, `verifyImageBytes.js` |
-| 19 | [Email](docs/ARCHITECTURE.md#19-email) | `emailService.js` |
-| 20 | [Infrastructure](docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting) | `app.js`, `schema.js`, `tests/workerDb.js`, `ci.yml` |
+| # | Domain |
+|---|---|
+| 1 | [Auth, users, RBAC, 2FA](docs/ARCHITECTURE.md#1-auth-users-rbac-2fa) |
+| 2 | [Admin shell + UI kit](docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit) |
+| 3 | [Public site + SEO](docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo) |
+| 4 | [Themes, scenes, ambience](docs/ARCHITECTURE.md#4-themes-scenes-ambience) |
+| 5 | [i18n](docs/ARCHITECTURE.md#5-i18n) |
+| 6 | [Leads](docs/ARCHITECTURE.md#6-leads--fyrirspurnir) |
+| 7 | [Markaður](docs/ARCHITECTURE.md#7-markaður--market-research-and-the-prospect-list) |
+| 8 | [Accounts, commission, staff audit](docs/ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) |
+| 9 | [Bookkeeping](docs/ARCHITECTURE.md#9-bookkeeping--invoices-vsk-peppol-intake-settings-replay-payroll) |
+| 10 | [Sales handbook](docs/ARCHITECTURE.md#10-sales-handbook--handbók-sölufólks) |
+| 11 | [Shop (hidden)](docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) |
+| 12 | [News, projects, party (hidden)](docs/ARCHITECTURE.md#12-news-projects-party-bio-hidden-portfolio) |
+| 13 | [Monitoring](docs/ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) |
+| 14 | [Self-update](docs/ARCHITECTURE.md#14-self-update) |
+| 15 | [MCP](docs/ARCHITECTURE.md#15-mcp-connector) |
+| 16 | [Change requests](docs/ARCHITECTURE.md#16-change-requests--breytingarbeiðnir) |
+| 17 | [Content, settings, background](docs/ARCHITECTURE.md#17-content-settings-background) |
+| 18 | [Uploads, media](docs/ARCHITECTURE.md#18-uploads-and-media) |
+| 19 | [Email](docs/ARCHITECTURE.md#19-email) |
+| 20 | [Infrastructure](docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting) |
 
 ## Doc map
 
@@ -100,10 +100,8 @@ Full per-domain index (files, the rules that must hold, history links): **`docs/
 - **History + decisions**: `docs/HISTORY.md` (every programme, dated, indexed — the *why* behind the rules) · `LESSONS.md` (retro log) · `CHANGELOG.md` (release notes; keep the `## [0.1.0]` heading — `build-manifest.js` parses it) · `ENHANCEMENTS.md` (proposal queue, Halli-gated) · gitignored `company/DECISIONS.md`.
 - **Frozen, banner-marked**: `PRE_LAUNCH_AUDIT.md` · `SECURITY_AUDIT_2026-04-16.md` · `SELF-UPDATE-PLAN.md`.
 
-**Recording a chunk (since 2026-09-17)**: the write-up goes to `docs/HISTORY.md` (dated section + index row); the rules it establishes go to the domain's "Rules that must hold" in `docs/ARCHITECTURE.md`, linking back; its open items go to `PLAN.md` → Status. This file changes only when a *rule* changes.
+**Recording a chunk (since 2026-09-17)**: the write-up goes to `docs/HISTORY.md` (dated section with an `<a id>` anchor + index row); the rules it establishes go to the domain's "Rules that must hold" in `docs/ARCHITECTURE.md`, linking back; its open items go to `PLAN.md` → Status. This file changes only when a *rule* changes. `tests/unit/architectureIndex.test.js` enforces the links, the file lists and the migration citations in both directions.
 
 ## Status
 
-- **Migration chain ends `104_sales_guides_services_page`** (`server/config/schema.js`); the books pair 095/096 sits before 097 in numeric order; never adopt the base's numbering.
-- **Awaiting Halli**: every DRAFT copy string (R1, admin re-shape, leads, Markaður, `/personuvernd` §3 + §6, the services page); the `ENHANCEMENTS.md` queue (its header carries the per-proposal status); publishing the seeded sales guides; whether `solufolk` gets `markadur`. Open technical items and decisions: `PLAN.md` → Status.
-- **CI/deploy**: GitHub Actions enabled since 2026-09-03; CI green is the merge gate; `deploy.yml` is dispatch-only with unset targets — no provisioning or deploy without Halli's go-ahead.
+Current status and open items: `PLAN.md` → Status (the migration chain end is the last entry in `server/config/schema.js`). Nothing else is recorded here.
