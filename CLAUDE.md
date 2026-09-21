@@ -16,6 +16,24 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 - **Estate map**: `C:\Users\Notandi\claude\Projects\README.md` orients any session across all sibling repos (roles, remotes, shared policies).
 - **Deploy target**: company Azure tenant (exists since 2026-08-12; company identity details in gitignored `company/COMPANY-LOG.md`) — **no provisioning or deploy without Halli's explicit go-ahead**. ENHANCEMENTS #1 is done (2026-08-19): `deploy.yml` is neutralized, so pushing the repo is safe.
 
+## Instance roles and next steps (D-020, Halli 2026-09-21)
+
+**This site is where the business runs, not rekstrarkerfi.is.** The full decision is D-020 in `company/DECISIONS.md`; §4 of the company plan is amended to match.
+
+- **rekstrarkerfi.is** (the product repo) is the shop window. Only Halli logs in, as staff. Its public signup is being closed. It captures website enquiries, which are copied one way into this repo's DB.
+- **`demo.rekstrarkerfi.is`** (to build) is the demo sellers use, with Kaffibrennslan Glóð sample data, reset nightly. The handbook should point sellers there, not at this site.
+- **Private ops** holds the books, invoices to customers, contracts, commission and the sales pipeline: one ledger, one invoice-number series. That is this repo's instance, run privately:
+  - **now:** the local instance from D-017;
+  - **after the 5.10 VSK filing:** `ops.orangesmiley.is`, on the stable release channel, behind Entra Easy Auth.
+- **orangesmiley.is (public)** is the company site, plus a seller area where each seller sees their own leads, accounts and commission statements. Later it adds the R6 customer billing portal. Everything is read-only, published one way from ops. Customers log in on their own instance, never here.
+
+**Next steps here, in order:**
+1. **Get the VSK veflykill** (Halli's hand, urgent). 2026-P4 is due 5.10 and the D-017 parallel run is behind.
+2. **After 5.10, stand up orangesmiley.is and ops** (about €39–55/month; needs Halli's go and an Entra app registration).
+3. **Make the seller area live before seller #1 signs.** Commission statements are due by the 7th, and the tables already exist: `leads`, `customer_accounts`, `commission_*`, `sales_guides`, `market_*`.
+4. **Import website leads from rekstrarkerfi.is**: weekly and by hand while there are 1–3 customers.
+5. **Align the sales handbook** (`server/scripts/seed-sales-guides.js`) **with D-001's pricing**, and point its demo steps at the demo instance.
+
 ## ⚠ Do NOT run /strip-base
 
 Halli's explicit instruction: **all base features and data models stay** — shop/cart/checkout/orders, admin + RBAC, bookkeeping suite, projects, news, party, user system, themes, i18n, Stripe, everything. Portfolio surfaces that don't fit the business (party, personal bio/news presentation) are *hidden from nav/SSR/sitemap but left functional* at their routes. Disposition of each module is decided via `ENHANCEMENTS.md` proposals with Halli's sign-off — never by deletion during the build.
@@ -40,7 +58,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 - Read-only references — never modify: `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system) and `C:\Users\Notandi\claude\Projects\hallismiley` (the HalliProjects base; folder renamed from `HalliProjects` 2026-08-23). The base was temporarily writable for the 2026-08-19 base-upgrade program (13 PRs, ledger: site-factory/BASE-SYNC.md); that program is closed and the read-only rule is back in force — base writes need Halli's explicit say-so again.
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
-- Tier prices (39–79 þ.kr./mán) are placeholders marked DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli).
+- Prices follow D-001 (`company/DECISIONS.md`): build fee 390/580/690 þ.kr. plus a service contract of 19/29/39 þ.kr./mán with 5/10/20 verkeiningar. They replaced the old flat 39–79 þ.kr./mán tiers, and they stay DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli). The sales handbook still quotes the old flat tiers, which is a known gap (D-020).
 - `APP_URL`/canonical host still references hallismiley.is in places — intentional until orangesmiley.is is registered; tracked in PLAN.md.
 - Log surprises in `LESSONS.md` (tagged factory/base/project) so `/retro` can harvest them.
 
