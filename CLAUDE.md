@@ -108,6 +108,7 @@ Full per-domain index (files, the rules that must hold, history links): **`docs/
 | 18 | [Uploads, media](docs/ARCHITECTURE.md#18-uploads-and-media) |
 | 19 | [Email](docs/ARCHITECTURE.md#19-email) |
 | 20 | [Infrastructure](docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting) |
+| 21 | [Seller area (public, published from ops)](docs/ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) |
 
 ## Doc map
 

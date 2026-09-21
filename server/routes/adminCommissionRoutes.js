@@ -132,15 +132,12 @@ router.get('/statements', async (req, res, next) => {
         LIMIT 200`,
       params
     );
-    // Status is DERIVED, never stored — the same rule the invoices table states
-    // for 'paid'/'overdue', so it cannot drift out of sync with the figures.
+    // Status is DERIVED, never stored (settlement.statementStatus).
     return res.json({
       statements: rows.map(s => ({
         ...s,
         period: toIsoDate(s.period),
-        status: Number(s.payable_isk) === 0 ? 'carried'
-          : Number(s.amount_paid_isk) >= Number(s.payable_isk) ? 'paid'
-            : s.has_later ? 'superseded' : 'open',
+        status: settlement.statementStatus(s, s.has_later),
       })),
       scope: req.commissionScope.all ? 'all' : 'own',
     });

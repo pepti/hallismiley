@@ -789,6 +789,54 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 **History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2)
 
+## 21. Seller area — the published copy on the public instance
+
+| | |
+|---|---|
+| Routes | `server/routes/sellerPublishRoutes.js` → `/api/v1/seller-publish` (signed ingest; public role + secret, else 404) · `server/routes/sellerRoutes.js` → `/api/v1/seller` (GET only; public role, published seller, 2FA) |
+| Services | `server/services/sellerPublish/snapshot.js` (ops: build), `signature.js` (HMAC), `ingest.js` (public: `shape` + `apply`) |
+| Auth / config | `server/auth/publishedSeller.js`; `server/config/instanceRole.js` (`INSTANCE_ROLE` = `ops` default / `public`) |
+| Views | `public/js/views/SellerAreaView.js` (`/solusvaedi`) |
+| Client | `public/js/services/seller.js`; `isSeller()` in `public/js/services/auth.js`; the menu item in `public/js/components/NavBar.js` |
+| Scripts | `server/scripts/publish-sellers.js` (`npm run publish:sellers`, ops only) |
+| CSS | `public/css/seller-area.css` |
+| Jest | `tests/integration/sellerArea.test.js` |
+| Migrations | 105 |
+| Feature doc | `docs/SALES-STAFF.md` (The seller area); decision D-020 in `company/DECISIONS.md` |
+
+**Rules that must hold**
+- One way only: ops READS its tables and SENDS; the public instance has no
+  route that reaches back, and the seller API is GET-only over the
+  `published_*` tables, which only the ingest writes ([seller-area](HISTORY.md#seller-area)).
+- `INSTANCE_ROLE` defaults to `ops` and an unknown value falls back to `ops`,
+  so both routes are closed unless a box is explicitly `public`; the ingest
+  also needs `SELLER_PUBLISH_SECRET` (≥ 32 chars).
+- Ingest = HMAC over the RAW bytes (mounted before the JSON body parser, like the
+  Stripe webhook; no CSRF, no sanitizeBody — documented exemption), 5-minute
+  timestamp window, every signature failure the same 401; then `shape()`
+  whitelists and bounds every field; then `apply()` refuses a snapshot that is
+  not newer than the last or reuses a `snapshot_id` (409), and replaces the
+  whole copy in one transaction — so an erasure on ops propagates at the next
+  publish ([seller-area](HISTORY.md#seller-area)).
+- Ops decides who is a seller: an enabled, non-admin user whose role set
+  grants `leads`, `accounts` or `commission`. The views decide what is
+  published: `leads` → every lead (Halli, 2026-09-21), `accounts` → own
+  accounts, `commission` → own issued statements. Never published: rate
+  fields, payee kennitala, Azure/repo internals. No seller holds `leads` → no
+  lead PII leaves ops.
+- On the public box a seller is matched by lower-cased email, only when the
+  email is proven (`email_verified` or an admin invite, `invited_at`) and the
+  account is enabled; a non-seller gets 404, a foreign statement 404, an
+  ungranted section 403.
+- Published sellers are 2FA-protected: `seller_holder` joins
+  `mfaService.protectedRole`, enrolment is allowed, and every seller route
+  except `/me` needs `totp_enabled`. Client mirror: `isMfaProtected()`
+  includes `isSeller()`.
+- Statement status is ONE function (`commissionStatements.statementStatus`)
+  for the admin list and the snapshot.
+
+**History**: [seller-area](HISTORY.md#seller-area)
+
 ---
 
 ## Ownership notes

@@ -52,9 +52,13 @@ const ISSUER = 'Icelandic Store';
 // caller via utils/adminRole.js userHoldsView(…, 'accounts') — marks a seller
 // who owns customer accounts. They reach customer data and deploy to customer
 // instances, so they face the same challenge as an admin.
+// Widened 2026-09-21 (D-020): `seller_holder` — precomputed by the caller via
+// auth/publishedSeller.js — marks a seller on the PUBLIC instance. They read
+// enquirer PII and their own earnings there, so the same challenge applies.
 function protectedRole(user) {
   if (!user) return false;
-  return user.role === 'admin' || user.admin_anywhere === true || user.accounts_holder === true;
+  return user.role === 'admin' || user.admin_anywhere === true || user.accounts_holder === true
+    || user.seller_holder === true;
 }
 
 function isProtected(user) {

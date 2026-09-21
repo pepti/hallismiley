@@ -408,7 +408,18 @@ async function balances(scope, client = db) {
   }));
 }
 
+// A statement's status is DERIVED, never stored — the same rule the invoices
+// table states for 'paid'/'overdue', so it cannot drift out of sync with the
+// figures. `hasLater` = the seller has a statement for a later period. One
+// function for the admin list and the seller-area publish (D-020), so the two
+// can never disagree about what "open" means.
+function statementStatus(s, hasLater) {
+  if (Number(s.payable_isk) === 0) return 'carried';
+  if (Number(s.amount_paid_isk) >= Number(s.payable_isk)) return 'paid';
+  return hasLater ? 'superseded' : 'open';
+}
+
 module.exports = {
-  StatementError, DEFAULT_MINIMUM_ISK, CLAWBACK_WINDOW_MONTHS, PAYEE_KINDS,
+  StatementError, statementStatus, DEFAULT_MINIMUM_ISK, CLAWBACK_WINDOW_MONTHS, PAYEE_KINDS,
   compose, issue, recordPayout, recordAdjustment, balances, firstOfMonth,
 };

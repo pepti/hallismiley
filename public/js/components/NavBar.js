@@ -1,4 +1,4 @@
-import { isAuthenticated, getUser, logout, updateProfile, hasAnyAdminView } from '../services/auth.js';
+import { isAuthenticated, getUser, logout, updateProfile, hasAnyAdminView, isSeller } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
@@ -264,6 +264,10 @@ export class NavBar {
         <a href="${navHref('/profile')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/profile">
           ${t('nav.profile')}
         </a>
+        ${isSeller() ? `
+        <a href="${navHref('/solusvaedi')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/solusvaedi" data-testid="nav-seller-area${suffix}">
+          ${t('nav.sellerArea')}
+        </a>` : ''}
         ${hasAnyAdminView() ? `
         <a href="${navHref('/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin">
           ${t('nav.admin')}

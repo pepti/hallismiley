@@ -24,6 +24,7 @@ import { AdminMarketView }    from './views/AdminMarketView.js';
 import { AdminAccountsView }  from './views/AdminAccountsView.js';
 import { AdminAccountDetailView } from './views/AdminAccountDetailView.js';
 import { AdminCommissionView } from './views/AdminCommissionView.js';
+import { SellerAreaView }     from './views/SellerAreaView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -111,6 +112,9 @@ const ROUTES = [
   { pattern: '/admin/books/settings', factory: () => (isAuthenticated() && canSeeView('books')) ? new AdminBooksSettingsView() : new HomeView() },
   { pattern: '/admin/accounts/:id', factory: (p) => (isAuthenticated() && canSeeView('accounts')) ? new AdminAccountDetailView(p.id) : new HomeView() },
   { pattern: '/admin/accounts',  factory: ()  => (isAuthenticated() && canSeeView('accounts')) ? new AdminAccountsView() : new HomeView() },
+  // Seller area (D-020) — public-instance only; the view itself handles a
+  // non-seller (the API answers 404) so no view id is needed here.
+  { pattern: '/solusvaedi',      factory: ()  => isAuthenticated() ? new SellerAreaView() : new HomeView() },
   { pattern: '/admin/commission', factory: () => (isAuthenticated() && canSeeView('commission')) ? new AdminCommissionView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },

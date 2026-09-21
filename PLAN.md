@@ -140,6 +140,17 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- Seller area (D-020 step 3) is BUILT, not live ([seller-area](docs/HISTORY.md#seller-area)):
+  it goes live with the public + ops instances (step 5, Halli's go), a shared
+  `SELLER_PUBLISH_SECRET`, and each seller invited on the public box under
+  their ops email. Open: (a) `/hafa-samband` on the PUBLIC instance still
+  writes its own `leads` table there, which ops never sees — route those
+  enquiries to ops before go-live (or keep the form on ops' copy only);
+  (b) publishing is by hand until ops runs on Azure, then a timer;
+  (c) a `verktaki` (`accounts` + `allaccounts`) is published with only the
+  accounts they OWN — `allaccounts` does not widen the public copy, by design
+  until Halli says otherwise. The `/solusvaedi` copy is DRAFT.
+
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

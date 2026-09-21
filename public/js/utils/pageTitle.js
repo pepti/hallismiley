@@ -57,6 +57,7 @@ const SECTIONS = {
   '/checkout': { en: 'Checkout',        is: 'Ganga frá pöntun' },
   '/orders':   { en: 'Order history',   is: 'Pantanir' },
   '/profile':  { en: 'Account',         is: 'Aðgangur' },
+  '/solusvaedi': { en: 'Seller area',   is: 'Sölusvæði' },
   '/signup':   { en: 'Create an account', is: 'Stofna aðgang' },
   '/login':    { en: 'Sign in',         is: 'Innskráning' },
 };

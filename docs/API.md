@@ -259,6 +259,7 @@ works today only because `adminRoutes.js` has no handler on those paths.
 
 | Mount | File | Gate | Feature doc |
 |---|---|---|---|
+| `/api/v1/seller-publish` | `sellerPublishRoutes.js` | mounted BEFORE `express.json` (raw body); `INSTANCE_ROLE=public` + `SELLER_PUBLISH_SECRET`, else 404; HMAC signature (401), shape (400), newer-than-last (409); own limiter 30/15 min | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/auth` | `authRoutes.js` | per route (above) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |
@@ -286,6 +287,7 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
+| `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me`; per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
 | `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
 | `/api/v1/admin/mcp-tokens` | `mcpAdminRoutes.js` | admin | `docs/mcp.md` |

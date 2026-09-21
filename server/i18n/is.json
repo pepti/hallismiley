@@ -184,6 +184,7 @@
   "errors.auth.mfaTooManyAttempts": "Of margir rangir kóðar. Skráðu þig inn aftur.",
   "errors.auth.mfaNotStarted": "Uppsetning er ekki hafin fyrir þennan aðgang",
   "errors.auth.mfaAlreadyEnabled": "Tveggja þátta innskráning er þegar virk",
+  "errors.seller.mfaRequired": "Kveiktu á tveggja þátta innskráningu undir Prófíll til að opna sölusvæðið",
   "errors.auth.forbidden": "Þú hefur ekki heimild til þessa",
   "errors.user.noUpdatableFields": "Engar uppfæranlegar upplýsingar sendar",
   "errors.user.unsupportedLocale": "Óstutt tungumál",

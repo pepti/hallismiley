@@ -52,7 +52,11 @@ export function hasAllViews()     { return getViews().includes('*'); }
 // who own customer accounts without widening the enrolment UI, so a seller was
 // pushed to enrol and had no panel to enrol from. The server stays the
 // authority; this exists so the two cannot drift silently again.
-export function isMfaProtected() { return isAdmin() || canSeeView('accounts'); }
+// D-020 widened both again: a published seller on the public instance.
+export function isMfaProtected() { return isAdmin() || canSeeView('accounts') || isSeller(); }
+// Seller area (D-020): the session says so only on the public instance, for a
+// user the latest ops snapshot lists. UX only — /api/v1/seller re-checks.
+export function isSeller() { return _user?.seller === true; }
 
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.

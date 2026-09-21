@@ -188,6 +188,14 @@ app.post('/api/v1/shop/webhook',
   express.raw({ type: 'application/json', limit: '1mb' }),
   shopController.handleStripeWebhook);
 
+// Seller-area ingest (D-020) — the same raw-body rule as the Stripe webhook:
+// the HMAC covers the exact bytes ops sent, so this router mounts its own
+// express.raw parser and MUST sit before express.json(). No CSRF (no cookie,
+// machine-to-machine; the signature is the authentication) and no sanitizeBody
+// (it would mutate the signed Buffer) — the reasons are in the router's header.
+// 404 unless INSTANCE_ROLE=public with SELLER_PUBLISH_SECRET set.
+app.use('/api/v1/seller-publish', require('./routes/sellerPublishRoutes'));
+
 // Change-request submissions may carry an inline base64 screenshot, so this
 // path gets a larger JSON limit. Mounted BEFORE the global 100 kb parser —
 // once body-parser sets req._body the global parser short-circuits for this
@@ -636,6 +644,8 @@ app.use('/api/v1/admin/commission', require('./routes/adminCommissionRoutes')); 
 app.use('/api/v1/admin/audit', require('./routes/adminAuditRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
+// Seller area (D-020): read-only, published copy; 404 unless INSTANCE_ROLE=public.
+app.use('/api/v1/seller',     require('./routes/sellerRoutes'));
 // Client error beacon + admin event log (harvest 2026-08-22, ice #195). The
 // beacon route carries its own tighter limiter (routes/eventRoutes.js).
 // MCP connector (ships dark: MCP_ENABLED unset → 404 before auth). Bearer-only
