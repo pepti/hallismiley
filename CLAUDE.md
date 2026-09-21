@@ -18,9 +18,9 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 
 ## Instance roles and next steps (D-020, Halli 2026-09-21)
 
-**This site is where the business runs, not rekstrarkerfi.is.** The full decision is D-020 in `company/DECISIONS.md`; §4 of the company plan is amended to match.
+**This repo, run as a private ops instance, is where the business runs, not rekstrarkerfi.is.** The public orangesmiley.is only shows each seller or customer their own read-only part. The full decision is D-020 in `company/DECISIONS.md`; §4 of the company plan is amended to match.
 
-- **rekstrarkerfi.is** (the product repo) is the shop window. Only Halli logs in, as staff. Its public signup is being closed. It captures website enquiries, which are copied one way into this repo's DB.
+- **rekstrarkerfi.is** (the product repo) is the shop window. Only Halli logs in, as staff. Its public signup is being closed. It captures website enquiries, which are copied one way into the private ops DB.
 - **`demo.rekstrarkerfi.is`** (to build) is the demo sellers use, with Kaffibrennslan Glóð sample data, reset nightly. The handbook should point sellers there, not at this site.
 - **Private ops** holds the books, invoices to customers, contracts, commission and the sales pipeline: one ledger, one invoice-number series. That is this repo's instance, run privately:
   - **now:** the local instance from D-017;
