@@ -45,9 +45,9 @@ Acceptance (2026-08-09 counts): 2012 Jest + 109 Playwright green · lint clean �
 
 ## Known intentional oddities
 
-- `--url`/canonical references to hallismiley.is remain until orangesmiley.is is registered (kennitala pending) — not an oversight.
+- *(Resolved 2026-09-22: the `APP_URL`/canonical fallbacks name orangesmiley.is — [go-live](docs/HISTORY.md#go-live).)*
 - Stripe/OAuth/Resend env vars blank in dev: shop browsable, checkout/OAuth/email inert until configured — features preserved, not removed.
-- Deploy: company Azure tenant, **do not provision** until kennitala lands.
+- Deploy: company Azure tenant; the public site was approved 2026-09-22 (production only, not ops) — `docs/DEPLOYMENT.md` §6.
 
 ## Open questions for Halli
 
@@ -168,8 +168,6 @@ chunk lands; add a HISTORY entry for the story.
 - Performance: Lighthouse desktop SEO 100 / a11y 100 on the business routes;
   performance ~85 (home) / ~92 (`/thjonusta`) because `router.js` imports all
   65 view modules eagerly (ENHANCEMENTS #6).
-- `APP_URL`/canonical still hallismiley.is until orangesmiley.is is registered
-  (the 301 derives from `APP_URL` since 2026-09-12).
 - Still a decision, not code: MCP arguments pass through `sanitizeBody` and the
   global IP limit (moving the mount would exempt MCP from two protections).
 
@@ -178,8 +176,11 @@ chunk lands; add a HISTORY entry for the story.
 - GitHub Actions enabled since 2026-09-03 (two repo-level toggles); the
   `main`→`master` trigger fix is in; CI green is the merge gate; Playwright
   workers match the runner's CPUs since 2026-09-13.
-- `deploy.yml` is dispatch-only with all targets in unset repo variables
-  (ENHANCEMENTS #1); arming a deploy = set the `vars.*`, no workflow edit; no
+- `deploy.yml` is dispatch-only, by digest, production only (2026-09-22,
+  [go-live](docs/HISTORY.md#go-live)); arming = the `production` environment's
+  `vars.*` + OIDC secrets. Standing up orangesmiley.is (public site only; ops
+  stays local until after 5.10 — D-020 step 2 split) is in progress: Azure
+  provisioning, Resend domain, ISNIC records per `docs/DEPLOYMENT.md` §6; no
   deploy without Halli. `npm audit --audit-level=high` clean (last advisory
   cleared 2026-09-14, fast-xml-parser 5).
 - Latest base-sync 2026-09-13: migration 103 (vehicle accounts), memory watch

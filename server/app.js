@@ -375,8 +375,8 @@ if (process.env.NODE_ENV === 'production') {
   // the fallback for an instance that never set APP_URL, matching ssrMeta.
   // Resolved once, above both redirects, so they agree on the target.
   const CANONICAL_HOST = (() => {
-    try { return new URL(process.env.APP_URL || 'https://www.hallismiley.is').host.toLowerCase(); }
-    catch { return 'www.hallismiley.is'; }
+    try { return new URL(process.env.APP_URL || 'https://www.orangesmiley.is').host.toLowerCase(); }
+    catch { return 'www.orangesmiley.is'; }
   })();
   app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') return next();

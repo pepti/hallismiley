@@ -7,11 +7,15 @@ const { t }      = require('../i18n');
 // rather than folded into an unrelated change.
 const logger     = require('../logger');
 
-const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
-// Send from the real owner mailbox (a verified Google Workspace address) rather
-// than a noreply@ alias, so mail actually delivers. Override with EMAIL_FROM.
-const FROM_ADDR = process.env.EMAIL_FROM || 'halli@hallismiley.is';
+const APP_URL   = process.env.APP_URL || 'https://www.orangesmiley.is';
+// Production sends from the fleet domain (D-015: <slug>@mail.orangesmiley.is,
+// verified in Resend). Override with EMAIL_FROM.
+const FROM_ADDR = process.env.EMAIL_FROM || 'info@orangesmiley.is';
 const FROM      = `Orange Smiley <${FROM_ADDR}>`;
+// The sending domain has no inbox, so replies go to EMAIL_REPLY_TO (the
+// owner's mailbox) unless a message sets its own replyTo (lead notifications
+// reply to the enquirer).
+const REPLY_TO  = (process.env.EMAIL_REPLY_TO || '').trim();
 
 // Staging safety: when EMAIL_ALLOWLIST is set (comma-separated addresses),
 // every message is redirected to those addresses instead of its real
@@ -59,6 +63,7 @@ function sendFailed(channel, detail) {
 // bounded wait, loud failure. Returns Resend's { data, error } shape.
 async function deliver(payload, channel = 'generic') {
   const msg = { ...payload, to: applyAllowlist(payload.to) };
+  if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
   try {
     const result = await Promise.race([
       getClient().emails.send(msg),
@@ -740,7 +745,7 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
     recipients.map(r => {
       const to = typeof r === 'string' ? r : r.email;
       const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
-      return client.emails.send({ from: FROM, to, subject: finalSubject, html });
+      return client.emails.send({ from: FROM, to, subject: finalSubject, html, ...(REPLY_TO && { replyTo: REPLY_TO }) });
     })
   );
 

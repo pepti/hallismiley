@@ -1,40 +1,57 @@
 name: Deploy to Azure
 
-# ── NEUTRALIZED (ENHANCEMENTS #1, 2026-08-19) ────────────────────────────────
-# The base's deploy.yml was inherited verbatim and aimed at the owner's
-# PERSONAL Azure resources (hallismileyacr / hallismiley-app) with an
-# auto-trigger on green CI — one push to a wired-up remote away from deploying
-# this repo over the live personal site.
+# ── orangesmiley.is PRODUCTION (armed 2026-09-22) ────────────────────────────
+# History: the base's deploy.yml aimed at the owner's PERSONAL Azure resources
+# with an auto-trigger on green CI; ENHANCEMENTS #1 (2026-08-19) neutralized it
+# to dispatch-only + a guard on repo variables. This file is the rekstrarkerfid
+# workflow (build once, deploy by digest — 2026-09-18) cut down to the one
+# stack this repo has: the public company site, production only, no TEST stack
+# (Halli, 2026-09-22 — sizing "small, production only"; docs/DEPLOYMENT.md).
 #
-# This rewrite makes the workflow inert-by-default, the same pattern as
-# promote.yml: manual dispatch only, and every target read from repo
-# variables that DO NOT EXIST yet. Until Halli provisions the company Azure
-# stack and sets the vars, a dispatch fails fast at the guard step and
-# touches nothing. Arming it later = set vars, no workflow edit:
-#   vars.ACR_NAME · vars.IMAGE_NAME · vars.WEBAPP_NAME · vars.RESOURCE_GROUP
-#   secrets.AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
+# Still inert until the stack's variables exist. Arming = set, no workflow edit:
+#   environment `production` vars: ACR_NAME · IMAGE_NAME · WEBAPP_NAME · RESOURCE_GROUP
+#   secrets: AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
 #   (optional) vars.ALERT_EMAIL_TO / vars.ALERT_EMAIL_FROM + secrets.RESEND_API_KEY
 #
-# The auto-deploy-on-green-CI trigger (workflow_run) is deliberately NOT kept:
-# re-adding it is a decision for when the company stack exists, and belongs in
-# the same review as the release-channel rollout (promote.yml canary→stable).
+# The flow, per dispatch:
+#   build ONCE per commit (re-use `:<sha>` if the registry already has it)
+#   → Trivy on the DIGEST → pin the web app to registry/image@sha256:…
+#   → restart → /ready from a process younger than the swap.
+# With no TEST stack, the Trivy gate + ci.yml's boot smoke on the same commit
+# are what stands between a commit and the live site — dispatch only a sha
+# whose CI run on master is green. Rollback = re-pin a previous digest (the
+# run summary prints it; docs/DEPLOYMENT.md → Rollback).
+#
+# No auto-deploy on green CI (workflow_run): re-adding it belongs with the
+# release-channel rollout (promote.yml canary→stable, D-014).
 on:
   workflow_dispatch:
+    inputs:
+      # `gh workflow run --ref` takes a branch or a tag, never a sha — this is
+      # how an older commit (a rollback build) gets deployed.
+      sha:
+        description: 'Commit to deploy — full 40-char sha. Empty = head of the dispatched ref.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 # Two deploys must never interleave (each ends in a webapp restart); queue
-# them instead of cancelling — a cancelled deploy would strand main un-shipped.
+# them instead of cancelling — a cancelled deploy would strand master un-shipped.
 concurrency:
-  group: deploy-prod
+  group: deploy-production
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Deploy (production)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The OIDC federated credential's subject is environment:production, and
+    # the environment is where the target vars live.
+    environment: production
 
     # Required for OIDC federated login against Azure AD — the job gets a
     # short-lived token from GitHub that Azure exchanges for a service-
@@ -44,15 +61,15 @@ jobs:
       contents: read
 
     env:
-      DEPLOY_SHA: ${{ github.sha }}
+      DEPLOY_SHA: ${{ inputs.sha || github.sha }}
       ACR_NAME: ${{ vars.ACR_NAME }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+      IMAGE_REPO: ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}
       WEBAPP_NAME: ${{ vars.WEBAPP_NAME }}
       RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
 
     steps:
-      # Inert-by-default guard: with the repo variables unset (the state of
-      # this repo until the company Azure stack exists), fail here — before
+      # Inert-by-default guard: with the variables unset, fail here — before
       # login, before any resource is touched.
       - name: Guard — require deploy target variables
         run: |
@@ -62,11 +79,17 @@ jobs:
             [ -z "$val" ] && missing="$missing $v"
           done
           if [ -n "$missing" ]; then
-            echo "::error::Deploy target not configured — unset repo variables:$missing"
-            echo "This workflow is neutralized until the company Azure stack exists (ENHANCEMENTS #1)."
+            echo "::error::Deploy target not configured — unset variables:$missing"
+            exit 1
+          fi
+          # The sha becomes part of registry tags and shell arguments below, so
+          # it is checked once, here, before anything uses it.
+          if ! printf '%s' "$DEPLOY_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::'sha' must be a full 40-character lowercase commit sha."
             exit 1
           fi
 
+      # Also the proof that the sha is a commit of THIS repository.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,6 +101,7 @@ jobs:
       # server/changes.json — the "Latest updates" list on Admin → Monitoring.
       # Written here, on the build host, because the Docker context carries no
       # .git directory; COPY server/ picks it up. Never fails the build (ice #209).
+      # Only a fresh build bakes it in; a re-used digest keeps its own stamp.
       - name: Stamp recent changes
         run: node server/scripts/generate-changes.js
 
@@ -88,21 +112,56 @@ jobs:
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # `az acr login` uses the Azure session above — no ACR_USERNAME /
-      # ACR_PASSWORD needed.
+      # `az acr login` uses the Azure session above; it leaves an ordinary
+      # docker login behind, which every registry query below (and Trivy) uses.
       - name: Log in to ACR
         run: az acr login --name "$ACR_NAME"
 
-      # The default docker driver can't export a build cache; the
-      # docker-container driver can, which is what makes cache-to below work.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      # provenance:false keeps the pushed artifact a plain single-arch manifest —
-      # the default (an OCI index with an attestation child) would change what
-      # an ACR purge sees and what App Service pulls.
+      # resolve_digest <ref>: prints the digest, prints NOTHING (and succeeds)
+      # when the ref does not exist, FAILS on anything else — "I could not ask"
+      # must never read as "not there", because "not there" means build+push.
+      # Plain registry v2 via imagetools, so AcrPush is all the identity needs.
+      - name: Registry helpers
+        run: |
+          cat > "$RUNNER_TEMP/registry.sh" <<'EOF'
+          resolve_digest() {
+            local ref="$1" out digest err="$RUNNER_TEMP/imagetools.err"
+            if out=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' 2>"$err"); then
+              digest=$(printf '%s' "$out" | jq -r '.digest // empty')
+              if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+                echo "::error::Unexpected answer while resolving $ref" >&2
+                printf '%s\n' "$out" >&2
+                return 1
+              fi
+              printf '%s' "$digest"
+            elif grep -Eqi 'not found|manifest[ _]unknown|name[ _]unknown' "$err"; then
+              return 0
+            else
+              echo "::error::Could not query the registry for $ref" >&2
+              cat "$err" >&2
+              return 1
+            fi
+          }
+          EOF
+
+      - name: Look up this commit in the registry
+        id: lookup
+        run: |
+          set -euo pipefail
+          . "$RUNNER_TEMP/registry.sh"
+          built=$(resolve_digest "$IMAGE_REPO:$DEPLOY_SHA")
+          echo "built=$built" >> "$GITHUB_OUTPUT"
+          echo ":$DEPLOY_SHA → ${built:-<not in the registry>}"
+
+      # Only when the commit is not in the registry yet — a re-dispatch of the
+      # same sha (or a rollback) deploys the bytes already there.
+      # provenance:false keeps the artifact a plain single-arch manifest.
       - name: Build and push Docker image
         id: build
+        if: ${{ steps.lookup.outputs.built == '' }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -111,72 +170,124 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Stamp the image with its own identity — server/version.json. Without
-          # these the container boots reporting gitSha "unknown", and the
-          # self-update checker cannot tell whether a published release is newer
-          # than what is running (docs/SELF-UPDATE.md).
+          # these the container reports gitSha "unknown" (docs/SELF-UPDATE.md).
+          # RELEASE_CHANNEL is a constant: the channel an instance FOLLOWS is
+          # modules.selfUpdate.channel, a runtime setting, not the bytes.
           build-args: |
-            APK_REFRESH=${{ github.run_id }}
             GIT_SHA=${{ env.DEPLOY_SHA }}
             BUILT_AT=${{ github.event.repository.updated_at }}
-            RELEASE_CHANNEL=stable
+            RELEASE_CHANNEL=release
+          # :latest is pushed BEFORE the Trivy gate. Never point the app at it;
+          # the app is pinned to a digest below.
           tags: |
-            ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:latest
-            ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:${{ env.DEPLOY_SHA }}
-            ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:sha-${{ env.DEPLOY_SHA }}
+            ${{ env.IMAGE_REPO }}:latest
+            ${{ env.IMAGE_REPO }}:${{ env.DEPLOY_SHA }}
+            ${{ env.IMAGE_REPO }}:sha-${{ env.DEPLOY_SHA }}
 
-      # The digest is the identity the release channel publishes and the
-      # platform pulls. Print it so a promote run can be given the exact bytes
-      # this deploy produced, rather than "whatever :sha-… resolves to later".
-      - name: Record image digest
+      # From here on the image is a DIGEST, never a tag.
+      - name: Pin the image digest
+        id: image
+        env:
+          BUILT_NOW: ${{ steps.build.outputs.digest }}
+          ALREADY_BUILT: ${{ steps.lookup.outputs.built }}
         run: |
-          echo "Image digest: ${{ steps.build.outputs.digest }}"
-          echo "### Deployed image" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "sha:    ${{ env.DEPLOY_SHA }}" >> $GITHUB_STEP_SUMMARY
-          echo "digest: ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          . "$RUNNER_TEMP/registry.sh"
+          if [ -n "$BUILT_NOW" ]; then
+            digest=$(resolve_digest "$IMAGE_REPO:$DEPLOY_SHA")
+            if [ "$digest" != "$BUILT_NOW" ]; then
+              echo "::error::The sha tag resolves to ${digest:-nothing}, but this run pushed $BUILT_NOW."
+              exit 1
+            fi
+            origin="built by this run"
+          else
+            digest="$ALREADY_BUILT"
+            origin="re-used from the registry — no build"
+          fi
+          if [ -z "$digest" ]; then
+            echo "::error::No image digest for $DEPLOY_SHA — nothing to deploy."
+            exit 1
+          fi
+          previous=$(az webapp config container show -g "$RESOURCE_GROUP" -n "$WEBAPP_NAME" \
+            --query "[?name=='DOCKER_CUSTOM_IMAGE_NAME'].value | [0]" -o tsv 2>/dev/null || true)
+          echo "digest=$digest"          >> "$GITHUB_OUTPUT"
+          echo "ref=$IMAGE_REPO@$digest" >> "$GITHUB_OUTPUT"
+          echo "Image: $IMAGE_REPO@$digest ($origin)"
+          {
+            echo "### Deployed image — production"
+            echo '```'
+            echo "sha:      $DEPLOY_SHA"
+            echo "digest:   $digest"
+            echo "image:    $origin"
+            echo "replaced: ${previous:-<unknown>}"
+            echo '```'
+            echo "Rollback target (what ran before this deploy): \`${previous:-see the previous run}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      # Scanned after the push but BEFORE the web app is pointed at it: an
-      # unreferenced image sitting in ACR serves no traffic, so this is the
-      # moment that actually matters. A HIGH/CRITICAL finding leaves the running
-      # version untouched.
-      - name: Scan pushed image (Trivy)
+      # Scanned BY DIGEST and BEFORE the web app is pointed at it. A
+      # HIGH/CRITICAL finding leaves the running version untouched.
+      - name: Scan the image (Trivy)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:sha-${{ env.DEPLOY_SHA }}
+          image-ref: ${{ steps.image.outputs.ref }}
           format: table
           exit-code: '1'
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
 
+      - name: Note when the swap began
+        run: echo "SWAP_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
           app-name: ${{ vars.WEBAPP_NAME }}
-          images: ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}:${{ env.DEPLOY_SHA }}
+          images: ${{ steps.image.outputs.ref }}
 
-      # azure/webapps-deploy updates the configured image tag but on tiers
-      # without slots doesn't reliably trigger a container swap (observed on
-      # the base 2026-04-24: six successful deploys, container kept a
-      # 10-hour-old image). Force a restart so the new image actually runs.
+      # On tiers without slots webapps-deploy doesn't reliably swap the
+      # container (base, 2026-04-24) — force it.
       - name: Force restart to activate new image
         run: az webapp restart --resource-group "$RESOURCE_GROUP" --name "$WEBAPP_NAME"
 
+      # A 200 only counts from a process YOUNGER than the swap: the old
+      # container answers /ready perfectly well for the image being replaced.
+      - name: Post-deploy health check
+        run: |
+          set -uo pipefail
+          url="https://${WEBAPP_NAME}.azurewebsites.net"
+          code="000"; uptime=""
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /tmp/ready.json -w '%{http_code}' "$url/ready" || true)
+            if [ "$code" = "200" ]; then
+              uptime=$(jq -r '.uptime // empty' /tmp/ready.json 2>/dev/null || true)
+              age=$(( $(date +%s) - SWAP_STARTED_AT ))
+              if printf '%s' "$uptime" | grep -Eq '^[0-9]+$' && [ "$uptime" -le "$age" ]; then
+                echo "/ready OK after ~$((i*5))s (process uptime ${uptime}s, swap began ${age}s ago)"
+                cat /tmp/ready.json; exit 0
+              fi
+            fi
+            sleep 5
+          done
+          if [ "$code" = "200" ]; then
+            echo "::error::$url/ready answers 200, but from a process older than this deploy (uptime ${uptime:-?}s) — the container swap never happened."
+          else
+            echo "::error::$url/ready never returned 200 (last HTTP $code)"
+          fi
+          cat /tmp/ready.json || true
+          exit 1
+
   # ── Failsafe: email when a dispatched deploy errored ─────────────────────────
   # No-ops cleanly unless vars.ALERT_EMAIL_TO/FROM and secrets.RESEND_API_KEY
-  # are all set. (The base's second alert — CI-red-on-main blocking an
-  # auto-deploy — is gone with the workflow_run trigger.)
+  # are all set.
   alert-deploy-failed:
     name: Alert — Azure deploy failed
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [deploy]
-    # always() is load-bearing, not decoration. An `if:` that contains no status
-    # function still has the implicit success() gate applied to `needs`, so a
-    # failed deploy SKIPS this job and the alert never fires — which is exactly
-    # what happened on the base 2026-08-07, when a registry 504 failed a deploy
-    # in silence. always() lifts that gate so the result check is reached.
+    # always() is load-bearing: without a status function the implicit
+    # success() gate on `needs` skips this job exactly when it should run
+    # (base, 2026-08-07).
     if: ${{ always() && needs.deploy.result == 'failure' }}
     steps:
       - name: Email deploy-failed alert (Resend)
@@ -184,7 +295,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
           ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
-          DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_SHA: ${{ inputs.sha || github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$RESEND_API_KEY" ] || [ -z "$ALERT_EMAIL_TO" ] || [ -z "$ALERT_EMAIL_FROM" ]; then
@@ -199,7 +310,7 @@ jobs:
             '{
                from: $from,
                to: [$to],
-               subject: "⚠️ orangesmiley — Azure deploy FAILED",
+               subject: "⚠️ orangesmiley.is — Azure deploy FAILED",
                html: ("<h2>⚠️ Azure deploy failed</h2>"
                  + "<p>The dispatched deploy (commit <code>" + $sha + "</code>) errored, so the code is <strong>not live</strong> on Azure.</p>"
                  + "<p><a href=\"" + $url + "\">View the deploy run →</a></p>")

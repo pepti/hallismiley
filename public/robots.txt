@@ -20,4 +20,4 @@ Disallow: /is/news
 Disallow: /en/shop
 Disallow: /is/shop
 
-Sitemap: https://www.hallismiley.is/sitemap.xml
+Sitemap: https://www.orangesmiley.is/sitemap.xml

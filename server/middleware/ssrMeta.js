@@ -69,15 +69,19 @@ function scenePreloadTag(route) {
   return `<link rel="preload" as="image" type="image/avif" imagesrcset="${srcset}" imagesizes="100vw" fetchpriority="high" id="ssr-scene-preload">`;
 }
 
-const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
+const APP_URL        = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
 const OG_IMAGE_PATH  = '/og-image.jpg';
 
 // Cached template (read once at boot) + stat watcher for dev hot-reload.
+// index.html is baked with the production origin; the static Organization
+// JSON-LD is never rewritten by id, so swap the baked origin for APP_URL here
+// or its @id dangles from the publisher refs on any other host.
+const BAKED_ORIGIN = 'https://www.orangesmiley.is';
 let _template = null;
 function loadTemplate() {
   if (_template) return _template;
-  _template = fs.readFileSync(INDEX_PATH, 'utf8');
+  _template = fs.readFileSync(INDEX_PATH, 'utf8').split(BAKED_ORIGIN).join(APP_URL);
   return _template;
 }
 if (process.env.NODE_ENV !== 'production') {

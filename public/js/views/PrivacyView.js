@@ -128,8 +128,8 @@ const COPY = {
         </ul>`],
       ['7. Vinnsluaðilar og staðsetning gagna', `
         <ul>
-          <li><strong>Microsoft Azure</strong> — hýsing á vefnum og gagnagrunninum, á svæðum
-          innan Evrópska efnahagssvæðisins.</li>
+          <li><strong>Microsoft Azure</strong> — hýsing á vefnum og gagnagrunninum, í gagnaveri
+          Microsoft í Svíþjóð, innan Evrópska efnahagssvæðisins.</li>
           <li><strong>Resend</strong> — afhending tölvupósts (m.a. fyrirspurna úr forminu).
           Bandarískt félag; flutningur byggir á stöðluðum samningsákvæðum ESB.</li>
           <li><strong>Google Workspace</strong> (Google Ireland Ltd.) — fyrirtækjapósthólfið
@@ -272,7 +272,7 @@ const COPY = {
       ['7. Processors and Data Location', `
         <ul>
           <li><strong>Microsoft Azure</strong> — hosting for the site and its database, in
-          European Economic Area regions.</li>
+          Microsoft's data centre in Sweden, inside the European Economic Area.</li>
           <li><strong>Resend</strong> — email delivery (including enquiries from the form). A US
           company; transfers rely on the EU Standard Contractual Clauses.</li>
           <li><strong>Google Workspace</strong> (Google Ireland Ltd.) — the company mailbox your

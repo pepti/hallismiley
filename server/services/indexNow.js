@@ -17,20 +17,20 @@
  *     A batch larger than the cap is split across multiple POSTs.
  *
  * Key hosting: Bing verifies ownership by fetching
- * `https://www.hallismiley.is/<INDEXNOW_KEY>.txt` and matching its body
+ * `https://www.orangesmiley.is/<INDEXNOW_KEY>.txt` and matching its body
  * against the `key` field in our POST body. That endpoint is served by
  * server/app.js — keep them in sync if either changes.
  */
 
 const logger = require('../logger');
 
-const APP_URL          = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
+const APP_URL          = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/IndexNow';
 const MAX_BATCH         = 10000;
 
 function getHostFromAppUrl() {
   try { return new URL(APP_URL).host; }
-  catch { return 'www.hallismiley.is'; }
+  catch { return 'www.orangesmiley.is'; }
 }
 
 async function postBatch(host, key, batch) {
