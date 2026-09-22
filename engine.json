@@ -1,0 +1,13 @@
+{
+  "$comment": "Engine provenance for this repo (D-021). product = migration prefix + product-migrations filename; role = engine | product | customer | personal. rev/history are written by site-factory/engine-sync.js. Product-owned: a sync never overwrites this file.",
+  "product": "hs",
+  "role": "personal",
+  "upstream": "C:/Users/Notandi/claude/Projects/orangesmiley/.claude/worktrees/engine-upstream",
+  "upstreamBranch": "feat/engine-upstream",
+  "rev": null,
+  "syncedAt": null,
+  "syncedPr": null,
+  "grafted": null,
+  "productPaths": [],
+  "history": []
+}
