@@ -123,6 +123,20 @@ export function persistLocaleChoice(locale) {
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 
+/** Engine table + this product's overlay. `<locale>.json` is engine-owned and
+ *  arrives by merge; `product.<locale>.json` is product-owned (D-021) and its
+ *  keys win, so a product never edits the engine file and a sync never
+ *  conflicts on locale keys. A missing overlay is an empty table. */
+async function fetchTable(locale) {
+  const [base, overlay] = await Promise.all([
+    fetch(`/js/i18n/${locale}.json`).then(r => r.json()),
+    fetch(`/js/i18n/product.${locale}.json`)
+      .then(r => (r.ok ? r.json() : {}))
+      .catch(() => ({})),
+  ]);
+  return { ...base, ...(overlay && typeof overlay === 'object' ? overlay : {}) };
+}
+
 /** Fetch the JSON for `locale` and cache it. Always resolves — on network
  *  error falls back silently to empty messages (en fallback still applies). */
 export async function loadLocale(locale) {
@@ -130,10 +144,8 @@ export async function loadLocale(locale) {
 
   try {
     const [msgs, fallback] = await Promise.all([
-      fetch(`/js/i18n/${locale}.json`).then(r => r.json()),
-      locale !== DEFAULT_LOCALE
-        ? fetch(`/js/i18n/${DEFAULT_LOCALE}.json`).then(r => r.json())
-        : Promise.resolve(null),
+      fetchTable(locale),
+      locale !== DEFAULT_LOCALE ? fetchTable(DEFAULT_LOCALE) : Promise.resolve(null),
     ]);
     _messages = msgs;
     _fallback = fallback ?? msgs;
