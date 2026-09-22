@@ -1,9 +1,8 @@
 # Deployment — Orange Smiley (orangesmiley.is)
 
-**State as of 2026-09-22: Halli approved standing up the public site,
-production only (not ops — D-020 step 2 split; §6 below).** Whether the stack
-exists yet is an Azure fact, not this file's: check `az group show -n
-orangesmiley-prod-rg`. **No provisioning or deploy happens without Halli's
+**State as of 2026-09-22: https://www.orangesmiley.is is live** — the public
+site only, production only (not ops — D-020 step 2 split); the stack and its
+ids are in §6. **No provisioning or deploy happens without Halli's
 explicit go-ahead** (CLAUDE.md), and each Part D step in §6 is his hand.
 
 This file was rewritten 2026-09-11. The previous version was the HalliProjects
@@ -185,6 +184,46 @@ create`; the Resend domain + DPA + DKIM/SPF/DMARC records and the API key
 (into the vault, never into chat); the ISNIC records (`A @` + `TXT asuid`,
 `CNAME www` + `TXT asuid.www` — values supplied at that step); production
 app-setting writes if the agent side is blocked.
+
+#### Provisioned 2026-09-22 (Halli's go) — the ids the next session needs
+
+- **Live:** `https://www.orangesmiley.is` (canonical); the apex, `http://` and
+  the azurewebsites host 301 there. Inbound IP `51.12.31.17`; custom-domain
+  verification id `6E830E09…0DFB6042` (the `asuid` TXT records). Managed
+  certificates for both names, SNI, valid to 2027-03-22, auto-renewed.
+- **Web app** identity principalId `e3adf637-ad75-4bdd-81c6-d74227ccc2c2` —
+  AcrPull on `orangesmileyacr`, Key Vault Secrets User on `orangesm-prod-kv`.
+  Container logging to filesystem is ON (that is how the `ip:port` limiter bug
+  was found on day one — HISTORY `#go-live`).
+- **Deploy identity** `orangesmiley-github-deploy`: appId
+  `0d3d70c3-5144-4897-9d34-df6940e8ff68`, app objectId
+  `707a9647-139b-4c5b-bab3-f09036a52cf2`, SP objectId
+  `3c6b36fc-fcf0-43f0-a712-ed1b506cf28a` — AcrPush (registry) · Contributor (web
+  app only) · Key Vault Reader (vault). Four federated subjects (master +
+  `environment:production`, plain and id-bearing; repo id `1349405381`, org id
+  `316194275`).
+- **Vault** secrets `database-url` · `csrf-secret` · `metrics-token` ·
+  `resend-api-key` (real key since 2026-09-22), all expiring 2027-03-21;
+  `admin-bootstrap-password` (30 d) for the first admin `halli`. Purge
+  protection on.
+- **Postgres** B1ms, PG 16, 32 GB, 14-day geo-redundant backup; the app's 32
+  outbound IPs as rules `app-1..32`. Scaling the plan rotates them — re-run the
+  loop.
+- **Monitoring:** App Insights `orangesmiley-prod-ai`; availability test
+  `PROD-ready` (standard, 300 s, Amsterdam) on `https://www.orangesmiley.is/ready`;
+  alerts `PROD-ready-down` and `PROD - HTTP 5xx spike` → action group
+  `os-oncall-prod` (halli@orangesmiley.is).
+- **Budgets:** `orangesmiley-prod-monthly` €45 (RG); `orange-smiley-platform-monthly`
+  raised 140 → 175.
+- **Mail:** Resend domain `mail.orangesmiley.is`, EU (eu-west-1), verified, no
+  tracking subdomain; DNS at ISNIC = `resend._domainkey.mail` TXT, `rsend.mail`
+  and `send.mail` CNAMEs. The Resend team is still named "hallismiley" — move it
+  to the company with the subscriptions.
+- **Rotating a Key Vault secret:** a plain restart can keep serving the cached
+  value. Re-set the app setting (same reference) to force a re-fetch, then check
+  `/ready` uptime is younger than the change.
+- ISNIC DNS is edited as **BSE255-IS** (registrant/tech contact); HV712-IS is
+  only the payer and cannot edit records.
 
 Three recipes from the base's guide that are still correct and worth keeping
 (placeholders as in `RUNBOOK.md`):
