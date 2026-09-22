@@ -47,30 +47,40 @@ initTheme();
 syncAmbienceClass(); // body.amb-off mirrors the visitor's live-Iceland pref
 document.body.appendChild(new ThemeSwitcher().render());
 
-// ── The in-app feedback (change-request) widget ──────────────────────────────
-// On TEST it's on for everyone; admins can hide the chrome per browser from the
-// theme switcher, and the override can never switch it ON (getEffectiveEnv), so
-// the blue TEST badge only ever appears on the real TEST stack. Outside TEST it
-// mounts only when an admin switched it on (Admin → Feedback) AND the current
-// user is an admin — customers must never see it, and the submit route
-// re-checks the role anyway (ice #206). Lazy-loaded either way, so a normal
-// production visitor never even fetches the module (or html2canvas). Mounted
-// via the module-scoped singleton so the ThemeSwitcher's TEST toggle controls
-// the same instance.
-const IS_TEST = getEffectiveEnv() === 'test';
-if (IS_TEST) {
-  document.body.classList.add('is-test-env');
-  if (getDemoMode()) document.body.classList.add('is-demo-mode');
-  import('./components/ChangeRequestWidget.js')
-    .then((m) => m.mountChangeRequestWidget())
-    .catch((err) => console.error('[test-env] change-request widget failed to load', err));
-} else {
+// ── The TEST chrome + in-app feedback (change-request) widget ────────────────
+// Admins only, everywhere (Halli, 2026-09-22). On the TEST stack a signed-in
+// admin gets the blue badge, the nav/footer glow and the widget, and can hide
+// them per browser from the theme switcher; a logged-out visitor or a customer
+// sees the site exactly as production (getEffectiveEnv). Outside TEST the
+// widget mounts only when an admin switched it on (Admin → Feedback). The
+// submit route re-checks the role either way (changeRequestGate, ice #206).
+// Lazy-loaded, so a non-admin never even fetches the module (or html2canvas).
+// Mounted via the module-scoped singleton so the ThemeSwitcher's TEST toggle
+// controls the same instance. Re-run on every 'authchange': the session is
+// restored after this runs, so the first pass always sees a logged-out user.
+{
   let crEnabled = null;   // null = not asked yet; it's a per-deploy setting, so ask once
-  let crModule  = null;   // only ever loaded for an admin on a site that has it on
+  let crModule  = null;   // only ever loaded for an admin
+
+  const syncTestChrome = () => {
+    const on = getEffectiveEnv() === 'test';
+    document.body.classList.toggle('is-test-env', on);
+    document.body.classList.toggle('is-demo-mode', on && getDemoMode());
+    return on;
+  };
 
   const syncChangeRequests = async () => {
-    if (!isAdmin()) { crModule?.syncChangeRequestWidget(); return; } // sign-out tears it down
-    if (crEnabled === null) {
+    const testOn = syncTestChrome();
+    if (!isAdmin()) {
+      // Sign-out tears it down — including a widget the theme switcher's TEST
+      // toggle mounted, which this closure never imported itself.
+      if (!crModule && document.getElementById('cr-widget')) {
+        crModule = await import('./components/ChangeRequestWidget.js');
+      }
+      crModule?.syncChangeRequestWidget();
+      return;
+    }
+    if (!testOn && crEnabled === null) {
       try {
         // The admin-only settings endpoint, deliberately not a public config
         // route: whether the widget is on is nobody else's business, and only
@@ -81,9 +91,9 @@ if (IS_TEST) {
         crEnabled = false; // endpoint unreachable → stay quiet
       }
     }
-    if (!crEnabled) { crModule?.syncChangeRequestWidget(); return; }
+    if (!testOn && !crEnabled) { crModule?.syncChangeRequestWidget(); return; }
     crModule = await import('./components/ChangeRequestWidget.js');
-    crModule.setChangeRequestsEnabled(true);
+    crModule.setChangeRequestsEnabled(!!crEnabled);
     crModule.syncChangeRequestWidget();
   };
 

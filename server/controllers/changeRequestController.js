@@ -1,7 +1,7 @@
 // Controller for the in-app change-request (feedback) tool. Submit is gated at
-// the route by changeRequestGate: open to everyone on the test stack
-// (config/appEnv.js — so logged-out testers can file requests), and on the live
-// site only to admins once the switch below is on. The admin list/status/
+// the route by changeRequestGate: admins only — on the test stack with no
+// further condition (config/appEnv.js), on the live site once the switch below
+// is on. The admin list/status/
 // settings routes are role-gated.
 // (The upstream store also emailed a digest per batch + a reminder; deferred
 // here — the admin inbox is the source of truth. See the feature-port notes.)
@@ -140,18 +140,20 @@ const changeRequestController = {
   },
 
   // GET /api/v1/admin/change-requests/settings  (admin only)
-  // Powers the switch at the top of Admin → Feedback. `openToEveryone` is the
+  // Powers the switch at the top of Admin → Feedback. `testStack` is the
   // gate's own decision (config/appEnv.js), returned so the UI can say "the
   // test stack has it on regardless of this switch" without re-deriving which
   // envs count — the view used to compare appEnv !== 'production' and told the
   // admin on a 'staging' stack that the switch was irrelevant while it was the
-  // only thing between them and a 404. `appEnv` stays for display.
+  // only thing between them and a 404. `appEnv` stays for display. (Named
+  // `openToEveryone` until 2026-09-22, when the test stack stopped taking
+  // anonymous requests.)
   async getSettings(req, res, next) {
     try {
       return res.json({
         enabled: await Setting.getChangeRequestsEnabled(),
         appEnv:  appEnv(),
-        openToEveryone: isTestStack(),
+        testStack: isTestStack(),
       });
     } catch (err) {
       next(err);
@@ -166,7 +168,7 @@ const changeRequestController = {
         return res.status(400).json({ error: 'enabled must be true or false', code: 400 });
       }
       await Setting.setChangeRequestsEnabled(enabled);
-      return res.json({ enabled, appEnv: appEnv(), openToEveryone: isTestStack() });
+      return res.json({ enabled, appEnv: appEnv(), testStack: isTestStack() });
     } catch (err) {
       next(err);
     }
