@@ -22,11 +22,11 @@ function tIs(key, params) { return t('is', key, params); }
 
 describe('server/i18n t() helper', () => {
   test('returns exact English copy for a known key', () => {
-    expect(t('en', 'email.verify.subject')).toBe('Verify your Halli Smiley account');
+    expect(t('en', 'email.verify.subject')).toBe('Verify your Orange Smiley account');
   });
 
   test('returns Icelandic copy for a known key', () => {
-    expect(t('is', 'email.verify.subject')).toBe('Staðfestu Halli Smiley aðganginn þinn');
+    expect(t('is', 'email.verify.subject')).toBe('Staðfestu Orange Smiley aðganginn þinn');
   });
 
   test('falls back to English when Icelandic key is missing', () => {
@@ -42,7 +42,7 @@ describe('server/i18n t() helper', () => {
   });
 
   test('unknown locale falls back to DEFAULT_LOCALE (en)', () => {
-    expect(t('xx', 'email.verify.subject')).toBe('Verify your Halli Smiley account');
+    expect(t('xx', 'email.verify.subject')).toBe('Verify your Orange Smiley account');
   });
 });
 

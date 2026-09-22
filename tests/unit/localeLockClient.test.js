@@ -46,16 +46,17 @@ beforeEach(() => {
 });
 
 describe('forcedLocaleFor (client mirror of the server rule)', () => {
-  test.each(['/party', '/en/party', '/is/party', '/party/admin', '/en/party/login'])(
-    'locks %s to Icelandic',
+  // hallismiley (engine-graft): the hidden Icelandic-only page.
+  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
+    'locks the hidden Icelandic-only page %s',
     (p) => {
       browseTo(p);
       expect(i18n.forcedLocaleFor(p)).toBe('is');
     }
   );
 
-  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
-    'locks the hidden Icelandic-only page %s',
+  test.each(['/party', '/en/party', '/is/party', '/party/admin', '/en/party/login'])(
+    'locks %s to Icelandic',
     (p) => {
       browseTo(p);
       expect(i18n.forcedLocaleFor(p)).toBe('is');
@@ -95,10 +96,12 @@ describe('href() while the visitor is on the locked party page', () => {
     expect(i18n.href('/projects')).toBe('/is/projects');
   });
 
-  test('with no saved choice, Accept-Language decides — not the locked page', async () => {
+  test('with no saved choice, links leave the locked page in Icelandic', async () => {
+    // The lock must not leak, but with nothing chosen the visitor's own locale
+    // is the site default — the browser's language list is not consulted.
     browseTo('/is/party', { languages: ['en-GB', 'en'] });
     await i18n.loadLocale('is');
-    expect(i18n.href('/projects')).toBe('/en/projects');
+    expect(i18n.href('/projects')).toBe('/is/projects');
   });
 });
 
@@ -113,7 +116,6 @@ describe('href() while browsing normally', () => {
     browseTo('/en/projects', { savedChoice: 'en' });
     await i18n.loadLocale('en');
     expect(i18n.href('/party')).toBe('/is/party');
-    expect(i18n.href('/aron13ara')).toBe('/is/aron13ara');
     expect(i18n.href('/shop')).toBe('/en/shop');
   });
 });
@@ -127,5 +129,19 @@ describe('getPreferredLocale', () => {
   test('returns the saved choice off the party page', () => {
     browseTo('/projects', { savedChoice: 'en' });
     expect(i18n.getPreferredLocale()).toBe('en');
+  });
+
+  test('no saved choice falls back to Icelandic', () => {
+    // PUBLIC_DEFAULT_LOCALE — the visitor-facing default mirrors the server.
+    browseTo('/projects', { languages: ['de-DE', 'fr'] });
+    expect(i18n.getPreferredLocale()).toBe('is');
+  });
+
+  // Mirrors the server rule in server/middleware/locale.js. If the client
+  // trusted navigator.languages while the server ignored it, the page would
+  // hydrate in a different language than the SSR <head> just advertised.
+  test('the browser language list never moves a visitor off Icelandic', () => {
+    browseTo('/projects', { languages: ['en-US', 'en'] });
+    expect(i18n.getPreferredLocale()).toBe('is');
   });
 });

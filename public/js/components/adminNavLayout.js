@@ -66,7 +66,7 @@ function scheduleFlush() {
   _saveTimer = setTimeout(flushSave, 400);
 }
 function flushSave() {
-  if (_sending) return; // one PATCH in flight at a time; completion reschedules
+  if (_sending) return; // one PATCH in flight at a time; completion drains
   _saveTimer = null;
   if (!_hasPending) return;
   const sentSeq = _seq;

@@ -3,8 +3,6 @@
 
 // A plain number, including a negative one. Accounting exports are full of these
 // and they must stay numeric so a spreadsheet imports them as numbers, not text.
-// [0-9] rather than a backslash-d escape: identical semantics, and it survives
-// every toolchain that has mangled this file.
 const PLAIN_NUMBER = /^-?[0-9]+([.][0-9]+)?$/;
 
 export function toCsvString(header, rows) {

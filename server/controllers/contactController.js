@@ -1,24 +1,35 @@
-// Contact form handler
-// Validates enquiries, answers the visitor, then e-mails the submission to every
-// verified, enabled admin (the same recipient rule shopController uses for
-// booking notices) and records a no-PII analytics event. Until 2026-09-12 this
-// was a stub that delivered nothing. Delivery is best-effort and never changes
-// the response: the visitor has already been told the message was received, so
-// a mail failure is an error line for the operator, not a 500 for the visitor.
+// Lead-capture handler for the business contact form (/hafa-samband).
+// Validates the enquiry, notifies the company inbox, persists the lead to
+// the `leads` table (migration 097 — the inbox at /admin/leads), and records
+// a no-PII conversion event. Email and row are independent, fire-and-forget:
+// a database problem never delays the visitor or stops the email, and vice
+// versa. /personuvernd §3 + §6 describe this store — change both together.
 const { randomUUID } = require('crypto');
 const { t }          = require('../i18n');
 const logger         = require('../logger');
-const db             = require('../config/database');
 const { AnalyticsEvent } = require('../models/Analytics');
-const { sendContactNotification } = require('../services/emailService');
+const Lead           = require('../models/Lead');
+// Held as a module reference rather than a destructured function so the
+// notification can be stubbed in tests (a destructured binding captures the
+// original and ignores any later spy).
+const emailService = require('../services/emailService');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const ALLOWED_TOPICS = ['carpentry', 'software', 'collaboration', 'press', 'other'];
+// The platform a prospect is moving off. Free text is accepted (the form
+// offers these as options but a lead is never rejected for typing something
+// else) — the list exists so analytics props stay a small, known set.
+const KNOWN_PLATFORMS = ['shopify', 'wix', 'wordpress', 'woocommerce', 'squarespace', 'dk', 'regla', 'payday', 'none', 'other'];
+
+function normalizePlatform(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const v = raw.trim().toLowerCase();
+  return KNOWN_PLATFORMS.includes(v) ? v : 'other';
+}
 
 async function submit(req, res, next) {
   try {
-    const { name, email, message, website, topic } = req.body || {};
+    const { name, email, message, website, company, phone, current_platform: currentPlatform } = req.body || {};
 
     // Honeypot — bots fill in this hidden field, humans never see it
     if (website) {
@@ -34,67 +45,59 @@ async function submit(req, res, next) {
     if (email   && email.trim().length   > 200)  errors.push(t(req.locale, 'errors.contact.emailTooLong'));
     if (message && message.trim().length > 2000) errors.push(t(req.locale, 'errors.contact.messageTooLong'));
 
-    // Topic is optional (Home form omits it). When present, restrict to known values.
-    const normalizedTopic = typeof topic === 'string' && topic.trim()
-      ? topic.trim().toLowerCase()
-      : null;
-    if (normalizedTopic && !ALLOWED_TOPICS.includes(normalizedTopic)) {
-      errors.push(t(req.locale, 'errors.contact.invalidTopic'));
-    }
+    // Optional business fields — length-capped, never required: a lead is
+    // worth more than a perfectly filled form.
+    if (company && (typeof company !== 'string' || company.trim().length > 150)) errors.push(t(req.locale, 'errors.contact.companyTooLong'));
+    if (phone   && (typeof phone   !== 'string' || phone.trim().length   > 40))  errors.push(t(req.locale, 'errors.contact.phoneTooLong'));
 
     if (errors.length) {
       return res.status(400).json({ errors });
     }
 
-    // Log a correlation ID only — name, email, and message body are PII and
-    // must not be written to aggregated log stores.
+    const platform     = normalizePlatform(currentPlatform);
     const submissionId = randomUUID();
-    logger.info({ submissionId, topic: normalizedTopic || 'none' }, '[contact] submission received');
+
+    // Correlation ID + non-identifying platform only. Name, company, email,
+    // phone and the message body are PII and must never reach the log store.
+    logger.info({ submissionId, platform: platform || 'none' }, 'lead submission received');
 
     res.status(200).json({ message: t(req.locale, 'errors.contact.messageReceivedFull') });
 
-    // Deliver to the admins, after the response. Recipients are looked up per
-    // submission (an admin added yesterday gets today's enquiry). Failures are
-    // logged with the id only.
-    (async () => {
-      const { rows } = await db.query(
-        `SELECT email FROM users
-          WHERE id IN (SELECT user_id FROM user_roles WHERE role_name = 'admin')
-            AND email_verified = TRUE AND disabled = FALSE
-            AND email IS NOT NULL`
-      );
-      const adminEmails = rows.map(r => r.email).filter(Boolean);
-      if (!adminEmails.length) {
-        logger.warn({ submissionId }, '[contact] no verified admin to deliver to');
-        return;
-      }
-      await sendContactNotification({
-        submissionId,
-        adminEmails,
-        name: name.trim(),
-        email: email.trim(),
-        message: message.trim(),
-        topic: normalizedTopic,
-        locale: req.locale,
-      });
-    })().catch(err => logger.error(
-      // Resend's validation errors quote the offending field, which could be
-      // the visitor's address — redact anything address-shaped before it lands
-      // in an aggregated log.
-      { submissionId, err: String(err && err.message || err).replace(/[^\s@<>]+@[^\s@<>]+/g, '<email>') },
-      '[contact] delivery failed'
-    ));
+    // Fire-and-forget: neither the notification nor analytics may delay or
+    // fail the visitor's response.
+    emailService.sendLeadNotification({
+      submissionId,
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
+      company: company ? company.trim() : null,
+      phone: phone ? phone.trim() : null,
+      platform,
+      locale: req.locale,
+    }).catch(err => logger.error({ submissionId, err: err.message }, 'lead notification failed'));
 
-    // Fire-and-forget conversion event (no PII — topic only). Reached only on
-    // the success path, so honeypot/validation failures are never counted.
+    // The inbox row. Lead.create never throws (it logs the id and returns
+    // null), so the email above and the response already sent are untouched
+    // by whatever the database does.
+    Lead.create({
+      submissionId,
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
+      company: company ? company.trim() : null,
+      phone: phone ? phone.trim() : null,
+      platform,
+      locale: req.locale,
+    }).catch(() => {});
+
     AnalyticsEvent.record({
       event_type: 'contact_submit',
       locale: req.locale,
-      props: { topic: normalizedTopic || 'none' },
+      props: { platform: platform || 'none' },
     }).catch(() => {});
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { submit };
+module.exports = { submit, KNOWN_PLATFORMS, normalizePlatform };

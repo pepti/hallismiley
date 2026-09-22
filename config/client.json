@@ -1,0 +1,18 @@
+{
+  "$comment": "Per-instance configuration for hallismiley.is (Halli's portfolio site, engine downstream since the 2026-09-22 graft). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. The values below equal the schema defaults: this file exists because tests/unit/clientConfig.test.js reads the committed instance config, not because hallismiley overrides anything. selfUpdate stays 'managed' (observe, never act) — hallismiley deploys itself from its own CI on green main, so the fleet updater must not swap its image.",
+  "modules": {
+    "selfUpdate": {
+      "enabled": true,
+      "mode": "managed",
+      "channel": "stable",
+      "manifestUrl": "https://releases.orangesmiley.is/store/{channel}.json",
+      "allowCriticalOutsideWindow": true,
+      "maintenanceWindow": {
+        "days": ["tue", "wed", "thu"],
+        "fromHour": 3,
+        "toHour": 5,
+        "tz": "Atlantic/Reykjavik"
+      }
+    }
+  }
+}

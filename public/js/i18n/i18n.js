@@ -6,7 +6,13 @@
 //   t('shop.inStock', {n: 3}) // → "3 in stock"
 
 export const SUPPORTED_LOCALES = ['en', 'is'];
-export const DEFAULT_LOCALE    = 'en';
+// DEFAULT_LOCALE is the MESSAGE-FALLBACK dimension (which JSON backfills a
+// missing key) — it mirrors the server's content dimension and stays 'en'.
+// PUBLIC_DEFAULT_LOCALE is what a brand-new visitor with no signal reads the
+// site in — Orange Smiley is an Icelandic business, so 'is'. Mirrors
+// server/config/i18n.js.
+export const DEFAULT_LOCALE        = 'en';
+export const PUBLIC_DEFAULT_LOCALE = 'is';
 
 let _locale   = DEFAULT_LOCALE;
 let _messages = {};
@@ -46,23 +52,10 @@ const PARTY_FORCED_LOCALE = 'is';
  *  when either changes. */
 function isPartyPath(pathname) {
   if (!pathname) return false;
-  const stripped = stripLocalePrefix(pathname);
-  return stripped === '/party' || stripped.startsWith('/party/');
-}
-
-/** Hidden one-off pages published in Icelandic only — exact match, no
- *  sub-routes. Mirrors server/config/i18n.js IS_ONLY_PAGES; kept in lockstep. */
-const IS_ONLY_PAGES = ['/aron13ara'];
-
-function isIsOnlyPage(pathname) {
-  if (!pathname) return false;
-  return IS_ONLY_PAGES.includes(stripLocalePrefix(pathname));
-}
-
-function stripLocalePrefix(pathname) {
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
-  return '/' + parts.join('/');
+  const stripped = '/' + parts.join('/');
+  return stripped === '/party' || stripped.startsWith('/party/');
 }
 
 /** The locale `pathname` is locked to, or null when it may render in any
@@ -72,6 +65,18 @@ function stripLocalePrefix(pathname) {
  *
  *  Defaults to the current URL so callers on the party page can just ask
  *  `forcedLocaleFor()`. */
+/** Hidden one-off pages published in Icelandic only — exact match, no
+ *  sub-routes. Mirrors server/config/i18n.js IS_ONLY_PAGES; kept in lockstep.
+ *  hallismiley residual hook (engine-graft). */
+const IS_ONLY_PAGES = ['/aron13ara'];
+
+function isIsOnlyPage(pathname) {
+  if (!pathname) return false;
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
+  return IS_ONLY_PAGES.includes('/' + parts.join('/'));
+}
+
 export function forcedLocaleFor(pathname = window.location.pathname) {
   if (isPartyPath(pathname)) return PARTY_FORCED_LOCALE;
   if (isIsOnlyPage(pathname)) return 'is';
@@ -97,22 +102,24 @@ export function getPreferredLocale() {
 }
 
 /** The visitor's OWN locale, ignoring any route lock: ?locale= → explicit saved
- *  choice → Accept-Language → default.
+ *  choice → PUBLIC_DEFAULT_LOCALE.
  *
  *  Split out from getPreferredLocale because the lock and the preference answer
  *  different questions. "What locale does this page render in?" is the lock;
  *  "what locale does this visitor read the site in?" is this. On a locked page
- *  the two disagree, and href() below needs the second one. */
+ *  the two disagree, and href() below needs the second one.
+ *
+ *  navigator.languages is deliberately not consulted — it mirrors the server's
+ *  rule in server/middleware/locale.js. Most Icelandic browsers report en-US,
+ *  so trusting it would flip the site to English for the audience it is written
+ *  for; and if the client disagreed with the server the page would hydrate into
+ *  a different language than the SSR <head> advertises. */
 function resolveUserLocale() {
   const fromQuery = getLocaleFromQuery();
   if (fromQuery) return fromQuery;
   const saved = localStorage.getItem('locale_choice');
   if (saved && SUPPORTED_LOCALES.includes(saved)) return saved;
-  for (const lang of (navigator.languages || [])) {
-    const code = lang.split('-')[0].toLowerCase();
-    if (SUPPORTED_LOCALES.includes(code)) return code;
-  }
-  return DEFAULT_LOCALE;
+  return PUBLIC_DEFAULT_LOCALE;
 }
 
 /** Persist an EXPLICIT locale choice (localStorage + cookie). Called only
@@ -130,6 +137,20 @@ export function persistLocaleChoice(locale) {
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 
+/** Engine table + this product's overlay. `<locale>.json` is engine-owned and
+ *  arrives by merge; `product.<locale>.json` is product-owned (D-021) and its
+ *  keys win, so a product never edits the engine file and a sync never
+ *  conflicts on locale keys. A missing overlay is an empty table. */
+async function fetchTable(locale) {
+  const [base, overlay] = await Promise.all([
+    fetch(`/js/i18n/${locale}.json`).then(r => r.json()),
+    fetch(`/js/i18n/product.${locale}.json`)
+      .then(r => (r.ok ? r.json() : {}))
+      .catch(() => ({})),
+  ]);
+  return { ...base, ...(overlay && typeof overlay === 'object' ? overlay : {}) };
+}
+
 /** Fetch the JSON for `locale` and cache it. Always resolves — on network
  *  error falls back silently to empty messages (en fallback still applies). */
 export async function loadLocale(locale) {
@@ -137,10 +158,8 @@ export async function loadLocale(locale) {
 
   try {
     const [msgs, fallback] = await Promise.all([
-      fetch(`/js/i18n/${locale}.json`).then(r => r.json()),
-      locale !== DEFAULT_LOCALE
-        ? fetch(`/js/i18n/${DEFAULT_LOCALE}.json`).then(r => r.json())
-        : Promise.resolve(null),
+      fetchTable(locale),
+      locale !== DEFAULT_LOCALE ? fetchTable(DEFAULT_LOCALE) : Promise.resolve(null),
     ]);
     _messages = msgs;
     _fallback = fallback ?? msgs;
@@ -156,6 +175,17 @@ export async function loadLocale(locale) {
   // is what used to break the party-page Icelandic default. Persistence is
   // persistLocaleChoice's job, triggered only by the explicit switcher.
   document.documentElement.lang = locale;
+
+  // Tell long-lived components mounted OUTSIDE #app (change-request widget,
+  // theme switcher, footer) that the message table has been swapped, so they
+  // can relabel themselves. Note this is not the same as 'spa:navigate':
+  // switchLocale() dispatches that one synchronously BEFORE the router awaits
+  // loadLocale(), so a listener there would still read the previous locale
+  // (ice #206).
+  // Guarded: unit tests stub `window` as a bare object (localeLockClient.test.js).
+  if (typeof Event === 'function' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new Event('localechange'));
+  }
 
   // Update og:locale so social scrapers that execute JS see the right locale.
   const ogLocale = document.querySelector('meta[property="og:locale"]');

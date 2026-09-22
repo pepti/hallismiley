@@ -31,7 +31,7 @@
   border-left: 3px solid var(--gold);
 }
 
-.updates-version { color: var(--gold-light); }
+.updates-version { color: var(--accent-ink); }
 
 /* ── Status facts ─────────────────────────────────────────────────────────── */
 
@@ -66,7 +66,7 @@
 .updates-note,
 .updates-hint { margin: var(--sp-2) 0 0; color: var(--text-muted); font-size: 0.82rem; }
 .updates-managed { margin: var(--sp-3) 0 0; color: var(--text-muted); }
-.updates-warn { margin: var(--sp-3) 0 0; color: var(--gold-light); font-size: 0.88rem; }
+.updates-warn { margin: var(--sp-3) 0 0; color: var(--accent-ink); font-size: 0.88rem; }
 .updates-scheduled { margin: var(--sp-3) 0 0; font-size: 0.9rem; }
 .updates-next { margin: var(--sp-3) 0 0; font-size: 0.88rem; color: var(--text-muted); }
 
@@ -85,10 +85,10 @@
   color: var(--text-muted);
   vertical-align: middle;
 }
-.updates-badge--critical { border-color: var(--gold); color: var(--gold-light); }
+.updates-badge--critical { border-color: var(--gold); color: var(--accent-ink); }
 .updates-badge--blocked  { border-style: dashed; }
 
-.updates-chip--applied   { border-color: var(--gold-dark); color: var(--gold-light); }
+.updates-chip--applied   { border-color: var(--gold-dark); color: var(--accent-ink); }
 .updates-chip--failed    { border-color: var(--error); color: var(--error); }
 .updates-chip--applying  { border-style: dashed; }
 

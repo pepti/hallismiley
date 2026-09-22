@@ -2,11 +2,6 @@
 // more than the payload: anonymous → 401, non-admin → 403, managed instance →
 // 403 with a message a human can act on, and no state change in any of those.
 const request = require('supertest');
-// The BASE ships the self-update module OFF (no config/client.json). This
-// suite tests the module LIVE, so switch it on the way an instance would —
-// before the app is required (clientConfig reads env at require time).
-process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED = 'true';
-
 const app = require('../../server/app');
 const db  = require('../../server/config/database');
 const SystemUpdate = require('../../server/models/SystemUpdate');

@@ -1,7 +1,13 @@
 import { forgotPassword } from '../services/auth.js';
 import { t, href } from '../i18n/i18n.js';
+import { mountSceneBackdrop } from '../scenes/sceneHeader.js';
 
 export class ForgotPasswordView {
+  // Rapids through snow — the account pages' shared scene (2026-09-22).
+  destroy() {
+    this._scene?.destroy();
+  }
+
   async render() {
     const el = document.createElement('div');
     el.className = 'main auth-page';
@@ -57,6 +63,7 @@ export class ForgotPasswordView {
       }
     });
 
+    this._scene = mountSceneBackdrop(el, 'account');
     return el;
   }
 }

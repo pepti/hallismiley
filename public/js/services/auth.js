@@ -41,16 +41,22 @@ export function canEdit()         { return getRoles().some(r => r === 'admin' ||
 export function getViews()        { return _user?.views || []; }
 export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
 export function hasAnyAdminView() { return getViews().length > 0; }
+// Holds every view (the admin role resolves to ['*']). The sidebar's
+// hidden-by-policy set (components/adminSurface.js) applies only to these
+// accounts — a custom role's explicit grant list is already its whole nav.
+export function hasAllViews()     { return getViews().includes('*'); }
 
-// Mirrors server/services/mfaService.js: the 2FA gate protects an admin by
-// PRIMARY role or by role SET (`admin_anywhere`), and isAdmin() already reads
-// the set — but ProfileView gated its enrolment panel on the primary role
-// alone, so a set-only admin was challenged with no way to comply.
-//
-// An instance that widens the server predicate must widen this in step. Orange
-// Smiley, for example, adds `|| canSeeView('accounts')` for sellers who reach
-// customer data (its ENHANCEMENTS #17).
-export function isMfaProtected() { return isAdmin(); }
+// Mirrors server/services/mfaService.js protectedRole(): admin (primary role
+// OR role set — getRoles() covers both, which is the `admin_anywhere` case),
+// or an accounts holder. ENHANCEMENTS #17 widened the SERVER gate to sellers
+// who own customer accounts without widening the enrolment UI, so a seller was
+// pushed to enrol and had no panel to enrol from. The server stays the
+// authority; this exists so the two cannot drift silently again.
+// D-020 widened both again: a published seller on the public instance.
+export function isMfaProtected() { return isAdmin() || canSeeView('accounts') || isSeller(); }
+// Seller area (D-020): the session says so only on the public instance, for a
+// user the latest ops snapshot lists. UX only — /api/v1/seller re-checks.
+export function isSeller() { return _user?.seller === true; }
 
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.

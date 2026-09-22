@@ -6,23 +6,17 @@ const shopController  = require('../controllers/shopController');
 const { csrfProtect } = require('../middleware/csrf');
 const { lucia }       = require('../auth/lucia');
 
-// Soft auth — populate req.user if a valid session cookie is present, but
-// don't reject if missing (guest checkout is supported).
-async function softAuth(req, res, next) {
-  try {
-    const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
-    if (!sessionId) return next();
-    const { session, user } = await lucia.validateSession(sessionId);
-    if (session && user && !user.disabled) {
-      req.user = user;
-      req.session = session;
-    }
-    return next();
-  } catch {
-    return next();
-  }
-}
+// Soft auth for guest checkout is the shared middleware: it attaches the role
+// SET, so any role-aware behaviour that lands on checkout sees the same
+// req.user.roles every other gate does. A private copy that only attached the
+// user row lived here until 2026-09-03 — the same copy changeRequestRoutes had
+// deleted for 404ing every admin granted through Admin → Roles.
+const { softAuth } = require('../middleware/softAuth');
 
+// Still private on purpose, for now: the shared auth/middleware.js requireAuth
+// also rotates fresh cookies, re-resolves req.locale and answers 403 (not 401)
+// for a disabled account — behaviour changes for /orders/mine that deserve
+// their own change, not a ride-along on the soft-auth cleanup.
 async function requireAuth(req, res, next) {
   const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
   if (!sessionId) return res.status(401).json({ error: 'Unauthorized', code: 401 });
@@ -35,10 +29,10 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// Stricter rate limit on checkout — 10 attempts / 15 min / IP
+// Stricter rate limit on checkout — 50 attempts / 15 min / IP (was 10; ×5, ice #201)
 const checkoutLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',

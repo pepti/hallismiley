@@ -1,423 +1,303 @@
-# Deployment Guide — Halli Smiley
+# Deployment — Orange Smiley (orangesmiley.is)
 
-This guide covers deploying the app to **Azure App Service** (Linux container)
-with **Azure Container Registry** and **Azure Database for PostgreSQL Flexible
-Server**. Deploys are triggered from GitHub Actions using OIDC federated
-credentials — no long-lived Azure secrets in the repo.
+**State as of 2026-09-22: https://www.orangesmiley.is is live** — the public
+site only, production only (not ops — D-020 step 2 split); the stack and its
+ids are in §6. **No provisioning or deploy happens without Halli's
+explicit go-ahead** (CLAUDE.md), and each Part D step in §6 is his hand.
 
-For routine operational tasks (rollbacks, log access, common incidents),
-see [`RUNBOOK.md`](../RUNBOOK.md). For environment variable reference, see
-[`.env.example`](../.env.example). For the release channel that instances
-scaffolded from this base poll, see [`SELF-UPDATE.md`](SELF-UPDATE.md).
+This file was rewritten 2026-09-11. The previous version was the HalliProjects
+base's guide to the owner's personal `hallismiley-*` Azure resources and an
+auto-deploy pipeline this repo deliberately removed; it also set an env var
+nothing reads (`REQUIRE_EMAIL_VERIFICATION`) and SMTP settings the app has not
+used since it moved to Resend.
 
-Sections 1–5 and 7 are the provisioning recipes the live stack was built with
-and are still the way to rebuild it. Sections 6, 8 and 9 describe what the
-workflows and the boot code actually do — re-read against `.github/workflows/*`
-and `server/` on 2026-09-12; live facts in this file are dated.
-
----
-
-## Prerequisites
-
-- Azure subscription with permission to create resource groups, registries,
-  databases, and app services.
-- `az` CLI installed and logged in (`az login`).
-- A GitHub repository for the app (this guide assumes `pepti/hallismiley`).
-- DNS control for your custom domain (only needed for custom-domain step).
-
-The names below match the current production deployment. Swap them for your
-own if you are deploying a fork.
-
-| Resource | Name | Region |
-| --- | --- | --- |
-| Resource group | `hallismiley-rg` | West Europe |
-| App Service plan | `hallismiley-plan` (B1 Linux, one worker, **no deployment slots** — read 2026-09-12; the worker is SHARED with `ferdabox-app`, so a scale-up or a memory problem is both sites') | West Europe |
-| App Service | `hallismiley-app` | West Europe |
-| Container registry | `hallismileyacr` | West Europe |
-| Postgres Flexible Server | `hallismiley-db` | North Europe (West Europe was restricted) |
-| Storage account | `hallismileyfs` (uploads file share) | West Europe |
+For routine operations see [`RUNBOOK.md`](../RUNBOOK.md); for every env var
+see [`.env.example`](../.env.example); for the release channel see
+[`SELF-UPDATE.md`](SELF-UPDATE.md).
 
 ---
 
-## 1. Resource provisioning
+## 1. What runs in CI (`.github/workflows/ci.yml`)
 
-```bash
-# Resource group
-az group create --name hallismiley-rg --location westeurope
+Push and pull request to **`master`** (the long-lived branch; it said `main`
+until 2026-09-02 and CI had never run) plus a weekly cron. No `paths-ignore`:
+docs-only changes run the full workflow. Three independent jobs, each with its
+own `postgres:16-alpine` service, all on Node 24:
 
-# Container registry (Basic SKU is fine for a single app)
-az acr create --resource-group hallismiley-rg --name hallismileyacr \
-  --sku Basic --admin-enabled false
+1. `test` — `npm audit --audit-level=high`, lint, `check:i18n`, runner spec,
+   release-manifest schema, Jest with coverage.
+2. `e2e` — Playwright against a booted server.
+3. `docker` — image build, Trivy (`HIGH,CRITICAL`, unfixed ignored), boot
+   smoke test with `UPLOAD_ROOT` and `DB_SSL=false` declared, readiness probe.
 
-# App Service plan + app (Linux, B1)
-az appservice plan create --resource-group hallismiley-rg --name hallismiley-plan \
-  --is-linux --sku B1
-az webapp create --resource-group hallismiley-rg --plan hallismiley-plan \
-  --name hallismiley-app \
-  --deployment-container-image-name hallismileyacr.azurecr.io/hallismiley:latest
+**CI green is the merge gate. Nothing deploys from CI.**
 
-# Grant the App Service permission to pull from ACR using its managed identity
-az webapp identity assign --resource-group hallismiley-rg --name hallismiley-app
-APP_PRINCIPAL_ID=$(az webapp identity show \
-  --resource-group hallismiley-rg --name hallismiley-app --query principalId -o tsv)
-ACR_ID=$(az acr show --name hallismileyacr --query id -o tsv)
-az role assignment create --assignee "$APP_PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID"
-```
+## 2. The image (`Dockerfile`)
 
-> **What the live app actually does (read 2026-09-12):** it pulls from ACR with
-> registry admin credentials held in the `DOCKER_REGISTRY_SERVER_*` app
-> settings (`acrUseManagedIdentityCreds` is false and the site has no managed
-> identity). The identity recipe above is the intended end state; switching the
-> live site to it is an Azure change, not a repo change.
+- Two-stage build on `node:24-alpine@sha256:d32cdf61…` (digest-pinned; both
+  stages). **The Node major in the Dockerfile, `ci.yml`'s `node-version: 24`
+  and the CLAUDE.md invariant move together** — dependabot's docker ecosystem
+  is configured not to major-bump the base image on its own.
+- `apk upgrade` runs behind `ARG APK_REFRESH` (deploy passes the run id so the
+  layer is not served from cache); the bundled npm CLI is removed from the
+  runtime image (LESSONS 2026-09-03).
+- `scripts/generate-version.js` writes `server/version.json` from the build
+  args `APP_VERSION` / `GIT_SHA` / `BUILT_AT` / `RELEASE_CHANNEL` — this is the
+  identity the self-update checker compares against a published release. A
+  local build without the args reports `version: "dev"`.
+- Runs as `appuser`, `EXPOSE 3000`, `HEALTHCHECK` on the liveness route,
+  `CMD node server/server.js`. Migrations (`server/scripts/migrate.js`, the
+  engine array plus the product array — `docs/MIGRATIONS.md`) run at boot; there
+  is no separate migration step. Before the first boot of a merged engine on a
+  live database, run `node server/scripts/migrate.js --plan` against a restored
+  copy: it prints RUN / ALIAS / SUPERSEDED per entry and executes nothing.
 
----
+`promote.yml` sets up the same Node 24 (it was on 20 until 2026-09-12).
 
-## 2. Postgres Flexible Server
+## 3. The deploy workflow (`.github/workflows/deploy.yml`) — dispatch-only, by digest
 
-```bash
-az postgres flexible-server create \
-  --resource-group hallismiley-rg --name hallismiley-db \
-  --location northeurope \
-  --tier Burstable --sku-name Standard_B1ms \
-  --storage-size 32 --version 16 \
-  --admin-user halliadmin --admin-password '<STRONG_PASSWORD>' \
-  --public-access 0.0.0.0  # Allow other Azure services; lock down further if needed
+Neutralised 2026-08-19 (ENHANCEMENTS #1); rebuilt 2026-09-22 from the
+rekstrarkerfid workflow (build once, deploy by digest), cut to this repo's one
+stack — production, no TEST. Trigger is `workflow_dispatch` **only**, with an
+optional full-length `sha` input (how a rollback build gets deployed); no
+auto-deploy on green CI. The job runs in the GitHub environment
+**`production`** (the OIDC subject), where the target variables live; the first
+step is a guard that fails before login if any is unset:
 
-az postgres flexible-server db create \
-  --resource-group hallismiley-rg --server-name hallismiley-db \
-  --database-name hallismiley
-```
+| Setting | Kind | Used for |
+|---|---|---|
+| `ACR_NAME`, `IMAGE_NAME`, `WEBAPP_NAME`, `RESOURCE_GROUP` | environment `vars.*` (required by the guard) | registry, image name, App Service, resource group |
+| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | `secrets.*` | OIDC federated login (no long-lived Azure secret) |
+| `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` + `RESEND_API_KEY` | `vars.*` + `secrets.*` (optional) | the deploy-failed alert email; skipped cleanly when unset |
 
-Add your current IP to the server's firewall during initial setup if you need
-to connect via `psql` from your laptop (the same rule is needed for the
-`pg_dump`, seed and bootstrap recipes elsewhere in the docs):
+What a dispatched run does: checkout at the sha (`fetch-depth: 50`) →
+`generate-changes.js` (the "Latest updates" card) → Azure login → `az acr
+login` → look `:<sha>` up in the registry → **build + push only if it is not
+there** (`:latest`, `:<sha>`, `:sha-<sha>`; single-arch, `provenance: false`)
+→ resolve the **digest** and print it with the image it replaces (the rollback
+target) in the run summary → **Trivy on that digest before the web app is
+pointed at it** → `webapps-deploy` with `registry/image@sha256:…` → `az webapp
+restart` → poll `/ready` until it answers from a process **younger than the
+swap** (the old container answers 200 too).
 
-```bash
-MY_IP=$(curl -s ifconfig.me)
-az postgres flexible-server firewall-rule create \
-  --resource-group hallismiley-rg --name hallismiley-db \
-  --rule-name dev-laptop --start-ip-address "$MY_IP" --end-ip-address "$MY_IP"
-```
+With no TEST stack, what stands between a commit and the live site is ci.yml
+(tests + boot smoke on the same commit) and the Trivy gate: **dispatch only a
+sha whose CI run on master is green.**
 
-URL-encode the password when building `DATABASE_URL` by hand:
-`node -e "console.log(encodeURIComponent(process.argv[1]))" '<password>'`.
+## 4. The release channel (`.github/workflows/promote.yml`) — dispatch-only
 
-Backups (read 2026-09-12): PITR retention **7 days**, geo-redundant backup
-**disabled**, no HA. Recipes in `README.md` → Database Backup Strategy.
+Retags an already-built image **by digest** to `canary` or `stable` and
+regenerates the channel manifest every instance polls (`docs/SELF-UPDATE.md`).
+Inputs: `sha` (the full SHA deploy.yml built), `channel`, `critical`,
+`min_compatible`, `dry_run`. It needs two more repository variables than
+deploy.yml: `RELEASE_STORAGE_ACCOUNT` and `RELEASE_CONTAINER` (the blob
+container that serves `stable.json` / `canary.json`), checked at the start
+unless `dry_run`. Rollout discipline is in the file header: promote to canary,
+soak on Orange Smiley's own instances 24–48 h, promote the SAME sha to stable.
 
----
+The manifest's changelog section comes from `CHANGELOG.md` by `## [version]`
+heading (`scripts/build-manifest.js`), with the version from `package.json` —
+a missing section publishes an empty changelog silently, so keep the heading
+for the version being promoted.
 
-## 3. Persistent uploads — Azure Files
+## 5. What the container needs at boot
 
-The container is read-only by default; uploaded media must live on a mounted
-volume that survives container restarts and image swaps. `server/config/paths.js`
-refuses to boot in production without `UPLOAD_ROOT`.
+`server/server.js` refuses to start (exit 1, before listening) without:
 
-```bash
-az storage account create \
-  --resource-group hallismiley-rg --name hallismileyfs \
-  --sku Standard_LRS --kind StorageV2 \
-  --https-only true --min-tls-version TLS1_2
-az storage share-rm create \
-  --resource-group hallismiley-rg --storage-account hallismileyfs \
-  --name uploads --quota 100
+| Variable | Note |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `ALLOWED_ORIGINS` | comma-separated CORS origins |
+| `CSRF_SECRET` | 32+ random chars |
+| `NODE_ENV` | `production` on every deployed stack (also on TEST stacks — it is not the environment label) |
+| `RESEND_API_KEY` | **required when `APP_ENV=production`** — a silent mail transport would no-op verification, resets and receipts while returning 200 |
+| `UPLOAD_ROOT` | required when `NODE_ENV=production` (`server/config/paths.js` throws) — the persistent uploads mount, e.g. `/app/uploads` |
 
-az webapp config storage-account add \
-  --resource-group hallismiley-rg --name hallismiley-app \
-  --custom-id uploads --storage-type AzureFiles \
-  --account-name hallismileyfs --share-name uploads \
-  --access-key "$(az storage account keys list -g hallismiley-rg -n hallismileyfs --query '[0].value' -o tsv)" \
-  --mount-path /app/uploads
-```
+Also set on any real instance:
 
-**Windows / Git Bash gotcha:** if `--mount-path /app/uploads` errors with
-"contains invalid characters", prefix the command with `MSYS_NO_PATHCONV=1`
-so MSYS doesn't rewrite the Linux path.
+| Variable | Why |
+|---|---|
+| `APP_ENV` | `production` / `test` — the environment label (`server/config/appEnv.js`); drives the RESEND rule above, the MCP `[TEST]/[PROD]` tag and the change-request gate |
+| `APP_URL` | canonical origin: email links, sitemap, SSR canonical/og/JSON-LD, the canonical-host 301. Code default `https://www.orangesmiley.is` since 2026-09-22 (was the base's hallismiley.is) |
+| `EMAIL_FROM` | sender. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `info@orangesmiley.is` |
+| `EMAIL_REPLY_TO` | where replies go — the sending domain has no inbox. Added to every message that does not set its own (lead notifications reply to the enquirer). Unset = no Reply-To |
+| `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |
+| `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED` | `false` on orangesmiley.is until the release host exists (D-014); `config/client.json` points at a manifest URL nothing serves yet |
+| `DB_SSL` | TLS is **on by default in production**; `false` is the documented opt-out for a plain-TCP Postgres (CI only, never Azure) |
+| `METRICS_TOKEN` | bearer for `GET /metrics`; blank = localhost only |
+| `PORT` | App Service sets `8080` for Linux containers; default 3000 |
+| `BOOKS_UPLOAD_ROOT` | the books' fylgiskjöl — point OUTSIDE the checkout on a backed-up disk |
+| `SELF_UPDATE_TRIGGER_URL` | the platform's deployment webhook; without it an update can be recorded but not applied |
+| `MCP_ENABLED` etc. | see `docs/mcp.md` |
 
----
+Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
+nothing reads them (the mail transport is Resend).
 
-## 4. GitHub Actions OIDC trust
+**Canonical host = `APP_URL`'s host** (since 2026-09-12): in production
+`server/app.js` 301-redirects every request whose `Host` differs from the host
+part of `APP_URL` (only `/health` and `/ready` are exempt). Until then it was
+the literal `www.hallismiley.is` with no override, which would have sent a
+first deploy's traffic to the base owner's site. The fallback when `APP_URL`
+is unset is `www.orangesmiley.is` since 2026-09-22 — still, set `APP_URL` on
+every instance. `public/index.html` is baked with `https://www.orangesmiley.is`;
+`ssrMeta.js` swaps that origin for `APP_URL` when it loads the template, so
+the static Organization JSON-LD matches the publisher `@id`s on any host.
 
-This lets `.github/workflows/deploy.yml` log into Azure without storing any
-long-lived secrets in the repo.
+## 6. Provisioning, when Halli says go
 
-```bash
-# Create an Azure AD application + service principal for GitHub
-az ad app create --display-name hallismiley-github-deploy
-APP_ID=$(az ad app list --display-name hallismiley-github-deploy --query "[0].appId" -o tsv)
-az ad sp create --id "$APP_ID"
-SP_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+The shape is the base's: Azure App Service (Linux container) pulling from an
+Azure Container Registry with its managed identity (`AcrPull`), Azure
+Database for PostgreSQL Flexible Server (v16, TLS), an Azure Files share
+mounted at `/app/uploads`, OIDC federated credential for the GitHub repo with
+subject `repo:orange-smiley/orangesmiley:ref:refs/heads/master`, HTTPS-only,
+FTPS disabled. The `azure-ops` skill holds the fleet provisioning pattern;
+the step-by-step recipe is LedgerLink's `docs/DEPLOYMENT.md` §0–12 (verified
+live 2026-09-07), and the DNS cutover is rekstrarkerfid's
+`docs/GO-LIVE-CHECKLIST.md` §5.
 
-# Role assignments
-SUB_ID=$(az account show --query id -o tsv)
-az role assignment create --assignee "$SP_ID" --role AcrPush --scope "$ACR_ID"
-az role assignment create --assignee "$SP_ID" --role Contributor \
-  --scope "/subscriptions/$SUB_ID/resourceGroups/hallismiley-rg/providers/Microsoft.Web/sites/hallismiley-app"
+### orangesmiley.is production (approved 2026-09-22)
 
-# Federated credential — trust the main branch
-az ad app federated-credential create --id "$APP_ID" --parameters '{
-  "name": "github-main-branch",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:pepti/hallismiley:ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
+Halli's choices: canonical `www.orangesmiley.is` (the apex 301s to it), small
+and production only (own B1 plan + own B1ms Postgres, no TEST stack, ~€35–40
+/month; grows to B2 when ops arrives), a **fresh database** from the seeded
+built-in content — nothing copied from the local instance, which holds the
+books — and Resend on `mail.orangesmiley.is` from day one. Ops stays on the
+local instance (D-017); the public site and ops share no database (plan §4).
 
-# Repo secrets used by deploy.yml
-gh secret set AZURE_CLIENT_ID       --body "$APP_ID"
-gh secret set AZURE_TENANT_ID       --body "$(az account show --query tenantId -o tsv)"
-gh secret set AZURE_SUBSCRIPTION_ID --body "$SUB_ID"
-```
+Platform subscription, `swedencentral` (D-012), fleet names:
 
-Plus `RESEND_API_KEY` as a repository secret (set 2026-09-12, evening) — the
-two alert jobs in `deploy.yml` e-mail through it (see §6). This is a different
-store from the App Service setting of the same name; it was copied from there
-(`az webapp config appsettings list … --query "[?name=='RESEND_API_KEY'].value"
--o tsv` into `gh secret set RESEND_API_KEY --body`). Those four are the only
-repository secrets. Still **not** set: the four repository **variables**
-`promote.yml` needs (§6b).
+| Resource | Name | Notes |
+|---|---|---|
+| Resource group | `orangesmiley-prod-rg` | tags owner / instance / `role=public` |
+| Postgres | `orangesmiley-prod-pg` | B1ms, PG 16, 32 GB, 14-day **geo-redundant** backup (creation-time only), `--public-access Enabled` + one firewall rule per web-app outbound IP, `require_secure_transport=on` |
+| Key Vault | `orangesm-prod-kv` | RBAC mode; `database-url`, `csrf-secret`, `metrics-token`, `resend-api-key`, each `--expires` +180 d; app settings reference them unversioned |
+| Storage | `orangesmileyprodfiles` | share `uploads` → `/app/uploads` (`UPLOAD_ROOT`); `BOOKS_UPLOAD_ROOT` under it |
+| Plan / web app | `orangesmiley-prod-plan` (B1 Linux) / `orangesmiley-prod-web` | system identity, AcrPull on `orangesmileyacr`, KV Secrets User on its own vault, HTTPS-only, FTPS off, TLS 1.2, HTTP/2, always-on, health check `/health` |
+| Monitoring | `orangesmiley-prod-ai` | `standard` availability test on `/health` **plus an alert rule on it** |
+| Budget | `orangesmiley-prod-monthly` | €45, RG-scoped |
+| Deploy identity | `orangesmiley-github-deploy` | AcrPush on the registry, Contributor on the web app only, KV Reader on the vault; federated creds for `ref:refs/heads/master` and `environment:production`, each in plain AND id-bearing subject form |
 
----
+App settings beyond §5's boot-fatal set: `APP_ENV=production`,
+`APP_URL=https://www.orangesmiley.is`, `ALLOWED_ORIGINS` = both hostnames'
+https origins + the `azurewebsites.net` one, `EMAIL_FROM`, `EMAIL_REPLY_TO`,
+`LEAD_NOTIFY_EMAIL`, `PORT=8080`, `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED=false`.
 
-## 5. App Settings (environment variables)
+The steps that are **Halli's hand**: the go on spend before the first `az …
+create`; the Resend domain + DPA + DKIM/SPF/DMARC records and the API key
+(into the vault, never into chat); the ISNIC records (`A @` + `TXT asuid`,
+`CNAME www` + `TXT asuid.www` — values supplied at that step); production
+app-setting writes if the agent side is blocked.
 
-Set everything via `az webapp config appsettings set` so the values survive
-container restarts and are visible in the portal. See `.env.example` for the
-authoritative list. Every settings write restarts the container.
+#### Provisioned 2026-09-22 (Halli's go) — the ids the next session needs
 
-```bash
-# Required — the server exits at boot without these
-az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
-  --settings \
-    NODE_ENV=production \
-    PORT=8080 \
-    DB_SSL=true \
-    DATABASE_URL="postgresql://halliadmin:<url-encoded-password>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require" \
-    ALLOWED_ORIGINS="https://hallismiley.is,https://www.hallismiley.is,https://hallismiley-app.azurewebsites.net" \
-    CSRF_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
-    APP_URL="https://www.hallismiley.is" \
-    UPLOAD_ROOT="/app/uploads" \
-    METRICS_TOKEN="$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")"
+- **Live:** `https://www.orangesmiley.is` (canonical); the apex, `http://` and
+  the azurewebsites host 301 there. Inbound IP `51.12.31.17`; custom-domain
+  verification id `6E830E09…0DFB6042` (the `asuid` TXT records). Managed
+  certificates for both names, SNI, valid to 2027-03-22, auto-renewed.
+- **Web app** identity principalId `e3adf637-ad75-4bdd-81c6-d74227ccc2c2` —
+  AcrPull on `orangesmileyacr`, Key Vault Secrets User on `orangesm-prod-kv`.
+  Container logging to filesystem is ON (that is how the `ip:port` limiter bug
+  was found on day one — HISTORY `#go-live`).
+- **Deploy identity** `orangesmiley-github-deploy`: appId
+  `0d3d70c3-5144-4897-9d34-df6940e8ff68`, app objectId
+  `707a9647-139b-4c5b-bab3-f09036a52cf2`, SP objectId
+  `3c6b36fc-fcf0-43f0-a712-ed1b506cf28a` — AcrPush (registry) · Contributor (web
+  app only) · Key Vault Reader (vault). Four federated subjects (master +
+  `environment:production`, plain and id-bearing; repo id `1349405381`, org id
+  `316194275`).
+- **Vault** secrets `database-url` · `csrf-secret` · `metrics-token` ·
+  `resend-api-key` (real key since 2026-09-22), all expiring 2027-03-21;
+  `admin-bootstrap-password` (30 d) for the first admin `halli`. Purge
+  protection on.
+- **Postgres** B1ms, PG 16, 32 GB, 14-day geo-redundant backup; the app's 32
+  outbound IPs as rules `app-1..32`. Scaling the plan rotates them — re-run the
+  loop.
+- **Monitoring:** App Insights `orangesmiley-prod-ai`; availability test
+  `PROD-ready` (standard, 300 s, Amsterdam) on `https://www.orangesmiley.is/ready`;
+  alerts `PROD-ready-down` and `PROD - HTTP 5xx spike` → action group
+  `os-oncall-prod` (halli@orangesmiley.is).
+- **Budgets:** `orangesmiley-prod-monthly` €45 (RG); `orange-smiley-platform-monthly`
+  raised 140 → 175.
+- **Mail:** Resend domain `mail.orangesmiley.is`, EU (eu-west-1), verified, no
+  tracking subdomain; DNS at ISNIC = `resend._domainkey.mail` TXT, `rsend.mail`
+  and `send.mail` CNAMEs. The Resend team is still named "hallismiley" — move it
+  to the company with the subscriptions.
+- **Rotating a Key Vault secret:** a plain restart can keep serving the cached
+  value. Re-set the app setting (same reference) to force a re-fetch, then check
+  `/ready` uptime is younger than the change.
+- ISNIC DNS is edited as **BSE255-IS** (registrant/tech contact); HV712-IS is
+  only the payer and cannot edit records.
 
-# Email — Resend is the only transport (server/services/emailService.js)
-az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
-  --settings \
-    RESEND_API_KEY=<from-resend> \
-    EMAIL_FROM=noreply@hallismiley.is   # the live value (read 2026-09-12); the code default is halli@hallismiley.is
+Three recipes from the base's guide that are still correct and worth keeping
+(placeholders as in `RUNBOOK.md`):
 
-# OAuth (Google sign-in) — only if SOCIAL_LOGIN_ENABLED=true
-az webapp config appsettings set --resource-group hallismiley-rg --name hallismiley-app \
-  --settings \
-    GOOGLE_CLIENT_ID=<from-google-console> \
-    GOOGLE_CLIENT_SECRET=<from-google-console> \
-    GOOGLE_REDIRECT_URI=https://www.hallismiley.is/auth/google/callback
-```
+- **Reaching the managed Postgres from a laptop** (needed by the prod shop
+  seed, the first-admin bootstrap and any `psql`): add your IP to the server
+  firewall first, and URL-encode the password in `DATABASE_URL` —
+  `node -e "console.log(encodeURIComponent(process.argv[1]))" '<password>'`.
 
-What each of these does in code: `NODE_ENV`, `DATABASE_URL`, `ALLOWED_ORIGINS`
-and `CSRF_SECRET` are `REQUIRED_ENV` in `server/server.js`; `UPLOAD_ROOT` is
-required by `server/config/paths.js` when `NODE_ENV=production`; `DB_SSL` is
-on by default in production anyway (`server/config/database.js` — `false` is
-the documented opt-out, never for Azure); `APP_URL` builds every e-mail link,
-the canonical tags, the sitemap **and, in production, the canonical-host 301**
-(`server/app.js` derives the host from it); `METRICS_TOKEN` gates `/metrics`.
+  ```bash
+  MY_IP=$(curl -s ifconfig.me)
+  az postgres flexible-server firewall-rule create \
+    --resource-group <RESOURCE_GROUP> --name <DB_SERVER> \
+    --rule-name dev-laptop --start-ip-address "$MY_IP" --end-ip-address "$MY_IP"
+  ```
 
-**`APP_ENV`** is the deployment's own label (`test` on a TEST stack,
-`production` here — set on the live site on 2026-09-12, evening). Every reader
-(`requireTestEnv.js`, `ssrMeta.js`, the MCP env tag) already resolves to
-production when it is unset under `NODE_ENV=production`, so setting
-`APP_ENV=production` changes exactly one thing: it **arms the boot guard** in
-`server/server.js` that refuses to start without `RESEND_API_KEY` — which is
-why it is set together with that key, never before it. Never set
-`APP_ENV=test` on the live site — that would switch on the TEST chrome and the
-change-request widget for every visitor.
+- **Mounting the uploads share from Git Bash on Windows.** If
+  `az webapp config storage-account add … --mount-path /app/uploads` fails
+  with "contains invalid characters", prefix the command with
+  `MSYS_NO_PATHCONV=1` — MSYS rewrites the Linux path otherwise.
 
-**Do not set** `SMTP_USER`, `SMTP_PASS` or `REQUIRE_EMAIL_VERIFICATION`: nothing
-in the code reads them (the mail transport is Resend; e-mail verification is
-optional in code, not env-gated). They sat on the live App Service from an
-earlier version of this guide until 2026-09-12, when they were deleted.
+- **Custom domain + free managed certificates** (for the day
+  `orangesmiley.is` points here; see the cutover checklist at the end of
+  `ENHANCEMENTS.md`): DNS = `A` record for the apex to the App Service IP and
+  `CNAME www → <WEBAPP_NAME>.azurewebsites.net`, then
 
-Enable HTTPS-only and turn off the legacy FTPS endpoint:
+  ```bash
+  for HOST in www.<host> <host>; do
+    az webapp config hostname add --resource-group <RESOURCE_GROUP> --webapp-name <WEBAPP_NAME> --hostname "$HOST"
+    az webapp config ssl create      --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> --hostname "$HOST"
+    THUMB=$(az webapp config ssl list --resource-group <RESOURCE_GROUP> \
+              --query "[?subjectName=='$HOST'].thumbprint | [0]" -o tsv)
+    az webapp config ssl bind --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> \
+      --certificate-thumbprint "$THUMB" --ssl-type SNI
+  done
+  ```
 
-```bash
-az webapp update --resource-group hallismiley-rg --name hallismiley-app --https-only true
-az webapp config set --resource-group hallismiley-rg --name hallismiley-app --ftps-state Disabled
-```
+  **Then add the new HTTPS origins to `ALLOWED_ORIGINS`** (a boot-fatal
+  variable) or CORS rejects every browser request twenty minutes after the
+  domain goes live.
 
----
+Bookkeeping note (RUNBOOK → Bókhald): Azure has no Iceland region, so the
+yearly books archive to media in Iceland is the compliance step, not a nicety.
 
-## 6. CI → deploy: what actually runs
-
-**`ci.yml`** runs on every push and pull request to `main`. **It has no
-`paths` / `paths-ignore` filter**, so a markdown-only change runs the whole
-workflow and, on `main`, deploys. Three jobs (`test`, then `e2e` and `docker`,
-both `needs: test`), each with its own `postgres:16-alpine` service, all on
-Node 24: `npm audit --audit-level=high` → lint → `npm run check:i18n` → Jest
-with coverage (`test:ci`); Playwright; Docker build + boot smoke test
-(`NODE_ENV=production` with `UPLOAD_ROOT` and `DB_SSL=false` declared, `/health`
-and `/ready` probed). A pull-request run is cancelled by a newer push to the
-same PR; runs on `main` are never cancelled.
-
-**`deploy.yml`** triggers on `workflow_run` of CI on `main` (fail-closed: only
-when CI concluded `success`, and it deploys the exact SHA CI validated) or by
-manual `workflow_dispatch`. It builds and pushes
-`hallismileyacr.azurecr.io/hallismiley:latest`, `:<sha>` and `:sha-<sha>`,
-stamping the image's identity (`GIT_SHA`, `BUILT_AT`, `RELEASE_CHANNEL=stable`
-→ `server/version.json`, `docs/SELF-UPDATE.md`), points the App Service at
-`:<sha>` and **force-restarts** (on B1 without slots the tag update alone does
-not reliably swap the container — 2026-04-24). Migrations run at container
-startup via `server/scripts/migrate.js`; there is no manual step. Typical
-merge-to-live time: CI ≈ 12 min + deploy ≈ 2 min + restart; the gap during
-the restart is ~30–60 s.
-
-**The two alert jobs.** `alert-ci-blocked` runs when CI on `main` did not
-succeed (red **or cancelled**) and **deliberately exits 1** so the Deploy run
-shows red — that red run IS the alert that merged code is not live.
-`alert-deploy-failed` runs when the `deploy` job errored (`always()` is what
-lets it observe the failure). Both try to e-mail `halli@hallismiley.is` via
-Resend; the `RESEND_API_KEY` repository secret exists since 2026-09-12
-(evening), so the e-mail is real — without it the step skips cleanly and the
-run colour is the only signal. On a healthy deploy both jobs show `skipped`;
-that is normal.
-Recovery after red CI: fix, re-run (`gh run rerun <ci-run-id> --failed` re-fires
-`workflow_run` on completion); never dispatch `deploy.yml` over a red CI run.
-
-Emergency override without waiting for CI:
-
-```bash
-gh workflow run "Deploy to Azure" --ref main
-```
-
-### 6b. The release channel (`promote.yml`) — present, unarmed
-
-`promote.yml` retags an already-built image **by digest** to `canary` or
-`stable` and publishes the channel manifest that self-update instances poll
-(`docs/SELF-UPDATE.md`). Inputs: `sha` (the full SHA deploy.yml built),
-`channel`, `critical`, `min_compatible`, `dry_run`. It resolves the image as
-`hallismiley:sha-<sha>` — a tag `deploy.yml` only started pushing on
-2026-09-12, so **only images built from that merge onward are promotable**. It
-also requires four repository variables — `ACR_NAME`, `IMAGE_NAME`,
-`RELEASE_STORAGE_ACCOUNT`, `RELEASE_CONTAINER` — and **none exist** on
-`pepti/hallismiley` (read 2026-09-12): a non-dry run exits at its first step.
-Arming it is a GitHub-settings act, and the intended release host lives in the
-company tenant while this deploy identity is in the personal tenant, so the
-cross-tenant upload is its own decision. `RELEASE_CHANNEL` stamped into the
-image is informational — the checker reads the channel from the instance's
-own settings, so a digest promoted to `canary` still says `stable` inside.
-
-### 6c. Registry housekeeping interacts with the tags
-
-The ACR task `weekly-purge` (Sundays 03:00 UTC, verified 2026-09-12) runs
-`acr purge --filter 'hallismiley:.*' --ago 14d --keep 10 --untagged`. With two
-SHA tags per build, "keep 10" protects roughly the last five builds beyond
-14 days, so rollback-by-older-SHA depth is that, not ten deploys. Any
-`:stable` / `:canary` tag promote.yml ever creates matches the filter and is
-purged after 14 days, after which `--untagged` can delete the very digest a
-published manifest points at — lock a promoted digest's tag
-(`RUNBOOK.md` → Container Registry Housekeeping). Changing the filter is an
-ACR task edit, Halli's act.
-
----
-
-## 7. Custom domain + SSL
-
-```bash
-# Add the apex and www records in your DNS provider:
-#   hallismiley.is        →  A     <azure-app-ip-from-portal>
-#   www.hallismiley.is    →  CNAME hallismiley-app.azurewebsites.net
-# Then validate ownership:
-az webapp config hostname add --resource-group hallismiley-rg \
-  --webapp-name hallismiley-app --hostname www.hallismiley.is
-az webapp config hostname add --resource-group hallismiley-rg \
-  --webapp-name hallismiley-app --hostname hallismiley.is
-
-# Provision App Service Managed Certificates (free) for both:
-az webapp config ssl create --resource-group hallismiley-rg \
-  --name hallismiley-app --hostname www.hallismiley.is
-az webapp config ssl create --resource-group hallismiley-rg \
-  --name hallismiley-app --hostname hallismiley.is
-
-# Bind both certs SNI to enforce HTTPS:
-for HOST in www.hallismiley.is hallismiley.is; do
-  THUMB=$(az webapp config ssl list --resource-group hallismiley-rg \
-            --query "[?subjectName=='$HOST'].thumbprint | [0]" -o tsv)
-  az webapp config ssl bind --resource-group hallismiley-rg \
-    --name hallismiley-app --certificate-thumbprint "$THUMB" --ssl-type SNI
-done
-```
-
-Remember to add the HTTPS origins to `ALLOWED_ORIGINS` (step 5) or CORS will
-reject browser requests. Both certificates expire 2027-02-01 (GeoTrust, read
-2026-09-12); whether they auto-renew is decided by `az webapp config ssl list`
-(managed certificates do) — no doc names an owner for the renewal.
-
----
-
-## 8. Verifying the deployment
+## 7. Verifying a deployment
 
 | Check | URL | Expected |
-| --- | --- | --- |
+|---|---|---|
 | Liveness | `GET /health` | `200 {"status":"ok","uptime":…,"timestamp":…}` — **no DB check** |
-| Readiness (DB + pool + breaker) | `GET /ready` | `200 {"status":"ok","checks":{…}}`; `503` when the DB check fails, the pool has more than 5 waiters, or the breaker is open. Memory and event-loop lag are reported, never flip it |
-| Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` (localhost-only in production when unset) |
+| Readiness (DB + breaker + memory) | `GET /ready` | `200 {"status":"ok", "checks": {…}}`; `503` while not ready |
+| Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` |
+| Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — which it is on orangesmiley.is until the release host exists; read the `gitSha` from `/ready` logs or the deploy run summary instead) | `gitSha` = the dispatched SHA |
+| Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
 
-A healthy deploy returns `200` on `/ready` once the container has finished
-booting and connected to Postgres — `/health` 200 with `/ready` 503 is the
-normal boot window (migrations run before `listen()`). If `/ready` stays `503`,
-tail the container logs via `az webapp log tail` (see RUNBOOK).
+## 8. Rollback
 
-Proof that the **new** image is running (the 2026-04-24 incident was six green
-deploys serving a 10-hour-old image): `/ready`'s `uptime` resets to seconds,
-and `az webapp config container show -g hallismiley-rg -n hallismiley-app
---query linuxFxVersion` names the new `:<sha>`. Proof of the build identity:
-the deploy run's build log prints `[version] … <sha> (stable) @ <builtAt>`
-(from `scripts/generate-version.js`); `az acr repository show-tags --name
-hallismileyacr --repository hallismiley --orderby time_desc --top 5` lists
-`sha-<sha>`. `GET /api/v1/system/version` is **404 on this site** — the
-self-update module ships off and there is no `config/client.json` — so do not
-use it as the check.
+Image-pin: point the App Service back at the previous **digest** — every
+deploy run's summary prints the image it replaced — and restart
+(`az webapp config container set … --container-image-name
+orangesmileyacr.azurecr.io/orangesmiley@sha256:…`; RUNBOOK → Rollback). Or
+dispatch deploy.yml with the old commit's `sha`: its image is still in the
+registry, so nothing is rebuilt. Git revert + merge only runs CI; a deploy is
+still a dispatch. Migrations are forward-only and must be expand/contract (stack
+invariant 14), so an image rollback never needs a schema rollback within one
+release.
 
-There is no App Insights, metric alert or availability test on this
-subscription (read 2026-09-12). The App Service health-check path is `/health`
-(set 2026-09-12, evening): Azure recycles the instance if the PROCESS stops
-answering, and nothing in Azure notices a `/ready` 503 on its own — which is
-the intended split, a database problem is not fixed by a restart.
+## 9. First admin
 
----
-
-## 9. Rollback
-
-See [`RUNBOOK.md` → Rollback Procedures](../RUNBOOK.md#rollback-procedures)
-for the canonical procedure. Summary: point the App Service at a previous
-`:<sha>` tag from ACR and force-restart — no CI rerun, no rebuild, ~1 minute end
-to end. Migrations are forward-only and expand/contract (`SELF-UPDATE.md`), so
-an image rollback within one release needs no schema rollback.
-
----
-
-## Runtime version
-
-`Dockerfile` pins `node:24-alpine` by digest in both stages; `ci.yml` sets
-`node-version: 24` in both jobs; `promote.yml` the same. **Five pins in three
-files move together** — `dependabot.yml` keeps the digest patched inside Node
-24 and is configured not to major-bump the base image on its own (Node 26 is
-Current, not LTS).
-
----
-
-## Initial admin user
-
-There is no public sign-up for admin accounts. To create the first admin run
-the bootstrap script with **all three** of `ADMIN_USERNAME`, `ADMIN_EMAIL` and
-`ADMIN_PASSWORD` in the environment — with any of them missing it migrates,
-creates no admin and exits 0 — locally against the prod DB (firewall rule from
-§2):
-
-```bash
-DATABASE_URL='postgresql://halliadmin:<pw>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require' \
-DB_SSL=true \
-ADMIN_USERNAME=halli ADMIN_EMAIL=halli@hallismiley.is ADMIN_PASSWORD='<strong-password>' \
-node server/scripts/bootstrap.js
-```
-
-or `node server/scripts/setup-admin.js <username> <email> <password>`. Keep the
-credentials in a password manager — there is no recovery flow without
-database access. Admins then enrol in TOTP from the profile.
+No public sign-up for admins. Run the bootstrap against the target database
+with **all three** of `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` set —
+`server/scripts/bootstrap.js` creates no admin and exits 0 if any is missing —
+or `node server/scripts/setup-admin.js <username> <email> <password>`, which
+writes the user row directly (scrypt hash). Admin accounts must then enrol in
+TOTP from the profile (2FA is enforced for admins and `accounts` holders).

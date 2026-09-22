@@ -1,9 +1,15 @@
 import { verifyEmail } from '../services/auth.js';
 import { t, href } from '../i18n/i18n.js';
+import { mountSceneBackdrop } from '../scenes/sceneHeader.js';
 
 export class VerifyEmailView {
   constructor(queryString = '') {
     this._queryString = queryString;
+  }
+
+  // Rapids through snow — the account pages' shared scene (2026-09-22).
+  destroy() {
+    this._scene?.destroy();
   }
 
   async render() {
@@ -25,6 +31,7 @@ export class VerifyEmailView {
 
     if (!token) {
       this._setResult(el, false, t('verifyEmail.error'));
+      this._scene = mountSceneBackdrop(el, 'account');
       return el;
     }
 
@@ -35,6 +42,7 @@ export class VerifyEmailView {
       this._setResult(el, false, t('verifyEmail.error'));
     }
 
+    this._scene = mountSceneBackdrop(el, 'account');
     return el;
   }
 

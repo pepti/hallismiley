@@ -2,9 +2,6 @@
 // "what exactly am I running?". Admin-gated on purpose: "which version" is also
 // "which published CVEs apply to me", so it is never public.
 const request = require('supertest');
-// Base ships the module OFF — switch it on before app require (env is read
-// at require time), the same way an instance would.
-process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED = 'true';
 const app     = require('../../server/app');
 const {
   createTestAdminUser, createTestRegularUser, getTestSessionCookie, cleanTables,

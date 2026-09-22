@@ -1,19 +1,30 @@
+import { motionAllowed } from './utils/motion.js';
+import { titleForRoute } from './utils/pageTitle.js';
 import { HomeView }           from './views/HomeView.js';
 import { ProjectsView }       from './views/ProjectsView.js';
 import { ProjectDetailView }  from './views/ProjectDetailView.js';
 import { HalliView }          from './views/HalliView.js';
 import { ContactView }        from './views/ContactView.js';
+import { ThjonustaView }      from './views/ThjonustaView.js';
+import { UmOkkurView }        from './views/UmOkkurView.js';
 import { AdminView }          from './views/AdminView.js';
-import { AdminMonitoringView } from './views/AdminMonitoringView.js';
-import { AdminMcpSettingsView } from './views/AdminMcpSettingsView.js';
+import { AdminProjectsView }  from './views/AdminProjectsView.js';
 import { AdminUsersView }     from './views/AdminUsersView.js';
-import { AdminUpdatesView }   from './views/AdminUpdatesView.js';
 import { AdminAnalyticsView } from './views/AdminAnalyticsView.js';
 import { AdminGeneralSettingsView } from './views/AdminGeneralSettingsView.js';
+import { AdminUpdatesView } from './views/AdminUpdatesView.js';
+import { AdminMonitoringView } from './views/AdminMonitoringView.js';
+import { AdminMcpSettingsView } from './views/AdminMcpSettingsView.js';
 import { AdminDiscountsView }  from './views/AdminDiscountsView.js';
 import { AdminSalesView }      from './views/AdminSalesView.js';
 import { AdminBackgroundView } from './views/AdminBackgroundView.js';
 import { AdminChangeRequestsView } from './views/AdminChangeRequestsView.js';
+import { AdminLeadsView }     from './views/AdminLeadsView.js';
+import { AdminMarketView }    from './views/AdminMarketView.js';
+import { AdminAccountsView }  from './views/AdminAccountsView.js';
+import { AdminAccountDetailView } from './views/AdminAccountDetailView.js';
+import { AdminCommissionView } from './views/AdminCommissionView.js';
+import { SellerAreaView }     from './views/SellerAreaView.js';
 import { NotFoundView }       from './views/NotFoundView.js';
 import { NewsView }           from './views/NewsView.js';
 import { ArticleView }        from './views/ArticleView.js';
@@ -29,6 +40,8 @@ import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
 import { PartyMagicLoginView } from './views/PartyMagicLoginView.js';
 import { PartyApproveView }    from './views/PartyApproveView.js';
+// hallismiley residual hook (engine-graft): the birthday page is product-owned
+// (features/hs/aron13.md); the engine's router has no seam for product routes.
 import { Aron13View }          from './views/Aron13View.js';
 import { ShopView }              from './views/ShopView.js';
 import { ProductView }           from './views/ProductView.js';
@@ -56,17 +69,25 @@ import { AdminLedgerView }       from './views/AdminLedgerView.js';
 import { AdminPayrollView }      from './views/AdminPayrollView.js';
 import { AdminPosView }          from './views/AdminPosView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
+import { AdminHandbookView }     from './views/AdminHandbookView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale, forcedLocaleFor,
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
 import { trackPageView } from './services/usage.js';
-import { titleForRoute } from './utils/pageTitle.js';
 
 // More specific patterns must come before generic ones
 const ROUTES = [
   { pattern: '/',                factory: ()  => new HomeView() },
+  // ── Business IA (canonical Icelandic slugs). The legacy portfolio routes
+  // below stay functional — hidden from nav/SSR/sitemap, never deleted. ──
+  { pattern: '/thjonusta',       factory: ()  => new ThjonustaView() },
+  { pattern: '/verkefni/:id',    factory: (p) => new ProjectDetailView(p.id) },
+  { pattern: '/verkefni',        factory: ()  => new ProjectsView() },
+  { pattern: '/um-okkur',        factory: ()  => new UmOkkurView() },
+  { pattern: '/hafa-samband',    factory: ()  => new ContactView() },
+  { pattern: '/personuvernd',    factory: ()  => new PrivacyView() },
   { pattern: '/projects/:id',    factory: (p) => new ProjectDetailView(p.id) },
   { pattern: '/projects',        factory: ()  => new ProjectsView() },
   { pattern: '/news/:slug',      factory: (p) => new ArticleView(p.slug) },
@@ -75,16 +96,29 @@ const ROUTES = [
   { pattern: '/about',           factory: ()  => new HalliView() },
   { pattern: '/contact',         factory: ()  => new ContactView() },
   { pattern: '/admin/users',     factory: ()  => (isAuthenticated() && canSeeView('users')) ? new AdminUsersView() : new HomeView() },
+  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
+  { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
   { pattern: '/admin/updates',   factory: ()  => (isAuthenticated() && canSeeView('updates')) ? new AdminUpdatesView() : new HomeView() },
   { pattern: '/admin/monitoring', factory: () => (isAuthenticated() && isAdmin()) ? new AdminMonitoringView() : new HomeView() },
   { pattern: '/admin/mcp', factory: () => (isAuthenticated() && isAdmin()) ? new AdminMcpSettingsView() : new HomeView() },
-  { pattern: '/admin/analytics', factory: ()  => (isAuthenticated() && canSeeView('analytics')) ? new AdminAnalyticsView() : new HomeView() },
-  { pattern: '/admin/general',   factory: ()  => (isAuthenticated() && canSeeView('general')) ? new AdminGeneralSettingsView() : new HomeView() },
   { pattern: '/admin/discounts', factory: ()  => (isAuthenticated() && canSeeView('discounts')) ? new AdminDiscountsView() : new HomeView() },
   { pattern: '/admin/sales',     factory: ()  => (isAuthenticated() && canSeeView('sales')) ? new AdminSalesView() : new HomeView() },
   { pattern: '/admin/background', factory: () => (isAuthenticated() && canSeeView('background')) ? new AdminBackgroundView() : new HomeView() },
   { pattern: '/admin/feedback',  factory: ()  => (isAuthenticated() && canSeeView('feedback')) ? new AdminChangeRequestsView() : new HomeView() },
   { pattern: '/admin/bins',      factory: ()  => (isAuthenticated() && canSeeView('bins')) ? new AdminBinsView() : new HomeView() },
+  { pattern: '/admin/handbok/:slug', factory: (p) => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView(p.slug) : new HomeView() },
+  { pattern: '/admin/handbok',   factory: ()  => (isAuthenticated() && canSeeView('handbok')) ? new AdminHandbookView() : new HomeView() },
+  { pattern: '/admin/leads',     factory: ()  => (isAuthenticated() && canSeeView('leads')) ? new AdminLeadsView() : new HomeView() },
+  { pattern: '/admin/markadur',  factory: ()  => (isAuthenticated() && canSeeView('markadur')) ? new AdminMarketView() : new HomeView() },
+  // Not a sidebar item: rides the `books` view id rather than adding one (a new id
+  // means a new RBAC grant and a parity-test entry for a screen visited four times a year).
+  { pattern: '/admin/books/settings', factory: () => (isAuthenticated() && canSeeView('books')) ? new AdminBooksSettingsView() : new HomeView() },
+  { pattern: '/admin/accounts/:id', factory: (p) => (isAuthenticated() && canSeeView('accounts')) ? new AdminAccountDetailView(p.id) : new HomeView() },
+  { pattern: '/admin/accounts',  factory: ()  => (isAuthenticated() && canSeeView('accounts')) ? new AdminAccountsView() : new HomeView() },
+  // Seller area (D-020) — public-instance only; the view itself handles a
+  // non-seller (the API answers 404) so no view id is needed here.
+  { pattern: '/solusvaedi',      factory: ()  => isAuthenticated() ? new SellerAreaView() : new HomeView() },
+  { pattern: '/admin/commission', factory: () => (isAuthenticated() && canSeeView('commission')) ? new AdminCommissionView() : new HomeView() },
   { pattern: '/admin/books/invoices/:id', factory: (p) => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoiceDetailView(p.id) : new HomeView() },
   { pattern: '/admin/books/invoices', factory: () => (isAuthenticated() && canSeeView('invoices')) ? new AdminInvoicesView() : new HomeView() },
   { pattern: '/admin/books/expenses', factory: () => (isAuthenticated() && canSeeView('expenses')) ? new AdminExpensesView() : new HomeView() },
@@ -95,11 +129,10 @@ const ROUTES = [
   { pattern: '/admin/books/pos', factory: () => (isAuthenticated() && canSeeView('pos')) ? new AdminPosView() : new HomeView() },
   { pattern: '/admin/books/vat', factory: () => (isAuthenticated() && canSeeView('vat')) ? new AdminVatView() : new HomeView() },
   { pattern: '/admin/books/ar', factory: () => (isAuthenticated() && canSeeView('ar')) ? new AdminARView() : new HomeView() },
-  // Not a sidebar item: rides the `books` view id rather than adding one (a new id
-  // means a new RBAC grant and a parity-test entry for a screen visited four times a year).
-  { pattern: '/admin/books/settings', factory: () => (isAuthenticated() && canSeeView('books')) ? new AdminBooksSettingsView() : new HomeView() },
   { pattern: '/admin/books',     factory: ()  => (isAuthenticated() && canSeeView('books')) ? new AdminBooksView() : new HomeView() },
   { pattern: '/admin/roles',     factory: ()  => (isAuthenticated() && isAdmin()) ? new AdminRolesView() : new HomeView() },
+  // The portfolio projects board — unlisted, same gate the old dashboard had.
+  { pattern: '/admin/projects',  factory: ()  => (isAuthenticated() && (canSeeView('dashboard') || canEdit())) ? new AdminProjectsView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
@@ -113,7 +146,8 @@ const ROUTES = [
   { pattern: '/party/login',     factory: (_, qs) => new PartyMagicLoginView(qs) },
   { pattern: '/party/approve',   factory: (_, qs) => new PartyApproveView(qs) },
   { pattern: '/party',           factory: ()  => new PartyView() },
-  // Hidden Icelandic-only birthday page — no nav link, no sitemap entry.
+  // Hidden Icelandic-only birthday page — no nav link, no sitemap entry
+  // (hallismiley residual hook, engine-graft).
   { pattern: '/aron13ara',       factory: ()  => new Aron13View() },
   // Shop + checkout. Section sub-routes (shop-redesign step 2) must precede
   // the generic /shop/:slug pattern so they're not matched as product slugs.
@@ -271,14 +305,19 @@ export class Router {
     // early client-side redirect). Each admin view maps to a role view-id.
     const VIEW_BY_PATH = {
       '/admin/users':      'users',
-      '/admin/updates':    'updates',
       '/admin/analytics':  'analytics',
       '/admin/general':    'general',
+      '/admin/updates':    'updates',
       '/admin/discounts':  'discounts',
       '/admin/sales':      'sales',
       '/admin/background': 'background',
       '/admin/feedback':   'feedback',
       '/admin/bins':       'bins',
+      '/admin/handbok':    'handbok',
+      '/admin/leads':      'leads',
+      '/admin/markadur':   'markadur',
+      '/admin/accounts':   'accounts',
+      '/admin/commission': 'commission',
       '/admin/customers':  'customers',
       '/admin/books':      'books',
       '/admin/books/settings': 'books',
@@ -327,19 +366,39 @@ export class Router {
       return;
     }
 
-    if (this._currentView && typeof this._currentView.destroy === 'function') {
-      this._currentView.destroy();
+    // The synchronous swap — wrapped in a View Transition where the browser
+    // supports it, so navigating between pages cross-fades between landscapes.
+    // Only the swap goes inside the callback: view.render() already ran above
+    // (async work inside startViewTransition would hold the page frozen), and
+    // the stale-nav guard already passed. The .vt-active class suppresses the
+    // legacy .view fadeIn for the duration (main.css) so the two animations
+    // don't stack.
+    const swap = () => {
+      if (this._currentView && typeof this._currentView.destroy === 'function') {
+        this._currentView.destroy();
+      }
+      this._currentView = view;
+
+      this.mountEl.innerHTML = '';
+      this.mountEl.appendChild(el);
+      this.navBar.setActive(pattern || '/');
+    };
+
+    if (document.startViewTransition && motionAllowed()) {
+      document.documentElement.classList.add('vt-active');
+      const vt = document.startViewTransition(swap);
+      vt.finished.finally(() => document.documentElement.classList.remove('vt-active'));
+      // Instant scroll during a transition — a smooth scroll mid-crossfade
+      // smears the captured frames.
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    } else {
+      swap();
+      window.scrollTo({ top: 0, behavior: motionAllowed() ? 'smooth' : 'auto' });
     }
-    this._currentView = view;
 
-    this.mountEl.innerHTML = '';
-    this.mountEl.appendChild(el);
-    this.navBar.setActive(pattern || '/');
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     // Tab title. SSR sets it on a full load; client navigation never did, so
     // the tab kept the landing page's title for the whole session. A view that
-    // knows its own subject (an article, a product) wins by setting
+    // knows its own subject (an article, an invoice) wins by setting
     // `documentTitle`; everything else is routed by pattern.
     document.title = (typeof view.documentTitle === 'string' && view.documentTitle)
       ? view.documentTitle

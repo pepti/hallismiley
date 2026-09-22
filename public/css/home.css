@@ -7,11 +7,70 @@
    ───────────────────────────────── */
 .lol-hero {
   position: relative;
-  height: 100vh; min-height: 600px;
+  height: 100vh; min-height: 640px;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   text-align: center; overflow: hidden;
-  background: var(--bg-nav);
+  padding: var(--sp-8) var(--sp-5);
+  /* The themed gradient IS the hero background since 2026-08-20 (the waterfall
+     video moved to an opt-in admin mode). --bg-base is the fallback the
+     gradient paints over, so a theme that sets --hero-gradient: none still
+     gets a sane surface rather than a transparent hero. */
+  background-color: var(--bg-base);
+  background-image: var(--hero-gradient, var(--bg-tint));
+  background-size: cover;
+}
+/* Media modes (photo/video) put an image behind the copy and a dark veil over
+   it — dark by DESIGN on every theme (Halli 2026-08-22: "dark video hero,
+   light site"). The theme surface gets out of the way entirely: fixed warm
+   near-black behind the media while it loads, fixed light copy over it, and
+   only the veil's last stop hands back to the themed page below. That is
+   invariant 15 compliance by construction, not exemption — the hero renders
+   identically under all five themes. */
+.lol-hero--media {
+  background-color: #17110B;
+  background-image: none;
+}
+/* Scene mode — the Iceland scene engine (SceneStage prepends .ice-scene as
+   the first child; hero copy stacks above on its existing z-index). The
+   ember-wash ::after is switched off: the photograph IS the atmosphere. */
+.lol-hero--scene { background-color: var(--bg-nav); background-image: none; }
+.lol-hero--scene::after { content: none; }
+/* The molten-gradient title fill was tuned for a near-black video. Over a
+   living photograph it lands on greens and skies and turns to mud — scene
+   mode trades it for white with real shadow, which reads on every scene and
+   every theme grade. */
+.lol-hero--scene .lol-hero__title {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: #FFFFFF;
+  color: #FFFFFF;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.6));
+}
+/* Media mode — the same problem as scene mode, arriving from the other side.
+   The title takes its fill from --accent-gradient, which the 2026-09-01 re-hue
+   turned brown; brown on a dark waterfall is mud, exactly what the note above
+   warns about. The video is fixed dark on every theme, so this hero can hold a
+   fixed light fill: sand to tan, plus the same shadow scene mode uses. Both
+   stops are far enough from the footage to read over the bright water. */
+.lol-hero--media .lol-hero__title {
+  background: linear-gradient(135deg, #F2E2C9 0%, #C9AE8C 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.62));
+}
+
+/* Ember wash over the video/plain background — sits between the media layer
+   and the content, tinting the whole hero toward the brand. */
+.lol-hero::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 110%, var(--gold-glow), transparent 65%),
+    radial-gradient(ellipse 70% 45% at 85% -10%, var(--teal-dim), transparent 60%);
 }
 
 .lol-hero__bg {
@@ -36,13 +95,21 @@
   to   { background-position: center 60%; }
 }
 
+/* Dark veil over the video: heavy at the top, thinnest across the middle so
+   the waterfall still reads, then rolling to near-opaque PAGE colour at the
+   bottom — the hero melts into whatever surface the theme paints next (light
+   Bjart included) instead of ending on a hard video edge. The dark stops are
+   fixed warm charcoal, NOT theme tokens: on the light themes --bg-nav-rgb is
+   white-ish and would fog the video instead of veiling it. */
 .lol-hero__overlay {
   position: absolute; inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(var(--bg-nav-rgb), 0.25) 0%,
-    rgba(var(--bg-nav-rgb), 0.45) 40%,
-    rgba(var(--bg-nav-rgb), 0.75) 100%
+    rgba(23, 17, 11, 0.62) 0%,
+    rgba(23, 17, 11, 0.38) 26%,
+    rgba(23, 17, 11, 0.34) 52%,
+    rgba(23, 17, 11, 0.72) 78%,
+    rgba(var(--bg-base-rgb), 0.98) 100%
   );
 }
 
@@ -51,62 +118,81 @@
   display: flex; flex-direction: column; align-items: center;
 }
 
-/* Gold metallic title — like LoL logo */
+/* Molten-orange display title — the LoL-lineage metallic treatment, in the
+   brand ramp. Gradient-filled Cinzel with an ember glow behind it. */
 .lol-hero__title {
-  font-family: 'Cinzel', serif;
-  font-size: clamp(2.8rem, 8vw, 7.5rem);
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 6.5vw, 5.6rem);
   font-weight: 900;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  line-height: 0.92;
-  color: #C8AA6E;
-  text-shadow:
-    0 0 80px rgba(200,170,110,0.6),
-    0 2px 4px rgba(0,0,0,0.9),
-    0 0 200px rgba(200,170,110,0.2);
-  margin-bottom: 0.4em;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  line-height: 1.02;
+  color: var(--gold);                      /* fallback if clip is unsupported */
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* Sized for white text on dark video. Over the gradient it reads as soot
+     under every letter, so the default is a whisper and the media modes keep
+     the heavy version. */
+  filter: drop-shadow(0 1px 2px var(--gold-glow));
+  text-shadow: var(--hero-title-glow, none);
+  margin-bottom: 0.3em;
+}
+.lol-hero--media .lol-hero__title {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
 }
 .lol-hero__title span {
   display: block;
-  font-size: 0.52em;
-  letter-spacing: 0.25em;
-  color: #D4B97A;
 }
-.lol-hero__title span.lol-hero__title-second {
-  text-transform: none;
-  font-size: 1em;
-  letter-spacing: 0.06em;
-  color: #C8AA6E;
+/* The glow lives on a separate non-clipped layer: text-shadow on a
+   background-clip:text element would paint through the transparent fill. */
+.lol-hero__content::before {
+  content: '';
+  position: absolute; inset: -10% 0 auto 0; height: 60%;
+  pointer-events: none;
+  background: radial-gradient(ellipse 60% 55% at 50% 40%, var(--gold-glow), transparent 70%);
 }
 
-/* Italic uppercase subtitle — LoL style */
+/* Italic condensed subtitle — LoL style, readable size */
 .lol-hero__subtitle {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: clamp(0.7rem, 1.4vw, 0.95rem);
-  font-weight: 700; font-style: italic;
-  letter-spacing: 0.22em; text-transform: uppercase;
-  color: #FFFFFF;
-  margin: 1.8rem 0 2.8rem;
-  opacity: 0.92;
+  font-family: 'Barlow Condensed', var(--font-sans);
+  font-size: clamp(0.95rem, 1.8vw, 1.15rem);
+  font-weight: 600; font-style: italic;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-primary);
+  max-width: 44em;
+  line-height: 1.7;
+  margin: 1.4rem 0 2.6rem;
 }
 
-/* Gold bordered CTA — exactly like LoL "PLAY FOR FREE" */
+/* Bordered CTA — the LoL "play free" shape, orange */
 .lol-hero__cta {
   display: inline-block;
   padding: 16px 52px;
   background: transparent;
-  border: 2px solid #C8AA6E;
-  color: #C8AA6E;
-  font-family: 'Barlow', sans-serif;
-  font-size: 0.78rem; font-weight: 700;
+  border: 2px solid var(--gold);
+  /* --accent-ink, not --gold-light: the bright end of the ramp is decorative
+     (3.41 : 1 on white) and this is a button label. */
+  color: var(--accent-ink);
+  font-family: var(--font-sans);
+  font-size: 0.82rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
+  border-radius: var(--radius-md);
   cursor: pointer; transition: all 300ms ease;
   text-decoration: none;
 }
 .lol-hero__cta:hover {
-  background: rgba(200,170,110,0.12);
-  box-shadow: 0 0 32px rgba(200,170,110,0.45);
-  color: #F0E6D3; border-color: #F0E6D3;
+  background: var(--accent-amber-dim);
+  border-color: var(--gold-light);
+  box-shadow: var(--glow-around);
+  color: var(--text-primary);
 }
+/* Over media the hero copy sits on the veil, not on the page, so it keeps the
+   light-on-dark treatment regardless of theme. */
+.lol-hero--media .lol-hero__subtitle    { color: #F5EDE2; }
+.lol-hero--media .lol-hero__cta         { color: #FDE7D3; border-color: #C9AE8C; }
+.lol-hero--media .lol-hero__cta:hover   { color: #FFFFFF; background: rgba(201, 174, 140, 0.26); }
+.lol-hero--media .lol-hero__scroll span { color: rgba(245, 237, 226, 0.72); }
 
 /* Scroll indicator */
 .lol-hero__scroll {
@@ -119,14 +205,14 @@
   50%       { transform: translateX(-50%) translateY(8px); }
 }
 .lol-hero__scroll span {
-  font-family: 'Barlow', sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.6rem; font-weight: 700;
   letter-spacing: 0.3em; text-transform: uppercase;
-  color: rgba(255,255,255,0.4);
+  color: var(--text-muted);
 }
 .lol-hero__scroll-line {
   width: 1px; height: 40px;
-  background: linear-gradient(180deg, rgba(200,170,110,0.6), transparent);
+  background: linear-gradient(180deg, var(--gold), transparent);
 }
 
 /* ─────────────────────────────────────────────────
@@ -156,7 +242,7 @@
 .lol-news__heading-link {
   text-decoration: none; color: inherit;
 }
-.lol-news__heading-link:hover .lol-news__heading { color: #C89B3C; }
+.lol-news__heading-link:hover .lol-news__heading { color: var(--gold); }
 
 .lol-news__view-all {
   display: inline-flex; align-items: center; gap: 8px;
@@ -167,7 +253,7 @@
   background: none; border: none;
   transition: color 200ms ease;
 }
-.lol-news__view-all:hover { color: #C89B3C; }
+.lol-news__view-all:hover { color: var(--gold); }
 
 .lol-news__grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
@@ -199,8 +285,8 @@
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
 }
-.lol-news__card-tag--tech        { color: #0BC4E3; }
-.lol-news__card-tag--carpentry   { color: #C89B3C; }
+.lol-news__card-tag--tech        { color: var(--teal); }
+.lol-news__card-tag--carpentry   { color: var(--gold); }
 .lol-news__card-tag--ai          { color: #9B7BC8; }
 .lol-news__card-tag--remodelling { color: #4CAF78; }
 
@@ -225,8 +311,11 @@
 /* ────────────────────────────────────────────────────────
    SECTION 4: Projects — champion-style, LIGHT background
    ──────────────────────────────────────────────────────── */
+/* Was a fixed #EDEBE5 with a fixed #1E2328 heading — a light island on the two
+   dark themes, and text tokens picked for the page could not read on it. The
+   surface token keeps it a distinct band on the light themes. */
 .lol-projects {
-  background: #EDEBE5; padding: 80px 0; overflow: hidden;
+  background: var(--bg-surface); padding: 80px 0; overflow: hidden;
 }
 
 .lol-projects__inner {
@@ -239,19 +328,19 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.1rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
-  color: rgba(30,35,40,0.55); margin-bottom: 4px;
+  color: var(--text-muted); margin-bottom: 4px;
 }
 
 .lol-projects__heading {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(2.8rem, 5vw, 4.8rem);
   font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: #1E2328; line-height: 0.9; margin-bottom: 1.4rem;
+  color: var(--text-primary); line-height: 0.9; margin-bottom: 1.4rem;
 }
 
 .lol-projects__desc {
   font-family: 'Barlow', sans-serif;
-  font-size: 0.95rem; color: #5B5A56;
+  font-size: 0.95rem; color: var(--text-secondary);
   line-height: 1.75; max-width: 420px; margin-bottom: 2rem;
 }
 
@@ -262,7 +351,7 @@
 /* Gold button — same as LoL "DISCOVER MORE CHAMPIONS" */
 .lol-btn--gold {
   padding: 13px 30px;
-  background: #C89B3C; color: var(--bg-nav);
+  background: var(--gold); color: var(--bg-nav);
   font-family: 'Barlow', sans-serif;
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
@@ -270,12 +359,15 @@
   transition: all 200ms ease;
   text-decoration: none; display: inline-block;
 }
-.lol-btn--gold:hover { background: #D4A843; box-shadow: 0 4px 20px rgba(200,152,60,0.4); }
+/* Hover fills were the old dark theme's yellow and cyan, hardcoded; --accent-hover
+   is the contract token for a filled control on hover and keeps its label
+   legible on every theme. */
+.lol-btn--gold:hover { background: var(--accent-hover); box-shadow: var(--glow-around); }
 
 /* Teal button — same as LoL "PLAY NOW" */
 .lol-btn--teal {
   padding: 13px 30px;
-  background: #0BC4E3; color: var(--bg-nav);
+  background: var(--teal); color: var(--bg-nav);
   font-family: 'Barlow', sans-serif;
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
@@ -283,7 +375,7 @@
   transition: all 200ms ease;
   text-decoration: none; display: inline-block;
 }
-.lol-btn--teal:hover { background: #0DD4F5; box-shadow: 0 4px 20px rgba(11,196,227,0.4); }
+.lol-btn--teal:hover { background: var(--accent-hover); box-shadow: var(--glow-around); }
 
 /* Category icon row — like LoL champion class icons */
 .lol-projects__categories {
@@ -300,7 +392,7 @@
 .lol-projects__cat-icon {
   width: 52px; height: 52px;
   display: flex; align-items: center; justify-content: center;
-  color: #C8AA6E;
+  color: var(--gold);
 }
 .lol-projects__cat-icon svg { width: 36px; height: 36px; }
 
@@ -308,7 +400,7 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.6rem; font-weight: 700;
   letter-spacing: 0.15em; text-transform: uppercase;
-  color: #1E2328;
+  color: var(--text-primary);
 }
 
 /* Right side — circular project preview */
@@ -320,9 +412,9 @@
 .lol-projects__circle {
   width: min(420px, 80vw); height: min(420px, 80vw);
   border-radius: 50%;
-  border: 1px solid rgba(200,170,110,0.7);
+  border: 1px solid var(--accent-amber-dim);
   overflow: hidden; position: relative;
-  box-shadow: 0 0 60px rgba(200,170,110,0.1);
+  box-shadow: 0 0 60px var(--accent-amber-dim);
 }
 
 .lol-projects__preview-img {
@@ -338,12 +430,12 @@
 .lol-projects__preview-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.4rem; font-weight: 900; font-style: italic;
-  text-transform: uppercase; color: #1E2328;
+  text-transform: uppercase; color: var(--text-primary);
 }
 
 .lol-projects__preview-type {
   font-family: 'Barlow', sans-serif;
-  font-size: 0.75rem; color: #5B5A56; margin-top: 4px;
+  font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;
 }
 
 /* ─────────────────────────────────────────────────────
@@ -373,7 +465,7 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1rem; font-weight: 700; font-style: italic;
   letter-spacing: 0.25em; text-transform: uppercase;
-  color: #C8AA6E; margin-bottom: 0.5rem;
+  color: var(--gold); margin-bottom: 0.5rem;
 }
 
 /* Large italic title — like LoL "SLAY WITH STYLE" */
@@ -381,12 +473,12 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(3rem, 5.5vw, 6rem);
   font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: #FFFFFF; line-height: 0.9; margin-bottom: 1.5rem;
+  color: var(--text-primary); line-height: 0.9; margin-bottom: 1.5rem;
 }
 
 .lol-skills__desc {
   font-family: 'Barlow', sans-serif;
-  font-size: 1rem; color: #A9B4C0;
+  font-size: 1rem; color: var(--text-secondary);
   line-height: 1.8; margin-bottom: 2.5rem;
 }
 
@@ -395,7 +487,7 @@
 }
 
 .lol-skills__item {
-  border-left: 2px solid #C8AA6E;
+  border-left: 2px solid var(--gold);
   padding-left: 16px;
 }
 
@@ -403,13 +495,13 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.62rem; font-weight: 700;
   letter-spacing: 0.18em; text-transform: uppercase;
-  color: #C8AA6E; margin-bottom: 4px;
+  color: var(--gold); margin-bottom: 4px;
 }
 
 .lol-skills__item-value {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.6rem; font-weight: 900; font-style: italic;
-  color: #FFFFFF; line-height: 1;
+  color: var(--text-primary); line-height: 1;
 }
 
 /* Right side — image in diamond clip */
@@ -421,7 +513,7 @@
 .lol-skills__img-border {
   position: absolute; inset: 0;
   clip-path: polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%);
-  border: 1px solid rgba(200,170,110,0.4);
+  border: 1px solid var(--accent-amber-dim);
   pointer-events: none;
 }
 
@@ -432,8 +524,8 @@
   background-image: var(--bg-tint);
   background-color: var(--bg-nav);
   padding: 64px 0;
-  border-top: 1px solid rgba(200,170,110,0.15);
-  border-bottom: 1px solid rgba(200,170,110,0.15);
+  border-top: 1px solid var(--accent-amber-dim);
+  border-bottom: 1px solid var(--accent-amber-dim);
 }
 
 .lol-stats__inner {
@@ -446,14 +538,14 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(2.5rem, 5vw, 4.5rem);
   font-weight: 900; font-style: italic;
-  color: #C8AA6E; line-height: 1;
+  color: var(--gold); line-height: 1;
 }
 
 .lol-stats__label {
   font-family: 'Barlow', sans-serif;
   font-size: 0.7rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
-  color: #A9B4C0; margin-top: 8px;
+  color: var(--text-muted); margin-top: 8px;
 }
 
 /* ─────────────────────────────────────────────────
@@ -483,19 +575,19 @@
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.85rem; font-weight: 700; font-style: italic;
   letter-spacing: 0.3em; text-transform: uppercase;
-  color: #C8AA6E; margin-bottom: 1rem;
+  color: var(--gold); margin-bottom: 1rem;
 }
 
 .lol-contact__title {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: clamp(2.5rem, 5.5vw, 5.5rem);
   font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: #FFFFFF; line-height: 0.92; margin-bottom: 1.5rem;
+  color: var(--text-primary); line-height: 0.92; margin-bottom: 1.5rem;
 }
 
 .lol-contact__desc {
   font-family: 'Barlow', sans-serif;
-  font-size: 1rem; color: #A9B4C0;
+  font-size: 1rem; color: var(--text-secondary);
   line-height: 1.75; margin-bottom: 3rem;
 }
 
@@ -503,7 +595,7 @@
   display: inline-block;
   padding: 18px 60px;
   background: transparent;
-  border: 2px solid #C8AA6E; color: #C8AA6E;
+  border: 2px solid var(--gold); color: var(--gold);
   font-family: 'Barlow', sans-serif;
   font-size: 0.78rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
@@ -511,9 +603,9 @@
   text-decoration: none;
 }
 .lol-contact__btn:hover {
-  background: rgba(200,170,110,0.1);
-  box-shadow: 0 0 40px rgba(200,170,110,0.35);
-  color: #F0E6D3;
+  background: var(--accent-amber-dim);
+  box-shadow: 0 0 40px var(--accent-amber-dim);
+  color: var(--text-primary);
 }
 
 /* ── Contact form ── */
@@ -530,13 +622,13 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase;
-  color: #A9B4C0;
+  color: var(--text-muted);
 }
 .contact-form__input,
 .contact-form__textarea {
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(200,170,110,0.25);
-  color: #F0E6D3;
+  border: 1px solid var(--accent-amber-dim);
+  color: var(--text-primary);
   font-family: 'Barlow', sans-serif; font-size: 0.92rem;
   padding: 12px 14px;
   outline: none; resize: vertical;
@@ -546,8 +638,8 @@
 }
 .contact-form__input:focus,
 .contact-form__textarea:focus {
-  border-color: #C8AA6E;
-  box-shadow: 0 0 0 2px rgba(200,170,110,0.18);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--accent-amber-dim);
 }
 .contact-form__input::placeholder,
 .contact-form__textarea::placeholder { color: #5B5A56; }
@@ -559,7 +651,7 @@
 .contact-form__status--error   { color: #e05c5c; }
 .contact-form__submit { display: block; width: 100%; cursor: pointer; }
 .contact-form__submit:disabled { opacity: 0.6; cursor: not-allowed; }
-.required-mark { color: #C8AA6E; margin-left: 2px; }
+.required-mark { color: var(--gold); margin-left: 2px; }
 
 @media (max-width: 640px) {
   .contact-form__row { grid-template-columns: 1fr; }
@@ -571,7 +663,7 @@
 .lol-footer {
   background-image: var(--bg-tint);
   background-color: var(--bg-nav);
-  border-top: 1px solid rgba(200,170,110,0.12);
+  border-top: 1px solid var(--accent-amber-dim);
 }
 
 /* Top nav row */
@@ -579,18 +671,18 @@
   display: flex; justify-content: center;
   gap: 40px; flex-wrap: wrap;
   padding: 40px 48px 30px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .lol-footer__nav-link {
   font-family: 'Barlow', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase;
-  color: #A9B4C0; text-decoration: none; cursor: pointer;
+  color: var(--text-secondary); text-decoration: none; cursor: pointer;
   background: none; border: none;
   transition: color 200ms ease;
 }
-.lol-footer__nav-link:hover { color: #C8AA6E; }
+.lol-footer__nav-link:hover { color: var(--accent-ink); }
 
 /* Social icons row */
 .lol-footer__social {
@@ -600,15 +692,15 @@
 
 .lol-footer__social-icon {
   width: 36px; height: 36px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--border-dim);
   display: flex; align-items: center; justify-content: center;
-  color: #A9B4C0; cursor: pointer;
+  color: var(--text-secondary); cursor: pointer;
   transition: all 200ms ease;
   font-size: 0.85rem; text-decoration: none;
 }
 .lol-footer__social-icon:hover {
-  border-color: #C8AA6E; color: #C8AA6E;
-  box-shadow: 0 0 12px rgba(200,170,110,0.2);
+  border-color: var(--gold); color: var(--gold);
+  box-shadow: 0 0 12px var(--accent-amber-dim);
 }
 
 /* Brand + legal row */
@@ -617,15 +709,15 @@
 }
 
 .lol-footer__logo {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 1rem; font-weight: 700;
-  letter-spacing: 0.35em; color: #C8AA6E;
+  letter-spacing: 0.35em; color: var(--gold);
   text-transform: uppercase; margin-bottom: 14px;
 }
 
 .lol-footer__copy {
   font-family: 'Barlow', sans-serif;
-  font-size: 0.68rem; color: #5B5A56;
+  font-size: 0.68rem; color: var(--text-muted);
   line-height: 1.7; max-width: 520px;
   margin: 0 auto 20px;
 }
@@ -639,11 +731,11 @@
   font-family: 'Barlow', sans-serif;
   font-size: 0.62rem; font-weight: 700;
   letter-spacing: 0.15em; text-transform: uppercase;
-  color: #5B5A56; text-decoration: none; cursor: pointer;
+  color: var(--text-muted); text-decoration: none; cursor: pointer;
   background: none; border: none;
   transition: color 200ms ease;
 }
-.lol-footer__legal-link:hover { color: #A9B4C0; }
+.lol-footer__legal-link:hover { color: var(--text-primary); }
 
 /* ── Responsive ── */
 @media (max-width: 1024px) {
@@ -675,10 +767,10 @@
   align-items: center;
   gap: .45rem;
   padding: .4rem .85rem;
-  background: rgba(200,155,60,.15);
-  border: 1px solid rgba(200,155,60,.5);
+  background: var(--accent-amber-dim);
+  border: 1px solid var(--accent-amber-dim);
   border-radius: 4px;
-  color: #C89B3C;
+  color: var(--gold);
   font-size: .75rem;
   font-family: inherit;
   letter-spacing: .06em;
@@ -687,7 +779,7 @@
   transition: background .2s, border-color .2s;
   z-index: 10;
 }
-.lol-skills__edit-btn:hover { background: rgba(200,155,60,.28); border-color: #C89B3C; }
+.lol-skills__edit-btn:hover { background: var(--accent-amber-dim); border-color: var(--gold); }
 .lol-skills__edit-btn--hidden { display: none; }
 
 /* Save / cancel controls bar */
@@ -699,7 +791,7 @@
   gap: .75rem;
   padding: .75rem 1.5rem;
   background: rgba(10,12,18,.92);
-  border-top: 1px solid rgba(200,155,60,.3);
+  border-top: 1px solid var(--accent-amber-dim);
   z-index: 10;
 }
 .lol-skills__edit-controls--hidden { display: none; }
@@ -716,8 +808,8 @@
   transition: background .2s;
 }
 .lol-skills__save-btn {
-  background: #C89B3C;
-  border: 1px solid #C89B3C;
+  background: var(--gold);
+  border: 1px solid var(--gold);
   color: var(--bg-nav);
   font-weight: 700;
 }
@@ -731,21 +823,21 @@
 
 .lol-skills__edit-status {
   font-size: .8rem;
-  color: #C89B3C;
+  color: var(--gold);
   margin-left: .25rem;
 }
 
 /* Editable fields — subtle gold underline while in edit mode */
 .lol-skills--editing [contenteditable="true"] {
   outline: none;
-  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-bottom: 2px solid var(--accent-amber-dim);
   border-radius: 0;
   cursor: text;
   min-width: 2ch;
   transition: border-color .2s;
 }
 .lol-skills--editing [contenteditable="true"]:focus {
-  border-bottom-color: #C89B3C;
+  border-bottom-color: var(--gold);
 }
 
 /* Image change overlay */
@@ -783,14 +875,14 @@
 /* Stats editing — gold underline on editable fields */
 .lol-stats--editing [contenteditable="true"] {
   outline: none;
-  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-bottom: 2px solid var(--accent-amber-dim);
   border-radius: 0;
   cursor: text;
   min-width: 2ch;
   transition: border-color .2s;
 }
 .lol-stats--editing [contenteditable="true"]:focus {
-  border-bottom-color: #C89B3C;
+  border-bottom-color: var(--gold);
 }
 
 /* ─────────────────────────────────────────────
@@ -805,10 +897,10 @@
   align-items: center;
   gap: .45rem;
   padding: .4rem .85rem;
-  background: rgba(200,155,60,.15);
-  border: 1px solid rgba(200,155,60,.5);
+  background: var(--accent-amber-dim);
+  border: 1px solid var(--accent-amber-dim);
   border-radius: 4px;
-  color: #C89B3C;
+  color: var(--gold);
   font-size: .75rem;
   font-family: inherit;
   letter-spacing: .06em;
@@ -817,7 +909,7 @@
   transition: background .2s, border-color .2s;
   z-index: 10;
 }
-.lol-projects__edit-btn:hover { background: rgba(200,155,60,.28); border-color: #C89B3C; }
+.lol-projects__edit-btn:hover { background: var(--accent-amber-dim); border-color: var(--gold); }
 .lol-projects__edit-btn--hidden { display: none; }
 
 .lol-projects__edit-controls {
@@ -829,7 +921,7 @@
   gap: .75rem;
   padding: .75rem 1.5rem;
   background: rgba(10,12,18,.92);
-  border-top: 1px solid rgba(200,155,60,.3);
+  border-top: 1px solid var(--accent-amber-dim);
   z-index: 10;
 }
 .lol-projects__edit-controls--hidden { display: none; }
@@ -846,8 +938,8 @@
   transition: background .2s;
 }
 .lol-projects__save-btn {
-  background: #C89B3C;
-  border: 1px solid #C89B3C;
+  background: var(--gold);
+  border: 1px solid var(--gold);
   color: var(--bg-nav);
   font-weight: 700;
 }
@@ -861,7 +953,7 @@
 
 .lol-projects__edit-status {
   font-size: .8rem;
-  color: #C89B3C;
+  color: var(--gold);
 }
 .lol-projects__edit-hint {
   font-size: .75rem;
@@ -873,14 +965,14 @@
 /* Editable fields — subtle gold underline while in edit mode */
 .lol-projects--editing [contenteditable="true"] {
   outline: none;
-  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-bottom: 2px solid var(--accent-amber-dim);
   border-radius: 0;
   cursor: text;
   min-width: 2ch;
   transition: border-color .2s;
 }
 .lol-projects--editing [contenteditable="true"]:focus {
-  border-bottom-color: #C89B3C;
+  border-bottom-color: var(--gold);
 }
 
 /* Make room for save/cancel bar while editing */
@@ -921,10 +1013,10 @@
   align-items: center;
   gap: .45rem;
   padding: .4rem .85rem;
-  background: rgba(200,155,60,.18);
-  border: 1px solid rgba(200,155,60,.55);
+  background: var(--accent-amber-dim);
+  border: 1px solid var(--accent-amber-dim);
   border-radius: 4px;
-  color: #C89B3C;
+  color: var(--gold);
   font-size: .75rem;
   font-family: inherit;
   letter-spacing: .06em;
@@ -933,7 +1025,7 @@
   transition: background .2s, border-color .2s;
   z-index: 20;
 }
-.lol-hero__edit-btn:hover { background: rgba(200,155,60,.32); border-color: #C89B3C; }
+.lol-hero__edit-btn:hover { background: var(--accent-amber-dim); border-color: var(--gold); }
 .lol-hero__edit-btn--hidden { display: none; }
 
 .lol-hero__edit-controls {
@@ -945,7 +1037,7 @@
   gap: .75rem;
   padding: .75rem 1.5rem;
   background: rgba(10,12,18,.92);
-  border-top: 1px solid rgba(200,155,60,.3);
+  border-top: 1px solid var(--accent-amber-dim);
   z-index: 20;
 }
 .lol-hero__edit-controls--hidden { display: none; }
@@ -962,8 +1054,8 @@
   transition: background .2s;
 }
 .lol-hero__save-btn {
-  background: #C89B3C;
-  border: 1px solid #C89B3C;
+  background: var(--gold);
+  border: 1px solid var(--gold);
   color: var(--bg-nav);
   font-weight: 700;
 }
@@ -977,21 +1069,21 @@
 
 .lol-hero__edit-status {
   font-size: .8rem;
-  color: #C89B3C;
+  color: var(--gold);
   margin-left: .25rem;
 }
 
 /* Editable fields — subtle gold underline while in edit mode */
 .lol-hero--editing [contenteditable="true"] {
   outline: none;
-  border-bottom: 2px solid rgba(200,155,60,.55);
+  border-bottom: 2px solid var(--accent-amber-dim);
   border-radius: 0;
   cursor: text;
   min-width: 2ch;
   transition: border-color .2s;
 }
 .lol-hero--editing [contenteditable="true"]:focus {
-  border-bottom-color: #C89B3C;
+  border-bottom-color: var(--gold);
 }
 
 /* CTA is an <a>; reset its hover transform during edit so the focus ring stays put */

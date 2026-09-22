@@ -31,6 +31,7 @@ const { pool } = require('./config/database');
 const { checkMemory } = require('./observability/alerts');
 const { migrate } = require('./scripts/migrate');
 const { startEventLogCleanup } = require('./services/eventLogCleanup');
+const { startLeadsCleanup } = require('./services/leadsCleanup');
 const { startTokenCleanup } = require('./services/tokenCleanup');
 const { logResolvedConfig } = require('./config/clientConfig');
 const { startUpdateChecker } = require('./services/updateChecker');
@@ -77,6 +78,7 @@ async function start() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     startEventLogCleanup(); // daily event_logs prune (EVENT_LOG_RETENTION_DAYS)
+    startLeadsCleanup();    // daily leads prune (LEAD_RETENTION_DAYS — the /personuvernd promise)
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
   });
 

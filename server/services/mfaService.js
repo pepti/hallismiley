@@ -48,15 +48,26 @@ const ISSUER = 'Icelandic Store';
 // migration 061, user_roles is the source of truth for the role SET and
 // "admin in the set ⇒ all views" — so a users.role='user' account with admin
 // in its set holds every admin permission and MUST face the same challenge.
+// Widened 2026-09-07 (ENHANCEMENTS #17): `accounts_holder` — precomputed by the
+// caller via utils/adminRole.js userHoldsView(…, 'accounts') — marks a seller
+// who owns customer accounts. They reach customer data and deploy to customer
+// instances, so they face the same challenge as an admin.
+// Widened 2026-09-21 (D-020): `seller_holder` — precomputed by the caller via
+// auth/publishedSeller.js — marks a seller on the PUBLIC instance. They read
+// enquirer PII and their own earnings there, so the same challenge applies.
+function protectedRole(user) {
+  if (!user) return false;
+  return user.role === 'admin' || user.admin_anywhere === true || user.accounts_holder === true
+    || user.seller_holder === true;
+}
+
 function isProtected(user) {
-  const isAdmin = !!user && (user.role === 'admin' || user.admin_anywhere === true);
-  return isAdmin && user.totp_enabled === true;
+  return protectedRole(user) && user.totp_enabled === true;
 }
 
 /** Should this account be *pushed* to enrol? (Protected roles that haven't yet.) */
 function shouldEnrol(user) {
-  const isAdmin = !!user && (user.role === 'admin' || user.admin_anywhere === true);
-  return isAdmin && user.totp_enabled !== true;
+  return protectedRole(user) && user.totp_enabled !== true;
 }
 
 // ── Enrolment ───────────────────────────────────────────────────────────────
@@ -259,7 +270,7 @@ async function remainingRecoveryCodes(userId) {
 
 module.exports = {
   CHALLENGE_TTL_MS, MAX_CHALLENGE_ATTEMPTS, RECOVERY_CODE_COUNT,
-  isProtected, shouldEnrol,
+  isProtected, shouldEnrol, protectedRole,
   beginEnrolment, confirmEnrolment, disable,
   createChallenge, verifyChallenge,
   consumeRecoveryCode, remainingRecoveryCodes,

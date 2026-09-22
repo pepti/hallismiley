@@ -1,6 +1,8 @@
-// Controller for the in-app change-request (feedback) tool (non-prod only).
-// Submit is public (test-env gated at the route) so logged-out testers can file
-// requests; the admin list/status routes are admin-gated.
+// Controller for the in-app change-request (feedback) tool. Submit is gated at
+// the route by changeRequestGate: admins only — on the test stack with no
+// further condition (config/appEnv.js), on the live site once the switch below
+// is on. The admin list/status/
+// settings routes are role-gated.
 // (The upstream store also emailed a digest per batch + a reminder; deferred
 // here — the admin inbox is the source of truth. See the feature-port notes.)
 const fs     = require('fs');
@@ -8,6 +10,9 @@ const path   = require('path');
 const crypto = require('crypto');
 
 const ChangeRequest = require('../models/ChangeRequest');
+const Setting       = require('../models/Setting');
+const { appEnv, isTestStack } = require('../config/appEnv');
+const { sniffImageFormat }    = require('../utils/imageType');
 const { changeRequestUploadDir } = require('../config/paths');
 
 const MAX_ITEMS            = 100;
@@ -36,6 +41,10 @@ function persistScreenshot(dataUrl) {
     const ext = m[1] === 'jpeg' ? 'jpg' : 'png';
     const buf = Buffer.from(m[2], 'base64');
     if (buf.length === 0 || buf.length > SCREENSHOT_MAX_BYTES) return null;
+    // The bytes decide the format, not the data-URL prefix — the same invariant
+    // verifyImageBytes enforces on every multer route (ice #215). This is the
+    // one image-write path that middleware cannot see, so it checks here.
+    if (sniffImageFormat(buf) !== m[1]) return null;
     const dir = changeRequestUploadDir();
     fs.mkdirSync(dir, { recursive: true });
     const name = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
@@ -125,6 +134,41 @@ const changeRequestController = {
       const item = await ChangeRequest.setItemStatus(req.params.itemId, status);
       if (!item) return res.status(404).json({ error: 'Not found', code: 404 });
       return res.json({ item });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // GET /api/v1/admin/change-requests/settings  (admin only)
+  // Powers the switch at the top of Admin → Feedback. `testStack` is the
+  // gate's own decision (config/appEnv.js), returned so the UI can say "the
+  // test stack has it on regardless of this switch" without re-deriving which
+  // envs count — the view used to compare appEnv !== 'production' and told the
+  // admin on a 'staging' stack that the switch was irrelevant while it was the
+  // only thing between them and a 404. `appEnv` stays for display. (Named
+  // `openToEveryone` until 2026-09-22, when the test stack stopped taking
+  // anonymous requests.)
+  async getSettings(req, res, next) {
+    try {
+      return res.json({
+        enabled: await Setting.getChangeRequestsEnabled(),
+        appEnv:  appEnv(),
+        testStack: isTestStack(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // PATCH /api/v1/admin/change-requests/settings  (admin only)
+  async updateSettings(req, res, next) {
+    try {
+      const { enabled } = req.body || {};
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'enabled must be true or false', code: 400 });
+      }
+      await Setting.setChangeRequestsEnabled(enabled);
+      return res.json({ enabled, appEnv: appEnv(), testStack: isTestStack() });
     } catch (err) {
       next(err);
     }

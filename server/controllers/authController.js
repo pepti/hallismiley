@@ -11,7 +11,26 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/e
 const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
 const mfaService          = require('../services/mfaService');
-const { userIsAdminAnywhere } = require('../utils/adminRole');
+const { userIsAdminAnywhere, userHoldsView } = require('../utils/adminRole');
+const { isPublishedSeller } = require('../auth/publishedSeller');
+
+/**
+ * May this account enrol in 2FA? Exactly the set the login path challenges
+ * (mfaService.protectedRole): an admin by either column, or a holder of the
+ * `accounts` view — a seller who owns customer accounts reaches customer data
+ * and deploys to customer instances. Resolved per call because a role grant
+ * takes effect without re-login.
+ */
+async function isEnrolmentEligible(user) {
+  if (!user) return false;
+  const enriched = {
+    ...user,
+    admin_anywhere: await userIsAdminAnywhere(dbQuery, user.id),
+    accounts_holder: await userHoldsView(dbQuery, user.id, 'accounts'),
+    seller_holder: await isPublishedSeller(dbQuery, user.id),
+  };
+  return mfaService.protectedRole(enriched);
+}
 const { t }               = require('../i18n');
 
 const scrypt = new Scrypt();
@@ -28,7 +47,13 @@ const RESET_TTL_MS  =      60 * 60 * 1000; // 1 hour
 async function roleFields(userId, primaryRole) {
   const roles = await UserRole.listForUser(userId);
   const set   = roles.length ? roles : [primaryRole];
-  return { role: primaryRole, roles: set, views: await Role.getViewsForRoles(set) };
+  return {
+    role: primaryRole, roles: set, views: await Role.getViewsForRoles(set),
+    // Seller area (D-020): true only on the public instance, for a user the
+    // latest ops snapshot lists. Drives the "Sölusvæði" menu item and the 2FA
+    // panel; the server re-checks on every /api/v1/seller request.
+    seller: await isPublishedSeller(dbQuery, userId),
+  };
 }
 
 const authController = {
@@ -128,6 +153,10 @@ const authController = {
       // an account can hold admin through user_roles while its primary role
       // says 'user', and it must not walk past the 2FA challenge.
       user.admin_anywhere = await userIsAdminAnywhere(dbQuery, user.id);
+      // Sellers holding the `accounts` view are protected like admins (#17).
+      user.accounts_holder = await userHoldsView(dbQuery, user.id, 'accounts');
+      // …and so are published sellers on the public instance (D-020).
+      user.seller_holder = await isPublishedSeller(dbQuery, user.id);
       if (mfaService.isProtected(user)) {
         const challengeId = await mfaService.createChallenge(user.id, {
           ip: req.ip ?? null,
@@ -161,10 +190,6 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
-          // Always false here: an enrolled account never reaches this payload,
-          // it gets the challenge response instead. Sent anyway so all three
-          // session payloads (login / loginTotp / getSession) have one shape.
-          totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
@@ -209,7 +234,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
-                totp_enabled, email_verified, party_access, approval_status
+                email_verified, party_access, approval_status
            FROM users
           WHERE id = $1`,
         [result.userId]
@@ -247,11 +272,6 @@ const authController = {
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
-          // The 2FA panel paints from this flag. Without it the admin who just
-          // passed the challenge sees the OFF state and is offered "Set up",
-          // which 409s — the account is already enrolled — with no way to reach
-          // the disable form until a reload re-fetches the session.
-          totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
@@ -268,7 +288,11 @@ const authController = {
   async totpSetup(req, res, next) {
     try {
       const user = req.user;
-      if (user.role !== 'admin') {
+      // Whoever the LOGIN path challenges must be able to enrol, or the
+      // protection is decorative. That set is admins (primary role or through
+      // user_roles) plus `accounts` holders — the same predicate mfaService
+      // uses, not a primary-role-only test.
+      if (!(await isEnrolmentEligible(user))) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
       }
       if (user.totp_enabled) {
@@ -288,7 +312,11 @@ const authController = {
   async totpConfirm(req, res, next) {
     try {
       const user = req.user;
-      if (user.role !== 'admin') {
+      // Whoever the LOGIN path challenges must be able to enrol, or the
+      // protection is decorative. That set is admins (primary role or through
+      // user_roles) plus `accounts` holders — the same predicate mfaService
+      // uses, not a primary-role-only test.
+      if (!(await isEnrolmentEligible(user))) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
       }
       const { code } = req.body;

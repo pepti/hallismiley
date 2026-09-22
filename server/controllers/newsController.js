@@ -1,6 +1,7 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
+const { foldSlug } = require('../utils/slug');
 const { MAX_IMAGE_SIZE } = require('../middleware/upload');
 const { parseYouTubeId } = require('../utils/youtube');
 const { UPLOAD_ROOT } = require('../config/paths');
@@ -71,15 +72,12 @@ const ARTICLE_COLS_BOTH = `
   u.avatar AS author_avatar
 `;
 
-// Auto-generate a slug from a title string
+// Auto-generate a slug from a title string. Icelandic-aware since 2026-09-02
+// (utils/slug.js, ice #229): "Þórsmörk" → "thorsmork", not "rsmrk". Only the
+// GENERATION path changes — a caller-supplied slug is kept verbatim and no
+// stored slug is rewritten.
 function _slugify(title) {
-  return title
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 100);
+  return foldSlug(title);
 }
 
 // Ensure a slug is unique in the DB; append -2, -3, … if needed

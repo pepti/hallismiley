@@ -17,6 +17,10 @@ const fs   = require('fs');
 const path = require('path');
 
 const VERSION_FILE = path.join(__dirname, '..', 'version.json');
+// Recent changes, written by server/scripts/generate-changes.js on the build
+// host (see that file for the opt-out rule). Absent in a checkout, absent when
+// the workflow forgot the step — both read as an empty list, never a guess.
+const CHANGES_FILE = path.join(__dirname, '..', 'changes.json');
 
 const DEV_BUILD = {
   version: 'dev',
@@ -51,6 +55,27 @@ function readBuildInfo(file = VERSION_FILE) {
 
 const buildInfo = Object.freeze(readBuildInfo());
 
+function readChanges(file = CHANGES_FILE) {
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return [];
+  }
+  if (!raw || !Array.isArray(raw.changes)) return [];
+  return raw.changes
+    .filter(c => c && typeof c.subject === 'string')
+    .map(c => Object.freeze({
+      sha:     typeof c.sha  === 'string' ? c.sha  : 'unknown',
+      date:    typeof c.date === 'string' ? c.date : 'unknown',
+      subject: c.subject,
+      pr:      Number.isInteger(c.pr) ? c.pr : null,
+    }));
+}
+
+/** The changes this build carries, newest first — the "Latest updates" card (ice #209). */
+const changes = Object.freeze(readChanges());
+
 /** True when this process has no stamped build — a local checkout, not a release. */
 const isDevBuild = buildInfo.version === DEV_BUILD.version;
 
@@ -59,4 +84,4 @@ function shortSha(sha = buildInfo.gitSha) {
   return String(sha || '').slice(0, 12);
 }
 
-module.exports = { buildInfo, isDevBuild, shortSha, readBuildInfo, VERSION_FILE, DEV_BUILD };
+module.exports = { buildInfo, isDevBuild, shortSha, readBuildInfo, VERSION_FILE, DEV_BUILD, changes, readChanges, CHANGES_FILE };

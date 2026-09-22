@@ -7,10 +7,13 @@ test.describe('Admin features', () => {
     await loginAsAdmin(page);
   });
 
+  // The site is Icelandic by default, so the project card's aria-label is now
+  // "Skoða verkefni: <title>". Match on the project title alone — it comes from
+  // the database and is identical in both locales.
   test('Edit Project button is visible on project detail page', async ({ page }) => {
     await page.goto('/#/projects');
     await page.waitForSelector('.project-card', { timeout: 10_000 });
-    await page.getByRole('button', { name: /View project: Stofan Bakhús/i }).click();
+    await page.getByRole('button', { name: /Stofan Bakhús/i }).click();
 
     await expect(page.locator('.pd-edit-toggle')).toBeVisible({ timeout: 10_000 });
   });
@@ -18,7 +21,7 @@ test.describe('Admin features', () => {
   test('clicking Edit Project enters edit mode', async ({ page }) => {
     await page.goto('/#/projects');
     await page.waitForSelector('.project-card', { timeout: 10_000 });
-    await page.getByRole('button', { name: /View project: Stofan Bakhús/i }).click();
+    await page.getByRole('button', { name: /Stofan Bakhús/i }).click();
 
     await page.locator('.pd-edit-toggle').click();
 

@@ -75,21 +75,10 @@ describe('with the module switched off', () => {
   });
 });
 
-describe('with the module switched on (env override)', () => {
-  // The BASE ships the module off and carries no config/client.json, so
-  // switching it on for this test is an explicit env override — the same
-  // mechanism an instance uses.
+describe('with the module switched on (this instance)', () => {
   test('the endpoints exist again', async () => {
-    const saved = process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED;
-    process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED = 'true';
-    try {
-      let app;
-      jest.isolateModules(() => { app = require('../../server/app'); });
-      const res = await request(app).get('/api/v1/system/version').set('Cookie', adminCookie);
-      expect(res.status).toBe(200);
-    } finally {
-      if (saved === undefined) delete process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED;
-      else process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED = saved;
-    }
+    const app = require('../../server/app');
+    const res = await request(app).get('/api/v1/system/version').set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
   });
 });

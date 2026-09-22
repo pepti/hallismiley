@@ -10,6 +10,24 @@ const { forcedLocaleFor, isPartyPath, PARTY_FORCED_LOCALE } = require('../../ser
 const { resolveLocale } = require('../../server/middleware/locale');
 
 describe('forcedLocaleFor', () => {
+  // hallismiley (engine-graft): hidden one-off pages (IS_ONLY_PAGES) are locked
+  // too, but they are NOT party paths — isPartyPath drives the party API's
+  // Icelandic default and must stay false for them.
+  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
+    'locks the hidden Icelandic-only page %s',
+    (p) => {
+      expect(forcedLocaleFor(p)).toBe('is');
+      expect(isPartyPath(p)).toBe(false);
+    }
+  );
+
+  test.each(['/aron13ara/x', '/en/aron13ara/admin', '/aron13', '/aron13arab'])(
+    'the hidden-page lock is an exact match — %s stays unlocked',
+    (p) => {
+      expect(forcedLocaleFor(p)).toBeNull();
+    }
+  );
+
   test.each([
     '/party',
     '/en/party',
@@ -50,24 +68,6 @@ describe('forcedLocaleFor', () => {
     expect(forcedLocaleFor(p)).toBeNull();
     expect(isPartyPath(p)).toBe(false);
   });
-
-  // Hidden one-off pages (IS_ONLY_PAGES) are locked too, but they are NOT
-  // party paths — isPartyPath drives the party API's Icelandic default and
-  // must stay false for them.
-  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
-    'locks the hidden Icelandic-only page %s',
-    (p) => {
-      expect(forcedLocaleFor(p)).toBe('is');
-      expect(isPartyPath(p)).toBe(false);
-    }
-  );
-
-  test.each(['/aron13ara/x', '/en/aron13ara/admin', '/aron13', '/aron13arab'])(
-    'the hidden-page lock is an exact match — %s stays unlocked',
-    (p) => {
-      expect(forcedLocaleFor(p)).toBeNull();
-    }
-  );
 
   test('does not match routes that merely start with the word party', () => {
     // Guards the startsWith('/party/') branch against '/partyoke'-style paths.
@@ -154,11 +154,22 @@ describe('resolveLocale — ordinary routes are untouched', () => {
     path, query: {}, headers: {}, cookies: {}, ...extra,
   });
 
-  test('still honours every signal off the party routes', () => {
-    expect(resolveLocale(req('/projects', { query: { locale: 'is' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { cookies: { locale_choice: 'is' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { user: { preferred_locale: 'is' } }))).toBe('is');
+  test('still honours every EXPLICIT signal off the party routes', () => {
+    expect(resolveLocale(req('/projects', { query: { locale: 'en' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { headers: { 'x-locale': 'en' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { cookies: { locale_choice: 'en' } }))).toBe('en');
+    expect(resolveLocale(req('/projects', { user: { preferred_locale: 'en' } }))).toBe('en');
+  });
+
+  // The whole point of the Icelandic default: an en-US browser is the norm in
+  // Iceland, so it must not be mistaken for "this visitor wants English".
+  test('Accept-Language never moves a visitor off Icelandic', () => {
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))).toBe('is');
     expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'is-IS,is;q=0.9' } }))).toBe('is');
-    expect(resolveLocale(req('/projects'))).toBe('en');
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'de-DE' } }))).toBe('is');
+  });
+
+  test('no signal at all falls back to PUBLIC_DEFAULT_LOCALE (is)', () => {
+    expect(resolveLocale(req('/projects'))).toBe('is');
   });
 });

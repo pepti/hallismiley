@@ -1,0 +1,72 @@
+{
+  "case": "synthetic-2017-P1",
+  "period": "2017-P1",
+  "description": "Synthetic — no company's figures. One opening entry, a domestic 24% purchase, a reverse-charge USD purchase, and a counter sale with a 24% and an 11% line. Claim year 2017: the test suites share one append-only journal (docs/BOOKKEEPING-SYSTEM.md).",
+  "settings": {
+    "seller_name": "Prófun ehf.",
+    "seller_kennitala": "1203894599",
+    "seller_vat_number": "123456",
+    "seller_address": "Prófgata 1, 101 Reykjavík"
+  },
+  "fx_rates": [
+    { "rate_date": "2017-01-10", "currency": "USD", "rate": 100 }
+  ],
+  "manual_entries": [
+    {
+      "entry_date": "2017-01-02",
+      "memo": "Opening — share capital",
+      "lines": [
+        { "account_code": "1900", "debit": 500000 },
+        { "account_code": "3100", "credit": 500000 }
+      ]
+    }
+  ],
+  "expenses": [
+    {
+      "expense_date": "2017-01-15",
+      "supplier_name": "Innlendur birgir ehf.",
+      "supplier_country": "IS",
+      "supplier_vat_number": "54321",
+      "supplier_invoice_no": "R-2017-1",
+      "account_code": "6300",
+      "vat_code": "input_24",
+      "currency": "ISK",
+      "amount_gross": 12400,
+      "description": "Hugbúnaðaráskrift — 12.400 kr. með VSK: nettó 10.000, innskattur 2.400",
+      "document": "stub"
+    },
+    {
+      "expense_date": "2017-01-20",
+      "supplier_name": "Cloud Vendor Inc.",
+      "supplier_country": "US",
+      "supplier_invoice_no": "INV-777",
+      "account_code": "6300",
+      "vat_code": "reverse_charge_24",
+      "currency": "USD",
+      "amount_gross": 2000,
+      "description": "Cloud hosting — USD 20.00 at 100 = 2.000 kr. net; reverse charge adds 480 to D and E",
+      "document": "stub"
+    }
+  ],
+  "pos_sales": [
+    {
+      "sold_at": "2017-02-03",
+      "tender": "cash",
+      "lines": [
+        { "description": "Ráðgjöf", "quantity": 1, "unit_price_gross": 12400, "vat_rate": 24 },
+        { "description": "Bók", "quantity": 1, "unit_price_gross": 1110, "vat_rate": 11 }
+      ]
+    }
+  ],
+  "expected": {
+    "box_a_net_24": 10000,
+    "box_b_net_11": 1000,
+    "box_c_net_zero": 0,
+    "box_d_output": 2990,
+    "output_vat_domestic": 2510,
+    "output_vat_reverse_charge": 480,
+    "box_e_input": 2880,
+    "box_f_payable": 110
+  },
+  "expected_preflight": { "blockers": [] }
+}

@@ -585,16 +585,16 @@ describe('theme preference', () => {
     const res = await request(app)
       .patch('/api/v1/users/me')
       .set('Cookie', sessionCookie)
-      .send({ theme: 'lava' });
+      .send({ theme: 'ember' });
     expect(res.status).toBe(200);
-    expect(res.body.theme).toBe('lava');
+    expect(res.body.theme).toBe('ember');
 
     const { rows } = await db.query('SELECT theme FROM users WHERE id = $1', [adminId]);
-    expect(rows[0].theme).toBe('lava');
+    expect(rows[0].theme).toBe('ember');
   });
 
   test('PATCH rejects an unknown theme with 400, leaving the stored value alone', async () => {
-    await db.query('UPDATE users SET theme = $1 WHERE id = $2', ['moss', adminId]);
+    await db.query('UPDATE users SET theme = $1 WHERE id = $2', ['ember', adminId]);
     const res = await request(app)
       .patch('/api/v1/users/me')
       .set('Cookie', sessionCookie)
@@ -602,14 +602,14 @@ describe('theme preference', () => {
     expect(res.status).toBe(400);
 
     const { rows } = await db.query('SELECT theme FROM users WHERE id = $1', [adminId]);
-    expect(rows[0].theme).toBe('moss');
+    expect(rows[0].theme).toBe('ember');
   });
 
   test('GET /auth/session carries the saved theme so the SPA can adopt it', async () => {
-    await db.query('UPDATE users SET theme = $1 WHERE id = $2', ['glacier', adminId]);
+    await db.query('UPDATE users SET theme = $1 WHERE id = $2', ['ember', adminId]);
     const res = await request(app).get('/auth/session').set('Cookie', sessionCookie);
     expect(res.status).toBe(200);
     expect(res.body.authenticated).toBe(true);
-    expect(res.body.user.theme).toBe('glacier');
+    expect(res.body.user.theme).toBe('ember');
   });
 });

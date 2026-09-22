@@ -2,6 +2,19 @@
 
 Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcases joinery/timber-framing work and software engineering work to two distinct audiences.
 
+**Engine downstream since 2026-09-22 (D-021).** This repo was the base every
+estate repo was scaffolded from; it is now a DOWNSTREAM of the Orange Smiley
+engine (`engine.json`: product `hs`, role `personal`, upstream orangesmiley
+`master`). Engine files arrive by `git merge upstream/master` through
+site-factory `engine-sync.js`; what is this site's own lives in product-owned
+paths (`.engine-paths`, generated from `features/hs/*.md`); every other
+hallismiley-specific edit to an engine file is a residual hook listed in
+`docs/HISTORY.md#engine-graft`, together with the identity items the engine's
+own tests pin and Halli still has to decide. `server/config/schema.js` is the
+engine's; hallismiley's old 080–085 numbering is mapped by the `aliases` in
+`server/config/product-migrations/hs.js`. **Merging `main` deploys**: never
+push an engine sync without green CI, never from a scratch clone.
+
 - **Live:** https://www.hallismiley.is
 - **Owner:** Halli (solo project)
 - **Deploy target:** Azure App Service (Linux container) — NOT Railway
@@ -25,7 +38,7 @@ Personal portfolio for Halli (Icelandic carpenter + computer scientist). Showcas
 1. **Vanilla JS frontend.** No SPA framework, no bundler-required syntax. ES modules + plain DOM.
 2. **CommonJS server.** Don't convert to ESM piecemeal.
 3. **Lucia owns sessions.** Don't bolt on a second session system. (The JWT half of this line was boilerplate — see the auth note above.)
-4. **Migrations are entries appended to the array in `server/config/schema.js`** (applied by `npm run migrate` / at boot, one transaction per migration, advisory-locked against concurrent booters). Never edit a migration that has been applied to prod — always add a new one.
+4. **Migrations: the engine array in `server/config/schema.js` is authored upstream** and arrives by merge; this repo's own entries go in `server/config/product-migrations/hs.js` (`hs_NNN_snake`), composed by `server/config/migrationSet.js` and applied by `npm run migrate` / at boot (one transaction per migration, advisory-locked). Never edit a migration that has been applied to prod — always add a new one.
 5. **All routes return a consistent error envelope** (see `docs/API.md` "Error formats"). Don't invent new error shapes.
 6. **Integration tests hit a real Postgres** — do not mock `pg`.
 7. **The books are double-entry, and the ledger is the only source of totals.** Every
@@ -88,29 +101,36 @@ Full deployment guide: `docs/DEPLOYMENT.md`. Operational runbook: `RUNBOOK.md`.
 
 ## Domain map — start a feature request here
 
-Full per-domain index: **`docs/ARCHITECTURE.md`**. `tests/unit/architectureIndex.test.js`
-fails CI when a routes/controller/model/service/view file has no row there, when a cited
-migration is not in `schema.js` (or an applied one is not cited), or when a link does not
-resolve — the failure message names the missing row.
+Full per-domain index: **`docs/ARCHITECTURE.md`** (the engine's 21 domains; the pieces
+that are hallismiley's own are marked "(hallismiley)" and registered under `features/hs/`).
+`tests/unit/architectureIndex.test.js` fails CI when a routes/controller/model/service/view
+file has no row there, when a cited migration is not applied (or an applied one is not
+cited), or when a link does not resolve; `tests/unit/featureRegistry.test.js` fails when a
+source file is claimed by no feature or by two.
 
 | # | Domain |
 |---|---|
 | 1 | [Auth, users, RBAC, 2FA](docs/ARCHITECTURE.md#1-auth-users-rbac-2fa) |
-| 2 | [Admin shell, UI kit](docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-ui-kit) |
-| 3 | [Public site, SSR meta, SEO](docs/ARCHITECTURE.md#3-public-site--home-contact-legal-ssr-meta-sitemap-seo) |
-| 4 | [Themes](docs/ARCHITECTURE.md#4-themes) |
+| 2 | [Admin shell + UI kit](docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit) |
+| 3 | [Public site + SEO (+ hallismiley's own pieces)](docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo) |
+| 4 | [Themes, scenes, ambience](docs/ARCHITECTURE.md#4-themes-scenes-ambience) |
 | 5 | [i18n](docs/ARCHITECTURE.md#5-i18n) |
-| 6 | [Shop](docs/ARCHITECTURE.md#6-shop--storefront-cart-checkout-orders-products-collections-bins-discounts-customers-sales) |
-| 7 | [News, projects, party, bio, Aron13](docs/ARCHITECTURE.md#7-news-projects-party-bio-aron13) |
-| 8 | [Monitoring](docs/ARCHITECTURE.md#8-monitoring--event-logs-metrics-analytics-health) |
-| 9 | [Self-update](docs/ARCHITECTURE.md#9-self-update) |
-| 10 | [MCP connector](docs/ARCHITECTURE.md#10-mcp-connector) |
-| 11 | [Change requests](docs/ARCHITECTURE.md#11-change-requests--in-app-feedback) |
-| 12 | [Content, settings, background](docs/ARCHITECTURE.md#12-content-settings-background) |
-| 13 | [Uploads, media](docs/ARCHITECTURE.md#13-uploads-and-media) |
-| 14 | [Email](docs/ARCHITECTURE.md#14-email) |
-| 15 | [Bookkeeping](docs/ARCHITECTURE.md#15-bookkeeping--invoices-expenses-ar-vsk-bank-ledger-payroll-pos) |
-| 16 | [Infrastructure](docs/ARCHITECTURE.md#16-infrastructure-and-cross-cutting) |
+| 6 | [Leads (hidden here)](docs/ARCHITECTURE.md#6-leads--fyrirspurnir) |
+| 7 | [Markaður (hidden here)](docs/ARCHITECTURE.md#7-markaður--market-research-and-the-prospect-list) |
+| 8 | [Accounts, commission, staff audit (hidden here)](docs/ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) |
+| 9 | [Bookkeeping](docs/ARCHITECTURE.md#9-bookkeeping--invoices-vsk-peppol-intake-settings-replay-payroll) |
+| 10 | [Sales handbook (hidden here)](docs/ARCHITECTURE.md#10-sales-handbook--handbók-sölufólks) |
+| 11 | [Shop](docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) |
+| 12 | [News, projects, party, bio, Aron13](docs/ARCHITECTURE.md#12-news-projects-party-bio-hidden-portfolio) |
+| 13 | [Monitoring](docs/ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) |
+| 14 | [Self-update](docs/ARCHITECTURE.md#14-self-update) |
+| 15 | [MCP connector](docs/ARCHITECTURE.md#15-mcp-connector) |
+| 16 | [Change requests](docs/ARCHITECTURE.md#16-change-requests--breytingarbeiðnir) |
+| 17 | [Content, settings, background](docs/ARCHITECTURE.md#17-content-settings-background) |
+| 18 | [Uploads, media](docs/ARCHITECTURE.md#18-uploads-and-media) |
+| 19 | [Email](docs/ARCHITECTURE.md#19-email) |
+| 20 | [Infrastructure](docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting) |
+| 21 | [Seller area (hidden here)](docs/ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) |
 
 **Recording a change (since 2026-09-22)**: an incident or programme write-up goes to
 `docs/HISTORY.md` (dated section with an `<a id>` anchor + index row); the rule it establishes

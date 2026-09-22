@@ -1,5 +1,15 @@
-// Shared schema DDL — single source of truth for migrate.js and tests/globalSetup.js.
-// Add new migrations as additional objects in the array; never edit existing entries.
+// ENGINE migrations — the first half of the list server/scripts/migrate.js
+// applies (server/config/migrationSet.js appends this repo's product array,
+// server/config/product-migrations/<id>.js, after it). Stack invariant #4.
+//
+// Authored in the upstream engine repo (orangesmiley) ONLY: a downstream
+// receives this file by `git merge upstream/master` and never appends to it —
+// product-specific migrations go in the product file, named <id>_NNN_snake.
+// Add new engine migrations as additional objects at the END of the array;
+// never edit or rename an applied entry (names are the runner's identity).
+// An engine migration never depends on a product table and never UPDATEs
+// product-editable content (site copy, seeded guides) — those are product
+// migrations, which is why 091, 092 and 104 live in product-migrations/os.js.
 
 const migrations = [
   {
@@ -1322,7 +1332,19 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
-    // Shop redesign step 1 — see docs/SHOP_REDESIGN.md.
+    // (Comment-only edit 2026-09-11 — the SQL statements below are untouched;
+    // invariant 4 guards the statements, and migrate.js keys applied
+    // migrations on `name`, not content.)
+    // Shop redesign step 1 (the base's 2026-05 storefront plan; its doc was
+    // retired 2026-09-11 — the shop is a hidden surface on this instance, see
+    // server/config/publicSurface.js). What the plan said the service columns
+    // mean, since nothing else records it: is_bookable = "true ⇒ triggers a
+    // post-checkout scheduling follow-up" — step 5 of that plan, built as
+    // sendBookingNotification() in emailService.js (fired from shopController
+    // for paid orders with a bookable line); adminBookkeepingController also
+    // reads the flag as is_service for the POS picker; duration_minutes /
+    // delivery_format describe a service SKU; a service's stock_count is NULL
+    // = always available.
     //
     // The existing products.category (from 024_product_variants) held
     // apparel-style values like 'apparel', 'accessories', 'roof_box'. The
@@ -3914,6 +3936,84 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
+    // ── 080: background library sections ─────────────────────────────────────
+    //
+    // Grows the flat background_media library (051) into named, ordered
+    // sections so the admin can group backgrounds ("Winter", "Studio", …) with
+    // per-locale names and descriptions. background_media already exists here,
+    // so section_id is ADDED rather than declared — 051 stays untouched.
+    //
+    // section_id is nullable with ON DELETE SET NULL: deleting a section
+    // ungroups its media instead of destroying uploads. Media list order is
+    // (section_id NULLS FIRST, sort_order, id), so the ungrouped bucket sorts
+    // first and matches what the admin UI paints.
+    //
+    // Authoritative copy; human-reference duplicate in
+    // server/migrations/080_background_sections.sql.
+    name: '080_background_sections',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS background_sections (
+        id             SERIAL      PRIMARY KEY,
+        name           TEXT        NOT NULL,
+        name_is        TEXT,
+        description    TEXT,
+        description_is TEXT,
+        sort_order     INTEGER     NOT NULL DEFAULT 0,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `ALTER TABLE background_media
+         ADD COLUMN IF NOT EXISTS section_id INTEGER
+         REFERENCES background_sections(id) ON DELETE SET NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_background_media_section ON background_media (section_id)`,
+    ],
+  },
+  {
+    // ── 081: self-update ledger ──────────────────────────────────────────────
+    //
+    // One row per release this instance has ever heard about, on the channel it
+    // heard about it from. The unique (channel, version) index is what makes
+    // the hourly check idempotent: re-reading the same manifest updates the row
+    // in place instead of growing the table forever.
+    //
+    // status is a CHECK, not an enum type: adding a state to a Postgres enum is
+    // a migration with a lock, adding one to a CHECK is a migration without the
+    // ceremony — and this state machine will grow.
+    //
+    // previous_digest is the digest that was running when apply was triggered,
+    // captured BEFORE the swap. It is the only thing that makes an assisted
+    // rollback possible, and it cannot be recovered after the fact.
+    //
+    // detail (jsonb) carries the non-indexed remainder — the scheduled time an
+    // auto instance picked, the compatibility flag, the failure reason — so the
+    // shape can grow without a migration per field.
+    //
+    // Authoritative copy; human-reference duplicate in
+    // server/migrations/081_system_updates.sql.
+    name: '081_system_updates',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS system_updates (
+        id              SERIAL      PRIMARY KEY,
+        discovered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        version         TEXT        NOT NULL,
+        image_digest    TEXT        NOT NULL,
+        channel         TEXT        NOT NULL,
+        changelog_md    TEXT,
+        status          TEXT        NOT NULL DEFAULT 'available'
+                        CHECK (status IN ('available','scheduled','applying','applied','failed','dismissed')),
+        applied_at      TIMESTAMPTZ,
+        previous_digest TEXT,
+        detail          JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_system_updates_channel_version
+         ON system_updates (channel, version)`,
+      // The two questions the app asks constantly: "is anything actionable?"
+      // and "what is the newest thing I know about?".
+      `CREATE INDEX IF NOT EXISTS idx_system_updates_status
+         ON system_updates (status, discovered_at DESC)`,
+    ],
+  },
+  {
     // Admin two-factor sign-in (TOTP, RFC 6238). Ported from icelandicstore
     // (#138 there; base migration number differs — chains diverged at 072).
     //
@@ -3933,7 +4033,7 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // revocable, attempt-countable and audit-visible, which a stateless token is
     // not — and inventing a second token format for auth is the wrong place to
     // improvise.
-    name: '080_admin_totp',
+    name: '082_admin_totp',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret       TEXT`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled      BOOLEAN NOT NULL DEFAULT FALSE`,
@@ -3976,13 +4076,17 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // would make every existing user's saved local theme get reset on their
     // first login after this migration. A CHECK constraint ignores NULLs, so
     // the column still can't hold an unknown theme name.
-    // WARNING for whoever widens this list: the DO block below guards by
-    // constraint NAME, so appending a copy of this pattern with more themes
-    // silently no-ops (the name already exists) and the DB keeps rejecting the
-    // new values while the UI offers them. A widening migration must instead be
-    // DROP CONSTRAINT IF EXISTS users_theme_check; ADD CONSTRAINT … (both
-    // idempotent, so still safe to re-run).
-    name: '081_user_theme',
+    // WARNING for whoever widens this list (a base-sync will, sooner or later:
+    // the base ships six themes to this repo's two): the DO block below guards
+    // by constraint NAME, so appending a copy of this pattern silently no-ops —
+    // the name already exists — and the DB keeps rejecting the new themes while
+    // themePrefs.js, theme-boot.js and config/themes.js all offer them. The
+    // symptom is a 500 from PATCH /users/me, not the typed 400 userController
+    // promises. A widening migration must be:
+    //   ALTER TABLE users DROP CONSTRAINT IF EXISTS users_theme_check;
+    //   ALTER TABLE users ADD  CONSTRAINT users_theme_check CHECK (theme IN (…));
+    // Both statements are idempotent, so that form is still re-run safe.
+    name: '083_user_theme',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT`,
       `DO $$ BEGIN
@@ -3990,57 +4094,78 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
            SELECT 1 FROM pg_constraint WHERE conname = 'users_theme_check'
          ) THEN
            ALTER TABLE users ADD CONSTRAINT users_theme_check
-             CHECK (theme IN ('classic', 'glacier', 'moss', 'lava', 'aurora', 'black-sand'));
+             CHECK (theme IN ('classic', 'light'));
          END IF;
        END $$`,
     ],
   },
   {
-    // ── 082: self-update ledger ──────────────────────────────────────────────
+    // Widen users.theme for the five-theme set that came in with the product
+    // rename (Rekstrarkerfið, 2026-08-20): 'mono', 'ember' and 'midnight' join
+    // the two that 083 allowed.
     //
-    // One row per release this instance has ever heard about, on the channel it
-    // heard about it from. The unique (channel, version) index is what makes
-    // the hourly check idempotent: re-reading the same manifest updates the row
-    // in place instead of growing the table forever.
+    // This is the migration shape 083's WARNING calls for, and the reason it
+    // exists: 083 guards by constraint NAME, so a second copy of that DO block
+    // would find users_theme_check already present, no-op, and leave the DB
+    // rejecting the new themes while all three client/server lists offer them
+    // (symptom: a 500 from PATCH /users/me, not the typed 400). DROP + ADD is
+    // the only form that actually widens, and both statements are idempotent,
+    // so this stays re-run safe.
     //
-    // status is a CHECK, not an enum type: adding a state to a Postgres enum is
-    // a migration with a lock, adding one to a CHECK is a migration without the
-    // ceremony — and this state machine will grow.
-    //
-    // previous_digest is the digest that was running when apply was triggered,
-    // captured BEFORE the swap. It is the only thing that makes an assisted
-    // rollback possible, and it cannot be recovered after the fact.
-    //
-    // detail (jsonb) carries the non-indexed remainder — the scheduled time an
-    // auto instance picked, the compatibility flag, the failure reason — so the
-    // shape can grow without a migration per field.
-    //
-    // Authoritative copy. NOTE: ported from orangesmiley, where this same
-    // migration is named 081_system_updates — here it is 082, because the
-    // runner records by NAME and the two chains diverged. There is no
-    // server/migrations/*.sql reference copy for it in this repo.
-    name: '082_system_updates',
+    // WIDEN-ONLY, per invariant 14 (expand/contract). 'classic' and 'light'
+    // stay in the list even though 'classic' now labels a light theme and
+    // 'light' is now labelled Pappír: during a self-update swap the OLD
+    // container still serves against the NEW schema, and it will happily PATCH
+    // the ids it knows. Dropping an id from this CHECK is only safe a release
+    // after nothing offers it any more.
+    name: '084_user_theme_widen',
     statements: [
-      `CREATE TABLE IF NOT EXISTS system_updates (
-        id              SERIAL      PRIMARY KEY,
-        discovered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        version         TEXT        NOT NULL,
-        image_digest    TEXT        NOT NULL,
-        channel         TEXT        NOT NULL,
-        changelog_md    TEXT,
-        status          TEXT        NOT NULL DEFAULT 'available'
-                        CHECK (status IN ('available','scheduled','applying','applied','failed','dismissed')),
-        applied_at      TIMESTAMPTZ,
-        previous_digest TEXT,
-        detail          JSONB       NOT NULL DEFAULT '{}'::jsonb,
-        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_system_updates_channel_version
-         ON system_updates (channel, version)`,
-      // The two questions the app asks constantly: "is anything actionable?"
-      // and "what is the newest thing I know about?".
-      `CREATE INDEX IF NOT EXISTS idx_system_updates_status
-         ON system_updates (status, discovered_at DESC)`,
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_theme_check`,
+      `ALTER TABLE users ADD CONSTRAINT users_theme_check
+         CHECK (theme IN ('classic', 'light', 'mono', 'ember', 'midnight'))`,
+    ],
+  },
+  {
+    // Retire the waterfall hero (Halli, 2026-08-20). Changing the code default
+    // in adminBackgroundController/HomeView only covers instances that never
+    // saved a landing_background row; any instance that has one — including
+    // this repo's dev DB — keeps whatever mode it stored, which is 'video'.
+    // So the stored row moves too, or the change is invisible where it counts.
+    //
+    // Scoped to 'video' on purpose: an admin who deliberately chose 'photo' or
+    // 'plain' keeps their choice. This flips the old default, not everyone's
+    // configuration.
+    //
+    // Forward-compatible for the swap window (invariant 14): the previous
+    // release's HomeView treats any mode that is not 'photo' or 'plain' as
+    // video, so an old container reading 'gradient' renders the old hero
+    // rather than erroring. Its admin PATCH would reject 'gradient', which is
+    // a degraded admin screen for the length of a swap, not an outage.
+    name: '085_landing_background_gradient',
+    statements: [
+      `UPDATE site_content
+          SET value = jsonb_set(value, '{mode}', '"gradient"'::jsonb)
+        WHERE key = 'landing_background'
+          AND value->>'mode' = 'video'`,
+    ],
+  },
+  {
+    // The Iceland scene becomes the default hero (Halli, 2026-08-21 — the
+    // "Úti á Íslandi" re-skin). Same reasoning as 085: the code default only
+    // covers instances without a stored row, so the stored old default moves
+    // too. Scoped to 'gradient' — deliberate photo/video/plain choices keep.
+    //
+    // Swap-window safe (invariant 14): the previous release's HomeView falls
+    // back to its own default for a mode it doesn't know, so an old container
+    // reading 'scene' renders the gradient hero rather than erroring; its
+    // admin PATCH rejects 'scene' — a degraded admin screen for the length of
+    // the swap, not an outage.
+    name: '086_landing_background_scene',
+    statements: [
+      `UPDATE site_content
+          SET value = jsonb_set(value, '{mode}', '"scene"'::jsonb)
+        WHERE key = 'landing_background'
+          AND value->>'mode' = 'gradient'`,
     ],
   },
   {
@@ -4051,8 +4176,8 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // EVENT_LOG_RETENTION_DAYS (default 90). NOTE the number: ice calls this
     // table's migration 093_event_logs (and even carries a duplicate 093 in
     // its chain) — the runner records by NAME, chains diverged at 072, so
-    // this repo numbers it 083.
-    name: '083_event_logs',
+    // this repo numbers it 087.
+    name: '087_event_logs',
     statements: [
       `CREATE TABLE IF NOT EXISTS event_logs (
          id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -4080,7 +4205,7 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // NOT-NULL expiry, revocation and last-used tracking; kind/oauth_client_id/
     // parent_id ship early so a future OAuth flow extends this one table.
     // NOTE the number: ice calls this 098_mcp_tokens — renumbered per chain.
-    name: '084_mcp_tokens',
+    name: '088_mcp_tokens',
     statements: [
       `CREATE TABLE IF NOT EXISTS mcp_tokens (
          id              SERIAL PRIMARY KEY,
@@ -4102,7 +4227,940 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     ],
   },
   {
-    // 085 — the vehicle-cost account contradiction found by the 2026-09-12 docs
+    // Homepage revert to the hallismiley composition (Halli, 2026-08-22):
+    // the scene-band cutovers didn't work, so the waterfall video is the
+    // landing default again. Same shape as 085/086 — flip the mode only when
+    // it still holds the previous default, so an explicit admin choice of
+    // another mode survives.
+    name: '089_landing_background_video',
+    statements: [
+      `UPDATE site_content
+          SET value = jsonb_set(value, '{mode}', '"video"'::jsonb)
+        WHERE key = 'landing_background'
+          AND value->>'mode' = 'scene'`,
+    ],
+  },
+  {
+    // Sales-staff handbook ("Handbók sölufólks", Halli 2026-08-27): internal,
+    // admin-editable guides for the sales team behind the `handbok` admin view.
+    // NOTE the locale convention is INVERTED relative to news_articles: guides
+    // are Icelandic-canonical (title/summary/body ARE the IS copy) with
+    // optional `_en` siblings, because the sales team works in Icelandic and
+    // an EN translation is a nice-to-have. Read endpoints resolve
+    // `en → COALESCE(x_en, x)`.
+    // Also seeds the `solufolk` role (non-system so Halli can edit its grants
+    // in /admin/roles; idempotent so an accidental delete is re-created on the
+    // next boot).
+    name: '090_sales_guides',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS sales_guides (
+        id           SERIAL PRIMARY KEY,
+        slug         VARCHAR(120) NOT NULL UNIQUE,
+        section      VARCHAR(20)  NOT NULL DEFAULT 'grunnur'
+                     CHECK (section IN ('grunnur','sala','thjonusta','vara')),
+        title        TEXT NOT NULL,
+        title_en     TEXT,
+        summary      TEXT,
+        summary_en   TEXT,
+        body         TEXT NOT NULL,
+        body_en      TEXT,
+        sort_order   INTEGER NOT NULL DEFAULT 0,
+        published    BOOLEAN NOT NULL DEFAULT FALSE,
+        published_at TIMESTAMPTZ,
+        created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+        updated_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_sales_guides_section
+         ON sales_guides (section, sort_order)`,
+      `DROP TRIGGER IF EXISTS trg_sales_guides_updated_at ON sales_guides`,
+      `CREATE TRIGGER trg_sales_guides_updated_at BEFORE UPDATE ON sales_guides
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `INSERT INTO roles (name, description, view_access, is_system) VALUES
+         ('solufolk', 'Sölufólk — aðgangur að handbók sölufólks',
+          '["handbok"]'::jsonb, FALSE)
+       ON CONFLICT (name) DO NOTHING`,
+    ],
+  },
+  {
+    // Market-research tables for the Markaðsstjóri agent (Halli, 2026-09-01):
+    // Icelandic companies gathered from public sources (Skatturinn fyrirtækjaskrá +
+    // ársreikningaskrá, keldan.is public figures, Hagstofa aggregates, Creditinfo's
+    // public list, trade-association member lists). One row per company, one row
+    // per company-year of figures, and sizing aggregates. Written only by
+    // server/scripts/market-import.js from a gitignored staging JSON
+    // (company/markadur/market.json). Nothing in the app reads these yet — the
+    // admin list view is ENHANCEMENTS #16. Pure "expand" (invariant 14): three new
+    // tables, no ALTER.
+    //
+    // Money is BIGINT ISK (072 convention). admin_cost_ratio is Halli's fit signal
+    // ("skrifstofu- og stjórnunarkostnaður" / tekjur) and is GENERATED so it can
+    // never disagree with its inputs — the importer must not write it.
+    name: '093_market_research',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS market_companies (
+         id                SERIAL PRIMARY KEY,
+         kennitala         VARCHAR(10)  NOT NULL UNIQUE CHECK (kennitala ~ '^[0-9]{10}$'),
+         name              TEXT         NOT NULL,
+         isat_code         VARCHAR(10),
+         isat_label        TEXT,
+         sector_group      VARCHAR(20)  NOT NULL DEFAULT 'annad'
+                           CHECK (sector_group IN ('smasala','heildsala','idnadur','thjonusta','annad')),
+         postcode          VARCHAR(5),
+         municipality      TEXT,
+         website           TEXT,
+         platform_detected VARCHAR(20)
+                           CHECK (platform_detected IS NULL OR platform_detected IN
+                             ('shopify','wix','wordpress','woocommerce','squarespace',
+                              'dk','regla','payday','none','other','custom','unknown')),
+         list_type         VARCHAR(10)  NOT NULL CHECK (list_type IN ('smb','large')),
+         fit_score         NUMERIC(5,2) CHECK (fit_score IS NULL OR fit_score BETWEEN 0 AND 100),
+         tier_fit          VARCHAR(10)  CHECK (tier_fit IS NULL OR tier_fit IN ('vefur','verslun','rekstur')),
+         fit_notes         TEXT,
+         summary           TEXT,
+         status            VARCHAR(20)  NOT NULL DEFAULT 'candidate'
+                           CHECK (status IN ('candidate','researched','shortlist','handed_to_sales','rejected')),
+         sources           JSONB        NOT NULL DEFAULT '[]'::jsonb
+                           CHECK (jsonb_typeof(sources) = 'array'),
+         report_path       TEXT,
+         researched_by     TEXT,
+         researched_at     TIMESTAMPTZ,
+         created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+         updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_market_companies_list_status ON market_companies (list_type, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_market_companies_sector ON market_companies (sector_group)`,
+      `CREATE INDEX IF NOT EXISTS idx_market_companies_fit ON market_companies (fit_score DESC NULLS LAST)`,
+      `DROP TRIGGER IF EXISTS trg_market_companies_updated_at ON market_companies`,
+      `CREATE TRIGGER trg_market_companies_updated_at BEFORE UPDATE ON market_companies
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS market_financials (
+         id                   SERIAL PRIMARY KEY,
+         company_id           INTEGER  NOT NULL REFERENCES market_companies(id) ON DELETE CASCADE,
+         fiscal_year          SMALLINT NOT NULL CHECK (fiscal_year BETWEEN 1990 AND 2100),
+         revenue_isk          BIGINT   CHECK (revenue_isk IS NULL OR revenue_isk >= 0),
+         operating_profit_isk BIGINT,
+         net_profit_isk       BIGINT,
+         equity_isk           BIGINT,
+         total_assets_isk     BIGINT   CHECK (total_assets_isk IS NULL OR total_assets_isk >= 0),
+         admin_cost_isk       BIGINT   CHECK (admin_cost_isk IS NULL OR admin_cost_isk >= 0),
+         admin_cost_ratio     NUMERIC(8,4) GENERATED ALWAYS AS (
+                                CASE WHEN revenue_isk > 0 AND admin_cost_isk IS NOT NULL
+                                     THEN ROUND(admin_cost_isk::numeric / revenue_isk, 4) END) STORED,
+         employees            INTEGER      CHECK (employees IS NULL OR employees >= 0),
+         fte                  NUMERIC(8,2) CHECK (fte IS NULL OR fte >= 0),
+         source_url           TEXT,
+         extracted_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+         created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+         updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+         UNIQUE (company_id, fiscal_year)
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_market_financials_year ON market_financials (fiscal_year, revenue_isk DESC NULLS LAST)`,
+      `DROP TRIGGER IF EXISTS trg_market_financials_updated_at ON market_financials`,
+      `CREATE TRIGGER trg_market_financials_updated_at BEFORE UPDATE ON market_financials
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS market_stats (
+         id             SERIAL PRIMARY KEY,
+         sector_group   VARCHAR(20) NOT NULL DEFAULT 'all'
+                        CHECK (sector_group IN ('all','smasala','heildsala','idnadur','thjonusta','annad')),
+         isat_code      VARCHAR(10) NOT NULL DEFAULT '',
+         size_class     VARCHAR(20) NOT NULL DEFAULT 'all',
+         metric         VARCHAR(40) NOT NULL,
+         value          NUMERIC(20,2) NOT NULL,
+         unit           VARCHAR(10) NOT NULL DEFAULT 'count'
+                        CHECK (unit IN ('count','isk','fte','pct')),
+         reference_year SMALLINT NOT NULL CHECK (reference_year BETWEEN 1990 AND 2100),
+         source_url     TEXT,
+         notes          TEXT,
+         created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         UNIQUE (sector_group, isat_code, size_class, metric, reference_year)
+       )`,
+      `DROP TRIGGER IF EXISTS trg_market_stats_updated_at ON market_stats`,
+      `CREATE TRIGGER trg_market_stats_updated_at BEFORE UPDATE ON market_stats
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
+  {
+    // Cut the theme set from five to three (Halli, 2026-09-02): 'light'
+    // (Pappír) and 'mono' (Svart & hvítt) no longer ship a token set, so an
+    // account that had picked one would boot into classic anyway (themePrefs
+    // normalises an unknown value to the default). Move the stored choice so
+    // the account and the screen agree, and so a later narrowing of the
+    // CHECK constraint has nothing left to reject.
+    //
+    // DATA ONLY, per invariant 14 (expand/contract). users_theme_check keeps
+    // admitting the retired ids on purpose: during a release swap the
+    // previous container may still write 'light' or 'mono', and a narrowed
+    // CHECK would turn that PATCH into a 500 for the length of the swap. The
+    // contract step — DROP + ADD with ('classic', 'ember', 'midnight') —
+    // belongs to a release that ships after no running container can write
+    // the old ids; 084_user_theme_widen is the shape to copy when it does.
+    //
+    // Idempotent: the WHERE matches nothing on a second run.
+    name: '094_theme_set_three',
+    statements: [
+      `UPDATE users SET theme = 'classic' WHERE theme IN ('light', 'mono')`,
+    ],
+  },
+  {
+    // ── 095: the statutory party block, structured ───────────────────────────
+    //
+    // 072 snapshotted the seller and buyer as free text, which is right for the
+    // PDF (Reglugerð 50/1993 asks for a printed address, not a parsed one) and
+    // wrong for a machine-readable invoice. EN 16931 BG-5/BG-8 want the parts:
+    // street, city, postal zone, and a mandatory ISO 3166-1 alpha-2 country.
+    //
+    // The parts already exist upstream — orders.shipping_address is JSONB with
+    // line1/line2/postal/city/country_code — and invoiceService.pickCustomer()
+    // used to throw them away by \n-joining into customer_address. This adds
+    // somewhere for them to land WITHOUT touching the free-text column: the PDF
+    // keeps reading customer_address exactly as today, and nothing reprints
+    // differently.
+    //
+    // Invariant 14 (expand/contract): every column is NULLable with no default
+    // and no CHECK. The previous release's code writes none of them and reads
+    // none of them; it keeps working unchanged against this schema for the
+    // whole length of a slot swap. Historical rows stay NULL forever and the
+    // UBL preflight refuses them by name rather than guessing — parsing a
+    // \n-joined address into a statutory document is exactly the kind of
+    // plausible guess that produces a wrong legal document.
+    name: '095_books_invoice_party_structured',
+    statements: [
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS seller_street        TEXT,
+         ADD COLUMN IF NOT EXISTS seller_city          TEXT,
+         ADD COLUMN IF NOT EXISTS seller_postal_zone   TEXT,
+         ADD COLUMN IF NOT EXISTS seller_country       TEXT,
+         ADD COLUMN IF NOT EXISTS customer_street      TEXT,
+         ADD COLUMN IF NOT EXISTS customer_city        TEXT,
+         ADD COLUMN IF NOT EXISTS customer_postal_zone TEXT`,
+
+      // The Peppol participant identifier the document was addressed to,
+      // snapshotted like everything else in the party block: a customer who later
+      // changes their access point must not retroactively re-address a document
+      // already sent. NULL means "never transmitted over Peppol" — every row today.
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS customer_endpoint_scheme TEXT,
+         ADD COLUMN IF NOT EXISTS customer_endpoint_id     TEXT`,
+
+      // What was actually emitted, and its checksum. This exists for one reason:
+      // the cross-implementation conformance test needs to tie the other side's
+      // parse verdict to EXACT BYTES. "It worked when I tried it" is not a result.
+      // The document is a few KB, and storing it beside the checksum is what makes
+      // the checksum verifiable later — the same "evidence, not convenience"
+      // argument as books_documents (Reglugerð 505/2013 gr. 14).
+      `CREATE TABLE IF NOT EXISTS invoice_ubl_exports (
+         id               TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         invoice_id       TEXT        NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+         profile          TEXT        NOT NULL DEFAULT 'peppol-bis-billing-3.0'
+                                      CHECK (profile IN ('peppol-bis-billing-3.0')),
+         customization_id TEXT        NOT NULL,
+         byte_size        BIGINT      NOT NULL CHECK (byte_size > 0),
+         checksum_sha256  TEXT        NOT NULL,
+         xml              TEXT        NOT NULL,
+         created_by       TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+         created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_invoice_ubl_exports_invoice
+         ON invoice_ubl_exports (invoice_id, created_at DESC)`,
+      `CREATE OR REPLACE FUNCTION books_protect_ubl_export()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         RAISE EXCEPTION 'An emitted UBL document is a record of what was sent and cannot be changed or removed'
+           USING ERRCODE = 'restrict_violation';
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_invoice_ubl_exports_immutable ON invoice_ubl_exports`,
+      `CREATE TRIGGER trg_invoice_ubl_exports_immutable
+         BEFORE UPDATE OR DELETE ON invoice_ubl_exports
+         FOR EACH ROW EXECUTE FUNCTION books_protect_ubl_export()`,
+    ],
+  },
+  {
+    // ── 096: the capture spine ───────────────────────────────────────────────
+    //
+    // 072 gave a document a KIND (receipt, supplier_invoice, …) — what it is. It
+    // never recorded how much it can be TRUSTED, which is a different axis: a
+    // supplier_invoice keyed in by hand from a phone photo and the same
+    // supplier_invoice arriving as signed UBL over an access point are the same
+    // kind and wildly different evidence. source_kind is that axis.
+    //
+    // The ladder is peppol > embedded_xml > extracted > manual. All four values
+    // ship now even though this release can only produce the bottom two: the
+    // ladder is the vocabulary, and widening a CHECK later is a migration nobody
+    // should have to write twice. What the ladder may drive: how a form pre-fills,
+    // how loudly the duplicate check speaks, what the archive says about
+    // provenance. What it may NEVER drive: whether a human is required.
+    //
+    // Invariant 14: source_kind is NOT NULL with a DEFAULT of 'manual', which is
+    // exactly what the previous release's documentService.register() — which does
+    // not know the column exists — produces. Every row it writes during a slot
+    // swap is correctly labelled 'manual', because that is what it is.
+    name: '096_books_capture_spine',
+    statements: [
+      `ALTER TABLE books_documents
+         ADD COLUMN IF NOT EXISTS source_kind TEXT NOT NULL DEFAULT 'manual'
+           CHECK (source_kind IN ('peppol','embedded_xml','extracted','manual'))`,
+      // Where it came from, in the sender's own terms: a Peppol transmission id,
+      // a message id, the filename inside a container. Free text on purpose —
+      // this is provenance, and every channel words it differently.
+      `ALTER TABLE books_documents
+         ADD COLUMN IF NOT EXISTS source_ref         TEXT,
+         ADD COLUMN IF NOT EXISTS source_received_at TIMESTAMPTZ`,
+      `CREATE INDEX IF NOT EXISTS idx_books_documents_source
+         ON books_documents (source_kind, created_at DESC)`,
+
+      // Provenance is evidence, so it freezes with the rest of the row. Extends
+      // the 073 trigger's frozen tuple; safe under expand/contract because nothing
+      // in either release UPDATEs books_documents.
+      `CREATE OR REPLACE FUNCTION books_protect_document()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           RAISE EXCEPTION 'Supporting documents cannot be deleted — they are the 7-year evidence trail (bokhaldslog 145/1994 gr. 20)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF (NEW.file_path, NEW.checksum_sha256, NEW.byte_size, NEW.mime_type, NEW.created_by,
+             NEW.source_kind, NEW.source_ref)
+            IS DISTINCT FROM
+            (OLD.file_path, OLD.checksum_sha256, OLD.byte_size, OLD.mime_type, OLD.created_by,
+             OLD.source_kind, OLD.source_ref)
+         THEN
+           RAISE EXCEPTION 'The stored file behind a supporting document, and where it came from, cannot be swapped; upload a new document instead'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+
+      // The evidence that justified the deduction. assessVat() refuses input VAT
+      // without a supplier VSK number and then the INSERT threw the number away —
+      // the books recorded the verdict and not the fact it rested on. NULLable:
+      // every historical row genuinely does not have it, and backfilling a
+      // statutory field with a guess is worse than leaving it empty.
+      `ALTER TABLE expenses
+         ADD COLUMN IF NOT EXISTS supplier_vat_number TEXT`,
+
+      // ── The intake queue ────────────────────────────────────────────────────
+      //
+      // A row here is a PROPOSAL. It touches no account and moves no money; the
+      // only way out of it and into the ledger is expenseService.createExpense(),
+      // which requires a named person. The CHECKs make that structural rather
+      // than a convention: an 'accepted' row that names no expense and no decider
+      // cannot be written at all. Deliberately no confidence score — a number is
+      // the seed of an auto-post threshold; source_kind is the signal, and it is
+      // categorical rather than tunable.
+      `CREATE TABLE IF NOT EXISTS books_intake (
+         id                  TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         source_kind         TEXT        NOT NULL
+                                         CHECK (source_kind IN ('peppol','embedded_xml','extracted','manual')),
+         source_ref          TEXT,
+         document_id         TEXT        NOT NULL REFERENCES books_documents(id) ON DELETE RESTRICT,
+         status              TEXT        NOT NULL DEFAULT 'pending'
+                                         CHECK (status IN ('pending','accepted','rejected','superseded')),
+         suggested           JSONB       NOT NULL DEFAULT '{}'::jsonb,
+         parse_problems      JSONB       NOT NULL DEFAULT '[]'::jsonb,
+         supplier_name       TEXT,
+         supplier_kennitala  TEXT,
+         supplier_invoice_no TEXT,
+         document_date       DATE,
+         amount_gross        BIGINT      CHECK (amount_gross IS NULL OR amount_gross > 0),
+         currency            TEXT        NOT NULL DEFAULT 'ISK',
+         dedupe_hash         TEXT        NOT NULL,
+         expense_id          TEXT        REFERENCES expenses(id) ON DELETE RESTRICT,
+         decided_by          TEXT        REFERENCES users(id) ON DELETE RESTRICT,
+         decided_at          TIMESTAMPTZ,
+         reject_reason       TEXT        NOT NULL DEFAULT '',
+         created_by          TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         CONSTRAINT books_intake_accepted_has_expense
+           CHECK (status <> 'accepted' OR expense_id IS NOT NULL),
+         CONSTRAINT books_intake_decided_has_actor
+           CHECK (status = 'pending' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL)),
+         CONSTRAINT books_intake_rejected_has_reason
+           CHECK (status <> 'rejected' OR reject_reason <> ''),
+         CONSTRAINT books_intake_pending_is_undecided
+           CHECK (status <> 'pending' OR (expense_id IS NULL AND decided_by IS NULL))
+       )`,
+      // Only ONE pending row per identical delivery. A settled row is deliberately
+      // not covered — the same supplier can legitimately bill the same amount next
+      // month, and that WARNING is expenseService.findPossibleDuplicates' job.
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_books_intake_pending_hash
+         ON books_intake (dedupe_hash) WHERE status = 'pending'`,
+      `CREATE INDEX IF NOT EXISTS idx_books_intake_pending
+         ON books_intake (created_at DESC) WHERE status = 'pending'`,
+      `CREATE INDEX IF NOT EXISTS idx_books_intake_expense ON books_intake (expense_id)`,
+
+      // A decision is final and its link is not repointable — the same rule 075
+      // applies to a settled bank line, for the same gr. 8 reason: the trail from
+      // the ledger back to the source document must not silently change target.
+      `CREATE OR REPLACE FUNCTION books_freeze_intake_decision()
+       RETURNS TRIGGER AS $$
+       BEGIN
+         IF OLD.status <> 'pending' AND NEW.status = 'pending' THEN
+           RAISE EXCEPTION 'A decided intake item cannot be returned to the queue; enter a correcting document instead'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.expense_id IS NOT NULL AND NEW.expense_id IS DISTINCT FROM OLD.expense_id THEN
+           RAISE EXCEPTION 'This intake item is already linked to an expense; that link cannot be repointed (Reglugerd 505/2013 gr. 8)'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         IF OLD.status <> 'pending'
+            AND (NEW.suggested, NEW.source_kind, NEW.document_id)
+                IS DISTINCT FROM (OLD.suggested, OLD.source_kind, OLD.document_id) THEN
+           RAISE EXCEPTION 'The proposal behind a decided intake item cannot be rewritten'
+             USING ERRCODE = 'restrict_violation';
+         END IF;
+         RETURN NEW;
+       END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_books_intake_decision_frozen ON books_intake`,
+      `CREATE TRIGGER trg_books_intake_decision_frozen
+         BEFORE UPDATE ON books_intake
+         FOR EACH ROW EXECUTE FUNCTION books_freeze_intake_decision()`,
+      `DROP TRIGGER IF EXISTS trg_books_intake_updated_at ON books_intake`,
+      `CREATE TRIGGER trg_books_intake_updated_at
+         BEFORE UPDATE ON books_intake
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
+  {
+    // Leads inbox (ENHANCEMENTS #2 + the 2026-08-27 addendum; Halli
+    // 2026-09-07). Every /hafa-samband submission is persisted alongside the
+    // notification email (server/controllers/contactController.js), and the
+    // sales team works its own queue at /admin/leads behind the new view id
+    // `leads`. PII TABLE: retention is LEAD_RETENTION_DAYS (default 730 = the
+    // 24 months /personuvernd promises), pruned daily by
+    // server/services/leadsCleanup.js; every API response is no-store.
+    //
+    // 095 and 096 are reserved by the books capture-spine work (in flight on
+    // its own branch); this is 097 on purpose so the two never collide.
+    //
+    // The role grant is append-only and idempotent: `roles` has no updated_by,
+    // so the id is only ever ADDED when absent — an admin who removes it in
+    // /admin/roles is not overruled (migrations never re-run).
+    // Reference copy: server/migrations/097_leads.sql
+    name: '097_leads',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS leads (
+        id               SERIAL PRIMARY KEY,
+        submission_id    UUID         NOT NULL UNIQUE,
+        name             VARCHAR(100) NOT NULL,
+        email            VARCHAR(200) NOT NULL,
+        company          VARCHAR(150),
+        phone            VARCHAR(40),
+        current_platform VARCHAR(20),
+        message          TEXT         NOT NULL,
+        source           VARCHAR(30)  NOT NULL DEFAULT 'hafa-samband',
+        locale           VARCHAR(5),
+        status           VARCHAR(20)  NOT NULL DEFAULT 'new'
+                         CHECK (status IN ('new', 'contacted', 'won', 'lost')),
+        owner_user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
+        contacted_at     TIMESTAMPTZ,
+        contacted_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
+        note             TEXT,
+        created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_created ON leads (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_status  ON leads (status, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_owner   ON leads (owner_user_id) WHERE owner_user_id IS NOT NULL`,
+      `DROP TRIGGER IF EXISTS trg_leads_updated_at ON leads`,
+      `CREATE TRIGGER trg_leads_updated_at BEFORE UPDATE ON leads
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `UPDATE roles
+          SET view_access = view_access || '["leads"]'::jsonb
+        WHERE name = 'solufolk' AND is_system = FALSE
+          AND NOT (view_access @> '["leads"]'::jsonb)`,
+    ],
+  },
+  {
+    // Customer accounts + staff roles + staff audit log + commission ledger
+    // (ENHANCEMENTS #17 + #18; Halli approved 2026-09-07; D-002/D-003/D-005).
+    // Pure expand (invariant 14): three tables, one nullable users column, two
+    // seeded non-system roles. customer_accounts is the per-customer state of
+    // record, owned by ONE seller (owner_user_id — commission follows it).
+    // staff_audit_log = books_audit_log's shape + the same immutable trigger.
+    // commission_events snapshots seller + rate at invoice time (D-003: 15% build,
+    // 10% recurring, earned only on receipt — the report derives "paid").
+    // Reference copy: server/migrations/098_customer_accounts.sql
+    name: '098_customer_accounts',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS customer_accounts (
+        id                    SERIAL PRIMARY KEY,
+        slug                  VARCHAR(40)  NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9-]{3,40}$'),
+        kennitala             VARCHAR(10)  UNIQUE CHECK (kennitala IS NULL OR kennitala ~ '^[0-9]{10}$'),
+        name                  TEXT         NOT NULL,
+        market_company_id     INTEGER      REFERENCES market_companies(id) ON DELETE SET NULL,
+        tier                  VARCHAR(10)  NOT NULL CHECK (tier IN ('vefur', 'verslun', 'rekstur')),
+        status                VARCHAR(20)  NOT NULL DEFAULT 'lead'
+                              CHECK (status IN ('lead', 'offered', 'signed', 'provisioning', 'building', 'live', 'paused', 'churned')),
+        owner_user_id         TEXT         NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        contact_name          TEXT,
+        contact_email         TEXT,
+        contact_phone         TEXT,
+        repo_name             TEXT,
+        test_url              TEXT,
+        prod_url              TEXT,
+        canonical_host        TEXT,
+        azure_subscription_id TEXT,
+        azure_rg_test         TEXT,
+        azure_rg_prod         TEXT,
+        contract_start        DATE,
+        contract_end          DATE,
+        build_fee_isk         BIGINT       CHECK (build_fee_isk IS NULL OR build_fee_isk >= 0),
+        monthly_fee_isk       BIGINT       CHECK (monthly_fee_isk IS NULL OR monthly_fee_isk >= 0),
+        quota_units           INTEGER      CHECK (quota_units IS NULL OR quota_units >= 0),
+        build_rate_bp         INTEGER      NOT NULL DEFAULT 1500 CHECK (build_rate_bp BETWEEN 0 AND 10000),
+        recurring_rate_bp     INTEGER      NOT NULL DEFAULT 1000 CHECK (recurring_rate_bp BETWEEN 0 AND 10000),
+        notes                 TEXT,
+        created_by            TEXT         REFERENCES users(id) ON DELETE SET NULL,
+        created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_accounts_owner  ON customer_accounts (owner_user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_accounts_status ON customer_accounts (status, updated_at DESC)`,
+      `DROP TRIGGER IF EXISTS trg_customer_accounts_updated_at ON customer_accounts`,
+      `CREATE TRIGGER trg_customer_accounts_updated_at BEFORE UPDATE ON customer_accounts
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS github_login TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_users_github_login ON users (github_login) WHERE github_login IS NOT NULL`,
+      `CREATE TABLE IF NOT EXISTS staff_audit_log (
+        id           BIGSERIAL   PRIMARY KEY,
+        actor_id     TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        action       TEXT        NOT NULL,
+        entity_type  TEXT        NOT NULL,
+        entity_id    TEXT,
+        summary      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        request_id   TEXT,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_staff_audit_entity  ON staff_audit_log (entity_type, entity_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_staff_audit_created ON staff_audit_log (created_at DESC)`,
+      `DROP TRIGGER IF EXISTS trg_staff_audit_log_immutable ON staff_audit_log`,
+      `CREATE TRIGGER trg_staff_audit_log_immutable
+         BEFORE UPDATE OR DELETE ON staff_audit_log
+         FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `CREATE TABLE IF NOT EXISTS commission_events (
+        id              BIGSERIAL   PRIMARY KEY,
+        account_id      INTEGER     NOT NULL REFERENCES customer_accounts(id) ON DELETE RESTRICT,
+        seller_user_id  TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        kind            VARCHAR(10) NOT NULL CHECK (kind IN ('build', 'recurring')),
+        period          DATE        NOT NULL,
+        base_amount_isk BIGINT      NOT NULL CHECK (base_amount_isk >= 0),
+        rate_bp         INTEGER     NOT NULL CHECK (rate_bp BETWEEN 0 AND 10000),
+        amount_isk      BIGINT      NOT NULL CHECK (amount_isk >= 0),
+        invoice_id      TEXT        NOT NULL UNIQUE REFERENCES invoices(id) ON DELETE RESTRICT,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_seller_period ON commission_events (seller_user_id, period)`,
+      `INSERT INTO roles (name, description, view_access, is_system) VALUES
+         ('solumadur', 'Sölumaður — á viðskiptareikninga og fær sölulaun',
+          '["handbok", "leads", "accounts", "commission"]'::jsonb, FALSE),
+         ('verktaki',  'Verktaki — þjónustar alla viðskiptareikninga, engin sölulaun',
+          '["handbok", "accounts", "allaccounts"]'::jsonb, FALSE)
+       ON CONFLICT (name) DO NOTHING`,
+    ],
+  },
+  {
+    // Review fix (2026-09-07): link a service invoice to its customer account
+    // and make a double-issue impossible in the DATABASE, not just in the UI.
+    // Before this, `createServiceInvoice` had no duplicate guard — the FOR
+    // UPDATE on the account only serialised two concurrent requests, so the
+    // second one allocated a fresh invoice number and a second commission row.
+    // Two immutable revenue invoices for one build deposit, output VSK declared
+    // twice, and double commission; under Reglugerð 505/2013 neither invoice
+    // can be deleted, only credited.
+    //
+    // Pure expand (invariant 14): three nullable columns + two partial unique
+    // indexes that ignore every row the previous release wrote (all NULL).
+    // Reference copy: server/migrations/099_invoice_account_link.sql
+    name: '099_invoice_account_link',
+    statements: [
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS account_id     INTEGER REFERENCES customer_accounts(id) ON DELETE RESTRICT,
+         ADD COLUMN IF NOT EXISTS service_kind   TEXT,
+         ADD COLUMN IF NOT EXISTS service_period DATE`,
+      `CREATE INDEX IF NOT EXISTS idx_invoices_account ON invoices (account_id, issued_at DESC)
+         WHERE account_id IS NOT NULL`,
+      // A cancelled invoice frees the slot so a mistake can be redone; a
+      // CREDITED one does not — the credit note is the correction, and
+      // re-issuing would double the revenue.
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoices_account_build
+         ON invoices (account_id, service_kind)
+         WHERE account_id IS NOT NULL
+           AND service_kind IN ('build_deposit', 'build_final')
+           AND status <> 'cancelled'`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoices_account_period
+         ON invoices (account_id, service_period)
+         WHERE account_id IS NOT NULL
+           AND service_kind = 'recurring'
+           AND service_period IS NOT NULL
+           AND status <> 'cancelled'`,
+    ],
+  },
+  {
+    // ── 100: the buyer party block ──────────────────────────────────────
+    // 098 gave the company a customer of record; 095 gave an invoice a
+    // structured party block. Nothing connected them: customer_accounts has no
+    // address, so createServiceInvoice wrote customer_address = '' and
+    // customer_country = 'IS' as LITERALS. Two consequences, and the reported
+    // one was the lesser: no service invoice can be emitted as Peppol BIS 3.0,
+    // and the PDF of every service invoice printed NO BUYER ADDRESS AT ALL.
+    // The second is a defect in the statutory document.
+    //
+    // The account holds the CURRENT value; the invoice keeps the value AS AT
+    // ISSUE in the 095 columns. Reglugerð 505/2013 gr. 9 is the reason for the
+    // split: an address corrected in 2027 must not change what a 2026 document
+    // says, and invoice_ubl_exports must never hold two different documents
+    // both claiming to be invoice N.
+    //
+    // Pure expand (invariant 14): eight nullable columns, no defaults, no NOT
+    // NULL, every CHECK admits NULL. Statement 3 only WIDENS an existing
+    // refusal — it fires on UPDATE/DELETE only, and the previous release
+    // updates nothing on an issued invoice but the payment counters.
+    // Reference copy: server/migrations/100_customer_account_party.sql
+    name: '100_customer_account_party',
+    statements: [
+      `ALTER TABLE customer_accounts
+         ADD COLUMN IF NOT EXISTS street          TEXT,
+         ADD COLUMN IF NOT EXISTS city            TEXT,
+         ADD COLUMN IF NOT EXISTS postal_zone     TEXT,
+         ADD COLUMN IF NOT EXISTS country         TEXT
+           CHECK (country IS NULL OR country ~ '^[A-Z]{2}$'),
+         ADD COLUMN IF NOT EXISTS vat_number      TEXT,
+         ADD COLUMN IF NOT EXISTS endpoint_scheme TEXT
+           CHECK (endpoint_scheme IS NULL OR endpoint_scheme ~ '^[0-9]{4}$'),
+         ADD COLUMN IF NOT EXISTS endpoint_id     TEXT`,
+      // BT-48. Nothing emits it for a domestic sale (24% is category S and
+      // needs no buyer VAT id), but an issued invoice can never be amended, so
+      // the column must exist BEFORE the first reverse-charge invoice rather
+      // than after it (ACCOUNTANT-QUESTIONS §2).
+      `ALTER TABLE invoices
+         ADD COLUMN IF NOT EXISTS customer_vat_number TEXT`,
+      // Close the immutability hole this migration would otherwise widen: the
+      // 072 trigger freezes an explicit TUPLE, and the 095/099/100 columns sit
+      // outside it — so the party block we are about to snapshot could be
+      // rewritten by any UPDATE, which makes the snapshot argument half true.
+      `CREATE OR REPLACE FUNCTION books_protect_issued_invoice()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status <> 'draft' THEN
+      RAISE EXCEPTION 'Invoice % has been issued and cannot be deleted (Reglugerd 505/2013 gr. 9); issue a credit note instead', OLD.invoice_number
+        USING ERRCODE = 'restrict_violation';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF OLD.status = 'draft' THEN
+    IF NEW.status NOT IN ('draft', 'issued', 'cancelled') THEN
+      RAISE EXCEPTION 'A draft invoice can only become issued or cancelled, not %', NEW.status
+        USING ERRCODE = 'restrict_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.status NOT IN ('issued', 'credited', 'cancelled') THEN
+    RAISE EXCEPTION 'Invoice % cannot return to %; it has been issued (Reglugerd 505/2013 gr. 9)', OLD.invoice_number, NEW.status
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  IF (NEW.series, NEW.invoice_number, NEW.order_id, NEW.user_id,
+      NEW.seller_name, NEW.seller_kennitala, NEW.seller_vat_number, NEW.seller_address,
+      NEW.customer_name, NEW.customer_kennitala, NEW.customer_email, NEW.customer_address,
+      NEW.customer_country, NEW.issued_at, NEW.due_at, NEW.terms_days,
+      NEW.currency, NEW.original_currency, NEW.original_total_gross, NEW.fx_rate,
+      NEW.zero_rate_reason,
+      NEW.subtotal_net, NEW.vat_total, NEW.total_gross, NEW.discount_total,
+      NEW.shipping_gross, NEW.note, NEW.created_by,
+      -- 095/099/100: the structured party block, the account link and the billed
+      -- period are statutory content too. They were left out of the original
+      -- tuple only because they did not exist when it was written.
+      NEW.seller_street, NEW.seller_city, NEW.seller_postal_zone, NEW.seller_country,
+      NEW.customer_street, NEW.customer_city, NEW.customer_postal_zone,
+      NEW.customer_endpoint_scheme, NEW.customer_endpoint_id, NEW.customer_vat_number,
+      NEW.account_id, NEW.service_kind, NEW.service_period)
+     IS DISTINCT FROM
+     (OLD.series, OLD.invoice_number, OLD.order_id, OLD.user_id,
+      OLD.seller_name, OLD.seller_kennitala, OLD.seller_vat_number, OLD.seller_address,
+      OLD.customer_name, OLD.customer_kennitala, OLD.customer_email, OLD.customer_address,
+      OLD.customer_country, OLD.issued_at, OLD.due_at, OLD.terms_days,
+      OLD.currency, OLD.original_currency, OLD.original_total_gross, OLD.fx_rate,
+      OLD.zero_rate_reason,
+      OLD.subtotal_net, OLD.vat_total, OLD.total_gross, OLD.discount_total,
+      OLD.shipping_gross, OLD.note, OLD.created_by,
+      OLD.seller_street, OLD.seller_city, OLD.seller_postal_zone, OLD.seller_country,
+      OLD.customer_street, OLD.customer_city, OLD.customer_postal_zone,
+      OLD.customer_endpoint_scheme, OLD.customer_endpoint_id, OLD.customer_vat_number,
+      OLD.account_id, OLD.service_kind, OLD.service_period)
+  THEN
+    RAISE EXCEPTION 'Invoice % has been issued; its content cannot be altered (Reglugerd 505/2013 gr. 9). Only payment, credit and status may change.', OLD.invoice_number
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql`,
+    ],
+  },
+  {
+    // ── 101: the build deposit is a prepayment, not revenue ────────────────
+    // Bókari's ruling, 2026-09-08. createServiceInvoice booked the 50% build
+    // deposit (D-005) as EARNED REVENUE on the issue date. Money taken before
+    // the work is delivered is a customer prepayment — a liability — and it
+    // becomes revenue on delivery (l. nr. 3/2006, 11. gr. rekstrargrunnur and
+    // 26. gr. "…skal færa til skuldar"). D-005 already said so in prose; only
+    // the second half of the sentence was ever implemented.
+    //
+    // VSK RUNS ON A DIFFERENT CLOCK AND DOES NOT MOVE. Under l. nr. 50/1988
+    // 13. gr. 2. mgr. the delivery is deemed to occur on the invoice date, and
+    // under 3. mgr. an advance is taxable turnover in the period received. So
+    // the net stays in box A and the 24% in box D in the DEPOSIT period. That
+    // is why 2150 carries vat_code 'output_24' and why vatService counts it as
+    // turnover: deferring the net without that would have dropped box A by
+    // 290.000 while box D kept 69.600 — a worse bug than the one being fixed.
+    //
+    // Pure expand (invariant 14): one data row, three nullable columns, one
+    // partial index, and a CHECK that is WIDENED (the list is copied from the
+    // CURRENT constraint — 077 added 'pos' — never retyped from 072's).
+    // Reference copy: server/migrations/101_books_deferred_revenue.sql
+    name: '101_books_deferred_revenue',
+    statements: [
+      `INSERT INTO ledger_accounts (code, name, name_en, type, vat_code, input_vat_blocked, sort, description)
+VALUES ('2150', 'Fyrirframinnheimtar tekjur', 'Deferred income', 'liability', 'output_24', FALSE, 205,
+        'Innborganir viðskiptavina á óafhenta vinnu. Telst til skattskyldrar veltu við útgáfu '
+        'reiknings (13. gr. l. nr. 50/1988) og tekjufærist við afhendingu (26. gr. l. nr. 3/2006).')
+ON CONFLICT (code) DO NOTHING`,
+      `ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS revenue_recognised_at       DATE,
+  ADD COLUMN IF NOT EXISTS revenue_recognised_entry_id TEXT REFERENCES journal_entries(id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS recognised_into_account     TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_invoices_deferred_open
+  ON invoices (account_id)
+  WHERE service_kind = 'build_deposit' AND revenue_recognised_at IS NULL`,
+      `ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS journal_entries_source_type_check`,
+      `ALTER TABLE journal_entries ADD CONSTRAINT journal_entries_source_type_check
+  CHECK (source_type IN ('invoice','payment','credit_note','expense',
+                         'payroll','vat_settlement','opening','manual',
+                         'reversal','stripe','bank','pos','revenue_recognition'))`,
+    ],
+  },
+  {
+    // ── 102: commission statements, payouts, adjustments ───────────────────
+    // Sölustjóri's design; D-019 (2026-09-08, amending D-003) is the decision.
+    // 098 built the ACCRUAL ledger but nothing recorded that a seller had been
+    // PAID. The unit of settlement is the seller-month statement over a running
+    // balance: payability is DERIVED, so an event payable in month M can stop
+    // being payable in M+2 when a credit note lands, and pinning events to a
+    // payout would need un-pinning — the clawback problem one level down.
+    //
+    //   balance = Σ payable_now(event) + Σ adjustments − Σ payouts
+    //
+    // Clawback is not a separate mechanism; it is that equation going down.
+    // Per D-019 it nets against future statements for 12 months and the
+    // company never invoices a seller for cash — hence no receivable table.
+    //
+    // commission_events keeps its UNIQUE(invoice_id): it is the only thing
+    // stopping a re-issue writing two commission rows for one invoice. If a
+    // later release needs several, expand with `reversal_of` + a partial
+    // unique index FIRST; a bare DROP CONSTRAINT keeps old code running while
+    // silently removing a guarantee it relies on.
+    // Reference copy: server/migrations/102_commission_settlement.sql
+    name: '102_commission_settlement',
+    statements: [
+      `ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS payee_kind       TEXT,
+  ADD COLUMN IF NOT EXISTS payee_kennitala  TEXT,
+  ADD COLUMN IF NOT EXISTS payee_vat_number TEXT`,
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_payee_kind_valid`,
+      `ALTER TABLE users ADD CONSTRAINT users_payee_kind_valid
+  CHECK (payee_kind IS NULL OR payee_kind IN ('contractor', 'employee', 'internal'))`,
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_payee_kennitala_shape`,
+      `ALTER TABLE users ADD CONSTRAINT users_payee_kennitala_shape
+  CHECK (payee_kennitala IS NULL OR payee_kennitala ~ '^[0-9]{10}$')`,
+      `CREATE TABLE IF NOT EXISTS commission_statements (
+  id                    BIGSERIAL   PRIMARY KEY,
+  seller_user_id        TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  period                DATE        NOT NULL,
+  cutoff_at             TIMESTAMPTZ NOT NULL,
+  previous_statement_id BIGINT      REFERENCES commission_statements(id) ON DELETE RESTRICT,
+  payee_kind            TEXT        NOT NULL DEFAULT 'contractor'
+                                    CHECK (payee_kind IN ('contractor', 'employee', 'internal')),
+  payee_kennitala       TEXT,
+  payee_vat_number      TEXT,
+  opening_balance_isk   BIGINT      NOT NULL,
+  earned_isk            BIGINT      NOT NULL DEFAULT 0 CHECK (earned_isk >= 0),
+  clawback_isk          BIGINT      NOT NULL DEFAULT 0 CHECK (clawback_isk >= 0),
+  adjustment_isk        BIGINT      NOT NULL DEFAULT 0,
+  settled_isk           BIGINT      NOT NULL DEFAULT 0 CHECK (settled_isk >= 0),
+  closing_balance_isk   BIGINT      NOT NULL,
+  minimum_isk           BIGINT      NOT NULL DEFAULT 25000 CHECK (minimum_isk >= 0),
+  payable_isk           BIGINT      NOT NULL CHECK (payable_isk >= 0),
+  carried_isk           BIGINT      NOT NULL,
+  amount_paid_isk       BIGINT      NOT NULL DEFAULT 0 CHECK (amount_paid_isk >= 0),
+  currency              TEXT        NOT NULL DEFAULT 'ISK' CHECK (currency = 'ISK'),
+  note                  TEXT        NOT NULL DEFAULT '',
+  issued_by             TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  issued_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_statements_period_first_day
+    CHECK (EXTRACT(DAY FROM period) = 1),
+  CONSTRAINT commission_statements_balance
+    CHECK (closing_balance_isk =
+           opening_balance_isk + earned_isk - clawback_isk + adjustment_isk - settled_isk),
+  CONSTRAINT commission_statements_split
+    CHECK (closing_balance_isk = payable_isk + carried_isk),
+  CONSTRAINT commission_statements_paid_within
+    CHECK (amount_paid_isk <= payable_isk),
+  CONSTRAINT commission_statements_internal_never_payable
+    CHECK (payee_kind <> 'internal' OR payable_isk = 0)
+)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_statements_seller_period
+  ON commission_statements (seller_user_id, period)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_statements_chain
+  ON commission_statements (previous_statement_id)
+  WHERE previous_statement_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_statements_genesis
+  ON commission_statements (seller_user_id)
+  WHERE previous_statement_id IS NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_statements_seller
+  ON commission_statements (seller_user_id, period DESC)`,
+      `CREATE TABLE IF NOT EXISTS commission_adjustments (
+  id             BIGSERIAL   PRIMARY KEY,
+  seller_user_id TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  account_id     INTEGER     REFERENCES customer_accounts(id) ON DELETE SET NULL,
+  kind           TEXT        NOT NULL CHECK (kind IN ('writeoff', 'manual_credit', 'manual_debit')),
+  amount_isk     BIGINT      NOT NULL CHECK (amount_isk <> 0),
+  reason         TEXT        NOT NULL CHECK (length(btrim(reason)) >= 3),
+  effective_on   DATE        NOT NULL,
+  created_by     TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_adjustments_sign CHECK (
+    (kind = 'writeoff'      AND amount_isk > 0) OR
+    (kind = 'manual_credit' AND amount_isk > 0) OR
+    (kind = 'manual_debit'  AND amount_isk < 0)
+  )
+)`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_adjustments_seller
+  ON commission_adjustments (seller_user_id, id)`,
+      `CREATE TABLE IF NOT EXISTS commission_payouts (
+  id                    BIGSERIAL   PRIMARY KEY,
+  statement_id          BIGINT      NOT NULL REFERENCES commission_statements(id) ON DELETE RESTRICT,
+  seller_user_id        TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  amount_isk            BIGINT      NOT NULL CHECK (amount_isk > 0),
+  paid_on               DATE        NOT NULL,
+  method                TEXT        NOT NULL CHECK (method IN ('bank_transfer', 'payroll', 'other')),
+  reference             TEXT        NOT NULL DEFAULT '',
+  seller_invoice_number TEXT,
+  seller_invoice_date   DATE,
+  seller_vat_isk        BIGINT      NOT NULL DEFAULT 0 CHECK (seller_vat_isk >= 0),
+  expense_id            TEXT        REFERENCES expenses(id) ON DELETE SET NULL,
+  idempotency_key       TEXT        NOT NULL,
+  note                  TEXT        NOT NULL DEFAULT '',
+  created_by            TEXT        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_payouts_idempotency
+  ON commission_payouts (idempotency_key)`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_payouts_statement ON commission_payouts (statement_id, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_payouts_seller    ON commission_payouts (seller_user_id, id)`,
+      `CREATE TABLE IF NOT EXISTS commission_statement_lines (
+  id                  BIGSERIAL   PRIMARY KEY,
+  statement_id        BIGINT      NOT NULL REFERENCES commission_statements(id) ON DELETE RESTRICT,
+  line_kind           TEXT        NOT NULL CHECK (line_kind IN ('earned', 'clawback', 'adjustment', 'payout')),
+  commission_event_id BIGINT      REFERENCES commission_events(id)      ON DELETE RESTRICT,
+  adjustment_id       BIGINT      REFERENCES commission_adjustments(id) ON DELETE RESTRICT,
+  payout_id           BIGINT      REFERENCES commission_payouts(id)     ON DELETE RESTRICT,
+  account_id          INTEGER     REFERENCES customer_accounts(id) ON DELETE RESTRICT,
+  invoice_id          TEXT        REFERENCES invoices(id) ON DELETE RESTRICT,
+  description         TEXT        NOT NULL DEFAULT '',
+  payable_before_isk  BIGINT      NOT NULL DEFAULT 0,
+  payable_after_isk   BIGINT      NOT NULL DEFAULT 0,
+  amount_isk          BIGINT      NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_statement_lines_one_source
+    CHECK (num_nonnulls(commission_event_id, adjustment_id, payout_id) = 1),
+  CONSTRAINT commission_statement_lines_kind_source CHECK (
+    (line_kind IN ('earned', 'clawback') AND commission_event_id IS NOT NULL) OR
+    (line_kind = 'adjustment'            AND adjustment_id       IS NOT NULL) OR
+    (line_kind = 'payout'                AND payout_id           IS NOT NULL)
+  ),
+  CONSTRAINT commission_statement_lines_delta CHECK (
+    line_kind NOT IN ('earned', 'clawback')
+    OR amount_isk = payable_after_isk - payable_before_isk
+  ),
+  CONSTRAINT commission_statement_lines_sign CHECK (
+    (line_kind = 'earned'     AND amount_isk > 0) OR
+    (line_kind = 'clawback'   AND amount_isk < 0) OR
+    (line_kind = 'payout'     AND amount_isk < 0) OR
+    (line_kind = 'adjustment' AND amount_isk <> 0)
+  )
+)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_lines_event
+  ON commission_statement_lines (statement_id, commission_event_id)
+  WHERE commission_event_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_lines_event_latest
+  ON commission_statement_lines (commission_event_id, statement_id DESC)
+  WHERE commission_event_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_lines_adjustment
+  ON commission_statement_lines (adjustment_id) WHERE adjustment_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_commission_lines_payout
+  ON commission_statement_lines (payout_id) WHERE payout_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_lines_statement
+  ON commission_statement_lines (statement_id, id)`,
+      `DROP TRIGGER IF EXISTS trg_commission_statement_lines_immutable ON commission_statement_lines`,
+      `CREATE TRIGGER trg_commission_statement_lines_immutable
+  BEFORE UPDATE OR DELETE ON commission_statement_lines
+  FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `DROP TRIGGER IF EXISTS trg_commission_adjustments_immutable ON commission_adjustments`,
+      `CREATE TRIGGER trg_commission_adjustments_immutable
+  BEFORE UPDATE OR DELETE ON commission_adjustments
+  FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `DROP TRIGGER IF EXISTS trg_commission_payouts_immutable ON commission_payouts`,
+      `CREATE TRIGGER trg_commission_payouts_immutable
+  BEFORE UPDATE OR DELETE ON commission_payouts
+  FOR EACH ROW EXECUTE FUNCTION books_forbid_any_mutation()`,
+      `CREATE OR REPLACE FUNCTION commission_statement_guard()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'commission_statements rows cannot be deleted'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  IF NEW.id <> OLD.id
+     OR NEW.seller_user_id      <> OLD.seller_user_id
+     OR NEW.period              <> OLD.period
+     OR NEW.cutoff_at           <> OLD.cutoff_at
+     OR NEW.previous_statement_id IS DISTINCT FROM OLD.previous_statement_id
+     OR NEW.payee_kind          <> OLD.payee_kind
+     OR NEW.payee_kennitala     IS DISTINCT FROM OLD.payee_kennitala
+     OR NEW.payee_vat_number    IS DISTINCT FROM OLD.payee_vat_number
+     OR NEW.opening_balance_isk <> OLD.opening_balance_isk
+     OR NEW.earned_isk          <> OLD.earned_isk
+     OR NEW.clawback_isk        <> OLD.clawback_isk
+     OR NEW.adjustment_isk      <> OLD.adjustment_isk
+     OR NEW.settled_isk         <> OLD.settled_isk
+     OR NEW.closing_balance_isk <> OLD.closing_balance_isk
+     OR NEW.minimum_isk         <> OLD.minimum_isk
+     OR NEW.payable_isk         <> OLD.payable_isk
+     OR NEW.carried_isk         <> OLD.carried_isk
+     OR NEW.issued_by           <> OLD.issued_by
+     OR NEW.issued_at           <> OLD.issued_at
+     OR NEW.note IS DISTINCT FROM OLD.note THEN
+    RAISE EXCEPTION 'A commission statement is immutable once issued; only amount_paid_isk may change'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql`,
+      `DROP TRIGGER IF EXISTS trg_commission_statements_guard ON commission_statements`,
+      `CREATE TRIGGER trg_commission_statements_guard
+  BEFORE UPDATE OR DELETE ON commission_statements
+  FOR EACH ROW EXECUTE FUNCTION commission_statement_guard()`,
+      `DROP TRIGGER IF EXISTS trg_commission_statements_updated_at ON commission_statements`,
+      `CREATE TRIGGER trg_commission_statements_updated_at
+  BEFORE UPDATE ON commission_statements
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+    ],
+  },
+  {
+    // 103 — the vehicle-cost account contradiction found by the 2026-09-12 docs
     // sync: 072 seeded 6600 Bifreiðakostnaður as input_24 with
     // input_vat_blocked FALSE while its own description said passenger-car
     // input VAT is NOT deductible — so a fólksbifreið fuel receipt booked there
@@ -4117,8 +5175,9 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
     // rename of 6600 is guarded on the original label + description so an
     // admin-edited row is left alone (the chart is data — 072 header comment).
     // Design: Bókari, 2026-09-12; the accountant confirms the split afterwards
-    // (docs/ACCOUNTANT-QUESTIONS.md §7).
-    name: '085_books_vehicle_accounts',
+    // (docs/ACCOUNTANT-QUESTIONS.md §7). Base: hallismiley migration 085.
+    // Reference copy: server/migrations/103_books_vehicle_accounts.sql
+    name: '103_books_vehicle_accounts',
     statements: [
       `INSERT INTO ledger_accounts (code, name, name_en, type, vat_code, input_vat_blocked, sort, description) VALUES
          ('6600','Rekstur atvinnubifreiða','Commercial vehicle costs','expense','input_24',FALSE,670,
@@ -4131,6 +5190,139 @@ Byggt fyrir framleiðslu frá fyrsta degi — kóðagrunnurinn inniheldur formfa
          ('6610','Rekstur fólksbifreiða','Passenger car costs','expense','none',TRUE,675,
           'Innskattur ekki frádráttarbær af öflun, rekstri og leigu fólksbifreiða (l. nr. 50/1988 16. gr. 3. mgr.)')
        ON CONFLICT (code) DO NOTHING`,
+    ],
+  },
+  {
+    // The seller area (D-020, 2026-09-21). Private ops holds the sales tables;
+    // the public orangesmiley.is shows each seller their part, read-only,
+    // published ONE WAY from ops (`npm run publish:sellers` → signed POST to
+    // /api/v1/seller-publish). These tables are that published copy. They are
+    // created on every instance (one schema), but only an INSTANCE_ROLE=public
+    // instance ever writes them, and only through the ingest route.
+    //
+    // Deliberately no FKs to users or to the ops tables: the ids are OPS ids
+    // (ops_id) and the seller is keyed by lower-cased EMAIL — a public user is a
+    // seller when ops says so, never by a grant on the public box. Each ingest
+    // replaces the whole snapshot in one transaction, so a lead erased on ops
+    // disappears here at the next publish. No payee kennitala and no commission
+    // rates are ever published.
+    //
+    // Pure expand (invariant 14): new tables only.
+    // Reference copy: server/migrations/105_seller_publication.sql
+    name: '105_seller_publication',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS seller_publications (
+        id             BIGSERIAL   PRIMARY KEY,
+        snapshot_id    UUID        NOT NULL UNIQUE,
+        generated_at   TIMESTAMPTZ NOT NULL,
+        received_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        seller_count   INTEGER     NOT NULL CHECK (seller_count >= 0),
+        lead_count     INTEGER     NOT NULL CHECK (lead_count >= 0),
+        account_count  INTEGER     NOT NULL CHECK (account_count >= 0),
+        statement_count INTEGER    NOT NULL CHECK (statement_count >= 0),
+        body_sha256    TEXT        NOT NULL CHECK (body_sha256 ~ '^[0-9a-f]{64}$')
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_seller_publications_generated ON seller_publications (generated_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS published_sellers (
+        email          TEXT        PRIMARY KEY CHECK (email = lower(email) AND length(email) BETWEEN 3 AND 200),
+        display_name   TEXT        NOT NULL,
+        can_leads      BOOLEAN     NOT NULL DEFAULT FALSE,
+        can_accounts   BOOLEAN     NOT NULL DEFAULT FALSE,
+        can_commission BOOLEAN     NOT NULL DEFAULT FALSE,
+        payee_kind     TEXT        CHECK (payee_kind IS NULL OR payee_kind IN ('contractor', 'employee', 'internal'))
+      )`,
+      `CREATE TABLE IF NOT EXISTS published_leads (
+        ops_id           INTEGER     PRIMARY KEY,
+        received_at      TIMESTAMPTZ NOT NULL,
+        name             TEXT        NOT NULL,
+        email            TEXT        NOT NULL,
+        company          TEXT,
+        phone            TEXT,
+        current_platform TEXT,
+        message          TEXT        NOT NULL,
+        status           TEXT        NOT NULL CHECK (status IN ('new', 'contacted', 'won', 'lost')),
+        owner_email      TEXT,
+        owner_name       TEXT,
+        contacted_at     TIMESTAMPTZ,
+        note             TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_published_leads_received ON published_leads (received_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS published_accounts (
+        ops_id          INTEGER     PRIMARY KEY,
+        seller_email    TEXT        NOT NULL,
+        slug            TEXT        NOT NULL,
+        name            TEXT        NOT NULL,
+        tier            TEXT        NOT NULL CHECK (tier IN ('vefur', 'verslun', 'rekstur')),
+        status          TEXT        NOT NULL,
+        contact_name    TEXT,
+        contact_email   TEXT,
+        contact_phone   TEXT,
+        prod_url        TEXT,
+        contract_start  DATE,
+        contract_end    DATE,
+        build_fee_isk   BIGINT,
+        monthly_fee_isk BIGINT,
+        quota_units     INTEGER,
+        updated_at      TIMESTAMPTZ NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_published_accounts_seller ON published_accounts (seller_email, name)`,
+      `CREATE TABLE IF NOT EXISTS published_statements (
+        ops_id              BIGINT      PRIMARY KEY,
+        seller_email        TEXT        NOT NULL,
+        period              DATE        NOT NULL,
+        status              TEXT        NOT NULL CHECK (status IN ('open', 'paid', 'carried', 'superseded')),
+        payee_kind          TEXT        NOT NULL,
+        opening_balance_isk BIGINT      NOT NULL,
+        earned_isk          BIGINT      NOT NULL,
+        clawback_isk        BIGINT      NOT NULL,
+        adjustment_isk      BIGINT      NOT NULL,
+        settled_isk         BIGINT      NOT NULL,
+        closing_balance_isk BIGINT      NOT NULL,
+        minimum_isk         BIGINT      NOT NULL,
+        payable_isk         BIGINT      NOT NULL,
+        carried_isk         BIGINT      NOT NULL,
+        amount_paid_isk     BIGINT      NOT NULL,
+        note                TEXT        NOT NULL DEFAULT '',
+        issued_at           TIMESTAMPTZ NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_published_statements_seller ON published_statements (seller_email, period DESC)`,
+      `CREATE TABLE IF NOT EXISTS published_statement_lines (
+        id               BIGSERIAL PRIMARY KEY,
+        statement_ops_id BIGINT    NOT NULL REFERENCES published_statements(ops_id) ON DELETE CASCADE,
+        line_kind        TEXT      NOT NULL CHECK (line_kind IN ('earned', 'clawback', 'adjustment', 'payout')),
+        account_name     TEXT,
+        invoice_number   TEXT,
+        description      TEXT      NOT NULL DEFAULT '',
+        amount_isk       BIGINT    NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_published_statement_lines ON published_statement_lines (statement_ops_id, id)`,
+      `CREATE TABLE IF NOT EXISTS published_payouts (
+        id                    BIGSERIAL PRIMARY KEY,
+        statement_ops_id      BIGINT    NOT NULL REFERENCES published_statements(ops_id) ON DELETE CASCADE,
+        paid_on               DATE      NOT NULL,
+        method                TEXT      NOT NULL CHECK (method IN ('bank_transfer', 'payroll', 'other')),
+        seller_invoice_number TEXT,
+        amount_isk            BIGINT    NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_published_payouts ON published_payouts (statement_ops_id, id)`,
+    ],
+  },
+  {
+    // Drop the users.theme CHECK constraint (D-021, 2026-09-22). Every repo in
+    // the estate created users_theme_check with a different theme set (the
+    // base's six-palette list, this repo's classic/light then the three-theme
+    // set of 094, LedgerLink's own id), and 084's unguarded DROP/ADD fails on
+    // any row holding a theme outside ITS list — a boot crash-loop the moment
+    // a downstream merges the engine. Theme ids are product configuration
+    // (invariant 13): themePrefs.js validates on write, so the database
+    // constraint only ever encoded one product's picker. Pure contract of a
+    // constraint nothing reads (invariant 14): an older container keeps
+    // working. IF EXISTS because a fresh database built from a product's
+    // aliases may never have had it.
+    // Reference copy: server/migrations/106_user_theme_check_drop.sql
+    name: '106_user_theme_check_drop',
+    statements: [
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_theme_check`,
     ],
   },
 ];

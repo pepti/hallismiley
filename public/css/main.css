@@ -3,6 +3,7 @@
 @import './layout.css';
 @import './components.css';
 @import './home.css';
+@import './business-pages.css';
 @import './contact.css';
 @import './user-system.css';
 @import './gallery.css';
@@ -14,6 +15,7 @@
 @import './shop.css';
 @import './analytics-admin.css';
 @import './admin-general-settings.css';
+@import './admin-updates.css';
 @import './barcode-scanner.css';
 @import './admin-collections.css';
 @import './admin-discounts.css';
@@ -23,16 +25,22 @@
 @import './admin-roles.css';
 @import './admin-customers.css';
 @import './admin-background.css';
+@import './background-library.css';
 @import './admin-change-requests.css';
 @import './admin-bins.css';
+@import './admin-handbok.css';
+@import './admin-leads.css';
+@import './admin-markadur.css';
+@import './admin-accounts.css';
+@import './seller-area.css';
 @import './admin-bookkeeping.css';
 @import './admin-shell.css';
-@import './admin-updates.css';
 @import './admin-monitoring.css';
+@import './admin-dashboard.css';
 @import './admin-kit.css';
 @import './test-env.css';
 @import './theme-switcher.css';
-@import './aron13.css';
+@import './iceland-scene.css';
 /* themes.css must stay LAST — its html[data-theme] rules out-specify and
    override the component CSS above when an alternate theme is active. */
 @import './themes.css';
@@ -45,14 +53,43 @@ body {
   color: var(--text-primary);
 }
 
+/* ── Living backdrop ─────────────────────────────────────────────────────────
+   Two soft ember glows drifting very slowly behind everything — the ambient
+   "the page is alive" layer, deliberately slower and dimmer than anything a
+   visitor should consciously notice. transform/opacity only, so it stays on
+   the compositor; a fixed element (not body background animation) because
+   background-position animation repaints every frame.
+   Killed entirely for prefers-reduced-motion. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 42% 34% at 22% 24%, var(--gold-glow), transparent 70%),
+    radial-gradient(ellipse 36% 30% at 80% 78%, var(--teal-dim), transparent 70%);
+  animation: emberDrift 46s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes emberDrift {
+  from { transform: translate3d(-2.5%, -2%, 0) scale(1); }
+  to   { transform: translate3d(2.5%, 2.5%, 0) scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
 #app { min-height: calc(100vh - 56px); }
 
-/* No fill-mode on purpose. With `forwards` the finished animation kept a
-   (non-none, identity) transform on .view, which makes .view the containing
-   block for every position:fixed descendant — modal overlays got sized to the
-   page instead of the viewport, so the news editor could not scroll to its
-   footer. The end keyframe is the element's natural state, so nothing jumps. */
-.view { animation: fadeIn 300ms ease; }
+@media (prefers-reduced-motion: no-preference) {
+  .view { animation: fadeIn 300ms ease forwards; }
+}
+/* While a View Transition runs the router adds .vt-active — the crossfade
+   owns the entrance, so the legacy fade must not stack on top of it. */
+.vt-active .view { animation: none; }
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 280ms; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -123,7 +160,7 @@ body {
 .profile-lang-error { margin-top: 8px; }
 .profile-lang-actions { margin-top: 12px; }
 
-/* Profile page — Appearance (theme) section. Same six themes as the floating
+/* Profile page — Appearance (theme) section. Same five themes as the floating
    switcher, laid out as labelled cards so the section reads as a setting. */
 .profile-theme-grid {
   display: grid;
@@ -159,7 +196,9 @@ body {
   background: var(--swatch);
   border: 1px solid var(--border);
 }
-/* black-sand reads as a duplicate of classic ink without a hint of its gold accent. */
-.profile-theme__swatch--dark { border: 2px solid #E8C06A; }
+/* A dark theme’s swatch is a near-black circle; on the light themes that reads
+   as a blob of ink rather than "this is the dark one". The orange rim is what
+   makes it legible as a theme preview. */
+.profile-theme__swatch--dark { border: 2px solid var(--gold); }
 .profile-theme__name { font-size: 14px; }
 .profile-theme-status { margin: 12px 0 0; font-size: 13px; color: #888; min-height: 18px; }

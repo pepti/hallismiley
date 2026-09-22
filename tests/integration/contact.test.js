@@ -17,7 +17,7 @@ describe('POST /api/v1/contact — valid submissions', () => {
       .send(validPayload());
 
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/received/i);
+    expect(res.body.message).toMatch(/móttekin/i);
   });
 
   test('accepts message at exactly 10 characters', async () => {
@@ -47,7 +47,7 @@ describe('POST /api/v1/contact — validation errors', () => {
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/name/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/nafn/i)]));
   });
 
   test('missing email returns 400', async () => {
@@ -55,7 +55,7 @@ describe('POST /api/v1/contact — validation errors', () => {
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/email/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/netfang/i)]));
   });
 
   test('invalid email format returns 400', async () => {
@@ -64,7 +64,7 @@ describe('POST /api/v1/contact — validation errors', () => {
       .send({ ...validPayload(), email: 'notanemail' });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/email/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/netfang/i)]));
   });
 
   test('missing message returns 400', async () => {
@@ -72,7 +72,7 @@ describe('POST /api/v1/contact — validation errors', () => {
     const res = await request(app).post('/api/v1/contact').send(rest);
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/message/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/skilaboð/i)]));
   });
 
   test('message under 10 characters returns 400', async () => {
@@ -81,7 +81,7 @@ describe('POST /api/v1/contact — validation errors', () => {
       .send({ ...validPayload(), message: 'Short' });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/10 characters/i)]));
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/10 stafir/i)]));
   });
 
   test('name over 100 chars returns 400', async () => {
@@ -128,6 +128,98 @@ describe('POST /api/v1/contact — honeypot', () => {
 
     // Returns 200 so the bot thinks it succeeded
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/received/i);
+    expect(res.body.message).toMatch(/móttekin/i);
+  });
+});
+
+// ── Business lead fields (job 2E) ────────────────────────────────────────────
+// The form doubles as lead capture: company, phone and current platform are
+// optional qualifiers, and a submission is never rejected for omitting them.
+
+describe('POST /api/v1/contact — lead fields', () => {
+  test('accepts the full business payload', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({
+        ...validPayload(),
+        company: 'Ísprjón ehf.',
+        phone: '+354 555 1234',
+        current_platform: 'shopify',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/móttekin/i);
+  });
+
+  test('omitting every optional field still succeeds', async () => {
+    const res = await request(app).post('/api/v1/contact').send(validPayload());
+    expect(res.status).toBe(200);
+  });
+
+  test('an unrecognised platform is accepted, not rejected', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({ ...validPayload(), current_platform: 'some-bespoke-thing' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('over-long company returns 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({ ...validPayload(), company: 'C'.repeat(151) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/150/)]));
+  });
+
+  test('over-long phone returns 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/contact')
+      .send({ ...validPayload(), phone: '9'.repeat(41) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual(expect.arrayContaining([expect.stringMatching(/40/)]));
+  });
+});
+
+describe('POST /api/v1/contact — notification', () => {
+  test('a valid submission triggers the lead notification', async () => {
+    const emailService = require('../../server/services/emailService');
+    const spy = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(undefined);
+
+    try {
+      const res = await request(app)
+        .post('/api/v1/contact')
+        .send({ ...validPayload(), company: 'Ísprjón ehf.', current_platform: 'shopify' });
+      expect(res.status).toBe(200);
+
+      // The send is fire-and-forget — let the microtask queue drain.
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        company: 'Ísprjón ehf.',
+        platform: 'shopify',
+      }));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('the honeypot path sends nothing', async () => {
+    const emailService = require('../../server/services/emailService');
+    const spy = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(undefined);
+
+    try {
+      await request(app)
+        .post('/api/v1/contact')
+        .send({ ...validPayload(), website: 'http://spam.bot' });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

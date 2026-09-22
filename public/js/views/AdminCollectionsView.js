@@ -9,15 +9,10 @@ import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
+// Icelandic-aware: "Þórsmörk" proposes "thorsmork". ESM twin of
+// server/utils/slug.js — matches the server's validateSlug regex.
+import { foldSlug as slugify } from '../utils/slug.js';
 
-// Lowercase, hyphenated, alphanumeric — matches the server's validateSlug regex.
-function slugify(s) {
-  return String(s || '')
-    .toLowerCase().trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-}
 
 export class AdminCollectionsView {
   constructor() { this._el = null; this._collections = []; }

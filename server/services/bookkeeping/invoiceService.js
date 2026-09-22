@@ -54,6 +54,11 @@ const PAYMENT_ACCOUNTS = {
 };
 
 const AR_ACCOUNT = '1100';
+// Fyrirframinnheimtar tekjur (migration 101). A build deposit is invoiced
+// before the work is delivered, so its net is a LIABILITY until go-live
+// (l. nr. 3/2006, 26. gr.) even though it is skattskyld velta on the invoice
+// date (l. nr. 50/1988, 13. gr.). Two clocks, one document.
+const DEFERRED_REVENUE_ACCOUNT = '2150';
 const VAT_OUTPUT_ACCOUNT = { 24: '2200', 11: '2210' };
 
 // Which revenue account a line belongs in. Zero-rated turnover is tracked in its
@@ -123,12 +128,55 @@ function pickCustomer(order) {
     if (cityLine) lines.push(cityLine);
     if (addr.country) lines.push(addr.country);
   }
+  // The same address as PARTS (migration 095). `address` stays exactly the joined
+  // text the PDF has always printed; the parts are what a machine-readable invoice
+  // needs, and they are snapshotted rather than re-derived so an issued document
+  // cannot change meaning when the order's address is edited later.
+  const part = (v, max) => (v ? String(v).trim().slice(0, max) : null) || null;
+  const street = addr ? [addr.line1, addr.line2].filter(Boolean).join(', ') : '';
   return {
     name: String(name).slice(0, 200),
     email,
     address: lines.join('\n'),
     // Country drives the VAT treatment: goods leaving Iceland are zero-rated.
     country: (addr && addr.country_code) || (addr && addr.country) || 'IS',
+    street: part(street, 200),
+    city: part(addr && addr.city, 120),
+    postalZone: part(addr && addr.postal, 20),
+  };
+}
+
+// The customer_accounts twin of pickCustomer (migration 100). A service invoice
+// used to write customer_address = '' and customer_country = 'IS' as literals,
+// which meant the PDF of every service invoice printed NO BUYER ADDRESS AT ALL
+// — bookkeepingPdf prints splitLines(customer_address) — as well as making a
+// UBL export impossible. Both are fixed by the same data.
+//
+// Snapshot, never a live read: Reglugerð 505/2013 gr. 9 means an address
+// corrected in 2027 must not change what a 2026 document says.
+function pickAccountCustomer(account) {
+  const part = (v, max) => (v ? String(v).trim().slice(0, max) : null) || null;
+  const street = part(account.street, 200);
+  const city = part(account.city, 120);
+  const postalZone = part(account.postal_zone, 20);
+  const country = part(account.country, 2) || 'IS';
+  // The printed block, in the shape pickCustomer produces: street, then
+  // "postcode city", then the country only when it is not Iceland.
+  const lines = [];
+  if (street) lines.push(street);
+  const cityLine = [postalZone, city].filter(Boolean).join(' ');
+  if (cityLine) lines.push(cityLine);
+  if (country && country !== 'IS') lines.push(country);
+  return {
+    name: String(account.name || '').slice(0, 200),
+    kennitala: account.kennitala || null,
+    email: account.contact_email || null,
+    address: lines.join('\n'),
+    country,
+    street, city, postalZone,
+    vatNumber: part(account.vat_number, 20),
+    endpointScheme: part(account.endpoint_scheme, 4),
+    endpointId: part(account.endpoint_id, 50),
   };
 }
 
@@ -428,9 +476,12 @@ async function createFromOrder(client, orderId, opts = {}) {
        issued_at, due_at, terms_days,
        original_currency, original_total_gross, fx_rate,
        subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
-       zero_rate_reason, note, status, created_by
+       zero_rate_reason, note, status, created_by,
+       seller_street, seller_city, seller_postal_zone, seller_country,
+       customer_street, customer_city, customer_postal_zone
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,'draft',$26)
+               $19,$20,$21,$22,$23,$24,$25,'draft',$26,
+               $27,$28,$29,$30,$31,$32,$33)
      RETURNING *`,
     [
       series, invoiceNumber, order.id, order.user_id,
@@ -443,6 +494,12 @@ async function createFromOrder(client, orderId, opts = {}) {
       totals.discount_total, totals.shipping_gross,
       exportSale ? 'Útflutningur — sala til útlanda, 0% VSK. Krefst útflutningsgagna.' : null,
       seller.invoice_note, createdBy,
+      // The structured party block (095). NULL, never '', when a part is missing,
+      // so "not recorded" reads the same on a row from before the migration and on
+      // one issued after it from an order that carried no address.
+      seller.seller_street || null, seller.seller_city || null,
+      seller.seller_postal_zone || null, seller.seller_country || null,
+      customer.street, customer.city, customer.postalZone,
     ]
   );
   await insertLines(client, invRows[0].id, totals.lines);
@@ -832,9 +889,20 @@ async function issueCreditNote(client, invoiceId, opts = {}) {
   );
   const revenueTotal = revRows.reduce((a, r) => a + Number(r.net), 0);
   const revenueShares = allocateProportional(creditNet, revRows.map(r => Number(r.net)));
+  // A deposit that has already been RECOGNISED is credited against the account
+  // its net was recognised INTO, not against the deferred account. Crediting
+  // 2150 a second time would drive a liability to a debit balance and leave
+  // 290.000 of recognised revenue standing against a sale that no longer
+  // exists. Unreleased deposits still credit 2150, which is correct: that is
+  // where their net still sits. The invariant either way is that 2150 never
+  // goes debit.
+  const netAccountFor = code =>
+    (invoice.revenue_recognised_at && code === DEFERRED_REVENUE_ACCOUNT && invoice.recognised_into_account)
+      ? invoice.recognised_into_account
+      : code;
   revRows.forEach((r, i) => {
     if (revenueShares[i] > 0) {
-      legs.push({ accountCode: r.revenue_account, debit: revenueShares[i], memo: 'Sala bakfærð' });
+      legs.push({ accountCode: netAccountFor(r.revenue_account), debit: revenueShares[i], memo: 'Sala bakfærð' });
     }
   });
   if (revenueTotal === 0 && creditNet > 0) {
@@ -900,8 +968,334 @@ async function findById(client, id) {
   return rows[0] || null;
 }
 
+// ── Service-contract invoices (ENHANCEMENTS #18, D-005) ──────────────────────
+
+const TIER_LABEL = { vefur: 'Vefur', verslun: 'Verslun', rekstur: 'Rekstur' };
+const IS_MONTHS = ['janúar', 'febrúar', 'mars', 'apríl', 'maí', 'júní',
+  'júlí', 'ágúst', 'september', 'október', 'nóvember', 'desember'];
+const SERVICE_KINDS = ['build', 'recurring', 'overage'];
+
+/**
+ * Issue an invoice to a customer ACCOUNT (customer_accounts, migration 098) —
+ * the company's own revenue path, which has no order behind it.
+ *
+ *   kind 'build'     — 50% of build_fee_isk: `deposit` true = at signing,
+ *                       false = at go-live (D-005)
+ *   kind 'recurring' — monthly_fee_isk for `period` (YYYY-MM), in advance;
+ *                       `amountNetIsk` overrides for a pro-rated first month
+ *   kind 'overage'   — `units` × `unitPriceIsk` verkeiningar beyond the quota
+ *
+ * Every price is ex-VSK (the customer is a VSK-registered business); 24% VSK is
+ * added on top. Same document machinery as createFromOrder: counter, lines,
+ * journal entry, books audit. Then the commission hook (D-003): build and
+ * recurring kinds record a commission_events row for the account's CURRENT
+ * owner at the account's current rate, in this same transaction — overage and
+ * one-off verk carry no commission.
+ *
+ * @param {object} client  pg client inside a transaction
+ * @param {object} opts    { accountId, kind, deposit?, period?, amountNetIsk?,
+ *                           units?, unitPriceIsk?, issuedAt?, createdBy, requestId? }
+ */
+async function createServiceInvoice(client, opts = {}) {
+  // Required lazily: CustomerAccount → staffAudit and Commission are leaf modules,
+  // but keeping them out of the top-level require list keeps this file's import
+  // graph the same for the order path.
+  const CustomerAccount = require('../../models/CustomerAccount');
+const { invoiceableProblems } = require('./peppol/party');
+  const Commission = require('../../models/Commission');
+  const staffAudit = require('../staffAudit');
+
+  const {
+    accountId, kind, deposit = true, period = null, amountNetIsk = null,
+    units = null, unitPriceIsk = null, createdBy, requestId = null, series = 'invoice',
+  } = opts;
+  if (!createdBy) throw new InvoiceError('createServiceInvoice requires createdBy', 500);
+  if (!SERVICE_KINDS.includes(kind)) {
+    throw new InvoiceError(`kind must be one of: ${SERVICE_KINDS.join(', ')}`, 400, 'BAD_KIND');
+  }
+
+  // Lock the account for the length of the document so two concurrent issues
+  // for the same account serialise (and so the owner/rate snapshot is stable).
+  // The lock serialises two concurrent issues for the same account; it does NOT
+  // stop a second one from proceeding once the first commits, so the real guard
+  // is the partial unique index from migration 099 (caught below).
+  const { rows: locked } = await client.query(
+    `SELECT id FROM customer_accounts WHERE id = $1 FOR UPDATE`, [accountId]
+  );
+  if (!locked.length) throw new InvoiceError('Customer account not found', 404, 'ACCOUNT_NOT_FOUND');
+  const account = await CustomerAccount.findByIdUnscoped(accountId, client);
+
+  const seller = await Setting.getBookkeepingSettings(client);
+  if (!seller.seller_complete) {
+    throw new InvoiceError(
+      'Cannot issue invoices yet: the seller name, kennitala and VSK number must be set ' +
+      'in the bookkeeping settings first. An invoice without them is not legally valid.',
+      409, 'SELLER_INCOMPLETE'
+    );
+  }
+
+  // The buyer-side twin of the refusal above, and it rests on the same argument:
+  // an invoice that does not identify the buyer is not one the buyer can deduct
+  // the input VAT on, so issuing it with a blank would inherit our defect to the
+  // customer. Deliberately the STATUTORY minimum only — a missing postal code or
+  // Peppol endpoint must NOT block issuing. That is a separate, downstream
+  // question answered at export time by peppol/conformance.js, and an invoice is
+  // a document the company must always be able to produce.
+  const buyerProblems = invoiceableProblems(account);
+  if (buyerProblems.length) {
+    throw new InvoiceError(
+      `Cannot issue: ${buyerProblems.map(x => x.message).join(' ')}`,
+      409, 'ACCOUNT_BUYER_INCOMPLETE'
+    );
+  }
+  const buyer = pickAccountCustomer(account);
+
+  const tier = TIER_LABEL[account.tier] || account.tier;
+  let net;
+  let description;
+  if (kind === 'build') {
+    const fee = Number(account.build_fee_isk);
+    if (!Number.isInteger(fee) || fee <= 0) {
+      throw new InvoiceError('The account has no build fee set', 409, 'ACCOUNT_FEES_MISSING');
+    }
+    const half = Math.round(fee / 2);
+    net = deposit ? half : fee - half;
+    description = `Uppsetning Rekstrarkerfisins — ${tier} — ${deposit ? 'innborgun 50% við undirritun' : 'lokagreiðsla 50% við gangsetningu'}`;
+  } else if (kind === 'recurring') {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period || ''))) {
+      throw new InvoiceError('period must be YYYY-MM', 400, 'BAD_PERIOD');
+    }
+    const fee = amountNetIsk != null ? Number(amountNetIsk) : Number(account.monthly_fee_isk);
+    if (!Number.isInteger(fee) || fee <= 0) {
+      throw new InvoiceError('The account has no monthly fee set', 409, 'ACCOUNT_FEES_MISSING');
+    }
+    net = fee;
+    const [y, m] = String(period).split('-').map(Number);
+    description = `Þjónustusamningur — ${tier} — ${IS_MONTHS[m - 1]} ${y}`;
+  } else {
+    const u = Number(units);
+    const p = Number(unitPriceIsk);
+    if (!Number.isInteger(u) || u <= 0 || !Number.isInteger(p) || p <= 0) {
+      throw new InvoiceError('units and unit_price_isk must be positive integers', 400, 'BAD_OVERAGE');
+    }
+    net = u * p;
+    description = `Verkeiningar umfram kvóta — ${u} ein.`;
+  }
+
+  // What the duplicate guard keys on (migration 099). `service_period` is the
+  // billed month for a contract invoice; build halves are told apart by
+  // `service_kind`; overage is deliberately unguarded (several batches of
+  // verkeiningar in one month are legitimate).
+  const serviceKind = kind === 'build' ? (deposit ? 'build_deposit' : 'build_final') : kind;
+  const servicePeriod = kind === 'recurring' ? `${period}-01` : null;
+
+  const vatRate = STANDARD_VAT_RATE;
+  const vat = Math.round(net * vatRate / 100);
+  const gross = net + vat;
+  const line = {
+    product_id: null, sku: null, description, quantity: 1,
+    unit_price_gross: gross, vat_rate: vatRate,
+    gross_before_discount: gross, discount_gross: 0,
+    line_net: net, line_vat: vat, line_gross: gross,
+    // The account this line’s NET is credited to — a revenue account normally,
+    // deferred income for a prepayment on work not yet delivered. The column
+    // name says "revenue_account" because renaming it would touch POS, the
+    // reports and the archive export for no behavioural gain.
+    revenue_account: (kind === 'build' && deposit)
+      ? DEFERRED_REVENUE_ACCOUNT
+      : revenueAccountFor({ vatRate, isService: true }),
+    is_shipping: false,
+  };
+  const totals = {
+    lines: [line], subtotal_net: net, vat_total: vat, total_gross: gross,
+    discount_total: 0, shipping_gross: 0, by_rate: [{ rate: vatRate, net, vat, gross }],
+  };
+
+  const issuedAt = opts.issuedAt ? assertAccountingDate(opts.issuedAt, 'issuedAt') : todayIso();
+  const invoiceNumber = await ledger.nextCounter(client, series);
+  const dueAt = addDays(issuedAt, seller.payment_terms_days);
+
+  let invRows;
+  try {
+    ({ rows: invRows } = await client.query(
+      `INSERT INTO invoices (
+       series, invoice_number, order_id, user_id,
+       seller_name, seller_kennitala, seller_vat_number, seller_address,
+       customer_name, customer_kennitala, customer_email, customer_address, customer_country,
+       issued_at, due_at, terms_days,
+       original_currency, original_total_gross, fx_rate,
+       subtotal_net, vat_total, total_gross, discount_total, shipping_gross,
+       zero_rate_reason, note, status, created_by,
+       seller_street, seller_city, seller_postal_zone, seller_country,
+       customer_street, customer_city, customer_postal_zone,
+       customer_endpoint_scheme, customer_endpoint_id, customer_vat_number,
+       account_id, service_kind, service_period
+     ) VALUES ($1,$2,NULL,NULL,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'ISK',NULL,1,
+               $15,$16,$17,0,0,NULL,$18,'draft',$19,
+               $20,$21,$22,$23,
+               $24,$25,$26,$27,$28,$29,
+               $30,$31,$32::date)
+     RETURNING *`,
+    [
+      series, invoiceNumber,
+      seller.seller_name, seller.seller_kennitala, seller.seller_vat_number, seller.seller_address,
+      buyer.name, buyer.kennitala, buyer.email, buyer.address, buyer.country,
+      issuedAt, dueAt, seller.payment_terms_days,
+      net, vat, gross,
+      seller.invoice_note, createdBy,
+      // The structured party block (095/100), NULL when a part is missing.
+      // Both sides are SNAPSHOTS: an issued invoice is corrected by credit
+      // note, never by an edit, so it must not read through to a row that can
+      // still change.
+      seller.seller_street || null, seller.seller_city || null,
+      seller.seller_postal_zone || null, seller.seller_country || null,
+      buyer.street, buyer.city, buyer.postalZone,
+      buyer.endpointScheme, buyer.endpointId, buyer.vatNumber,
+      account.id, serviceKind, servicePeriod,
+    ]
+  ));
+  // A duplicate is refused by the DATABASE, not by a check-then-act read: two
+  // requests that both pass a JS-level check can still both reach the INSERT.
+  // 23505 = unique_violation on one of the 099 partial indexes.
+  } catch (err) {
+    if (err && err.code === '23505') {
+      throw new InvoiceError(
+        kind === 'recurring'
+          ? `This account already has a service invoice for ${period}. Credit that one instead of issuing a second.`
+          : 'This account already has that build-fee instalment. Credit that invoice instead of issuing a second.',
+        409, 'DUPLICATE_SERVICE_INVOICE'
+      );
+    }
+    throw err;
+  }
+  await insertLines(client, invRows[0].id, totals.lines);
+  const { rows: issuedRows } = await client.query(
+    `UPDATE invoices SET status = 'issued' WHERE id = $1 RETURNING *`, [invRows[0].id]
+  );
+  const invoice = issuedRows[0];
+
+  const entry = await ledger.postEntry(client, {
+    entryDate: issuedAt,
+    memo: `Reikningur ${invoiceNumber} — ${account.name}`,
+    sourceType: 'invoice',
+    sourceId: invoice.id,
+    createdBy,
+    lines: invoiceJournalLines({ totals, lines: totals.lines }),
+  });
+
+  await audit.record(client, {
+    actorId: createdBy,
+    action: 'invoice.issued',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    requestId,
+    summary: {
+      invoice_number: invoiceNumber, series, account_id: account.id, kind,
+      total_gross: gross, vat_total: vat, journal_entry_number: entry.entry_number,
+    },
+  });
+
+  let commission = null;
+  if (kind !== 'overage') {
+    commission = await Commission.recordForInvoice(client, { account, invoice, kind, issuedAt });
+    if (commission) {
+      await staffAudit.record(client, {
+        actorId: createdBy, requestId,
+        action: 'commission.recorded', entityType: 'account', entityId: account.id,
+        summary: {
+          invoice_id: invoice.id, kind, seller_user_id: account.owner_user_id,
+          rate_bp: commission.rate_bp, amount_isk: Number(commission.amount_isk),
+        },
+      });
+    }
+  }
+
+  // Issuing the FINAL build half IS the delivery under D-005, so it releases
+  // the deposit from deferred income into revenue — in this same transaction.
+  // No deposit, or one already released, is a no-op.
+  let recognition = null;
+  if (kind === 'build' && !deposit) {
+    const { rows: dep } = await client.query(
+      `SELECT i.id, i.invoice_number, i.subtotal_net, i.amount_credited, i.total_gross,
+              (SELECT vat_rate FROM invoice_lines WHERE invoice_id = i.id LIMIT 1) AS vat_rate
+         FROM invoices i
+        WHERE i.account_id = $1 AND i.service_kind = 'build_deposit'
+          AND i.status <> 'cancelled' AND i.revenue_recognised_at IS NULL
+        LIMIT 1`,
+      [account.id]
+    );
+    if (dep.length) {
+      recognition = await recogniseDeposit(client, {
+        depositInvoice: dep[0], recogniseAt: issuedAt, createdBy,
+      });
+    }
+  }
+
+  logger.info(
+    { invoiceId: invoice.id, invoiceNumber, accountId: account.id, kind, period: entry.period,
+      recognisedIsk: recognition ? recognition.released : null },
+    'service invoice issued'
+  );
+  return { invoice, created: true, commission, recognition };
+}
+
+/**
+ * Release a build deposit from deferred income into revenue. Called when the
+ * FINAL build invoice is issued — that is the delivery under D-005 — inside
+ * the same transaction.
+ *
+ * Deliberately a SECOND entry rather than a reversal of the deposit’s original
+ * entry: reversing would pull the net out of box A in the deposit’s period,
+ * which 13. gr. does not allow, and becomes impossible once that period is
+ * filed and locked. The release nets to zero in box A (credit 4110, debit
+ * 2150), so turnover is counted exactly once, in the right period.
+ */
+async function recogniseDeposit(client, { depositInvoice, recogniseAt, createdBy = null }) {
+  if (!depositInvoice) return null;
+  // Claim it race-safely, the same idiom as the markadur hand-off: no row, no
+  // entry, so two concurrent callers cannot both release the same deposit.
+  const intoAccount = revenueAccountFor({
+    vatRate: Number(depositInvoice.vat_rate) || STANDARD_VAT_RATE, isService: true,
+  });
+  const { rows: claimed } = await client.query(
+    `UPDATE invoices SET revenue_recognised_at = $2::date, recognised_into_account = $3
+      WHERE id = $1 AND revenue_recognised_at IS NULL
+      RETURNING id, subtotal_net, amount_credited, total_gross`,
+    [depositInvoice.id, recogniseAt, intoAccount]
+  );
+  if (!claimed.length) return null;
+
+  // Release what was actually DEFERRED, read from the stored invoice — never a
+  // recomputed round(build_fee/2), because the fee may have changed between
+  // the two halves. Net off anything already credited, and floor at zero.
+  const row = claimed[0];
+  const creditedNet = Number(row.total_gross) > 0
+    ? Math.round(Number(row.subtotal_net) * Number(row.amount_credited || 0) / Number(row.total_gross))
+    : 0;
+  const released = Math.max(Number(row.subtotal_net) - creditedNet, 0);
+  if (released === 0) return null;
+
+  const entry = await ledger.postEntry(client, {
+    entryDate: recogniseAt,
+    memo: `Innlausn innborgunar — reikningur ${depositInvoice.invoice_number} tekjufærður við gangsetningu`,
+    sourceType: 'revenue_recognition',
+    sourceId: depositInvoice.id,
+    createdBy,
+    lines: [
+      { accountCode: DEFERRED_REVENUE_ACCOUNT, debit: released, memo: 'Innborgun innleyst' },
+      { accountCode: intoAccount, credit: released, memo: 'Tekjufærsla við afhendingu' },
+    ],
+  });
+  await client.query(`UPDATE invoices SET revenue_recognised_entry_id = $2 WHERE id = $1`,
+    [depositInvoice.id, entry.id]);
+  return { released, entryId: entry.id, intoAccount };
+}
 module.exports = {
+  recogniseDeposit,
+  DEFERRED_REVENUE_ACCOUNT,
   InvoiceError,
+  createServiceInvoice,
+  SERVICE_KINDS,
   recordPayment,
   recordRefund,
   recordSettlement,

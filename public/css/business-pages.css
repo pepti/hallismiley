@@ -1,0 +1,446 @@
+/* ═══════════════════════════════════════════════════════
+   BUSINESS PAGES — home tier teaser + steps, /thjonusta, /um-okkur
+   All colors ride the theme tokens (variables.css).
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Home: products ──
+   The company site names its products (2026-09-01). One card today, so the
+   card is wide and confident rather than one-of-three: a single narrow card
+   in a three-column grid reads as a gap, and this is the only place on the
+   homepage where the visitor learns what we actually sell. The grid takes a
+   second product without a rewrite; auto-fit turns one full-width card into
+   a row when it arrives. */
+.home-products {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-5);
+}
+
+.home-products__header { margin-bottom: var(--sp-6); }
+
+.home-products__eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem; letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-2);
+}
+
+.home-products__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.home-products__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: var(--sp-5);
+}
+
+.home-products__card {
+  position: relative;
+  padding: var(--sp-7) var(--sp-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+/* Molten top rail, same treatment as the tier cards it replaced up here. */
+.home-products__card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent-gradient);
+  opacity: 0.8;
+}
+
+.home-products__badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.home-products__name {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 900;
+  color: var(--accent-ink);
+  line-height: 1.1;
+  margin-bottom: var(--sp-2);
+}
+
+.home-products__tagline {
+  font-family: var(--font-display);
+  font-size: 1.05rem; font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-4);
+}
+
+.home-products__desc {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-6);
+  max-width: 60ch;
+}
+
+.home-products__cta { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.home-products__cta-icon { font-size: 1.05em; line-height: 1; }
+
+/* ── Home: tier teaser ── */
+.home-tiers,
+.home-steps {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-5);
+}
+
+.home-tiers__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-5);
+}
+
+.home-tiers__card {
+  position: relative;
+  display: block;
+  padding: var(--sp-6) var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+/* Molten top rail — lights up on hover (LoL card treatment) */
+.home-tiers__card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent-gradient);
+  opacity: 0.35;
+  transition: opacity var(--transition);
+}
+.home-tiers__card:hover {
+  border-color: var(--gold);
+  box-shadow: var(--glow-around);
+  transform: translateY(-2px);
+}
+.home-tiers__card:hover::before { opacity: 1; }
+
+/* Each tier ascends — the ghosted numeral and the emphasized middle card
+   break the three-identical-cards monotony (design rule: no cookie-cutter
+   card rows). Verslun is the tier most prospects land on, so it leads. */
+.home-tiers__numeral {
+  position: absolute; top: var(--sp-2); right: var(--sp-4);
+  font-family: var(--font-display);
+  font-size: 2.6rem; font-weight: 900;
+  line-height: 1;
+  color: var(--gold);
+  opacity: 0.14;
+  pointer-events: none;
+}
+.home-tiers__card--featured {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  transform: scale(1.03);
+}
+.home-tiers__card--featured::before { opacity: 0.8; }
+.home-tiers__card--featured .home-tiers__numeral { opacity: 0.22; }
+.home-tiers__card--featured:hover { transform: scale(1.03) translateY(-2px); }
+
+.home-tiers__name {
+  font-family: var(--font-display);
+  font-size: 1.3rem; font-weight: 700;
+  color: var(--gold);
+  margin-bottom: var(--sp-3);
+}
+
+.home-tiers__desc {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-tiers__cta-row {
+  display: flex; justify-content: center;
+  margin-top: var(--sp-6);
+}
+
+/* ── Home: how-it-works steps ── */
+.home-steps__list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-6);
+  padding: 0; margin: 0;
+}
+
+.home-steps__item { text-align: left; }
+
+.home-steps__num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--accent-amber-dim);
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-weight: 800; font-size: 1.1rem;
+  margin-bottom: var(--sp-3);
+}
+
+.home-steps__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.home-steps__desc {
+  font-size: 0.92rem; line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ── /thjonusta ── */
+.thjonusta-header,
+.um-okkur-header {
+  max-width: 46em;
+  margin: 0 auto var(--sp-7);
+  text-align: center;
+}
+
+.thjonusta-title,
+.um-okkur-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 4.5vw, 3rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: var(--sp-3) 0;
+}
+
+.thjonusta-intro,
+.um-okkur-lead {
+  font-size: 1.05rem; line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* The page walks down from the h1: what we build, how we work, what the
+   ready-made product is, then a closing call to action. Each
+   section shares one header treatment so the type steps stay consistent. */
+.thjonusta-section {
+  margin-bottom: var(--sp-8);
+}
+
+.thjonusta-section__header {
+  max-width: 46em;
+  margin: 0 auto var(--sp-6);
+  text-align: center;
+}
+
+.thjonusta-section__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-3);
+}
+
+.thjonusta-section__intro {
+  font-size: 1rem; line-height: 1.65;
+  color: var(--text-secondary);
+}
+.thjonusta-section__intro + .thjonusta-section__intro { margin-top: var(--sp-3); }
+
+/* What we build — an editorial numbered list rather than a card row. The
+   first entry is the core offering and spans the full width; the rest carry
+   a ghosted numeral and a rule on the left, so no two read as the same. */
+.service-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--sp-5) var(--sp-6);
+  padding: 0; margin: 0;
+}
+
+.service-item {
+  position: relative;
+  padding: var(--sp-4) 0 var(--sp-4) var(--sp-5);
+  border-left: 2px solid var(--border);
+}
+
+.service-item__num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.9rem; font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+  margin-bottom: var(--sp-2);
+}
+
+.service-item__name {
+  font-family: var(--font-display);
+  font-size: 1.2rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.service-item__desc {
+  font-size: 0.95rem; line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.service-item--lead {
+  grid-column: 1 / -1;
+  padding: var(--sp-6) var(--sp-6) var(--sp-6) var(--sp-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.service-item--lead .service-item__name {
+  font-size: clamp(1.4rem, 2.6vw, 1.8rem); font-weight: 800;
+}
+.service-item--lead .service-item__desc {
+  font-size: 1.02rem;
+  max-width: 62ch;
+}
+
+/* How we work — three numbered steps */
+.thjonusta-steps__list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--sp-6);
+  padding: 0; margin: 0;
+}
+
+.thjonusta-steps__num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--accent-amber-dim);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 800; font-size: 1.1rem;
+  margin-bottom: var(--sp-3);
+}
+
+.thjonusta-steps__title {
+  font-family: var(--font-display);
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.thjonusta-steps__desc {
+  font-size: 0.95rem; line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* The ready-made product. A rule above sets it apart from the bespoke work. */
+.thjonusta-product {
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-light);
+}
+
+.thjonusta-product__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem; letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
+}
+
+/* The product has its own site; the company site only says what it is and
+   sends the visitor there in a new tab (no prices here, Halli 2026-09-13). */
+.thjonusta-product__link {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-5);
+}
+.thjonusta-product__link-icon { font-size: 1.05em; line-height: 1; }
+
+/* Closing call to action */
+.thjonusta-cta {
+  max-width: 46em;
+  margin: 0 auto var(--sp-6);
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+}
+
+.thjonusta-cta__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 2.6vw, 1.8rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-3);
+}
+
+.thjonusta-cta__text {
+  font-size: 1rem; line-height: 1.65;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-5);
+}
+
+.thjonusta-cta__button { display: inline-block; }
+
+/* ── /um-okkur ── */
+.um-okkur-story {
+  max-width: 42em;
+  margin: 0 auto var(--sp-7);
+}
+.um-okkur-story p {
+  font-size: 1rem; line-height: 1.75;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-5);
+}
+
+.um-okkur-facts {
+  max-width: 42em;
+  margin: 0 auto var(--sp-7);
+  padding: var(--sp-5);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+}
+.um-okkur-facts h2 {
+  font-family: var(--font-display);
+  font-size: 0.9rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: var(--sp-3);
+}
+.um-okkur-facts ul { list-style: none; padding: 0; margin: 0; }
+.um-okkur-facts li {
+  padding: var(--sp-1) 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+.um-okkur-facts a { color: var(--accent-ink); }
+
+.um-okkur-cta {
+  display: flex; justify-content: center;
+  margin-bottom: var(--sp-6);
+}
+
+/* Screen-reader-only helper (the new-tab notes on the product links) */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}

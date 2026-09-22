@@ -4,7 +4,7 @@
  * moment nobody checks them, so this test reads the two documents and the tree
  * and asserts, in BOTH directions where a direction exists:
  *
- *  - every path the index names exists in the tree (a bare `Name.ext`
+ *  - every path the index names exists in the tracked tree (a bare `Name.ext`
  *    resolves by basename against the tree, so line layout is irrelevant; an
  *    unknown or ambiguous basename is a failure, never a skip);
  *  - every file in the source directories the index promises to cover is in it;
@@ -12,23 +12,22 @@
  *  - every HISTORY link from ARCHITECTURE, PLAN and API resolves to an anchor;
  *  - CLAUDE.md's domain map has exactly one row per numbered ARCHITECTURE
  *    section, and API.md's section links resolve too;
- *  - the migrations ARCHITECTURE cites are exactly the ones schema.js applies.
+ *  - the migrations ARCHITECTURE cites are exactly the ones schema.js applies;
+ *  - every feature file (features/**) is linked from its domain's Features
+ *    row, and every id in a Features row is a feature file of that domain.
  *
  * One assertion per rule over a set difference, so a failure names every
- * offender in one message; each message says what to add. Guards check that
- * every parser found something, so a reformat cannot make this assert nothing.
- *
- * This file ships from the base to every scaffold (site-factory copies
- * tests/ verbatim). PLAN.md and docs/API.md are optional sources: a repo
- * without them is simply not checked for them.
+ * offender in one message (the shape of admin-views-parity.test.js). Guards
+ * check that each parser found something, so a reformat cannot make this
+ * assert nothing.
  */
 const fs = require('fs');
 const path = require('path');
 const { migrations } = require('../../server/config/schema');
+const { ROOT, TREE_ROOTS, tree, byBase } = require('../lib/sourceTree');
+const { loadFeatures } = require('../../scripts/features-index');
 
-const ROOT = path.join(__dirname, '../..');
-const exists = (p) => fs.existsSync(path.join(ROOT, p));
-const read = (p) => (exists(p) ? fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n') : '');
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 
 const ARCH = read('docs/ARCHITECTURE.md');
 const HISTORY = read('docs/HISTORY.md');
@@ -36,31 +35,8 @@ const CLAUDE = read('CLAUDE.md');
 const PLAN = read('PLAN.md');
 const API = read('docs/API.md');
 
-// ---------------------------------------------------------------- the tree
-const TREE_ROOTS = ['server', 'public', 'tests', 'e2e', 'docs', 'scripts', 'config', '.github'];
-const SKIP_DIRS = new Set(['node_modules', 'coverage']);
-
-function walk(rel, out) {
-  for (const ent of fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
-    const p = rel ? `${rel}/${ent.name}` : ent.name;
-    if (ent.isDirectory()) {
-      if (!SKIP_DIRS.has(ent.name)) { out.add(p + '/'); walk(p, out); }
-    } else {
-      out.add(p);
-    }
-  }
-}
-const tree = new Set();
-for (const r of TREE_ROOTS) if (exists(r)) { tree.add(r + '/'); walk(r, tree); }
-for (const ent of fs.readdirSync(ROOT, { withFileTypes: true })) if (ent.isFile()) tree.add(ent.name);
-
-const byBase = new Map();
-for (const p of tree) {
-  if (p.endsWith('/')) continue;
-  const b = path.posix.basename(p);
-  if (!byBase.has(b)) byBase.set(b, []);
-  byBase.get(b).push(p);
-}
+// The tree (walk, roots, byBase) lives in tests/lib/sourceTree.js, shared with
+// featureRegistry.test.js.
 
 // ------------------------------------------------------------ the parsers
 const PREFIX = new RegExp(`^(${TREE_ROOTS.map((r) => r.replace('.', '\\.')).join('|')})/`);
@@ -120,18 +96,18 @@ describe('docs/ARCHITECTURE.md names real files', () => {
   const { paths, unknown, ambiguous } = indexedPaths(ARCH);
 
   test('the parser found the index (guard)', () => {
-    expect(ARCH.length).toBeGreaterThan(1000);
-    expect(tree.size).toBeGreaterThan(300);
-    expect(paths.size).toBeGreaterThan(200);
-    expect(paths.has('server/routes/authRoutes.js')).toBe(true);
+    expect(tree.size).toBeGreaterThan(500);
+    expect(paths.size).toBeGreaterThan(300);
+    expect(paths.has('server/routes/leadsRoutes.js')).toBe(true);
+    expect(paths.has('public/js/views/AdminLeadsView.js')).toBe(true);
     expect(paths.has('RUNBOOK.md')).toBe(true); // root-level bare token resolves
   });
 
-  test('every listed path exists in the tree (add the file, or fix the path in ARCHITECTURE.md)', () => {
+  test('every listed path exists in the tracked tree', () => {
     expect(diff(paths, tree)).toEqual([]);
   });
 
-  test('every bare filename resolves to exactly one tree file (write the full path when two share a name)', () => {
+  test('every bare filename resolves to exactly one tree file', () => {
     expect(unknown).toEqual([]);
     expect(ambiguous).toEqual([]);
   });
@@ -144,13 +120,11 @@ describe('every source file the index promises to cover is listed', () => {
     'server/services/bookkeeping', 'server/services/bookkeeping/peppol',
     'server/middleware', 'server/auth', 'server/utils',
     'public/js/views', 'public/js/components', 'public/js/services', 'public/js/utils', 'public/js/scenes',
-  ].filter(exists);
+  ];
 
-  test('there are directories to cover (guard)', () => expect(dirs.length).toBeGreaterThan(8));
-
-  test.each(dirs)('%s — every .js file has a row in docs/ARCHITECTURE.md', (dir) => {
+  test.each(dirs)('%s', (dir) => {
     const files = fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith('.js')).map((f) => `${dir}/${f}`);
-    expect(files.length).toBeGreaterThan(0);
+    expect(files.length).toBeGreaterThan(3); // guard
     expect(files.filter((f) => !paths.has(f))).toEqual([]);
   });
 });
@@ -163,17 +137,17 @@ describe('docs/HISTORY.md: anchors, dated headings and the index table agree', (
   const indexLinks = linkIds(HISTORY.slice(tableStart, tableEnd), /\]\(#([\w-]+)\)/g);
 
   test('parsers found the file (guard)', () => {
-    expect(anchors.size).toBeGreaterThan(0);
+    expect(anchors.size).toBeGreaterThan(15);
     expect(tableStart).toBeGreaterThan(0);
     expect(tableEnd).toBeGreaterThan(tableStart);
   });
 
-  test('every anchor heads a dated section, and every dated section has an anchor', () => {
+  test('every anchor heads a dated section', () => {
     expect(diff(anchors, dated)).toEqual([]);
     expect(diff(dated, anchors)).toEqual([]);
   });
 
-  test('the index table lists exactly the anchored entries (add the row, or the anchor)', () => {
+  test('the index table lists exactly the anchored entries', () => {
     expect(diff(indexLinks, anchors)).toEqual([]);
     expect(diff(anchors, indexLinks)).toEqual([]);
   });
@@ -187,8 +161,10 @@ describe('history links resolve', () => {
     'docs/API.md': linkIds(API, /\(HISTORY\.md#([\w-]+)\)/g),
   };
 
-  test('ARCHITECTURE links to history (guard)', () => {
-    expect(sources['docs/ARCHITECTURE.md'].size).toBeGreaterThan(3);
+  test('the link parsers found links (guard)', () => {
+    expect(sources['docs/ARCHITECTURE.md'].size).toBeGreaterThan(10);
+    expect(sources['PLAN.md'].size).toBeGreaterThan(3);
+    expect(sources['docs/API.md'].size).toBeGreaterThan(3);
   });
 
   test.each(Object.keys(sources))('every HISTORY link in %s is an anchor', (file) => {
@@ -201,11 +177,12 @@ describe('ARCHITECTURE section links', () => {
   const apiLinks = linkIds(API, /\(ARCHITECTURE\.md#([^)]+)\)/g);
 
   test('parsers found sections (guard)', () => {
-    expect(DOMAIN_SLUGS.size).toBeGreaterThan(8);
-    expect(claudeLinks.size).toBeGreaterThan(8);
+    expect(DOMAIN_SLUGS.size).toBeGreaterThan(10);
+    expect(DOMAIN_SLUGS.has('6-leads--fyrirspurnir')).toBe(true);
+    expect(apiLinks.size).toBeGreaterThan(3);
   });
 
-  test("CLAUDE.md's domain map has one row per numbered section, and no other (add or remove the row)", () => {
+  test("CLAUDE.md's domain map has one row per numbered section, and no other", () => {
     expect(diff(claudeLinks, DOMAIN_SLUGS)).toEqual([]);
     expect(diff(DOMAIN_SLUGS, claudeLinks)).toEqual([]);
   });
@@ -220,14 +197,20 @@ describe('ARCHITECTURE section links', () => {
 });
 
 describe('cited migrations are exactly the applied ones', () => {
-  const CITE = /(?<!\d)(\d{3})(?:\s*[–—-]\s*(\d{3}))?(?!\d)/g;
-  const applied = new Set(migrations.map((m) => m.name.slice(0, 3)));
+  // Applied = the engine array (schema.js) plus this product's array, read as
+  // source text so a mid-edit product file cannot break the require. The
+  // product file keeps 091/092/104 under their engine-era names (D-021).
+  const productFile = `server/config/product-migrations/${require('../../engine.json').product}.js`;
+  const productNums = fs.existsSync(path.join(ROOT, productFile))
+    ? [...read(productFile).matchAll(/name: '(\d{3})_[a-z0-9_]+'/g)].map((m) => m[1])
+    : [];
+  const applied = new Set([...migrations.map((m) => m.name.slice(0, 3)), ...productNums]);
   const cited = new Set();
   for (const line of ARCH.split('\n')) {
     if (!/^\| Migrations \|/.test(line)) continue;
     // A citation is a standalone 3-digit number or a 3-digit range (any dash);
     // the lookarounds keep a year like 2026 from minting migration 202.
-    for (const m of line.matchAll(CITE)) {
+    for (const m of line.matchAll(/(?<!\d)(\d{3})(?:\s*[–—-]\s*(\d{3}))?(?!\d)/g)) {
       const a = Number(m[1]);
       const b = m[2] ? Number(m[2]) : a;
       for (let n = a; n <= b; n++) cited.add(String(n).padStart(3, '0'));
@@ -235,19 +218,47 @@ describe('cited migrations are exactly the applied ones', () => {
   }
 
   test('parsers found the chain (guard)', () => {
-    expect(applied.size).toBeGreaterThan(50);
-    expect(cited.size).toBeGreaterThan(50);
+    expect(applied.size).toBeGreaterThan(90);
+    expect(cited.size).toBeGreaterThan(60);
     expect(migrations[0].name).toBe('001_initial_schema');
   });
 
-  test('every cited migration is applied, and every applied migration is cited in some domain', () => {
+  test('every cited migration is applied, and every applied migration is cited', () => {
     expect(diff(cited, applied)).toEqual([]);
     expect(diff(applied, cited)).toEqual([]);
   });
 
   test('the citation regex ignores years and accepts every dash', () => {
-    const take = (s) => [...s.matchAll(CITE)].map((m) => m[1] + (m[2] ? '-' + m[2] : ''));
+    const take = (s) => [...s.matchAll(/(?<!\d)(\d{3})(?:\s*[–—-]\s*(\d{3}))?(?!\d)/g)].map((m) => m[1] + (m[2] ? '-' + m[2] : ''));
     expect(take('| Migrations | 105 (2026 year-end) |')).toEqual(['105']);
     expect(take('| Migrations | 072—079, 080–081, 082-083 |')).toEqual(['072-079', '080-081', '082-083']);
+  });
+});
+
+describe('every feature file is linked from its domain\'s Features row', () => {
+  // "<domain>:<id>" pairs from the registry and from the `| Features |` rows.
+  const registry = new Set(loadFeatures(ROOT).map((f) => `${f.domain}:${f.id}`));
+  const rows = new Set();
+  let domain = null;
+  for (const line of ARCH.split('\n')) {
+    const h = line.match(/^## (\d+)\. /);
+    if (h) domain = h[1];
+    if (!/^\| Features \|/.test(line)) continue;
+    for (const m of line.matchAll(/\[([\w-]+)\]\(\.\.\/(features\/[\w/-]+\.md)\)/g)) {
+      rows.add(`${domain}:${m[1]}`);
+      expect(fs.existsSync(path.join(ROOT, m[2]))).toBe(true);
+      expect(path.posix.basename(m[2], '.md')).toBe(m[1]);
+    }
+  }
+
+  test('parsers found the rows (guard)', () => {
+    expect(registry.size).toBeGreaterThan(40);
+    expect(rows.size).toBeGreaterThan(40);
+    expect(rows.has('6:leads')).toBe(true);
+  });
+
+  test('the Features rows list exactly the registry, per domain', () => {
+    expect(diff(registry, rows)).toEqual([]);
+    expect(diff(rows, registry)).toEqual([]);
   });
 });

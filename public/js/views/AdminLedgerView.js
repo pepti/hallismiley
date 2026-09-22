@@ -38,6 +38,7 @@ const PAGE_SIZE = 25;
 const SOURCE_TYPES = [
   'invoice', 'payment', 'credit_note', 'expense', 'manual', 'reversal',
   'vat_settlement', 'bank', 'stripe', 'payroll', 'pos', 'opening',
+  'revenue_recognition',
 ];
 
 export class AdminLedgerView {

@@ -7,7 +7,8 @@
 // The ceiling is read PER CALL so lowering it on a stack demotes existing
 // write tokens immediately — no re-mint, no restart.
 // v1 toolset for this instance is deliberately system-only (ENHANCEMENTS #13
-// scope): leads have no DB rows to query and the shop is hidden. More tool
+// scope); the shop is hidden. Leads DO have rows since migration 097 (2026-09-07),
+// but a read-only leads tool is a separate Halli sign-off. More tool
 // modules slot in here exactly like icelandicstore's orders/inventory/etc.
 const system    = require('./tools/system');
 

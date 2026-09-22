@@ -148,14 +148,6 @@ describe('authorization', () => {
 
   it('admin can do all of it', async () => {
     await request(app).get(`${BASE}/settings`).set('Cookie', adminCookie).expect(200);
-    // The settings screen asks for one currency's history and every currency's
-    // freshness (ported from orangesmiley 2026-09-12); an unknown currency is 400.
-    const usd = await request(app).get(`${BASE}/settings?currency=USD`).set('Cookie', adminCookie).expect(200);
-    expect(usd.body.fx_currency).toBe('USD');
-    expect(Array.isArray(usd.body.fx_rates)).toBe(true);
-    expect(Array.isArray(usd.body.fx_freshness)).toBe(true);
-    for (const f of usd.body.fx_freshness) expect(f).toEqual(expect.objectContaining({ currency: expect.any(String), has_rate: expect.any(Boolean), ok: expect.any(Boolean) }));
-    await request(app).get(`${BASE}/settings?currency=XXX`).set('Cookie', adminCookie).expect(400);
     await request(app).patch(`${BASE}/settings`)
       .set('Cookie', adminCookie).send({ payment_terms_days: 30 }).expect(200);
   });
@@ -383,6 +375,61 @@ describe('dashboard', () => {
     expect(res.body.range.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(res.body.range.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(res.body.range.from < res.body.range.to).toBe(true);
+  });
+});
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+describe('settings', () => {
+  it('confirming the chart of accounts requires a note and records who confirmed', async () => {
+    // A confirmation date alone silences the only warning that tracks
+    // ACCOUNTANT-QUESTIONS §1. The note is what turns a click into a statement.
+    await request(app).patch(`${BASE}/settings`).set('Cookie', adminCookie)
+      .send({ coa_confirmed_at: '2026-09-05' }).expect(400);
+
+    const ok = await request(app).patch(`${BASE}/settings`).set('Cookie', adminCookie)
+      .send({ coa_confirmed_at: '2026-09-05', coa_confirmed_note: 'Yfirfarið með bókara 05.09' })
+      .expect(200);
+    expect(ok.body.settings.coa_confirmed_at).toBe('2026-09-05');
+    expect(ok.body.settings.coa_confirmed_note).toBe('Yfirfarið með bókara 05.09');
+    // Stamped from the session, never from the body.
+    expect(ok.body.settings.coa_confirmed_by).toBeTruthy();
+
+    const dash = await request(app).get(`${BASE}/dashboard`).set('Cookie', adminCookie).expect(200);
+    expect(dash.body.readiness.coa_confirmed_at).toBe('2026-09-05');
+
+    // Revoking clears the whole claim, not just the date.
+    const off = await request(app).patch(`${BASE}/settings`).set('Cookie', adminCookie)
+      .send({ coa_confirmed_at: null }).expect(200);
+    expect(off.body.settings.coa_confirmed_at).toBeNull();
+    expect(off.body.settings.coa_confirmed_by).toBe('');
+    expect(off.body.settings.coa_confirmed_note).toBe('');
+  });
+
+  it('serves rate history per currency and reports freshness for every currency in use', async () => {
+    // The dashboard used to check EUR alone, so a USD rate months old — or no USD
+    // rate at all — produced no warning while the first USD expense was refused.
+    await request(app).post(`${BASE}/fx-rates`).set('Cookie', adminCookie)
+      .send({ rate_date: '2026-06-01', currency: 'USD', rate: 138.9 }).expect(201);
+
+    const usd = await request(app).get(`${BASE}/settings?currency=USD`).set('Cookie', adminCookie).expect(200);
+    expect(usd.body.fx_currency).toBe('USD');
+    expect(usd.body.fx_rates.length).toBeGreaterThan(0);
+    expect(usd.body.fx_rates.every(r => r.currency === 'USD')).toBe(true);
+
+    const eur = await request(app).get(`${BASE}/settings`).set('Cookie', adminCookie).expect(200);
+    expect(eur.body.fx_currency).toBe('EUR');
+    expect(eur.body.fx_rates.every(r => r.currency === 'EUR')).toBe(true);
+
+    await request(app).get(`${BASE}/settings?currency=CHF`).set('Cookie', adminCookie).expect(400);
+
+    const dash = await request(app).get(`${BASE}/dashboard`).set('Cookie', adminCookie).expect(200);
+    const usdFresh = dash.body.readiness.fx_currencies.find(f => f.currency === 'USD');
+    expect(usdFresh).toMatchObject({ currency: 'USD', has_rate: true, ok: false });
+    // A currency nobody has touched is not nagged about.
+    expect(dash.body.readiness.fx_currencies.some(f => f.currency === 'GBP')).toBe(false);
+    // The EUR check the first release shipped is still there for older clients.
+    expect(dash.body.readiness.fx).toHaveProperty('ok');
   });
 });
 

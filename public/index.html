@@ -1,13 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- lang is rewritten per request by server/middleware/ssrMeta.js; "is" is the
+     right static default because that is what an unprefixed URL resolves to. -->
+<html lang="is">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Primary Meta -->
-  <title>Halli Smiley — Icelandic Carpenter &amp; Computer Scientist</title>
-  <meta name="description" content="Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing, combined with full-stack web development. Based in Iceland." />
-  <meta name="robots" content="index, follow" />
+  <title>Orange Smiley — hugbúnaðarhús knúið gervigreind</title>
+  <meta name="description" content="Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum hugbúnað fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefi, vefverslanir og Rekstrarkerfið." />
+  <meta name="robots" content="index, follow" id="ssr-robots" />
   <meta name="author" content="Halli" />
 
   <!-- Search engine ownership verification — populated by server SSR from the
@@ -21,10 +23,10 @@
        middleware (server/middleware/ssrMeta.js) — these elements exist as
        default fallbacks when a route is rendered directly from a browser
        cache before SSR catches up. -->
-  <link rel="canonical" href="https://www.hallismiley.is/" id="ssr-canonical" />
-  <link rel="alternate" hreflang="en"        href="https://www.hallismiley.is/en/"        id="ssr-hreflang-en" />
-  <link rel="alternate" hreflang="is"        href="https://www.hallismiley.is/is/"        id="ssr-hreflang-is" />
-  <link rel="alternate" hreflang="x-default" href="https://www.hallismiley.is/"           id="ssr-hreflang-default" />
+  <link rel="canonical" href="https://www.orangesmiley.is/" id="ssr-canonical" />
+  <link rel="alternate" hreflang="en"        href="https://www.orangesmiley.is/en/"        id="ssr-hreflang-en" />
+  <link rel="alternate" hreflang="is"        href="https://www.orangesmiley.is/is/"        id="ssr-hreflang-is" />
+  <link rel="alternate" hreflang="x-default" href="https://www.orangesmiley.is/"           id="ssr-hreflang-default" />
 
   <!-- Geo targeting -->
   <meta name="geo.region" content="IS" />
@@ -36,12 +38,11 @@
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:locale" content="en_IS" />
-  <meta property="og:url" content="https://www.hallismiley.is/" />
-  <meta property="og:title" content="Halli Smiley — Icelandic Carpenter &amp; Computer Scientist" />
-  <meta property="og:description" content="Twenty years of carpentry precision — timber frames, hand-cut joinery, bespoke cabinetry — married to modern full-stack software engineering. Based in Iceland." />
-  <!-- TODO before launch: create og-image.jpg (1200×630 px) and place it in public/ -->
-  <meta property="og:image" content="https://www.hallismiley.is/og-image.jpg" />
+  <meta property="og:locale" content="is_IS" />
+  <meta property="og:url" content="https://www.orangesmiley.is/" />
+  <meta property="og:title" content="Orange Smiley — hugbúnaðarhús knúið gervigreind" />
+  <meta property="og:description" content="Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum hugbúnað fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefi, vefverslanir og Rekstrarkerfið." />
+  <meta property="og:image" content="https://www.orangesmiley.is/og-image.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:site_name" content="Halli Smiley" />
@@ -66,30 +67,33 @@
   <!-- Stylesheet -->
   <link rel="stylesheet" href="/css/main.css" />
 
-  <!-- JSON-LD Structured Data. The @id matches the publisher reference in
-       the WebSite schema emitted server-side on the homepage so search
-       engines can stitch Person + WebSite into one knowledge-graph entity. -->
+  <!-- JSON-LD Structured Data. The @id matches the publisher reference in the
+       WebSite schema emitted server-side on the homepage so search engines can
+       stitch Organization + WebSite into one knowledge-graph entity. Change
+       both together — a dangling publisher @id yields a broken graph.
+       DRAFT: the kennitala (vatID/taxID) lands once registration completes. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "Person",
-    "@id": "https://www.hallismiley.is/#person",
-    "name": "Halli",
-    "url": "https://www.hallismiley.is",
-    "description": "Icelandic carpenter and computer scientist with twenty years of precision joinery and timber framing, combined with full-stack web development in Node.js and PostgreSQL.",
+    "@type": "Organization",
+    "@id": "https://www.orangesmiley.is/#organization",
+    "name": "Orange Smiley ehf.",
+    "alternateName": ["Orange Smiley", "Rekstrarkerfið"],
+    "url": "https://www.orangesmiley.is",
+    "logo": "https://www.orangesmiley.is/favicon.svg",
+    "image": "https://www.orangesmiley.is/og-image.jpg",
+    "email": "info@orangesmiley.is",
+    "description": "Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.",
     "address": {
       "@type": "PostalAddress",
       "addressCountry": "IS",
-      "addressLocality": "Iceland"
+      "addressLocality": "Hafnarfjörður"
     },
+    "areaServed": { "@type": "Country", "name": "Iceland" },
     "knowsAbout": [
-      "Carpentry", "Timber Framing", "Hand-Cut Joinery", "Cabinetry",
-      "JavaScript", "Node.js", "PostgreSQL", "Full-Stack Development",
-      "REST APIs", "JWT Authentication"
-    ],
-    "sameAs": [
-      "https://github.com/pepti",
-      "https://www.linkedin.com/in/halliv/"
+      "Web Development", "E-commerce", "Inventory Management",
+      "Invoicing", "VAT Accounting", "Shopify Migration",
+      "Node.js", "PostgreSQL"
     ]
   }
   </script>
@@ -100,7 +104,9 @@
   <script src="/js/consent.js" defer></script>
 </head>
 <body>
-  <a href="#main-content" class="skip-nav">Skip to main content</a>
+  <!-- Re-translated by the SPA on boot (public/js/main.js) once messages
+       load; the markup default is Icelandic to match <html lang>. -->
+  <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Fara í meginmál</a>
   <div id="app"></div>
   <script type="module" src="/js/main.js"></script>
 </body>

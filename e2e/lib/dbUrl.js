@@ -10,7 +10,7 @@
 // you develop against.
 //
 // ⚠️ The e2e database must also NEVER be the one Jest uses
-// (hallismiley_test): `tests/globalSetup.js` opens every Jest run with
+// (orangesmiley_test): `tests/globalSetup.js` opens every Jest run with
 // pg_terminate_backend + DROP DATABASE on its target. If both suites resolve
 // to the same name, any `npx jest` in a second terminal kills a running
 // Playwright suite mid-flight — every spec goes red at once with
@@ -32,17 +32,17 @@
 //
 // These databases accumulate one per branch. They are throwaway: drop the lot
 // with
-//   psql -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'hallismiley_e2e%'" \
+//   psql -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'orangesmiley_e2e%'" \
 //     | xargs -r -n1 dropdb
 const { execSync } = require('child_process');
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });
 
 // Connection details only — the database name here is a placeholder that
-// e2eDatabaseUrl always overwrites. Deliberately NOT hallismiley_test: a
+// e2eDatabaseUrl always overwrites. Deliberately NOT orangesmiley_test: a
 // constant naming Jest's database in this file would read like an endorsement,
 // and any future early return of it would restore the very collision above.
 const DEFAULT_URL = 'postgresql://postgres:postgres@localhost:5432/postgres';
-const PREFIX = 'hallismiley_e2e';
+const PREFIX = 'orangesmiley_e2e';
 const MAX_IDENTIFIER = 63; // Postgres truncates silently past this — do it ourselves
 
 // The checked-out branch, reduced to an identifier-safe slug. Returns '' when

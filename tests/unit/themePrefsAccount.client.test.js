@@ -3,7 +3,7 @@
 /**
  * Unit tests for the ACCOUNT half of public/js/services/themePrefs.js — the
  * theme following the login rather than the browser (users.theme, migration
- * 081_user_theme).
+ * 083_user_theme).
  *
  * Two directions, and they must not fight each other:
  *   • browser → account: setTheme() applies locally, then PATCHes /users/me;
@@ -104,41 +104,41 @@ describe('themePrefs — browser → account', () => {
     mockUser = { id: 'u1', theme: null };
     const { setTheme } = load();
 
-    expect(setTheme('lava')).toBe('lava');
-    expect(store.ws_theme).toBe('lava');
-    expect(attrs['data-theme']).toBe('lava');
+    expect(setTheme('ember')).toBe('ember');
+    expect(store.ws_theme).toBe('ember');
+    expect(attrs['data-theme']).toBe('ember');
     expect(events.map(e => e.type)).toContain('themechange');
     // The repaint must not wait on the network — the PATCH is still pending here.
     expect(mockUpdateProfile).not.toHaveBeenCalled();
 
     await flushSave();
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'lava' });
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'ember' });
   });
 
   test('classic clears the key and the attribute (it is the :root default)', () => {
-    store.ws_theme = 'lava';
-    attrs['data-theme'] = 'lava';
+    store.ws_theme = 'ember';
+    attrs['data-theme'] = 'ember';
     const { setTheme } = load();
 
     setTheme('classic');
-    expect(store.ws_theme).toBeUndefined();
+    expect(store.ws_theme).toBe('classic');
     expect(attrs['data-theme']).toBeUndefined();
   });
 
-  test('an unknown theme falls back to classic and is never sent to the server', async () => {
-    mockUser = { id: 'u1', theme: 'moss' };
+  test('an unknown theme falls back to the default and the bad value is never sent to the server', async () => {
+    mockUser = { id: 'u1', theme: 'midnight' };
     const { setTheme } = load();
 
-    expect(setTheme('neon-hotdog')).toBe('classic');
+    expect(setTheme('neon-hotdog')).toBe('ember');
     await flushSave();
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'classic' });
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'ember' });
   });
 
   test('anonymous visitors stay browser-local — no account write', async () => {
     const { setTheme } = load();
 
-    setTheme('glacier');
-    expect(store.ws_theme).toBe('glacier');
+    setTheme('ember');
+    expect(store.ws_theme).toBe('ember');
     await flushSave();
     expect(mockUpdateProfile).not.toHaveBeenCalled();
   });
@@ -147,27 +147,27 @@ describe('themePrefs — browser → account', () => {
     mockUser = { id: 'u1', theme: null };
     const { setTheme } = load();
 
-    setTheme('aurora', { persist: false });
-    expect(attrs['data-theme']).toBe('aurora');
+    setTheme('ember', { persist: false });
+    expect(attrs['data-theme']).toBe('ember');
     await flushSave();
     expect(mockUpdateProfile).not.toHaveBeenCalled();
   });
 
   test('saveThemeToAccount refreshes the cached user so the next authchange does not revert it', async () => {
-    mockUser = { id: 'u1', theme: 'moss' };
+    mockUser = { id: 'u1', theme: 'classic' };
     const { saveThemeToAccount } = load();
 
-    await expect(saveThemeToAccount('lava', { delay: 0 })).resolves.toBe(true);
+    await expect(saveThemeToAccount('ember', { delay: 0 })).resolves.toBe(true);
     // Silent: a dispatched authchange makes the router re-navigate, tearing
     // down the view the user is on just to repaint an already-applied theme.
-    expect(mockUpdateCachedUser).toHaveBeenCalledWith({ theme: 'lava' }, { silent: true });
+    expect(mockUpdateCachedUser).toHaveBeenCalledWith({ theme: 'ember' }, { silent: true });
   });
 
   test('saveThemeToAccount skips the request when the account already has that theme', async () => {
-    mockUser = { id: 'u1', theme: 'lava' };
+    mockUser = { id: 'u1', theme: 'ember' };
     const { saveThemeToAccount } = load();
 
-    await expect(saveThemeToAccount('lava', { delay: 0 })).resolves.toBe(true);
+    await expect(saveThemeToAccount('ember', { delay: 0 })).resolves.toBe(true);
     expect(mockUpdateProfile).not.toHaveBeenCalled();
   });
 
@@ -176,7 +176,7 @@ describe('themePrefs — browser → account', () => {
     mockUpdateProfile = jest.fn().mockRejectedValue(new Error('offline'));
     const { saveThemeToAccount } = load();
 
-    await expect(saveThemeToAccount('moss', { delay: 0 })).resolves.toBe(false);
+    await expect(saveThemeToAccount('ember', { delay: 0 })).resolves.toBe(false);
   });
 
   // A held arrow key in the radiogroup auto-repeats at ~30/s. One PATCH per
@@ -186,12 +186,12 @@ describe('themePrefs — browser → account', () => {
     mockUser = { id: 'u1', theme: null };
     const { setTheme } = load();
 
-    ['glacier', 'moss', 'lava', 'aurora'].forEach((id) => setTheme(id));
+    ['ember', 'classic', 'ember', 'classic'].forEach((id) => setTheme(id));
     await flushSave();
 
     expect(mockUpdateProfile).toHaveBeenCalledTimes(1);
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'aurora' });
-    expect(mockUpdateCachedUser).toHaveBeenCalledWith({ theme: 'aurora' }, { silent: true });
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'classic' });
+    expect(mockUpdateCachedUser).toHaveBeenCalledWith({ theme: 'classic' }, { silent: true });
   });
 
   // Arrow-keying the Appearance radios walks THROUGH themes. If the user lands
@@ -200,11 +200,11 @@ describe('themePrefs — browser → account', () => {
   // account silently ended up on a theme they had rejected (and adopted it at
   // the next session restore, while the UI had said "Saved").
   test('returning to the account theme inside the window cancels the pending write', async () => {
-    mockUser = { id: 'u1', theme: 'lava' };
+    mockUser = { id: 'u1', theme: 'ember' };
     const { saveThemeToAccount } = load();
 
-    const passedThrough = saveThemeToAccount('aurora');
-    const backToCurrent = saveThemeToAccount('lava');
+    const passedThrough = saveThemeToAccount('classic');
+    const backToCurrent = saveThemeToAccount('ember');
 
     await expect(backToCurrent).resolves.toBe(true);
     await expect(passedThrough).resolves.toBe(true);
@@ -217,14 +217,14 @@ describe('themePrefs — browser → account', () => {
     const { saveThemeToAccount } = load();
 
     const results = await Promise.all([
-      saveThemeToAccount('glacier'),
-      saveThemeToAccount('moss'),
-      saveThemeToAccount('lava'),
+      saveThemeToAccount('ember'),
+      saveThemeToAccount('ember'),
+      saveThemeToAccount('ember'),
     ]);
 
     expect(results).toEqual([true, true, true]);
     expect(mockUpdateProfile).toHaveBeenCalledTimes(1);
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'lava' });
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ theme: 'ember' });
   });
 
   // Overlapping writes that survive the debounce must still commit in order:
@@ -234,36 +234,37 @@ describe('themePrefs — browser → account', () => {
     mockUser = { id: 'u1', theme: null };
     const order = [];
     mockUpdateProfile = jest.fn(({ theme }) => new Promise((resolve) => {
-      // First write is slow, second is instant — parallel writes would
-      // finish reversed.
-      setTimeout(() => { order.push(theme); resolve({}); }, theme === 'moss' ? 60 : 0);
+      // The FIRST write is slow and the second instant, so unchained writes
+      // would resolve reversed and land the account on the theme the user
+      // already moved off. The two themes must differ for that to be visible.
+      setTimeout(() => { order.push(theme); resolve({}); }, theme === 'ember' ? 60 : 0);
     }));
     const { saveThemeToAccount } = load();
 
-    const first = saveThemeToAccount('moss', { delay: 0 });
+    const first = saveThemeToAccount('ember', { delay: 0 });
     // Let the first debounce fire so its PATCH is genuinely in flight — a
     // second call in the same tick would simply be collapsed into it.
     await new Promise((r) => setTimeout(r, 10));
-    const second = saveThemeToAccount('lava', { delay: 0 });
+    const second = saveThemeToAccount('classic', { delay: 0 });
     await Promise.all([first, second]);
 
-    expect(order).toEqual(['moss', 'lava']);
-    expect(mockUpdateCachedUser).toHaveBeenLastCalledWith({ theme: 'lava' }, { silent: true });
+    expect(order).toEqual(['ember', 'classic']);
+    expect(mockUpdateCachedUser).toHaveBeenLastCalledWith({ theme: 'classic' }, { silent: true });
   });
 });
 
 describe('themePrefs — account → browser', () => {
   test('adoptAccountTheme applies the theme saved on the account', () => {
-    mockUser = { id: 'u1', theme: 'glacier' };
+    mockUser = { id: 'u1', theme: 'midnight' };
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(getTheme()).toBe('glacier');
-    expect(attrs['data-theme']).toBe('glacier');
+    expect(getTheme()).toBe('midnight');
+    expect(attrs['data-theme']).toBe('midnight');
   });
 
   test('adopting does NOT write back to the server', async () => {
-    mockUser = { id: 'u1', theme: 'moss' };
+    mockUser = { id: 'u1', theme: 'ember' };
     const { adoptAccountTheme } = load();
 
     adoptAccountTheme();
@@ -272,29 +273,29 @@ describe('themePrefs — account → browser', () => {
   });
 
   test('a null account theme leaves the browser choice alone', () => {
-    store.ws_theme = 'lava';
+    store.ws_theme = 'ember';
     mockUser = { id: 'u1', theme: null };
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(getTheme()).toBe('lava');
+    expect(getTheme()).toBe('ember');
   });
 
   test('logged out (no cached user) is a no-op', () => {
-    store.ws_theme = 'aurora';
+    store.ws_theme = 'ember';
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(getTheme()).toBe('aurora');
+    expect(getTheme()).toBe('ember');
   });
 
   test('an unknown value from the server is ignored', () => {
-    store.ws_theme = 'moss';
+    store.ws_theme = 'ember';
     mockUser = { id: 'u1', theme: 'neon-hotdog' };
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(getTheme()).toBe('moss');
+    expect(getTheme()).toBe('ember');
   });
 
   // Storage is the pre-paint cache, not the source of truth. With it disabled
@@ -302,12 +303,12 @@ describe('themePrefs — account → browser', () => {
   // actually on screen — otherwise the pickers highlight the wrong swatch.
   test('the applied theme is reported even when storage is unavailable', () => {
     storageBroken = true;
-    mockUser = { id: 'u1', theme: 'moss' };
+    mockUser = { id: 'u1', theme: 'midnight' };
     const { adoptAccountTheme, getTheme } = load();
 
     adoptAccountTheme();
-    expect(attrs['data-theme']).toBe('moss');
-    expect(getTheme()).toBe('moss');
+    expect(attrs['data-theme']).toBe('midnight');
+    expect(getTheme()).toBe('midnight');
   });
 });
 
@@ -320,42 +321,44 @@ describe('themePrefs — logout', () => {
   }
 
   test('logout hands the browser back the theme it had before the login', () => {
-    store.ws_theme = 'lava'; // this browser's own choice, made while signed out
+    store.ws_theme = 'classic'; // this browser's own choice, made while signed out
     const { initTheme, getTheme } = load();
     initTheme();
 
-    login({ id: 'a', theme: 'moss' });
-    expect(getTheme()).toBe('moss');
+    // The account theme must differ from the browser one, or this asserts nothing.
+    login({ id: 'a', theme: 'ember' });
+    expect(getTheme()).toBe('ember');
 
     login(null);
-    expect(getTheme()).toBe('lava');
+    expect(getTheme()).toBe('classic');
   });
 
   test('a theme picked while signed in does not carry into the next account', () => {
-    store.ws_theme = 'lava';
+    store.ws_theme = 'classic';
     const { initTheme, setTheme, getTheme } = load();
     initTheme();
 
     // User A has never picked (theme null), so nothing is adopted — then picks
-    // aurora during the session.
+    // light during the session. It must differ from the browser theme, or the
+    // assertions below pass whatever the logout path does.
     login({ id: 'a', theme: null });
-    setTheme('aurora', { persist: false });
-    expect(getTheme()).toBe('aurora');
+    setTheme('ember', { persist: false });
+    expect(getTheme()).toBe('ember');
 
     login(null);
-    expect(getTheme()).toBe('lava');
+    expect(getTheme()).toBe('classic');
 
     // User B, also with no saved theme, gets the browser's own theme — not A's.
     login({ id: 'b', theme: null });
-    expect(getTheme()).toBe('lava');
+    expect(getTheme()).toBe('classic');
   });
 
   test('an anonymous visitor is untouched by the logout path', () => {
-    store.ws_theme = 'glacier';
+    store.ws_theme = 'ember';
     const { initTheme, getTheme } = load();
     initTheme();
 
     global.window.dispatchEvent(new CustomEvent('authchange')); // never logged in
-    expect(getTheme()).toBe('glacier');
+    expect(getTheme()).toBe('ember');
   });
 });

@@ -46,10 +46,7 @@ const SCHEMA = {
       // that is not here should not advertise that it could be. This is the
       // switch the base (HalliProjects) ships OFF, so the engine carries the
       // capability dormant and each fleet turns it on deliberately.
-      // BASE DEFAULT: the engine ships with self-update OFF — the API answers 404,
-    // the checker never starts, the sidebar drops the Updates line. Instances
-    // (and the factory) turn it on per fleet in config/client.json.
-    enabled: { type: 'boolean', default: false },
+      enabled: { type: 'boolean', default: true },
       // managed → check + record only (Orange Smiley drives the update)
       // manual  → the customer's admin presses "Update now"
       // auto    → applies itself inside the maintenance window

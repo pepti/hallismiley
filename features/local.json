@@ -1,0 +1,13 @@
+{
+  "_comment": "Downstream overrides for ENGINE features, keyed by engine feature id: { \"<engine feature id>\": { \"status\": \"hidden|disabled|forked\", \"note\": \"why, and where the fork lives\" } }. hallismiley.is (product hs, role personal) is Halli's portfolio site, not a business instance: the sales, market and customer-billing features the engine grew for Orange Smiley ship in the image (hide, never delete) but have no place in this site's nav or use. tests/unit/featureRegistry.test.js checks every key is an engine feature id.",
+  "leads": { "status": "hidden", "note": "portfolio site — no enquiry pipeline; the contact form mails Halli directly" },
+  "markadur": { "status": "hidden", "note": "portfolio site — no prospect list" },
+  "market-import": { "status": "hidden", "note": "portfolio site — no market data" },
+  "customer-accounts": { "status": "hidden", "note": "portfolio site — no B2B customers of record" },
+  "commission": { "status": "hidden", "note": "portfolio site — no sellers" },
+  "sales-handbook": { "status": "hidden", "note": "portfolio site — no sales staff; the engine's seed script (Orange Smiley company copy) ships inert and is never run here" },
+  "seller-publication": { "status": "hidden", "note": "portfolio site — INSTANCE_ROLE stays ops (the default), so both seller routes are closed" },
+  "staff-audit": { "status": "hidden", "note": "portfolio site — one admin, no staff" },
+  "peppol-outbound": { "status": "hidden", "note": "portfolio site — the books are Halli's own; no Peppol counterparties" },
+  "books-intake": { "status": "hidden", "note": "portfolio site — no receipt intake queue in use" }
+}

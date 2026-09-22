@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 
 const collectLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 60,
+  max: 300, // was 60 — ×5 (ice #201)
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',

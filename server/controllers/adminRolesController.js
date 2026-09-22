@@ -7,6 +7,9 @@ const UserRole = require('../models/UserRole');
 const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
 const { t } = require('../i18n');
+// Role grants/revocations are staff actions (migration 098 staff_audit_log).
+// Best-effort here: these handlers are not one transaction with the grant.
+const staffAudit = require('../services/staffAudit');
 
 const NAME_RE  = /^[a-z0-9_-]{2,32}$/;
 const RESERVED = new Set(['admin', 'moderator', 'user']);
@@ -65,10 +68,19 @@ const adminRolesController = {
         const verr = validateViewAccess(req.body.view_access);
         if (verr) return res.status(400).json({ error: verr, code: 400 });
       }
+      const before = role.view_access;
       const updated = await Role.update(name, {
         description: typeof req.body.description === 'string' ? req.body.description.slice(0, 200) : undefined,
         view_access: req.body.view_access !== undefined ? [...new Set(req.body.view_access)] : undefined,
       });
+      // Widening a role's view_access is the most security-relevant role event
+      // there is — more than a membership change — so it belongs in the trail.
+      if (req.body.view_access !== undefined) {
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'role.updated', entityType: 'role', entityId: name,
+          summary: { views_before: before, views_after: updated.view_access },
+        });
+      }
       return res.json({ role: updated });
     } catch (err) { next(err); }
   },
@@ -128,6 +140,10 @@ const adminRolesController = {
       if (!added) {
         return res.status(409).json({ error: t(req.locale, 'errors.admin.alreadyMember'), code: 409 });
       }
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'role.granted', entityType: 'user', entityId: userId,
+        summary: { role: name },
+      });
       return res.status(201).json({ ok: true });
     } catch (err) {
       if (err.code === '23503') { // user/role vanished mid-request
@@ -200,6 +216,10 @@ const adminRolesController = {
 
         await client.query('COMMIT');
         UserRole.invalidateUser(userId);
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: userId,
+          summary: { role: name },
+        });
         return res.status(204).send();
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});

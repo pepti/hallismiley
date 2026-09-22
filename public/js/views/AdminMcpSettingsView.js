@@ -91,7 +91,7 @@ export class AdminMcpSettingsView {
 
   _mintedPanel() {
     const m = this._minted;
-    const cmd = `claude mcp add --transport http hallismiley-${escHtml(this._data.app_env)} ${escHtml(this._endpointUrl())} --header "Authorization: Bearer ${escHtml(m.token)}"`;
+    const cmd = `claude mcp add --transport http orangesmiley-${escHtml(this._data.app_env)} ${escHtml(this._endpointUrl())} --header "Authorization: Bearer ${escHtml(m.token)}"`;
     return `
       <section class="gs-card mcp-minted">
         <div class="gs-card__head"><h2 class="gs-card__title">${t('mcp.mintedTitle')}</h2></div>

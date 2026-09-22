@@ -1,13 +1,25 @@
 {
-  "$comment": "Engine provenance for this repo (D-021). product = migration prefix + product-migrations filename; role = engine | product | customer | personal. rev/history are written by site-factory/engine-sync.js. Product-owned: a sync never overwrites this file.",
+  "$comment": "Engine provenance for this repo (D-021). product = migration prefix + product-migrations filename; role = engine | product | customer | personal. rev/history are written by site-factory/engine-sync.js. Product-owned: a sync never overwrites this file. productPaths = engine files this repo keeps FORKED wholesale on top of .engine-paths; empty here — every hallismiley-specific change to an engine file is a listed residual hook (docs/HISTORY.md#engine-graft), not a fork.",
   "product": "hs",
   "role": "personal",
-  "upstream": "C:/Users/Notandi/claude/Projects/orangesmiley/.claude/worktrees/engine-upstream",
-  "upstreamBranch": "feat/engine-upstream",
-  "rev": null,
-  "syncedAt": null,
+  "upstream": "https://github.com/orange-smiley/orangesmiley.git",
+  "upstreamBranch": "master",
+  "rev": "1e0099519dcc4bc7fc711778ee997c9ce7050a28",
+  "syncedAt": "2026-09-22T23:26:27.226Z",
   "syncedPr": null,
-  "grafted": null,
+  "grafted": {
+    "at": "2026-09-22",
+    "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
+    "mergeBase": "fdf9581dc6ad7db1d4160a34a7b074595281866a"
+  },
   "productPaths": [],
-  "history": []
+  "history": [
+    {
+      "rev": "1e0099519dcc4bc7fc711778ee997c9ce7050a28",
+      "date": "2026-09-22",
+      "upstreamCommits": 270,
+      "conflicts": 114,
+      "note": "graft"
+    }
+  ]
 }

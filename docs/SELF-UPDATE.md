@@ -4,8 +4,8 @@ How a deployed instance of this engine learns that a newer release exists, and
 how it gets there.
 
 This exists because of the fan-out problem: one engine, many instances
-(the Orange Smiley business plan §4 — a document in the company's gitignored
-`company/` folder in the orangesmiley repo, not a file here). Without it, shipping a security fix to N customers
+(the business plan, `company/ORANGE-SMILEY-PLAN.md` §4 — a gitignored folder
+inside this repo, not a tracked file). Without it, shipping a security fix to N customers
 is N manual deploys, and the honest answer to "is customer X patched?" is "let
 me look". With it, every instance knows what it is, what it could be, and who
 decides.
@@ -36,15 +36,12 @@ Five pieces, each with one job:
 |---|---|---|
 | Build identity | `server/config/version.js`, `scripts/generate-version.js` | "which release am I?" — stamped at image build, never at runtime |
 | Checker | `server/services/updateChecker.js` | fetch the channel manifest, compare, record |
-| Ledger | `server/models/SystemUpdate.js`, migration **082** (`082_system_updates` — 081 is `user_theme` here; orangesmiley numbers the same migration 081) | one row per release this instance has heard about |
+| Ledger | `server/models/SystemUpdate.js`, migration 081 | one row per release this instance has heard about |
 | Applier | `server/services/updateApplier.js` | trigger the platform, record what was running, verify afterwards |
 | Screen | `public/js/views/AdminUpdatesView.js` | show it, and let the right person decide |
 
 Config lives in `config/client.json` under `modules.selfUpdate`, resolved by
-`server/config/clientConfig.js` (defaults < file < `CLIENT_CONFIG_*` env). **The
-base has no `config/client.json`** — it runs on the schema defaults, which ship
-the module OFF (`enabled: false`), so every `/api/v1/system/*` route answers 404
-on www.hallismiley.is. Instances add the file at scaffold/provisioning time.
+`server/config/clientConfig.js` (defaults < file < `CLIENT_CONFIG_*` env).
 
 ---
 
@@ -177,18 +174,15 @@ an older instance.
 ## Releasing
 
 ```
-merge to main → CI → deploy.yml pushes :sha-<gitSha>, prints the digest
+merge to master → CI → deploy.yml (manual dispatch — nothing auto-deploys here)
+                       pushes :sha-<gitSha>, prints the digest
               → promote.yml: that sha → canary
               → Orange Smiley's own instances soak 24–48 h
               → promote.yml: the SAME sha → stable
 ```
 
 `promote.yml` retags an existing digest with `az acr import` and **never
-builds**. On `pepti/hallismiley` it is unarmed: the four repository variables it
-requires do not exist (2026-09-12), and only images built from that date carry
-the `:sha-<sha>` tag it resolves. The `RELEASE_CHANNEL` stamped into an image is
-informational — the checker reads the channel from the instance's own settings,
-so a digest promoted to `canary` still says `stable` inside. Rebuilding the same commit produces different bytes (timestamps, base
+builds**. Rebuilding the same commit produces different bytes (timestamps, base
 image drift) and silently discards the soak. We are the canary; customers are
 not.
 
@@ -240,7 +234,10 @@ Per **instance**:
 | PATCH | `/api/v1/system/settings` | admin + CSRF |
 | POST | `/api/v1/system/updates/:id/apply` | admin + CSRF + rate limit |
 | POST | `/api/v1/system/updates/:id/rollback` | admin + CSRF + rate limit |
+| GET | `/api/v1/system/changes` | admin — sits **above** the module gate, so it answers even when self-update is disabled (the "Latest updates" card on Admin → Monitoring reads it) |
 
+Everything except `/changes` answers `404` while `modules.selfUpdate.enabled`
+is off (the base ships it off; this instance ships it on, `managed`).
 Reads are delegable — an ops role can watch a fleet. Writes are hard admin:
 applying an update restarts the instance, and so does changing how updates
 arrive. Nothing here is public: "which version" is also "which published CVEs

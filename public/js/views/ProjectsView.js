@@ -3,6 +3,7 @@ import { ProjectCard } from '../components/ProjectCard.js';
 import { FilterBar }   from '../components/FilterBar.js';
 import { t, href }     from '../i18n/i18n.js';
 import { navigate }    from '../navigate.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
 
 export class ProjectsView {
   constructor() {
@@ -16,18 +17,15 @@ export class ProjectsView {
 
     const main = document.createElement('main');
     main.className = 'main';
+    // Give the page the skip-nav target it never had — every other business
+    // page anchors #main-content on its <main>.
+    main.id = 'main-content';
 
-    const filterBar = new FilterBar((category) => this._applyFilter(category));
+    this.filterBar = new FilterBar((category) => this._applyFilter(category));
 
     const section = document.createElement('section');
     section.className = 'section';
-    section.innerHTML = `
-      <div class="section__header">
-        <h2 class="section__title">${t('projects.title')}</h2>
-        <span class="section__count" id="projects-count"></span>
-      </div>
-    `;
-    section.insertBefore(filterBar.render(), section.querySelector('.section__header').nextSibling);
+    section.appendChild(this.filterBar.render());
 
     this.grid = document.createElement('div');
     this.grid.className = 'project-grid';
@@ -37,13 +35,28 @@ export class ProjectsView {
     main.appendChild(section);
     view.appendChild(main);
 
+    // Rhyolite ridges — the brand's earth colours as landscape.
+    this._scene = mountSceneHeader(main, 'verkefni', `
+        <header class="thjonusta-header">
+          <p class="admin-eyebrow">${t('nav.projects')}</p>
+          <h1 class="thjonusta-title">${t('projects.title')}</h1>
+          <p class="section__count" id="projects-count"></p>
+        </header>`);
+
     this._loadProjects(view);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
   }
 
   async _loadProjects(view) {
     try {
       this.allProjects = await projectApi.getAll({ limit: 100 });
+      // The filter row is built from the categories actually present, so it
+      // never offers a filter that would return nothing.
+      this.filterBar.setCategories(this.allProjects.map(pr => pr.category));
       this._renderGrid(this.allProjects, view);
     } catch {
       this.grid.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div>${t('form.error')}</div>`;
@@ -69,7 +82,7 @@ export class ProjectsView {
     projects.forEach(p => {
       this.grid.appendChild(
         new ProjectCard(p, (proj) => {
-          navigate(href(`/projects/${proj.id}`));
+          navigate(href(`/verkefni/${proj.id}`));
         }).render()
       );
     });

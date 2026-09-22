@@ -10,7 +10,11 @@
 // guard against stored XSS payloads from non-browser clients.
 const sanitizeHtml = require('sanitize-html');
 
-const RICH_TEXT_FIELDS = new Set(['body', 'content']);
+// `body_is` (news) and `body_en` (sales guides) are the secondary-locale
+// bodies of their CMS tables — same rich-HTML contract as `body`. `body_is`
+// was missing from this set until 2026-08-27: IS news bodies submitted via
+// the API had their tags stripped (see LESSONS.md).
+const RICH_TEXT_FIELDS = new Set(['body', 'content', 'body_is', 'body_en']);
 
 // Mirror of ALLOWED_TAGS in public/js/views/ArticleView.js (lowercased).
 const RICH_TEXT_ALLOWED_TAGS = [

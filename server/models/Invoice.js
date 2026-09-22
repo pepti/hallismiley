@@ -152,23 +152,26 @@ class Invoice {
   static async findDetail(id, client = db) {
     const invoice = await Invoice.findById(id, client);
     if (!invoice) return null;
-    const [lines, payments, creditNotes] = await Promise.all([
-      client.query(
-        `SELECT id, product_id, sku, description, quantity::float AS quantity,
-                unit_price_gross, vat_rate, gross_before_discount, discount_gross,
-                line_net, line_vat, line_gross, revenue_account, sort_order
-           FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order`, [invoice.id]),
-      client.query(
-        `SELECT p.id, p.amount, p.method, p.received_at, p.reference, p.created_at,
-                u.username AS recorded_by
-           FROM payments p LEFT JOIN users u ON u.id = p.created_by
-          WHERE p.invoice_id = $1 ORDER BY p.received_at, p.created_at`, [invoice.id]),
-      client.query(
-        `SELECT cn.id, cn.credit_note_number, cn.amount_net, cn.amount_vat, cn.amount_gross,
-                cn.reason, cn.issued_at, cn.stripe_refund_id, u.username AS issued_by
-           FROM credit_notes cn LEFT JOIN users u ON u.id = cn.created_by
-          WHERE cn.invoice_id = $1 ORDER BY cn.issued_at, cn.created_at`, [invoice.id]),
-    ]);
+    // Sequential, not Promise.all: one pg client can only run one query at a time, so
+    // fanning these out over a transaction client made pg queue them anyway and warn
+    // (the behaviour is removed in pg@9). On the pool path each await checks out its
+    // own client in turn — the parallelism was imaginary either way, and the object
+    // built below is unchanged.
+    const lines = await client.query(
+      `SELECT id, product_id, sku, description, quantity::float AS quantity,
+              unit_price_gross, vat_rate, gross_before_discount, discount_gross,
+              line_net, line_vat, line_gross, revenue_account, sort_order
+         FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order`, [invoice.id]);
+    const payments = await client.query(
+      `SELECT p.id, p.amount, p.method, p.received_at, p.reference, p.created_at,
+              u.username AS recorded_by
+         FROM payments p LEFT JOIN users u ON u.id = p.created_by
+        WHERE p.invoice_id = $1 ORDER BY p.received_at, p.created_at`, [invoice.id]);
+    const creditNotes = await client.query(
+      `SELECT cn.id, cn.credit_note_number, cn.amount_net, cn.amount_vat, cn.amount_gross,
+              cn.reason, cn.issued_at, cn.stripe_refund_id, u.username AS issued_by
+         FROM credit_notes cn LEFT JOIN users u ON u.id = cn.created_by
+        WHERE cn.invoice_id = $1 ORDER BY cn.issued_at, cn.created_at`, [invoice.id]);
 
     const shapedLines = lines.rows.map(l => ({
       ...l,

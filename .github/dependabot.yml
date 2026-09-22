@@ -1,6 +1,6 @@
-# Dependabot: weekly, grouped updates for npm packages and the SHA-pinned
-# GitHub Actions (the github-actions ecosystem updates the pinned SHAs and
-# keeps the `# vN` comments in sync).
+# Dependabot: weekly, grouped updates for npm packages, the digest-pinned Docker
+# base image and the SHA-pinned GitHub Actions (the github-actions ecosystem
+# updates the pinned SHAs and keeps the `# vN` comments in sync).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -10,7 +10,13 @@ updates:
       day: monday
       time: "06:00"
       timezone: Atlantic/Reykjavik
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    # Do NOT auto-rebase open PRs when master moves: every rebase re-triggers
+    # the full CI suite. On icelandicstore in August 2026 roughly half of the
+    # ~690 dependabot CI minutes were rebases of PRs nobody had reviewed yet
+    # (ice #233). Rebase deliberately with an `@dependabot rebase` comment when
+    # a PR is actually about to be merged.
+    rebase-strategy: disabled
     groups:
       # One PR for all minor+patch bumps — review/merge in a single pass.
       minor-and-patch:
@@ -18,9 +24,9 @@ updates:
     # Majors (express 5, eslint 9+, jest 30…) arrive as individual PRs so each
     # breaking upgrade is a deliberate decision.
 
-  # Keeps the Dockerfile base image patched. The image is SHA-pinned, so
+  # Keeps the Dockerfile base image patched. The image is digest-pinned, so
   # without this the pin silently rots and Trivy starts failing CI on base
-  # CVEs nobody is bumping. (Ported from icelandicstore with the Node-24 pin.)
+  # CVEs nobody is bumping.
   - package-ecosystem: docker
     directory: "/"
     schedule:
@@ -28,13 +34,12 @@ updates:
       day: monday
       time: "06:00"
       timezone: Atlantic/Reykjavik
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    rebase-strategy: disabled  # see the npm ecosystem above
     # Keep the digest fresh WITHIN the current Node LTS line, but never propose
-    # a major. Left unconstrained, the first thing this ecosystem produced on
-    # icelandicstore was node 20 -> 26 — and 26 is a Current release
-    # (lts: false), not something to run a production site on. Moving Node
-    # major is a deliberate change that also has to bump `node-version` in
-    # ci.yml, so it should not arrive as an automated base-image bump.
+    # a major: Node 26 is Current-not-LTS, and moving the Node major also has to
+    # bump `node-version` in ci.yml and the CLAUDE.md invariant TOGETHER, so it
+    # must not arrive as an automated base-image bump (stack-invariants.md).
     ignore:
       - dependency-name: node
         update-types: ["version-update:semver-major"]
@@ -46,4 +51,10 @@ updates:
       day: monday
       time: "06:00"
       timezone: Atlantic/Reykjavik
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    rebase-strategy: disabled  # see the npm ecosystem above
+    groups:
+      # Action SHA bumps get reviewed as a batch anyway; separately they each
+      # burn a full CI run for a one-line pin change.
+      actions:
+        patterns: ["*"]

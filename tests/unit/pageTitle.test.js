@@ -53,14 +53,14 @@ describe('pageTitle mirrors the server', () => {
     expect(Object.keys(ROUTE_KEYS).length).toBeGreaterThan(10);
     expect(Object.keys(TITLES.en).length).toBeGreaterThan(10);
     expect(Object.keys(TITLES.is).length).toBe(Object.keys(TITLES.en).length);
-    expect(ROUTE_KEYS['/shop']).toBe('shop');
-    expect(TITLES.is.home).toContain('Halli Smiley');
+    expect(ROUTE_KEYS['/thjonusta']).toBe('thjonusta');
+    expect(TITLES.is.home).toContain('Orange Smiley');
   });
 
-  // The base has no intentional divergence: it IS the brand its SSR titles name.
-  // A re-skinned instance may diverge (orangesmiley re-brands the hidden
-  // portfolio routes) and lists its exceptions here with the reason.
-  const INTENTIONAL = new Set();
+  // Routes the client deliberately titles differently from SSR, with the reason.
+  // The hidden portfolio surfaces keep "Halli Smiley" in their SSR titles on
+  // purpose (R1 chunk A); the client presents them under the company name.
+  const INTENTIONAL = new Set(['/verkefni', '/projects']);
 
   for (const [route, key] of Object.entries(serverRouteKeys())) {
     const client = __tables.PUBLIC_TITLES[route];
@@ -80,28 +80,28 @@ describe('pageTitle mirrors the server', () => {
 
 describe('titleForRoute', () => {
   test('every /admin route shares one label rather than leaking the landing title', () => {
-    expect(titleForRoute('/admin/leads', 'is')).toBe('Stjórnborð — Halli Smiley');
-    expect(titleForRoute('/admin/books/vat', 'is')).toBe('Stjórnborð — Halli Smiley');
-    expect(titleForRoute('/admin/accounts/:id', 'en')).toBe('Admin — Halli Smiley');
+    expect(titleForRoute('/admin/leads', 'is')).toBe('Stjórnborð — Orange Smiley');
+    expect(titleForRoute('/admin/books/vat', 'is')).toBe('Stjórnborð — Orange Smiley');
+    expect(titleForRoute('/admin/accounts/:id', 'en')).toBe('Admin — Orange Smiley');
   });
 
   test('client-only sections get the site suffix', () => {
-    expect(titleForRoute('/checkout', 'is')).toBe('Ganga frá pöntun — Halli Smiley');
-    expect(titleForRoute('/cart', 'en')).toBe('Cart — Halli Smiley');
+    expect(titleForRoute('/checkout', 'is')).toBe('Ganga frá pöntun — Orange Smiley');
+    expect(titleForRoute('/cart', 'en')).toBe('Cart — Orange Smiley');
   });
 
   test('a detail route inherits its list title until the view supplies one', () => {
     expect(titleForRoute('/news/:slug', 'is')).toBe(titleForRoute('/news', 'is'));
-    expect(titleForRoute('/projects/:id', 'en')).toBe(titleForRoute('/projects', 'en'));
+    expect(titleForRoute('/verkefni/:id', 'en')).toBe(titleForRoute('/verkefni', 'en'));
   });
 
   test('an unknown route falls back to the site name, never to empty', () => {
-    expect(titleForRoute('/nope', 'is')).toBe('Halli Smiley');
-    expect(titleForRoute(undefined, 'en')).toBe('Halli Smiley');
-    expect(titleForRoute(null, 'is')).toBe('Halli Smiley');
+    expect(titleForRoute('/nope', 'is')).toBe('Orange Smiley');
+    expect(titleForRoute(undefined, 'en')).toBe('Orange Smiley');
+    expect(titleForRoute(null, 'is')).toBe('Orange Smiley');
   });
 
   test('an unknown locale is treated as English, not as a crash', () => {
-    expect(titleForRoute('/cart', 'de')).toBe('Cart — Halli Smiley');
+    expect(titleForRoute('/cart', 'de')).toBe('Cart — Orange Smiley');
   });
 });

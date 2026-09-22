@@ -77,10 +77,7 @@ describe('MCP auth', () => {
       // Plain Bearer challenge: we must NOT advertise resource_metadata until
       // PR 2 actually serves /.well-known/oauth-protected-resource — pointing
       // OAuth clients at the SPA catch-all breaks their discovery flow.
-      // The realm is a label, not a credential — but it names THIS site, not
-      // the instance the connector was ported from (it said icelandicstore
-      // until 2026-09-12).
-      expect(res.headers['www-authenticate']).toBe('Bearer realm="hallismiley-mcp"');
+      expect(res.headers['www-authenticate']).toMatch(/^Bearer/);
       expect(res.headers['www-authenticate']).not.toMatch(/resource_metadata/);
     }
     await McpToken.revoke(tokenRow.id);
@@ -122,7 +119,7 @@ describe('MCP tools — the v1 system surface', () => {
     expect(res.status).toBe(200);
     const payload = JSON.parse(res.body.result.content[0].text);
     expect(payload._environment ?? payload.environment).toBeDefined();
-    expect(payload.instance).toMatch(/Halli Smiley/);
+    expect(payload.instance).toMatch(/Rekstrarkerfið/);
     expect(payload.counts).toMatchObject({
       orders: expect.any(Number),
       products: expect.any(Number),

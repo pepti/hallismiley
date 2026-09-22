@@ -1,16 +1,16 @@
 # API Reference — public + auth surface
 
-Base URL: `https://www.hallismiley.is` (in production `server/app.js` 301s every
-other host to the host part of `APP_URL`).
+Base URL: the deployed origin. `server/app.js` still pins
+`CANONICAL_HOST = 'www.hallismiley.is'` (the domain cutover to orangesmiley.is
+is tracked in CLAUDE.md); this repo has no deployed instance yet.
 
 This document covers the **public and authentication** endpoints in detail and
 ends with an **inventory of every mounted router** so the admin surface is at
-least findable. The admin API (28 router mounts in `server/app.js`; 298 route declarations across
-`server/routes/*.js`, 68 of them the books, 58 the party module — counted 2026-09-12 by summing
-`grep -cE '^\s*router\.(get|post|put|patch|delete)\('` over `server/routes/*.js`)
-is documented by its route files and the feature docs they point at, not here.
-Read 2026-09-12 against `server/app.js` and `server/routes/`; the previous
-version dated from 2026-04-22.
+least findable. The admin API (207 route declarations across the `/api/v1/admin/*`
+routers, of 353 in `server/routes/` altogether — counted 2026-09-11 by
+summing `grep -cE '^\s*router\.(get|post|put|patch|delete)\('` over
+`server/routes/*.js`) is documented by its route files and the feature docs
+they point at, not here. Read 2026-09-11 against `server/app.js` and `server/routes/`.
 
 Auth endpoints are mounted at `/auth`; everything else is under `/api/v1/`.
 Authenticated endpoints require a valid session cookie (`auth_session`)
@@ -25,32 +25,30 @@ no JWT layer). The `auth_session` httpOnly, `SameSite=Strict` cookie is set by
 the server on login and cleared on logout — the browser handles it
 automatically. No tokens are stored in the frontend.
 
-### CSRF — required on every session-authenticated write
+### CSRF — required on every state-changing request
 
-Every session-authenticated write route that changes state (POST/PUT/PATCH/DELETE,
-including `POST /auth/logout`) carries `csrfProtect` (`server/middleware/csrf.js`).
-Three session-gated POSTs omit it BY DESIGN because they write nothing —
-`/api/v1/admin/customers/import/preview`, `/api/v1/admin/customers/send-invites/render`
-and `/api/v1/admin/shop/products/import/preview` (each says so in its route
-comment). Fetch a token first and send it back as the `X-CSRF-Token` header:
+Every session-authenticated write route (POST/PUT/PATCH/DELETE, including
+`POST /auth/logout`) carries `csrfProtect` (`server/middleware/csrf.js`). Fetch a token first and
+send it back as the `X-CSRF-Token` header:
 
 ```
 GET /api/v1/csrf-token            →  200 { "token": "…" }
 ```
 
-The token is bound to a `SameSite=Strict` cookie (`secure` in production). A
-missing or stale token answers `403` in the standard error envelope. Routes
-that deliberately omit `csrfProtect`: the bearer-only MCP endpoint
-(`docs/mcp.md`), the anonymous contact form, the analytics beacon and the client
-error beacon (`POST /api/v1/events`), the Stripe webhook (signature-verified
-instead), and the read-only routers.
+The token is bound to a `SameSite=Strict` cookie (`secure` in production).
+A missing or stale token answers `403` in the standard error envelope. Routes
+that deliberately omit `csrfProtect` (read 2026-09-11, `grep -L csrfProtect`):
+the bearer-only MCP endpoint (`docs/mcp.md`), the public lead form
+`POST /api/v1/contact` and the analytics beacon `POST /api/v1/analytics/collect`
+(both anonymous, rate-limited, and write only their own row), and the
+read-only routers. Note the asymmetry: the client-error beacon
+`POST /api/v1/events/collect` DOES carry `csrfProtect`.
 
 ### POST /auth/login
 
 Authenticate and start a session (or a 2FA challenge).
 
-**Rate limit:** 10 requests / 15 min per IP — the same bucket also covers
-`/auth/login/totp` and the four OAuth routes.
+**Rate limit:** 50 requests / 15 min per IP.
 
 **Request body:**
 ```json
@@ -63,14 +61,15 @@ Authenticate and start a session (or a 2FA challenge).
 ```
 Sets the `auth_session` cookie.
 
-**Response `200 OK`** — password accepted, account is 2FA-protected (admins;
-`mfaService.isProtected`):
+**Response `200 OK`** — password accepted, account is 2FA-protected
+(admins and every holder of the `accounts` view — `mfaService.isProtected`):
 ```json
 { "mfaRequired": true, "challengeId": "uuid", "expiresInMs": 300000 }
 ```
 No cookie is set on this branch. Complete the login with
-`POST /auth/login/totp` `{ "challengeId": "…", "code": "123456" }`, which sets
-the cookie and answers `{ "usedRecoveryCode": false, "recoveryCodesRemaining": n, "user": { … } }`.
+`POST /auth/login/totp` `{ "challengeId": "…", "code": "123456" }` (same 50/15 min
+limiter), which sets the cookie and answers
+`{ "usedRecoveryCode": false, "recoveryCodesRemaining": n, "user": { … } }`.
 
 **Errors:** `400` missing fields · `401` invalid credentials · `401` account
 temporarily locked (after 5 failed attempts) · `403` account disabled ·
@@ -106,22 +105,26 @@ Use this on page load to restore session state.
 
 ---
 
-### Other `/auth` routes (`server/routes/authRoutes.js`, limits read 2026-09-12)
+### Other `/auth` routes (`server/routes/authRoutes.js`)
 
 | Route | Gate / limiter |
 |---|---|
-| `POST /auth/signup` | 15 / 10 min per IP, validated body |
+| `POST /auth/signup` | 75 / 10 min per IP, validated body |
 | `POST /auth/verify-email` | — |
-| `POST /auth/resend-verification` | 1 / minute per IP |
-| `POST /auth/forgot-password`, `POST /auth/reset-password` | 5 / hour per IP |
+| `POST /auth/resend-verification` | 5 / minute per IP |
+| `POST /auth/forgot-password`, `POST /auth/reset-password` | 25 / hour per IP |
 | `POST /auth/totp/setup`, `/totp/confirm`, `/totp/disable` | session + CSRF |
-| `GET /auth/check-username/:username`, `GET /auth/check-email/:email` | 30 / hour per IP |
-| `POST /auth/party-magic-login` | 10 / 15 min per IP (party module) |
-| `GET /auth/google`, `/google/callback`, `/facebook`, `/facebook/callback` | `socialLoginGate` — answer `404` unless `SOCIAL_LOGIN_ENABLED=true`; then the login limiter |
+| `GET /auth/check-username/:username`, `GET /auth/check-email/:email` | 150 / hour per IP |
+| `POST /auth/party-magic-login` | 50 / 15 min per IP (hidden party module) |
+| `GET /auth/google`, `/google/callback`, `/facebook`, `/facebook/callback` | `socialLoginGate` — answer `404` unless `SOCIAL_LOGIN_ENABLED=true` (OFF on this instance: no OAuth app configured) |
 
 ---
 
 ## Projects
+
+The projects module is the base's portfolio feature. On this site it is a
+hidden surface (`/verkefni` is in `server/config/publicSurface.js`), but the
+API is fully functional.
 
 ### GET /api/v1/projects
 
@@ -133,7 +136,7 @@ List all projects. Supports filtering and pagination.
 | `featured` | `true` \| `false` | — | Filter by featured status |
 | `year` | integer 1900–2100 | — | Filter by year |
 | `limit` | integer 1–100 | `20` | Max results per page |
-| `offset` | integer 0–1 000 000 | `0` | Number of results to skip |
+| `offset` | integer ≥ 0 | `0` | Number of results to skip |
 
 **Response `200 OK`:** array of project objects:
 ```json
@@ -151,15 +154,14 @@ List all projects. Supports filtering and pagination.
 ### GET /api/v1/projects/:id
 
 **Errors:** `404` not found. Sub-resources: `GET /:id/media`, `/:id/sections`,
-`/:id/videos`, plus their admin writes, `PATCH /:id/cover` and three
-`…/reorder` endpoints (25 routes in `projectRoutes.js`).
+`/:id/videos` (see `projectRoutes.js` for the matching admin writes).
 
 ### POST /api/v1/projects
 
 Create a project. **Requires a session with role `admin` or `moderator`, plus
 `X-CSRF-Token`.**
 
-**Rate limit:** 90 write requests / 15 min per IP (the write limiter; see below).
+**Rate limit:** 450 write requests / 15 min per IP.
 
 ```json
 {
@@ -193,31 +195,29 @@ Same gate as POST. **Response:** `204 No Content`. **Errors:** `401` · `403` ·
 
 ---
 
-## Contact
+## Contact (the lead form, `/hafa-samband`)
 
 ### POST /api/v1/contact
 
-Submit a contact form message. Validates, answers the visitor, then (since
-2026-09-12) e-mails the submission to every verified, enabled admin via Resend
-with Reply-To set to the visitor (`emailService.sendContactNotification`; the
-same recipient rule as booking notices) and records a no-PII analytics event.
-Delivery is best-effort after the response: a mail failure is a pino error line
-carrying the submission id only, never a 500. With no `RESEND_API_KEY` the send
-is a logged no-op. (Until 2026-09-12 the handler was a stub that delivered
-nothing.) orangesmiley additionally stores the submission as a lead.
+Submit an enquiry. It is emailed to the company inbox AND stored as a row in
+`leads` (migration 097, worked at `/admin/leads`) — `/personuvernd` §3 + §6
+describe that store and must change together with it.
 
-**Rate limit:** 10 / hour per IP (`contactRoutes.js`).
+**Rate limit:** 5 / hour per IP (`contactRoutes.js`, `LEAD_RATE_LIMIT`).
 
 ```json
-{ "name": "≤100", "email": "≤200", "message": "10–2000 chars", "topic": "optional", "website": "honeypot — leave empty" }
+{ "name": "≤100", "email": "≤200", "message": "10–2000 chars",
+  "company": "optional ≤150", "phone": "optional ≤40",
+  "current_platform": "optional — shopify|wix|wordpress|woocommerce|squarespace|dk|regla|payday|none|other (anything else is stored as other)",
+  "website": "honeypot — leave empty" }
 ```
 
 **Response `200 OK`:** `{ "message": "<localised confirmation>" }` (a filled
 honeypot also answers 200 and is silently discarded).
 
-**Errors:** `400 { "errors": ["<localised message>", …] }` — **the one endpoint
-that does not use the standard envelope**; it returns the full list of
-validation failures as an array.
+**Errors:** `400 { "errors": ["<localised message>", …] }` — **this is the one
+endpoint that does not use the standard envelope**; it returns the full list
+of validation failures as an array.
 
 ---
 
@@ -228,84 +228,85 @@ Every other error returns the envelope from `server/middleware/errorHandler.js`:
 { "error": "Human-readable message", "code": 400 }
 ```
 
-## Rate limits (`express-rate-limit`)
-
-Skip rules differ by file, and the difference matters when developing locally: the app-level limiters in `server/app.js` (global, writes) and the shop/events/change-request/analytics ones skip when `NODE_ENV` is `test` **or** `development`; the auth (`authRoutes.js`), MCP (`mcpRoutes.js`), party (`partyRoutes.js`) and contact (`contactRoutes.js`) limiters skip under `test` **only**, so a dev server enforces them.
+## Rate limits (`express-rate-limit`, all skipped when `NODE_ENV` is `test` or `development`)
 
 | Scope | Limit | Where |
 |-------|-------|-------|
-| Global (all endpoints; static-asset GETs exempt) | 400 / 15 min per IP | `server/app.js` |
-| Writes (POST/PUT/PATCH/DELETE on `/api/v1/projects`, `/api/v1/party`, `/api/v1/admin/shop`, `/api/v1/admin/bins`, `/api/v1/admin/bookkeeping`) | 90 / 15 min per IP | `server/app.js` |
-| Auth login (+ TOTP step + OAuth routes) | 10 / 15 min per IP | `authRoutes.js` |
-| Signup | 15 / 10 min per IP | `authRoutes.js` |
-| Password reset (forgot + reset) | 5 / hour per IP | `authRoutes.js` |
-| Resend verification | 1 / minute per IP | `authRoutes.js` |
-| Username/email availability checks | 30 / hour per IP | `authRoutes.js` |
-| Contact | 10 / hour per IP | `contactRoutes.js` |
-| Party: access request / approval action / e-mail blast / uploads | 5 per h · 20 per h · 10 per h · 1000 / 15 min per IP | `partyRoutes.js` |
-| Shop: checkout / discount lookup | 10 / 15 min · 30 / 15 min per IP | `shopRoutes.js` |
-| Client error beacon (`POST /api/v1/events`) | 20 / minute per IP | `eventRoutes.js` |
-| MCP pre-auth (per IP, before the bearer is checked) | 60 / 15 min | `mcpRoutes.js` |
-| Books PDF/CSV/document downloads (12 GETs) | `docLimiter` — 60 / 15 min per IP | `server/middleware/booksLimiters.js` |
+| Global (all endpoints; static assets exempt by location, `utils/staticAsset.js`) | 2000 / 15 min per IP | `server/app.js` |
+| Writes (POST/PUT/PATCH/DELETE) | 450 / 15 min per IP | `server/app.js` |
+| Auth login (+ TOTP step) | 50 / 15 min per IP | `authRoutes.js` |
+| Signup | 75 / 10 min per IP | `authRoutes.js` |
+| Password reset (forgot + reset) | 25 / hour per IP | `authRoutes.js` |
+| Resend verification | 5 / minute per IP | `authRoutes.js` |
+| Username/email availability checks | 150 / hour per IP | `authRoutes.js` |
+| Contact / lead form | 5 / hour per IP | `contactRoutes.js` |
+| Shop checkout | 50 / 15 min per IP | `shopRoutes.js` |
+| Client error beacon / analytics beacon | 100 / 300 per window | `eventRoutes.js`, `analyticsRoutes.js` |
 | MCP (per token) | 300 / 15 min (`MCP_RATE_LIMIT_MAX`) | `mcpRoutes.js` |
-| Self-update apply/rollback | 10 / 15 min | `systemRoutes.js` |
+| Self-update apply/rollback | 10 / window | `systemRoutes.js` |
 
 Rate-limit responses use HTTP `429` with standard `RateLimit-*` headers.
 
 ---
 
-## Router inventory (`server/app.js` mounts, in mount order, read 2026-09-12)
+## Router inventory (`server/app.js` mounts, in mount order)
 
 Gates are the router's own (`requireAuth`, `requireRole`, `requireView(id)` —
 view ids in `server/auth/adminViews.js`). Most `/api/v1/admin/*` routers are
-mounted before the generic `/api/v1/admin` router; `mcp-tokens` and `events`
-are mounted after it (their inline comments claim otherwise) — it works only
-because `adminRoutes.js` has no handler on those paths.
+mounted before the generic `/api/v1/admin` router, but `mcp-tokens` and
+`events` are mounted AFTER it (their inline comments claim otherwise) — it
+works today only because `adminRoutes.js` has no handler on those paths.
 
 | Mount | File | Gate | Feature doc |
 |---|---|---|---|
+| `/api/v1/seller-publish` | `sellerPublishRoutes.js` | mounted BEFORE `express.json` (raw body); `INSTANCE_ROLE=public` + `SELLER_PUBLISH_SECRET`, else 404; HMAC signature (401), shape (400), newer-than-last (409); own limiter 30/15 min | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/auth` | `authRoutes.js` | per route (above) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
-| `/api/v1/contact` | `contactRoutes.js` | public, 10/h (stub) | — |
+| `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |
 | `/api/v1/users` | `userRoutes.js` | session | — |
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
-| `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (TEST stacks) | — |
-| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `orders` / `sales` views per sub-path | — |
+| `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (admin, and non-prod or switch on) | — |
+| `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |
+| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface) | — |
 | `/api/v1/admin/analytics` | `analyticsAdminRoutes.js` | `analytics` view | — |
 | `/api/v1/admin/general-settings` | `adminGeneralSettingsRoutes.js` | `general` view | — |
-| `/api/v1/admin/discounts` | `adminDiscountRoutes.js` | `discounts` view | — |
-| `/api/v1/admin/background` | `adminBackgroundRoutes.js` | `background` view | — |
+| `/api/v1/admin/discounts` | `adminDiscountRoutes.js` | admin views (hidden) | — |
+| `/api/v1/admin/background` | `adminBackgroundRoutes.js` | admin (hidden) | — |
 | `/api/v1/admin/change-requests` | `adminChangeRequestRoutes.js` | `feedback` view | — |
 | `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
 | `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
-| `/api/v1/admin/bins` | `adminBinsRoutes.js` | `bins` view | — |
-| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view | — |
+| `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
+| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view | `docs/SALES-STAFF.md` |
 | `/api/v1/admin/customer-notes` | `adminCustomerNotesRoutes.js` | `customers` view | — |
-| `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (68 routes; `GET /settings?currency=` also returns `fx_freshness` per currency in use) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views for reads; **admin for every write** (the one non-admin POST, `/expenses/preview-vat`, posts nothing) | `docs/BOOKKEEPING-SYSTEM.md` |
+| `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (76 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views; admin for issuing | `docs/BOOKKEEPING-SYSTEM.md` |
+| `/api/v1/admin/handbok` | `salesGuidesRoutes.js` | `handbok` view; admin/moderator edit | `docs/SALES-STAFF.md` |
+| `/api/v1/admin/leads` | `leadsRoutes.js` | `leads` view; delete + CSV admin | `docs/SALES-STAFF.md` |
+| `/api/v1/admin/markadur` | `marketRoutes.js` | `markadur` view; status PATCH admin/moderator | [ARCHITECTURE §7](ARCHITECTURE.md#7-markaður--market-research-and-the-prospect-list) · [HISTORY](HISTORY.md#markadur) |
+| `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
+| `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#migrations-100-102) |
+| `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
-| `/api/v1/content` | `contentRoutes.js` | public reads; admin/moderator writes | — |
+| `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
+| `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me`; per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
-| `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | RUNBOOK (Event log) |
+| `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
 | `/api/v1/admin/mcp-tokens` | `mcpAdminRoutes.js` | admin | `docs/mcp.md` |
-| `/api/v1/admin/events` | `adminEventRoutes.js` | admin | RUNBOOK (Event log) |
-| `/api/v1/news` | `newsRoutes.js` | public reads; admin/moderator writes | — |
-| `/api/v1/party` | `partyRoutes.js` (58 routes) | party module | — |
-| `/api/v1/shop` | `shopRoutes.js` | public storefront; Stripe checkout | `docs/SHOP_REDESIGN.md` |
-| `/api/v1/system` | `systemRoutes.js` | `/version` and `/updates` = `updates` view; writes admin + CSRF; **the whole router answers 404 while `modules.selfUpdate.enabled` is off — which it is here** | `docs/SELF-UPDATE.md` |
+| `/api/v1/admin/events` | `adminEventRoutes.js` | admin (`requireRole`) | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
+| `/api/v1/ambience` | `ambienceRoutes.js` | public, always 200 (`{available:false}` on failure) | [ARCHITECTURE §4](ARCHITECTURE.md#4-themes-scenes-ambience) · [HISTORY](HISTORY.md#scene-engine) |
+| `/api/v1/news` | `newsRoutes.js` | public reads (hidden surface) | — |
+| `/api/v1/party` | `partyRoutes.js` | party module (hidden) | — |
+| `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface) | — |
 
-Root-level routes outside the routers: `GET /health` (liveness, no DB),
-`GET /ready` (DB + pool + breaker; `503` when not ready), `GET /metrics`
-(`Authorization: Bearer <METRICS_TOKEN>`; localhost-only in production when
-unset), `POST /csp-report`, `POST /api/v1/shop/webhook` (Stripe, raw body,
-signature-verified), `GET /api/v1/csrf-token`, the sitemap and IndexNow key
-routes, and the SPA catch-all.
+Root-level operational routes: `GET /health` (liveness, no DB), `GET /ready`
+(DB + breaker + memory, `503` when not ready), `GET /metrics`
+(`Authorization: Bearer <METRICS_TOKEN>`), `POST /csp-report`.
 
 ---
 
 ## Admin setup
 
 After migrating, create the first admin user (writes the row directly with a
-Scrypt hash — no env values to copy):
+scrypt hash — no env values to copy):
 ```bash
 node server/scripts/setup-admin.js <username> <email> <password>
 ```

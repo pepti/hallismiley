@@ -64,10 +64,10 @@ async function navigateToProject(page, name = /Stofan Bakhús/i) {
 
 
 // Click, then wait for the resulting API response itself — never
-// networkidle, which is not a save-completed signal (beacons and polling
-// keep the network busy; worse, idle can arrive while the save is still in
-// flight). Arm waitForResponse BEFORE clicking or a fast response can land
-// in the gap. Ported from icelandicstore #178.
+// `networkidle`, which is not a save-completed signal (analytics beacons and
+// polling keep the network busy; worse, "idle" can arrive while the save is
+// still in flight). Arm waitForResponse BEFORE clicking or a fast response
+// can land in the gap. Ported from icelandicstore #178.
 async function clickAndExpectApi(page, locator, { method, path, status = 200 }) {
   const responded = page.waitForResponse(
     (r) => new URL(r.url()).pathname === path && r.request().method() === method
@@ -75,7 +75,7 @@ async function clickAndExpectApi(page, locator, { method, path, status = 200 }) 
   await locator.click();
   const res = await responded;
   if (res.status() !== status) {
-    throw new Error(method + ' ' + path + ' responded ' + res.status() + ', expected ' + status);
+    throw new Error(`${method} ${path} responded ${res.status()}, expected ${status}`);
   }
   return res;
 }

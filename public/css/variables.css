@@ -1,97 +1,204 @@
 :root {
-  /* Charcoal-mid palette */
-  --bg-base:     #202020;
-  --bg-base-rgb: 32, 32, 32;
-  --bg-surface:  #2A2A2A;
-  --bg-elevated: #303030;
-  --bg-nav:      #141414;
-  --bg-nav-rgb:  20, 20, 20;
-  --bg-hover:    #383838;
-  /* Subtle two-stop tint used to break up flat dark surfaces — gold glow
-     at top, teal glow at bottom. Layered over a solid base color via
-     `background-image: var(--bg-tint); background-color: var(--bg-base);`
-     (or any base var). Same pattern as the /contact hero overlay. */
-  --bg-tint:
-    radial-gradient(ellipse at top, rgba(200, 170, 110, 0.12), transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(11, 196, 227, 0.08), transparent 60%);
+  color-scheme: light;
 
-  --border:       rgba(120, 90, 40, 0.6);
-  --border-dim:   rgba(120, 90, 40, 0.3);
-  --border-light: rgba(200, 170, 110, 0.2);
+  /* ── "classic" = BJART — beige paper, brown ink, orange on the mark ───────
+     Re-hued 2026-09-01 (Halli: less orange, more beige and brown). Bjart was
+     white paper + a dominant orange ramp; the orange did all the work and the
+     page shouted. Now the earth tones carry the page and orange is spent in
+     one place — the emblem — where it says whose site this is.
 
-  --gold:         #C8AA6E;
-  --gold-light:   #F0E6D3;
-  --gold-dark:    #785A28;
-  --gold-glow:    rgba(200, 170, 110, 0.12);
-  --glow-around:  0 0 60px rgba(200, 170, 110, 0.196), 0 0 20px rgba(200, 170, 110, 0.126);
-  --teal:         #0BC4E3;
-  --teal-dim:     rgba(11, 196, 227, 0.12);
+     Token NAMES are inherited from the base (incl. the legacy --gold/--teal
+     aliases) so every var() reference resolves without component edits. The
+     names still say "gold"; the values are brown. Renaming 364 usages to buy
+     a nicer word is not worth the diff.
+
+     Note for anyone reading git history: :root used to be ASH, the warm dark
+     charcoal theme. Ash was not deleted — it lives on as the `ember` theme in
+     themes.css with its values intact.
+
+     Palette discipline (design rules): dominant = the brown ramp, measured on
+     the page (#F2EBE0) and on a card (#FDFAF4):
+       #9C7149  --gold-light   DECORATIVE ONLY (3.64 / 4.14) — rules, washes.
+                               Never a fill under a white label: white on it
+                               is 4.31, which fails AA as text.
+       #7B5533  --gold         THE accent — icons, links, price numerals
+                               (5.56 / 6.32)
+       #4F3722  --gold-dark    accent-as-text, borders, pressed (9.32 / 10.60)
+     sharp accent = the warm near-black (--teal), used sparingly; neutrals =
+     beige, cream and brown-black ink. Every text token clears WCAG AA on both
+     the page and cards:
+       --text-primary   #2A1F17  13.57 / 15.42
+       --text-secondary #574434   7.77 /  8.83
+       --text-muted     #6F5A46   5.50 /  6.25 */
+
+  /* Beige surfaces — the page is warm beige so cream cards lift off it */
+  --bg-base:     #F2EBE0;
+  --bg-base-rgb: 242, 235, 224;
+  --bg-surface:  #FDFAF4;
+  --bg-elevated: #FFFFFF;
+  --bg-nav:      #FDFAF4;
+  --bg-nav-rgb:  253, 250, 244;
+  --bg-hover:    #E8DECE;
+  /* Modal/drawer backdrop. Not a reading surface, so it is a shade rather
+     than a palette colour — but it still rides the token system, because a
+     light page wants a lighter veil than Miðnætti does. */
+  --overlay:     rgba(38, 26, 16, 0.45);
+  /* Bjart is deliberately pattern-free — no tint layer behind content. */
+  --bg-tint:     none;
+
+  /* Hairlines in the ink, not in grey: a neutral-grey rule reads cold and
+     slightly blue against beige. Brown-black at low alpha disappears into the
+     paper the way a hairline should. */
+  --border:       rgba(42, 31, 23, 0.20);
+  --border-dim:   rgba(42, 31, 23, 0.11);
+  --border-light: rgba(42, 31, 23, 0.06);
+
+  /* The brown ramp — light brown, brown, dark brown */
+  --gold:         #7B5533;
+  --gold-light:   #9C7149;
+  --gold-dark:    #4F3722;
+  --gold-glow:    rgba(123, 85, 51, 0.14);
+  --glow-around:  0 0 26px rgba(123, 85, 51, 0.16);
+  /* The sharp accent — warm near-black, rare by design */
+  --teal:         #2A1F17;
+  --teal-dim:     rgba(42, 31, 23, 0.06);
+
+  /* ── The brand mark ──────────────────────────────────────────────────────
+     The emblem is the one thing on the page that stays orange, and it is the
+     reason these tokens exist: the mark used to be drawn with --gold-light /
+     --gold / --gold-dark, so re-hueing the interface to brown would have
+     turned the logo brown with it. "Logo unchanged" is a standing rule, so
+     the mark now has its own ramp. Every theme must define these, and they
+     are the same orange in all of them — a logo does not change colour when
+     the reader picks a different theme. Values match favicon.svg. */
+  --brand-mark-light: #EA580C;
+  --brand-mark:       #C2410C;
+  --brand-mark-dark:  #9A3412;
+
+  /* Accent gradients — shared by CTAs and the hero title fill. Both stops
+     carry --on-accent labels, so both must clear AA against white: #7B5533 is
+     6.58 : 1 and #4F3722 is 11.04 : 1 — more headroom than the orange ramp
+     they replace. The lighter #9C7149 (4.31 : 1) is deliberately NOT a stop:
+     it would fail at the light end of every filled button. */
+  --accent-gradient:     linear-gradient(135deg, #7B5533 0%, #4F3722 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(123, 85, 51, 0.14), rgba(79, 55, 34, 0.14));
+  --hero-title-glow: none;
 
   /* Legacy aliases used in components */
-  --accent-amber:     #C8AA6E;
-  --accent-amber-dim: rgba(200, 170, 110, 0.12);
-  --accent-blue:      #0BC4E3;
-  --accent-blue-dim:  rgba(11, 196, 227, 0.12);
+  --accent-amber:     #7B5533;
+  --accent-amber-dim: rgba(123, 85, 51, 0.10);
+  --accent-blue:      #2A1F17;
+  --accent-blue-dim:  rgba(42, 31, 23, 0.06);
 
-  --text-primary:   #F0E6D3;
-  --text-secondary: #A9B4C0;
-  --text-muted:     #5B5A56;
+  /* Ink — brown-black rather than neutral black: true black on beige reads as
+     a hole punched in the paper. */
+  --text-primary:   #2A1F17;
+  --text-secondary: #574434;
+  --text-muted:     #6F5A46;
 
-  /* Status colours — completed into a theme-aware set (ported shape from
-     icelandicstore #196/#192; values re-measured for the base's six dark
-     themes: warning #E8A33D clears 7.55:1 on the lightest bg #202020).
-     --danger aliases --error: components had var(--danger, hex) fallbacks
-     against a token that never existed. -dim washes are for pills/rows and
-     never carry text alone. */
-  --success:     #4caf78;
-  --success-dim: rgba(76, 175, 120, 0.16);
-  --error:       #e05c5c;
-  --error-dim:   rgba(224, 92, 92, 0.16);
-  --danger:      #e05c5c;
-  --warning:     #E8A33D;
-  --warning-dim: rgba(232, 163, 61, 0.16);
+  /* ── Cross-theme contract tokens (added 2026-08-20 with the 5-theme set) ──
+     --on-accent  the label colour ON a filled accent surface (orange or ink
+                  fill). NOT the same as a background token: `midnight` fills
+                  with bright #FB923C, which needs a BLACK label, while every
+                  light theme needs white. Components that used to say
+                  `color: var(--bg-nav)` on an orange fill say --on-accent now
+                  — under a dark theme --bg-nav is near-black, which on an
+                  orange fill is the wrong side of the contrast line.
+     --accent-ink the accent colour that is safe as TEXT on the page
+                  background. --gold-light is decorative-only in light themes
+                  (3.41 : 1), so accent-coloured copy must reach for this.
+     --hero-gradient  the hero background (see home.css). Replaced the
+                  waterfall video as the default hero — Halli, 2026-08-20.
+     --accent-hover  the fill a filled control takes on hover. It must keep
+                  --on-accent legible, which rules out simply reaching for
+                  --gold-light: white on #EA580C is 3.56 : 1.
+     --ambient-opacity  gates the drifting ember wash in main.css. The wash is
+                  tuned for a near-black page; on paper it reads as a dirty
+                  smudge, so light themes take it to 0. */
+  --on-accent:       #FFFFFF;
+  --accent-ink:      #4F3722;
+  --accent-hover:    #4F3722;
+  --ambient-opacity: 0;
+
+  /* ── Iceland scene grading (engine: public/js/scenes/, iceland-scene.css).
+     Three themes = three lights on the same photographs. Bjart is the daylight
+     reference: a scrim that darkens enough for white hero text (bottom-heavy
+     so scenes melt into the page). --scene-aurora gates the chunk-3 aurora
+     layer: only themes dark enough to sell a night sky.
+
+     The filter is a touch of sepia since the re-hue, so the photographs sit
+     in the same warm light as the page rather than looking colour-corrected
+     for a different site. */
+  --scene-filter: sepia(0.10) saturate(0.97);
+  --scene-scrim: linear-gradient(180deg, rgba(42, 31, 23, 0.34) 0%, rgba(42, 31, 23, 0.18) 40%, rgba(42, 31, 23, 0.52) 100%);
+  --scene-scrim-strength: 1;
+  /* 0.65, not the 0.52 the scrim uses: the credit chip is 11px caption text
+     that can land on a white sky, and at 0.52 it composited to 3.24 : 1
+     there. 0.65 clears AA (4.86) over pure white, so it no longer relies
+     on the photograph being dark under it. */
+  --scene-chip-bg: rgba(42, 31, 23, 0.65);
+  --scene-chip-fg: #FDFAF4;
+  --scene-aurora: 0;
+  --hero-gradient:   linear-gradient(155deg, #FDFAF4 0%, #F2EBE0 38%, #E6D7C0 70%, #D8C3A5 100%);
+  --bg-gradient:     none;
+
+  /* Status colours — a complete, theme-aware set (ported shape from
+     icelandicstore #196/#192; VALUES re-measured for this palette). The
+     strong colour must clear 4.5:1 as text on --bg-base AND --bg-surface;
+     the -dim washes are for pills/rows and never carry text alone.
+     --danger aliases --error: components had grown var(--danger, hex)
+     fallbacks against a token that never existed, so every one silently
+     took its fallback. RE-MEASURED for the beige page 2026-09-01 — the old
+     values were tuned against #FAFAFA and success fell to 4.21 on beige, so
+     all three darkened a step (page/card): success 5.48/6.23 · error
+     6.10/6.93 · warning 6.04/6.87. */
+  --success:     #166B49;
+  --success-dim: rgba(22, 107, 73, 0.12);
+  --error:       #a8221b;
+  --error-dim:   rgba(168, 34, 27, 0.12);
+  --danger:      #a8221b;
+  --warning:     #7F4C00;
+  --warning-dim: rgba(127, 76, 0, 0.14);
 
   /* TEST-environment affordances (test-env.css + the theme switcher's TEST row) */
   --test-blue:     #2f6fed;
   --test-blue-rgb: 47, 111, 237;
   --test-glow:     0 0 0 2px rgba(47, 111, 237, 0.55), 0 0 16px 2px rgba(47, 111, 237, 0.45);
 
+  /* Sticky top nav height (.lol-nav in layout.css). Sticky/fixed offsets that
+     must clear the header derive from this token (ice #204). */
+  --nav-h: 56px;
+
   /* Admin-nav row tints — the 12 colours an admin can assign to a sidebar line to
      group related lines (AdminSidebar.js TINT_KEYS). Each token is used twice: as
      a low-alpha wash behind the row and at full chroma for the 3px identity rail.
-     EVERY theme in this repo is dark (classic here plus the five in themes.css),
-     so one set covers all of them and lives here. They must be LIGHT hues: on a
-     dark surface lightness delta is what the eye reads first, so a dark hue on a
-     dark surface just looks like a smudge. The values arrived from icelandicstore
-     — whose :root IS a white surface — as its dark-on-light set under :root with
-     these light-on-dark ones under html[data-theme]. That mapping is wrong here:
-     classic carries no data-theme attribute, so the DEFAULT theme took the
-     white-surface values and its tints were near-invisible (brown/rose/slate all
-     composited under 2:1 against --bg-surface). Do not reintroduce a second set
-     unless a genuinely light theme ships.
+
+     These are the DARK-ON-LIGHT values, because :root is now a white surface:
+     saturated mid-tones that composite to pale washes on white, at a lower
+     alpha because a light surface needs less wash to read. The light-on-dark
+     counterparts live under the `ember` and `midnight` themes in themes.css.
+     (Before 2026-08-20 the mapping was the other way round — :root was Ash.
+     Whoever adds a sixth theme: a dark theme MUST bring its own tint block, or
+     it inherits these and its sidebar tints go near-invisible.)
 
      Hues are spaced for SEPARATION rather than picked to match the status-pill
-     inks: at this alpha the pill red/amber (#c0392b/#b45309) composite only ~7
-     apart on white, which is too close to group by. Red stays --error; the rest
-     are spread out.
-
-     Ordered round the wheel. brown and slate are intentionally muted: at twelve
-     tints the hues no longer fit round the circle, so those two separate by
-     CHROMA rather than hue. slate keeps enough chroma to stay clear of
-     --bg-hover (measured) — a neutral grey would read as a hovered row. */
-  --nav-tint-red:     #F59289;
-  --nav-tint-rose:    #FDA4AF;
-  --nav-tint-brown:   #D2A679;
-  --nav-tint-amber:   #F0C868;
-  --nav-tint-lime:    #A3E635;
-  --nav-tint-green:   #5EE08F;
-  --nav-tint-teal:    #5FD6D0;
-  --nav-tint-slate:   #A8B3C4;
-  --nav-tint-blue:    #93B8FA;
-  --nav-tint-violet:  #CBB6F2;
-  --nav-tint-fuchsia: #F0ABFC;
-  --nav-tint-pink:    #F79AD3;
-  --nav-tint-a:       26%;
+     inks: at this alpha the pill red/amber composite only ~7 apart on white,
+     which is too close to group by. Ordered round the wheel; brown and slate
+     are intentionally muted — at twelve tints the hues no longer fit round the
+     circle, so those two separate by CHROMA rather than hue. */
+  --nav-tint-red:     #c0392b;
+  --nav-tint-rose:    #9f1239;
+  --nav-tint-brown:   #78350f;
+  --nav-tint-amber:   #ca8a04;
+  --nav-tint-lime:    #4d7c0f;
+  --nav-tint-green:   #15803d;
+  --nav-tint-teal:    #0891b2;
+  --nav-tint-slate:   #475569;
+  --nav-tint-blue:    #1d4ed8;
+  --nav-tint-violet:  #7c3aed;
+  --nav-tint-fuchsia: #a21caf;
+  --nav-tint-pink:    #db2777;
+  --nav-tint-a:       18%;
 
   /* Spacing scale */
   --sp-1:  4px;
@@ -103,21 +210,24 @@
   --sp-7:  48px;
   --sp-8:  64px;
 
-  /* Typography */
-  --font-display: 'Cinzel', 'Georgia', serif;
-  --font-sans:    'Barlow', 'Inter', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  /* Typography — Barlow carries the quiet voice; Cinzel remains available to
+     the alternate themes (editorial). Fallback stacks end in bare generic
+     families — no named default fonts (design rule). */
+  --font-display: 'Barlow', sans-serif;
+  --font-sans:    'Barlow', 'Barlow Condensed', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
 
-  /* Sharp corners — LoL aesthetic */
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 4px;
+  /* Soft corners */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  /* Shadows */
-  --shadow-card:  0 4px 24px rgba(0,0,0,0.6), 0 1px 4px rgba(0,0,0,0.4);
-  --shadow-modal: 0 16px 64px rgba(0,0,0,0.85);
-  --shadow-gold:  0 0 24px rgba(200,170,110,0.2);
+  /* Shadows — low and matte. Ink-based, not black-on-black: these are the
+     values for a white page, and the dark themes override them. */
+  --shadow-card:  0 1px 3px rgba(42, 31, 23, 0.10), 0 1px 2px rgba(42, 31, 23, 0.06);
+  --shadow-modal: 0 16px 56px rgba(42, 31, 23, 0.22);
+  --shadow-gold:  0 0 20px rgba(123, 85, 51, 0.18);
 
   /* Transitions */
   --transition: 200ms ease;

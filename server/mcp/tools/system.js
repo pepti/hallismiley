@@ -5,8 +5,8 @@
 // tool tags its payload with the same value (envTag.js).
 //
 // Scope note (ENHANCEMENTS #13, approved 2026-08-22): v1 ships system tools
-// only. Leads are deliberately NOT queryable — this instance stores no lead
-// rows (email-only by design; the leads table is a Job-3 deferral), and
+// only. Leads are deliberately NOT queryable yet — rows exist since migration
+// 097 (2026-09-07), but a leads tool is a separate Halli sign-off — and
 // customer/order detail tools wait for a real need.
 const db = require('../../config/database');
 const { env } = require('../envTag');
@@ -15,7 +15,7 @@ const tools = [
   {
     name: 'environment_info',
     scope: 'read',
-    description: 'Which deployment this connector talks to (test or production), with instance totals. Call this first when in doubt about which environment you are connected to.',
+    description: 'Which Rekstrarkerfið deployment this connector talks to (test or production), with instance totals. Call this first when in doubt about which environment you are connected to.',
     inputSchema: { type: 'object', properties: {}, required: [] },
     async handler() {
       const { rows } = await db.query(
@@ -27,7 +27,7 @@ const tools = [
       return {
         environment: env(),
         app_url: process.env.APP_URL || null,
-        instance: 'Halli Smiley (base engine)',
+        instance: 'Rekstrarkerfið — Orange Smiley ehf.',
         counts: rows[0],
         server_time: new Date().toISOString(),
         access: (process.env.MCP_ALLOWED_SCOPES || 'read'),

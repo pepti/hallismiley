@@ -1,11 +1,11 @@
 {
-  "name": "Halli Smiley",
-  "short_name": "Halli",
-  "description": "Portfolio of Halli — Icelandic carpenter and computer scientist.",
+  "name": "Orange Smiley",
+  "short_name": "Orange Smiley",
+  "description": "Orange Smiley — íslenskt hugbúnaðarhús knúið gervigreind. Smíðar hugbúnað fyrir lítil og meðalstór fyrirtæki.",
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#010A13",
-  "background_color": "#010A13",
+  "theme_color": "#E8853D",
+  "background_color": "#161412",
   "icons": [
     {
       "src": "/favicon.svg",

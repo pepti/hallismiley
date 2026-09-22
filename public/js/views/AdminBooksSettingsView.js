@@ -1,15 +1,12 @@
 // AdminBooksSettingsView (/admin/books/settings) — the setup the readiness banner
-// keeps asking for. Ported from orangesmiley (2026-09-07) on 2026-09-12 and
-// narrowed to what THIS base's Setting.updateBookkeepingSettings accepts: no
-// Peppol party block, no IBAN/BIC, and the chart confirmation is a date only
-// (orangesmiley's migration 095 added the note and the "who"; the base has
-// neither column, so this screen does not pretend to record them).
+// keeps asking for.
 //
 // Three things gate the rest of the books, in the order they block:
 //
 //   1. Útgefandi       name, kennitala, VSK-númer — what makes an invoice legally
 //                      valid. Nothing can be issued until this is complete.
-//   2. Bókhaldslykill  the chart of accounts, confirmed by a person. The chart is
+//   2. Bókhaldslykill  the chart of accounts, confirmed by a person WITH A NOTE
+//                      saying what was reviewed and against what. The chart is
 //                      rendered above the button so confirming is a reading act,
 //                      not a clicking act: a code changed after entries exist
 //                      means running two charts, so the cheap moment is now.
@@ -18,9 +15,9 @@
 //                      worst kind), so rates are entered here or via `books:fx`.
 //                      Freshness is shown per currency IN USE — USD as loudly as EUR.
 //
-// Not a sidebar item: reached from the overview, so it needs no admin view id.
-// Reads ride the `books` view; writes are admin-only on the server, and the
-// forms are disabled for a reader.
+// Not a sidebar item: reached from the readiness banner and the overview, so it
+// needs no admin view id. Reads ride the `books` view; writes are admin-only on
+// the server, and the forms are disabled for a reader.
 import { isAuthenticated, canSeeView, isAdmin } from '../services/auth.js';
 import {
   fetchBooksSettings, updateBooksSettings, setFxRate, fetchAccounts,
@@ -38,6 +35,10 @@ const FX_CURRENCIES = ['EUR', 'USD', 'GBP', 'DKK'];
 // Setting.updateBookkeepingSettings accepts — do not add one the server does not.
 const SELLER_TEXT_FIELDS = [
   'seller_name', 'seller_kennitala', 'seller_vat_number', 'seller_address',
+  // The address as PARTS plus Peppol addressing and bank details — what a
+  // machine-readable invoice (EN 16931) needs on top of the printed block.
+  'seller_street', 'seller_city', 'seller_postal_zone', 'seller_country',
+  'seller_endpoint_id', 'seller_iban', 'seller_bic',
   'invoice_note', 'municipality', 'accountant_name', 'accountant_email',
 ];
 
@@ -161,6 +162,18 @@ export class AdminBooksSettingsView {
             <label class="books-form__wide">${escHtml(t('adminBooks.settings.sellerAddress'))}
               <textarea name="seller_address" rows="2" maxlength="400" ${ro}>${escHtml(s.seller_address || '')}</textarea>
             </label>
+            ${field('seller_street', t('adminBooks.settings.sellerStreet'))}
+            ${field('seller_postal_zone', t('adminBooks.settings.sellerPostalZone'), { maxLen: 20 })}
+            ${field('seller_city', t('adminBooks.settings.sellerCity'), { maxLen: 120 })}
+            ${field('seller_country', t('adminBooks.settings.sellerCountry'), { maxLen: 2 })}
+            ${field('seller_endpoint_id', t('adminBooks.settings.sellerEndpointId'), { maxLen: 50, hint: t('adminBooks.settings.sellerEndpointHint') })}
+            ${field('seller_iban', t('adminBooks.settings.sellerIban'), { maxLen: 34 })}
+            ${field('seller_bic', t('adminBooks.settings.sellerBic'), { maxLen: 11 })}
+            <div class="books-form__wide">
+              <div class="books-banner books-banner--${s.peppol_complete ? 'ok' : 'info'}">
+                ${escHtml(t(s.peppol_complete ? 'adminBooks.settings.peppolOk' : 'adminBooks.settings.peppolMissing'))}
+              </div>
+            </div>
             <label class="books-form__wide">${escHtml(t('adminBooks.settings.invoiceNote'))}
               <input type="text" name="invoice_note" maxlength="400" ${ro} value="${escHtml(s.invoice_note || '')}" />
               <small>${escHtml(t('adminBooks.settings.invoiceNoteHint'))}</small>
@@ -218,7 +231,8 @@ export class AdminBooksSettingsView {
     const confirmed = Boolean(s.coa_confirmed_at);
     const banner = confirmed
       ? `<div class="books-banner books-banner--ok">
-           <strong>${escHtml(t('adminBooks.settings.coaConfirmedAt', { date: s.coa_confirmed_at }))}</strong>
+           <strong>${escHtml(t('adminBooks.settings.coaConfirmedAt', { date: s.coa_confirmed_at, by: s.coa_confirmed_by || '—' }))}</strong>
+           ${s.coa_confirmed_note ? `<div>${escHtml(t('adminBooks.settings.coaNote'))}: ${escHtml(s.coa_confirmed_note)}</div>` : ''}
            ${isAdmin() ? `<div><button type="button" class="btn btn--ghost" data-revoke-coa>${escHtml(t('adminBooks.settings.coaRevoke'))}</button></div>` : ''}
          </div>`
       : `<div class="books-banner books-banner--error">
@@ -258,13 +272,15 @@ export class AdminBooksSettingsView {
       </section>`;
   }
 
-  // The base records the confirmation DATE only (no note, no "who" — those are
-  // orangesmiley's 095 columns), so the prompt is a plain confirm and the audit
-  // trail is the securityLogger line the endpoint writes.
+  // Same shape as AdminPayrollView._confirmYear: a prompt whose answer is the
+  // note, and a refusal if the note is empty. The claim "I checked these" is only
+  // worth something if it says against what.
   async _confirmCoa() {
-    if (!window.confirm(t('adminBooks.settings.coaConfirmPrompt'))) return;
+    const note = window.prompt(t('adminBooks.settings.coaConfirmPrompt'));
+    if (note === null) return;
+    if (!note.trim()) { showToast(t('adminBooks.settings.coaNotePrompt'), 'error'); return; }
     try {
-      const { settings } = await updateBooksSettings({ coa_confirmed_at: isoToday() });
+      const { settings } = await updateBooksSettings({ coa_confirmed_at: isoToday(), coa_confirmed_note: note.trim() });
       this._settings = settings;
       showToast(t('adminBooks.settings.coaConfirmed'), 'success');
       this._paint();
@@ -288,7 +304,7 @@ export class AdminBooksSettingsView {
     const ro = isAdmin() ? '' : 'disabled';
 
     // One chip per currency the books use: fresh, stale, or in use with no rate at
-    // all. The last one is the case an EUR-only check could not see.
+    // all. The last one is the case the old EUR-only check could not see.
     const chips = this._fxFreshness.length
       ? `<div class="books-form__row">${this._fxFreshness.map(f => {
         const tone = f.ok ? 'ok' : 'warn';

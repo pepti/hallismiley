@@ -149,7 +149,7 @@
 .admin-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .admin-chip[aria-pressed="true"] {
   border-width: 2px;
-  border-color: var(--gold);
+  border-color: var(--accent-ink);
   font-weight: 700;
   color: var(--text-primary);
   background: var(--accent-amber-dim);

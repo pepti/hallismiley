@@ -646,9 +646,297 @@ function validateNewsMediaReorder(req, res, next) {
   next();
 }
 
+// ── Sales-guide validation ───────────────────────────────────────────────────
+// Guides are Icelandic-canonical: title/summary/body ARE the IS copy and the
+// `_en` siblings are optional (inverse of the news `_is` convention).
+
+const GUIDE_SECTIONS = ['grunnur', 'sala', 'thjonusta', 'vara'];
+
+// POST /api/v1/admin/handbok  and  PATCH /api/v1/admin/handbok/:id
+function validateGuide(req, res, next) {
+  const {
+    title, slug, summary, body, section,
+    title_en, summary_en, body_en,
+    sort_order, published,
+  } = req.body;
+  const errors = [];
+  const isPOST = req.method === 'POST';
+
+  // Required on creation (Icelandic canonical fields)
+  if (isPOST) {
+    if (!title?.trim()) errors.push({ key: 'validation.title.required' });
+    if (!body?.trim())  errors.push({ key: 'validation.body.required' });
+  }
+
+  if (title !== undefined) {
+    if (typeof title !== 'string' || title.trim().length === 0)
+      errors.push({ key: 'validation.title.nonEmptyString' });
+    else if (title.length > MAX_NEWS_TITLE_LEN)
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_NEWS_TITLE_LEN } });
+  }
+
+  if (slug !== undefined && slug !== null && slug !== '') {
+    if (typeof slug !== 'string' || !SLUG_RE.test(slug))
+      errors.push({ key: 'validation.slug.invalid' });
+    else if (slug.length > 100)
+      errors.push({ key: 'validation.slug.maxLength', params: { n: 100 } });
+  }
+
+  if (summary !== undefined && summary !== null) {
+    if (typeof summary !== 'string')
+      errors.push({ key: 'validation.summary.nonEmptyString' });
+    else if (summary.length > MAX_NEWS_SUMMARY_LEN)
+      errors.push({ key: 'validation.summary.maxLength', params: { n: MAX_NEWS_SUMMARY_LEN } });
+  }
+
+  if (body !== undefined) {
+    if (typeof body !== 'string' || body.trim().length === 0)
+      errors.push({ key: 'validation.body.nonEmptyString' });
+  }
+
+  if (section !== undefined) {
+    if (typeof section !== 'string' || !GUIDE_SECTIONS.includes(section))
+      errors.push({ key: 'validation.section.invalid' });
+  }
+
+  if (sort_order !== undefined) {
+    if (!Number.isInteger(sort_order) || sort_order < 0)
+      errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i: 0 } });
+  }
+
+  if (published !== undefined && typeof published !== 'boolean') {
+    errors.push({ key: 'validation.published.boolean' });
+  }
+
+  // English siblings — nullable, same constraints as their IS counterparts.
+  if (title_en !== undefined && title_en !== null) {
+    if (typeof title_en !== 'string') errors.push({ key: 'validation.title.nonEmptyString' });
+    else if (title_en.length > MAX_NEWS_TITLE_LEN)
+      errors.push({ key: 'validation.title.maxLength', params: { n: MAX_NEWS_TITLE_LEN } });
+  }
+  if (summary_en !== undefined && summary_en !== null) {
+    if (typeof summary_en !== 'string') errors.push({ key: 'validation.summary.nonEmptyString' });
+    else if (summary_en.length > MAX_NEWS_SUMMARY_LEN)
+      errors.push({ key: 'validation.summary.maxLength', params: { n: MAX_NEWS_SUMMARY_LEN } });
+  }
+  if (body_en !== undefined && body_en !== null) {
+    if (typeof body_en !== 'string') errors.push({ key: 'validation.body.nonEmptyString' });
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
+// PUT /api/v1/admin/handbok/reorder — [{ id, section, sort_order }, ...]
+function validateGuideReorder(req, res, next) {
+  const { order } = req.body;
+  const errors = [];
+
+  if (!Array.isArray(order) || order.length === 0) {
+    errors.push({ key: 'validation.order.nonEmptyArray' });
+  } else if (order.length > MAX_REORDER_LEN) {
+    errors.push({ key: 'validation.order.maxItems', params: { n: MAX_REORDER_LEN } });
+  } else {
+    for (let i = 0; i < order.length; i++) {
+      const item = order[i];
+      if (typeof item !== 'object' || item === null) {
+        errors.push({ key: 'validation.order.itemObject', params: { i } });
+        continue;
+      }
+      const id = Number(item.id);
+      const so = Number(item.sort_order);
+      if (!Number.isInteger(id) || id <= 0)
+        errors.push({ key: 'validation.order.itemIdPositive', params: { i } });
+      if (!Number.isInteger(so) || so < 0)
+        errors.push({ key: 'validation.order.itemSortOrderNonNegative', params: { i } });
+      if (item.section !== undefined && !GUIDE_SECTIONS.includes(item.section))
+        errors.push({ key: 'validation.section.invalid' });
+    }
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
+// ── Leads inbox (workflow fields only) ───────────────────────────────────────
+// PATCH /api/v1/admin/leads/:id. The body is WHITELISTED to the three workflow
+// fields — name, email, message and the other submission fields are what the
+// visitor wrote and are immutable; anything else sent is dropped, not rejected,
+// so a client carrying a stale row shape keeps working.
+const LEAD_STATUSES = ['new', 'contacted', 'won', 'lost'];
+const MAX_LEAD_NOTE_LEN = 4000;
+
+function validateLeadUpdate(req, res, next) {
+  const src = req.body || {};
+  const errors = [];
+  const picked = {};
+
+  if (src.status !== undefined) {
+    if (typeof src.status !== 'string' || !LEAD_STATUSES.includes(src.status))
+      errors.push({ key: 'validation.lead.statusInvalid' });
+    else picked.status = src.status;
+  }
+  if (src.note !== undefined) {
+    if (src.note === null || src.note === '') picked.note = null;
+    else if (typeof src.note !== 'string') errors.push({ key: 'validation.lead.noteInvalid' });
+    else if (src.note.length > MAX_LEAD_NOTE_LEN)
+      errors.push({ key: 'validation.lead.noteMaxLength', params: { n: MAX_LEAD_NOTE_LEN } });
+    else picked.note = src.note;
+  }
+  if (src.owner_user_id !== undefined) {
+    if (src.owner_user_id === null || src.owner_user_id === '') picked.owner_user_id = null;
+    else if (typeof src.owner_user_id !== 'string' || src.owner_user_id.length > 64)
+      errors.push({ key: 'validation.lead.ownerInvalid' });
+    else picked.owner_user_id = src.owner_user_id;
+  }
+
+  if (!errors.length && Object.keys(picked).length === 0)
+    errors.push({ key: 'validation.lead.noFields' });
+
+  if (errors.length) return _fail(req, res, errors);
+  req.body = picked;
+  next();
+}
+
+// ── Markaður status hand-off ─────────────────────────────────────────────────
+// PATCH /api/v1/admin/markadur/:id/status. The body is exactly { status } and
+// the target is one of the two the app may set; the transition itself
+// (only FROM shortlist) is checked in the controller against the live row.
+const MARKET_TARGET_STATUSES = ['handed_to_sales', 'rejected'];
+
+function validateMarketStatus(req, res, next) {
+  const { status } = req.body || {};
+  if (typeof status !== 'string' || !MARKET_TARGET_STATUSES.includes(status)) {
+    return _fail(req, res, [{ key: 'validation.marketStatus.invalid' }]);
+  }
+  req.body = { status };
+  next();
+}
+
+// ── Customer accounts (migration 098) ────────────────────────────────────────
+// Whitelisted body for POST / PATCH /api/v1/admin/accounts. Owner and status
+// have their own rules: `owner_user_id` is only honoured for unscoped callers
+// (controller), `status` moves through the model's transition map.
+const ACCOUNT_TIERS    = ['vefur', 'verslun', 'rekstur'];
+const ACCOUNT_STATUSES = ['lead', 'offered', 'signed', 'provisioning', 'building', 'live', 'paused', 'churned'];
+const ACCOUNT_SLUG_RE  = /^[a-z0-9-]{3,40}$/;
+const KENNITALA_RE     = /^\d{10}$/;
+const ISO_DATE_RE      = /^\d{4}-\d{2}-\d{2}$/;
+const ACCOUNT_TEXT = {           // field → max length
+  name: 200, contact_name: 150, contact_email: 200, contact_phone: 40,
+  repo_name: 100, test_url: 300, prod_url: 300, canonical_host: 200,
+  azure_subscription_id: 100, azure_rg_test: 100, azure_rg_prod: 100,
+  // The buyer party block (migration 100). Lengths mirror
+  // Setting.updateBookkeepingSettings, so the two sides of an invoice are
+  // bounded identically.
+  street: 200, city: 120, postal_zone: 20, vat_number: 20, endpoint_id: 50,
+  notes: 4000,
+};
+const ACCOUNT_INTS = {           // field → [min, max]
+  build_fee_isk: [0, 1e12], monthly_fee_isk: [0, 1e12], quota_units: [0, 100000],
+  build_rate_bp: [0, 10000], recurring_rate_bp: [0, 10000],
+};
+
+function _accountBody(src, errors, { isCreate }) {
+  const picked = {};
+  for (const [field, max] of Object.entries(ACCOUNT_TEXT)) {
+    const v = src[field];
+    if (v === undefined) continue;
+    if (v === null || v === '') { if (field !== 'name') picked[field] = null; else errors.push({ key: 'validation.account.nameRequired' }); continue; }
+    if (typeof v !== 'string') { errors.push({ key: 'validation.account.fieldInvalid', params: { field } }); continue; }
+    if (v.length > max) { errors.push({ key: 'validation.account.fieldMaxLength', params: { field, n: max } }); continue; }
+    picked[field] = v.trim();
+  }
+  if (src.contact_email && typeof src.contact_email === 'string' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(src.contact_email.trim())) {
+    errors.push({ key: 'validation.account.emailInvalid' });
+  }
+  for (const [field, [min, max]] of Object.entries(ACCOUNT_INTS)) {
+    const v = src[field];
+    if (v === undefined) continue;
+    if (v === null || v === '') { picked[field] = null; continue; }
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < min || n > max) { errors.push({ key: 'validation.account.fieldInvalid', params: { field } }); continue; }
+    picked[field] = n;
+  }
+  for (const field of ['contract_start', 'contract_end']) {
+    const v = src[field];
+    if (v === undefined) continue;
+    if (v === null || v === '') { picked[field] = null; continue; }
+    if (typeof v !== 'string' || !ISO_DATE_RE.test(v)) { errors.push({ key: 'validation.account.fieldInvalid', params: { field } }); continue; }
+    picked[field] = v;
+  }
+  if (src.kennitala !== undefined) {
+    if (src.kennitala === null || src.kennitala === '') picked.kennitala = null;
+    else if (typeof src.kennitala !== 'string' || !KENNITALA_RE.test(src.kennitala.trim())) errors.push({ key: 'validation.account.kennitalaInvalid' });
+    else picked.kennitala = src.kennitala.trim();
+  }
+  // BT-55. Uppercased before the shape test so "is" is a typo, not a refusal;
+  // the DB CHECK admits NULL or two capitals and nothing else.
+  if (src.country !== undefined) {
+    if (src.country === null || src.country === '') picked.country = null;
+    else if (typeof src.country !== 'string' || !/^[A-Za-z]{2}$/.test(src.country.trim())) errors.push({ key: 'validation.account.countryInvalid' });
+    else picked.country = src.country.trim().toUpperCase();
+  }
+  // BT-49-1: an ISO 6523 ICD / Peppol EAS code. 0196 is the kennitala.
+  if (src.endpoint_scheme !== undefined) {
+    if (src.endpoint_scheme === null || src.endpoint_scheme === '') picked.endpoint_scheme = null;
+    else if (typeof src.endpoint_scheme !== 'string' || !/^[0-9]{4}$/.test(src.endpoint_scheme.trim())) errors.push({ key: 'validation.account.endpointSchemeInvalid' });
+    else picked.endpoint_scheme = src.endpoint_scheme.trim();
+  }
+  if (src.tier !== undefined) {
+    if (typeof src.tier !== 'string' || !ACCOUNT_TIERS.includes(src.tier)) errors.push({ key: 'validation.account.tierInvalid' });
+    else picked.tier = src.tier;
+  }
+  if (isCreate) {
+    if (src.slug !== undefined && src.slug !== null && src.slug !== '') {
+      if (typeof src.slug !== 'string' || !ACCOUNT_SLUG_RE.test(src.slug)) errors.push({ key: 'validation.account.slugInvalid' });
+      else picked.slug = src.slug;
+    }
+    if (src.market_company_id !== undefined && src.market_company_id !== null && src.market_company_id !== '') {
+      const n = Number(src.market_company_id);
+      if (!Number.isInteger(n) || n <= 0) errors.push({ key: 'validation.account.fieldInvalid', params: { field: 'market_company_id' } });
+      else picked.market_company_id = n;
+    }
+    if (src.owner_user_id !== undefined && src.owner_user_id !== null && src.owner_user_id !== '') {
+      if (typeof src.owner_user_id !== 'string' || src.owner_user_id.length > 64) errors.push({ key: 'validation.account.fieldInvalid', params: { field: 'owner_user_id' } });
+      else picked.owner_user_id = src.owner_user_id;
+    }
+    // name + tier are required unless a market company supplies them.
+    if (!picked.market_company_id) {
+      if (!picked.name) errors.push({ key: 'validation.account.nameRequired' });
+      if (!picked.tier) errors.push({ key: 'validation.account.tierInvalid' });
+    }
+  } else if (src.status !== undefined) {
+    if (typeof src.status !== 'string' || !ACCOUNT_STATUSES.includes(src.status)) errors.push({ key: 'validation.account.statusInvalid' });
+    else picked.status = src.status;
+  }
+  return picked;
+}
+
+function validateAccountCreate(req, res, next) {
+  const errors = [];
+  const picked = _accountBody(req.body || {}, errors, { isCreate: true });
+  if (errors.length) return _fail(req, res, errors);
+  req.body = picked;
+  next();
+}
+
+function validateAccountPatch(req, res, next) {
+  const errors = [];
+  const picked = _accountBody(req.body || {}, errors, { isCreate: false });
+  if (!errors.length && Object.keys(picked).length === 0) errors.push({ key: 'validation.account.noFields' });
+  if (errors.length) return _fail(req, res, errors);
+  req.body = picked;
+  next();
+}
+
 module.exports = {
   validateProject,
   validateQuery,
+  validateLeadUpdate,
+  validateMarketStatus,
+  validateAccountCreate,
+  validateAccountPatch,
   validateSignup,
   validatePartyRequest,
   validateResetPassword,
@@ -663,6 +951,8 @@ module.exports = {
   validateNews,
   validateNewsMediaUpdate,
   validateNewsMediaReorder,
+  validateGuide,
+  validateGuideReorder,
   ALLOWED_AVATARS,
   UPLOADED_AVATAR_RE,
   isOwnUploadedAvatar,

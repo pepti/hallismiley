@@ -1,7 +1,9 @@
 // AdminSidebar — left-nav "admin shell" that wraps every /admin/* view.
 //
-// A shared sidebar (overview / shop / site / settings groups) plus a content
-// pane. Each admin view builds its own content element as before, then returns
+// A shared sidebar (overview / sales / books / service / product / site /
+// settings groups; the retail "shop" group is hidden by policy — see
+// adminSurface.js) plus a content pane. Each admin view builds its own content
+// element as before, then returns
 // renderAdminShell({ activePath, content }) so the back-office navigation is
 // consistent across every section. Navigation is handled by the router's global
 // anchor interceptor — sidebar links are plain locale-prefixed <a> tags, so they
@@ -19,9 +21,10 @@
 // and links can't break.
 
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
-import { isAdmin, canSeeView } from '../services/auth.js';
+import { isAdmin, canSeeView, hasAllViews } from '../services/auth.js';
 import { getBuildInfo } from '../services/buildInfo.js';
 import { showToast } from './Toast.js';
+import { HIDDEN_ADMIN_VIEWS } from './adminSurface.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
 } from './adminNavLayout.js';
@@ -29,23 +32,36 @@ import {
 // Single source of truth for the admin information architecture. Each group has a
 // stable `key` (used to map a section back to its default i18n title and to home
 // items added in code later). Order here is render order. Routes mirror router.js.
+//
+// Shaped for the business (Halli, 2026-09-07): Orange Smiley is a software
+// company with a sales team, its own books, a change-request service and a
+// product to run — so those are the groups, in that order. The retail base
+// (the `shop` group + pos + background) is still here at the bottom because
+// every id must stay in lockstep with server/auth/adminViews.js (parity test)
+// and the routes stay live; adminSurface.js hides those lines by default.
+// Group KEYS never change once shipped — saved layouts are keyed on them.
 export const ADMIN_NAV = [
   { key: 'overview', group: 'admin.navGroup.overview', items: [
     { id: 'dashboard', route: '/admin',               labelKey: 'admin.nav.dashboard', icon: 'grid' },
   ] },
-  { key: 'shop', group: 'admin.navGroup.shop', items: [
-    { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
-    { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
-    { id: 'bins',        route: '/admin/bins',             labelKey: 'admin.nav.bins',        icon: 'box' },
-    { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
-    { id: 'customers',   route: '/admin/customers',        labelKey: 'admin.nav.customers',   icon: 'people' },
-    { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
-    { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
+  // Sölustarf — the sales team's workspace, and the one group a `solufolk`
+  // (sales-staff) user sees. Handbók first (it is where a new hire lands);
+  // the customer list is the account register the team onboards from
+  // (docs/SALES-STAFF.md). Fyrirspurnir = the leads inbox (migration 097);
+  // Markaður = the prospect list over the 093 research tables.
+  { key: 'staff', group: 'admin.navGroup.staff', items: [
+    { id: 'handbok',   route: '/admin/handbok',   labelKey: 'admin.nav.handbok',   icon: 'book' },
+    { id: 'leads',     route: '/admin/leads',     labelKey: 'admin.nav.leads',     icon: 'inbox' },
+    { id: 'markadur',  route: '/admin/markadur',  labelKey: 'admin.nav.markadur',  icon: 'chart' },
+    { id: 'accounts',  route: '/admin/accounts',  labelKey: 'admin.nav.accounts',  icon: 'box' },
+    { id: 'commission', route: '/admin/commission', labelKey: 'admin.nav.commission', icon: 'percent' },
+    { id: 'customers', route: '/admin/customers', labelKey: 'admin.nav.customers', icon: 'people' },
   ] },
   // Bókhald. Order follows the workflow rather than the alphabet: overview first,
-  // then the documents you create. Receivables, VSK, the ledger, payroll and the
-  // counter-sales screen join this group as they are built — an item here must have
-  // a route in router.js and a matching id in server/auth/adminViews.js.
+  // then the documents you create. Payroll stays visible (reiknað endurgjald
+  // from 2027 — Halli); the counter-sales till is retail and policy-hidden.
+  // An item here must have a route in router.js and a matching id in
+  // server/auth/adminViews.js.
   { key: 'books', group: 'admin.navGroup.books', items: [
     { id: 'books',    route: '/admin/books',          labelKey: 'admin.nav.books',    icon: 'book' },
     { id: 'invoices', route: '/admin/books/invoices', labelKey: 'admin.nav.invoices', icon: 'receipt' },
@@ -57,25 +73,49 @@ export const ADMIN_NAV = [
     { id: 'payroll',  route: '/admin/books/payroll',  labelKey: 'admin.nav.payroll',  icon: 'users' },
     { id: 'pos',      route: '/admin/books/pos',      labelKey: 'admin.nav.pos',      icon: 'till' },
   ] },
+  // Þjónusta — change requests. In this business they ARE the support product
+  // (a customer asks, AI builds it as a flagged module), so the inbox gets its
+  // own group rather than hiding under "Site".
+  { key: 'service', group: 'admin.navGroup.service', items: [
+    { id: 'feedback', route: '/admin/feedback', labelKey: 'admin.nav.feedback', icon: 'inbox' },
+  ] },
+  // Vörustýring — governing the product, as distinct from running this site
+  // (Halli, 2026-09-01). Which release this instance is on, how it is behaving,
+  // and who may reach it over MCP are one job; they sat in Settings next to the
+  // user list, which is a different one. The ids are unchanged, so RBAC and the
+  // adminViews parity test do not notice the move.
+  //
+  // This is the group a fleet console would grow into (roadmap R3–R8): today
+  // every screen in it speaks for this instance alone.
+  { key: 'product', group: 'admin.navGroup.product', items: [
+    { id: 'updates',    route: '/admin/updates',    labelKey: 'admin.nav.updates',        icon: 'update' },
+    { id: 'monitoring', route: '/admin/monitoring', labelKey: 'adminMonitoring.navTitle', icon: 'monitor' },
+    { id: 'mcp',        route: '/admin/mcp',        labelKey: 'mcp.navTitle',             icon: 'gear' },
+  ] },
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
     { id: 'background', route: '/admin/background',    labelKey: 'admin.nav.background', icon: 'image' },
-    { id: 'feedback',   route: '/admin/feedback',      labelKey: 'admin.nav.feedback',   icon: 'inbox' },
   ] },
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
-    { id: 'updates', route: '/admin/updates', labelKey: 'admin.nav.updates', icon: 'update' },
-    { id: 'monitoring', route: '/admin/monitoring', labelKey: 'adminMonitoring.navTitle', icon: 'monitor' },
-    { id: 'mcp', route: '/admin/mcp', labelKey: 'mcp.navTitle', icon: 'gear' },
     { id: 'users',   route: '/admin/users',   labelKey: 'admin.nav.users',   icon: 'shield' },
     { id: 'roles',   route: '/admin/roles',   labelKey: 'admin.nav.roles',   icon: 'key' },
+  ] },
+  // Verslun — the retail base. Every line is hidden by policy (adminSurface.js),
+  // so this group only appears in edit mode, where an admin can reveal a line.
+  { key: 'shop', group: 'admin.navGroup.shop', items: [
+    { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
+    { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
+    { id: 'bins',        route: '/admin/bins',             labelKey: 'admin.nav.bins',        icon: 'box' },
+    { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
+    { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
+    { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
   ] },
 ];
 
 // Inline SVGs (stroke="currentColor"), matching the NavBar icon convention.
 const ICONS = {
   grid:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
-  update:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
   box:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
   receipt:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12a1 1 0 0 1 1 1v18l-3-2-3 2-3-2-3 2V3a1 1 0 0 1 1-1Z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>',
   tag:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
@@ -92,6 +132,8 @@ const ICONS = {
   image:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
   inbox:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>',
   gear:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
+  // Download-into-tray: 'a new version lands here', not a gear.
+  update:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
   shield:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>',
   key:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10.5 12.5 8-8"/><path d="m15 6 2.5 2.5"/><path d="m18 3 2.5 2.5"/></svg>',
   people:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
@@ -198,7 +240,7 @@ export function reconcile(saved) {
   });
   for (const id of BY_ID.keys()) {
     if (seen.has(id)) continue;
-    if (!itemUsable(id)) continue; // RBAC/module gate: never surface a dead line
+    if (!itemUsable(id)) continue; // RBAC + module flags: never surface what isn't there
     const target = sections.find(s => s.key === GROUP_OF.get(id)) || sections[0];
     if (target) { target.items.push(id); seen.add(id); }
   }
@@ -223,7 +265,28 @@ export function reconcile(saved) {
   const collapsed = cleanFlagList(saved && saved.collapsed, sectionKeys);
   const hiddenSections = cleanFlagList(saved && saved.hiddenSections, sectionKeys);
   const hiddenItems = cleanFlagList(saved && saved.hiddenItems, itemIds);
-  return { v: 1, sections, labels, colors, collapsed, hiddenSections, hiddenItems };
+  // Lines the instance hides by policy that THIS admin has switched back on.
+  // Pruned to the policy set, so an id that leaves the policy is forgotten.
+  const revealedItems = cleanFlagList(saved && saved.revealedItems, HIDDEN_ADMIN_VIEWS);
+  return { v: 1, sections, labels, colors, collapsed, hiddenSections, hiddenItems, revealedItems };
+}
+
+// Does the instance-level hidden set apply to this account? Only to accounts
+// holding every view — a custom role's grant list is already its whole nav,
+// and a role that holds nothing but `orders` must still see Pantanir.
+function policyApplies() { return hasAllViews(); }
+
+// The hidden-line list the renderer sees: the admin's own hides, plus the
+// policy set minus what they have revealed. Keeping the merge here means
+// itemHtml/sectionHtml (and the "the active page always shows" rule) need no
+// knowledge of where a hide came from.
+function effectiveHiddenItems(layout) {
+  if (!policyApplies()) return layout.hiddenItems;
+  const out = new Set(layout.hiddenItems);
+  for (const id of HIDDEN_ADMIN_VIEWS) {
+    if (!layout.revealedItems.includes(id)) out.add(id);
+  }
+  return [...out];
 }
 
 // Section title: custom sections carry an explicit string; default sections show
@@ -313,6 +376,9 @@ function sectionHtml(section, activeId, labels, editing, opts = {}) {
     // Same rule per line: hidden items vanish, but the active one always shows.
     const visibleIds = section.items.filter(id =>
       id === activeId || !(opts.hiddenItems && opts.hiddenItems.includes(id)));
+    // A group whose every line is hidden has nothing to show — no orphan title.
+    // (Verslun by default on this instance; any group an admin hid line by line.)
+    if (!visibleIds.length) return '';
     const itemsHtml = visibleIds.map(id => itemHtml(BY_ID.get(id), activeId, labels, editing, opts)).join('');
     // Collapse is an admin convenience; moderators keep a plain, always-open nav.
     if (!opts.canEdit) {
@@ -445,7 +511,7 @@ export function renderAdminShell({ activePath, content } = {}) {
       activeSectionKey: activeHome ? activeHome.key : null,
       collapsed: working.collapsed,
       hiddenSections: working.hiddenSections,
-      hiddenItems: working.hiddenItems,
+      hiddenItems: effectiveHiddenItems(working),
       colors: working.colors,
     };
     // Outside edit mode, hide sections the role has no items in (e.g. a
@@ -501,7 +567,14 @@ export function renderAdminShell({ activePath, content } = {}) {
     tintPop.hidden = false;
     const r = btn.getBoundingClientRect();
     const a = aside.getBoundingClientRect();
-    tintPop.style.top  = `${r.bottom - a.top + 4}px`;
+    // The aside is a scroll container (admin-shell.css max-height + overflow-y):
+    // the absolute offset is measured from its scrolled content origin, and a
+    // popover hanging below a row near the bottom edge would be clipped — flip
+    // it above the trigger when the visible room below is short (ice #204).
+    const below = r.bottom - a.top + 4;
+    const fits = below + tintPop.offsetHeight <= aside.clientHeight - 4;
+    const top = fits ? below : (r.top - a.top - tintPop.offsetHeight - 4);
+    tintPop.style.top  = `${top + aside.scrollTop}px`;
     tintPop.style.left = `${Math.max(4, Math.min(r.left - a.left, a.width - tintPop.offsetWidth - 4))}px`;
     btn.setAttribute('aria-expanded', 'true');
     document.addEventListener('pointerdown', onTintDocPointerDown);
@@ -587,9 +660,13 @@ export function renderAdminShell({ activePath, content } = {}) {
     btn.setAttribute('aria-label', label);
     btn.setAttribute('title', label);
   }
+  // One eye toggle per line, two lists behind it: a policy-hidden line flips
+  // its `revealedItems` entry (so re-hiding it returns it to the instance
+  // default, and Reset does too); any other line flips the personal hide.
   function toggleHiddenItem(id) {
     if (!id || !BY_ID.has(id)) return;
-    toggleIn(working.hiddenItems, id);
+    if (policyApplies() && HIDDEN_ADMIN_VIEWS.has(id)) toggleIn(working.revealedItems, id);
+    else toggleIn(working.hiddenItems, id);
     persist();
     renderNav();
   }
@@ -817,10 +894,9 @@ export function renderAdminShell({ activePath, content } = {}) {
 
   renderNav();
 
-  // Pull the per-admin layout from the DB once per page load; this shell's
-  // re-render is the hook a late-arriving hydrate calls when it differs.
   // Build stamp — the sidebar's quiet answer to "which release is live right
-  // now?". Fills in asynchronously and stays hidden if the endpoint says no.
+  // now?", the first thing you want when a fix is supposedly deployed. Fills in
+  // asynchronously and stays hidden if the endpoint says no (non-admin roles).
   const stamp = shell.querySelector('.admin-sidebar__build');
   getBuildInfo().then((info) => {
     // No answer means the self-update module is switched off for this instance
@@ -841,6 +917,8 @@ export function renderAdminShell({ activePath, content } = {}) {
     stamp.hidden = false;
   });
 
+  // Pull the per-admin layout from the DB once per page load; this shell's
+  // re-render is the hook a late-arriving hydrate calls when it differs.
   if (canEdit) {
     setNavRerender(renderNav);
     hydrateNavLayout();
