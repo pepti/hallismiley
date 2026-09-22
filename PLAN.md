@@ -136,8 +136,7 @@ chunk lands; add a HISTORY entry for the story.
   veflykill for the 2026-P4 parallel run (gjalddagi 5.10.2026); plan §6 ("no
   salaries") vs hiring.
 - D-021, the engine upstream ([engine-upstream-2026-09-22](docs/HISTORY.md#engine-upstream-2026-09-22)):
-  merge or abandon the stale LedgerLink `base-sync/2026-09-13` worktree; pick
-  the window for icelandicstore's graft PR (merging deploys TEST); adopt the
+  pick the window for icelandicstore's graft PR (merging deploys TEST); adopt the
   `Feature: <id>` commit trailer with Orri; veto or accept engine migration
   `106_user_theme_check_drop`; merge the hallismiley and icelandicstore sync
   PRs (both deploy on merge); arm `RELEASE_*` per product — orangesmiley's own

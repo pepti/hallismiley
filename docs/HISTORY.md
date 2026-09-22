@@ -1040,8 +1040,7 @@ first-class: `Feature: <id>` trailers on ice commits, a weekly `from-ice/<date>`
 harvest PR into this repo, Halli deciding generic-or-ice-only per candidate;
 customer-specific code is never touched by a sync in either direction.
 
-**Still Halli's:** merge or abandon the stale LedgerLink `base-sync/2026-09-13`
-worktree; pick the window for icelandicstore's graft PR (merge deploys TEST);
+**Still Halli's:** pick the window for icelandicstore's graft PR (merge deploys TEST);
 adopt the `Feature:` trailer with Orri; veto or accept migration 106; merge
 the hallismiley and icelandicstore sync PRs; arm `RELEASE_*` per product,
 orangesmiley's own first. Superseded documents were banner-marked or rewritten
