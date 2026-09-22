@@ -134,12 +134,30 @@ chunk lands; add a HISTORY entry for the story.
   (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
   accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK
   veflykill for the 2026-P4 parallel run (gjalddagi 5.10.2026); plan §6 ("no
-  salaries") vs hiring; the base PR upstreaming `promote.yml`.
+  salaries") vs hiring.
+- D-021, the engine upstream ([engine-upstream-2026-09-22](docs/HISTORY.md#engine-upstream-2026-09-22)):
+  merge or abandon the stale LedgerLink `base-sync/2026-09-13` worktree; pick
+  the window for icelandicstore's graft PR (merging deploys TEST); adopt the
+  `Feature: <id>` commit trailer with Orri; veto or accept engine migration
+  `106_user_theme_check_drop`; merge the hallismiley and icelandicstore sync
+  PRs (both deploy on merge); arm `RELEASE_*` per product — orangesmiley's own
+  channel first, rekstrarkerfid's next (the hallismiley arming packet of
+  2026-09-13 is parked).
 - Next programme: R2, the product-site build in the sibling `rekstrarkerfid`
   repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`.
 
 **Open technical items**
 
+- Engine upstream (D-021, [engine-upstream-2026-09-22](docs/HISTORY.md#engine-upstream-2026-09-22)):
+  the first syncs, in order — LedgerLink and icelandicstore in parallel (both
+  need the one-time graft; ice's PR waits for Halli's window), then
+  rekstrarkerfid, then hallismiley (Halli merges; deploys). Before the SECOND
+  sync of any repo: the i18n `product.{lang}.json` loader, so product keys
+  stop colliding with engine keys in `en.json`/`is.json` (until then §6 of
+  `docs/ENGINE-SYNC.md`: resolve by key). Convert `/base-diff` → `/engine-diff`
+  in each downstream's `.claude/commands` (arrives by merge; the downstream's
+  own copy, if any, is deleted in its graft PR). `engine-sync/`, `from-ice/`
+  and `engine-drift.js` runs start once the graft PRs are merged.
 - Seller area (D-020 step 3) is BUILT, not live ([seller-area](docs/HISTORY.md#seller-area)):
   it goes live with the public + ops instances (step 5, Halli's go), a shared
   `SELLER_PUBLISH_SECRET`, and each seller invited on the public box under
