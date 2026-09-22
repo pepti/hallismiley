@@ -1,5 +1,5 @@
-// In-app change-request widget. On for everyone in a non-production app-env;
-// on PROD it mounts only for admins, and only once the Admin → Feedback switch
+// In-app change-request widget. Admins only: in a non-production app-env it
+// rides the TEST chrome; on PROD it mounts only once the Admin → Feedback switch
 // is on (main.js decides, the submit route re-checks — ice #206). Also toggled
 // by the theme switcher's TEST row. Click an element on any page, write a note, and queue it; queued
 // requests persist across SPA navigation in localStorage. "Submit all" sends
@@ -159,8 +159,8 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// main.js adds body.is-test-env only when the server reports a non-prod
-// app-env (or an admin flipped the per-browser override). The widget itself
+// main.js adds body.is-test-env only for a signed-in admin on a non-prod
+// app-env who has not hidden it (themePrefs.getEffectiveEnv). The widget itself
 // also runs on PROD when an admin switches it on, and there it must stay
 // quiet: no TEST pill, no demo toggle.
 function isTestEnv() {
@@ -631,8 +631,9 @@ export function setChangeRequestsEnabled(enabled) {
   _enabledOnProd = !!enabled;
 }
 
-// The single answer to "should the widget be on screen right now?": everyone
-// on TEST, admins only elsewhere and only once the switch is on.
+// The single answer to "should the widget be on screen right now?": admins
+// only — on TEST while the test chrome shows (is-test-env is itself admin-only),
+// elsewhere once the switch is on.
 export function shouldShowChangeRequests() {
   return isTestEnv() || (_enabledOnProd && isAdmin());
 }

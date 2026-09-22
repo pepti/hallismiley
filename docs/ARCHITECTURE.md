@@ -670,12 +670,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | — |
 
 **Rules that must hold**
-- The gate = non-prod app-env OR (`change_requests.enabled` setting on AND
-  admin); it answers **404, not 403**; in prod the widget mounts for admins
+- The gate = admin AND (non-prod app-env OR `change_requests.enabled` setting
+  on); it answers **404, not 403**; in prod the widget mounts for admins
   only, without the TEST chrome ([harvest-2](HISTORY.md#harvest-2)).
+- The TEST chrome (badge, nav/footer glow, widget) is **admins only on every
+  stack**: a logged-out visitor or a customer on TEST sees production.
+  `themePrefs.getEffectiveEnv()` is the one client answer, re-evaluated on
+  `authchange` ([test-chrome-admin](HISTORY.md#test-chrome-admin)).
 - Sits in the Þjónusta sidebar group as the support product ([admin-reshape](HISTORY.md#admin-reshape)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin)
 
 ## 17. Content, settings, background
 
