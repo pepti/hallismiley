@@ -1,18 +1,32 @@
 // Versioned migration runner.
-// Applies pending migrations from server/config/schema.js and records them in
+// Applies pending migrations from server/config/migrationSet.js (the engine
+// array in schema.js followed by this product's array) and records them in
 // the schema_migrations table so each migration only ever runs once.
 //
 // Run standalone: node server/scripts/migrate.js
+//   --plan   print what a run WOULD do (RUN / ALIAS via <name> / SUPERSEDED /
+//            applied) and exit without executing — the pre-flight before a
+//            downstream boots a merged engine for the first time.
 // Called on deploy: imported and invoked by server/server.js before app.listen
+//
+// Aliases and superseded entries (stack invariant #4): a downstream's database
+// may already hold an engine migration under another name (the same DDL was
+// numbered differently before the repos shared history), or may carry a
+// product-specific variant that the engine entry must never overwrite. The
+// product file declares those; the runner then RECORDS the engine name as
+// applied — with the reason in resolved_from — instead of executing it. Both
+// happen under the same advisory lock and are printed, so a first boot on a
+// grafted database is legible in the log.
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });
 const { pool } = require('../config/database');
-const { migrations } = require('../config/schema');
+const { migrations, aliases, superseded } = require('../config/migrationSet');
 
 // Arbitrary but fixed key for the session-level advisory lock. Any process
 // running this runner against the same database contends on it.
 const MIGRATION_LOCK_ID = 725_100_318;
 
-async function migrate() {
+async function migrate(options = {}) {
+  const plan = Boolean(options.plan);
   const client = await pool.connect();
   let lockHeld = false;
   try {
@@ -46,15 +60,48 @@ async function migrate() {
         applied_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       )
     `);
+    // resolved_from records WHY a name is marked applied without having run:
+    // the product name it was aliased to, or "superseded: <reason>". NULL for
+    // an entry the runner executed. Additive, so an older container reading
+    // this table during a swap is unaffected (invariant 14).
+    await client.query(
+      'ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS resolved_from VARCHAR(255)'
+    );
+
+    const appliedRows = await client.query('SELECT name FROM schema_migrations');
+    const applied = new Set(appliedRows.rows.map(r => r.name));
 
     for (const migration of migrations) {
-      const { rows } = await client.query(
-        'SELECT name FROM schema_migrations WHERE name = $1',
-        [migration.name]
-      );
-      if (rows.length > 0) {
+      if (applied.has(migration.name)) {
+        if (plan) console.log(`[migrate:plan] applied     ${migration.name}`);
         continue; // already applied
       }
+
+      const via = (aliases[migration.name] || []).find(n => applied.has(n));
+      if (via) {
+        if (plan) { console.log(`[migrate:plan] ALIAS       ${migration.name} via ${via}`); continue; }
+        await client.query(
+          'INSERT INTO schema_migrations (name, resolved_from) VALUES ($1, $2)',
+          [migration.name, via]
+        );
+        applied.add(migration.name);
+        console.log(`[migrate] Recorded ${migration.name} as applied via ${via}`);
+        continue;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(superseded, migration.name)) {
+        const reason = String(superseded[migration.name]);
+        if (plan) { console.log(`[migrate:plan] SUPERSEDED  ${migration.name} (${reason})`); continue; }
+        await client.query(
+          'INSERT INTO schema_migrations (name, resolved_from) VALUES ($1, $2)',
+          [migration.name, `superseded: ${reason}`.slice(0, 255)]
+        );
+        applied.add(migration.name);
+        console.log(`[migrate] Skipped ${migration.name} (superseded: ${reason})`);
+        continue;
+      }
+
+      if (plan) { console.log(`[migrate:plan] RUN         ${migration.name}`); continue; }
 
       // One transaction per migration, covering the bookkeeping row: a migration
       // that fails half-way must leave no trace, or the next boot replays its
@@ -76,10 +123,11 @@ async function migrate() {
         err.message = `migration ${migration.name} failed and was rolled back: ${err.message}`;
         throw err;
       }
+      applied.add(migration.name);
       console.log(`[migrate] Applied: ${migration.name}`);
     }
 
-    console.log('[migrate] All migrations up to date.');
+    console.log(plan ? '[migrate:plan] Nothing was executed.' : '[migrate] All migrations up to date.');
   } finally {
     // Release before returning the connection to the pool: a pooled connection
     // is reused, and a session-level advisory lock left held would travel with
@@ -100,9 +148,9 @@ async function migrate() {
 
 module.exports = { migrate };
 
-// When invoked directly: node server/scripts/migrate.js
+// When invoked directly: node server/scripts/migrate.js [--plan]
 if (require.main === module) {
-  migrate()
+  migrate({ plan: process.argv.includes('--plan') })
     .then(() => pool.end())
     .then(() => process.exit(0))
     .catch(err => { console.error('Migration failed:', err.message); process.exit(1); });

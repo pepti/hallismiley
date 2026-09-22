@@ -1,0 +1,13 @@
+{
+  "$comment": "Engine provenance for this repo (D-021, 2026-09-22). `product` is the short id used as the migration prefix and the product-migrations filename; `role` is engine | product | customer | personal. In a downstream, `rev` is the engine commit last merged in and `history` is appended by site-factory/engine-sync.js; in the engine itself `rev` is HEAD by definition. Product-owned: a sync never overwrites this file.",
+  "product": "os",
+  "role": "engine",
+  "upstream": "https://github.com/orange-smiley/orangesmiley.git",
+  "upstreamBranch": "master",
+  "rev": null,
+  "syncedAt": null,
+  "syncedPr": null,
+  "grafted": null,
+  "productPaths": [],
+  "history": []
+}

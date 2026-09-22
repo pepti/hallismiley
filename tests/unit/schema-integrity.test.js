@@ -29,12 +29,16 @@ const SQL_KEYWORDS = new Set([
 ]);
 
 /**
- * Returns the final set of live table names from schema.js:
- *   created tables  minus  explicitly dropped tables.
+ * Returns the final set of live table names from both migration arrays —
+ * the engine's schema.js and this repo's product-migrations/<id>.js (id from
+ * engine.json) — created tables minus explicitly dropped tables. Read as
+ * source text, the way the runner's list is assembled in migrationSet.js.
  */
 function getSchemaTableNames() {
   const schemaPath = path.join(__dirname, '../../server/config/schema.js');
-  const src = fs.readFileSync(schemaPath, 'utf8');
+  const productId = require('../../engine.json').product;
+  const productPath = path.join(__dirname, `../../server/config/product-migrations/${productId}.js`);
+  const src = [schemaPath, productPath].map(p => fs.readFileSync(p, 'utf8')).join('\n');
 
   const created = new Set();
   const dropped = new Set();
