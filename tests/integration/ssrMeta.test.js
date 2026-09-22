@@ -70,7 +70,7 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(preloadAt).toBeGreaterThan(-1);
     expect(cssAt).toBeGreaterThan(preloadAt);
     expect(th.text).toMatch(/<link rel="preload" as="image"[^>]*fetchpriority="high"/);
-    expect(th.text).toMatch(/imagesrcset="[^"]*\/assets\/iceland\/sigoldugljufur-[^"]*\.avif[^"]*"/);
+    expect(th.text).toMatch(/imagesrcset="[^"]*\/assets\/iceland\/canyon-river-[^"]*\.avif[^"]*"/);
 
     // Home is the waterfall video again (2026-08-22 revert): a scene preload
     // there would fetch ~200KB the page never paints.

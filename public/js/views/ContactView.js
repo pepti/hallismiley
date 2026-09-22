@@ -264,7 +264,7 @@ export class ContactView {
       ${this._footerHtml()}
     `;
 
-    // Reynisfjara behind the hero — mounted INSIDE the existing decoration
+    // The black beach and sea stack behind the hero — mounted INSIDE the existing decoration
     // node so the admin-editable data-section/data-field tree is untouched.
     const heroBg = view.querySelector('.contact-hero__bg');
     if (heroBg) {

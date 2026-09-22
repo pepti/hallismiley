@@ -80,7 +80,7 @@ export class ThjonustaView {
         </section>
       </main>
     `;
-    // Sigöldugljúfur — many falls feeding one river; the page's header rides
+    // A canyon river between orange walls — many streams, one river; the page's header rides
     // the band on a frosted panel (h1 stays inside #main-content).
     this._scene = mountSceneHeader(view.querySelector('.main'), 'thjonusta', `
         <header class="thjonusta-header">

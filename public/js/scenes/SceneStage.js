@@ -15,7 +15,8 @@
 //   .ice-scene__fx     z2  particle/aurora canvas (hidden until chunk 3)
 //   .ice-scene__scrim  z3  per-theme gradient that buys text contrast
 //   .ice-scene__content z5 caller's slot (hero copy / page header)
-//   .ice-scene__chip   z6  "Skógafoss — Suðurland"
+//   .ice-scene__chip   z6  "Place — Region" (opt-in; off since 2026-09-22,
+//                          when the images stopped being real places)
 import { SCENE_IMAGES } from './manifest.js';
 import { SCENE_DEFS } from './sceneDefs.js';
 import { t } from '../i18n/i18n.js';
@@ -29,13 +30,14 @@ export class SceneStage {
    * @param {'hero'|'band'} [opts.variant] hero = full-viewport home hero
    *   (eager, preloaded by ssrMeta); band = page-header / section band
    *   (lazy via IntersectionObserver).
-   * @param {boolean} [opts.chip] show the place chip.
+   * @param {boolean} [opts.chip] show the place chip. Off by default, and
+   *   only drawn when the def names a place (sceneDefs.js explains why none do).
    */
-  constructor(defKey, { variant = 'band', chip = true } = {}) {
+  constructor(defKey, { variant = 'band', chip = false } = {}) {
     this.def = SCENE_DEFS[defKey];
     this.img = this.def && SCENE_IMAGES[this.def.image];
     this.variant = variant;
-    this.chip = chip;
+    this.chip = chip && !!this.def?.place;
     this.root = null;
     this._io = null;
   }

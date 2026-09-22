@@ -836,7 +836,7 @@ export class HomeView {
     ];
     for (const [key, section] of bands) {
       if (!section) continue;
-      const stage = new SceneStage(key, { variant: 'band', chip: true });
+      const stage = new SceneStage(key, { variant: 'band' });
       const el = stage.el();
       el.classList.add('ice-scene--backdrop');
       section.classList.add('home-section--scene');
