@@ -36,6 +36,7 @@ const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
+const { normalizeForwardedFor } = require('./middleware/forwardedFor');
 const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register, dbPoolTotal, dbPoolIdle, dbPoolWaiting } = require('./observability/metrics');
@@ -50,6 +51,10 @@ const app = express();
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
+// App Service forwards `ip:port`; without this every IP-keyed limiter and the
+// brute-force tracker keys per TCP CONNECTION (icelandicstore 2026-09-12; seen
+// here 2026-09-22 — see middleware/forwardedFor.js). Must run before any limiter.
+app.use(normalizeForwardedFor);
 
 // ── Prometheus HTTP metrics — must be first to capture all requests ────────────
 app.use(httpMetrics);
