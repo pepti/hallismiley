@@ -18,7 +18,12 @@ ClaudeHalliProjectskeys/
 data/
 
 # Claude IDE files
-.claude/
+.claude/*
+# …except the engine-canonical rules and commands (D-021): tracked here and
+# received by every downstream through `git merge upstream/master`. Worktrees,
+# settings and per-machine files under .claude/ stay ignored.
+!.claude/rules/
+!.claude/commands/
 .claude.zip
 
 # Codex CLI local tooling (hooks reference local .claude/ scripts)

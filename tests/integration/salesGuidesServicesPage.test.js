@@ -1,7 +1,9 @@
 // Migration 104: the seeded sales guides stop telling sellers that prices and
 // the tier table are on /thjonusta (removed from the company site 2026-09-13).
 const db = require('../../server/config/database');
-const { migrations } = require('../../server/config/schema');
+// 104 is a company-content migration, so it lives in the product array
+// (product-migrations/os.js) — migrationSet is the list the runner applies.
+const { migrations } = require('../../server/config/migrationSet');
 const { createTestAdminUser } = require('../helpers');
 
 const m104 = migrations.find(m => m.name === '104_sales_guides_services_page');

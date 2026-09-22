@@ -1,7 +1,7 @@
 # Secure Development Lifecycle (S-SDLC)
 
-**Project:** Orange Smiley — `orangesmiley.is` (scaffolded from the HalliProjects base, whose S-SDLC this is)
-**Version:** 1.2
+**Project:** Orange Smiley — `orangesmiley.is`, the engine repo of the estate (D-021, 2026-09-22): this is the engine's S-SDLC; downstreams inherit it by merge (`docs/ENGINE-SYNC.md`)
+**Version:** 1.3
 **Effective:** 2026-05-25
 **Cadence:** Two-week sprints (Monday → Sunday, 14 days)
 **Owner:** Halli (Security Champion + Engineering Lead)
@@ -743,6 +743,7 @@ A story is "security done" only when all apply (in addition to functional DoD):
 | 1.0 | 2026-05-23 | Halli | Initial S-SDLC, effective 2026-05-25. |
 | 1.1 | 2026-08-27 | Öryggisvörður (approved by Halli) | §5 cadence ownership: weekly/monthly/quarterly/annual rows executed or flagged by the `security-sdl-sweep` scheduled task run as Öryggisvörður. The site-factory/template mirror of this doc is deliberately NOT updated — divergence to be reconciled by a later /retro or base-sync. |
 | 1.2 | 2026-09-11 | Docs sync (Claude, for Halli's review) | Project retitled to Orange Smiley; §9 hooks, §10.1 gates and §13 tooling matrix corrected to what the repo actually runs (lint-only husky, no secret scan, ESLint 10 flat config, Dependabot + Trivy in use, `/csp-report` live); artefact directories marked not instantiated; sprint calendar marked historical; `main` → `master`. |
+| 1.3 | 2026-09-22 | Docs sync (Claude, for Halli's review) | D-021: this document is engine-owned and reaches every downstream by merge; the site-factory template no longer carries a mirror (the 1.1 divergence note is closed). "Base security sync" becomes the engine security sync: a security patch lands on the engine, then an engine-sync PR in every downstream the same week, critical within 48 h (`docs/ENGINE-SYNC.md` §5); Öryggisvörður's Monday sweep reports security-tagged engine commits absent from a downstream's `engine.json.rev..upstream/master`. |
 
 Future revisions are tracked here. The SDLC is reviewed quarterly at the verification day of the sprint containing the quarter boundary; major changes require an ADR.
 

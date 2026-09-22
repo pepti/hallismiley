@@ -7,12 +7,12 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 - **Orange Smiley = the company**; THIS repo/site is the **company site**: what the company does + its products (content pass = roadmap R1, done 2026-09-01). The /thjonusta tier matrix left the company site on 2026-09-13; tiers and prices live on rekstrarkerfi.is only.
 - **Orange Smiley sells any software a small or medium business needs** (Halli, 2026-09-13) — custom systems, websites and stores, integrations, automation, migration, hosting. Rekstrarkerfið is ONE product it sells, not the whole offering; `/thjonusta` was rebuilt as the services page that day (section below). The "company sells ONE product" line in plan §1 carries a note saying so.
 - **Rekstrarkerfið = the product** — ONE product for all: one shared core for every customer + per-customer custom features as AI-built/AI-maintained flagged modules, managed via the MCP connector (feature requests flow through the same AI workflow). Positioning: against fit-everyone standard ERP.
-- **Canonical product core = sibling repo `C:\Users\Notandi\claude\Projects\rekstrarkerfid`** (scaffolded from the base 2026-08-22; serves rekstrarkerfi.is). Customers are generated from IT; HalliProjects retires as upstream after the transition (criteria in `company/REKSTRARKERFI-PLAN.md` §8).
+- **Product core = sibling `rekstrarkerfid`** (`C:\Users\Notandi\claude\Projects\rekstrarkerfid`, serves rekstrarkerfi.is), a DOWNSTREAM of this engine (D-021). Product repos derive from the engine; customer instances derive from a product's image.
 - Strategy docs: `company/REKSTRARKERFI-PLAN.md` (product plan + roadmap R0–R8) and `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md` (product-site build brief); company plan §1/§4/§7 rewritten same day.
 
 - **Owner**: Halli. Business plan: `company/ORANGE-SMILEY-PLAN.md` (offering/tiers §1, instance architecture §4, targets §7). Build brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Both live in the gitignored `company/` folder in this repo, alongside `COMPANY-LOG.md` and `ORANGE-SMILEY-WEBSITE-PLAN.md`.
 - **Product name** (Halli, 2026-08-20): **Rekstrarkerfi** is the ASCII/technical form — domain `rekstrarkerfi.is` (registered, with IDN `rekstrarkerfið.is` to 301 to it), slugs, identifiers. **"Rekstrarkerfið"** (definite form) is what every human-facing surface says: nav lockup, page titles, ads. The COMPANY stays Orange Smiley ehf. — footer, legal pages, /um-okkur, Organization JSON-LD. Logo unchanged.
-- **Provenance**: scaffolded 2026-08-09 from the HalliProjects base — now at `C:\Users\Notandi\claude\Projects\hallismiley` (folder renamed 2026-08-23) — at base rev **`562c637`** by site-factory.
+- **Provenance**: scaffolded 2026-08-09 from the HalliProjects base — now at `C:\Users\Notandi\claude\Projects\hallismiley` (folder renamed 2026-08-23) — at base rev **`562c637`** by site-factory. **Since 2026-09-22 (D-021) THIS repo is the engine upstream of the estate**; every other repo merges it (`docs/ENGINE-SYNC.md`).
 - **Estate map**: `C:\Users\Notandi\claude\Projects\README.md` orients any session across all sibling repos (roles, remotes, shared policies).
 - **Deploy target**: company Azure tenant (exists since 2026-08-12; company identity details in gitignored `company/COMPANY-LOG.md`) — **no provisioning or deploy without Halli's explicit go-ahead**. ENHANCEMENTS #1 is done (2026-08-19): `deploy.yml` is neutralized, so pushing the repo is safe.
 
@@ -34,6 +34,24 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 4. **Import website leads from rekstrarkerfi.is**: weekly and by hand while there are 1–3 customers.
 5. **Align the sales handbook** (`server/scripts/seed-sales-guides.js`) **with D-001's pricing**, and point its demo steps at the demo instance.
 
+## Engine upstream (D-021, 2026-09-22)
+
+**This repo is the engine**: the one place generic code is authored. Two layers, never confused:
+- **Source** — engine → every other repo by `git merge upstream/master` on an `engine-sync/<date>` branch → PR (`site-factory/engine-sync.js`). Generic work born downstream comes UP by `git cherry-pick -x` (`engine-harvest.js`), driven by a `Feature: <id>` commit trailer.
+- **Runtime** — a product repo → its deployed instances by that product's OWN release channel (`promote.yml`, canary/stable, self-update), one channel set per product in its tenant. This repo is a product too (orangesmiley.is, later ops), so its channel is armed first; rekstrarkerfid's next.
+- Invariant: product repos derive from the engine; customer instances derive from a product's image; instances are never cloned from instances.
+- `engine.json` (role, product id, upstream, rev) + the feature wiki `features/` + two migration arrays (`docs/MIGRATIONS.md`) are what make a merge mechanical.
+
+| Repo | Role | id | Branch | Sync PR merged by | Merge deploys? |
+|---|---|---|---|---|---|
+| `orangesmiley` | engine (+ company instance) | `os` | `master` | — | no (dispatch only) |
+| `rekstrarkerfid` | product | `rk` | `master` | Verkstjóri | no |
+| `LedgerLink` | product (contract) | `ll` | `master` | Verkstjóri | no (no Azure yet) |
+| `icelandicstore` | customer #1, live; current SOURCE of generic work | `ice` | `main` | Halli | TEST |
+| `hallismiley` | personal (Halli's site) | `hs` | `main` | Halli | www.hallismiley.is |
+
+Runbook: `docs/ENGINE-SYNC.md` (roles, preconditions, routine sync, security fast path, conflict rules, what never syncs, upward path, cadence, rollback). Migrations: `docs/MIGRATIONS.md`.
+
 ## ⚠ Do NOT run /strip-base
 
 Halli's explicit instruction: **all base features and data models stay** — shop/cart/checkout/orders, admin + RBAC, bookkeeping suite, projects, news, party, user system, themes, i18n, Stripe, everything. Portfolio surfaces that don't fit the business (party, personal bio/news presentation) are *hidden from nav/SSR/sitemap but left functional* at their routes. Disposition of each module is decided via `ENHANCEMENTS.md` proposals with Halli's sign-off — never by deletion during the build.
@@ -43,7 +61,7 @@ Halli's explicit instruction: **all base features and data models stay** — sho
 - Express 5.x, CommonJS server. PostgreSQL via `pg` (dev DB `orangesmiley`; test DBs derived **per branch** from `orangesmiley_<branch-slug>_test` — one template + one per Jest worker, `…_w<N>_test`, `tests/workerDb.js`; user postgres/postgres).
 - Vanilla JS SPA frontend — **no React/Vue/Svelte, no bundler**.
 - Lucia v3 sessions. One auth system only. (The old "RS256 JWT" line was boilerplate — no JWT code exists; verified 2026-08-22.)
-- Migrations are **entries appended to the array in `server/config/schema.js`** (applied by `npm run migrate` / at boot); the `NNN_name.sql` files under `server/migrations/` are reference copies. Never edit an applied entry (`/migration-new` to add).
+- Migrations are **two arrays, one runner** (`docs/MIGRATIONS.md`, invariant #4): the engine array in `server/config/schema.js` (authored here, the upstream, `NNN_name`) plus this repo's product array in `server/config/product-migrations/os.js` (`os_NNN_name`; its `legacy` section holds 091/092/104, the company-copy migrations, frozen), concatenated by `server/config/migrationSet.js` and applied by `npm run migrate` / at boot. `node server/scripts/migrate.js --plan` shows a run without executing. The `.sql` files under `server/migrations/` are reference copies. Never edit or rename an applied entry (`/migration-new` picks the array).
 - Consistent error envelope on all routes; pino (no console.log); typed errors → central middleware.
 - Security: helmet, csrf-csrf, hpp, express-rate-limit, sanitize-html, RBAC role checks. Tighten, don't loosen.
 - **Multi-theme engine:** `public/css/themes.css` + render-blocking `theme-boot.js`, `html[data-theme]` (`classic` owns `:root`; the visitor DEFAULT is `ember`/Glóð — `DEFAULT_THEME` in `themePrefs.js` and `theme-boot.js`, see Design rules). Re-brand = re-hue token *values*, keep the machinery.
@@ -55,7 +73,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 
 ## Project rules
 
-- Read-only references — never modify: `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1's live system) and `C:\Users\Notandi\claude\Projects\hallismiley` (the HalliProjects base; folder renamed from `HalliProjects` 2026-08-23). The base was temporarily writable for the 2026-08-19 base-upgrade program (13 PRs, ledger: site-factory/BASE-SYNC.md); that program is closed and the read-only rule is back in force — base writes need Halli's explicit say-so again.
+- Downstreams, never edited directly: `C:\Users\Notandi\claude\Projects\hallismiley` (Halli's personal site — writable only via `engine-sync/<date>` PRs that Halli merges, because merging `main` deploys) and `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1, live, currently the SOURCE of new generic features — engine changes reach it by engine-sync PR, generic work comes up by `engine-harvest.js`; customer-specific code is never touched by a sync). Generic fixes found in any downstream land HERE first, by PR.
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
 - Prices follow D-001 (`company/DECISIONS.md`): build fee 390/580/690 þ.kr. plus a service contract of 19/29/39 þ.kr./mán with 5/10/20 verkeiningar. They replaced the old flat 39–79 þ.kr./mán tiers, and they stay DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli). The sales handbook still quotes the old flat tiers, which is a known gap (D-020).
@@ -70,7 +88,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 
 ## Factory commands
 
-`/status` · `/base-diff` (engine drift vs base HEAD) · `/test-plan` · `/audit` · `/retro` · `/e2e` · `/i18n-sync` — plus base commands `/security-check`, `/pre-deploy`, `/migration-new`. (`/strip-base`, `/clone-ui`, `/import-data` exist but do not apply to this build — see the warning above.)
+`/status` · `/engine-diff` (repo drift vs the engine, reads `engine.json`) · `/engine-sync` (wraps `site-factory/engine-sync.js`; refuses here, the engine) · `/test-plan` · `/audit` · `/retro` · `/e2e` · `/i18n-sync` — plus base commands `/security-check`, `/pre-deploy`, `/migration-new`. (`/strip-base`, `/clone-ui`, `/import-data` exist but do not apply to this build — see the warning above.)
 
 
 ## Scene engine + homepage rules (binding; the story is in `docs/HISTORY.md`)
@@ -113,13 +131,13 @@ Full per-domain index (files, the rules that must hold, history links): **`docs/
 ## Doc map
 
 - **Start here**: `README.md` (setup, scripts) · `docs/ARCHITECTURE.md` (the domain index above).
-- **Rules**: this file · `.claude/rules/stack-invariants.md` (15 invariants, auto-loaded) · `docs/TESTING.md` (tiers, per-branch DBs, what CI runs) · `SECURE_SDLC.md`.
+- **Rules**: this file · `.claude/rules/stack-invariants.md` (15 invariants, auto-loaded) · `docs/MIGRATIONS.md` (two arrays, one runner) · `docs/ENGINE-SYNC.md` (the sync runbook, engine-owned) · `docs/TESTING.md` (tiers, per-branch DBs, what CI runs) · `SECURE_SDLC.md`.
 - **How it behaves**: `docs/API.md` (every mount + gate) · `docs/BOOKKEEPING-SYSTEM.md` · `docs/SELF-UPDATE.md` · `docs/mcp.md` · `docs/SALES-STAFF.md` · `docs/SLO.md`.
 - **Running it**: `docs/DEPLOYMENT.md` · `RUNBOOK.md` · `docs/BOOKS-PARALLEL-RUN.md` · `docs/ACCOUNTANT-QUESTIONS.md`.
 - **History + decisions**: `docs/HISTORY.md` (every programme, dated, indexed — the *why* behind the rules) · `LESSONS.md` (retro log) · `CHANGELOG.md` (release notes; keep the `## [0.1.0]` heading — `build-manifest.js` parses it) · `ENHANCEMENTS.md` (proposal queue, Halli-gated) · gitignored `company/DECISIONS.md`.
 - **Frozen, banner-marked**: `PRE_LAUNCH_AUDIT.md` · `SECURITY_AUDIT_2026-04-16.md` · `SELF-UPDATE-PLAN.md`.
 
-**Recording a chunk (since 2026-09-17)**: the write-up goes to `docs/HISTORY.md` (dated section with an `<a id>` anchor + index row); the rules it establishes go to the domain's "Rules that must hold" in `docs/ARCHITECTURE.md`, linking back; its open items go to `PLAN.md` → Status. This file changes only when a *rule* changes. `tests/unit/architectureIndex.test.js` enforces the links, the file lists and the migration citations in both directions.
+**Recording a chunk (since 2026-09-17)**: the write-up goes to `docs/HISTORY.md` (dated section with an `<a id>` anchor + index row); the rules it establishes go to the domain's "Rules that must hold" in `docs/ARCHITECTURE.md`, linking back; its open items go to `PLAN.md` → Status; a chunk that adds or changes a feature edits its `features/<id>.md` (the registry test names the file). This file changes only when a *rule* changes. `tests/unit/architectureIndex.test.js` enforces the links, the file lists and the migration citations in both directions.
 
 ## Status
 

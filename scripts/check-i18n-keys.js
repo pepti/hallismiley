@@ -24,6 +24,21 @@ const PAIRS = [
     en: 'server/i18n/en.json',
     is: 'server/i18n/is.json',
   },
+  // Product overlays (D-021): product-owned, merged over the engine table at
+  // load time. Same lockstep rule; a product must not redefine an engine key
+  // by accident (checked below), and the used-key scan sees both tables.
+  {
+    label: 'public/js/i18n (product overlay)',
+    en: 'public/js/i18n/product.en.json',
+    is: 'public/js/i18n/product.is.json',
+    overlayOf: 'public/js/i18n/en.json',
+  },
+  {
+    label: 'server/i18n (product overlay)',
+    en: 'server/i18n/product.en.json',
+    is: 'server/i18n/product.is.json',
+    overlayOf: 'server/i18n/en.json',
+  },
 ];
 
 function loadJson(rel) {
@@ -113,9 +128,15 @@ for (const pair of PAIRS) {
   const emptyEn = findEmptyValues(en);
   const emptyIs = findEmptyValues(is);
 
+  // An overlay key that also exists in the engine table overrides it at load
+  // time — that is how a product puts its own brand and copy into engine
+  // screens without editing the engine file. Reported, never failed.
+  const overrides = pair.overlayOf ? enKeys.filter(k => k in loadJson(pair.overlayOf)) : [];
+
   const ok = !onlyEn.length && !onlyIs.length && !emptyEn.length && !emptyIs.length;
 
-  console.log(`${ok ? '✓' : '✗'} ${pair.label} — en: ${enKeys.length} keys, is: ${isKeys.length} keys`);
+  const overrideNote = pair.overlayOf ? ` (${overrides.length} override engine keys)` : '';
+  console.log(`${ok ? '✓' : '✗'} ${pair.label} — en: ${enKeys.length} keys, is: ${isKeys.length} keys${overrideNote}`);
   if (onlyEn.length) {
     console.log(`  ⚠ only in en:\n    - ${onlyEn.slice(0, 50).join('\n    - ')}${onlyEn.length > 50 ? `\n    - … (+${onlyEn.length - 50} more)` : ''}`);
     failed = true;
@@ -134,7 +155,7 @@ for (const pair of PAIRS) {
   }
 }
 
-const publicEn = loadJson(PAIRS[0].en);
+const publicEn = { ...loadJson(PAIRS[0].en), ...loadJson(PAIRS[2].en) };
 const undefinedUsed = findUndefinedUsedKeys(publicEn);
 if (undefinedUsed.size) {
   console.log(`✗ public/js — ${undefinedUsed.size} referenced key(s) missing from en.json:`);

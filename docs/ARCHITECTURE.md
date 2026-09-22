@@ -54,9 +54,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
   before the generic `/api/v1/admin` catch-all except `mcp-tokens` and `events`,
   which mount after it — `docs/API.md` (Router inventory) documents the hazard
   and lists every mount with its gate.
-- **Migrations**: the array in `server/config/schema.js` is the only source of
-  truth (chain ends `104_sales_guides_services_page`; 006 and 007 never
-  existed; the books pair 095/096 sits before 097 in numeric order). The
+- **Migrations**: the engine array in `server/config/schema.js` plus this
+  product's array in `server/config/product-migrations/os.js` (091, 092 and
+  104 — the company's seeded copy), composed by `server/config/migrationSet.js`
+  (engine chain ends `106_user_theme_check_drop`; 006 and 007 never existed;
+  the books pair 095/096 sits before 097 in numeric order). The
   `.sql` files under `server/migrations/` are reference copies of a subset.
   Never adopt the base's numbering for the same feature
   ([base-sync](HISTORY.md#base-sync)).
@@ -76,6 +78,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
   string functions plus one `bind*()` with a single delegated listener on a
   container that outlives the repaint (node-testable, no jsdom)
   ([ui-kit](HISTORY.md#ui-kit)).
+- **Feature registry**: `features/<id>.md` is the wiki of what this engine
+  ships, cut finer than the domains here — one file per feature with a YAML
+  frontmatter naming its files (`paths`), migrations, gate (`flag`), status
+  and history anchors. Each domain below lists its features in a
+  `| Features |` row; product features live under `features/<product>/`
+  (this repo: `features/os/`) and downstream overrides in
+  `features/local.json`. `scripts/features-index.js` generates
+  `features/README.md`, `.engine-paths` (the product-owned paths a sync
+  from the engine never overwrites) and `.gitattributes` from it;
+  `tests/unit/featureRegistry.test.js` fails when a source file is claimed by
+  no feature or by two, a migration is unowned, or the generated files drift.
 
 ---
 
@@ -96,6 +109,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `security.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js` |
 | e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js` |
 | Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme) |
+| Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
 | Feature doc | `docs/API.md` (Authentication) |
 
 **Rules that must hold**
@@ -138,6 +152,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js` |
 | e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js` |
 | Migrations | 053 (nav config) |
+| Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
 
 **Rules that must hold**
@@ -189,6 +204,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `ssrMeta.test.js`; `tests/unit/clientConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017, 091, 092 (seeded company copy) |
+| Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
 **Rules that must hold**
@@ -249,7 +265,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Scripts | `scripts/build-iceland-scenes.js`, `scripts/audit-text-contrast.js`, `scripts/self-host-fonts.js`, `scripts/recompress-images.js` |
 | Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js` |
 | e2e | `e2e/iceland-scene.spec.js` |
-| Migrations | 083, 084 (user theme), 086, 089 (landing background scene/video), 094 (three-theme set) |
+| Migrations | 083, 084 (user theme), 086, 089 (landing background scene/video), 094 (three-theme set), 106 (theme CHECK dropped so a product may add ids) |
+| Features | [ambience](../features/ambience.md), [scene-engine](../features/scene-engine.md), [themes](../features/themes.md) |
 | Feature doc | `CLAUDE.md` Design rules; `public/assets/iceland/CREDITS.md` |
 
 **Rules that must hold**
@@ -292,6 +309,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Scripts | `scripts/check-i18n-keys.js` (`npm run check:i18n`), `scripts/backfill-is-translations.js`, `scripts/retranslate-party-en.js` |
 | Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js` |
 | Migrations | 028–038 (eleven consecutive i18n migrations) |
+| Features | [i18n](../features/i18n.md) |
 | Feature doc | — |
 
 **Rules that must hold**
@@ -321,6 +339,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/leads.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
 | e2e | `e2e/leads.spec.js`, `e2e/sales-handbook.spec.js` (sidebar count) |
 | Migrations | 097 |
+| Features | [leads](../features/leads.md) |
 | Feature doc | `docs/SALES-STAFF.md` (Working the lead inbox) |
 
 **Rules that must hold**
@@ -350,6 +369,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/market.test.js`, `marketImport.test.js` |
 | e2e | `e2e/markadur.spec.js` |
 | Migrations | 093 (`market_companies`, `market_financials` with generated `admin_cost_ratio`, `market_stats` — no screen yet) |
+| Features | [markadur](../features/markadur.md), [market-import](../features/market-import.md) |
 | Feature doc | — (this section; agent charter in `Projects\agents\markadsstjori.md`) |
 
 **Rules that must hold**
@@ -401,6 +421,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/accounts.test.js`, `commission.test.js`, `commissionStatements.test.js`, `adminCustomers.test.js`, `adminCustomerNotes.test.js`, `staffAudit.test.js` |
 | e2e | `e2e/accounts.spec.js` (+ `e2e/lib/accounts.js`) |
 | Migrations | 064 (customer notes), 098, 099, 100, 102 |
+| Features | [commission](../features/commission.md), [customer-accounts](../features/customer-accounts.md), [customers-crm](../features/customers-crm.md), [staff-audit](../features/staff-audit.md) |
 | Feature doc | `docs/SALES-STAFF.md`; decisions D-003/D-005/D-019 in `company/DECISIONS.md` |
 
 **Rules that must hold**
@@ -448,6 +469,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | CSS | `public/css/admin-bookkeeping.css` |
 | Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`; `tests/unit/booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js` |
 | Migrations | 072–079, 095, 096, 099, 101, 103 |
+| Features | [bookkeeping-core](../features/bookkeeping-core.md), [books-intake](../features/books-intake.md), [books-replay](../features/books-replay.md), [books-settings](../features/books-settings.md), [invoices](../features/invoices.md), [payroll](../features/payroll.md), [peppol-outbound](../features/peppol-outbound.md), [pos](../features/pos.md), [vsk](../features/vsk.md) |
 | Feature doc | `docs/BOOKKEEPING-SYSTEM.md`, `docs/BOOKS-PARALLEL-RUN.md`, `docs/ACCOUNTANT-QUESTIONS.md` |
 
 **Rules that must hold**
@@ -497,6 +519,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js` |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
 | Migrations | 090, 104 |
+| Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
 **Rules that must hold**
@@ -526,6 +549,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js` |
 | e2e | `e2e/admin-product-group.spec.js` |
 | Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074 |
+| Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22–#26 hold the ice harvest backlog) |
 
 **Rules that must hold**
@@ -555,6 +579,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/news.test.js`, `newsMedia.test.js`, `projects.test.js`, `party.test.js`, `content.partyRsvpForm.test.js`, `videos.test.js`; `tests/unit/partyRsvpStatus.test.js`, `partyNotifyRecipients.test.js`, `partyTimingBucket.test.js` |
 | e2e | `e2e/gallery.spec.js`, `project-edit.spec.js` |
 | Migrations | 004, 008, 010, 011, 013–016, 018, 019, 026, 027, 039, 040, 042, 044, 058–063, 066–071 |
+| Features | [bio](../features/bio.md), [news](../features/news.md), [party](../features/party.md), [projects](../features/projects.md) |
 | Feature doc | — |
 
 **Rules that must hold**
@@ -583,6 +608,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js` |
 | e2e | `e2e/admin-monitoring.spec.js` |
 | Migrations | 046 (analytics), 087 (event logs) |
+| Features | [analytics](../features/analytics.md), [monitoring](../features/monitoring.md) |
 | Feature doc | `RUNBOOK.md` (Analytics, Health), `docs/SLO.md` |
 
 **Rules that must hold**
@@ -614,6 +640,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/systemUpdatesApi.test.js`, `systemUpdatesRoutes.test.js`, `systemChanges.test.js`, `systemChangesGate.test.js`, `systemVersion.test.js`, `updateApplier.test.js`, `updateChecker.test.js`, `selfUpdateSettings.test.js`, `selfUpdateDisabled.test.js`; `tests/unit/changelogRender.test.js`, `generateChanges.test.js`, `semver.test.js` |
 | e2e | `e2e/admin-updates.spec.js` |
 | Migrations | 081 |
+| Features | [self-update](../features/self-update.md) |
 | Feature doc | `docs/SELF-UPDATE.md`, `docs/UPSTREAM-SELF-UPDATE.md`, `docs/DEPLOYMENT.md` (promote.yml) |
 
 **Rules that must hold**
@@ -647,6 +674,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/adminMcp.js` |
 | Jest | `tests/integration/mcp.test.js` |
 | Migrations | 088 |
+| Features | [mcp-connector](../features/mcp-connector.md) |
 | Feature doc | `docs/mcp.md` |
 
 **Rules that must hold**
@@ -673,6 +701,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/changeRequests.test.js` |
 | e2e | `e2e/admin-feedback-switch.spec.js` |
 | Migrations | 052 |
+| Features | [change-requests](../features/change-requests.md) |
 | Feature doc | — |
 
 **Rules that must hold**
@@ -701,6 +730,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/content.uploadImage.test.js`, `sections.test.js` |
 | e2e | `e2e/editable-homepage.spec.js`, `profile-background.spec.js` |
 | Migrations | 047, 051, 080, 085, 086, 089 |
+| Features | [app-settings](../features/app-settings.md), [landing-background](../features/landing-background.md), [site-content](../features/site-content.md) |
 | Feature doc | — |
 
 **Rules that must hold**
@@ -722,6 +752,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Config | `server/config/paths.js` |
 | Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
 | Migrations | 004, 016, 051 |
+| Features | [uploads-media](../features/uploads-media.md) |
 | Feature doc | `SECURE_SDLC.md` |
 
 **Rules that must hold**
@@ -745,6 +776,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `GET /api/v1/admin/email-health` in `server/routes/adminRoutes.js` |
 | Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js` |
 | Migrations | 062 |
+| Features | [email](../features/email.md) |
 | Feature doc | `RUNBOOK.md`, `docs/DEPLOYMENT.md` (env) |
 
 **Rules that must hold**
@@ -768,6 +800,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml`, `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
+| Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
 
 **Rules that must hold**
@@ -824,6 +857,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | CSS | `public/css/seller-area.css` |
 | Jest | `tests/integration/sellerArea.test.js` |
 | Migrations | 105 |
+| Features | [seller-publication](../features/seller-publication.md) |
 | Feature doc | `docs/SALES-STAFF.md` (The seller area); decision D-020 in `company/DECISIONS.md` |
 
 **Rules that must hold**

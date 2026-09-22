@@ -189,8 +189,9 @@ Two rules the port carries: never add an `afterAll` that ends the app pool
 keep the migration in a child process (`CREATE DATABASE … TEMPLATE` refuses
 while any session holds the template).
 
-This is engine work that belongs upstream (ice #225/#233 built it first; the
-base `hallismiley` is read-only) — queued in site-factory/BASE-SYNC.md.
+This is engine work, and since D-021 (2026-09-22) this repo IS the engine, so
+it is home: ice #225/#233 built it first and it reaches every downstream by
+engine-sync merge (`docs/ENGINE-SYNC.md`). The BASE-SYNC queue entry is history.
 
 ## What CI actually runs (`.github/workflows/ci.yml`, read 2026-09-11)
 

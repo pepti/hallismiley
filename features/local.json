@@ -1,0 +1,3 @@
+{
+  "_comment": "Downstream overrides for ENGINE features, keyed by engine feature id: { \"<engine feature id>\": { \"status\": \"hidden|disabled|forked\", \"note\": \"why, and where the fork lives\" } }. A downstream (rekstrarkerfid, LedgerLink, icelandicstore, hallismiley) records here which inherited features it hides, switches off or has forked, so features can be identified across repos without editing the engine's features/*.md (those arrive by merge). This file is product-owned (listed in .engine-paths); in the engine itself it stays empty. tests/unit/featureRegistry.test.js checks every key is an engine feature id."
+}

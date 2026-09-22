@@ -1,5 +1,10 @@
 # Upstreaming self-update to the base
 
+> **Historical (2026-08-10).** Describes porting self-update INTO the HalliProjects
+> base; since D-021 (2026-09-22) this repo IS the upstream and the module is
+> engine-owned code. Nothing below is a live instruction — `docs/SELF-UPDATE.md`
+> and `docs/ENGINE-SYNC.md` are.
+
 The self-update module is **engine capability, not an Orange Smiley special**.
 Every instance the factory ever scaffolds has the same problem — "how does this
 customer get the security fix?" — so the module belongs in HalliProjects, with

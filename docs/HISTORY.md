@@ -42,6 +42,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [TEST chrome is admins only](#test-chrome-admin) | Logged-out visitors on TEST see production; `changeRequestGate` admin-only on every stack; `openToEveryone` → `testStack` |
 | 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
 | 2026-09-22 | [orangesmiley.is go-live, public site only](#go-live) | D-020 step 2 split: public site first, ops stays local; deploy.yml by digest, production only; `APP_URL` default + baked origin → orangesmiley.is; `EMAIL_REPLY_TO` |
+| 2026-09-22 | [Engine upstream — this repo becomes the parent of every repo (D-021)](#engine-upstream-2026-09-22) | Two layers (source by merge, runtime by product channel); `engine.json` + feature wiki; two-array migrations (091/092/104 → `os.js`, theme CHECK → 106); `engine-sync` / `engine-harvest` / `engine-drift`; icelandicstore is the current source of generic work |
 
 ---
 
@@ -965,3 +966,82 @@ restart — re-set the app setting to force a re-fetch after rotating a secret.
 Known and out of scope: the admin, books and commission screens ship in the
 image and sit behind RBAC + TOTP on an empty database; hiding them by instance
 role is ENHANCEMENTS #5.
+
+<a id="engine-upstream-2026-09-22"></a>
+## 2026-09-22 — Engine upstream: orangesmiley becomes the parent of every repo (D-021)
+
+**Why.** Five repos ran the same engine and none of them shared git history:
+each was scaffolded as a file copy of a hallismiley commit, so every generic
+fix travelled by hand (`/base-diff`, cherry-pick by eye, "ported verbatim" —
+the `forwardedFor` hole found in icelandicstore on 2026-09-12 was still open
+in three repos ten days later, [go-live](#go-live)). The written record made
+it worse: the 2026-08-22 review §3 and REKSTRARKERFI-PLAN §8 named
+`rekstrarkerfid` the successor upstream "after R3+R7", which left the base
+frozen, the product repo not yet upstream, and this repo — the one that
+actually carried the newest engine — officially nobody's parent.
+
+**The decision (Halli, 2026-09-13, refined 2026-09-22; D-021).** THIS repo is
+the engine upstream of the estate. Orange Smiley ehf. is the parent company
+and builds several products; Rekstrarkerfið is one. Downstreams:
+`rekstrarkerfid` (product core, rekstrarkerfi.is), `LedgerLink` (contract
+product), `icelandicstore` (customer #1, live) and `hallismiley` (the old base,
+now a FULL downstream: Halli's personal site, pepti org, personal tenant,
+deploys on merge to `main`). Two layers: source flows engine → repos by
+`git merge upstream/master` on `engine-sync/<date>` PRs; runtime flows a
+product repo → its instances by that product's own release channel
+(`promote.yml`, canary/stable, self-update), one channel set per product in
+its tenant — the engine repo is a product in that sense too, so its own
+channel (orangesmiley.is now, ops on stable after 5.10) is armed first,
+rekstrarkerfid's next; the 2026-09-13 hallismiley arming packet is parked.
+Restated invariant: product repos derive from the engine; customer instances
+derive from a product's image; instances are never cloned from instances.
+Runbook: `docs/ENGINE-SYNC.md`.
+
+**Mechanism.** Each downstream gets an `upstream` remote and a one-time
+history graft (temporary `git replace --graft` of both roots onto the common
+hallismiley ancestor `fdf9581`, one ordinary merge, replace refs deleted —
+never `--allow-unrelated-histories`); after that a sync is a plain merge.
+`engine.json` in every repo records product id, role, upstream, `rev`,
+`syncedAt`, `grafted`, `productPaths`, `history`. Tools in `site-factory`:
+`engine-sync.js` (branch, merge, mechanical lock resolution, the verification
+chain, `engine.json` in the same commit; exit 3 hands conflicts to the
+operator), `engine-harvest.js` (upward `cherry-pick -x` of downstream commits
+that carry a `Feature: <id>` trailer or touch an engine feature's paths),
+`engine-drift.js` (writes `engine-registry.json` + `FEATURE-MATRIX.md`,
+derived, never hand-edited). `/base-diff` becomes `/engine-diff`.
+`.claude/rules/stack-invariants.md` and `.claude/commands/` are tracked here
+now (the `.claude/*` ignore has exceptions) so they reach downstreams by
+merge; the site-factory template stops shipping its own invariants copy.
+
+**Migrations: two arrays.** Auditing the chains for the graft found two
+things. First, 091, 092 and 104 are not engine migrations at all — they
+`UPDATE site_content` / `sales_guides` with Orange Smiley's own copy, which
+every other product seeds with its own; they moved to
+`server/config/product-migrations/os.js` as `legacy` entries. Second, the
+per-repo `081_user_theme` CHECK constraints differ by repo (each repo has its
+own theme set), so a downstream booting the engine's array would crash-loop
+on the constraint it never applied — hence engine migration
+`106_user_theme_check_drop`, which removes the CHECK and lets `themePrefs.js`
+own the set (Halli's veto pending). The shape — engine array in `schema.js`
+upstream-only, product array `<id>_NNN_name` with `legacy`, `aliases`,
+`superseded`, assembled by `migrationSet.js`, `migrate.js --plan` as the
+pre-flight — is `docs/MIGRATIONS.md`, now invariant #4.
+
+**Feature wiki.** `features/<id>.md` for engine features, `features/<product>/`
+for product features, `features/local.json` per repo; `.engine-paths` and
+`.gitattributes` (`merge=ours` on product-owned paths) are generated from it,
+and `tests/unit/featureRegistry.test.js` enforces that every migration name
+and every owned path is claimed by exactly one feature.
+
+**The ice-as-source correction.** The plan first treated icelandicstore as a
+pure consumer. Halli is building it with Orri, the owner, and for the next
+weeks it is the main SOURCE of new generic features. So the upward path is
+first-class: `Feature: <id>` trailers on ice commits, a weekly `from-ice/<date>`
+harvest PR into this repo, Halli deciding generic-or-ice-only per candidate;
+customer-specific code is never touched by a sync in either direction.
+
+**Still Halli's:** pick the window for icelandicstore's graft PR (merge deploys TEST);
+adopt the `Feature:` trailer with Orri; veto or accept migration 106; merge
+the hallismiley and icelandicstore sync PRs; arm `RELEASE_*` per product,
+orangesmiley's own first. Superseded documents were banner-marked or rewritten
+the same day (`company/DECISIONS.md` D-021 lists them).

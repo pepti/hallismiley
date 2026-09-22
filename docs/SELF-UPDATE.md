@@ -10,6 +10,18 @@ is N manual deploys, and the honest answer to "is customer X patched?" is "let
 me look". With it, every instance knows what it is, what it could be, and who
 decides.
 
+**Who owns the channel (D-021, 2026-09-22).** One channel set (`stable.json` /
+`canary.json`, registry, `RELEASE_*` variables) per PRODUCT, in that product's
+tenant — never a manifest shared across products. `promote.yml` is engine-owned
+code and reaches every product repo by engine-sync merge; each product arms
+its own copy. This repo is a product in that sense too: orangesmiley.is has
+been live since 2026-09-22 and `ops.orangesmiley.is` follows on the stable
+channel after the 5.10 VSK filing, so **orangesmiley's own channel is the
+first one armed** (its instances soak canary per the rollout discipline
+below), rekstrarkerfid's is next. Source flow (engine → repos, by merge) and
+runtime flow (product → its instances, by channel) are two different layers:
+`docs/ENGINE-SYNC.md` §1.
+
 ---
 
 ## The shape of it
@@ -194,7 +206,7 @@ None of the following lives in this repo, and an instance without it is one that
 can see updates but not install them. **The site-factory provisioning playbook
 owns these** (see the factory's `RECOMMENDATIONS.md`).
 
-Per **fleet** (once):
+Per **product** (once — one channel set per product, in its own tenant; D-021):
 
 - [ ] A container registry for release images.
 - [ ] A release host serving `stable.json` / `canary.json` over https — an

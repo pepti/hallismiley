@@ -26,7 +26,7 @@ dated and indexed. `PLAN.md` is the build plan and current status,
 |-------|-----------|
 | Runtime | Node.js **24** (`Dockerfile` `node:24-alpine`, digest-pinned; `ci.yml` `node-version: 24` — the two move together) |
 | Framework | Express **5** (`^5.2.1`, CommonJS; catch-alls are `'/{*splat}'`) |
-| Database | PostgreSQL 16 via `pg`; migrations are the array in `server/config/schema.js`, applied at boot (chain ends `104_sales_guides_services_page`) |
+| Database | PostgreSQL 16 via `pg`; migrations are two arrays — the engine list in `server/config/schema.js` plus `server/config/product-migrations/os.js` — applied at boot (`docs/MIGRATIONS.md`; the engine chain ends at the last entry of `schema.js`) |
 | Frontend | Vanilla JS SPA — ES modules, no framework, no bundler; three themes (`ember`/Glóð default, `classic`/Bjart, `midnight`/Miðnætti); IS is the visitor default locale, EN mirrors it |
 | Auth | **Lucia v3 server-side sessions** (`auth_session` cookie), csrf-csrf double-submit, admin TOTP; no JWT layer |
 | Email | Resend (`RESEND_API_KEY`); sender `EMAIL_FROM` |

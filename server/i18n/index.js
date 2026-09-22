@@ -8,13 +8,16 @@ const { DEFAULT_LOCALE, SUPPORTED_LOCALES } = require('../config/i18n');
 
 const _cache = {};
 
+// Engine table + this product's overlay (D-021): `<locale>.json` is
+// engine-owned and arrives by merge; `product.<locale>.json` is product-owned
+// and its keys win. A missing overlay is an empty table.
+function _require(name) {
+  try { return require(name); } catch { return {}; }
+}
+
 function _load(locale) {
   if (_cache[locale]) return _cache[locale];
-  try {
-    _cache[locale] = require(`./${locale}.json`);
-  } catch {
-    _cache[locale] = {};
-  }
+  _cache[locale] = { ..._require(`./${locale}.json`), ..._require(`./product.${locale}.json`) };
   return _cache[locale];
 }
 

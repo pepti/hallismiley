@@ -12,7 +12,9 @@
  *  - every HISTORY link from ARCHITECTURE, PLAN and API resolves to an anchor;
  *  - CLAUDE.md's domain map has exactly one row per numbered ARCHITECTURE
  *    section, and API.md's section links resolve too;
- *  - the migrations ARCHITECTURE cites are exactly the ones schema.js applies.
+ *  - the migrations ARCHITECTURE cites are exactly the ones schema.js applies;
+ *  - every feature file (features/**) is linked from its domain's Features
+ *    row, and every id in a Features row is a feature file of that domain.
  *
  * One assertion per rule over a set difference, so a failure names every
  * offender in one message (the shape of admin-views-parity.test.js). Guards
@@ -22,8 +24,9 @@
 const fs = require('fs');
 const path = require('path');
 const { migrations } = require('../../server/config/schema');
+const { ROOT, TREE_ROOTS, tree, byBase } = require('../lib/sourceTree');
+const { loadFeatures } = require('../../scripts/features-index');
 
-const ROOT = path.join(__dirname, '../..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 
 const ARCH = read('docs/ARCHITECTURE.md');
@@ -32,31 +35,8 @@ const CLAUDE = read('CLAUDE.md');
 const PLAN = read('PLAN.md');
 const API = read('docs/API.md');
 
-// ---------------------------------------------------------------- the tree
-const TREE_ROOTS = ['server', 'public', 'tests', 'e2e', 'docs', 'scripts', 'config', '.github'];
-const SKIP_DIRS = new Set(['node_modules', 'coverage', 'vendor']);
-
-function walk(rel, out) {
-  for (const ent of fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
-    const p = rel ? `${rel}/${ent.name}` : ent.name;
-    if (ent.isDirectory()) {
-      if (!SKIP_DIRS.has(ent.name)) { out.add(p + '/'); walk(p, out); }
-    } else {
-      out.add(p);
-    }
-  }
-}
-const tree = new Set();
-for (const r of TREE_ROOTS) if (fs.existsSync(path.join(ROOT, r))) { tree.add(r + '/'); walk(r, tree); }
-for (const ent of fs.readdirSync(ROOT, { withFileTypes: true })) if (ent.isFile()) tree.add(ent.name);
-
-const byBase = new Map();
-for (const p of tree) {
-  if (p.endsWith('/')) continue;
-  const b = path.posix.basename(p);
-  if (!byBase.has(b)) byBase.set(b, []);
-  byBase.get(b).push(p);
-}
+// The tree (walk, roots, byBase) lives in tests/lib/sourceTree.js, shared with
+// featureRegistry.test.js.
 
 // ------------------------------------------------------------ the parsers
 const PREFIX = new RegExp(`^(${TREE_ROOTS.map((r) => r.replace('.', '\\.')).join('|')})/`);
@@ -217,7 +197,14 @@ describe('ARCHITECTURE section links', () => {
 });
 
 describe('cited migrations are exactly the applied ones', () => {
-  const applied = new Set(migrations.map((m) => m.name.slice(0, 3)));
+  // Applied = the engine array (schema.js) plus this product's array, read as
+  // source text so a mid-edit product file cannot break the require. The
+  // product file keeps 091/092/104 under their engine-era names (D-021).
+  const productFile = `server/config/product-migrations/${require('../../engine.json').product}.js`;
+  const productNums = fs.existsSync(path.join(ROOT, productFile))
+    ? [...read(productFile).matchAll(/name: '(\d{3})_[a-z0-9_]+'/g)].map((m) => m[1])
+    : [];
+  const applied = new Set([...migrations.map((m) => m.name.slice(0, 3)), ...productNums]);
   const cited = new Set();
   for (const line of ARCH.split('\n')) {
     if (!/^\| Migrations \|/.test(line)) continue;
@@ -245,5 +232,33 @@ describe('cited migrations are exactly the applied ones', () => {
     const take = (s) => [...s.matchAll(/(?<!\d)(\d{3})(?:\s*[–—-]\s*(\d{3}))?(?!\d)/g)].map((m) => m[1] + (m[2] ? '-' + m[2] : ''));
     expect(take('| Migrations | 105 (2026 year-end) |')).toEqual(['105']);
     expect(take('| Migrations | 072—079, 080–081, 082-083 |')).toEqual(['072-079', '080-081', '082-083']);
+  });
+});
+
+describe('every feature file is linked from its domain\'s Features row', () => {
+  // "<domain>:<id>" pairs from the registry and from the `| Features |` rows.
+  const registry = new Set(loadFeatures(ROOT).map((f) => `${f.domain}:${f.id}`));
+  const rows = new Set();
+  let domain = null;
+  for (const line of ARCH.split('\n')) {
+    const h = line.match(/^## (\d+)\. /);
+    if (h) domain = h[1];
+    if (!/^\| Features \|/.test(line)) continue;
+    for (const m of line.matchAll(/\[([\w-]+)\]\(\.\.\/(features\/[\w/-]+\.md)\)/g)) {
+      rows.add(`${domain}:${m[1]}`);
+      expect(fs.existsSync(path.join(ROOT, m[2]))).toBe(true);
+      expect(path.posix.basename(m[2], '.md')).toBe(m[1]);
+    }
+  }
+
+  test('parsers found the rows (guard)', () => {
+    expect(registry.size).toBeGreaterThan(40);
+    expect(rows.size).toBeGreaterThan(40);
+    expect(rows.has('6:leads')).toBe(true);
+  });
+
+  test('the Features rows list exactly the registry, per domain', () => {
+    expect(diff(registry, rows)).toEqual([]);
+    expect(diff(rows, registry)).toEqual([]);
   });
 });

@@ -46,8 +46,11 @@ own `postgres:16-alpine` service, all on Node 24:
   identity the self-update checker compares against a published release. A
   local build without the args reports `version: "dev"`.
 - Runs as `appuser`, `EXPOSE 3000`, `HEALTHCHECK` on the liveness route,
-  `CMD node server/server.js`. Migrations (`server/scripts/migrate.js`) run at
-  boot; there is no separate migration step.
+  `CMD node server/server.js`. Migrations (`server/scripts/migrate.js`, the
+  engine array plus the product array — `docs/MIGRATIONS.md`) run at boot; there
+  is no separate migration step. Before the first boot of a merged engine on a
+  live database, run `node server/scripts/migrate.js --plan` against a restored
+  copy: it prints RUN / ALIAS / SUPERSEDED per entry and executes nothing.
 
 `promote.yml` sets up the same Node 24 (it was on 20 until 2026-09-12).
 
