@@ -38,6 +38,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-08 | [Shared admin UI kit (ENHANCEMENTS #21)](#ui-kit) | The kit (`adminTable`, `adminPager`, `listState`…); eight defects; 2FA gate mirrored both sides; `pageTitle` mirrors `ssrMeta.js`; base PR #153 |
 | 2026-09-13 | [/thjonusta = the services page](#services-page) | Company sells any SMB software; no tiers or prices on this site; `SERVICE_OFFERINGS` mirror; migration 104 rewrites two seeded guides |
 | 2026-09-17 | [Docs restructure — ARCHITECTURE, HISTORY, parity test](#docs-restructure) | CLAUDE.md 776 → ~100 lines of rules; this file + `docs/ARCHITECTURE.md`; `architectureIndex.test.js`; review pass fixed 8 findings |
+| 2026-09-21 | [Seller area — published one way from ops (D-020 step 3)](#seller-area) | `INSTANCE_ROLE`; migration 105 `published_*`; signed snapshot ingest; `/solusvaedi` read-only behind 2FA; built, not deployed |
 | 2026-09-22 | [TEST chrome is admins only](#test-chrome-admin) | Logged-out visitors on TEST see production; `changeRequestGate` admin-only on every stack; `openToEveryone` → `testStack` |
 | 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
 
@@ -806,6 +807,44 @@ doc" column pointed into CLAUDE.md history sections.
   one-directional and 962 cases wide. Fixed in the follow-up PR.
 - LESSONS.md 2026-09-17 carries the factory lesson: scaffold ARCHITECTURE +
   HISTORY + the parity test from day one.
+
+<a id="seller-area"></a>
+## 2026-09-21 — Seller area: published one way from ops (D-020 step 3)
+
+D-020 made the private ops instance the place the business runs and gave the
+public orangesmiley.is a seller area: each seller's leads, accounts and
+commission statements, read-only, published one way from ops. The seller
+screens already existed in the admin shell (`solumadur`); what did not exist
+was the split. Halli chose, 2026-09-21: **push signed snapshots** (over a
+hand-carried export file), **every seller sees all leads** (over only assigned
+ones), and the full build in one chunk.
+
+- **`INSTANCE_ROLE`** (`server/config/instanceRole.js`): `ops` by default so
+  every existing instance is unchanged; `public` switches on the two new routes.
+- **Migration 105** — `seller_publications` (the ingest log: snapshot id,
+  generated_at, counts, body sha256) and six `published_*` tables keyed by ops
+  ids and the seller's lower-cased email, with no FKs to users: the public box
+  never grants anything itself.
+- **Ops → public**: `npm run publish:sellers` builds the snapshot
+  (`sellerPublish/snapshot.js`), signs it (HMAC-SHA256 over `t.rawBody`, the
+  Stripe scheme) and posts it. The ingest verifies the MAC on the raw bytes,
+  validates every field, refuses stale or replayed snapshots, and replaces the
+  whole copy in one transaction — which is also how an erasure on ops reaches
+  the public box.
+- **Who sees what** is decided on ops by the existing views: a non-admin with
+  `leads`/`accounts`/`commission` is a seller; rates and payee kennitala are
+  never published. The statement status rule moved into one function so the
+  admin list and the snapshot cannot disagree.
+- **Public side**: `/api/v1/seller` (GET only) and `/solusvaedi`
+  (`SellerAreaView`, reusing the admin statement drawer with the payout form
+  off). A seller is matched by a proven email (verified or admin-invited), and
+  published sellers join the 2FA-protected set — login challenge, enrolment,
+  and every route but `/me` refusing until TOTP is on.
+- 15 Jest integration tests (`sellerArea.test.js`); lint + i18n clean.
+- **Not live.** It needs the public and ops instances (D-020 step 5, after the
+  5.10 VSK filing, Halli's go), a shared `SELLER_PUBLISH_SECRET` on both, and
+  each seller invited on the public box with the same email as on ops. Copy is
+  DRAFT.
 
 <a id="test-chrome-admin"></a>
 ## 2026-09-22 — TEST chrome is admins only

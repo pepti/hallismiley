@@ -43,6 +43,41 @@ check); optionally remove the `solufolk` membership. Leads they own keep
 `owner_user_id` pointing at the disabled account until someone reassigns
 them (the "Mínar" filter of the next owner will not show them until then).
 
+## The seller area (public orangesmiley.is, D-020)
+
+Since D-020 the sales tables live on **private ops**; sellers read their part
+on the public site at **`/solusvaedi`** (user menu → Sölusvæði). It is a
+read-only copy that ops publishes one way — nothing a seller does there
+changes anything on ops, and the public box never holds the books.
+
+**What a seller sees** follows their role on ops: `leads` → every enquiry;
+`accounts` → the customer accounts they own (no commission rates);
+`commission` → their issued commission statements with lines and payouts (no
+kennitala). A `solufolk` trainee therefore sees Fyrirspurnir only.
+
+**Setting it up (once, when both instances exist — D-020 step 5):**
+
+1. Generate a secret (`openssl rand -hex 32`) and set it as
+   `SELLER_PUBLISH_SECRET` on BOTH instances.
+2. Public instance: `INSTANCE_ROLE=public`. Ops: leave `INSTANCE_ROLE` unset
+   (= `ops`) and set `SELLER_PUBLISH_URL=https://orangesmiley.is`.
+
+**Onboarding a seller to the area:** give them their role on ops as above,
+then on the PUBLIC site create their account with the **same email**
+(`/admin/customers` → Add customer sends the invite). They set a password,
+log in, and are sent to switch on two-factor sign-in — the area stays shut
+until they do. A self-signed-up account only matches after its email is
+verified.
+
+**Publishing:** on ops, `npm run publish:sellers` (`-- --dry-run` lists who
+would be published). Run it after issuing the month's statements (due by the
+7th, D-003) and whenever the pipeline moved; the page shows when it was last
+updated. Each publish replaces the whole copy, so a lead erased on ops, or a
+seller whose role was removed, disappears at the next run.
+
+Offboarding: remove the role or disable the user on ops and publish; disable
+the account on the public site too.
+
 ## Working the lead inbox (`/admin/leads`)
 
 - Every `/hafa-samband` submission lands here the moment it is sent — the

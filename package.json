@@ -13,6 +13,7 @@
     "seed:arnarhraun": "node server/scripts/seed-arnarhraun.js",
     "import:csv": "node server/scripts/import-products-csv.js",
     "market:import": "node server/scripts/market-import.js",
+    "publish:sellers": "node server/scripts/publish-sellers.js",
     "books:fx": "node server/scripts/books-fetch-fx.js",
     "test": "jest",
     "test:unit": "jest -c jest.unit.config.js",

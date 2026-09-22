@@ -12,6 +12,7 @@ const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
 const mfaService          = require('../services/mfaService');
 const { userIsAdminAnywhere, userHoldsView } = require('../utils/adminRole');
+const { isPublishedSeller } = require('../auth/publishedSeller');
 
 /**
  * May this account enrol in 2FA? Exactly the set the login path challenges
@@ -26,6 +27,7 @@ async function isEnrolmentEligible(user) {
     ...user,
     admin_anywhere: await userIsAdminAnywhere(dbQuery, user.id),
     accounts_holder: await userHoldsView(dbQuery, user.id, 'accounts'),
+    seller_holder: await isPublishedSeller(dbQuery, user.id),
   };
   return mfaService.protectedRole(enriched);
 }
@@ -45,7 +47,13 @@ const RESET_TTL_MS  =      60 * 60 * 1000; // 1 hour
 async function roleFields(userId, primaryRole) {
   const roles = await UserRole.listForUser(userId);
   const set   = roles.length ? roles : [primaryRole];
-  return { role: primaryRole, roles: set, views: await Role.getViewsForRoles(set) };
+  return {
+    role: primaryRole, roles: set, views: await Role.getViewsForRoles(set),
+    // Seller area (D-020): true only on the public instance, for a user the
+    // latest ops snapshot lists. Drives the "Sölusvæði" menu item and the 2FA
+    // panel; the server re-checks on every /api/v1/seller request.
+    seller: await isPublishedSeller(dbQuery, userId),
+  };
 }
 
 const authController = {
@@ -147,6 +155,8 @@ const authController = {
       user.admin_anywhere = await userIsAdminAnywhere(dbQuery, user.id);
       // Sellers holding the `accounts` view are protected like admins (#17).
       user.accounts_holder = await userHoldsView(dbQuery, user.id, 'accounts');
+      // …and so are published sellers on the public instance (D-020).
+      user.seller_holder = await isPublishedSeller(dbQuery, user.id);
       if (mfaService.isProtected(user)) {
         const challengeId = await mfaService.createChallenge(user.id, {
           ip: req.ip ?? null,

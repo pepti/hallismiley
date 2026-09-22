@@ -19,6 +19,14 @@ portfolio site) lives in the `hallismiley` repo, not here.
 
 No instance of this repo has been deployed; every entry below is on `master`.
 
+### 2026-09-21
+
+- Seller area (D-020): `INSTANCE_ROLE` (`ops` default / `public`); migration
+  105 `published_*` tables; `npm run publish:sellers` signs a snapshot on ops
+  and posts it to `/api/v1/seller-publish` on the public instance; sellers
+  read their leads, own accounts and commission statements at `/solusvaedi`,
+  read-only, behind 2FA. Built and tested, not deployed.
+
 ### 2026-09-12
 
 - Follow-ups to the docs sync: the production canonical-host 301 derives from
