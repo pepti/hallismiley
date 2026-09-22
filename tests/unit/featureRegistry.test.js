@@ -30,7 +30,10 @@ const idx = require('../../scripts/features-index');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 const diff = (a, b) => [...a].filter((x) => !b.has(x)).sort();
 
-const features = idx.loadFeatures(ROOT);
+// Another product's folder (features/os/ in a downstream) is inert: its files
+// stay claimed so they are not "unclaimed", but nothing else is checked.
+const allFeatures = idx.loadFeatures(ROOT);
+const features = allFeatures.filter((f) => !f.foreign);
 const engineFeatures = features.filter((f) => f.owner === 'engine');
 const ARCH = read('docs/ARCHITECTURE.md');
 const HISTORY = read('docs/HISTORY.md');
@@ -62,11 +65,14 @@ function globRe(glob) {
 
 const claims = new Map(); // file → [feature ids]
 const emptyGlobs = [];
-for (const f of features) {
+// Foreign (another product's) features still CLAIM their files — the files
+// arrive by merge and would otherwise read as unclaimed — but an empty glob
+// is not their fault here.
+for (const f of allFeatures) {
   for (const g of f.paths || []) {
     const re = globRe(g);
     const hits = files.filter((p) => re.test(p));
-    if (hits.length === 0) emptyGlobs.push(`${f.id}: ${g}`);
+    if (hits.length === 0 && !f.foreign) emptyGlobs.push(`${f.id}: ${g}`);
     for (const h of hits) {
       if (!claims.has(h)) claims.set(h, []);
       claims.get(h).push(f.id);
@@ -100,7 +106,6 @@ describe('the parsers found the registry (guard)', () => {
   test('features, tree, migrations, docs', () => {
     expect(features.length).toBeGreaterThan(40);
     expect(engineFeatures.length).toBeGreaterThan(40);
-    expect(features.some((f) => f.owner !== 'engine')).toBe(true);
     expect(covered.size).toBeGreaterThan(300);
     expect(engineNames.length).toBeGreaterThan(90);
     expect(engineNames[0]).toBe('001_initial_schema');
@@ -221,5 +226,29 @@ describe('generated files are current', () => {
     for (const f of features) if (f.owner !== 'engine') for (const p of f.paths) expect(patterns).toContain(p);
     expect(generated['.gitattributes'].split('\n')[0]).toBe('* text=auto');
     for (const p of patterns) expect(generated['.gitattributes']).toContain(`${p} merge=ours`);
+  });
+});
+
+// A downstream carries the engine's own product folder (features/os/) by merge.
+// Simulate one: same registry, engine.json says product "zz".
+describe('another product\'s folder is inert in a downstream', () => {
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'features-foreign-'));
+  fs.cpSync(path.join(ROOT, 'features'), path.join(tmp, 'features'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'engine.json'), JSON.stringify({ product: 'zz', role: 'product' }));
+
+  test('features/os/* load as foreign and claim no product-owned path', () => {
+    const loaded = idx.loadFeatures(tmp);
+    const foreign = loaded.filter((f) => f.foreign);
+    expect(foreign.length).toBeGreaterThan(0);
+    expect(foreign.every((f) => f.file.startsWith('features/os/'))).toBe(true);
+    const paths = idx.generateAll(tmp)['.engine-paths'];
+    const lines = paths.split(/\r?\n/);
+    // Foreign feature paths never reach the per-feature block (the fixed block
+    // may legitimately carry the same generic pattern, e.g. product-migrations/**).
+    const extraBlock = lines.slice(lines.findIndex((l) => l.startsWith('# From the')));
+    expect(extraBlock.length).toBeGreaterThan(0);
+    for (const f of foreign) for (const pth of f.paths || []) expect(extraBlock).not.toContain(pth);
+    expect(lines).toContain('features/zz/**');
   });
 });

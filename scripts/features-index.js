@@ -123,16 +123,22 @@ function listFeatureFiles(root = ROOT) {
 /**
  * Every feature file, parsed. `file` is `features/<...>.md`; `folderOwner` is
  * what the folder says the owner is (`engine` for features/x.md, `<p>` for
- * features/<p>/x.md) — the test checks it equals `owner`.
+ * features/<p>/x.md) — the test checks it equals `owner`. `foreign` marks
+ * ANOTHER product's folder: the engine's own product files (features/os/,
+ * product-migrations/os.js) arrive in every downstream by merge and stay
+ * there, inert — a downstream never loads, claims or deletes them (deleting
+ * would turn every later sync into a delete/modify conflict).
  */
 function loadFeatures(root = ROOT) {
+  const product = productId(root);
   return listFeatureFiles(root).map((rel) => {
     const file = `${FEATURES_DIR}/${rel}`;
     const { data, body } = parseFrontmatter(fs.readFileSync(path.join(root, file), 'utf8'));
     const parts = rel.split('/');
     const folderOwner = parts.length === 1 ? 'engine' : parts[0];
     const fileId = path.posix.basename(rel, '.md');
-    return { file, folderOwner, fileId, body, ...data };
+    const foreign = folderOwner !== 'engine' && folderOwner !== product;
+    return { file, folderOwner, fileId, foreign, body, ...data };
   });
 }
 
@@ -157,7 +163,7 @@ function enginePathPatterns(features, product) {
   const fixed = FIXED_PRODUCT_PATHS.map((p) => p.replace('<product>', product));
   const extra = new Set();
   for (const f of features) {
-    if (f.owner === 'engine') continue;
+    if (f.owner === 'engine' || f.foreign) continue;
     for (const p of f.paths || []) if (!fixed.includes(p)) extra.add(p);
   }
   return { fixed, extra: [...extra].sort() };
@@ -214,7 +220,8 @@ function generateReadme(features) {
   ];
   for (const owner of owners) {
     const rows = features.filter((f) => f.owner === owner).sort((a, b) => a.domain - b.domain || a.id.localeCompare(b.id));
-    out.push(`## ${owner === 'engine' ? 'Engine features' : `Product: ${owner}`} (${rows.length})`, '');
+    const foreign = rows.length && rows[0].foreign;
+    out.push(`## ${owner === 'engine' ? 'Engine features' : `Product: ${owner}${foreign ? ' (another product — inert here)' : ''}`} (${rows.length})`, '');
     out.push('| id | name (is / en) | domain | owner | status | flag | migrations | file |');
     out.push('|---|---|---|---|---|---|---|---|');
     for (const f of rows) {
