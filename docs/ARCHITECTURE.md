@@ -333,10 +333,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Controllers | `server/controllers/leadsController.js` (`validateLeadUpdate`, `csvCell`) |
 | Models | `server/models/Lead.js` |
 | Services | `server/services/leadsCleanup.js` (`LEAD_RETENTION_DAYS`, default 730) |
+| Scripts | `server/scripts/leads-export.js` (`npm run leads:export`, on the capturing instance) · `server/scripts/leads-import.js` (`npm run leads:import`, on ops) |
 | Views | `public/js/views/AdminLeadsView.js` |
 | Client | `public/js/services/leads.js` |
 | CSS | `public/css/admin-leads.css` |
-| Jest | `tests/integration/leads.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
+| Jest | `tests/integration/leads.test.js`, `leadsTransfer.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
 | e2e | `e2e/leads.spec.js`, `e2e/sales-handbook.spec.js` (sidebar count) |
 | Migrations | 097 |
 | Features | [leads](../features/leads.md) |
@@ -353,8 +354,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
   formula-neutralised, paged to the end) are admin-only ([review-099](HISTORY.md#review-099)).
 - `leads` is on the seeded `solufolk` role (append-only, `@>` guarded).
 - No MCP leads tool and no automatic per-seller routing — separate sign-offs.
+- Cross-instance transfer (D-020 step 4) is one way, by file, insert-only:
+  `leads:export` carries the submission fields + `created_at` and NEVER the
+  workflow columns; `leads:import` validates the whole file to the contact
+  form's limits, writes in one transaction, `ON CONFLICT (submission_id) DO
+  NOTHING` — an ops row is the seller's work product and is never updated;
+  `source` = `--source` or the file's `instance`; the file lives under
+  gitignored `data/` and is deleted after import (`/personuvernd` §3/§6)
+  ([leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)).
 
-**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099)
+**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099) · [leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)
 
 ## 7. Markaður — market research and the prospect list
 

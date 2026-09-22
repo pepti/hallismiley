@@ -98,6 +98,27 @@ the account on the public site too.
   in `/personuvernd` §6. A visitor's erasure request = delete the row in the
   inbox (admin) and the email in the mailbox.
 
+### Enquiries from the other instances (`leads:export` / `leads:import`)
+
+The public orangesmiley.is (and rekstrarkerfi.is once it runs this engine)
+captures `/hafa-samband` enquiries into its OWN `leads` table, which ops
+never sees. Until ops runs on Azure and a timer takes over, the route is by
+hand, weekly (D-020 step 4):
+
+1. On the capturing box: `npm run leads:export -- --since 2026-09-15 --out data/leads-2026-09-22.json`
+   (omit `--since` for everything; the import is idempotent, so over-exporting
+   is harmless). `data/` is gitignored — never write the file anywhere else.
+2. Carry the file to ops. It is personal data (`/personuvernd` §3).
+3. On ops: `npm run leads:import -- data/leads-2026-09-22.json --dry-run`
+   to see `inserted=` / `skipped=`, then without `--dry-run`. Rows arrive as
+   **Ný** with `source` = the exporting host (or `--source <label>`).
+4. Delete the file on both boxes. Ops keeps the rows under the same 24-month
+   retention.
+
+A lead already on ops is never touched by a re-import — your status, owner
+and notes are yours; only new `submission_id`s are added. A bad row anywhere
+fails the whole file, so a half-imported week cannot happen.
+
 ## Content workflow
 
 - Guides are written/edited in the overlay editor on `/admin/handbok`
