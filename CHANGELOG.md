@@ -24,6 +24,15 @@ sessions, hosting is Azure; see the `[Unreleased]` entries.
 Everything merged to `main` since the 1.0.0 release, by date (one line per
 merged PR or chunk, taken from the merge subjects and branch names).
 
+### 2026-09-22
+
+- Rate limits key per client again on Azure: App Service forwards
+  `X-Forwarded-For: ip:port`, so every IP-keyed limiter and the brute-force
+  tracker keyed per TCP connection (`ERR_ERL_INVALID_IP_ADDRESS` in the log).
+  `server/middleware/forwardedFor.js` strips the port before Express reads the
+  header, mounted right after `trust proxy`. Ported from icelandicstore
+  (fixed there 2026-09-12).
+
 ### 2026-09-12
 
 - Docs back in step with the code, and the defects the sync found (#154): every
