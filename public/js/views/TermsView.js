@@ -1,4 +1,5 @@
 import { t, href, getLocale } from '../i18n/i18n.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
 
 // Terms of service for the public company site (/terms).
 //
@@ -114,12 +115,6 @@ export class TermsView {
     view.innerHTML = `
       <main class="main legal-page" id="main-content">
         <article class="legal-article">
-          <header class="legal-header">
-            <p class="admin-eyebrow">${t('legal.eyebrow')}</p>
-            <h1 class="legal-title">${t('terms.title')}</h1>
-            <p class="legal-meta">${copy.updated}</p>
-          </header>
-
           ${copy.sections.map(([heading, body]) => `
           <section class="legal-section">
             <h2>${heading}</h2>
@@ -132,6 +127,21 @@ export class TermsView {
         </article>
       </main>
     `;
+    // A basalt canyon — solid ground, the rules as bedrock.
+    const header = `
+          <header class="legal-header">
+            <p class="admin-eyebrow">${t('legal.eyebrow')}</p>
+            <h1 class="legal-title">${t('terms.title')}</h1>
+            <p class="legal-meta">${copy.updated}</p>
+          </header>`;
+    const main = view.querySelector('.main');
+    this._scene = mountSceneHeader(main, 'terms', header);
+    // No manifest entry → the flat header goes back where it was.
+    if (!main.contains(this._scene.el())) main.querySelector('.legal-article').insertAdjacentHTML('afterbegin', header);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
   }
 }

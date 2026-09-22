@@ -35,7 +35,7 @@ export class ProjectsView {
     main.appendChild(section);
     view.appendChild(main);
 
-    // Landmannalaugar — black-and-orange, the brand as landscape.
+    // Rhyolite ridges — the brand's earth colours as landscape.
     this._scene = mountSceneHeader(main, 'verkefni', `
         <header class="thjonusta-header">
           <p class="admin-eyebrow">${t('nav.projects')}</p>

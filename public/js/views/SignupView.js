@@ -4,6 +4,7 @@ import { isSafeReturnTo } from '../utils/safeReturnTo.js';
 import { t, href } from '../i18n/i18n.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 import { SOCIAL_LOGIN_ENABLED } from '../utils/features.js';
+import { mountSceneBackdrop } from '../scenes/sceneHeader.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -44,6 +45,11 @@ function captureSignupReferrer() {
 }
 
 export class SignupView {
+  // Moss falls into a clear pool — a fresh start (iceland-v2, 2026-09-22).
+  destroy() {
+    this._scene?.destroy();
+  }
+
   async render() {
     captureSignupReferrer();
     const el = document.createElement('div');
@@ -159,6 +165,7 @@ export class SignupView {
 
     this._buildAvatarPicker(el);
     this._bindForm(el);
+    this._scene = mountSceneBackdrop(el, 'signup');
     return el;
   }
 

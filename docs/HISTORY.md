@@ -39,6 +39,8 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-13 | [/thjonusta = the services page](#services-page) | Company sells any SMB software; no tiers or prices on this site; `SERVICE_OFFERINGS` mirror; migration 104 rewrites two seeded guides |
 | 2026-09-17 | [Docs restructure — ARCHITECTURE, HISTORY, parity test](#docs-restructure) | CLAUDE.md 776 → ~100 lines of rules; this file + `docs/ARCHITECTURE.md`; `architectureIndex.test.js`; review pass fixed 8 findings |
 | 2026-09-21 | [Seller area — published one way from ops (D-020 step 3)](#seller-area) | `INSTANCE_ROLE`; migration 105 `published_*`; signed snapshot ingest; `/solusvaedi` read-only behind 2FA; built, not deployed |
+| 2026-09-22 | [TEST chrome is admins only](#test-chrome-admin) | Logged-out visitors on TEST see production; `changeRequestGate` admin-only on every stack; `openToEveryone` → `testStack` |
+| 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
 
 ---
 
@@ -843,3 +845,69 @@ ones), and the full build in one chunk.
   5.10 VSK filing, Halli's go), a shared `SELLER_PUBLISH_SECRET` on both, and
   each seller invited on the public box with the same email as on ops. Copy is
   DRAFT.
+
+<a id="test-chrome-admin"></a>
+## 2026-09-22 — TEST chrome is admins only
+
+Halli, looking at the local TEST stack logged out: the blue TEST badge, the
+nav glow and the "Óska eftir breytingu" button must not show unless an admin
+is signed in with TEST mode on. Until now the test stack showed all three to
+every visitor and the submit endpoint took anonymous requests, a leftover of
+icelandicstore's validation trial.
+
+- Client: `themePrefs.getEffectiveEnv()` returns `production` for anyone who
+  is not an admin, so `body.is-test-env` and the widget follow the role.
+  `main.js` used to decide once at boot, before the session was restored; it
+  now runs one sync at boot and on every `authchange` (sign-in mounts the
+  chrome, sign-out tears it down, including a widget the theme switcher's
+  TEST toggle mounted).
+- Server: `changeRequestGate` checks the admin role first on every stack; the
+  test stack only waives the Admin → Feedback switch. Hiding the button while
+  leaving the door open would have been a hidden anonymous write path.
+- The settings endpoint's `openToEveryone` became `testStack`, and the admin
+  note (`adminCR.switchTestNote`, DRAFT copy) now says "admins" not "everyone".
+- Tests: three clamp cases in `themePrefsEnv.client.test.js`; the gate matrix
+  in `changeRequests.test.js` flipped for anonymous/customer on TEST; two e2e
+  cases in `admin-feedback-switch.spec.js` (logged out: no badge, no widget;
+  admin: both).
+- The same code lives in `rekstrarkerfid` (whose TEST stack is public); not
+  ported in this chunk.
+
+<a id="iceland-v2"></a>
+## 2026-09-22 — Iceland v2: a landscape on every page
+
+Halli: most pages had no background landscape. Only /thjonusta, /verkefni,
+/um-okkur and /hafa-samband wore one; privacy, terms, signup, the password
+and email pages, profile and 404 were flat. He supplied 19 AI-generated
+stills of his own (`pictures/iceland-v2-originals`, 1280×720 JPEGs named
+`.png`) and chose to **replace the whole Commons set** with them.
+
+- **Assignments** (`sceneDefs.js` header has the meanings): /thjonusta
+  canyon river · /verkefni rhyolite ridges · /um-okkur glacier tongue ·
+  /hafa-samband black beach · /personuvernd cave falls · /terms basalt canyon ·
+  /signup moss falls · forgot/reset/verify snow rapids · /profile hot spring ·
+  404 braided sand; the dormant home defs got ice-lagoon / braided-moss /
+  braided-valley. Six more stills wait in `assets-src` as spares.
+- **No place chip.** Its reason was "real places, so the site feels located";
+  these are landforms, so a name would be false. `SceneStage`'s `chip` now
+  defaults off and needs a `place` in the def.
+- **Two mounting shapes.** Header pages use `mountSceneHeader` (ProfileView
+  moves its *bound* header node in, so the edit button keeps its listener; the
+  legal and 404 views put their flat header back if the manifest lacks the
+  image). Card pages use the new `mountSceneBackdrop`: the scene fills one
+  viewport behind a frosted card (`.scene-page`), masked into the page
+  background below the fold. Page-tall was tried first: `cover` on a long
+  signup form blew the 1280px image up until the first screen was only sky.
+- **Build script.** Sources below a width step now ship at their own width
+  (1280), not only 480/960; the 250 KB budget applies to the largest ≤1600w
+  AVIF (all 13 are 56–107 KB). CREDITS.md renders entries without a license
+  URL and says the images, and the hero video, are AI-generated for Orange
+  Smiley ehf.
+- **Known soft edge.** 1280px sources are upscaled ~1.5× on a 1920px screen;
+  the scrim and grade hide most of it, and larger originals drop straight in.
+- The /personuvernd title (one 20-letter word at 2rem + tracking) was clipped
+  by the band on a phone; it scales with the viewport inside the band now.
+- Verifying in the desktop app's browser pane: IntersectionObserver only fires
+  when the pane paints, so a band can look like its blurred placeholder until a
+  screenshot forces a frame. That is the pane, not the site (the e2e run
+  loads every scene).

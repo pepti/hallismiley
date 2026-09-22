@@ -12,12 +12,17 @@
  * icelandicstore-prod-app (and handed an admin a change-request widget whose
  * submit endpoint 404s there — changeRequestGate).
  *
+ * Since 2026-09-22 the chrome is also admin-only on TEST (Halli): a logged-out
+ * visitor or a customer sees the TEST stack exactly as production. The admin
+ * check comes from services/auth.js, mocked here so each test sets the role.
+ *
  * The module is authored as ESM but Jest's babel-jest transform (babel.config.js
  * with @babel/preset-env) compiles it to CJS for require(). It reads `document`
  * and `localStorage`, which the node test environment lacks — both are stubbed.
  */
 
 let store;
+let admin;
 
 beforeAll(() => {
   global.localStorage = {
@@ -41,10 +46,18 @@ function setServerEnv(content) {
 
 beforeEach(() => {
   store = {};
+  admin = true; // the pre-2026-09-22 cases below are an admin's view
   jest.resetModules();
 });
 
 function load() {
+  jest.doMock('../../public/js/services/auth.js', () => ({
+    getUser: () => (admin ? { roles: ['admin'] } : null),
+    isAuthenticated: () => admin,
+    isAdmin: () => admin,
+    updateProfile: async () => {},
+    updateCachedUser: () => {},
+  }));
   return require('../../public/js/services/themePrefs');
 }
 
@@ -84,5 +97,26 @@ describe('themePrefs.getEffectiveEnv — TEST chrome clamp', () => {
     jest.resetModules();
     setServerEnv('production');
     expect(load().getEffectiveEnv()).toBe('production');
+  });
+});
+
+describe('themePrefs.getEffectiveEnv — TEST chrome is admin-only', () => {
+  test('TEST stack, logged out → production (no badge, no widget)', () => {
+    setServerEnv('test');
+    admin = false;
+    expect(load().getEffectiveEnv()).toBe('production');
+  });
+
+  test('TEST stack, non-admin with a leftover test override → still production', () => {
+    setServerEnv('test');
+    admin = false;
+    store.ws_test_override = 'test';
+    expect(load().getEffectiveEnv()).toBe('production');
+  });
+
+  test('TEST stack, admin with the switch on (no override) → test', () => {
+    setServerEnv('test');
+    admin = true;
+    expect(load().getEffectiveEnv()).toBe('test');
   });
 });

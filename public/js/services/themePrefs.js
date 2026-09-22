@@ -7,9 +7,10 @@
 // APP_ENV (the <meta name="app-env"> stamped by ssrMeta.js). The override is
 // purely client-side, and it can only ever turn the test affordances OFF —
 // never on. See getEffectiveEnv(): the blue TEST chrome means "this really is
-// the TEST stack" and nothing else. The change-request submit endpoint is
-// gated server-side regardless (changeRequestGate: the test stack, or an
-// admin with the Admin → Feedback switch on) — no browser state opens it.
+// the TEST stack, and you are an admin" and nothing else. The change-request
+// submit endpoint is gated server-side regardless (changeRequestGate: an admin
+// on the test stack, or an admin with the Admin → Feedback switch on) — no
+// browser state opens it.
 // `ws_demo_mode` — '1' = demo mode on; absent = off. A presentation overlay
 // layered on top of TEST (see test-env.css / ChangeRequestWidget); purely
 // client-side and only meaningful while the test affordances are showing.
@@ -26,7 +27,7 @@
 //     server value back into localStorage and repaints.
 // Anonymous visitors are unaffected: no session, no write, browser-local only.
 
-import { getUser, isAuthenticated, updateProfile, updateCachedUser } from './auth.js';
+import { getUser, isAuthenticated, isAdmin, updateProfile, updateCachedUser } from './auth.js';
 
 // Order is the picker's order: the default (Glóð) first, then the light, then
 // high contrast. 'classic' is BJART (light) since 2026-08-20 — the id outlived the
@@ -225,8 +226,13 @@ export function setTestOverride(value) {
 // live site" signal, and stops a non-admin from being handed a change-request
 // widget whose submit endpoint 404s in production (changeRequestGate). A stale
 // 'test' override left in a PROD browser is simply ignored.
+//
+// And even on TEST the chrome is an admin's tool, not the visitor's (Halli,
+// 2026-09-22): logged out, or signed in without the admin role, the site looks
+// exactly like production. Callers re-evaluate on 'authchange'.
 export function getEffectiveEnv() {
   if (getServerEnv() !== 'test') return 'production';
+  if (!isAdmin()) return 'production';
   return getTestOverride() === 'production' ? 'production' : 'test';
 }
 

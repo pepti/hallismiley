@@ -20,7 +20,7 @@
 //
 // Only 'test' and 'development' are "not the live site". Anything else — an
 // unset value, 'production', or a stack somebody named 'staging' — is live: a
-// value the UI would never badge must not open the anonymous submit door.
+// value the UI would never badge must not open the switch-free submit door.
 
 const OPEN_ENVS = new Set(['test', 'development']);
 
@@ -28,9 +28,9 @@ function appEnv() {
   return process.env.APP_ENV || process.env.NODE_ENV || 'production';
 }
 
-// The test stack: the change-request widget is on for everyone, the submit
-// endpoint is open, the write limiters step aside, and the client shows the
-// blue TEST chrome. One question, one answer.
+// The test stack: admins get the change-request widget without the Admin →
+// Feedback switch, the write limiters step aside, and the client shows admins
+// the blue TEST chrome. One question, one answer.
 function isTestStack() {
   return OPEN_ENVS.has(appEnv());
 }

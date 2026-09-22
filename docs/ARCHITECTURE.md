@@ -257,13 +257,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `theme-boot.js` — keep in sync), `classic`/Bjart (owns `:root`),
   `midnight`/Miðnætti. `light`/`mono` are retired ids (094). Every new UI must
   survive a theme switch (invariant 15); canvases read `chartTheme.js` at draw time.
-- Photos are licensed Commons CC0/CC BY, credited in the generated `CREDITS.md`
-  (footer-linked); never Halli's Facebook saves. Originals live in gitignored
-  `assets-src/iceland/`; `build-iceland-scenes.js` regenerates everything and
-  FAILS if a hero AVIF exceeds 250 KB ([scene-engine](HISTORY.md#scene-engine)).
-- Scene assignments carry meaning (`sceneDefs.js`): /thjonusta Sigöldugljúfur,
-  /verkefni Landmannalaugar, /um-okkur glacier at blue hour, /hafa-samband
-  Reynisfjara. Inner pages only — the homepage left the programme.
+- The images are Halli's own AI generations (since [iceland-v2](HISTORY.md#iceland-v2);
+  the Commons set before them is retired), credited to Orange Smiley ehf. in the
+  generated `CREDITS.md` (footer-linked); never other people's photos or
+  Facebook saves. Originals live in gitignored `assets-src/iceland/`;
+  `build-iceland-scenes.js` regenerates everything, ships a small source at its
+  own width, and FAILS if the largest ≤1600w AVIF exceeds 250 KB
+  ([scene-engine](HISTORY.md#scene-engine)).
+- Scene assignments carry meaning (`sceneDefs.js` header): every
+  visitor-facing page has one — bands via `mountSceneHeader`, the card pages
+  (signup, forgot/reset password, verify email) a one-viewport backdrop via
+  `mountSceneBackdrop`. Not on the homepage (video), the hidden surfaces or
+  admin. No place chip: the images are not real places. `ssrMeta.js`
+  `ROUTE_SCENE_IMAGES` follows every reassignment ([iceland-v2](HISTORY.md#iceland-v2)).
 - `/api/v1/ambience` proxies Open-Meteo with a 10-minute server cache and
   ALWAYS answers 200 (`{available:false}` on failure, static scenes); sun
   position is client-side; weather particles + WebGL aurora run on dark themes
@@ -274,7 +280,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the hardest cut, for contrast) [scene-engine](HISTORY.md#scene-engine).
 - `landing_background` mode `video` is the hero default (089 reverted 086).
 
-**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme)
+**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2)
 
 ## 5. i18n
 
@@ -670,12 +676,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | — |
 
 **Rules that must hold**
-- The gate = non-prod app-env OR (`change_requests.enabled` setting on AND
-  admin); it answers **404, not 403**; in prod the widget mounts for admins
+- The gate = admin AND (non-prod app-env OR `change_requests.enabled` setting
+  on); it answers **404, not 403**; in prod the widget mounts for admins
   only, without the TEST chrome ([harvest-2](HISTORY.md#harvest-2)).
+- The TEST chrome (badge, nav/footer glow, widget) is **admins only on every
+  stack**: a logged-out visitor or a customer on TEST sees production.
+  `themePrefs.getEffectiveEnv()` is the one client answer, re-evaluated on
+  `authchange` ([test-chrome-admin](HISTORY.md#test-chrome-admin)).
 - Sits in the Þjónusta sidebar group as the support product ([admin-reshape](HISTORY.md#admin-reshape)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin)
 
 ## 17. Content, settings, background
 

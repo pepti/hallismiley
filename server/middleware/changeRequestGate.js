@@ -1,9 +1,12 @@
-// Gate for the change-request submit endpoint (ice #206). Two ways in:
-//   • the test stack (config/appEnv.js isTestStack) — anyone can file requests,
-//     logged out included, which is the whole point of a validation trial.
+// Gate for the change-request submit endpoint (ice #206). Admins only, always;
+// two ways in for them:
+//   • the test stack (config/appEnv.js isTestStack) — no switch needed.
 //   • the admin switch (Admin → Feedback) — lets the owner file requests
-//     against the live site too, but ONLY as an admin. Customers must never
-//     see or reach this, so a non-admin gets the same 404 as before.
+//     against the live site too.
+// Customers and logged-out visitors get the 404 on every stack. The test stack
+// used to take anonymous requests (a validation trial); since 2026-09-22 the
+// TEST chrome and the widget are admin-only in the client (Halli), and the
+// door closes to match rather than stay open with no UI in front of it.
 // Must run AFTER softAuth so req.user (and its role set) is populated. 404
 // rather than 403 keeps production silent about the route either way.
 //
@@ -27,8 +30,8 @@ function notFound(res) {
 
 async function changeRequestGate(req, res, next) {
   try {
-    if (isTestStack()) return next();
     if (!hasRole(req.user, 'admin')) return notFound(res);
+    if (isTestStack()) return next();
     if (!(await Setting.getChangeRequestsEnabled())) return notFound(res);
     return next();
   } catch (err) {
