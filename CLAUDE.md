@@ -69,6 +69,10 @@ Full deployment guide: `docs/DEPLOYMENT.md`. Operational runbook: `RUNBOOK.md`.
 
 ## Reference docs (read these instead of asking me to re-explain)
 
+- `docs/ARCHITECTURE.md` — **start a feature request here**: every domain with its routes,
+  controllers, models, services, views, tests, migrations and the rules that must hold.
+  `tests/unit/architectureIndex.test.js` fails CI when the index and the tree disagree.
+- `docs/HISTORY.md` — dated incidents and programmes, indexed; the *why* behind the rules.
 - `README.md` — setup, env vars, backup strategy
 - `RUNBOOK.md` — operational procedures
 - `CHANGELOG.md` — version history
@@ -82,31 +86,34 @@ Full deployment guide: `docs/DEPLOYMENT.md`. Operational runbook: `RUNBOOK.md`.
 - `SECURITY_AUDIT_2026-04-16.md` — frozen point-in-time record (banner says what is since fixed)
 - `PRE_LAUNCH_AUDIT.md` — frozen point-in-time record (2026-03-30)
 
-## Things that have bitten us before
+## Domain map — start a feature request here
 
-<!-- Append one bullet per real incident. Format:
-- YYYY-MM-DD — short symptom — root cause — fix (link to RUNBOOK / commit if applicable)
--->
+Full per-domain index: **`docs/ARCHITECTURE.md`**. `tests/unit/architectureIndex.test.js`
+fails CI when a routes/controller/model/service/view file has no row there, when a cited
+migration is not in `schema.js` (or an applied one is not cited), or when a link does not
+resolve — the failure message names the missing row.
 
-- 2026-08-07 — dev AR page 500s after a schema edit — migration 072 was edited AFTER the
-  dev database had applied it, so the column existed in `schema.js` and not in Postgres —
-  dropped the ~21 books tables and the `schema_migrations` rows, re-migrated. **Never edit
-  an applied migration; add a new one.**
-- 2026-08-07 — new payroll columns silently absent — migration 076 used `CREATE TABLE IF NOT
-  EXISTS employees`, but 072 already created that table, so the statement was a no-op and the
-  service queried columns that were never added — rewrote 076 as ALTERs on 072's tables.
-  **Check whether a table already exists before declaring one.**
-- 2026-08-07 — `journal_lines.vat_rate` NULL on every row ever written — `postEntry` prepared
-  the value and left it out of the INSERT; nothing failed because the VSK return derives from
-  each account's `vat_code` — added the column to both inserts.
-- 2026-08-08 — payroll tax bands all started at 0 kr. — migration 072 seeded 2026 as UPPER
-  bounds (`{"upTo":498122}`, how Skatturinn prints it) while the loader read LOWER bounds and
-  defaulted a missing one to 0, collapsing the slicing so nearly the whole salary would have
-  been taxed at the top rate — `normaliseBands()` now accepts either shape and refuses one
-  that states neither. **Found by looking at the screen, not by a test.**
-- 2026-08-07 — 100+ nondeterministic test failures across unrelated suites — two sessions
-  shared `hallismiley_test`, which jest globalSetup DROPs — always set `TEST_DATABASE_URL` to
-  a private database name.
-- 2026-08-07 — `gh pr checks` reported green for a stale head — it was reading a merged PR's
-  old commit — verify with `gh api repos/:owner/:repo/commits/$(git rev-parse HEAD)/check-runs`
-  and require `total_count > 0`.
+| # | Domain |
+|---|---|
+| 1 | [Auth, users, RBAC, 2FA](docs/ARCHITECTURE.md#1-auth-users-rbac-2fa) |
+| 2 | [Admin shell, UI kit](docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-ui-kit) |
+| 3 | [Public site, SSR meta, SEO](docs/ARCHITECTURE.md#3-public-site--home-contact-legal-ssr-meta-sitemap-seo) |
+| 4 | [Themes](docs/ARCHITECTURE.md#4-themes) |
+| 5 | [i18n](docs/ARCHITECTURE.md#5-i18n) |
+| 6 | [Shop](docs/ARCHITECTURE.md#6-shop--storefront-cart-checkout-orders-products-collections-bins-discounts-customers-sales) |
+| 7 | [News, projects, party, bio, Aron13](docs/ARCHITECTURE.md#7-news-projects-party-bio-aron13) |
+| 8 | [Monitoring](docs/ARCHITECTURE.md#8-monitoring--event-logs-metrics-analytics-health) |
+| 9 | [Self-update](docs/ARCHITECTURE.md#9-self-update) |
+| 10 | [MCP connector](docs/ARCHITECTURE.md#10-mcp-connector) |
+| 11 | [Change requests](docs/ARCHITECTURE.md#11-change-requests--in-app-feedback) |
+| 12 | [Content, settings, background](docs/ARCHITECTURE.md#12-content-settings-background) |
+| 13 | [Uploads, media](docs/ARCHITECTURE.md#13-uploads-and-media) |
+| 14 | [Email](docs/ARCHITECTURE.md#14-email) |
+| 15 | [Bookkeeping](docs/ARCHITECTURE.md#15-bookkeeping--invoices-expenses-ar-vsk-bank-ledger-payroll-pos) |
+| 16 | [Infrastructure](docs/ARCHITECTURE.md#16-infrastructure-and-cross-cutting) |
+
+**Recording a change (since 2026-09-22)**: an incident or programme write-up goes to
+`docs/HISTORY.md` (dated section with an `<a id>` anchor + index row); the rule it establishes
+goes to the domain's "Rules that must hold" in `docs/ARCHITECTURE.md`, linking back. This
+file changes only when a *rule* changes. The former "Things that have bitten us before" list
+is `docs/HISTORY.md` now; the lesson each one taught is in the domain it belongs to.
