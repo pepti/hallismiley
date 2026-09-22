@@ -37,8 +37,9 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-08 | [The three deferred items (migrations 100–102)](#migrations-100-102) | Payable is an amount; buyer party block (100); deposit is a prepayment, 2150 never debit (101); statements/payouts/clawback (102); `commissionScope` |
 | 2026-09-08 | [Shared admin UI kit (ENHANCEMENTS #21)](#ui-kit) | The kit (`adminTable`, `adminPager`, `listState`…); eight defects; 2FA gate mirrored both sides; `pageTitle` mirrors `ssrMeta.js`; base PR #153 |
 | 2026-09-13 | [/thjonusta = the services page](#services-page) | Company sells any SMB software; no tiers or prices on this site; `SERVICE_OFFERINGS` mirror; migration 104 rewrites two seeded guides |
-| 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
 | 2026-09-17 | [Docs restructure — ARCHITECTURE, HISTORY, parity test](#docs-restructure) | CLAUDE.md 776 → ~100 lines of rules; this file + `docs/ARCHITECTURE.md`; `architectureIndex.test.js`; review pass fixed 8 findings |
+| 2026-09-22 | [TEST chrome is admins only](#test-chrome-admin) | Logged-out visitors on TEST see production; `changeRequestGate` admin-only on every stack; `openToEveryone` → `testStack` |
+| 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
 
 ---
 
@@ -805,6 +806,33 @@ doc" column pointed into CLAUDE.md history sections.
   one-directional and 962 cases wide. Fixed in the follow-up PR.
 - LESSONS.md 2026-09-17 carries the factory lesson: scaffold ARCHITECTURE +
   HISTORY + the parity test from day one.
+
+<a id="test-chrome-admin"></a>
+## 2026-09-22 — TEST chrome is admins only
+
+Halli, looking at the local TEST stack logged out: the blue TEST badge, the
+nav glow and the "Óska eftir breytingu" button must not show unless an admin
+is signed in with TEST mode on. Until now the test stack showed all three to
+every visitor and the submit endpoint took anonymous requests, a leftover of
+icelandicstore's validation trial.
+
+- Client: `themePrefs.getEffectiveEnv()` returns `production` for anyone who
+  is not an admin, so `body.is-test-env` and the widget follow the role.
+  `main.js` used to decide once at boot, before the session was restored; it
+  now runs one sync at boot and on every `authchange` (sign-in mounts the
+  chrome, sign-out tears it down, including a widget the theme switcher's
+  TEST toggle mounted).
+- Server: `changeRequestGate` checks the admin role first on every stack; the
+  test stack only waives the Admin → Feedback switch. Hiding the button while
+  leaving the door open would have been a hidden anonymous write path.
+- The settings endpoint's `openToEveryone` became `testStack`, and the admin
+  note (`adminCR.switchTestNote`, DRAFT copy) now says "admins" not "everyone".
+- Tests: three clamp cases in `themePrefsEnv.client.test.js`; the gate matrix
+  in `changeRequests.test.js` flipped for anonymous/customer on TEST; two e2e
+  cases in `admin-feedback-switch.spec.js` (logged out: no badge, no widget;
+  admin: both).
+- The same code lives in `rekstrarkerfid` (whose TEST stack is public); not
+  ported in this chunk.
 
 <a id="iceland-v2"></a>
 ## 2026-09-22 — Iceland v2: a landscape on every page

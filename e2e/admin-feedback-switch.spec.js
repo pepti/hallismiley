@@ -1,12 +1,33 @@
 // Admin → Feedback: the PROD on/off switch for the change-request widget
 // (ice #206). The e2e server runs with NODE_ENV=test, so the page explains
-// that this environment always has the widget on and the switch governs the
-// live site. Persisting the switch is what is under test here; the server
-// gate itself is covered by tests/integration/changeRequests.test.js.
+// that this environment always has the widget on for admins and the switch
+// governs the live site. Persisting the switch is what is under test here; the
+// server gate itself is covered by tests/integration/changeRequests.test.js.
 const { test, expect } = require('@playwright/test');
 const { loginAsAdmin } = require('./helpers');
 
 test.use({ viewport: { width: 1280, height: 900 } });
+
+// Halli, 2026-09-22: the TEST chrome (badge, nav glow, feedback widget) is an
+// admin's tool. A logged-out visitor on the test stack sees production.
+test.describe('TEST chrome — admins only', () => {
+  test('a logged-out visitor sees no TEST badge and no feedback widget', async ({ page }) => {
+    await page.goto('/is/');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('body')).not.toHaveClass(/is-test-env/);
+    await expect(page.locator('.test-env-badge')).toHaveCount(0);
+    await expect(page.locator('#cr-widget')).toHaveCount(0);
+  });
+
+  test('a signed-in admin gets the badge and the widget', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/is/');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('body')).toHaveClass(/is-test-env/);
+    await expect(page.locator('.lol-nav .test-env-badge')).toBeVisible();
+    await expect(page.locator('#cr-fab')).toBeVisible();
+  });
+});
 
 test.describe('admin feedback — change-request switch', () => {
   test.beforeEach(async ({ page }) => {
@@ -42,7 +63,7 @@ test.describe('admin feedback — change-request switch', () => {
   });
 
   test('the widget relabels itself when the locale switches (localechange)', async ({ page }) => {
-    // The widget is mounted for everyone on the test stack.
+    // The widget is mounted for admins on the test stack.
     const fab = page.locator('#cr-fab-label');
     await expect(fab).toBeVisible();
     const isText = (await fab.textContent()).trim();

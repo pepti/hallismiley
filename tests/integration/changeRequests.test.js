@@ -4,7 +4,9 @@
 // The widget was non-production-only (404 in production). It can now also be
 // switched on for production from Admin → Feedback, but there it is admins
 // only — a customer or a logged-out visitor must still get the same 404, so
-// production never reveals the route.
+// production never reveals the route. Since 2026-09-22 the test stack is
+// admins-only too (Halli: the TEST chrome is not for visitors); there the
+// admin needs no switch.
 //
 // The gate resolves APP_ENV || NODE_ENV, and Jest runs with NODE_ENV=test,
 // which would leave every door open. Every test therefore pins APP_ENV.
@@ -71,11 +73,21 @@ describe('POST /api/v1/change-requests — environment gate', () => {
     expect((await submit(adminCookie)).status).toBe(404);
   });
 
-  test('accepts anonymous submissions on TEST regardless of the switch', async () => {
+  test('accepts an admin on TEST regardless of the switch', async () => {
     setAppEnv('test');
-    const res = await submit(null);
+    const res = await submit(adminCookie);
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ ok: true, count: 1 });
+  });
+
+  test('TEST no longer takes anonymous or customer submissions (admin-only since 2026-09-22)', async () => {
+    setAppEnv('test');
+    expect((await submit(null)).status).toBe(404);
+    expect((await submit(userCookie)).status).toBe(404);
+    await enable(true); // the PROD switch opens nothing for non-admins either
+    expect((await submit(null)).status).toBe(404);
+    const { rows } = await db.query('SELECT id FROM change_requests');
+    expect(rows).toHaveLength(0);
   });
 
   test('once switched on in production, admins can submit', async () => {
@@ -127,9 +139,10 @@ describe('POST /api/v1/change-requests — environment gate', () => {
     expect((await submit(adminCookie)).status).toBe(201);
   });
 
-  test('a development app-env opens the anonymous door like test does', async () => {
+  test('a development app-env behaves like test: admins without the switch, nobody else', async () => {
     setAppEnv('development');
-    expect((await submit(null)).status).toBe(201);
+    expect((await submit(adminCookie)).status).toBe(201);
+    expect((await submit(null)).status).toBe(404);
   });
 });
 
@@ -141,7 +154,7 @@ describe('/api/v1/admin/change-requests/settings', () => {
       .get('/api/v1/admin/change-requests/settings')
       .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: false, appEnv: 'production', openToEveryone: false });
+    expect(res.body).toEqual({ enabled: false, appEnv: 'production', testStack: false });
   });
 
   test('PATCH persists the switch and GET reads it back', async () => {
