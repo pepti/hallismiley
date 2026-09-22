@@ -953,6 +953,15 @@ Code chunk (`feat/orangesmiley-go-live`):
   points at `releases.orangesmiley.is`, which nothing serves yet (D-014).
 - `/personuvernd` §7 (DRAFT) names Sweden as where Azure keeps the data.
 
+**Same day, after the first deploy:** the container logged
+`ERR_ERL_INVALID_IP_ADDRESS` — App Service forwards `X-Forwarded-For: ip:port`,
+so every IP-keyed limiter (global, writes, login, contact, MCP pre-auth) keyed
+per TCP connection. icelandicstore had found and fixed exactly this on
+2026-09-12 (`forwardedFor.js` + test) but it never reached the base or this
+repo; ported verbatim. rekstrarkerfid, LedgerLink and the base carry the same
+hole. Also learned: a Key Vault reference keeps its cached value across a plain
+restart — re-set the app setting to force a re-fetch after rotating a secret.
+
 Known and out of scope: the admin, books and commission screens ship in the
 image and sit behind RBAC + TOTP on an empty database; hiding them by instance
 role is ENHANCEMENTS #5.

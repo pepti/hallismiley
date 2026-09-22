@@ -762,7 +762,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js` |
+| App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`; `tests/integration/migrateRunner.test.js` |
@@ -790,6 +790,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   digest and before a `/ready` check that only believes a process younger than
   the swap. There is no TEST stack, so dispatch only a sha with green CI; no
   deploy without Halli ([go-live](HISTORY.md#go-live)).
+- `normalizeForwardedFor` runs right after `trust proxy` and before every
+  limiter: App Service forwards `ip:port`, and without it every IP-keyed rate
+  limit keys per TCP connection ([go-live](HISTORY.md#go-live)).
 - The canonical origin is `APP_URL` (fallback `https://www.orangesmiley.is`).
   `public/index.html` is baked with that origin and `ssrMeta.js` swaps it for
   `APP_URL` on load — change the two together ([go-live](HISTORY.md#go-live)).
