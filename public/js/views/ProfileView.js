@@ -4,6 +4,7 @@ import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 import { THEMES, THEME_SWATCHES, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
@@ -21,6 +22,7 @@ export class ProfileView {
   // left to remove it.
   destroy() {
     this._disposed = true;
+    this._scene?.destroy();
     if (this._onThemeChange) {
       window.removeEventListener('themechange', this._onThemeChange);
       this._onThemeChange = null;
@@ -55,6 +57,11 @@ export class ProfileView {
       this._bindPassword(el);
       this._bindSessions(el, sessions);
       this._bindTheme(el);
+      // A hot spring — your own warm spot (iceland-v2, 2026-09-22). The header
+      // node moves into the band AFTER its listeners are bound, so they come
+      // with it; with no manifest entry it simply stays where it is.
+      const header = wrap.querySelector('.profile-header');
+      if (header && !this._disposed) this._scene = mountSceneHeader(el, 'profile', header);
       if (isMfaProtected()) {
         this._renderTotp(el);
       }

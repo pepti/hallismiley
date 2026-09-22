@@ -246,6 +246,61 @@
 .ice-band-panel .um-okkur-header { margin: 0; max-width: none; }
 .ice-band-panel .thjonusta-intro,
 .ice-band-panel .um-okkur-lead { margin-bottom: 0; }
+/* The 2026-09-22 band pages (iceland-v2): legal, 404, profile. Their headers
+   were drawn for paper — rules, borders and a card — so strip that chrome in
+   the band; the copy is lit by the element rules below. */
+.ice-band-panel .legal-header { margin: 0; padding: 0; border: 0; }
+.ice-band-panel .legal-meta { margin-bottom: 0; }
+/* "PERSÓNUVERNDARSTEFNA" is one 20-letter word at 2rem + tracking: on a phone
+   the band's overflow clip would cut it, so it scales with the viewport. */
+.ice-band-panel .legal-title { font-size: clamp(1.2rem, 5.4vw, 2rem); overflow-wrap: anywhere; }
+.ice-band-panel .not-found__inner { max-width: 32em; margin: 0 auto; text-align: center; }
+.ice-band-panel .not-found__code { color: #FDE7D3; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
+.ice-band-panel .not-found__desc { color: #F5EDE2; }
+.not-found:has(> .ice-scene) { display: block; min-height: 0; }
+.ice-band-panel .profile-header { margin: 0; background: none; border: 0; box-shadow: none; }
+.ice-band-panel .profile-header__username { color: #FFFFFF; }
+.ice-band-panel .profile-header .btn--outline { color: #FFFFFF; border-color: rgba(255, 255, 255, 0.7); }
+
+/* ── Scene as a whole-page backdrop (card pages: signup, forgot/reset
+   password, verify email; 2026-09-22) ─────────────────────────────────────
+   Same idea as the home sections above: the stage stretches behind the page
+   and the centred card rises above it, frosted. The page's own solid
+   background stays as the fallback until the picture arrives. */
+.scene-page {
+  position: relative;
+  isolation: isolate;
+  max-width: none;
+}
+/* One viewport tall, not page-tall: a long form (signup) would otherwise
+   stretch `cover` until the first screen shows only sky. Below the fold the
+   page's own background carries on; the mask fades the seam. */
+.scene-page > .ice-scene--backdrop {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: min(100%, 100vh);
+  min-height: 0;
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent);
+  mask-image: linear-gradient(to bottom, #000 80%, transparent);
+}
+.scene-page > :not(.ice-scene--backdrop) {
+  position: relative;
+  z-index: 1;
+}
+.scene-page .auth-card,
+.scene-page .signup-card {
+  background: rgba(var(--bg-nav-rgb), 0.94);
+  border-color: var(--border-light);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .scene-page .auth-card,
+  .scene-page .signup-card {
+    background: rgba(var(--bg-nav-rgb), 0.8);
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  }
+}
 
 /* Band header copy sits directly on the photograph (Halli, 2026-09-02: no
    boxes behind the headers). The page tokens' ink was measured for paper —

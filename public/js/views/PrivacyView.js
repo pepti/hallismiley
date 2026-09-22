@@ -1,4 +1,5 @@
 import { t, href, getLocale } from '../i18n/i18n.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
 
 // Privacy policy for the public business site (/personuvernd).
 //
@@ -330,12 +331,6 @@ export class PrivacyView {
     view.innerHTML = `
       <main class="main legal-page" id="main-content">
         <article class="legal-article">
-          <header class="legal-header">
-            <p class="admin-eyebrow">${t('legal.eyebrow')}</p>
-            <h1 class="legal-title">${t('privacy.title')}</h1>
-            <p class="legal-meta">${copy.updated}</p>
-          </header>
-
           ${copy.sections.map(([heading, body]) => `
           <section class="legal-section">
             <h2>${heading}</h2>
@@ -359,6 +354,21 @@ export class PrivacyView {
       el.appendChild(a);
     });
 
+    // A waterfall seen from inside a cave — a sheltered place.
+    const header = `
+          <header class="legal-header">
+            <p class="admin-eyebrow">${t('legal.eyebrow')}</p>
+            <h1 class="legal-title">${t('privacy.title')}</h1>
+            <p class="legal-meta">${copy.updated}</p>
+          </header>`;
+    const main = view.querySelector('.main');
+    this._scene = mountSceneHeader(main, 'personuvernd', header);
+    // No manifest entry → the flat header goes back where it was.
+    if (!main.contains(this._scene.el())) main.querySelector('.legal-article').insertAdjacentHTML('afterbegin', header);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
   }
 }

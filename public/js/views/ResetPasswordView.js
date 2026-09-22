@@ -1,10 +1,16 @@
 import { resetPassword } from '../services/auth.js';
 import { t, href } from '../i18n/i18n.js';
+import { mountSceneBackdrop } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 
 export class ResetPasswordView {
   constructor(queryString = '') {
     this._queryString = queryString;
+  }
+
+  // Rapids through snow — the account pages' shared scene (2026-09-22).
+  destroy() {
+    this._scene?.destroy();
   }
 
   async render() {
@@ -24,6 +30,7 @@ export class ResetPasswordView {
             <a href="${href('/forgot-password')}" class="btn btn--primary">${t('forgotPassword.submit')}</a>
           </div>
         </div>`;
+      this._scene = mountSceneBackdrop(el, 'account');
       return el;
     }
 
@@ -108,6 +115,7 @@ export class ResetPasswordView {
       }
     });
 
+    this._scene = mountSceneBackdrop(el, 'account');
     return el;
   }
 }

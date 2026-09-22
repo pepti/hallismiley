@@ -33,7 +33,7 @@ export class UmOkkurView {
         </footer>
       </main>
     `;
-    // Svínafellsjökull at blue hour — patient, quiet craft.
+    // A glacier tongue over its lagoon — patient, quiet craft.
     this._scene = mountSceneHeader(view.querySelector('.main'), 'umOkkur', `
         <header class="um-okkur-header">
           <p class="admin-eyebrow">${t('umOkkur.eyebrow')}</p>
