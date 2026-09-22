@@ -178,10 +178,11 @@ chunk lands; add a HISTORY entry for the story.
   workers match the runner's CPUs since 2026-09-13.
 - `deploy.yml` is dispatch-only, by digest, production only (2026-09-22,
   [go-live](docs/HISTORY.md#go-live)); arming = the `production` environment's
-  `vars.*` + OIDC secrets. Standing up orangesmiley.is (public site only; ops
-  stays local until after 5.10 — D-020 step 2 split) is in progress: Azure
-  provisioning, Resend domain, ISNIC records per `docs/DEPLOYMENT.md` §6; no
-  deploy without Halli. `npm audit --audit-level=high` clean (last advisory
+  `vars.*` + OIDC secrets. orangesmiley.is is LIVE since 2026-09-22 (public site
+  only; ops stays local until after 5.10 — D-020 step 2 split); stack, ids and
+  hand-steps in `docs/DEPLOYMENT.md` §6; no deploy without Halli. Open: the
+  `forwardedFor` port to rekstrarkerfid / LedgerLink / base, the Resend team
+  moving to the company, and Halli's approval of `/personuvernd` §7 (Sweden). `npm audit --audit-level=high` clean (last advisory
   cleared 2026-09-14, fast-xml-parser 5).
 - Latest base-sync 2026-09-13: migration 103 (vehicle accounts), memory watch
   timer, escaped mail title, canonical HTTPS redirect — accountant to confirm
