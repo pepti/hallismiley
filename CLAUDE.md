@@ -32,7 +32,7 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 2. **After 5.10, stand up orangesmiley.is and ops** (about €39–55/month; needs Halli's go and an Entra app registration).
 3. **Make the seller area live before seller #1 signs.** Commission statements are due by the 7th, and the tables already exist: `leads`, `customer_accounts`, `commission_*`, `sales_guides`, `market_*`.
 4. **Import website leads from rekstrarkerfi.is**: weekly and by hand while there are 1–3 customers.
-5. **Align the sales handbook** (`server/scripts/seed-sales-guides.js`) **with D-001's pricing**, and point its demo steps at the demo instance.
+5. ~~**Align the sales handbook** (`server/scripts/seed-sales-guides.js`) **with D-001's pricing**, and point its demo steps at the demo instance.~~ Done as DRÖG 2026-09-22 (os_001); Halli confirms the prices, then publishes the guides.
 
 ## Engine upstream (D-021, 2026-09-22)
 
@@ -76,7 +76,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 - Downstreams, never edited directly: `C:\Users\Notandi\claude\Projects\hallismiley` (Halli's personal site — writable only via `engine-sync/<date>` PRs that Halli merges, because merging `main` deploys) and `C:\Users\Notandi\claude\Projects\icelandicstore` (customer #1, live, currently the SOURCE of new generic features — engine changes reach it by engine-sync PR, generic work comes up by `engine-harvest.js`; customer-specific code is never touched by a sync). Generic fixes found in any downstream land HERE first, by PR.
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
-- Prices follow D-001 (`company/DECISIONS.md`): build fee 390/580/690 þ.kr. plus a service contract of 19/29/39 þ.kr./mán with 5/10/20 verkeiningar. They replaced the old flat 39–79 þ.kr./mán tiers, and they stay DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli). The sales handbook still quotes the old flat tiers, which is a known gap (D-020).
+- Prices follow D-001 (`company/DECISIONS.md`): build fee 390/580/690 þ.kr. plus a service contract of 19/29/39 þ.kr./mán with 5/10/20 verkeiningar. They replaced the old flat 39–79 þ.kr./mán tiers, and they stay DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli). The sales handbook quotes the D-001 model too since 2026-09-22 (migration os_001, all DRÖG).
 - The canonical origin is `APP_URL`; its fallback is `https://www.orangesmiley.is` since 2026-09-22. `public/index.html` is baked with that origin and `ssrMeta.js` swaps it for `APP_URL`, so change the two together.
 - Log surprises in `LESSONS.md` (tagged factory/base/project) so `/retro` can harvest them.
 

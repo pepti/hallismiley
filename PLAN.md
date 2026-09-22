@@ -51,7 +51,7 @@ Acceptance (2026-08-09 counts): 2012 Jest + 109 Playwright green · lint clean �
 
 ## Open questions for Halli
 
-1. Confirm tier pricing (39–79 þ.kr./mán is DRAFT).
+1. Confirm tier pricing (D-001: build fee 390/580/690 þ.kr. + service contract 19/29/39 þ.kr./mán with 5/10/20 verkeiningar — DRAFT; the old flat 39–79 þ.kr./mán is retired).
 2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
 3. ENHANCEMENTS.md decisions after Job 3.
 
@@ -126,10 +126,14 @@ chunk lands; add a HISTORY entry for the story.
 - Publish the 14 seeded sales guides ([sales-staff](docs/HISTORY.md#sales-staff));
   decide whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`,
   then flip `e2e/markadur.spec.js`).
-- Tier prices (39/59/79 þ.kr./mán DRAFT) now live on rekstrarkerfi.is only; the
-  sales guides quote them while the product site drafts a build-price-plus-
-  monthly model — two draft price models to reconcile
-  ([services-page](docs/HISTORY.md#services-page)).
+- Handbook aligned to D-001 (DRÖG) 2026-09-22 — Halli confirms the prices, then
+  publishes the guides. Tier prices live on rekstrarkerfi.is only; the guides now
+  quote the same build fee + service contract + verkeiningar model and send
+  sellers to `demo.rekstrarkerfi.is` for demos (migration os_001;
+  [handbook-d001-2026-09-22](docs/HISTORY.md#handbook-d001-2026-09-22)). Open in
+  the guides as "DRÖG — Halli staðfestir": the einingaverð amount, whether unused
+  verkeiningar carry over, the cost of moving up a tier, how sellers demo before
+  the demo instance exists.
 - Decisions that are his, not code's: the lawyer on netting-only set-off
   (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
   accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK

@@ -43,6 +43,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
 | 2026-09-22 | [orangesmiley.is go-live, public site only](#go-live) | D-020 step 2 split: public site first, ops stays local; deploy.yml by digest, production only; `APP_URL` default + baked origin → orangesmiley.is; `EMAIL_REPLY_TO` |
 | 2026-09-22 | [Engine upstream — this repo becomes the parent of every repo (D-021)](#engine-upstream-2026-09-22) | Two layers (source by merge, runtime by product channel); `engine.json` + feature wiki; two-array migrations (091/092/104 → `os.js`, theme CHECK → 106); `engine-sync` / `engine-harvest` / `engine-drift`; icelandicstore is the current source of generic work |
+| 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
 
 ---
 
@@ -1045,3 +1046,59 @@ adopt the `Feature:` trailer with Orri; veto or accept migration 106; merge
 the hallismiley and icelandicstore sync PRs; arm `RELEASE_*` per product,
 orangesmiley's own first. Superseded documents were banner-marked or rewritten
 the same day (`company/DECISIONS.md` D-021 lists them).
+
+<a id="handbook-d001-2026-09-22"></a>
+## 2026-09-22 — Handbook on D-001 pricing and the demo instance (D-020 step 5)
+
+D-020 found two faults in Handbók sölufólks. The seeded guides still sold the
+flat 39/59/79 þ.kr./mán subscription with "setup fee waived on an annual
+contract", which D-001 retired on 2026-09-01/03. And they told sellers to demo
+on orangesmiley.is. A SALES-LOG entry of 2026-09-03 said the seed script
+already carried the new model, but master's seed did not (the change never
+landed), and the dev database's 14 rows were byte-identical to master's seed.
+**All copy is DRÖG for Halli.** Söluþjálfari drafted it.
+
+- **The model in the guides**: a one-time build fee of 390 / 580 / 690 þ.kr.
+  (half at signing, half at go-live, D-005), plus a service contract of
+  19 / 29 / 39 þ.kr./mán carrying 5 / 10 / 20 verkeiningar, all án VSK. What a
+  verkeining is: verk sized 1 / 5 / 20 with the examples from the live
+  rekstrarkerfi.is/verdskra copy, an estimate the customer approves before work
+  starts, a notice at 80%, overage at a fixed einingaverð, and non-urgent verk
+  that queue free. The slogan "Sérsniðið kostar áskrift, ekki ráðgjafatíma"
+  became "Sérsniðið kostar verkeiningar, ekki ráðgjafatíma". The glossary gained
+  uppsetningargjald, þjónustusamningur, verkeining (kept apart from *sérsniðin
+  eining*), einingaverð and sýnikerfi. `manadarleg-samskipti` swaps the
+  annual-contract pitch for the draft 12-month term (D-007, a lawyer-review
+  draft).
+- **Where D-001 is silent the guides say "DRÖG — Halli staðfestir"** and
+  nothing more: the einingaverð amount, whether unused units carry over, the
+  cost of moving up a tier, and how sellers demo before the demo instance
+  exists.
+- **Demos**: `kerfid-i-stuttu-mali` gained a section on `demo.rekstrarkerfi.is`.
+  It covers the Kaffibrennslan Glóð data, the nightly reset, one login per
+  seller behind an authenticator code, time-limited prospect logins only after
+  a guided demo, the shop → order → invoice → VSK → change-request path, and
+  email and payments being off. It says plainly that the instance is being
+  built. `innskraning-og-handbokin` points there too, and its theme sentence
+  now counts three themes, not five.
+- **Migration `os_001_sales_guides_d001_pricing`**, the first entry in the
+  product array `migrations` (D-021). The seed is `ON CONFLICT DO NOTHING`, so
+  seeded rows only move by migration. The 34 passages were derived line by line
+  from the old and new seed. Each is an exact old → new `replace()` through a
+  `guideEdit` helper in `os.js`, guarded on `updated_by IS NULL`, on the old
+  passage being present and on the new one being absent, so a re-run is a no-op.
+  The entry carries its `edits` for the test. A dry run on the dev database, in
+  a rolled-back transaction, turned all 14 rows into exactly the new seed text,
+  and the second run touched nothing.
+- **Test** `tests/integration/salesGuidesD001.test.js` rebuilds the old text by
+  undoing the edits on the seed. It pins that text to a sha256 of the dev
+  database rows as shipped. It then checks that os_001 turns the old text into
+  the seed text exactly, and that no flat-tier phrase survives while the D-001
+  figures and the demo host do. It also checks that a guide saved by a person
+  is untouched and that a second run changes nothing.
+- Not changed (flagged to Halli): `velkomin-i-soluteymid` still says the company
+  "selur eina vöru", although since 2026-09-13 it sells any SMB software.
+  `innskraning-og-handbokin` still sends sellers to `/admin/handbok` on
+  orangesmiley.is, and D-020 has not said which instance serves the handbook
+  once ops is private. Plan docs §1/§3 still carry the old model, which is
+  Halli's edit per D-001.

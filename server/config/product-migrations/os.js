@@ -24,7 +24,137 @@
 //   superseded  { engineName: 'reason' } — engine entries this product never
 //               executes; recorded as applied with the reason. Empty here.
 //
-// Reference copies: server/migrations/091_*.sql, 092_*.sql, 104_*.sql.
+// Reference copies: server/migrations/091_*.sql, 092_*.sql, 104_*.sql,
+// product/os_001_*.sql.
+
+// One exact passage of one seeded sales guide, old text -> new text: the 104
+// pattern as a helper. The UPDATE touches a row only where no person has saved
+// the guide (updated_by IS NULL; salesGuidesController stamps it on every
+// edit), only while the old passage is still there and the new one is not.
+// So a guide somebody edited keeps every word, and a re-run is a no-op. The
+// field names are the constants below, never input.
+const sqlText = (s) => `'${s.replace(/'/g, "''")}'`;
+const guideEdit = ({ slug, field, from, to }) => {
+  if (!['title', 'summary', 'body'].includes(field)) throw new Error(`guideEdit: bad field ${field}`);
+  return `UPDATE sales_guides SET ${field} = replace(${field}, ${sqlText(from)}, ${sqlText(to)})
+       WHERE slug = ${sqlText(slug)} AND updated_by IS NULL
+         AND position(${sqlText(from)} in ${field}) > 0 AND position(${sqlText(to)} in ${field}) = 0`;
+};
+
+// os_001 — D-020 step 5 (2026-09-22). The seeded guides still sold the retired
+// flat subscription (39/59/79 þ.kr./mán, setup fee waived on an annual
+// contract) and told sellers to demo on orangesmiley.is. D-001 replaces the
+// first (build fee 390/580/690 þ.kr. + service contract 19/29/39 þ.kr./mán
+// with 5/10/20 verkeiningar), the demo instance demo.rekstrarkerfi.is the
+// second (D-020; being built, Kaffibrennslan Glóð data reset nightly). The
+// passages were derived line by line from the old and new seed-sales-guides.js,
+// which carries the same text for fresh databases; the test
+// tests/integration/salesGuidesD001.test.js checks that old seed text + these
+// edits == new seed text. Every figure stays DRÖG until Halli confirms.
+const OS_001_EDITS = [
+  { slug: 'velkomin-i-soluteymid', field: 'body',
+    from: '<p>Sérstaða vörunnar í einni setningu: <em>allir viðskiptavinir fá sama trausta kjarnann, og hver og einn fær að auki sérsníðin sem passa nákvæmlega hans rekstri — af því að gervigreind smíðar og viðheldur sérsniðnu hlutunum kostar það áskrift, ekki ráðgjafatíma.</em></p>',
+    to: '<p>Sérstaða vörunnar í einni setningu: <em>allir viðskiptavinir fá sama trausta kjarnann, og hver og einn fær að auki sérsníðin sem passa nákvæmlega hans rekstri — af því að gervigreind smíðar og viðheldur sérsniðnu hlutunum eru þeir greiddir með verkeiningum úr föstum þjónustusamningi, ekki með ráðgjafatímum.</em></p>' },
+  { slug: 'innskraning-og-handbokin', field: 'body',
+    from: '<p>Vefurinn okkar er með <strong>þemuval</strong>: gestir og notendur geta valið á milli fimm útlita (t.d. bjart, pappírslitað, svarthvítt og tvö dökk). Valið er gert í útlitsvalmyndinni á síðunni og vefurinn man stillinguna í vafranum þínum. Þetta skiptir þig máli af tveimur ástæðum:</p>',
+    to: '<p>Vefurinn okkar er með <strong>þemuval</strong>: gestir og notendur geta valið á milli þriggja útlita — Glóð (dökkt, það sem allir sjá fyrst), Bjart (ljóst) og Miðnætti (svart með hvítu letri og mikilli skerpu). Valið er gert í útlitsvalmyndinni á síðunni og vefurinn man stillinguna í vafranum þínum. Þetta skiptir þig máli af tveimur ástæðum:</p>' },
+  { slug: 'innskraning-og-handbokin', field: 'body',
+    from: '<li>Þegar þú sýnir kerfið er fínt að sýna þemuvalið: það er áþreifanlegt dæmi um að kerfið lagar sig að notandanum.</li>',
+    to: '<li>Þemuvalið er áþreifanlegt dæmi um að kerfið lagar sig að notandanum. En þegar þú sýnir viðskiptavini kerfið gerirðu það á <strong>sýnikerfinu demo.rekstrarkerfi.is</strong>, ekki á þessum vef (sjá <em>Kerfið í stuttu máli</em>).</li>' },
+  { slug: 'ordalisti', field: 'body',
+    from: '<li><strong>Áskrift</strong> — fast mánaðargjald sem innifelur allt: kerfið, hýsinguna, vöktun, öryggisuppfærslur og breytingar. Andstæðan við tímagjald.</li>',
+    to: '<li><strong>Uppsetningargjald</strong> — greitt einu sinni fyrir að setja kerfið upp og flytja gögnin yfir. Fast verð eftir þrepi, aldrei tímagjald.</li>\n<li><strong>Þjónustusamningur</strong> — fast mánaðargjald sem heldur kerfinu í rekstri: hýsing, vöktun, öryggisuppfærslur og ákveðinn fjöldi verkeininga á mánuði fyrir breytingar. Fylgir öllum þrepum. Andstæðan við tímagjald.</li>\n<li><strong>Verkeining</strong> — mælieining fyrir vinnu við breytingar og sérsmíði. Hvert verk er metið fyrir fram: lítið verk er 1 eining, meðalstórt 5, stórt 20. Ekki rugla henni saman við <em>sérsniðna einingu</em> hér að neðan: verkeining mælir vinnu, sérsniðin eining er hluti af kerfinu.</li>\n<li><strong>Einingaverð</strong> — fast verð fyrir hverja verkeiningu umfram þær sem fylgja þjónustusamningnum. Upphæðin er ekki ákveðin (DRÖG — Halli staðfestir).</li>' },
+  { slug: 'ordalisti', field: 'body',
+    from: '<li><strong>Hýsing</strong> — að geyma og keyra vef eða kerfi á netþjóni. Innifalin í áskriftinni.</li>',
+    to: '<li><strong>Hýsing</strong> — að geyma og keyra vef eða kerfi á netþjóni. Innifalin í þjónustusamningnum.</li>' },
+  { slug: 'ordalisti', field: 'body',
+    from: '<li><strong>Uppfærsla</strong> — ný útgáfa kerfisins með lagfæringum og nýjungum. Berst sjálfkrafa til allra; viðskiptavinurinn gerir ekkert.</li>',
+    to: '<li><strong>Uppfærsla</strong> — ný útgáfa kerfisins með lagfæringum og nýjungum. Berst sjálfkrafa til allra; viðskiptavinurinn gerir ekkert.</li>\n<li><strong>Sýnikerfi</strong> — sérstakt eintak af Rekstrarkerfinu með tilbúnum sýnigögnum, notað til að sýna viðskiptavinum kerfið: demo.rekstrarkerfi.is. Það er í smíðum, og gögnin þar verða endurstillt á hverri nóttu.</li>' },
+  { slug: 'kerfid-i-stuttu-mali', field: 'summary',
+    from: 'Yfirlit yfir vöruna á einni síðu: eitt íslenskt kerfi í skýinu sem sameinar heimasíðu, vefverslun og bókhald — sami kjarni fyrir alla, sérsníðin fyrir hvern og einn, allt innifalið í fastri mánaðaráskrift.',
+    to: 'Yfirlit yfir vöruna á einni síðu: eitt íslenskt kerfi í skýinu sem sameinar heimasíðu, vefverslun og bókhald — sami kjarni fyrir alla, sérsníðin fyrir hvern og einn, eitt uppsetningargjald og svo fastur þjónustusamningur á mánuði.' },
+  { slug: 'kerfid-i-stuttu-mali', field: 'body',
+    from: '<p>Allir viðskiptavinir keyra sama kjarnann. Það þýðir að endurbætur og öryggisuppfærslur berast öllum, sjálfkrafa — enginn situr eftir á gamalli útgáfu. Ofan á kjarnann fær hver viðskiptavinur <strong>sérsniðnar einingar</strong>: viðbætur sem passa nákvæmlega hans rekstri. Gervigreind smíðar þær og viðheldur þeim, og þess vegna kosta þær áskrift en ekki ráðgjafatíma. Hver viðskiptavinur er með sína eigin uppsetningu og sinn eigin gagnagrunn — gögnin hans blandast aldrei við annarra.</p>\n<h2>Allt innifalið í áskriftinni</h2>\n<p>Fasta mánaðargjaldið innifelur kerfið sjálft, hýsingu í skýinu, vöktun, öryggisuppfærslur — og <strong>breytingar</strong>. Breytingabeiðnir eru afgreiddar á dögum, ekki mánuðum: svar innan eins virks dags, smábreytingar innan viku. Engir tímareikningar, aldrei. Það er stærsti munurinn á okkur og hefðbundinni vefstofu eða kerfissala.</p>',
+    to: '<p>Allir viðskiptavinir keyra sama kjarnann. Það þýðir að endurbætur og öryggisuppfærslur berast öllum, sjálfkrafa — enginn situr eftir á gamalli útgáfu. Ofan á kjarnann fær hver viðskiptavinur <strong>sérsniðnar einingar</strong>: viðbætur sem passa nákvæmlega hans rekstri. Gervigreind smíðar þær og viðheldur þeim, og þess vegna eru þær greiddar með verkeiningum úr þjónustusamningnum en ekki með ráðgjafatímum. Hver viðskiptavinur er með sína eigin uppsetningu og sinn eigin gagnagrunn — gögnin hans blandast aldrei við annarra.</p>\n<h2>Hvað viðskiptavinurinn greiðir</h2>\n<p>Tvennt: <strong>uppsetningargjald</strong> einu sinni, fyrir að setja kerfið upp og flytja gögnin yfir, og <strong>þjónustusamning</strong> á föstu mánaðargjaldi. Samningurinn innifelur hýsingu í skýinu, vöktun, öryggisuppfærslur og ákveðinn fjölda <strong>verkeininga</strong> á mánuði fyrir breytingar og sérsmíði. Breytingabeiðnir eru afgreiddar á dögum, ekki mánuðum: svar innan eins virks dags, smábreytingar innan viku. Engir tímareikningar, aldrei. Það er stærsti munurinn á okkur og hefðbundinni vefstofu eða kerfissala. Verðin og reglurnar um verkeiningar eru í leiðinni <em>Þrepin þrjú</em>.</p>' },
+  { slug: 'kerfid-i-stuttu-mali', field: 'body',
+    from: '<p>Vefur Orange Smiley keyrir á sama kerfi og við seljum — kerfið sem viðskiptavinurinn kaupir er kerfið sem við rekum sjálf. Fyrsti viðskiptavinurinn er íslensk heildverslun sem flutti af Shopify yfir á kerfið. Þegar þú sýnir orangesmiley.is ertu því um leið að sýna vöruna.</p>',
+    to: '<p>Vefur Orange Smiley keyrir á sama kerfi og við seljum — kerfið sem viðskiptavinurinn kaupir er kerfið sem við rekum sjálf. Fyrsti viðskiptavinurinn er íslensk heildverslun sem flutti af Shopify yfir á kerfið.</p>\n<h2>Að sýna kerfið: sýnikerfið demo.rekstrarkerfi.is</h2>\n<p>Þegar þú sýnir viðskiptavini kerfið notarðu <strong>sýnikerfið demo.rekstrarkerfi.is</strong>: sérstakt eintak af Rekstrarkerfinu, bara til sýnis. Þú sýnir aldrei á orangesmiley.is og aldrei á kerfi annars viðskiptavinar. Í sýnikerfinu verða tilbúin gögn fyrir skáldað fyrirtæki, <em>Kaffibrennsluna Glóð</em>: vörur, pantanir, reikningar, eitt VSK-tímabil og ein breytingabeiðni í vinnslu. Gögnin verða endurstillt á hverri nóttu, svo þú mátt prófa hvað sem er — daginn eftir er allt eins og áður.</p>\n<ul>\n<li><strong>Staðan núna:</strong> sýnikerfið er í smíðum og ekki komið í loftið. Þangað til talarðu við Halla áður en þú býður viðskiptavini sýningu (DRÖG — Halli staðfestir hvernig sýnt er fram að því).</li>\n<li><strong>Aðgangur:</strong> hver sölumanneskja fær eigin innskráningu sem er varin með kóða úr auðkenningarappi í símanum, auk lykilorðsins. Viðskiptavinur getur fengið tímabundinn aðgang eftir sýningu sem þú leiðir, aldrei á undan henni.</li>\n<li><strong>Leiðin sem þú sýnir:</strong> vefverslun → pöntun → reikningur → VSK → breytingabeiðni.</li>\n<li>Tölvupóstur og greiðslur verða óvirk í sýnikerfinu, svo ekkert berst til raunverulegs fólks.</li>\n</ul>' },
+  { slug: 'solusagan', field: 'summary',
+    from: 'Kjarnasagan sem öll sala byggist á: stöðluð kerfi reyna að passa öllum og enginn fær það sem hann þarf — Rekstrarkerfið snýr þessu við. Sami trausti kjarninn fyrir alla, sérsníðin fyrir hvern og einn. Sérsniðið kostar áskrift, ekki ráðgjafatíma.',
+    to: 'Kjarnasagan sem öll sala byggist á: stöðluð kerfi reyna að passa öllum og enginn fær það sem hann þarf — Rekstrarkerfið snýr þessu við. Sami trausti kjarninn fyrir alla, sérsníðin fyrir hvern og einn. Sérsniðið kostar verkeiningar, ekki ráðgjafatíma.' },
+  { slug: 'solusagan', field: 'body',
+    from: '<blockquote><p><strong>Sérsniðið kostar áskrift, ekki ráðgjafatíma.</strong></p></blockquote>\n<p>Þessi setning er hjarta sögunnar. Hjá öðrum er sérsníðin dýrasti hlutinn; hjá okkur eru þau innifalin í módelinu — breytingabeiðni fer í ferli og er afgreidd á dögum, ekki mánuðum, án aukareiknings.</p>',
+    to: '<blockquote><p><strong>Sérsniðið kostar verkeiningar, ekki ráðgjafatíma.</strong></p></blockquote>\n<p>Þessi setning er hjarta sögunnar. Hjá öðrum er sérsníðin dýrasti hlutinn og reikningurinn kemur eftir á; hjá okkur fylgja verkeiningar þjónustusamningnum í hverjum mánuði, hvert verk er metið í einingum áður en það hefst, og breytingabeiðni er afgreidd á dögum, ekki mánuðum. Viðskiptavinurinn veit alltaf fyrir fram hvað breytingin kostar.</p>' },
+  { slug: 'solusagan', field: 'body',
+    from: '<p>Ef þú hefur bara eina mínútu: <em>„Þið eruð sennilega með þrjú, fjögur kerfi og jafn marga reikninga — og þegar ykkur vantar breytingu bíðið þið vikum saman eða borgið tímagjald. Við setjum þetta allt í eitt íslenskt kerfi á föstu mánaðargjaldi, og þegar ykkur vantar breytingu er hún afgreidd á dögum. Sérsniðið kostar áskrift, ekki ráðgjafatíma.“</em></p>',
+    to: '<p>Ef þú hefur bara eina mínútu: <em>„Þið eruð sennilega með þrjú, fjögur kerfi og jafn marga reikninga — og þegar ykkur vantar breytingu bíðið þið vikum saman eða borgið tímagjald. Við setjum þetta allt í eitt íslenskt kerfi: eitt uppsetningargjald og svo einn þjónustusamningur á föstu mánaðargjaldi. Þegar ykkur vantar breytingu er hún metin fyrir fram og afgreidd á dögum. Sérsniðið kostar verkeiningar, ekki ráðgjafatíma.“</em></p>' },
+  { slug: 'threpin-thrju', field: 'summary',
+    from: 'Vefur (39), Verslun (59) og Rekstur (79) þ.kr./mán — öll verð DRÖG þar til Halli staðfestir. Flöt áskrift, aldrei tímagjald; uppsetningargjald fellur niður með árssamningi. Hér lærirðu að para fyrirtæki við rétt þrep.',
+    to: 'Vefur, Verslun og Rekstur: uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 19 / 29 / 39 þ.kr./mán með 5 / 10 / 20 verkeiningum á mánuði — öll verð DRÖG þar til Halli staðfestir, öll án VSK. Aldrei tímagjald. Hér lærirðu verðmódelið, hvað verkeining er og hvernig þú parar fyrirtæki við rétt þrep.' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<p>Verðin hér að neðan eru <strong>DRÖG — óstaðfest</strong> þar til Halli staðfestir þau. Þau eru ekki birt á orangesmiley.is, svo vísaðu viðskiptavini ekki þangað eftir verði. Í samtali máttu nefna þau sem viðmið, en alltaf með fyrirvara: „endanlegt verð kemur í tilboðinu“. Skriflegt verð kemur aðeins frá Halla.</p>\n<h2>Vefur — 39 þ.kr./mán (DRÖG)</h2>',
+    to: '<p>Verðin hér að neðan eru <strong>DRÖG — óstaðfest</strong> þar til Halli staðfestir þau, og öll <strong>án VSK</strong>. Þau birtast, líka merkt drög, á verðskrá vörunnar á <strong>rekstrarkerfi.is/verdskra</strong> — þangað máttu vísa viðskiptavini. Þau eru aldrei birt á orangesmiley.is. Í samtali máttu nefna þau sem viðmið, en alltaf með fyrirvara: „endanlegt verð kemur í tilboðinu“. Skriflegt verð kemur aðeins frá Halla.</p>\n<h2>Vefur — 390 þ.kr. uppsetning + 19 þ.kr./mán með 5 verkeiningum (DRÖG)</h2>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<h2>Verslun — 59 þ.kr./mán (DRÖG)</h2>',
+    to: '<h2>Verslun — 580 þ.kr. uppsetning + 29 þ.kr./mán með 10 verkeiningum (DRÖG)</h2>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<h2>Rekstur — 79 þ.kr./mán (DRÖG)</h2>',
+    to: '<h2>Rekstur — 690 þ.kr. uppsetning + 39 þ.kr./mán með 20 verkeiningum (DRÖG)</h2>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<h2>Gjaldareglurnar</h2>',
+    to: '<h2>Verðmódelið: uppsetning + þjónustusamningur</h2>\n<ul>\n<li><strong>Uppsetningargjald</strong> — greitt einu sinni: 390 / 580 / 690 þ.kr. (Vefur / Verslun / Rekstur). Það greiðir fyrir uppsetninguna og flutning gagnanna. Það er rukkað í tvennu lagi: helmingur við undirritun og helmingur þegar kerfið fer í loftið.</li>\n<li><strong>Þjónustusamningur</strong> — fylgir öllum þrepum, enginn kaupir kerfið án hans: 19 / 29 / 39 þ.kr. á mánuði. Hann innifelur hýsingu, vöktun, öryggisuppfærslur og <strong>5 / 10 / 20 verkeiningar á mánuði</strong> fyrir breytingar og sérsmíði. Hann er rukkaður mánaðarlega fyrir fram, frá þeim mánuði sem kerfið fer í loftið.</li>\n<li>Öll verð eru <strong>án VSK</strong>; 24% VSK bætist við á reikningi. Segðu það alltaf þegar þú nefnir verð.</li>\n<li><strong>Aldrei tímagjald</strong> — hvorki í uppsetningu né í breytingum.</li>\n<li>Sérsniðnar einingar ríða á hvaða þrepi sem er — sérþarfir þvinga engan upp um þrep. Þær eru smíðaðar fyrir verkeiningar eins og aðrar breytingar.</li>\n</ul>\n<h2>Verkeiningar — svona virka þær</h2>\n<p>Verkeining er mælieining fyrir vinnu. Hvert verk er metið fyrir fram og viðskiptavinurinn samþykkir matið áður en vinnan hefst — ekkert er unnið án samþykkis. Stærðirnar eru þrjár:</p>\n<ul>\n<li><strong>Lítið verk = 1 eining</strong> — t.d. textabreyting eða nýr reitur í formi.</li>\n<li><strong>Meðalstórt verk = 5 einingar</strong> — t.d. ný síða eða nýtt yfirlit í stjórnborði.</li>\n<li><strong>Stórt verk = 20 einingar</strong> — t.d. nýr eiginleiki eða tenging við annað kerfi.</li>\n</ul>\n<p>Til að gera þetta áþreifanlegt: 5 einingar í Vef duga fyrir fimm litlum verkum eða einu meðalstóru á mánuði; 20 einingar í Rekstri duga fyrir einu stóru verki eða fjórum meðalstórum.</p>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<li><strong>Flöt áskrift</strong> — fast mánaðargjald sem innifelur kerfi, hýsingu, vöktun, öryggisuppfærslur og breytingar. <strong>Aldrei tímagjald.</strong></li>\n<li><strong>Uppsetningargjald</strong> samkvæmt samkomulagi — <strong>fellur niður með árssamningi</strong>. Það er besta röksemdin fyrir árssamningi og þú mátt alltaf nefna hana.</li>\n<li>Sérsniðnar einingar ríða á hvaða þrepi sem er — sérþarfir þvinga engan upp um þrep.</li>',
+    to: '<li><strong>Tilkynning við 80%:</strong> viðskiptavinurinn fær að vita þegar 80% af einingum mánaðarins eru notuð.</li>\n<li><strong>Umfram einingarnar:</strong> klárist einingar mánaðarins greiðir hann fast <strong>einingaverð</strong> fyrir það sem umfram er — og fær verðið alltaf gefið upp áður en verkið hefst. Upphæð einingaverðsins er ekki ákveðin: DRÖG — Halli staðfestir. Nefndu enga tölu.</li>\n<li><strong>Verk sem ekkert liggur á</strong> má geyma til næsta mánaðar og taka af einingum hans, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>\n<li>Hvort ónotaðar einingar flytjist yfir á næsta mánuð er ekki ákveðið: DRÖG — Halli staðfestir. Lofaðu engu um það.</li>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<p>Einföld regla: <strong>engin vefverslun → Vefur; vefverslun eða búð → Verslun; vill líka losna við sérstakt bókhaldskerfi → Rekstur.</strong> Ef þú ert í vafa, veldu lægra þrepið — það er auðvelt að færa sig upp og enginn upplifir sig plataðan.</p>',
+    to: '<p>Einföld regla: <strong>engin vefverslun → Vefur; vefverslun eða búð → Verslun; vill líka losna við sérstakt bókhaldskerfi → Rekstur.</strong> Ef þú ert í vafa, veldu lægra þrepið — það er auðvelt að færa sig upp og enginn upplifir sig plataðan. Hvað það kostar að færa sig upp um þrep síðar er ekki ákveðið: DRÖG — Halli staðfestir.</p>' },
+  { slug: 'fyrsta-samtalid', field: 'body',
+    from: '<p>Segðu söguna stutt (sjá <em>Sölusöguna</em>): eitt íslenskt kerfi, einn reikningur, breytingar á dögum, sérsniðið kostar áskrift en ekki ráðgjafatíma. Nefndu þrepið sem þér sýnist passa og af hverju. Ef verð ber á góma: viðmiðunarverðin eru drög og endanlegt verð kemur í tilboðinu frá Halla. Lofaðu engri dagsetningu og engum eiginleika sem þú ert ekki viss um — „þetta læt ég tæknifólkið svara, þú heyrir frá okkur innan eins virks dags“ er alltaf gilt svar.</p>',
+    to: '<p>Segðu söguna stutt (sjá <em>Sölusöguna</em>): eitt íslenskt kerfi, einn reikningur, breytingar á dögum, sérsniðið kostar verkeiningar en ekki ráðgjafatíma. Nefndu þrepið sem þér sýnist passa og af hverju. Ef verð ber á góma: viðmiðunarverðin eru drög og endanlegt verð kemur í tilboðinu frá Halla. Lofaðu engri dagsetningu og engum eiginleika sem þú ert ekki viss um — „þetta læt ég tæknifólkið svara, þú heyrir frá okkur innan eins virks dags“ er alltaf gilt svar.</p>' },
+  { slug: 'motbarur-og-svor', field: 'body',
+    from: '<p>Svarið er samanburður, ekki afsláttur. Fáðu viðmælandann til að leggja saman það sem hann borgar í dag: vefverslunarþjónustu í erlendri mynt, viðbótaröpp hvert með sínu mánaðargjaldi, bókhaldskerfi, vefstofu sem rukkar tímagjald fyrir breytingar. Summan kemur flestum á óvart — og hún er án breytinganna, sem hjá okkur eru innifaldar. Bættu svo við: engir tímareikningar, aldrei; og uppsetningargjaldið fellur niður með árssamningi. Ef verðið er samt fyrirstaða: „endanlegt verð kemur í tilboðinu“ — og láttu Halla vita; þú semur aldrei um verð sjálf(ur).</p>',
+    to: '<p>Svarið er samanburður, ekki afsláttur. Fáðu viðmælandann til að leggja saman það sem hann borgar í dag: vefverslunarþjónustu í erlendri mynt, viðbótaröpp hvert með sínu mánaðargjaldi, bókhaldskerfi, vefstofu sem rukkar tímagjald fyrir breytingar. Summan kemur flestum á óvart — og hún er án breytinganna, en hjá okkur fylgja verkeiningar fyrir breytingar þjónustusamningnum í hverjum mánuði. Bættu svo við: engir tímareikningar, aldrei; uppsetningargjaldið er fast verð sem er vitað fyrir fram; og hvert verk er metið áður en það hefst. Ef verðið er samt fyrirstaða: „endanlegt verð kemur í tilboðinu“ — og láttu Halla vita; þú semur aldrei um verð sjálf(ur).</p>' },
+  { slug: 'tilbodsferlid', field: 'body',
+    from: '<li>Mánaðarverðið og uppsetningargjaldið — þar með talið að uppsetningargjaldið fellur niður með árssamningi.</li>\n<li><strong>Samanburður við núverandi stafla:</strong> hvað fyrirtækið borgar í dag á móti einu föstu mánaðargjaldi. Þetta er sterkasta blaðsíðan — og hún er bara jafn góð og upplýsingarnar sem þú safnaðir.</li>',
+    to: '<li>Uppsetningargjaldið og þjónustusamningurinn: mánaðargjaldið og hve margar verkeiningar fylgja, öll verð án VSK. Uppsetningargjaldið er rukkað í tvennu lagi, helmingur við undirritun og helmingur þegar kerfið fer í loftið.</li>\n<li><strong>Samanburður við núverandi stafla:</strong> hvað fyrirtækið borgar í dag á móti föstu mánaðargjaldi þjónustusamningsins, með uppsetningargjaldið sýnt sér. Þetta er sterkasta blaðsíðan — og hún er bara jafn góð og upplýsingarnar sem þú safnaðir.</li>' },
+  { slug: 'breytingabeidnir', field: 'body',
+    from: '<li><strong>Beiðnin er flokkuð</strong> — smábreyting, stærri breyting eða ný sérsniðin eining.</li>',
+    to: '<li><strong>Beiðnin er metin í verkeiningum</strong> — lítið verk (1 eining), meðalstórt (5) eða stórt (20). Viðskiptavinurinn sér matið og samþykkir það áður en vinnan hefst.</li>' },
+  { slug: 'breytingabeidnir', field: 'body',
+    from: '<p>Þetta eru <strong>markmið sem við vinnum eftir</strong> — orðaðu þau þannig. Segðu „svar innan eins virks dags, smábreytingar að jafnaði innan viku“. Segðu aldrei „samdægurs“, „á morgun“ eða annað umfram markmiðin — það er regla (sjá <em>Hvað þú lofar aldrei</em>). Stærri breytingar og sérsniðnar einingar fá tímamat í svari, ekki fyrir fram frá þér.</p>',
+    to: '<p>Þetta eru <strong>markmið sem við vinnum eftir</strong> — orðaðu þau þannig. Segðu „svar innan eins virks dags, smábreytingar að jafnaði innan viku“. Segðu aldrei „samdægurs“, „á morgun“ eða annað umfram markmiðin — það er regla (sjá <em>Hvað þú lofar aldrei</em>). Stærri breytingar og sérsniðnar einingar fá mat í verkeiningum og tímamat í svari, ekki fyrir fram frá þér.</p>' },
+  { slug: 'breytingabeidnir', field: 'body',
+    from: '<p>Berðu flæðið saman við það sem viðskiptavinurinn þekkir: hjá vefstofu kostar breyting tímagjald og bið; hjá stóru kerfi kostar hún ráðgjafa og mánuði; í app-búð vonar hann að eitthvert app leysi málið. Hjá okkur er breytingin <strong>innifalin í áskriftinni</strong> og afgreidd á dögum. Þess vegna segjum við: flæðið er ekki aukaþjónusta við vöruna — <em>flæðið er varan</em>.</p>',
+    to: '<p>Berðu flæðið saman við það sem viðskiptavinurinn þekkir: hjá vefstofu kostar breyting tímagjald og bið; hjá stóru kerfi kostar hún ráðgjafa og mánuði; í app-búð vonar hann að eitthvert app leysi málið. Hjá okkur er breytingin <strong>greidd með verkeiningum sem fylgja þjónustusamningnum</strong>, metin fyrir fram og afgreidd á dögum. Þess vegna segjum við: flæðið er ekki aukaþjónusta við vöruna — <em>flæðið er varan</em>.</p>' },
+  { slug: 'manadarleg-samskipti', field: 'body',
+    from: '<p>Áskriftarviðskipti lifa á trausti, og traust byggist á reglubundnum samskiptum. Viðskiptavinur sem heyrir aldrei frá okkur man bara eftir gjaldinu sem er dregið mánaðarlega — viðskiptavinur sem fær reglulegt yfirlit sér hvað hann fær fyrir það. Þetta er ódýrasta vörnin gegn uppsögnum.</p>',
+    to: '<p>Viðskipti á föstum þjónustusamningi lifa á trausti, og traust byggist á reglubundnum samskiptum. Viðskiptavinur sem heyrir aldrei frá okkur man bara eftir gjaldinu sem er dregið mánaðarlega — viðskiptavinur sem fær reglulegt yfirlit sér hvað hann fær fyrir það. Þetta er ódýrasta vörnin gegn uppsögnum.</p>' },
+  { slug: 'manadarleg-samskipti', field: 'body',
+    from: '<li><strong>Hvað var afgreitt:</strong> breytingabeiðnir sem var lokið í mánuðinum — taldar upp með einföldum orðum. Þetta er mikilvægasti hlutinn: hann sýnir svart á hvítu að áskriftin skilar vinnu.</li>',
+    to: '<li><strong>Hvað var afgreitt:</strong> breytingabeiðnir sem var lokið í mánuðinum — taldar upp með einföldum orðum. Þetta er mikilvægasti hlutinn: hann sýnir svart á hvítu að þjónustusamningurinn skilar vinnu.</li>\n<li><strong>Verkeiningar:</strong> hve margar einingar mánaðarins voru notaðar og í hvað.</li>' },
+  { slug: 'manadarleg-samskipti', field: 'body',
+    from: '<h2>Árssamningurinn og endurnýjun</h2>\n<p>Munaðu að árssamningur er hagstæðastur fyrir báða: viðskiptavinurinn slapp við uppsetningargjaldið og við fáum fyrirsjáanleika. Þegar líður að endurnýjun áttu að vita stöðuna á sambandinu löngu áður en dagsetningin rennur upp — það er afrakstur mánaðarlegu samtalanna. Öll umræða um verð eða samningskjör við endurnýjun fer til Halla, eins og alltaf.</p>',
+    to: '<h2>Samningstíminn og endurnýjun</h2>\n<p>Í drögum að þjónustusamningi gildir samningurinn í 12 mánuði frá því kerfið fer í loftið og endurnýjast svo sjálfkrafa um 12 mánuði í senn (DRÖG — lögfræðingur á eftir að fara yfir samninginn og Halli staðfestir). Fylgstu líka með einingunum: viðskiptavinur sem klárar einingar mánaðarins aftur og aftur gæti átt betur heima í þrepinu fyrir ofan — skráðu það og láttu Halla vita. Þegar líður að endurnýjun áttu að vita stöðuna á sambandinu löngu áður en dagsetningin rennur upp — það er afrakstur mánaðarlegu samtalanna. Öll umræða um verð eða samningskjör við endurnýjun fer til Halla, eins og alltaf.</p>' },
+  { slug: 'hvad-thu-lofar-aldrei', field: 'body',
+    from: '<li>Viðmiðunarverðin (39/59/79 þ.kr./mán) eru <strong>DRÖG</strong> þar til Halli staðfestir og máttu aðeins nefnast sem viðmið með þeim fyrirvara.</li>',
+    to: '<li>Viðmiðunarverðin — uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 19 / 29 / 39 þ.kr./mán með 5 / 10 / 20 verkeiningum — eru <strong>DRÖG</strong> þar til Halli staðfestir, og máttu aðeins nefnast sem viðmið með þeim fyrirvara og alltaf án VSK.</li>' },
+  { slug: 'hvad-thu-lofar-aldrei', field: 'body',
+    from: '<li>Sama gildir um uppsetningargjaldið: reglan „fellur niður með árssamningi“ er það eina sem þú mátt fullyrða um það.</li>',
+    to: '<li>Einingaverðið, það sem greitt er fyrir verkeiningar umfram samninginn, er ekki ákveðið — þú nefnir enga tölu. Hvort ónotaðar einingar flytjist milli mánaða er heldur ekki ákveðið — þú lofar engu um það.</li>\n<li>Þú metur aldrei sjálf(ur) hve margar verkeiningar verk kostar. Matið kemur úr ferlinu, áður en vinnan hefst.</li>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '<p>Þessi leið geymir eiginleikatöfluna fyrir þrepin — hún er heimildin þín þegar viðskiptavinur spyr „er þetta innifalið?“. Ef eiginleiki er ekki hér, þá er hann ekki innifalinn og þú lofar honum ekki (sjá <em>Hvað þú lofar aldrei</em>). Verðin eru DRÖG þar til Halli staðfestir: Vefur 39, Verslun 59, Rekstur 79 þ.kr./mán. Hvert þrep inniheldur allt úr þrepinu á undan.</p>',
+    to: '<p>Þessi leið geymir eiginleikatöfluna fyrir þrepin — hún er heimildin þín þegar viðskiptavinur spyr „er þetta innifalið?“. Ef eiginleiki er ekki hér, þá er hann ekki innifalinn og þú lofar honum ekki (sjá <em>Hvað þú lofar aldrei</em>). Verðin eru DRÖG þar til Halli staðfestir, öll án VSK: Vefur 390 þ.kr. uppsetning + 19 þ.kr./mán með 5 verkeiningum, Verslun 580 þ.kr. + 29 þ.kr./mán með 10, Rekstur 690 þ.kr. + 39 þ.kr./mán með 20. Hvert þrep inniheldur allt úr þrepinu á undan.</p>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '<li><strong>Breytingabeiðnir afgreiddar á dögum</strong> — þjónustuflæðið sjálft (sjá <em>Breytingabeiðnir</em>) er innifalið í öllum þrepum, líka því minnsta. Svar innan eins virks dags, smábreytingar innan viku.</li>',
+    to: '<li><strong>Breytingabeiðnir afgreiddar á dögum</strong> — þjónustuflæðið sjálft (sjá <em>Breytingabeiðnir</em>) er innifalið í öllum þrepum, líka því minnsta; verkin eru greidd með verkeiningum þjónustusamningsins (5, 10 eða 20 á mánuði eftir þrepi). Svar innan eins virks dags, smábreytingar innan viku.</li>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '<p>Í öllum þrepum er líka innifalið það sem fylgir áskriftinni sjálfri: hýsing í skýinu, vöktun og öryggisuppfærslur — viðskiptavinurinn kaupir aldrei neitt af þessu sérstaklega.</p>',
+    to: '<p>Í öllum þrepum er líka innifalið það sem fylgir þjónustusamningnum sjálfum: hýsing í skýinu, vöktun og öryggisuppfærslur — viðskiptavinurinn kaupir aldrei neitt af þessu sérstaklega.</p>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '<li><strong>Uppsetningargjald</strong> er samkvæmt samkomulagi og <strong>fellur niður með árssamningi</strong>.</li>',
+    to: '<li><strong>Uppsetningargjald</strong> er fast verð eftir þrepi (390 / 580 / 690 þ.kr., DRÖG) og <strong>þjónustusamningur</strong> fylgir öllum þrepum.</li>' },
+];
 
 module.exports = {
   product: 'os',
@@ -120,7 +250,14 @@ module.exports = {
   },
   ],
   migrations: [
-    // { name: 'os_001_…', statements: [ … ] },
+  {
+    // The handbook moves to D-001 pricing and the demo instance (see
+    // OS_001_EDITS above). Pure data, no schema; `edits` is carried for the test.
+    // Reference copy: server/migrations/product/os_001_sales_guides_d001_pricing.sql
+    name: 'os_001_sales_guides_d001_pricing',
+    edits: OS_001_EDITS,
+    statements: OS_001_EDITS.map(guideEdit),
+  },
   ],
   aliases: {},
   superseded: {},

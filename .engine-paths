@@ -33,4 +33,5 @@ docs/product/**
 
 # From the `paths` of every feature whose owner is not `engine`
 server/scripts/seed-sales-guides.js
+tests/integration/salesGuidesD001.test.js
 tests/integration/salesGuidesServicesPage.test.js

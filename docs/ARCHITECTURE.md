@@ -516,9 +516,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/salesGuides.js` |
 | Scripts | `server/scripts/seed-sales-guides.js` |
 | CSS | `public/css/admin-handbok.css` |
-| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js` |
+| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js` |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
-| Migrations | 090, 104 |
+| Migrations | 090, 104, os_001 |
 | Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
@@ -529,9 +529,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Seeded guides are DRAFTS; sales staff see nothing until Halli publishes;
   prices inside carry DRÖG. Migration 104 rewrote two seeded guides guarded on
   `updated_by IS NULL` ([services-page](HISTORY.md#services-page)).
+- A text change in `seed-sales-guides.js` ships with a product migration that
+  makes the same change to seeded rows (the seed is `ON CONFLICT DO NOTHING`);
+  os_001 moved the guides to D-001 pricing and the demo instance, and
+  `salesGuidesD001.test.js` checks seed and migration agree
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
+- Guide prices follow D-001 (build fee + service contract + verkeiningar) and
+  carry DRÖG; demos go to `demo.rekstrarkerfi.is`, never this site
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 

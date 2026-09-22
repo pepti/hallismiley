@@ -73,4 +73,4 @@ Downstream overrides go in `features/local.json`.
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
-| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page` | [os/company-content.md](os/company-content.md) |
+| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing` | [os/company-content.md](os/company-content.md) |
