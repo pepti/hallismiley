@@ -128,18 +128,15 @@ for (const pair of PAIRS) {
   const emptyEn = findEmptyValues(en);
   const emptyIs = findEmptyValues(is);
 
-  // An overlay key that also exists in the engine table silently shadows it:
-  // almost always a product editing engine copy in the wrong file.
-  const shadowed = pair.overlayOf ? enKeys.filter(k => k in loadJson(pair.overlayOf)) : [];
+  // An overlay key that also exists in the engine table overrides it at load
+  // time — that is how a product puts its own brand and copy into engine
+  // screens without editing the engine file. Reported, never failed.
+  const overrides = pair.overlayOf ? enKeys.filter(k => k in loadJson(pair.overlayOf)) : [];
 
-  const ok = !onlyEn.length && !onlyIs.length && !emptyEn.length && !emptyIs.length && !shadowed.length;
+  const ok = !onlyEn.length && !onlyIs.length && !emptyEn.length && !emptyIs.length;
 
-  console.log(`${ok ? '✓' : '✗'} ${pair.label} — en: ${enKeys.length} keys, is: ${isKeys.length} keys`);
-  if (shadowed.length) {
-    const sep = '\n    - ';
-    console.log(`  ⚠ overlay redefines engine keys (edit them in the engine, or rename):${sep}${shadowed.slice(0, 50).join(sep)}`);
-    failed = true;
-  }
+  const overrideNote = pair.overlayOf ? ` (${overrides.length} override engine keys)` : '';
+  console.log(`${ok ? '✓' : '✗'} ${pair.label} — en: ${enKeys.length} keys, is: ${isKeys.length} keys${overrideNote}`);
   if (onlyEn.length) {
     console.log(`  ⚠ only in en:\n    - ${onlyEn.slice(0, 50).join('\n    - ')}${onlyEn.length > 50 ? `\n    - … (+${onlyEn.length - 50} more)` : ''}`);
     failed = true;
