@@ -44,6 +44,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [orangesmiley.is go-live, public site only](#go-live) | D-020 step 2 split: public site first, ops stays local; deploy.yml by digest, production only; `APP_URL` default + baked origin → orangesmiley.is; `EMAIL_REPLY_TO` |
 | 2026-09-22 | [Engine upstream — this repo becomes the parent of every repo (D-021)](#engine-upstream-2026-09-22) | Two layers (source by merge, runtime by product channel); `engine.json` + feature wiki; two-array migrations (091/092/104 → `os.js`, theme CHECK → 106); `engine-sync` / `engine-harvest` / `engine-drift`; icelandicstore is the current source of generic work |
 | 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
+| 2026-09-22 | [Leads transfer — enquiries from the other instances reach ops (D-020 step 4)](#leads-transfer-2026-09-22) | `leads:export` (submission fields only) / `leads:import` (one transaction, `ON CONFLICT DO NOTHING`, an ops row is never updated); by hand weekly, a timer once ops is on Azure; no migration |
 
 ---
 
@@ -1102,3 +1103,45 @@ landed), and the dev database's 14 rows were byte-identical to master's seed.
   orangesmiley.is, and D-020 has not said which instance serves the handbook
   once ops is private. Plan docs §1/§3 still carry the old model, which is
   Halli's edit per D-001.
+<a id="leads-transfer-2026-09-22"></a>
+## 2026-09-22 — Leads transfer: enquiries from the other instances reach ops (D-020 step 4)
+
+D-020 gave every instance its own `leads` table and made ops the one place
+the pipeline is worked — which left the enquiries the public orangesmiley.is
+captures (and rekstrarkerfi.is's, once it runs this engine) invisible to the
+sellers. Halli's brief: "weekly and by hand while there are 1–3 customers".
+This is the by-hand pair. **No migration**: 097's `submission_id UUID NOT
+NULL UNIQUE` is the idempotency key it always was.
+
+- `server/scripts/leads-export.js` (`npm run leads:export -- [--since <ISO>]
+  [--out <file>]`, default stdout) dumps `{ exportedAt, instance, leads[] }`
+  from the capturing instance. `instance` = the `APP_URL` host (else
+  `INSTANCE_ROLE`). The rows carry the **submission fields + `created_at`
+  only** — never `status`, `owner_user_id`, `contacted_*` or `note` — so a
+  file can never carry one box's workflow state onto another. Counts go to
+  stderr, field values nowhere.
+- `server/scripts/leads-import.js` (`npm run leads:import -- <file.json>
+  [--dry-run] [--source <label>]`) on ops: validates every row against the
+  contact form's own limits (`contactController`: name ≤100, well-formed email
+  ≤200, message 10–2000, company ≤150, phone ≤40; `Lead.CAPS` for platform /
+  locale / source), fails the whole file on any bad row, then inserts in ONE
+  transaction with `ON CONFLICT (submission_id) DO NOTHING`. **An existing
+  row is never updated** — on ops it is the seller's work product. Inserted
+  rows are `status = 'new'`, no owner, `created_at` preserved (retention
+  counts from the visitor's receipt, not the import), `source` = `--source`
+  or the file's `instance`. Prints `inserted=`/`skipped=`; `--dry-run` rolls
+  back.
+- PII posture, in the header comments and `docs/SALES-STAFF.md` (the
+  seller-facing steps): the file lives under gitignored `data/`, is carried
+  by hand, deleted on both boxes after import; ops holds the rows under the
+  same 24-month `/personuvernd` §6 retention. Error messages name a row by
+  index and submission id only.
+- `tests/integration/leadsTransfer.test.js`: export shape excludes the
+  workflow columns; `--since`; import inserts / second import skips all / a
+  worked row's status, note, owner AND submission text survive a "corrected"
+  re-import; one bad row writes nothing; `--dry-run` writes nothing;
+  `--source` wins; the export→import round trip keeps the ids; every limit.
+- Deliberately NOT built: an HTTP route between the instances (the seller
+  publication is one way ops → public by design, and a public → ops door
+  would be the reverse), and a timer — that comes with ops on Azure (PLAN →
+  Status). `source` stays a label, not an FK; the inbox shows it as text.

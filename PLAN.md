@@ -164,9 +164,11 @@ chunk lands; add a HISTORY entry for the story.
 - Seller area (D-020 step 3) is BUILT, not live ([seller-area](docs/HISTORY.md#seller-area)):
   it goes live with the public + ops instances (step 5, Halli's go), a shared
   `SELLER_PUBLISH_SECRET`, and each seller invited on the public box under
-  their ops email. Open: (a) `/hafa-samband` on the PUBLIC instance still
-  writes its own `leads` table there, which ops never sees — route those
-  enquiries to ops before go-live (or keep the form on ops' copy only);
+  their ops email. Open: (a) `/hafa-samband` on the PUBLIC instance writes
+  its own `leads` table there — route those enquiries by `leads:export` on
+  the public box / `leads:import` on ops until ops runs on Azure, then a
+  timer (D-020 step 4 is scriptable since
+  [leads-transfer-2026-09-22](docs/HISTORY.md#leads-transfer-2026-09-22));
   (b) publishing is by hand until ops runs on Azure, then a timer;
   (c) a `verktaki` (`accounts` + `allaccounts`) is published with only the
   accounts they OWN — `allaccounts` does not widen the public copy, by design
