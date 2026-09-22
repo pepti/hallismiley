@@ -72,7 +72,8 @@ set `TEST_DATABASE_URL` to a private database name.
 ## 2026-08-07 — `gh pr checks` reported green for a stale head
 
 It was reading a merged PR's old commit — verify with
-`gh api repos/:owner/:repo/commits/$(git rev-parse HEAD)/check-runs`.
+`gh api repos/:owner/:repo/commits/$(git rev-parse HEAD)/check-runs`
+and require `total_count > 0`.
 
 <a id="docs-restructure"></a>
 ## 2026-09-22 — Docs restructure: ARCHITECTURE index, HISTORY, parity test

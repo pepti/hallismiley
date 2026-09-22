@@ -484,8 +484,8 @@ docs/                     API, ARCHITECTURE (this), HISTORY, BOOKKEEPING-SYSTEM,
   container start. A docs-only merge deploys too.
 - Jest runs one worker against one database, so every session needs a private
   `TEST_DATABASE_URL` ([shared-test-db](HISTORY.md#shared-test-db)); verify a
-  PR's checks against the commit, not the PR
-  ([stale-pr-checks](HISTORY.md#stale-pr-checks)).
+  PR's checks against the commit's check-runs, not the PR, and require
+  `total_count > 0` ([stale-pr-checks](HISTORY.md#stale-pr-checks)).
 - The migration runner is one transaction per migration and advisory-locked;
   `UPLOAD_ROOT` and `DB_SSL` are declared at boot.
 - Node major pinned in THREE places (`Dockerfile` digest, ci.yml, promote.yml);
