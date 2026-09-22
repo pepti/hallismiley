@@ -404,6 +404,15 @@ describe('SSR meta-injection — SPA catch-all', () => {
       expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#organization"\}/);
     });
 
+    // index.html is baked with https://www.orangesmiley.is; the template loader
+    // swaps that origin for APP_URL (the tests run as hallismiley.is), so the
+    // static Organization @id is the one the publisher refs point at.
+    test('the baked Organization JSON-LD follows APP_URL', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.text).toMatch(/"@id": "https:\/\/www\.hallismiley\.is\/#organization"/);
+      expect(res.text).not.toContain('https://www.orangesmiley.is');
+    });
+
     test('does not emit WebSite schema on non-home pages', async () => {
       const res = await request(app).get('/en/halli');
       expect(res.status).toBe(200);

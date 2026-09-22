@@ -108,7 +108,7 @@ const WEIGHT_UNITS  = ['kg', 'g', 'lb', 'oz'];
 // until an admin actually edits a field.
 const DEFAULTS = {
   [KEYS.storeName]:    'Halli Smiley',
-  [KEYS.contactEmail]: process.env.EMAIL_FROM || 'hallismiley@gmail.com',
+  [KEYS.contactEmail]: process.env.EMAIL_FROM || 'info@orangesmiley.is',
   [KEYS.phone]:        '',
   [KEYS.address1]:     '',
   [KEYS.address2]:     '',

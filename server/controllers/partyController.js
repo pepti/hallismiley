@@ -31,7 +31,7 @@ const { approveGuest, declineGuest, grantInstantAccess, sendWelcome } = require(
 const { DEFAULT_PARTY_INFO, LOCALE_NEUTRAL_INFO_KEYS, readPartyInfo } = require('../services/partyInfo');
 
 // Base URL for links embedded in emails (mirrors emailService).
-const APP_URL = process.env.APP_URL || 'https://www.hallismiley.is';
+const APP_URL = process.env.APP_URL || 'https://www.orangesmiley.is';
 // One-click email-approval token lifetime. Short by design — the owner acts soon
 // after the request; the magic link issued on approval is the long-lived one.
 const APPROVAL_ACTION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours

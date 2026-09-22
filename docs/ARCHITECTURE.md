@@ -743,18 +743,20 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Services | `server/services/emailService.js` (`emailShell`), `outboundAllowlist.js`; templates use `server/i18n/` |
 | Routes | `GET /api/v1/admin/email-health` in `server/routes/adminRoutes.js` |
-| Jest | `tests/unit/outboundAllowlist.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js` |
+| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js` |
 | Migrations | 062 |
 | Feature doc | `RUNBOOK.md`, `docs/DEPLOYMENT.md` (env) |
 
 **Rules that must hold**
-- Sender is `EMAIL_FROM` (placeholder `info@orangesmiley.is`); never the base's
-  address. Mail failures are loud; `EMAIL_ALLOWLIST` limits recipients outside
+- Sender is `EMAIL_FROM`; never the base's address. Production sends from the
+  fleet domain (`orangesmiley@mail.orangesmiley.is`, D-015) with
+  `EMAIL_REPLY_TO` pointing at a real mailbox, added to every message that
+  sets no replyTo of its own ([go-live](HISTORY.md#go-live)). Mail failures are loud; `EMAIL_ALLOWLIST` limits recipients outside
   prod ([harvest-1](HISTORY.md#harvest-1)).
 - The 7 server email strings carry the company brand ([r1](HISTORY.md#r1));
   `emailShell` escapes its `<title>` (base-sync 2026-09-13).
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1) · [go-live](HISTORY.md#go-live)
 
 ## 20. Infrastructure and cross-cutting
 
@@ -764,7 +766,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`; `tests/integration/migrateRunner.test.js` |
-| CI / deploy | `.github/workflows/ci.yml`, `deploy.yml` (dispatch-only), `promote.yml`; `Dockerfile` |
+| CI / deploy | `.github/workflows/ci.yml`, `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
 
@@ -783,7 +785,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - CI: weekly cron + Jest transform cache; dependabot `rebase-strategy:
   disabled` + docker ecosystem; ice's `main-gate` job was deliberately NOT
   ported (this repo merges locally; deploy is dispatch-only) [harvest-2](HISTORY.md#harvest-2).
-- `deploy.yml` is dispatch-only with unset targets; no deploy without Halli.
+- `deploy.yml` is dispatch-only; its targets are `production`-environment vars
+  and it pins the web app to an image DIGEST, never a tag, after Trivy on that
+  digest and before a `/ready` check that only believes a process younger than
+  the swap. There is no TEST stack, so dispatch only a sha with green CI; no
+  deploy without Halli ([go-live](HISTORY.md#go-live)).
+- The canonical origin is `APP_URL` (fallback `https://www.orangesmiley.is`).
+  `public/index.html` is baked with that origin and `ssrMeta.js` swaps it for
+  `APP_URL` on load — change the two together ([go-live](HISTORY.md#go-live)).
 - **Upstream cross-cutting improvements.** site-factory's `DEFAULT_BASE` is
   `hallismiley`, so work landing only in an instance reaches no future scaffold
   (LedgerLink was scaffolded without the admin affordances this repo had for
@@ -797,7 +806,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   green CI on `main`, unlike here, and has zero e2e coverage of checkout, so a
   base PR touching it is verified by hand first [ui-kit](HISTORY.md#ui-kit).
 
-**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2)
+**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live)
 
 ---
 

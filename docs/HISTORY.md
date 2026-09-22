@@ -40,6 +40,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-17 | [Docs restructure — ARCHITECTURE, HISTORY, parity test](#docs-restructure) | CLAUDE.md 776 → ~100 lines of rules; this file + `docs/ARCHITECTURE.md`; `architectureIndex.test.js`; review pass fixed 8 findings |
 | 2026-09-22 | [TEST chrome is admins only](#test-chrome-admin) | Logged-out visitors on TEST see production; `changeRequestGate` admin-only on every stack; `openToEveryone` → `testStack` |
 | 2026-09-22 | [Iceland v2 — a landscape on every page](#iceland-v2) | Halli's AI-generated set replaces the Commons photos; band or card backdrop on every visitor page; no place chip; native-width renditions |
+| 2026-09-22 | [orangesmiley.is go-live, public site only](#go-live) | D-020 step 2 split: public site first, ops stays local; deploy.yml by digest, production only; `APP_URL` default + baked origin → orangesmiley.is; `EMAIL_REPLY_TO` |
 
 ---
 
@@ -872,3 +873,47 @@ stills of his own (`pictures/iceland-v2-originals`, 1280×720 JPEGs named
   when the pane paints, so a band can look like its blurred placeholder until a
   screenshot forces a frame. That is the pane, not the site (the e2e run
   loads every scene).
+
+<a id="go-live"></a>
+## 2026-09-22 — orangesmiley.is go-live, public site only
+
+Halli parked the VSK veflykill (next-steps item 1) and brought item 2 forward
+**without ops**: the public company site goes up now, ops stays the local
+instance (D-017) until after the 5.10 filing. His choices: canonical
+`www.orangesmiley.is`; small and production only (own B1 plan + B1ms
+Postgres, no TEST stack, ~€35–40/month, B2 when ops arrives); a fresh database
+from the seeded built-in content — nothing copied from the local DB, which
+holds the books; Resend on `mail.orangesmiley.is` (D-015) from day one.
+The stack, names and Halli's hand-steps are in `docs/DEPLOYMENT.md` §6.
+
+Code chunk (`feat/orangesmiley-go-live`):
+
+- **`deploy.yml`** rebuilt from the rekstrarkerfid workflow (build once,
+  deploy by digest), cut to one stack: environment `production`, optional
+  `sha` input, build only when `:<sha>` is not in the registry, Trivy on the
+  digest, pin the app to the digest, `/ready` from a process younger than the
+  swap, the replaced image printed as the rollback target. The
+  `generate-changes.js` stamp from the neutralized version is kept.
+- **hallismiley.is fallbacks gone.** Every `APP_URL` default (app.js canonical
+  301, emailService, indexNow, sitemap, ssrMeta, party) and the `EMAIL_FROM`
+  / settings `contactEmail` defaults now name orangesmiley.is.
+  `robots.txt` names the new sitemap. `index.html` is baked with the new
+  origin, and `ssrMeta.js` swaps it for `APP_URL` when it loads the template:
+  the static Organization JSON-LD is never rewritten by id, so without the swap
+  its `@id` dangles from the publisher refs on any other host (tests run as
+  hallismiley.is and still pass for that reason). `PARTY_NOTIFY_EMAIL`'s
+  default stays Halli's personal address: it is a person, not a host, and the
+  party surface is hidden.
+- **`EMAIL_REPLY_TO`** (new): the sending domain has no inbox, so replies go
+  to a real mailbox on every message that sets no replyTo of its own.
+- **No contact-card migration needed.** The seeded card still carried
+  halli@hallismiley.is, but migration 092 already rewrites it on any database
+  where nobody edited it — which includes a fresh one.
+- **Self-update off on this instance** by app setting
+  (`CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED=false`): `config/client.json`
+  points at `releases.orangesmiley.is`, which nothing serves yet (D-014).
+- `/personuvernd` §7 (DRAFT) names Sweden as where Azure keeps the data.
+
+Known and out of scope: the admin, books and commission screens ship in the
+image and sit behind RBAC + TOTP on an empty database; hiding them by instance
+role is ENHANCEMENTS #5.

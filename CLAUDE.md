@@ -49,7 +49,7 @@ Halli's explicit instruction: **all base features and data models stay** — sho
 - **Multi-theme engine:** `public/css/themes.css` + render-blocking `theme-boot.js`, `html[data-theme]` (`classic` owns `:root`; the visitor DEFAULT is `ember`/Glóð — `DEFAULT_THEME` in `themePrefs.js` and `theme-boot.js`, see Design rules). Re-brand = re-hue token *values*, keep the machinery.
 - Tests: Jest integration (real Postgres, no pg mocks) + Playwright e2e. Adapt inherited specs, never delete them.
 - i18n: EN + IS JSON locale files; `npm run check:i18n` before pushing translation changes. Icelandic is the primary/default visitor locale (job 2); EN mirrors it. Language-switcher choice lives in the **`locale_choice`** cookie.
-- Transactional email sender = **`EMAIL_FROM`** in `.env` (set to placeholder `info@orangesmiley.is` — base default is halli@hallismiley.is, never use it here).
+- Transactional email sender = **`EMAIL_FROM`** (local `.env`: `info@orangesmiley.is`; production: `orangesmiley@mail.orangesmiley.is` per D-015, with `EMAIL_REPLY_TO` set to a real mailbox). Never the base's halli@hallismiley.is.
 
 Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns worth repeating here: Express 5 catch-alls are `app.get('/{*splat}', …)` — keep the braces, `'/*splat'` stops matching `/`; and the Node major is pinned in THREE places (24 LTS today — the `Dockerfile` digest, ci.yml and promote.yml `node-version` move TOGETHER, and dependabot must not major-bump the base image on its own).
 
@@ -59,7 +59,7 @@ Full rules: `.claude/rules/stack-invariants.md` (auto-loaded). Two footguns wort
 - One feature branch + worktree per chunk; every chunk ends with lint + `check:i18n` + tests green, then merges to main (Halli reviews history post-hoc — his decision 2026-08-09).
 - **Halli approves before the fact**: all copy and pricing (draft natively in Icelandic, mark `DRAFT`), anything in `ENHANCEMENTS.md` before implementation, and any deploy.
 - Prices follow D-001 (`company/DECISIONS.md`): build fee 390/580/690 þ.kr. plus a service contract of 19/29/39 þ.kr./mán with 5/10/20 verkeiningar. They replaced the old flat 39–79 þ.kr./mán tiers, and they stay DRAFT until Halli confirms. Since 2026-09-13 they appear on the product site rekstrarkerfi.is only — never put tiers or prices back on the company site (Halli). The sales handbook still quotes the old flat tiers, which is a known gap (D-020).
-- `APP_URL`/canonical host still references hallismiley.is in places — intentional until orangesmiley.is is registered; tracked in PLAN.md.
+- The canonical origin is `APP_URL`; its fallback is `https://www.orangesmiley.is` since 2026-09-22. `public/index.html` is baked with that origin and `ssrMeta.js` swaps it for `APP_URL`, so change the two together.
 - Log surprises in `LESSONS.md` (tagged factory/base/project) so `/retro` can harvest them.
 
 ## Design rules (Halli, 2026-08-09 — binding for all UI work)

@@ -1,10 +1,10 @@
 # Deployment — Orange Smiley (orangesmiley.is)
 
-**State as of 2026-09-11: this repo has no deployed instance.** The company
-Azure tenant exists (COMPANY-LOG, gitignored), but **no provisioning or deploy
-happens without Halli's explicit go-ahead** (CLAUDE.md). Everything below
-describes what the repo's workflows and boot code actually do today, so that
-arming a deploy later is a matter of setting variables, not editing YAML.
+**State as of 2026-09-22: Halli approved standing up the public site,
+production only (not ops — D-020 step 2 split; §6 below).** Whether the stack
+exists yet is an Azure fact, not this file's: check `az group show -n
+orangesmiley-prod-rg`. **No provisioning or deploy happens without Halli's
+explicit go-ahead** (CLAUDE.md), and each Part D step in §6 is his hand.
 
 This file was rewritten 2026-09-11. The previous version was the HalliProjects
 base's guide to the owner's personal `hallismiley-*` Azure resources and an
@@ -52,31 +52,35 @@ own `postgres:16-alpine` service, all on Node 24:
 
 `promote.yml` sets up the same Node 24 (it was on 20 until 2026-09-12).
 
-## 3. The deploy workflow (`.github/workflows/deploy.yml`) — dispatch-only, inert
+## 3. The deploy workflow (`.github/workflows/deploy.yml`) — dispatch-only, by digest
 
-Neutralised 2026-08-19 (ENHANCEMENTS #1). Trigger is `workflow_dispatch`
-**only**; the base's auto-deploy-on-green-CI `workflow_run` trigger was
-deliberately dropped and re-adding it is a decision for when the company stack
-exists. Every target is a repository variable; the first step is a guard that
-fails before login if any is unset, so a dispatch today touches nothing:
+Neutralised 2026-08-19 (ENHANCEMENTS #1); rebuilt 2026-09-22 from the
+rekstrarkerfid workflow (build once, deploy by digest), cut to this repo's one
+stack — production, no TEST. Trigger is `workflow_dispatch` **only**, with an
+optional full-length `sha` input (how a rollback build gets deployed); no
+auto-deploy on green CI. The job runs in the GitHub environment
+**`production`** (the OIDC subject), where the target variables live; the first
+step is a guard that fails before login if any is unset:
 
 | Setting | Kind | Used for |
 |---|---|---|
-| `ACR_NAME`, `IMAGE_NAME`, `WEBAPP_NAME`, `RESOURCE_GROUP` | `vars.*` (required by the guard) | registry, image name, App Service, resource group |
+| `ACR_NAME`, `IMAGE_NAME`, `WEBAPP_NAME`, `RESOURCE_GROUP` | environment `vars.*` (required by the guard) | registry, image name, App Service, resource group |
 | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | `secrets.*` | OIDC federated login (no long-lived Azure secret) |
 | `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` + `RESEND_API_KEY` | `vars.*` + `secrets.*` (optional) | the deploy-failed alert email; skipped cleanly when unset |
 
-What a dispatched run does once armed: checkout at the dispatched SHA
-(`fetch-depth: 50`) → `node server/scripts/generate-changes.js` (stamps the
-"Latest updates" card) → Azure login → `az acr login` → Buildx build + push
-tagged `:latest`, `:<sha>`, `:sha-<sha>` (single-arch manifest, `provenance:
-false`) → print the digest → **Trivy on the pushed image, before the web app
-is pointed at it** → `azure/webapps-deploy` → `az webapp restart` (the tag
-update alone does not reliably swap the container on slot-less tiers).
+What a dispatched run does: checkout at the sha (`fetch-depth: 50`) →
+`generate-changes.js` (the "Latest updates" card) → Azure login → `az acr
+login` → look `:<sha>` up in the registry → **build + push only if it is not
+there** (`:latest`, `:<sha>`, `:sha-<sha>`; single-arch, `provenance: false`)
+→ resolve the **digest** and print it with the image it replaces (the rollback
+target) in the run summary → **Trivy on that digest before the web app is
+pointed at it** → `webapps-deploy` with `registry/image@sha256:…` → `az webapp
+restart` → poll `/ready` until it answers from a process **younger than the
+swap** (the old container answers 200 too).
 
-Arming = set the variables/secrets on the GitHub repo. No workflow edit.
-Whether they are set is a GitHub setting — read it there, do not infer it from
-this file.
+With no TEST stack, what stands between a commit and the live site is ci.yml
+(tests + boot smoke on the same commit) and the Trivy gate: **dispatch only a
+sha whose CI run on master is green.**
 
 ## 4. The release channel (`.github/workflows/promote.yml`) — dispatch-only
 
@@ -112,9 +116,11 @@ Also set on any real instance:
 | Variable | Why |
 |---|---|
 | `APP_ENV` | `production` / `test` — the environment label (`server/config/appEnv.js`); drives the RESEND rule above, the MCP `[TEST]/[PROD]` tag and the change-request gate |
-| `APP_URL` | links in every transactional email; **the code default is the base's `https://www.hallismiley.is`** (`emailService.js`) |
-| `EMAIL_FROM` | sender; **the code default is the base's `halli@hallismiley.is`** — set `info@orangesmiley.is` (CLAUDE.md) |
-| `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`) |
+| `APP_URL` | canonical origin: email links, sitemap, SSR canonical/og/JSON-LD, the canonical-host 301. Code default `https://www.orangesmiley.is` since 2026-09-22 (was the base's hallismiley.is) |
+| `EMAIL_FROM` | sender. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `info@orangesmiley.is` |
+| `EMAIL_REPLY_TO` | where replies go — the sending domain has no inbox. Added to every message that does not set its own (lead notifications reply to the enquirer). Unset = no Reply-To |
+| `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |
+| `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED` | `false` on orangesmiley.is until the release host exists (D-014); `config/client.json` points at a manifest URL nothing serves yet |
 | `DB_SSL` | TLS is **on by default in production**; `false` is the documented opt-out for a plain-TCP Postgres (CI only, never Azure) |
 | `METRICS_TOKEN` | bearer for `GET /metrics`; blank = localhost only |
 | `PORT` | App Service sets `8080` for Linux containers; default 3000 |
@@ -129,8 +135,11 @@ nothing reads them (the mail transport is Resend).
 `server/app.js` 301-redirects every request whose `Host` differs from the host
 part of `APP_URL` (only `/health` and `/ready` are exempt). Until then it was
 the literal `www.hallismiley.is` with no override, which would have sent a
-first deploy's traffic to the base owner's site; the literal remains only as
-the fallback when `APP_URL` is unset — so set `APP_URL` on every instance.
+first deploy's traffic to the base owner's site. The fallback when `APP_URL`
+is unset is `www.orangesmiley.is` since 2026-09-22 — still, set `APP_URL` on
+every instance. `public/index.html` is baked with `https://www.orangesmiley.is`;
+`ssrMeta.js` swaps that origin for `APP_URL` when it loads the template, so
+the static Organization JSON-LD matches the publisher `@id`s on any host.
 
 ## 6. Provisioning, when Halli says go
 
@@ -139,10 +148,43 @@ Azure Container Registry with its managed identity (`AcrPull`), Azure
 Database for PostgreSQL Flexible Server (v16, TLS), an Azure Files share
 mounted at `/app/uploads`, OIDC federated credential for the GitHub repo with
 subject `repo:orange-smiley/orangesmiley:ref:refs/heads/master`, HTTPS-only,
-FTPS disabled. Resource names, regions and SKUs are decided at provisioning
-time and recorded in the gitignored `company/` folder and as the `vars.*`
-above — this file will not carry them until they exist. The `azure-ops` skill
-holds the fleet provisioning pattern.
+FTPS disabled. The `azure-ops` skill holds the fleet provisioning pattern;
+the step-by-step recipe is LedgerLink's `docs/DEPLOYMENT.md` §0–12 (verified
+live 2026-09-07), and the DNS cutover is rekstrarkerfid's
+`docs/GO-LIVE-CHECKLIST.md` §5.
+
+### orangesmiley.is production (approved 2026-09-22)
+
+Halli's choices: canonical `www.orangesmiley.is` (the apex 301s to it), small
+and production only (own B1 plan + own B1ms Postgres, no TEST stack, ~€35–40
+/month; grows to B2 when ops arrives), a **fresh database** from the seeded
+built-in content — nothing copied from the local instance, which holds the
+books — and Resend on `mail.orangesmiley.is` from day one. Ops stays on the
+local instance (D-017); the public site and ops share no database (plan §4).
+
+Platform subscription, `swedencentral` (D-012), fleet names:
+
+| Resource | Name | Notes |
+|---|---|---|
+| Resource group | `orangesmiley-prod-rg` | tags owner / instance / `role=public` |
+| Postgres | `orangesmiley-prod-pg` | B1ms, PG 16, 32 GB, 14-day **geo-redundant** backup (creation-time only), `--public-access Enabled` + one firewall rule per web-app outbound IP, `require_secure_transport=on` |
+| Key Vault | `orangesm-prod-kv` | RBAC mode; `database-url`, `csrf-secret`, `metrics-token`, `resend-api-key`, each `--expires` +180 d; app settings reference them unversioned |
+| Storage | `orangesmileyprodfiles` | share `uploads` → `/app/uploads` (`UPLOAD_ROOT`); `BOOKS_UPLOAD_ROOT` under it |
+| Plan / web app | `orangesmiley-prod-plan` (B1 Linux) / `orangesmiley-prod-web` | system identity, AcrPull on `orangesmileyacr`, KV Secrets User on its own vault, HTTPS-only, FTPS off, TLS 1.2, HTTP/2, always-on, health check `/health` |
+| Monitoring | `orangesmiley-prod-ai` | `standard` availability test on `/health` **plus an alert rule on it** |
+| Budget | `orangesmiley-prod-monthly` | €45, RG-scoped |
+| Deploy identity | `orangesmiley-github-deploy` | AcrPush on the registry, Contributor on the web app only, KV Reader on the vault; federated creds for `ref:refs/heads/master` and `environment:production`, each in plain AND id-bearing subject form |
+
+App settings beyond §5's boot-fatal set: `APP_ENV=production`,
+`APP_URL=https://www.orangesmiley.is`, `ALLOWED_ORIGINS` = both hostnames'
+https origins + the `azurewebsites.net` one, `EMAIL_FROM`, `EMAIL_REPLY_TO`,
+`LEAD_NOTIFY_EMAIL`, `PORT=8080`, `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED=false`.
+
+The steps that are **Halli's hand**: the go on spend before the first `az …
+create`; the Resend domain + DPA + DKIM/SPF/DMARC records and the API key
+(into the vault, never into chat); the ISNIC records (`A @` + `TXT asuid`,
+`CNAME www` + `TXT asuid.www` — values supplied at that step); production
+app-setting writes if the agent side is blocked.
 
 Three recipes from the base's guide that are still correct and worth keeping
 (placeholders as in `RUNBOOK.md`):
@@ -194,14 +236,18 @@ yearly books archive to media in Iceland is the compliance step, not a nicety.
 | Liveness | `GET /health` | `200 {"status":"ok","uptime":…,"timestamp":…}` — **no DB check** |
 | Readiness (DB + breaker + memory) | `GET /ready` | `200 {"status":"ok", "checks": {…}}`; `503` while not ready |
 | Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` |
-| Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — it is on here) | `gitSha` = the dispatched SHA |
+| Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — which it is on orangesmiley.is until the release host exists; read the `gitSha` from `/ready` logs or the deploy run summary instead) | `gitSha` = the dispatched SHA |
 | Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
 
 ## 8. Rollback
 
-Image-pin: point the App Service at a previous `:sha-<sha>` tag and restart
-(RUNBOOK → Rollback). Git revert + merge only runs CI; a deploy is still a
-dispatch. Migrations are forward-only and must be expand/contract (stack
+Image-pin: point the App Service back at the previous **digest** — every
+deploy run's summary prints the image it replaced — and restart
+(`az webapp config container set … --container-image-name
+orangesmileyacr.azurecr.io/orangesmiley@sha256:…`; RUNBOOK → Rollback). Or
+dispatch deploy.yml with the old commit's `sha`: its image is still in the
+registry, so nothing is rebuilt. Git revert + merge only runs CI; a deploy is
+still a dispatch. Migrations are forward-only and must be expand/contract (stack
 invariant 14), so an image rollback never needs a schema rollback within one
 release.
 

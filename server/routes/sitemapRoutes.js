@@ -17,7 +17,7 @@
 const express = require('express');
 const { forcedLocaleFor } = require('../config/i18n');
 
-const APP_URL = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
+const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
 // Static business pages — one entry per locale. The home page gets an extra
 // x-default entry because it's the locale-selection landing.
