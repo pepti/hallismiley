@@ -1665,5 +1665,10 @@ the pricing block needs a product slot the engine does not have yet — keep
 that one as a product route until it does), the `_id` uuid shim in
 `leadsController.js`, the `h1.legal-title` override in `landscape.css`, the
 `legacy` comment in `rk.js`. No alias for 108 (both ADDs are no-ops there).
+*Correction, same day (rekstrarkerfid#46):* "no-op" held only for an existing
+database. On a fresh one the engine list runs first, rk has superseded `097`,
+so `leads` does not exist yet and 108 fails — rk now lists 108 under
+`superseded`. The general rule is in `docs/MIGRATIONS.md` ("Superseding a
+table means superseding what alters it").
 Its `qa-chrome-findings.spec.js` 320px case and its `crawlerPages.test.js`
 llms/lastmod cases can then point at the engine's.
