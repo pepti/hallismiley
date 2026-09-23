@@ -124,7 +124,9 @@ Also set on any real instance:
 | `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |
 | `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED` | `false` on orangesmiley.is until the release host exists (D-014); `config/client.json` points at a manifest URL nothing serves yet |
 | `DB_SSL` | TLS is **on by default in production**; `false` is the documented opt-out for a plain-TCP Postgres (CI only, never Azure) |
-| `METRICS_TOKEN` | bearer for `GET /metrics`; blank = localhost only |
+| `METRICS_TOKEN` | bearer for `GET /metrics`; blank = localhost only (compared constant-time, `utils/safeEqual.js`) |
+| `TOTP_ENC_KEY` | 32-byte key (base64 or hex) that seals admin TOTP secrets at rest (`utils/secretBox.js`, migration 107). A Key Vault reference, **backed up with the other secrets** — losing it means resetting every admin. Malformed → the boot refuses; unset → secrets stay in the plaintext column and production warns at boot. Set it BEFORE the first deploy of 107 (`docs/ADMIN-2FA.md`) |
+| `ADMIN_TOTP_EXEMPT` | **never on a deployed stack.** Usernames (or `*`) not forced to enrol two-factor sign-in — a Jest/Playwright/dev switch that the server IGNORES under `NODE_ENV=production` (TEST stacks included) and warns about at boot if it finds it |
 | `PORT` | App Service sets `8080` for Linux containers; default 3000 |
 | `BOOKS_UPLOAD_ROOT` | the books' fylgiskjöl — point OUTSIDE the checkout on a backed-up disk |
 | `SELF_UPDATE_TRIGGER_URL` | the platform's deployment webhook; without it an update can be recorded but not applied |

@@ -151,6 +151,18 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- First upward harvest landed 2026-09-23 ([harvest-rk-totp-2026-09-23](docs/HISTORY.md#harvest-rk-totp-2026-09-23)):
+  mandatory 2FA enrolment + TOTP secret sealed at rest (migration 107). Open:
+  (a) **before the first deploy of 107, create `TOTP_ENC_KEY` in the instance's
+  Key Vault and reference it on the web app** (`docs/ADMIN-2FA.md`; Halli's
+  hand); after it every unenrolled admin is walked through enrolment at next
+  sign-in — save the recovery codes; (b) rekstrarkerfid's next engine-sync
+  adds `'107_totp_secret_enc': ['093_totp_secret_enc']` to `aliases` in its
+  `rk.js` (its `legacy` keeps 093 as is); (c) the authenticator issuer is still
+  the base literal `Icelandic Store` — it follows `identity.brand.name` once the
+  identity seam lands (rk reads `brand.name`; that hunk was trimmed to keep off
+  `clientConfig.js`); (d) release N+1 stops writing `totp_secret`, N+2 drops it;
+  (e) next rk candidates: `social-login-gate`, `request-logging`.
 - Engine upstream (D-021, [engine-upstream-2026-09-22](docs/HISTORY.md#engine-upstream-2026-09-22)):
   the first syncs, in order — LedgerLink and icelandicstore in parallel (both
   need the one-time graft; ice's PR waits for Halli's window), then
