@@ -6,10 +6,6 @@ const db = require('../../server/config/database');
 const { migrations } = require('../../server/config/migrationSet');
 const { createTestAdminUser } = require('../helpers');
 
-// On a product other than os the migration is absent (hallismiley engine-graft):
-// the suite is skipped rather than failing at module load.
-const PRODUCT = require('../../engine.json').product;
-const describeOs = PRODUCT === 'os' ? describe : describe.skip;
 const m104 = migrations.find(m => m.name === '104_sales_guides_services_page');
 const run = async () => { for (const sql of m104.statements) await db.query(sql); };
 
@@ -25,7 +21,13 @@ async function insertGuide(slug, { summary = null, body, updatedBy = null }) {
 }
 const guide = async (slug) => (await db.query('SELECT summary, body FROM sales_guides WHERE slug = $1', [slug])).rows[0];
 
-describeOs('migration 104 — sales guides no longer point at /thjonusta', () => {
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this suite belongs to, or when the feature is another product's
+// (features/local.json — see tests/lib/featureGate.js). Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
+describe('migration 104 — sales guides no longer point at /thjonusta', () => {
   beforeEach(async () => {
     await db.query(`DELETE FROM sales_guides WHERE slug IN ('threpin-thrju', 'hvad-er-i-hverju-threpi')`);
   });

@@ -1,4 +1,12 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
+// Brand, hero clip and title suffix come from the product identity
+// (config/client.json → <script id="identity">), never from a literal, so the
+// engine's spec passes unchanged in a downstream with its own identity.
+const { identity, readIdentity, escapeRe } = require('./lib/identity');
 
 test.describe('Navigation — basic page loads', () => {
 
@@ -38,13 +46,17 @@ test.describe('Navigation — basic page loads', () => {
   test('homepage hero shows the background video by default', async ({ page }) => {
     // Halli's call (2026-08-22, the hallismiley-layout revert): the video hero
     // is the default again. Scene/gradient/photo/plain remain admin-selectable,
-    // so this asserts the DEFAULT, not the only possibility. The clip itself
-    // changed 2026-09-13 (Halli): the waterfall gave way to hero-dc7df.
+    // so this asserts the DEFAULT, not the only possibility. The clip is the
+    // product's (identity.hero; for Orange Smiley hero-dc7df since 2026-09-13,
+    // when the waterfall gave way to it) — the page must show the clip the
+    // server handed it, and that must be the one this repo's config names.
     await page.goto('/');
+    const served = await readIdentity(page);
+    expect(served.hero).toEqual(identity.hero);
     const video = page.locator('video.lol-hero__bg');
     await expect(video).toBeAttached();
-    await expect(video.locator('source')).toHaveAttribute('src', /\/assets\/videos\/hero-dc7df-v2\.mp4$/);
-    await expect(video).toHaveAttribute('poster', /\/assets\/videos\/hero-dc7df-v2-poster\.jpg$/);
+    await expect(video.locator('source')).toHaveAttribute('src', new RegExp(`${escapeRe(identity.hero.clip)}$`));
+    await expect(video).toHaveAttribute('poster', new RegExp(`${escapeRe(identity.hero.poster)}$`));
     await expect(video).toHaveAttribute('autoplay', '');
     // The dark veil is what keeps the fixed light hero copy legible.
     await expect(page.locator('.lol-hero__overlay')).toBeAttached();
@@ -62,7 +74,7 @@ test.describe('Navigation — basic page loads', () => {
     await expect(video).toBeAttached();
     await expect(video).not.toHaveAttribute('autoplay', /.*/);
     await expect(video).toHaveAttribute('preload', 'none');
-    await expect(video).toHaveAttribute('poster', /hero-dc7df-v2-poster\.jpg$/);
+    await expect(video).toHaveAttribute('poster', new RegExp(`${escapeRe(identity.hero.poster)}$`));
     // Give autoplay every chance to misbehave before asserting it did not.
     await page.waitForTimeout(500);
     expect(await video.evaluate((v) => v.paused)).toBe(true);
@@ -161,36 +173,46 @@ test.describe('Tab title follows SPA navigation', () => {
   // navigation never touched document.title, so the tab kept the landing page's
   // title for a whole session — every inner page read "Orange Smiley —
   // hugbúnaðarhús knúið gervigreind". utils/pageTitle.js + the router hook fixed
-  // that; tests/unit/pageTitle.test.js pins the strings against the server's,
-  // and this pins that a CLIENT-SIDE navigation actually applies them.
+  // that; tests/unit/pageTitle.test.js pins the page parts against the server's,
+  // and this pins that a CLIENT-SIDE navigation actually applies them. The
+  // brand and the suffix are the product identity's; the page parts are the
+  // engine's (ssrMeta DEFAULT_META).
+  const { name, titleSuffix } = identity.brand;
+  const HOME_IS = `${name} — hugbúnaðarhús knúið gervigreind`;
 
   test('a client-side navigation retitles the tab, matching the SSR title', async ({ page }) => {
     await page.goto('/is/');
-    await expect(page).toHaveTitle('Orange Smiley — hugbúnaðarhús knúið gervigreind');
+    await expect(page).toHaveTitle(HOME_IS);
 
     // Navigate the way a visitor does — click the nav, no page load.
     await page.click('a[href="/is/thjonusta"]');
     await expect(page).toHaveURL(/\/is\/thjonusta$/);
-    await expect(page).toHaveTitle('Þjónusta — Orange Smiley');
+    await expect(page).toHaveTitle(`Þjónusta${titleSuffix}`);
 
     // And a direct load of the same URL must agree, or the tab would say one
     // thing on load and another after a click.
     await page.goto('/is/thjonusta');
-    await expect(page).toHaveTitle('Þjónusta — Orange Smiley');
+    await expect(page).toHaveTitle(`Þjónusta${titleSuffix}`);
   });
 
   test('going back restores the previous title', async ({ page }) => {
     await page.goto('/is/');
     await page.click('a[href="/is/um-okkur"]');
-    await expect(page).toHaveTitle('Um okkur — Orange Smiley');
+    await expect(page).toHaveTitle(`Um okkur${titleSuffix}`);
     await page.goBack();
     await expect(page).toHaveURL(/\/is\/$/);
-    await expect(page).toHaveTitle('Orange Smiley — hugbúnaðarhús knúið gervigreind');
+    await expect(page).toHaveTitle(HOME_IS);
   });
 
   test('the English side is titled in English', async ({ page }) => {
     await page.goto('/en/');
     await page.click('a[href="/en/thjonusta"]');
-    await expect(page).toHaveTitle('Services — Orange Smiley');
+    await expect(page).toHaveTitle(`Services${titleSuffix}`);
+  });
+
+  test('the nav lockup and the footer carry the brand the server handed the page', async ({ page }) => {
+    await page.goto('/is/');
+    await expect(page.locator('.lol-nav__logo-text')).toHaveText(name);
+    await expect(page.locator('.lol-footer__logo')).toHaveText(name);
   });
 });

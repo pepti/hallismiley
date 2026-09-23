@@ -6,7 +6,6 @@ owner: hs
 status: live
 flag: null
 paths:
-  - server/config/product-migrations/hs.js
   - .github/workflows/trivy.yml
   - e2e/news-editor.spec.js
   - server/utils/canonicalHost.js

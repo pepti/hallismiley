@@ -98,6 +98,27 @@ the account on the public site too.
   in `/personuvernd` §6. A visitor's erasure request = delete the row in the
   inbox (admin) and the email in the mailbox.
 
+### Enquiries from the other instances (`leads:export` / `leads:import`)
+
+The public orangesmiley.is (and rekstrarkerfi.is once it runs this engine)
+captures `/hafa-samband` enquiries into its OWN `leads` table, which ops
+never sees. Until ops runs on Azure and a timer takes over, the route is by
+hand, weekly (D-020 step 4):
+
+1. On the capturing box: `npm run leads:export -- --since 2026-09-15 --out data/leads-2026-09-22.json`
+   (omit `--since` for everything; the import is idempotent, so over-exporting
+   is harmless). `data/` is gitignored — never write the file anywhere else.
+2. Carry the file to ops. It is personal data (`/personuvernd` §3).
+3. On ops: `npm run leads:import -- data/leads-2026-09-22.json --dry-run`
+   to see `inserted=` / `skipped=`, then without `--dry-run`. Rows arrive as
+   **Ný** with `source` = the exporting host (or `--source <label>`).
+4. Delete the file on both boxes. Ops keeps the rows under the same 24-month
+   retention.
+
+A lead already on ops is never touched by a re-import — your status, owner
+and notes are yours; only new `submission_id`s are added. A bad row anywhere
+fails the whole file, so a half-imported week cannot happen.
+
 ## Content workflow
 
 - Guides are written/edited in the overlay editor on `/admin/handbok`
@@ -108,12 +129,30 @@ the account on the public site too.
   Söluþjálfari agent's) lands as drafts and **only Halli publishes**.
 - The seed script `server/scripts/seed-sales-guides.js` inserts the initial guide set
   as drafts; it is idempotent (`ON CONFLICT (slug) DO NOTHING`) and never
-  overwrites edited guides.
+  overwrites edited guides. So a revision of its text reaches rows that already
+  exist only through a product migration in `server/config/product-migrations/os.js`
+  that rewrites the same passages where no person has saved the guide
+  (`updated_by IS NULL`): 104 (2026-09-13) and `os_001_sales_guides_d001_pricing`
+  (2026-09-22). `tests/integration/salesGuidesD001.test.js` checks that the seed
+  and os_001 give the same text.
+- **Pricing in the guides is D-001's model** (`company/DECISIONS.md`, since
+  2026-09-22): a one-time build fee of 390 / 580 / 690 þ.kr. plus a service
+  contract of 19 / 29 / 39 þ.kr./mán carrying 5 / 10 / 20 verkeiningar a month
+  (Vefur / Verslun / Rekstur), all án VSK. Work is sized 1 / 5 / 20 einingar,
+  estimated before the customer confirms, with a notice at 80% and overage at a
+  fixed einingaverð. Where D-001 is silent (the einingaverð amount, whether
+  unused units carry over, the cost of moving up a tier) the guides say
+  "DRÖG — Halli staðfestir". The flat 39/59/79 þ.kr./mán subscription and "setup
+  fee waived on annual commitment" are retired. Every price stays DRÖG until
+  Halli confirms.
+- **Demos happen on the demo instance `demo.rekstrarkerfi.is`** (D-020; being
+  built): Kaffibrennslan Glóð sample data, reset nightly, one login per seller.
+  The guides never send a seller to orangesmiley.is or the ops instance to demo.
 - Keep guides consistent with the tier matrix on the product site
-  (rekstrarkerfi.is, `VerdskraView.js` in the sibling `rekstrarkerfid` repo —
-  the company site shows no tiers since 2026-09-13) and the
-  company plans; prices in guides stay DRAFT-marked until Halli confirms
-  pricing. The Söluþjálfari agent owns this consistency sweep.
+  (rekstrarkerfi.is/verdskra, `VerdskraView.js` + `thjonusta.*` keys in the
+  sibling `rekstrarkerfid` repo — the company site shows no tiers since
+  2026-09-13) and the company plans. The Söluþjálfari agent owns this
+  consistency sweep.
 
 ## Related proposals (ENHANCEMENTS.md — not implemented)
 

@@ -8,6 +8,10 @@
 // database (e2e/lib/dbUrl) — an invoice without a seller kennitala/VSK number
 // is refused by design.
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { TEST_ADMIN } = require('./helpers');

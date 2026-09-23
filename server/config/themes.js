@@ -1,9 +1,12 @@
-// UI themes — the server-side mirror of the client theme list.
+// UI themes — the server-side reader of the product's theme set.
 //
-// The canonical set lives in three places that MUST stay in sync:
-//   • public/css/themes.css        — the token sets per html[data-theme]
-//   • public/js/services/themePrefs.js + public/js/theme-boot.js — client list
-//   • this file + the users.theme CHECK constraint (migration 083_user_theme)
+// The SET is `identity.theme.picker` in config/client.json (defaults in
+// server/config/clientConfig.js). ssrMeta.js hands the same list to the
+// browser on <html data-theme-picker>, which theme-boot.js and themePrefs.js
+// read — so the four readers cannot disagree. What still has to match by hand
+// is public/css/themes.css: every id in the picker needs a token set there
+// (the users.theme CHECK constraint of 083 was dropped by 106 so a product can
+// add ids without an engine migration).
 //
 // users.theme is NULLABLE and has NO column default: NULL means "this account
 // has never picked a theme", which is deliberately distinct from 'classic'
@@ -22,10 +25,7 @@
 // moved the accounts that had them to classic. The CHECK constraint still
 // admits the old ids — invariant 14 says it narrows in a later release, after
 // no running container can write them.
-// hallismiley residual hook (engine-graft): the five colour themes of the
-// base's 081_user_theme stay selectable. 084_user_theme_widen is SUPERSEDED
-// here (product-migrations/hs.js) and 106 drops the CHECK, so this list is
-// the only gate on users.theme.
-const THEMES = ['classic', 'ember', 'midnight', 'glacier', 'moss', 'lava', 'aurora', 'black-sand'];
+const { identity } = require('./identity');
+const THEMES = identity.theme.picker.slice();
 
 module.exports = { THEMES };

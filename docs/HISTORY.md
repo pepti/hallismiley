@@ -57,6 +57,11 @@ link to them. "This repo" inside an engine entry means orangesmiley.
 | 2026-09-22 | [orangesmiley.is go-live, public site only](#go-live) | D-020 step 2 split: public site first, ops stays local; deploy.yml by digest, production only; `APP_URL` default + baked origin → orangesmiley.is; `EMAIL_REPLY_TO` |
 | 2026-09-22 | [Docs restructure in the base (PR #167)](#docs-restructure-hs) | hallismiley: per-domain index + HISTORY + `architectureIndex.test.js` in the base, the day before the graft |
 | 2026-09-22 | [Engine graft — hallismiley becomes a downstream (D-021)](#engine-graft) | hallismiley: merge of the engine with a real base; `hs.js` aliases; what the identity check found, what was hooked, what stays open |
+| 2026-09-22 | [Engine upstream — this repo becomes the parent of every repo (D-021)](#engine-upstream-2026-09-22) | Two layers (source by merge, runtime by product channel); `engine.json` + feature wiki; two-array migrations (091/092/104 → `os.js`, theme CHECK → 106); `engine-sync` / `engine-harvest` / `engine-drift`; icelandicstore is the current source of generic work |
+| 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
+| 2026-09-22 | [Leads transfer — enquiries from the other instances reach ops (D-020 step 4)](#leads-transfer-2026-09-22) | `leads:export` (submission fields only) / `leads:import` (one transaction, `ON CONFLICT DO NOTHING`, an ops row is never updated); by hand weekly, a timer once ops is on Azure; no migration |
+| 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
+| 2026-09-23 | [Engine sync — identity through the seam, feature gate (D-021)](#engine-sync-2026-09-23) | hallismiley: up to engine `92308d2`; brand/locale/theme trio/hero/hidden surfaces/Organization now in `config/client.json`, the theme and brand hooks retired, `/aron13ara` the one remaining hook; what the seam still lacks |
 
 ---
 
@@ -1227,3 +1232,380 @@ clip, locale default, theme default) with its tests reading it, or hallismiley
 forks the pinned files and their tests in `engine.json.productPaths`. Until
 then this commit is reviewable but hallismiley.is presents as the company site
 if deployed — do not merge to `main` without that decision.
+<a id="engine-upstream-2026-09-22"></a>
+## 2026-09-22 — Engine upstream: orangesmiley becomes the parent of every repo (D-021)
+
+**Why.** Five repos ran the same engine and none of them shared git history:
+each was scaffolded as a file copy of a hallismiley commit, so every generic
+fix travelled by hand (`/base-diff`, cherry-pick by eye, "ported verbatim" —
+the `forwardedFor` hole found in icelandicstore on 2026-09-12 was still open
+in three repos ten days later, [go-live](#go-live)). The written record made
+it worse: the 2026-08-22 review §3 and REKSTRARKERFI-PLAN §8 named
+`rekstrarkerfid` the successor upstream "after R3+R7", which left the base
+frozen, the product repo not yet upstream, and this repo — the one that
+actually carried the newest engine — officially nobody's parent.
+
+**The decision (Halli, 2026-09-13, refined 2026-09-22; D-021).** THIS repo is
+the engine upstream of the estate. Orange Smiley ehf. is the parent company
+and builds several products; Rekstrarkerfið is one. Downstreams:
+`rekstrarkerfid` (product core, rekstrarkerfi.is), `LedgerLink` (contract
+product), `icelandicstore` (customer #1, live) and `hallismiley` (the old base,
+now a FULL downstream: Halli's personal site, pepti org, personal tenant,
+deploys on merge to `main`). Two layers: source flows engine → repos by
+`git merge upstream/master` on `engine-sync/<date>` PRs; runtime flows a
+product repo → its instances by that product's own release channel
+(`promote.yml`, canary/stable, self-update), one channel set per product in
+its tenant — the engine repo is a product in that sense too, so its own
+channel (orangesmiley.is now, ops on stable after 5.10) is armed first,
+rekstrarkerfid's next; the 2026-09-13 hallismiley arming packet is parked.
+Restated invariant: product repos derive from the engine; customer instances
+derive from a product's image; instances are never cloned from instances.
+Runbook: `docs/ENGINE-SYNC.md`.
+
+**Mechanism.** Each downstream gets an `upstream` remote and a one-time
+history graft (temporary `git replace --graft` of both roots onto the common
+hallismiley ancestor `fdf9581`, one ordinary merge, replace refs deleted —
+never `--allow-unrelated-histories`); after that a sync is a plain merge.
+`engine.json` in every repo records product id, role, upstream, `rev`,
+`syncedAt`, `grafted`, `productPaths`, `history`. Tools in `site-factory`:
+`engine-sync.js` (branch, merge, mechanical lock resolution, the verification
+chain, `engine.json` in the same commit; exit 3 hands conflicts to the
+operator), `engine-harvest.js` (upward `cherry-pick -x` of downstream commits
+that carry a `Feature: <id>` trailer or touch an engine feature's paths),
+`engine-drift.js` (writes `engine-registry.json` + `FEATURE-MATRIX.md`,
+derived, never hand-edited). `/base-diff` becomes `/engine-diff`.
+`.claude/rules/stack-invariants.md` and `.claude/commands/` are tracked here
+now (the `.claude/*` ignore has exceptions) so they reach downstreams by
+merge; the site-factory template stops shipping its own invariants copy.
+
+**Migrations: two arrays.** Auditing the chains for the graft found two
+things. First, 091, 092 and 104 are not engine migrations at all — they
+`UPDATE site_content` / `sales_guides` with Orange Smiley's own copy, which
+every other product seeds with its own; they moved to
+`server/config/product-migrations/os.js` as `legacy` entries. Second, the
+per-repo `081_user_theme` CHECK constraints differ by repo (each repo has its
+own theme set), so a downstream booting the engine's array would crash-loop
+on the constraint it never applied — hence engine migration
+`106_user_theme_check_drop`, which removes the CHECK and lets `themePrefs.js`
+own the set (Halli's veto pending). The shape — engine array in `schema.js`
+upstream-only, product array `<id>_NNN_name` with `legacy`, `aliases`,
+`superseded`, assembled by `migrationSet.js`, `migrate.js --plan` as the
+pre-flight — is `docs/MIGRATIONS.md`, now invariant #4.
+
+**Feature wiki.** `features/<id>.md` for engine features, `features/<product>/`
+for product features, `features/local.json` per repo; `.engine-paths` and
+`.gitattributes` (`merge=ours` on product-owned paths) are generated from it,
+and `tests/unit/featureRegistry.test.js` enforces that every migration name
+and every owned path is claimed by exactly one feature.
+
+**The ice-as-source correction.** The plan first treated icelandicstore as a
+pure consumer. Halli is building it with Orri, the owner, and for the next
+weeks it is the main SOURCE of new generic features. So the upward path is
+first-class: `Feature: <id>` trailers on ice commits, a weekly `from-ice/<date>`
+harvest PR into this repo, Halli deciding generic-or-ice-only per candidate;
+customer-specific code is never touched by a sync in either direction.
+
+**Still Halli's:** pick the window for icelandicstore's graft PR (merge deploys TEST);
+adopt the `Feature:` trailer with Orri; veto or accept migration 106; merge
+the hallismiley and icelandicstore sync PRs; arm `RELEASE_*` per product,
+orangesmiley's own first. Superseded documents were banner-marked or rewritten
+the same day (`company/DECISIONS.md` D-021 lists them).
+
+<a id="handbook-d001-2026-09-22"></a>
+## 2026-09-22 — Handbook on D-001 pricing and the demo instance (D-020 step 5)
+
+D-020 found two faults in Handbók sölufólks. The seeded guides still sold the
+flat 39/59/79 þ.kr./mán subscription with "setup fee waived on an annual
+contract", which D-001 retired on 2026-09-01/03. And they told sellers to demo
+on orangesmiley.is. A SALES-LOG entry of 2026-09-03 said the seed script
+already carried the new model, but master's seed did not (the change never
+landed), and the dev database's 14 rows were byte-identical to master's seed.
+**All copy is DRÖG for Halli.** Söluþjálfari drafted it.
+
+- **The model in the guides**: a one-time build fee of 390 / 580 / 690 þ.kr.
+  (half at signing, half at go-live, D-005), plus a service contract of
+  19 / 29 / 39 þ.kr./mán carrying 5 / 10 / 20 verkeiningar, all án VSK. What a
+  verkeining is: verk sized 1 / 5 / 20 with the examples from the live
+  rekstrarkerfi.is/verdskra copy, an estimate the customer approves before work
+  starts, a notice at 80%, overage at a fixed einingaverð, and non-urgent verk
+  that queue free. The slogan "Sérsniðið kostar áskrift, ekki ráðgjafatíma"
+  became "Sérsniðið kostar verkeiningar, ekki ráðgjafatíma". The glossary gained
+  uppsetningargjald, þjónustusamningur, verkeining (kept apart from *sérsniðin
+  eining*), einingaverð and sýnikerfi. `manadarleg-samskipti` swaps the
+  annual-contract pitch for the draft 12-month term (D-007, a lawyer-review
+  draft).
+- **Where D-001 is silent the guides say "DRÖG — Halli staðfestir"** and
+  nothing more: the einingaverð amount, whether unused units carry over, the
+  cost of moving up a tier, and how sellers demo before the demo instance
+  exists.
+- **Demos**: `kerfid-i-stuttu-mali` gained a section on `demo.rekstrarkerfi.is`.
+  It covers the Kaffibrennslan Glóð data, the nightly reset, one login per
+  seller behind an authenticator code, time-limited prospect logins only after
+  a guided demo, the shop → order → invoice → VSK → change-request path, and
+  email and payments being off. It says plainly that the instance is being
+  built. `innskraning-og-handbokin` points there too, and its theme sentence
+  now counts three themes, not five.
+- **Migration `os_001_sales_guides_d001_pricing`**, the first entry in the
+  product array `migrations` (D-021). The seed is `ON CONFLICT DO NOTHING`, so
+  seeded rows only move by migration. The 34 passages were derived line by line
+  from the old and new seed. Each is an exact old → new `replace()` through a
+  `guideEdit` helper in `os.js`, guarded on `updated_by IS NULL`, on the old
+  passage being present and on the new one being absent, so a re-run is a no-op.
+  The entry carries its `edits` for the test. A dry run on the dev database, in
+  a rolled-back transaction, turned all 14 rows into exactly the new seed text,
+  and the second run touched nothing.
+- **Test** `tests/integration/salesGuidesD001.test.js` rebuilds the old text by
+  undoing the edits on the seed. It pins that text to a sha256 of the dev
+  database rows as shipped. It then checks that os_001 turns the old text into
+  the seed text exactly, and that no flat-tier phrase survives while the D-001
+  figures and the demo host do. It also checks that a guide saved by a person
+  is untouched and that a second run changes nothing.
+- Not changed (flagged to Halli): `velkomin-i-soluteymid` still says the company
+  "selur eina vöru", although since 2026-09-13 it sells any SMB software.
+  `innskraning-og-handbokin` still sends sellers to `/admin/handbok` on
+  orangesmiley.is, and D-020 has not said which instance serves the handbook
+  once ops is private. Plan docs §1/§3 still carry the old model, which is
+  Halli's edit per D-001.
+<a id="leads-transfer-2026-09-22"></a>
+## 2026-09-22 — Leads transfer: enquiries from the other instances reach ops (D-020 step 4)
+
+D-020 gave every instance its own `leads` table and made ops the one place
+the pipeline is worked — which left the enquiries the public orangesmiley.is
+captures (and rekstrarkerfi.is's, once it runs this engine) invisible to the
+sellers. Halli's brief: "weekly and by hand while there are 1–3 customers".
+This is the by-hand pair. **No migration**: 097's `submission_id UUID NOT
+NULL UNIQUE` is the idempotency key it always was.
+
+- `server/scripts/leads-export.js` (`npm run leads:export -- [--since <ISO>]
+  [--out <file>]`, default stdout) dumps `{ exportedAt, instance, leads[] }`
+  from the capturing instance. `instance` = the `APP_URL` host (else
+  `INSTANCE_ROLE`). The rows carry the **submission fields + `created_at`
+  only** — never `status`, `owner_user_id`, `contacted_*` or `note` — so a
+  file can never carry one box's workflow state onto another. Counts go to
+  stderr, field values nowhere.
+- `server/scripts/leads-import.js` (`npm run leads:import -- <file.json>
+  [--dry-run] [--source <label>]`) on ops: validates every row against the
+  contact form's own limits (`contactController`: name ≤100, well-formed email
+  ≤200, message 10–2000, company ≤150, phone ≤40; `Lead.CAPS` for platform /
+  locale / source), fails the whole file on any bad row, then inserts in ONE
+  transaction with `ON CONFLICT (submission_id) DO NOTHING`. **An existing
+  row is never updated** — on ops it is the seller's work product. Inserted
+  rows are `status = 'new'`, no owner, `created_at` preserved (retention
+  counts from the visitor's receipt, not the import), `source` = `--source`
+  or the file's `instance`. Prints `inserted=`/`skipped=`; `--dry-run` rolls
+  back.
+- PII posture, in the header comments and `docs/SALES-STAFF.md` (the
+  seller-facing steps): the file lives under gitignored `data/`, is carried
+  by hand, deleted on both boxes after import; ops holds the rows under the
+  same 24-month `/personuvernd` §6 retention. Error messages name a row by
+  index and submission id only.
+- `tests/integration/leadsTransfer.test.js`: export shape excludes the
+  workflow columns; `--since`; import inserts / second import skips all / a
+  worked row's status, note, owner AND submission text survive a "corrected"
+  re-import; one bad row writes nothing; `--dry-run` writes nothing;
+  `--source` wins; the export→import round trip keeps the ids; every limit.
+- Deliberately NOT built: an HTTP route between the instances (the seller
+  publication is one way ops → public by design, and a public → ops door
+  would be the reverse), and a timer — that comes with ops on Azure (PLAN →
+  Status). `source` stays a label, not an FK; the inbox shows it as text.
+
+---
+
+<a id="identity-seam-2026-09-22"></a>
+## 2026-09-22 — Identity seam + feature gate: a downstream owns who it is in one file (D-021)
+
+**Why.** The hallismiley graft kept the engine's identity: engine-owned
+tests pinned Orange Smiley literals (the nav lockup, the SSR titles and
+JSON-LD names, the `hero-dc7df-v2` clip, visitor default `is`, theme default
+`ember` with its picker, `HIDDEN_ADMIN_VIEWS`, the baked `#organization`,
+`email.verify.subject`), so merged as-is Halli's personal site would have
+presented as the company site. LedgerLink and rekstrarkerfid carried the same
+literals as "residual hooks" that re-conflicted on every sync, and
+LedgerLink's graft CI showed 32 e2e failures — engine specs asserting the
+engine's public IA on a product that hides it, plus jest suites the graft had
+to `describe.skip` by hand. The engine was a fork by default.
+
+**The identity seam.** `identity.*` joins `modules.*` in the existing
+per-instance config (`server/config/clientConfig.js`: schema defaults <
+`config/client.json` < `CLIENT_CONFIG_IDENTITY_*` env; nothing new was
+invented). `brand` (name, legalName, alternateNames, titleSuffix), `locale`
+(publicDefault), `theme` (default, root, picker — validated as a trio, a picker
+without its default or root is rejected whole), `hero` (clip, poster),
+`surface` (hiddenRoutes, hiddenAdminViews), `organization` (email,
+description, logo, image, address, areaServed, knowsAbout, sameAs). The
+defaults ARE Orange Smiley's values, pinned once in
+`tests/unit/identityConfig.test.js`, so an engine with no block behaves as
+before. A leaf is now a node with both `type` and `default` — checking
+`default` alone read `identity.theme` (which has a child called `default`) as a
+leaf. Readers, server: `server/config/identity.js` (the resolved record +
+pure head helpers), `ssrMeta.js` (page-part titles composed by `composeTitle`;
+`og:site_name`, `<meta author>`; the WebSite and a server-built Organization
+JSON-LD on every page — `loadTemplate()` strips the baked block from
+`index.html`), `config/i18n.js`, `publicSurface.js`, `themes.js`, and
+`server/i18n/index.js`, whose `t()` injects `{siteName}` / `{siteHost}`
+(APP_URL's host without `www.`) so the email tables carry no brand
+(`i18nIdentity.test.js`: the default renders exactly the old text). Hand-off:
+ssrMeta writes `<html data-default-theme data-theme-picker data-root-theme>`
+for the pre-paint `theme-boot.js` and `<script id="identity">` (with `</`
+escaped) for `public/js/utils/identity.js`, which parses it once with the
+same defaults as fallback; `themePrefs.js`, `i18n.js`, `consent.js`,
+`adminSurface.js`, `NavBar.js`, `HomeView.js` and `pageTitle.js` read it.
+`pageTitle.js` now holds page parts + `titleMode`, and the parity test parses
+both from `ssrMeta.js` and holds the two `composeTitle`s equal.
+
+**Tests read the seam.** `ssrMeta.test.js`, `users.test.js`,
+`i18n.test.js`, `localeLock*.test.js`, `themePrefsAccount.client.test.js`,
+`admin-surface-parity.test.js` (engine defaults AND the resolved list ⊂
+`ADMIN_VIEW_IDS`) and the e2e specs `navigation`, `admin-surface`,
+`business-routes` assert against `identity.*` (`e2e/lib/identity.js`
+resolves it in-process and reads what the server served). Every existing
+test keeps what it protected; only where the expected value comes from
+changed. `tests/integration/identityDownstream.test.js` requires the app
+fresh with a temp `client.json` (brand "Halli Smiley", default `en`, theme
+`glacier` in a picker of six, waterfall clip, empty hidden lists) and proves
+the served page presents as that product.
+
+**The feature gate.** `features/local.json` already recorded which engine
+features a downstream hides/disables/forks; now the tests read it.
+`tests/lib/featureGate.js` maps a suite to its feature through the registry's
+`paths` and answers `gate(id)` / `gateForSpec(file)`; a feature that is
+`hidden`, `disabled` or `forked` there, or belongs to another product
+(`features/<other>/`, inert), skips with the note; an unknown id never skips.
+Every engine e2e spec opens with `gateSpec(test, __filename)`
+(`e2e/lib/featureGate.js`); `salesGuidesServicesPage`, `salesGuidesD001`
+(os-owned) and `sellerArea` (`seller-publication`) shadow `describe` with
+`describeForSpec(__filename)`. In the engine `local.json` is empty and nothing
+skips — `featureGate.test.js` pins it and exercises a temp file hiding
+`public-site`. Rule (ENGINE-SYNC §6, TESTING.md): tests for a hidden feature
+skip; an engine spec is never deleted or hand-edited downstream.
+
+**What a downstream puts in `config/client.json`** (hallismiley, ready to
+paste):
+
+```json
+"identity": {
+  "brand": { "name": "Halli Smiley", "legalName": "Halli Smiley",
+             "alternateNames": ["hallismiley", "Halli"], "titleSuffix": " — Halli Smiley" },
+  "locale": { "publicDefault": "en" },
+  "theme": { "default": "glacier", "root": "classic",
+             "picker": ["glacier", "classic", "midnight", "ember", "lava", "moss"] },
+  "hero": { "clip": "/assets/videos/waterfall.mp4", "poster": "/assets/videos/waterfall-poster.jpg" },
+  "surface": { "hiddenRoutes": [], "hiddenAdminViews": [] },
+  "organization": { "email": "halli@hallismiley.is", "description": "…", "addressLocality": "Hafnarfjörður", "sameAs": [] }
+}
+```
+
+Its `themes.css` must carry a token set per picker id, `product.<locale>.json`
+its own `nav.brandAriaLabel` / `themeSwitcher.theme.<id>` names, and its
+`features/local.json` whichever engine features it hides. Not in the seam, on
+purpose: the seeded company COPY (`site_content`, the home hero and skills
+rows, `SERVICE_OFFERINGS`) — that is product content, replaced by product
+migrations; the PWA `manifest.json` name; the Product-schema `brand`.
+No migration.
+
+<a id="engine-sync-2026-09-23"></a>
+## 2026-09-23 — Engine sync: hallismiley's identity through the seam, the feature gate (D-021)
+
+Second sync, engine `1e00995` → `92308d2` (PR #168, still the graft branch).
+The engine's [identity seam](#identity-seam-2026-09-22) and [feature gate](#identity-seam-2026-09-22)
+answer most of the graft's "not reconciled" list, so the residual hooks of
+[engine-graft](#engine-graft) were retired and this site's identity moved into
+`config/client.json` `identity` — the product-owned seam, never an edit on an
+engine file:
+
+- **brand** `Halli Smiley` / legalName `Halli Smiley` / alternateNames
+  `Hallismiley`, `Halli`, `halli smiley` (the base's WebSite schema) /
+  titleSuffix ` — Halli Smiley`. The nav lockup, `og:site_name`, `<meta author>`,
+  the WebSite and Organization JSON-LD and the email strings (`{siteName}` /
+  `{siteHost}`) follow it; the seven `email.*` overrides and the
+  `author`/`og:site_name` edits on `index.html` are gone.
+- **locale** `publicDefault: en` (the base's default; `/` → `/en/`).
+- **theme** `classic` default and root, picker = the base's six ids
+  (`classic`, `glacier`, `moss`, `lava`, `aurora`, `black-sand`). The
+  `THEMES` edits on `themePrefs.js`, `theme-boot.js` and `server/config/themes.js`
+  are gone; the five token sets stay appended in `themes.css` (product CSS) and
+  their names in the product overlay.
+- **hero** `waterfall-bk-v1.mp4` + a poster extracted from its first frame
+  (`waterfall-bk-v1-poster.jpg`, new — the base served the clip without one).
+- **surface** `hiddenRoutes` = the three Orange Smiley company pages
+  (`/thjonusta`, `/um-okkur`, `/hafa-samband`) + `/aron13ara`; the portfolio
+  (`/verkefni`, `/halli`, `/news`, `/shop`, `/party`, `/contact`, `/privacy`)
+  is public again. `hiddenAdminViews` = [] (the base hid nothing).
+- **organization** halli@hallismiley.is, the base's Person description,
+  knowsAbout and sameAs (GitHub, LinkedIn). The record is an Organization,
+  not the base's Person `#person` — the seam has one shape.
+- Brand strings that were edits on the engine's locale tables
+  (`nav.brandAriaLabel`, `signup.checkEmail`, `projectDetail.brandPara1/2`) are
+  overlay keys in `product.{en,is}.json` — an overlay key overriding an engine
+  key is the intended use since engine `c43a092`.
+- `tests/unit/featureRegistry.test.js` and the `describe.skip` in
+  `salesGuidesServicesPage.test.js` are the engine's again: `features/os/` is
+  foreign and its suites skip through the gate. `features/hs/inert-engine-product-files.md`
+  claims no paths any more (a second claim reads as double-claimed).
+- `Dockerfile` `COPY engine.json` merged clean (same line both sides).
+
+**The one hook left:** `/aron13ara` — the route + view (product-owned files),
+`ROUTE_META` + `DEFAULT_META.aron13` (`titleMode: 'bare'`) in `ssrMeta.js`, the
+entry in `pageTitle.js`, and the Icelandic-only lock (`IS_ONLY_PAGES` in
+`server/config/i18n.js` + the client mirror, with its cases in the two
+`localeLock*` tests). It is noindexed through `identity.surface.hiddenRoutes`
+now, not through an edit on `publicSurface.js`.
+
+**What the seam still lacks for this site** (each one an engine change, not a
+hook here):
+
+1. **The public IA is still the company's.** `NavBar.js` links `/thjonusta`,
+   `/um-okkur`, `/hafa-samband` as literals — it does not filter by
+   `identity.surface.hiddenRoutes` — so hallismiley's nav offers three
+   noindexed company pages and none of the portfolio links the base had
+   (Projects, Shop, News, About, Contact). `tests/integration/ssrMeta.test.js`
+   ("hidden public surfaces": six portfolio routes noindex, `/thjonusta` &c.
+   indexable) and `e2e/navigation.spec.js` ("the public nav offers only the
+   business routes", the `/thjonusta` click-throughs) and
+   `e2e/business-routes.spec.js` pin that IA as literals rather than reading
+   the seam. `server/routes/sitemapRoutes.js` `STATIC_ROUTES` is the same
+   literal list: the sitemap names the three hidden company pages and none of
+   the portfolio.
+2. **Page parts are engine copy.** `DEFAULT_META` / `pageTitle.js` hold the
+   company's page parts: the home part is `{brand} — AI-driven software company`
+   (the base said "Icelandic Carpenter & Computer Scientist"), and the
+   descriptions of `/`, `/verkefni`, `/contact`, `/privacy`, `/terms` are
+   Orange Smiley's. Not overridable from a product-owned file.
+3. **`tests/unit/identityConfig.test.js`** "this instance's committed
+   config/client.json spells the same values out" asserts the committed file
+   resolves to the Orange Smiley values — true only in the engine. Needs a
+   guard on `engine.json.role === 'engine'`.
+4. **The home composition** carries the engine's `home-products` section
+   (the Rekstrarkerfið card) between the hero and the news row; `_tiers` /
+   `_steps` are dormant. The rest — hero, news, projects, skills, stats,
+   contact — is the base's order.
+5. **`classic` is Bjart**, not the base's charcoal-and-gold (`variables.css`
+   `:root` is engine-owned; `public/css/product/**` is product-owned but
+   nothing loads it yet).
+6. `manifest.json` name/short_name, the Product-schema `brand` and the
+   Organization `@type` (the base had a Person) are engine literals.
+7. **`APP_URL` must be set on the App Service**: the engine's fallback origin
+   is `www.orangesmiley.is` since 2026-09-22 (the base's was hallismiley.is).
+   `deploy.yml` does not set it; verify the App Service setting before merge.
+8. **Engine suites that assume the Icelandic visitor default.** With
+   `publicDefault: en` the API answers English and the OAuth callbacks land on
+   `/en/`, and `auth`, `auth.google`, `auth.facebook`, `contact`, `media`,
+   `projects` (128 cases) plus `localeLock` "Accept-Language never moves a
+   visitor off Icelandic" assert Icelandic strings and `/is/` literally.
+9. **Engine-only assumptions in engine tests**: `identityConfig` (the
+   hand-off tests read the INSTANCE identity, not `defaults()`),
+   `i18nIdentity` "with the engine defaults" (same), `featureGate` "in the
+   engine nothing is gated" (a downstream's `local.json` is never empty),
+   `featureRegistry` (the `features/os/` glob `server/config/product-migrations/**`
+   also claims `hs.js`, so the hs claim on it was dropped here; and the
+   foreign-folder test assumes `features/os/` is the only other folder).
+   `salesGuidesD001.test.js` reads the os_001 migration at module load, so it
+   fails before `describeForSpec` can skip it.
+
+**Jest on this branch** (`hs_graft_test`): 138 suites / 3192 tests pass;
+14 suites / 92 tests fail, every one in items 1, 3, 8 and 9 above. Fixed
+through the overlay meanwhile: `footer.companyLine` (the engine's carried the
+company's kennitala and VAT number). Not a divergence in production: the home
+hero copy comes from the `home_hero` `site_content` row, which hallismiley.is
+has ("Halli / Smiley / and his friend claude"); only an unseeded dev copy
+shows the engine's literal fallback in `HomeView.js`.

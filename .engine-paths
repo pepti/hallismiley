@@ -42,10 +42,6 @@ public/js/views/aron13-font.js
 public/js/views/aron13-fx.js
 public/js/views/aron13-games/**
 public/js/views/aron13-sprites.js
-server/config/product-migrations/hs.js
-server/config/product-migrations/os.js
-server/scripts/seed-sales-guides.js
 server/utils/canonicalHost.js
-tests/integration/salesGuidesServicesPage.test.js
 tests/unit/booksRouteOrder.test.js
 tests/unit/canonicalHost.test.js

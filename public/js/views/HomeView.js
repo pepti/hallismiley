@@ -7,13 +7,16 @@ import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../
 import { SceneStage } from '../scenes/SceneStage.js';
 import { productSiteUrl } from '../utils/productSite.js';
 import { motionAllowed, onMotionChange } from '../utils/motion.js';
+import { getIdentity } from '../utils/identity.js';
 
-// The home hero clip and its still. The poster is the loop's first frame, so
-// the switch between the still (reduced motion, Save-Data, before the first
-// frame decodes) and playback never jumps. A new clip gets a new filename:
-// the generic public/ static mount caches for an hour.
-const HERO_VIDEO_SRC    = '/assets/videos/hero-dc7df-v2.mp4';
-const HERO_VIDEO_POSTER = '/assets/videos/hero-dc7df-v2-poster.jpg';
+// The home hero clip and its still — the PRODUCT's, from identity.hero in
+// config/client.json (utils/identity.js; the engine default is Orange
+// Smiley's hero-dc7df-v2). The poster is the loop's first frame, so the switch
+// between the still (reduced motion, Save-Data, before the first frame
+// decodes) and playback never jumps. A new clip gets a new filename: the
+// generic public/ static mount caches for an hour.
+const HERO_VIDEO_SRC    = getIdentity().hero.clip;
+const HERO_VIDEO_POSTER = getIdentity().hero.poster;
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
@@ -786,7 +789,7 @@ export class HomeView {
       </div>
 
       <div class="lol-footer__brand">
-        <div class="lol-footer__logo">Orange Smiley</div>
+        <div class="lol-footer__logo">${escHtml(getIdentity().brand.name)}</div>
         <p class="lol-footer__copy">
           &copy; ${new Date().getFullYear()} ${t('footer.companyLine')}
         </p>

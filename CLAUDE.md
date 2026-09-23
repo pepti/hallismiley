@@ -7,10 +7,14 @@ estate repo was scaffolded from; it is now a DOWNSTREAM of the Orange Smiley
 engine (`engine.json`: product `hs`, role `personal`, upstream orangesmiley
 `master`). Engine files arrive by `git merge upstream/master` through
 site-factory `engine-sync.js`; what is this site's own lives in product-owned
-paths (`.engine-paths`, generated from `features/hs/*.md`); every other
-hallismiley-specific edit to an engine file is a residual hook listed in
-`docs/HISTORY.md#engine-graft`, together with the identity items the engine's
-own tests pin and Halli still has to decide. `server/config/schema.js` is the
+paths (`.engine-paths`, generated from `features/hs/*.md`). **Who this site
+is lives in `config/client.json` `identity`** (brand, visitor locale `en`,
+theme trio `classic` + six ids, the waterfall hero, hidden company pages,
+Organization — the engine's D-021 seam, since the 2026-09-23 sync); brand
+strings the engine's locale tables carry are overlay keys in
+`public/js/i18n/product.<locale>.json`. The one residual hook on engine files
+is `/aron13ara`; what the seam still lacks is in
+`docs/HISTORY.md#engine-sync-2026-09-23`. `server/config/schema.js` is the
 engine's; hallismiley's old 080–085 numbering is mapped by the `aliases` in
 `server/config/product-migrations/hs.js`. **Merging `main` deploys**: never
 push an engine sync without green CI, never from a scratch clone.

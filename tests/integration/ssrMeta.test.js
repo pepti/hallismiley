@@ -10,44 +10,54 @@
  */
 const request = require('supertest');
 const app     = require('../../server/app');
+// Everything brand-bearing is asserted against the product identity
+// (config/client.json via clientConfig), never a literal: the same suite runs
+// unchanged in a downstream that sets its own identity block.
+const { clientConfig } = require('../../server/config/clientConfig');
+const ID     = clientConfig.identity;
+const SUFFIX = ID.brand.titleSuffix;
+// The visitor default and "the other" supported locale (for the cookie cases).
+const LC    = ID.locale.publicDefault;
+const OTHER = LC === 'is' ? 'en' : 'is';
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 describe('SSR meta-injection — SPA catch-all', () => {
-  // The root redirect is Icelandic unless the visitor has explicitly chosen
-  // otherwise. Accept-Language is NOT a signal here: most Icelandic browsers
-  // report en-US, so honouring it would serve the English site to the exact
-  // audience this one is written for.
+  // The root redirect is the visitor default (Icelandic here) unless the
+  // visitor has explicitly chosen otherwise. Accept-Language is NOT a signal:
+  // most Icelandic browsers report en-US, so honouring it would serve the
+  // English site to the exact audience this one is written for.
   test.each([
     ['an Icelandic browser',      'is-IS,is;q=0.9'],
     ['an English browser',        'en-US,en;q=0.9'],
     ['an unsupported language',   'de-DE'],
-  ])('GET / lands on Icelandic for %s', async (_label, acceptLanguage) => {
+  ])('GET / lands on the visitor default for %s', async (_label, acceptLanguage) => {
     const res = await request(app).get('/').set('Accept-Language', acceptLanguage);
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`/${LC}/`);
   });
 
-  test('GET / with no locale signal at all lands on Icelandic', async () => {
+  test('GET / with no locale signal at all lands on the visitor default', async () => {
     const res = await request(app).get('/');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`/${LC}/`);
   });
 
   test('an explicit locale_choice cookie is what moves the landing page', async () => {
     const res = await request(app)
       .get('/')
-      .set('Cookie', 'locale_choice=en')
+      .set('Cookie', `locale_choice=${OTHER}`)
       .set('Accept-Language', 'is-IS');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe(`/${OTHER}/`);
   });
 
   test('legacy preferred_locale cookie is ignored (polluted by the old fallback bug)', async () => {
     const res = await request(app)
       .get('/')
-      .set('Cookie', 'preferred_locale=en')
+      .set('Cookie', `preferred_locale=${OTHER}`)
       .set('Accept-Language', 'en-US');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`/${LC}/`);
   });
 
   test('GET /en/ renders index.html with EN meta tags', async () => {
@@ -55,7 +65,7 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
     expect(res.text).toMatch(/<html lang="en"/);
-    expect(res.text).toMatch(/<title id="ssr-title">[^<]*Orange Smiley[^<]*<\/title>/);
+    expect(res.text).toMatch(new RegExp(`<title id="ssr-title">[^<]*${escRe(ID.brand.name)}[^<]*</title>`));
     expect(res.text).toMatch(/property="og:locale" content="en_IS"/);
     expect(res.text).toMatch(/rel="canonical" href="[^"]*\/en\/"/);
   });
@@ -79,28 +89,50 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(home.text).not.toContain('id="ssr-scene-preload"');
   });
 
-  test('business routes render locale-aware business meta', async () => {
+  test('business routes render locale-aware business meta, titled with the brand suffix', async () => {
     const th = await request(app).get('/is/thjonusta');
     expect(th.status).toBe(200);
-    expect(th.text).toMatch(/<title id="ssr-title">Þjónusta — Orange Smiley<\/title>/);
+    expect(th.text).toContain(`<title id="ssr-title">Þjónusta${SUFFIX}</title>`);
     expect(th.text).toMatch(/rel="canonical" href="[^"]*\/is\/thjonusta"/);
 
     const um = await request(app).get('/en/um-okkur');
     expect(um.status).toBe(200);
-    expect(um.text).toMatch(/<title id="ssr-title">About us — Orange Smiley<\/title>/);
+    expect(um.text).toContain(`<title id="ssr-title">About us${SUFFIX}</title>`);
 
     const hs = await request(app).get('/is/hafa-samband');
     expect(hs.status).toBe(200);
-    expect(hs.text).toMatch(/<title id="ssr-title">Hafa samband — Orange Smiley<\/title>/);
+    expect(hs.text).toContain(`<title id="ssr-title">Hafa samband${SUFFIX}</title>`);
 
     const pv = await request(app).get('/is/personuvernd');
     expect(pv.status).toBe(200);
-    expect(pv.text).toMatch(/<title id="ssr-title">Persónuverndarstefna — Orange Smiley<\/title>/);
+    expect(pv.text).toContain(`<title id="ssr-title">Persónuverndarstefna${SUFFIX}</title>`);
 
     const vk = await request(app).get('/is/verkefni');
     expect(vk.status).toBe(200);
-    expect(vk.text).toMatch(/<title id="ssr-title">Verkefnin okkar — Orange Smiley<\/title>/);
+    expect(vk.text).toContain(`<title id="ssr-title">Verkefnin okkar${SUFFIX}</title>`);
     expect(vk.text).toMatch(/rel="alternate" hreflang="en" href="[^"]*\/en\/verkefni"/);
+  });
+
+  // The identity seam (2026-09-22): the product's config/client.json reaches
+  // the browser through the shell — the theme trio as <html> attributes for
+  // the pre-paint theme-boot.js, the whole record as <script id="identity">
+  // for utils/identity.js — and the brand-bearing static tags follow it.
+  describe('identity hand-off', () => {
+    test('the theme trio rides <html> and the identity rides the script tag', async () => {
+      const res = await request(app).get('/is/');
+      expect(res.text).toContain(
+        `<html lang="is" data-default-theme="${ID.theme.default}" data-theme-picker="${ID.theme.picker.join(' ')}" data-root-theme="${ID.theme.root}">`
+      );
+      const m = res.text.match(/<script id="identity" type="application\/json">([\s\S]*?)<\/script>/);
+      expect(m).not.toBeNull();
+      expect(JSON.parse(m[1])).toEqual(JSON.parse(JSON.stringify(ID)));
+    });
+
+    test('og:site_name is the brand and <meta author> the registered company', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.text).toContain(`<meta property="og:site_name" content="${ID.brand.name}" />`);
+      expect(res.text).toContain(`<meta name="author" content="${ID.brand.legalName}" />`);
+    });
   });
 
   // "Hidden from nav/SSR/sitemap, still functional" — the routes render a
@@ -395,21 +427,23 @@ describe('SSR meta-injection — SPA catch-all', () => {
   });
 
   describe('home page — WebSite schema + crawler content', () => {
-    test('emits a WebSite JSON-LD schema with brand-name alternates', async () => {
+    test('emits a WebSite JSON-LD schema with the identity’s brand-name alternates', async () => {
       const res = await request(app).get('/en/');
       expect(res.status).toBe(200);
       expect(res.text).toMatch(/<script type="application\/ld\+json">[^<]*"@type":"WebSite"/);
-      expect(res.text).toMatch(/"alternateName":\["Orangesmiley","Orange Smiley ehf\.","orange smiley","Rekstrarkerfið","Rekstrarkerfi"\]/);
-      // Publisher reference resolves to the baked Organization schema's @id.
+      expect(res.text).toContain(`"name":"${ID.brand.name}","alternateName":${JSON.stringify(ID.brand.alternateNames)}`);
+      // Publisher reference resolves to the Organization schema's @id.
       expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#organization"\}/);
     });
 
     // index.html is baked with https://www.orangesmiley.is; the template loader
-    // swaps that origin for APP_URL (the tests run as hallismiley.is), so the
-    // static Organization @id is the one the publisher refs point at.
-    test('the baked Organization JSON-LD follows APP_URL', async () => {
+    // swaps that origin for APP_URL (the tests run as hallismiley.is) and drops
+    // the baked Organization block, which the server re-emits from the identity
+    // on the same @id the publisher refs point at.
+    test('the Organization JSON-LD is built on APP_URL, once, from the identity', async () => {
       const res = await request(app).get('/en/');
-      expect(res.text).toMatch(/"@id": "https:\/\/www\.hallismiley\.is\/#organization"/);
+      expect(res.text).toContain('"@type":"Organization","@id":"https://www.hallismiley.is/#organization"');
+      expect(res.text.match(/"@type":\s*"Organization"/g)).toHaveLength(1);
       expect(res.text).not.toContain('https://www.orangesmiley.is');
     });
 
@@ -474,13 +508,11 @@ describe('business JSON-LD', () => {
     expect(res.text).toMatch(/"provider":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
   });
 
-  test('the baked Organization the server references actually exists', async () => {
+  test('the Organization the server references actually exists, named after the identity', async () => {
     const res = await request(app).get('/is/');
-    // The baked block in public/index.html is pretty-printed, so allow the
-    // whitespace that the server's JSON.stringify output never has.
     expect(res.text).toMatch(/"@type":\s*"Organization"/);
     expect(res.text).toMatch(ORG_ID);
-    expect(res.text).toMatch(/"name":\s*"Orange Smiley ehf\."/);
+    expect(res.text).toContain(`"name":${JSON.stringify(ID.brand.legalName)}`);
   });
 
   test('the services page carries the service catalogue', async () => {

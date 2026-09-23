@@ -57,7 +57,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY server/   ./server/
 COPY public/   ./public/
 COPY package.json ./
-# engine.json names this repo's product id; server/config/migrationSet.js reads it at boot (D-021)
+# engine.json names this repo's product id; server/config/migrationSet.js
+# reads it at boot to pick the product migration array (D-021). Without it
+# the container cannot migrate, so the boot smoke test fails.
 COPY engine.json ./
 
 # ── Build identity ───────────────────────────────────────────────────────────

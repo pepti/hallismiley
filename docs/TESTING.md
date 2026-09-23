@@ -30,6 +30,16 @@ _Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suit
 - **A prod bug that escaped the suite earns a permanent test** in the tier that would have caught it fastest — and if that test is critical-path, it joins the smoke list.
 - **Never delete inherited specs** (stack invariant: adapt, don't delete). Tiering reorganizes when tests run, never whether they exist.
 - `jest.unit.config.js` derives from `jest.config.js` — config drift between them is a bug. New unit specs must stay DB-free; a unit spec that needs Postgres belongs in `tests/integration/`.
+- **Engine tests read the product identity, never a brand literal** (`clientConfig.identity` server-side, `public/js/utils/identity.js` client-side, `e2e/lib/identity.js` in Playwright — the seam of 2026-09-22). A downstream that sets its `identity` block in `config/client.json` runs the engine's suites unchanged.
+
+## The feature gate — suites of a hidden feature skip, never get deleted (2026-09-22)
+
+A downstream product hides, disables or forks engine features (LedgerLink has no company site; rekstrarkerfid no seller area). Its graft PRs used to `describe.skip` the engine's suites by hand, which re-conflicts on every sync. Instead the product records the fact once in `features/local.json` — `{ "public-site": { "status": "hidden", "note": "…" } }` — and the gate derives the skip:
+
+- `tests/lib/featureGate.js` is the core: it reads `features/local.json` and the feature registry (`scripts/features-index.js`), maps a suite file to its feature through the registry's `paths` (so the spec → feature mapping is never hand-kept), and answers `gate(featureId)` / `gateForSpec(file)` → `{ skip, status, reason }`. A feature is gated when its local status is `hidden`, `disabled` or `forked`, or when it belongs to ANOTHER product (`features/<other>/`, inert here). An unknown id never skips, so a typo cannot silence a suite.
+- Every engine e2e spec starts with `const { gateSpec } = require('./lib/featureGate'); gateSpec(test, __filename);` (`e2e/lib/featureGate.js` wraps `test.skip(condition, note)`). `skipUnless(test, 'seller-publication')` gates one describe.
+- Jest suites a product may not run shadow the global: `const describe = describeForSpec(__filename);` — a `describe.skip` whose block name carries the note. Used by the os-owned `salesGuidesServicesPage` / `salesGuidesD001` suites (foreign on any other product) and `sellerArea` (the `seller-publication` feature).
+- In the engine `local.json` is empty and every spec runs — `tests/unit/featureGate.test.js` pins that, and exercises a temp `local.json` that hides `public-site`. The skipped tests show in the report with the note, so a downstream's coverage of the engine is visible, not silent.
 
 ## Hunting an intermittent failure
 
@@ -189,8 +199,9 @@ Two rules the port carries: never add an `afterAll` that ends the app pool
 keep the migration in a child process (`CREATE DATABASE … TEMPLATE` refuses
 while any session holds the template).
 
-This is engine work that belongs upstream (ice #225/#233 built it first; the
-base `hallismiley` is read-only) — queued in site-factory/BASE-SYNC.md.
+This is engine work, and since D-021 (2026-09-22) this repo IS the engine, so
+it is home: ice #225/#233 built it first and it reaches every downstream by
+engine-sync merge (`docs/ENGINE-SYNC.md`). The BASE-SYNC queue entry is history.
 
 ## What CI actually runs (`.github/workflows/ci.yml`, read 2026-09-11)
 

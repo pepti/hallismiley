@@ -11,23 +11,17 @@
 //                             <meta name="robots" content="noindex, nofollow">
 //
 // Nothing here is deleted; per-module disposition (repurpose / flag / remove)
-// is decided via ENHANCEMENTS.md with Halli's sign-off. This module is also
-// the seed of the future `client.config` module-flag system (plan §4).
-const HIDDEN_PUBLIC_ROUTES = [
-  '/party',      // birthday landing (+ /party/admin, /party/login, …)
-  '/halli',      // personal bio
-  '/about',      // alias of /halli
-  '/news',       // portfolio news presentation
-  '/shop',       // storefront (capability retained; not part of the public IA yet)
-  '/projects',   // superseded by /verkefni
-  '/contact',    // superseded by /hafa-samband
-  '/privacy',    // superseded by /personuvernd
-  '/verkefni',   // case studies — hidden 2026-09-03 (Halli). The list page and
-                 // every /verkefni/:id follow by prefix; the admin project
-                 // tools and the detail pages keep working at their URLs.
-  '/aron13ara',  // hallismiley residual hook (engine-graft): Aron's birthday
-                 // page — unlisted, IS-only, noindexed; product-owned files.
-];
+// is decided via ENHANCEMENTS.md with Halli's sign-off.
+//
+// The LIST is the product's, not the engine's: `identity.surface.hiddenRoutes`
+// in config/client.json (server/config/clientConfig.js holds the defaults —
+// Orange Smiley's set: /party (birthday landing + sub-routes), /halli and
+// /about (personal bio), /news, /shop, the superseded /projects · /contact ·
+// /privacy aliases, and /verkefni, hidden 2026-09-03 by Halli). A downstream
+// that wants its shop or its news back lists fewer routes there; it never
+// edits this file. This module was the hand-rolled ancestor of that seam.
+const { identity } = require('./identity');
+const HIDDEN_PUBLIC_ROUTES = identity.surface.hiddenRoutes.slice();
 
 // Prefix-aware: '/news' hides '/news/some-slug' too. Locale prefixes are the
 // caller's concern — pass the locale-stripped path (ssrMeta's `rest`, the

@@ -13,6 +13,8 @@
     "seed:arnarhraun": "node server/scripts/seed-arnarhraun.js",
     "import:csv": "node server/scripts/import-products-csv.js",
     "market:import": "node server/scripts/market-import.js",
+    "leads:export": "node server/scripts/leads-export.js",
+    "leads:import": "node server/scripts/leads-import.js",
     "publish:sellers": "node server/scripts/publish-sellers.js",
     "books:fx": "node server/scripts/books-fetch-fx.js",
     "test": "jest",

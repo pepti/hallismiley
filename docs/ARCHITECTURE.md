@@ -170,6 +170,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `orders` alone still sees it. Routes stay live and ids stay grantable. The
   eye toggle writes `revealedItems` into the layout blob; Reset re-hides; an
   all-hidden group renders no header ([admin-reshape](HISTORY.md#admin-reshape)).
+  The SET is the product's — `identity.surface.hiddenAdminViews` in
+  `config/client.json`, read through `public/js/utils/identity.js`; never a
+  literal in `adminSurface.js`. `admin-surface-parity.test.js` checks the engine
+  defaults and this instance's resolved list against `ADMIN_VIEW_IDS`
+  ([identity-seam](HISTORY.md#identity-seam-2026-09-22)).
 - Sidebar IA (`ADMIN_NAV`): Yfirlit · Sölustarf · Bókhald · Þjónusta ·
   Vörustýring · Vefur · Stillingar · Verslun LAST (every line hidden). Group
   keys are stable; saved per-admin layouts keep their old placement until Reset
@@ -206,12 +211,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (robots, sitemap) |
 | Controllers | `server/controllers/contactController.js` |
 | Services | `server/services/indexNow.js`, `server/services/outboundAllowlist.js` |
-| Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META`, `SERVICE_OFFERINGS`, JSON-LD); `server/utils/canonicalHost.js` (hallismiley's `APP_URL` → host resolver; the engine's `app.js` resolves inline — see Ownership notes) |
+| Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization); `server/utils/canonicalHost.js` (hallismiley's `APP_URL` → host resolver; the engine's `app.js` resolves inline — see Ownership notes) |
 | Views | `public/js/views/HomeView.js`, `ThjonustaView.js`, `UmOkkurView.js`, `ContactView.js`, `PrivacyView.js`, `TermsView.js`, `NotFoundView.js`; `HalliView.js` serves the hidden `/about`/`/halli` (`AboutView.js` is dead — see Ownership notes) |
 | Components | `public/js/components/NavBar.js` |
-| Client | `public/js/router.js`, `navigate.js`, `main.js`; `public/js/utils/reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
+| Client | `public/js/router.js`, `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `ssrMeta.test.js`; `tests/unit/clientConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js`; `canonicalHost.test.js` (hallismiley) |
+| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js`; `canonicalHost.test.js` (hallismiley) |
 | e2e | `e2e/business-routes.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017 |
 | Features | [public-site](../features/public-site.md), [hallismiley-site](../features/hs/hallismiley-site.md) (hs), [company-content](../features/os/company-content.md) (os — the engine's own product feature, inert here) |
@@ -245,12 +250,25 @@ company/                  gitignored: plans, decisions, logs, market-research st
   new clip), and `_initHeroVideo` follows a live OS-setting change both ways;
   `/halli` keeps the waterfall on purpose; `e2e/navigation.spec.js` pins the
   filename [homepage](HISTORY.md#homepage).
+- **Identity comes from the seam, never a literal**
+  ([identity-seam](HISTORY.md#identity-seam-2026-09-22)): brand name and legal
+  name, the title suffix, `og:site_name`, `<meta author>`, the Organization +
+  WebSite JSON-LD, the hero clip + poster, the hidden-route list and the
+  visitor-default locale all read `identity.*` — `server/config/identity.js`
+  server-side (from `clientConfig`), `public/js/utils/identity.js` client-side
+  (from the `<script id="identity">` ssrMeta injects). `ssrMeta.js` and
+  `pageTitle.js` hold page PARTS; the document title is part +
+  `brand.titleSuffix`, or the part with `{brand}` substituted (home), or the
+  part as written for `titleMode: 'bare'` (the portfolio surfaces keep "Halli
+  Smiley" on purpose). `loadTemplate()` drops the baked Organization from
+  `index.html` and the server emits it from the identity on every page, on the
+  `${APP_URL}/#organization` id everything references.
 - `pageTitle.js` mirrors `ssrMeta.js`; the parity test parses the server file
-  and guards that its own parser still matches, so a refactor cannot make it
-  assert nothing. Business-route titles suffix "— Orange Smiley"; `og:site_name`,
-  the static head and the PWA name carry the company; the nav lockup is ORANGE
-  SMILEY + `nav.brandTagline`. Hidden portfolio routes (`/verkefni`,
-  `/projects`) keep "Halli Smiley" in SSR on purpose [ui-kit](HISTORY.md#ui-kit), [r1](HISTORY.md#r1).
+  (parts + `titleMode`) and guards that its own parser still matches, so a
+  refactor cannot make it assert nothing; `composeTitle` on both sides is held
+  equal by the same test. The nav lockup and the home footer show
+  `identity.brand.name` [ui-kit](HISTORY.md#ui-kit), [r1](HISTORY.md#r1),
+  [identity-seam](HISTORY.md#identity-seam-2026-09-22).
 - `HomeView._tiers()` / `_steps()` stay dormant with their i18n — do not delete
   [r1](HISTORY.md#r1).
 - The commercial model on `/thjonusta`: fixed price for the build, never
@@ -291,19 +309,29 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `CLAUDE.md` Design rules; `public/assets/iceland/CREDITS.md` |
 
 **Rules that must hold**
-- Three themes: `ember`/Glóð (default, `DEFAULT_THEME` in `themePrefs.js` AND
-  `theme-boot.js` — keep in sync), `classic`/Bjart (owns `:root`),
-  `midnight`/Miðnætti. `light`/`mono` are retired ids (094). Every new UI must
-  survive a theme switch (invariant 15); canvases read `chartTheme.js` at draw time.
-- **hallismiley (engine-graft):** the base's five colour themes — `glacier`,
-  `moss`, `lava`, `aurora`, `black-sand` — ride behind the engine's three as a
-  residual hook: their token sets are appended to `themes.css` (with a bridge
-  block for the engine-only tokens), the ids are added to `THEMES` in
-  `themePrefs.js`, `theme-boot.js` and `server/config/themes.js`, and their
-  names live in the product overlay `public/js/i18n/product.<locale>.json`.
-  Eight themes in the picker. The DEFAULT stays `ember` and `classic` is Bjart
-  (both pinned by the engine's tests) — the base's charcoal-and-gold `classic`
-  default is an open divergence ([engine-graft](HISTORY.md#engine-graft)).
+- Three themes here: `ember`/Glóð (default), `classic`/Bjart (owns `:root`),
+  `midnight`/Miðnætti. The trio is the PRODUCT's — `identity.theme`
+  (`default`, `root`, `picker`) in `config/client.json`, validated together;
+  `server/config/themes.js` and `themePrefs.js` read it, `theme-boot.js` reads
+  the same values off `<html data-default-theme / data-theme-picker /
+  data-root-theme>` that ssrMeta writes (it runs pre-paint, so its literals are
+  only the engine fallback for a shell that never passed through SSR). Never a
+  theme literal elsewhere ([identity-seam](HISTORY.md#identity-seam-2026-09-22)).
+  Every picker id needs a token set in `themes.css`; `swatchFor()` gives an
+  unknown id a neutral swatch. `light`/`mono` are retired ids (094). Every new
+  UI must survive a theme switch (invariant 15); canvases read `chartTheme.js`
+  at draw time.
+- **hallismiley:** the trio is `classic` (default AND root — the base's
+  `DEFAULT_THEME`) with the six ids of the base's 081_user_theme in the picker
+  (`classic`, `glacier`, `moss`, `lava`, `aurora`, `black-sand`), set in
+  `config/client.json` `identity.theme` — no edit on `themePrefs.js`,
+  `theme-boot.js` or `server/config/themes.js` since the 2026-09-23 sync. The
+  five colour token sets are product CSS appended to `themes.css` (with a
+  bridge block for the engine-only tokens); their names live in
+  `public/js/i18n/product.<locale>.json`. `ember`/`midnight` keep their token
+  sets but are not in this picker. `classic` is the engine's Bjart palette
+  (`variables.css` `:root` is engine-owned) — the base's charcoal-and-gold
+  hues are gone ([engine-sync-2026-09-23](HISTORY.md#engine-sync-2026-09-23)).
 - The images are Halli's own AI generations (since [iceland-v2](HISTORY.md#iceland-v2);
   the Commons set before them is retired), credited to Orange Smiley ehf. in the
   generated `CREDITS.md` (footer-linked); never other people's photos or
@@ -337,15 +365,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Services | `server/services/translator.js`, `autoTranslateFields.js`, `siteContentTranslate.js` |
 | Client | `public/js/i18n/i18n.js`, `public/js/i18n/en.json`, `public/js/i18n/is.json` |
 | Scripts | `scripts/check-i18n-keys.js` (`npm run check:i18n`), `scripts/backfill-is-translations.js`, `scripts/retranslate-party-en.js` |
-| Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js` |
+| Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js`, `i18nIdentity.test.js` |
 | Migrations | 028–038 (eleven consecutive i18n migrations) |
 | Features | [i18n](../features/i18n.md) |
 | Feature doc | — |
 
 **Rules that must hold**
-- IS is the visitor default (`PUBLIC_DEFAULT_LOCALE`); `DEFAULT_LOCALE='en'`
+- IS is the visitor default here (`PUBLIC_DEFAULT_LOCALE`), and it comes from
+  the identity seam — `identity.locale.publicDefault`, the env var still
+  winning — on both sides (`server/config/i18n.js`; `public/js/i18n/i18n.js`
+  and `consent.js` via the hand-off), never a literal
+  ([identity-seam](HISTORY.md#identity-seam-2026-09-22)). `DEFAULT_LOCALE='en'`
   stays the content/storage dimension (the party module depends on it); the
   switcher choice lives in the `locale_choice` cookie.
+- The server tables carry no brand: `t()` injects `{siteName}`
+  (`identity.brand.name`) and `{siteHost}` (APP_URL's host without `www.`) on
+  every call, explicit params win; product wording goes in
+  `product.<locale>.json` ([identity-seam](HISTORY.md#identity-seam-2026-09-22)).
 - `check:i18n` also scans every `t('literal')`/`labelKey` in `public/js`
   against `public/js/i18n/en.json` — a missing key fails CI ([harvest-2](HISTORY.md#harvest-2)).
 - `loadLocale()` dispatches `localechange` for components mounted outside
@@ -370,10 +406,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Controllers | `server/controllers/leadsController.js` (`validateLeadUpdate`, `csvCell`) |
 | Models | `server/models/Lead.js` |
 | Services | `server/services/leadsCleanup.js` (`LEAD_RETENTION_DAYS`, default 730) |
+| Scripts | `server/scripts/leads-export.js` (`npm run leads:export`, on the capturing instance) · `server/scripts/leads-import.js` (`npm run leads:import`, on ops) |
 | Views | `public/js/views/AdminLeadsView.js` |
 | Client | `public/js/services/leads.js` |
 | CSS | `public/css/admin-leads.css` |
-| Jest | `tests/integration/leads.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
+| Jest | `tests/integration/leads.test.js`, `leadsTransfer.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
 | e2e | `e2e/leads.spec.js`, `e2e/sales-handbook.spec.js` (sidebar count) |
 | Migrations | 097 |
 | Features | [leads](../features/leads.md) |
@@ -390,8 +427,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
   formula-neutralised, paged to the end) are admin-only ([review-099](HISTORY.md#review-099)).
 - `leads` is on the seeded `solufolk` role (append-only, `@>` guarded).
 - No MCP leads tool and no automatic per-seller routing — separate sign-offs.
+- Cross-instance transfer (D-020 step 4) is one way, by file, insert-only:
+  `leads:export` carries the submission fields + `created_at` and NEVER the
+  workflow columns; `leads:import` validates the whole file to the contact
+  form's limits, writes in one transaction, `ON CONFLICT (submission_id) DO
+  NOTHING` — an ops row is the seller's work product and is never updated;
+  `source` = `--source` or the file's `instance`; the file lives under
+  gitignored `data/` and is deleted after import (`/personuvernd` §3/§6)
+  ([leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)).
 
-**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099)
+**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099) · [leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)
 
 ## 7. Markaður — market research and the prospect list
 
@@ -553,9 +598,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/salesGuides.js` |
 | Scripts | `server/scripts/seed-sales-guides.js` (Orange Smiley's company copy — ships inert here, never run; `features/local.json` hides the handbook) |
 | CSS | `public/css/admin-handbok.css` |
-| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js` (skipped on any product but os) |
+| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js` (both os-owned: they skip here as foreign via the feature gate) |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
-| Migrations | 090 (the Orange Smiley product migration that rewrote two seeded guides is not applied here) |
+| Migrations | 090 (the handbook's two later Orange Smiley product migrations — the 2026-09-13 services-page rewrite and the D-001 pricing one — are not applied here) |
 | Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
@@ -566,9 +611,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Seeded guides are DRAFTS; sales staff see nothing until Halli publishes;
   prices inside carry DRÖG. Migration 104 rewrote two seeded guides guarded on
   `updated_by IS NULL` ([services-page](HISTORY.md#services-page)).
+- A text change in `seed-sales-guides.js` ships with a product migration that
+  makes the same change to seeded rows (the seed is `ON CONFLICT DO NOTHING`);
+  os_001 moved the guides to D-001 pricing and the demo instance, and
+  `salesGuidesD001.test.js` checks seed and migration agree
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
+- Guide prices follow D-001 (build fee + service contract + verkeiningar) and
+  carry DRÖG; demos go to `demo.rekstrarkerfi.is`, never this site
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 
@@ -843,8 +896,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
-| Tests infra | `tests/workerDb.js`, `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`; `scripts/drop-test-dbs.js` |
-| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`; `tests/integration/migrateRunner.test.js` |
+| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`; `scripts/drop-test-dbs.js` |
+| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml`, `deploy.yml` (hallismiley's, product-owned: `workflow_run` on green CI on `main` + `workflow_dispatch` — NOT the engine's dispatch-only one), `promote.yml`, `trivy.yml` (hallismiley: scheduled, non-blocking image CVE scan); `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
 | Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md), [inert-engine-product-files](../features/hs/inert-engine-product-files.md) (hs) |
@@ -876,6 +929,24 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - The canonical origin is `APP_URL` (fallback `https://www.orangesmiley.is`).
   `public/index.html` is baked with that origin and `ssrMeta.js` swaps it for
   `APP_URL` on load — change the two together ([go-live](HISTORY.md#go-live)).
+- **The identity seam** ([identity-seam](HISTORY.md#identity-seam-2026-09-22)):
+  `identity.*` in `config/client.json` (schema + this product's defaults in
+  `server/config/clientConfig.js`: brand, locale, theme, hero, surface,
+  organization) is the ONE place a product says who it is. A schema leaf has
+  both `type` and `default`; the theme trio is validated together. The engine
+  ships Orange Smiley's values as the defaults so an engine with no block
+  behaves as before, and `identityConfig.test.js` pins them ONCE — engine code
+  and engine tests read `clientConfig.identity` / `utils/identity.js` /
+  `e2e/lib/identity.js`, never a brand literal. `identityDownstream.test.js`
+  proves a foreign identity flows through the served page.
+- **The feature gate** (`tests/lib/featureGate.js`, `e2e/lib/featureGate.js`;
+  `docs/TESTING.md`): a suite maps to its feature through the registry's
+  `paths`; a feature `hidden`/`disabled`/`forked` in `features/local.json`, or
+  another product's, skips with the note. Every engine e2e spec calls
+  `gateSpec(test, __filename)`; jest suites a product may not run shadow
+  `describe` with `describeForSpec(__filename)`. In the engine `features/local.json` is
+  empty and nothing skips (`featureGate.test.js`); an engine spec is never
+  deleted in a downstream ([identity-seam](HISTORY.md#identity-seam-2026-09-22)).
 - **Upstream cross-cutting improvements.** site-factory's `DEFAULT_BASE` is
   `hallismiley`, so work landing only in an instance reaches no future scaffold
   (LedgerLink was scaffolded without the admin affordances this repo had for

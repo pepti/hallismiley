@@ -32,6 +32,12 @@ const db   = require('../config/database');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 const { isHiddenRoute } = require('../config/publicSurface');
 const { clientAppEnv }  = require('../config/appEnv');
+// The product's identity (config/client.json via clientConfig): brand, title
+// suffix, theme trio, Organization record. Every brand-bearing literal this
+// file used to carry now reads from it — see server/config/identity.js.
+const {
+  identity, htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
+} = require('../config/identity');
 
 // Iceland scene hero preloads — the scene engine's LCP insurance. The JSON
 // twin of public/js/scenes/manifest.js (both written by
@@ -74,14 +80,20 @@ const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
 const OG_IMAGE_PATH  = '/og-image.jpg';
 
 // Cached template (read once at boot) + stat watcher for dev hot-reload.
-// index.html is baked with the production origin; the static Organization
-// JSON-LD is never rewritten by id, so swap the baked origin for APP_URL here
-// or its @id dangles from the publisher refs on any other host.
+// index.html is baked with the production origin; swap it for APP_URL here so
+// nothing baked (canonical, hreflang, og:url fallbacks) points at another
+// host. The baked Organization JSON-LD is dropped at the same time: it is only
+// the no-SSR fallback, and every SSR'd page gets the one built from
+// `identity` (organizationSchema below) so a downstream never forks
+// index.html to change its company record.
 const BAKED_ORIGIN = 'https://www.orangesmiley.is';
+const BAKED_ORG_RE = /[ \t]*<script type="application\/ld\+json">(?:(?!<\/script>)[\s\S])*"@type":\s*"Organization"(?:(?!<\/script>)[\s\S])*<\/script>\n?/;
 let _template = null;
 function loadTemplate() {
   if (_template) return _template;
-  _template = fs.readFileSync(INDEX_PATH, 'utf8').split(BAKED_ORIGIN).join(APP_URL);
+  _template = fs.readFileSync(INDEX_PATH, 'utf8')
+    .split(BAKED_ORIGIN).join(APP_URL)
+    .replace(BAKED_ORG_RE, '');
   return _template;
 }
 if (process.env.NODE_ENV !== 'production') {
@@ -119,50 +131,66 @@ const ROUTE_META = {
   '/privacy':          { key: 'privacy' },
   '/terms':            { key: 'terms' },
   '/party':            { key: 'party' },
-  // Hidden one-off page (hallismiley residual hook, engine-graft): locale-locked
-  // in server/config/i18n.js, absent from the sitemap, noindexed through
-  // publicSurface.js so a shared link never lands in an index.
+  // hallismiley hook (engine-graft): Aron's birthday page — unlisted, IS-only
+  // (server/config/i18n.js IS_ONLY_PAGES), noindexed via identity.surface.
   '/aron13ara':        { key: 'aron13' },
 };
 
+// `title` is the PAGE PART; the document title is composeTitle(part, mode)
+// from server/config/identity.js — part + identity.brand.titleSuffix, or the
+// part with `{brand}` substituted (home), or, for `titleMode: 'bare'`, the
+// part as written (the hidden portfolio surfaces keep their own full titles —
+// "Halli Smiley" there is the base's, on purpose). Keep the key order
+// `title, titleMode, description`: tests/unit/pageTitle.test.js parses these
+// lines to hold public/js/utils/pageTitle.js to the same parts and modes.
 const DEFAULT_META = {
   en: {
-    home:           { title: 'Orange Smiley — AI-driven software company', description: 'Icelandic software company driven by AI. We build software for small and medium businesses: custom systems, websites, online stores and Rekstrarkerfið.' },
-    thjonusta:      { title: 'Services — Orange Smiley', description: 'Software for small and medium businesses: custom systems, websites, online stores, integrations and automation. Rekstrarkerfið is our ready-made system for retail and operations.' },
-    umOkkur:        { title: 'About us — Orange Smiley', description: 'Orange Smiley ehf. is an Icelandic software company: a solo founder assisted by AI agents, building and operating systems for Icelandic SMBs.' },
-    projects:       { title: 'Our work — Orange Smiley', description: 'Case studies of systems we have built and operate — including a full Shopify-to-own-platform migration for an Icelandic wholesaler.' },
-    halli:          { title: 'About Halli — Where Wood Meets Code', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
-    shop:           { title: 'Shop — Halli Smiley', description: 'Apparel, goods, and services from the workshop. Prices include 24% VAT, shipping from Iceland.' },
-    shopProducts:   { title: 'Products — Halli Smiley Shop', description: 'Physical goods from the workshop: apparel and accessories. Prices include 24% VAT, shipping from Iceland.' },
-    shopTech:       { title: 'Tech Services — Work with Halli', description: 'Technical advisement, AI teaching sessions, and lectures by Halli. Book a session through the shop.' },
-    shopCarpentry:  { title: 'Carpentry Services — Work with Halli', description: 'Carpentry advisement and commissioned work — including TV wall artwork. Book a session through the shop.' },
-    news:           { title: 'News — Halli Smiley', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
-    contact:        { title: 'Contact — Orange Smiley', description: 'Get a demo or ask about moving your website, store or business system over. We reply within one business day.' },
-    privacy:        { title: 'Privacy Policy — Orange Smiley' },
-    terms:          { title: 'Terms of Service — Orange Smiley' },
-    party:          { title: "Halli's 40th Birthday Party", description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
-    // Icelandic-only page; the en copy exists so a lookup can never fall
-    // through to the home title, but the lock means it is never rendered.
-    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
+    home:           { title: '{brand} — AI-driven software company', description: 'Icelandic software company driven by AI. We build software for small and medium businesses: custom systems, websites, online stores and Rekstrarkerfið.' },
+    thjonusta:      { title: 'Services', description: 'Software for small and medium businesses: custom systems, websites, online stores, integrations and automation. Rekstrarkerfið is our ready-made system for retail and operations.' },
+    umOkkur:        { title: 'About us', description: 'Orange Smiley ehf. is an Icelandic software company: a solo founder assisted by AI agents, building and operating systems for Icelandic SMBs.' },
+    projects:       { title: 'Our work', description: 'Case studies of systems we have built and operate — including a full Shopify-to-own-platform migration for an Icelandic wholesaler.' },
+    halli:          { title: 'About Halli — Where Wood Meets Code', titleMode: 'bare', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
+    shop:           { title: 'Shop — Halli Smiley', titleMode: 'bare', description: 'Apparel, goods, and services from the workshop. Prices include 24% VAT, shipping from Iceland.' },
+    shopProducts:   { title: 'Products — Halli Smiley Shop', titleMode: 'bare', description: 'Physical goods from the workshop: apparel and accessories. Prices include 24% VAT, shipping from Iceland.' },
+    shopTech:       { title: 'Tech Services — Work with Halli', titleMode: 'bare', description: 'Technical advisement, AI teaching sessions, and lectures by Halli. Book a session through the shop.' },
+    shopCarpentry:  { title: 'Carpentry Services — Work with Halli', titleMode: 'bare', description: 'Carpentry advisement and commissioned work — including TV wall artwork. Book a session through the shop.' },
+    news:           { title: 'News — Halli Smiley', titleMode: 'bare', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
+    contact:        { title: 'Contact', description: 'Get a demo or ask about moving your website, store or business system over. We reply within one business day.' },
+    privacy:        { title: 'Privacy Policy' },
+    terms:          { title: 'Terms of Service' },
+    party:          { title: "Halli's 40th Birthday Party", titleMode: 'bare', description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
+    // Icelandic-only page (hallismiley hook); the en copy exists so a lookup
+    // can never fall through to the home title, but the lock means it is never rendered.
+    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', titleMode: 'bare', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
   },
   is: {
-    home:           { title: 'Orange Smiley — hugbúnaðarhús knúið gervigreind', description: 'Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum hugbúnað fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefi, vefverslanir og Rekstrarkerfið.' },
-    thjonusta:      { title: 'Þjónusta — Orange Smiley', description: 'Hugbúnaður fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefir, vefverslanir, tengingar og sjálfvirkni. Rekstrarkerfið er tilbúin lausn fyrir verslun og rekstur.' },
-    umOkkur:        { title: 'Um okkur — Orange Smiley', description: 'Orange Smiley ehf. er íslenskt hugbúnaðarfyrirtæki: einn stofnandi með aðstoð gervigreindarumboða sem smíðar og rekur kerfi fyrir íslensk fyrirtæki.' },
-    projects:       { title: 'Verkefnin okkar — Orange Smiley', description: 'Umfjöllun um kerfi sem við höfum smíðað og rekum — þar á meðal flutning íslenskrar heildverslunar af Shopify yfir á eigið kerfi.' },
-    halli:          { title: 'Um Halla — Þar sem viður mætir kóða', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
-    shop:           { title: 'Verslun — Halli Smiley', description: 'Fatnaður, varningur og þjónusta úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
-    shopProducts:   { title: 'Vörur — Verslun Halla Smiley', description: 'Áþreifanlegar vörur úr verkstæðinu: fatnaður og fylgihlutir. Verð með 24% VSK, sent frá Íslandi.' },
-    shopTech:       { title: 'Tækniþjónusta — Vinnuðu með Halla', description: 'Tækniráðgjöf, AI-kennsla og fyrirlestrar hjá Halla. Bókaðu tíma í gegnum verslunina.' },
-    shopCarpentry:  { title: 'Smíðaþjónusta — Vinnuðu með Halla', description: 'Smíðaráðgjöf og sérsmíði — þar á meðal sjónvarpsveggir. Bókaðu tíma í gegnum verslunina.' },
-    news:           { title: 'Fréttir — Halli Smiley', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
-    contact:        { title: 'Hafa samband — Orange Smiley', description: 'Fáðu demo eða spurðu um flutning á vef, verslun eða rekstrarkerfi. Við svörum innan eins virks dags.' },
-    privacy:        { title: 'Persónuverndarstefna — Orange Smiley' },
-    terms:          { title: 'Notkunarskilmálar — Orange Smiley' },
-    party:          { title: '40 ára afmæli Halla', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
-    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
+    home:           { title: '{brand} — hugbúnaðarhús knúið gervigreind', description: 'Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum hugbúnað fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefi, vefverslanir og Rekstrarkerfið.' },
+    thjonusta:      { title: 'Þjónusta', description: 'Hugbúnaður fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefir, vefverslanir, tengingar og sjálfvirkni. Rekstrarkerfið er tilbúin lausn fyrir verslun og rekstur.' },
+    umOkkur:        { title: 'Um okkur', description: 'Orange Smiley ehf. er íslenskt hugbúnaðarfyrirtæki: einn stofnandi með aðstoð gervigreindarumboða sem smíðar og rekur kerfi fyrir íslensk fyrirtæki.' },
+    projects:       { title: 'Verkefnin okkar', description: 'Umfjöllun um kerfi sem við höfum smíðað og rekum — þar á meðal flutning íslenskrar heildverslunar af Shopify yfir á eigið kerfi.' },
+    halli:          { title: 'Um Halla — Þar sem viður mætir kóða', titleMode: 'bare', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
+    shop:           { title: 'Verslun — Halli Smiley', titleMode: 'bare', description: 'Fatnaður, varningur og þjónusta úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
+    shopProducts:   { title: 'Vörur — Verslun Halla Smiley', titleMode: 'bare', description: 'Áþreifanlegar vörur úr verkstæðinu: fatnaður og fylgihlutir. Verð með 24% VSK, sent frá Íslandi.' },
+    shopTech:       { title: 'Tækniþjónusta — Vinnuðu með Halla', titleMode: 'bare', description: 'Tækniráðgjöf, AI-kennsla og fyrirlestrar hjá Halla. Bókaðu tíma í gegnum verslunina.' },
+    shopCarpentry:  { title: 'Smíðaþjónusta — Vinnuðu með Halla', titleMode: 'bare', description: 'Smíðaráðgjöf og sérsmíði — þar á meðal sjónvarpsveggir. Bókaðu tíma í gegnum verslunina.' },
+    news:           { title: 'Fréttir — Halli Smiley', titleMode: 'bare', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
+    contact:        { title: 'Hafa samband', description: 'Fáðu demo eða spurðu um flutning á vef, verslun eða rekstrarkerfi. Við svörum innan eins virks dags.' },
+    privacy:        { title: 'Persónuverndarstefna' },
+    terms:          { title: 'Notkunarskilmálar' },
+    party:          { title: '40 ára afmæli Halla', titleMode: 'bare', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
+    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', titleMode: 'bare', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
   },
 };
+
+// The document title + description for a static key in a locale, composed
+// from the page part above and the product's brand — the ONE place a title
+// is assembled server-side. Falls back through DEFAULT_LOCALE like content.
+function metaFor(locale, key) {
+  const table = DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE];
+  const entry = table[key] || DEFAULT_META[DEFAULT_LOCALE][key];
+  if (!entry) return null;
+  return { title: composeTitle(entry.title, entry.titleMode), description: entry.description };
+}
 
 // Section labels for breadcrumbs (per locale).
 const SECTION_LABELS = {
@@ -476,17 +504,47 @@ function websiteSchema() {
   // Emitted only on the home page. The alternateName array binds branded
   // search variants (one-word "Orangesmiley", the ehf. form) to the site so
   // knowledge graphs treat them as the same entity. The publisher reference
-  // resolves to the Organization schema baked into public/index.html (same
-  // @id) — change the two together or the graph dangles.
+  // resolves to organizationSchema() below (same @id), emitted on every page.
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     '@id':  `${APP_URL}/#website`,
     url:    APP_URL,
-    name:   'Orange Smiley',
-    alternateName: ['Orangesmiley', 'Orange Smiley ehf.', 'orange smiley', 'Rekstrarkerfið', 'Rekstrarkerfi'],
-    inLanguage: ['en', 'is'],
+    name:   identity.brand.name,
+    alternateName: identity.brand.alternateNames.slice(),
+    inLanguage: SUPPORTED_LOCALES.slice(),
     publisher: { '@id': `${APP_URL}/#organization` },
+  };
+}
+
+// The company itself, on EVERY page: the Article/Product/CreativeWork/Service
+// schemas and the WebSite all reference `${APP_URL}/#organization`, and a
+// dangling @id yields a broken knowledge graph. Built from
+// identity.organization + identity.brand (config/client.json), which is how a
+// downstream gets its own record without forking index.html — the baked copy
+// there is stripped by loadTemplate() and only serves a shell that never
+// passed through here.
+function organizationSchema() {
+  const org = identity.organization;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    '@id':  `${APP_URL}/#organization`,
+    name:   identity.brand.legalName,
+    alternateName: organizationAlternateNames(),
+    url:    APP_URL,
+    logo:   absUrl(org.logo),
+    image:  absUrl(org.image),
+    email:  org.email,
+    description: org.description,
+    address: (org.addressCountry || org.addressLocality) ? {
+      '@type': 'PostalAddress',
+      addressCountry: org.addressCountry,
+      addressLocality: org.addressLocality,
+    } : undefined,
+    areaServed: org.areaServed ? { '@type': 'Country', name: org.areaServed } : undefined,
+    knowsAbout: org.knowsAbout.length ? org.knowsAbout.slice() : undefined,
+    sameAs: org.sameAs.length ? org.sameAs.slice() : undefined,
   };
 }
 
@@ -580,7 +638,7 @@ function jsonLdScript(schemas) {
 // non-JS crawlers. Contains an <h1>, excerpts, and real anchor links.
 
 function crawlerListHtml(section, rows, locale) {
-  const heading = DEFAULT_META[locale]?.[section]?.title || DEFAULT_META.en[section].title;
+  const heading = metaFor(locale, section).title;
   const items = rows.map(row => {
     if (section === 'news') {
       const title   = pickLocale(row, 'title', 'title_is', locale);
@@ -644,7 +702,7 @@ async function crawlerHomeHtml(locale) {
   } catch {
     return '';
   }
-  const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE]).home;
+  const defaults = metaFor(locale, 'home');
 
   // Hero — heading + tagline. Field names match what HomeView reads (heading,
   // tagline, subheading). Fall back to the page-level meta defaults so the
@@ -813,7 +871,24 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   html = hreflang['x-default']
     ? replaceById(html, 'ssr-hreflang-default', { rel: 'alternate', hreflang: 'x-default', href: hreflang['x-default'] })
     : removeById(html, 'ssr-hreflang-default');
-  html = html.replace(/<html\b[^>]*\blang="[^"]*"/i, `<html lang="${esc(ogLocale.split('_')[0])}"`);
+  // The product identity rides the shell in two places (server/config/
+  // identity.js): the theme trio as <html data-*-theme> attributes, which the
+  // render-blocking theme-boot.js reads before any module runs, and the whole
+  // record as <script id="identity"> for public/js/utils/identity.js.
+  html = html.replace(
+    /<html\b[^>]*\blang="[^"]*"/i,
+    `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}`
+  );
+  // The brand-bearing static tags: og:site_name is the brand, author the
+  // registered company. Baked in index.html for the no-SSR case only.
+  html = html.replace(
+    /<meta\s+property="og:site_name"[^>]*>/i,
+    `<meta property="og:site_name" content="${esc(identity.brand.name)}" />`
+  );
+  html = html.replace(
+    /<meta\s+name="author"[^>]*>/i,
+    `<meta name="author" content="${esc(identity.brand.legalName)}" />`
+  );
 
   // Hero-image preload for scene routes — ahead of the main stylesheet so
   // the LCP fetch starts before CSS parse blocks anything.
@@ -821,11 +896,10 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     html = html.replace(/<link rel="stylesheet" href="\/css\/main\.css"/i,
       `${scenePreload}\n  <link rel="stylesheet" href="/css/main.css"`);
   }
-  // Inject per-route JSON-LD just before </head>. The baked Person schema
-  // on home stays in place (inside <head> before this insertion point).
-  if (jsonLd) {
-    html = html.replace(/<\/head>/i, `  ${jsonLd}\n</head>`);
-  }
+  // Inject the identity hand-off and the per-route JSON-LD just before
+  // </head>. The Organization is part of jsonLd on every page.
+  const tail = [identityScriptTag(), jsonLd].filter(Boolean).join('\n  ');
+  html = html.replace(/<\/head>/i, `  ${tail}\n</head>`);
   return html;
 }
 
@@ -871,7 +945,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       const sectionKey = detail.section === 'shop' ? 'shop'
                        : detail.section === 'news' ? 'news'
                        : 'projects';
-      const d = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[sectionKey];
+      const d = metaFor(locale, sectionKey);
       title       = d.title;
       description = d.description;
       ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
@@ -902,15 +976,16 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     // ── List / static page ──────────────────────────────────────────────
     const meta = staticMeta;
     const key  = meta?.key;
-    const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[key] || {};
+    const defaults = metaFor(locale, key) || {};
+    const home     = metaFor(DEFAULT_LOCALE, 'home');
     // For shop section sub-routes we deliberately do NOT pull meta_title /
     // meta_description from shop_hero — the shared hero copy applies to the
     // landing only. Per-section pages get the DEFAULT_META titles so each
     // route stays independently SEO-indexable.
     const override = (meta?.contentKey && !meta.section) ? await fetchContentMeta(meta.contentKey, locale) : null;
 
-    title       = override?.title       || defaults.title       || DEFAULT_META[DEFAULT_LOCALE].home.title;
-    description = override?.description || defaults.description || DEFAULT_META[DEFAULT_LOCALE].home.description;
+    title       = override?.title       || defaults.title       || home.title;
+    description = override?.description || defaults.description || home.description;
     ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
 
     // Party links share the admin-uploaded cover photo instead of the generic
@@ -974,7 +1049,8 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     };
   const ogLocale = locale === 'is' ? 'is_IS' : 'en_IS';
 
-  const jsonLdHtml = jsonLdScript(schemas);
+  // The Organization leads on every page — everything above references it.
+  const jsonLdHtml = jsonLdScript([organizationSchema(), ...schemas]);
 
   // Crawler body content — covers the home page, list pages, and detail
   // pages. Bing and other non-JS crawlers index the initial HTML response,

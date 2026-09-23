@@ -6,6 +6,10 @@
 // hand in /admin/roles) — is bounced and 403'd. If Halli grants the view to
 // `solufolk`, the last test flips: adjust it then, not before.
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { loginAsAdmin } = require('./helpers');

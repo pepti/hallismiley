@@ -63,7 +63,7 @@ Downstream overrides go in `features/local.json`.
 | `site-content` | Vefefni / Site content | 17 | engine | live | — | `005_site_content` | [site-content.md](site-content.md) |
 | `uploads-media` | Skráaupphal / Uploads and media | 18 | engine | live | — | — | [uploads-media.md](uploads-media.md) |
 | `email` | Tölvupóstur / Email | 19 | engine | live | — | — | [email.md](email.md) |
-| `client-config` | Stillingar tilviks / Instance config (module flags) | 20 | engine | live | — | — | [client-config.md](client-config.md) |
+| `client-config` | Stillingar tilviks / Instance config (module flags + identity) | 20 | engine | live | — | — | [client-config.md](client-config.md) |
 | `platform-core` | Kjarni / Platform core | 20 | engine | live | — | `001_initial_schema`, `043_strip_stale_railway_references` | [platform-core.md](platform-core.md) |
 | `rate-limits-security` | Öryggislag / Security layer | 20 | engine | live | — | — | [rate-limits-security.md](rate-limits-security.md) |
 | `testing-infra` | Prófunarumgjörð / Testing infrastructure | 20 | engine | live | — | — | [testing-infra.md](testing-infra.md) |
@@ -77,8 +77,8 @@ Downstream overrides go in `features/local.json`.
 | `aron13` | Afmælissíða Arons / Aron's birthday page (/aron13ara) | 12 | hs | hidden | — | — | [hs/aron13.md](hs/aron13.md) |
 | `inert-engine-product-files` | Óvirkar vöruskrár vélarinnar / The engine's own product files (inert here) | 20 | hs | dormant | — | — | [hs/inert-engine-product-files.md](hs/inert-engine-product-files.md) |
 
-## Product: os (1)
+## Product: os (another product — inert here) (1)
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
-| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page` | [os/company-content.md](os/company-content.md) |
+| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing` | [os/company-content.md](os/company-content.md) |

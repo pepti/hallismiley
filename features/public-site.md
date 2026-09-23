@@ -55,8 +55,9 @@ history: [homepage, r1, services-page, ui-kit, go-live]
 The SPA shell and the visitor pages: home (video hero), `/thjonusta`, `/um-okkur`, `/hafa-samband` (the contact form that becomes a lead), `/personuvernd`, terms and 404; the router with View Transitions; SSR meta + JSON-LD (`ssrMeta.js`), robots + sitemap, IndexNow pings and the hidden-route policy (`publicSurface.js`). The company copy itself is the product's (`os/company-content`); the engine ships the structure and the JS fallbacks. `HomeView._tiers()/_steps()` are dormant with their i18n.
 
 **Rules**
-- Everything not in the public IA is in `publicSurface.js`: hidden from nav, sitemap and search, still served.
+- Identity comes from the seam, never a literal: brand name, title suffix, `og:site_name`, `<meta author>`, the Organization + WebSite JSON-LD, the hero clip and the hidden-route list all read `identity.*` (`config/client.json` via `server/config/identity.js` server-side, `public/js/utils/identity.js` client-side). `ssrMeta.js` and `pageTitle.js` hold page PARTS; the document title is part + suffix (or `{brand}` substituted; `titleMode: 'bare'` for the portfolio surfaces).
+- Everything not in the public IA is in `identity.surface.hiddenRoutes`, read by `publicSurface.js`: hidden from nav, sitemap and search, still served.
 - No product tiers or prices on the company site; `SERVICE_OFFERINGS` mirrors the locale service names; `productSite.js` builds the one product-site URL.
-- A new hero clip gets a NEW filename; under reduced motion / Save-Data the hero shows the poster with no autoplay; `e2e/navigation.spec.js` pins the filename.
-- The canonical origin is `APP_URL`; `public/index.html` is baked with it and `ssrMeta.js` swaps it on load — change the two together.
+- A new hero clip gets a NEW filename (`identity.hero`); under reduced motion / Save-Data the hero shows the poster with no autoplay; `e2e/navigation.spec.js` pins the served clip to the config's.
+- The canonical origin is `APP_URL`; `public/index.html` is baked with it and `ssrMeta.js` swaps it on load (and drops the baked Organization, re-emitting it from the identity on every page) — change the two together.
 - Full rules: [../docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo](../docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo).

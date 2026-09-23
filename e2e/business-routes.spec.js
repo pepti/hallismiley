@@ -1,4 +1,9 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
+const { identity } = require('./lib/identity');
 
 /**
  * The public business site, walked end to end in BOTH locales.
@@ -67,13 +72,14 @@ test.describe('locale behaviour', () => {
     await expect(page.locator('h1.thjonusta-title')).toContainText('Software for small and medium businesses');
   });
 
-  test('an unprefixed business path serves Icelandic to a visitor with no signal', async ({ browser }) => {
-    // PUBLIC_DEFAULT_LOCALE. A browser sending Accept-Language: en-US would
-    // legitimately get English, so the context asks for neither.
+  test('an unprefixed business path serves the visitor default to a visitor with no signal', async ({ browser }) => {
+    // PUBLIC_DEFAULT_LOCALE = identity.locale.publicDefault ('is' for Orange
+    // Smiley). Accept-Language is not a signal (most Icelandic browsers send
+    // en-US), so the context asks for a language the site does not have.
     const ctx = await browser.newContext({ locale: 'de-DE', extraHTTPHeaders: { 'Accept-Language': 'de-DE' } });
     const page = await ctx.newPage();
     const res = await page.goto('/');
-    expect(res.url()).toMatch(/\/is\/$/);
+    expect(res.url()).toMatch(new RegExp(`/${identity.locale.publicDefault}/$`));
     await ctx.close();
   });
 });

@@ -6,6 +6,10 @@
 // popover on a bottom row rendered off the visible box. Pinned at a short
 // viewport so the overflow is guaranteed regardless of how many groups exist.
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { loginAsAdmin } = require('./helpers');
 
 test.use({ viewport: { width: 1280, height: 620 } });

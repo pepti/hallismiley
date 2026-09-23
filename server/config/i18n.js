@@ -5,8 +5,10 @@ const SUPPORTED_LOCALES = (process.env.SUPPORTED_LOCALES || 'en,is')
   .split(',').map(l => l.trim()).filter(Boolean);
 
 // The locale a brand-new visitor sees when no signal (URL prefix, cookie,
-// account preference, Accept-Language) resolves one. Orange Smiley is an
-// Icelandic business, so this is 'is'.
+// account preference, Accept-Language) resolves one. It is the PRODUCT's
+// choice — `identity.locale.publicDefault` in config/client.json ('is' for
+// Orange Smiley, an Icelandic business) — and the env var still wins over it,
+// as it did before the identity seam.
 //
 // Deliberately separate from DEFAULT_LOCALE above, which is the CONTENT
 // dimension: the t()/site_content fallback locale and the storage locale for
@@ -14,7 +16,8 @@ const SUPPORTED_LOCALES = (process.env.SUPPORTED_LOCALES || 'en,is')
 // content first, so that dimension stays 'en' — flipping it would silently
 // re-home stored rows and break the party module's IS-primary/EN-translated
 // contract. Only the visitor-facing default changes.
-const PUBLIC_DEFAULT_LOCALE = process.env.PUBLIC_DEFAULT_LOCALE || 'is';
+const { identity } = require('./identity');
+const PUBLIC_DEFAULT_LOCALE = process.env.PUBLIC_DEFAULT_LOCALE || identity.locale.publicDefault;
 
 // The party pages are a birthday landing for an Iceland-based event with an
 // all-Icelandic guest list — they are published in Icelandic ONLY.

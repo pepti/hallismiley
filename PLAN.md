@@ -21,17 +21,26 @@ incidents that used to live in `CLAUDE.md` are in the same file, from
   ([engine-graft](docs/HISTORY.md#engine-graft)).
 - 2026-09-22 — docs restructure in the base, before the graft
   ([docs-restructure-hs](docs/HISTORY.md#docs-restructure-hs)).
+- 2026-09-23 — engine sync to `92308d2`: this site's identity (brand, `en`
+  default, `classic` + six-theme picker, waterfall hero, hidden company pages,
+  Organization) lives in `config/client.json` `identity`; the theme and brand
+  hooks are retired; `features/os/` suites skip through the feature gate
+  ([engine-sync-2026-09-23](docs/HISTORY.md#engine-sync-2026-09-23)).
 
-**Open — identity items the engine's own tests pin (Halli decides)**
-The engine hard-codes Orange Smiley's identity in engine-owned files AND in
-engine-owned tests, so after the graft hallismiley.is would present as the
-company site unless each item below gets a product-owned seam in the engine.
-The exact list, with the pinning test for each, is in
-[engine-graft](docs/HISTORY.md#engine-graft) § "Not reconciled":
-public IA + nav lockup, SSR titles/descriptions, sitemap routes, hero clip,
-visitor-default locale (`is` → was `en`), default theme (`ember` → was
-`classic`) and the `classic` palette itself, the admin hidden-lines set, the
-Organization JSON-LD, and `email.verify.subject`.
+**Open — what the identity seam still lacks (engine changes, Halli decides)**
+Listed with the pinning test for each in
+[engine-sync-2026-09-23](docs/HISTORY.md#engine-sync-2026-09-23) § "What the
+seam still lacks": the public IA (`NavBar.js` links the company pages as
+literals; `ssrMeta.test.js`, `e2e/navigation.spec.js`, `e2e/business-routes.spec.js`
+pin it — the red tests on the branch), the page parts/descriptions in
+`DEFAULT_META`, the `identityConfig.test.js` committed-file test, the
+`home-products` section, the `classic` palette, `manifest.json`, the
+Product-schema brand and the Organization `@type`; the engine suites that
+assume the Icelandic visitor default (auth/OAuth/contact/media/projects) and
+the engine-only gate/registry/identity tests; and `APP_URL` must be set on
+the App Service (the engine's fallback origin is orangesmiley.is). Jest on the
+branch: 92 failing cases, all in that list — the PR stays draft until the
+engine closes them.
 
 **Open — housekeeping**
 - `server/utils/canonicalHost.js` is no longer required by the app (the
