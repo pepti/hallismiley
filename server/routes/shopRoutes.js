@@ -5,6 +5,7 @@ const router  = express.Router();
 const shopController  = require('../controllers/shopController');
 const { csrfProtect } = require('../middleware/csrf');
 const { lucia }       = require('../auth/lucia');
+const { applyMfaPolicy } = require('../auth/mfaPolicy');
 
 // Soft auth for guest checkout is the shared middleware: it attaches the role
 // SET, so any role-aware behaviour that lands on checkout sees the same
@@ -24,7 +25,7 @@ async function requireAuth(req, res, next) {
   if (!session || !user || user.disabled) {
     return res.status(401).json({ error: 'Unauthorized', code: 401 });
   }
-  req.user = user;
+  req.user = applyMfaPolicy(user);   // auth/mfaPolicy.js
   req.session = session;
   next();
 }

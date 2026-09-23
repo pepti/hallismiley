@@ -19,6 +19,8 @@ async function softAuth(req, res, next) {
     if (session && user && !user.disabled) {
       req.user = user;
       req.session = session;
+      // attachRoles also applies the two-factor policy (auth/mfaPolicy.js):
+      // an unenrolled admin loses `admin` here like everywhere else.
       await attachRoles(req, user);
     }
     return next();

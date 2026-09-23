@@ -9,6 +9,7 @@ paths:
   - server/middleware/csrf.js
   - server/middleware/forwardedFor.js
   - server/utils/staticAsset.js
+  - server/utils/safeEqual.js
   - public/js/api/rateLimitDecide.js
   - public/js/api/rateLimitGuard.js
   - tests/integration/security.test.js

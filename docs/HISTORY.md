@@ -46,6 +46,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
 | 2026-09-22 | [Leads transfer — enquiries from the other instances reach ops (D-020 step 4)](#leads-transfer-2026-09-22) | `leads:export` (submission fields only) / `leads:import` (one transaction, `ON CONFLICT DO NOTHING`, an ops row is never updated); by hand weekly, a timer once ops is on Azure; no migration |
 | 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
+| 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
 
 ---
 
@@ -1240,3 +1241,80 @@ purpose: the seeded company COPY (`site_content`, the home hero and skills
 rows, `SERVICE_OFFERINGS`) — that is product content, replaced by product
 migrations; the PWA `manifest.json` name; the Product-schema `brand`.
 No migration.
+<a id="harvest-rk-totp-2026-09-23"></a>
+## 2026-09-23 — Harvest from rekstrarkerfid: mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)
+
+The first commit to travel UP the engine tree under D-021: rekstrarkerfid's
+`4df0943` (2026-09-18, "admin two-factor enrolment is mandatory, not an option
+on the profile page" — Öryggisvörður's review while fact-checking its
+/um-kerfid page, which promises "TOTP fyrir stjórnendur"). rk's history has no
+`Feature:` trailers and `engine-harvest --list` keys on commits after the graft
+merge, so it listed nothing; the pick was named by hand
+(`git cherry-pick -x 4df0943`, a real three-way pick since the 2026-09-22
+graft) and the rk-only hunks trimmed. Branch `from-rk/2026-09-23`.
+
+**What the engine took, and how it was widened**
+
+- **The rule, in one file — `server/auth/mfaPolicy.js`.** rk withholds `admin`
+  from an unenrolled admin at every session reader. The engine's gate is wider
+  (`mfaService.protectedRole`: admin OR `accounts` holder OR published seller,
+  ENHANCEMENTS #17 + D-020), so the policy asks `protectedRole` and withholds
+  what made the account protected: `admin` from the role set for an admin
+  (effectiveRoles); the `accounts` view and a wildcard grant from the resolved
+  views for a holder (`withholdViews`, called by `requireView` — the one place
+  views are resolved for a guard — and by `roleFields`); a published seller's
+  routes already demand `totp_enabled` (rule 4 of `sellerRoutes.js`). Other
+  roles and views keep working. Applied from `attachRoles`
+  (`auth/middleware.js`), which every session reader shares here (rk still
+  had four copies; the engine's 2026-09-03 cleanup means ONE hook), plus the
+  shop router's private `requireAuth`. The `accounts` flag needs the resolved
+  views, so `applyMfaPolicyToRequest` looks them up (Role cache) only for an
+  unenrolled, non-exempt, non-admin account — enrolled accounts, exempt
+  accounts and admins cost nothing extra.
+- **Session payloads** (`roleFields(user)`, now taking the user row) report the
+  same downgrade plus `mfa_enrolment_required`; `loginTotp` now selects
+  `totp_enabled` (without it the policy read "not enrolled" off the account
+  that had just passed the second factor). `isEnrolmentEligible` short-cuts on
+  the flag: an account that owes enrolment is always eligible. The 403 says why
+  (`forbiddenMessage` in `auth/roles.js`, `errors.auth.mfaEnrolmentRequired`,
+  worded for any protected account, not just admins). SPA: `auth.js`
+  `mfaEnrolmentRequired()` + `refreshSession()`; `LoginModal` sends the person
+  to `/profile` with `profile.twoStepRequired`; the router bounces `/admin*`
+  there; `ProfileView` renders the panel on `isMfaProtected() ||
+  mfaEnrolmentRequired()` and `totpConfirm` merges silently so the one-time
+  recovery codes survive until "I saved them" calls `refreshSession()`.
+- **The secret at rest — `server/utils/secretBox.js` + migration
+  `107_totp_secret_enc`.** AES-256-GCM under `TOTP_ENC_KEY` (32 bytes, base64
+  or hex; malformed → boot refuses, unset → plaintext as before, production
+  warns), the user id as associated data, `v1:` prefixed. EXPAND phase: both
+  columns written, the sealed copy read first with a plaintext fallback, a
+  pre-107 account sealed at its next successful sign-in (`COALESCE`); N+1
+  stops writing the plaintext, N+2 drops it (invariant 14). rk applied the same
+  DDL as `093_totp_secret_enc`; its product file must alias
+  `'107_totp_secret_enc': ['093_totp_secret_enc']` and keep `093` in `legacy`
+  untouched (`docs/MIGRATIONS.md`). Verified in Jest: a plaintext-only account
+  signs in and is sealed on the way; a sealed-only row is enough; a foreign
+  ciphertext is refused; with no key the plaintext path still works.
+- **Also taken**: `ADMIN_TOTP_EXEMPT` (ignored under `NODE_ENV=production`,
+  boot warns; `tests/env.js` sets `*`, Playwright exempts `testadmin`);
+  `server/scripts/reset-admin-totp.js` (break-glass, both columns, ends the
+  sessions); party magic links refuse admin accounts; `utils/safeEqual.js` for
+  the `/metrics` bearer compare; `docs/ADMIN-2FA.md` (runbook, three-release
+  plan, rollout); `.env.example` and `docs/DEPLOYMENT.md` §5 rows.
+- **Trimmed from the pick**: rk's `brand.name` section in `clientConfig.js`
+  (the identity seam, merged from master the same day, owns that file; the
+  issuer is then wired to `identity.brand.name` in a follow-up commit on the
+  branch, with rk's issuer test re-added against the seam); rk's CLAUDE.md /
+  LESSONS.md hunks; the `/api/v1/content/um_kerfid` probe (engine key `home`).
+- **Tests**: `tests/unit/mfaPolicy.test.js` (policy incl. the wider gate,
+  `withholdViews`, `applyMfaPolicyToRequest`, secretBox, safeEqual);
+  `tests/integration/adminTotpEnforcement.test.js` (20, under the production
+  rule: admin, admin-by-set, accounts holder loses only `accounts` and gets it
+  back on enrolling, handbook-only seller untouched, same-session unlock,
+  disable re-gates, magic link, both columns, legacy seal, sealed-only, foreign
+  ciphertext, no-key path, `/metrics`); `e2e/admin-totp-enrolment.spec.js`
+  (a real admin through the flow, then the break-glass script).
+
+**Next harvest candidates seen in rk** (not picked): `features/rk/social-login-gate.md`
+and `features/rk/request-logging.md`; the issuer/`brand.name` hunk once the
+identity seam has landed.

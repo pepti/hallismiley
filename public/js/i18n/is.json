@@ -447,6 +447,7 @@
   "login.totpRecoveryHint": "Sláðu inn einn af endurheimtukóðunum sem þú vistaðir við uppsetningu. Hver kóði virkar einu sinni.",
   "login.recoveryCodeUsed": "Endurheimtukóði notaður — {n} eftir. Settu auðkennisappið upp aftur til að fá nýja kóða.",
   "profile.twoStepTitle": "Tveggja þátta staðfesting",
+  "profile.twoStepRequired": "Þessi aðgangur krefst tveggja þátta staðfestingar. Settu hana upp hér og þá opnast aðgangurinn.",
   "profile.twoStepOff": "Aðgangurinn þinn er aðeins varinn með lykilorði. Tveggja þátta staðfesting bætir við kóða úr símanum, svo stolið lykilorð dugi ekki eitt og sér.",
   "profile.twoStepOn": "Tveggja þátta staðfesting er virk. Þú verður beðin(n) um kóða úr auðkennisappinu í hvert sinn sem þú skráir þig inn.",
   "profile.twoStepSetUp": "Setja upp tveggja þátta staðfestingu",

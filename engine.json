@@ -9,5 +9,19 @@
   "syncedPr": null,
   "grafted": null,
   "productPaths": [],
-  "history": []
+  "history": [
+    {
+      "rev": null,
+      "date": "2026-09-23",
+      "upstreamCommits": 0,
+      "conflicts": 11,
+      "note": "harvest",
+      "harvestedFrom": "rk@4df09435115743ef15eeca952fdc9c5467d4bcfa",
+      "commits": ["4df09435115743ef15eeca952fdc9c5467d4bcfa"],
+      "branch": "from-rk/2026-09-23",
+      "features": ["admin-2fa"],
+      "migrations": { "107_totp_secret_enc": "rk 093_totp_secret_enc (alias in rk.js)" },
+      "trimmed": ["clientConfig.js brand.name (identity seam owns it; issuer wired to identity.brand.name in a follow-up)", "CLAUDE.md", "LESSONS.md", "rk issuer test"]
+    }
+  ]
 }

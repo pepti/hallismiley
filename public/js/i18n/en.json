@@ -447,6 +447,7 @@
   "login.totpRecoveryHint": "Enter one of the recovery codes you saved when you set this up. Each code works once.",
   "login.recoveryCodeUsed": "Recovery code used — {n} left. Set up your authenticator app again to get a new set.",
   "profile.twoStepTitle": "Two-step verification",
+  "profile.twoStepRequired": "This account needs two-step verification. Set it up here and your access opens.",
   "profile.twoStepOff": "Your account is protected by a password only. Two-step verification adds a code from your phone, so a stolen password is not enough on its own.",
   "profile.twoStepOn": "Two-step verification is on. You will be asked for a code from your authenticator app each time you sign in.",
   "profile.twoStepSetUp": "Set up two-step verification",

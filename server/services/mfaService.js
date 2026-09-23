@@ -23,6 +23,7 @@ const { query: dbQuery } = require('../config/database');
 const totp = require('../utils/totp');
 const qrUtil = require('../utils/qr');
 const logger = require('../logger');
+const secretBox = require('../utils/secretBox');
 
 const scrypt = new Scrypt();
 
@@ -35,7 +36,40 @@ const CHALLENGE_TTL_MS   = 5 * 60 * 1000;
 const MAX_CHALLENGE_ATTEMPTS = 5;
 const RECOVERY_CODE_COUNT = 10;
 
-const ISSUER = 'Icelandic Store';
+// What the authenticator app shows beside the entry. It is the INSTANCE's name
+// from the identity seam (config/client.json → identity.brand.name), not a
+// literal: this was 'Icelandic Store' — customer #1's name, inherited with the
+// code — on every instance until rekstrarkerfid fixed it (2026-09-18, its
+// brand.name); the engine wires it to the seam that landed 2026-09-22.
+const { identity } = require('../config/identity');
+const issuer = () => identity.brand.name;
+
+// ── The secret, at rest ─────────────────────────────────────────────────────
+// Expand phase (migration 107, rk's 093): the secret is written to BOTH totp_secret and,
+// sealed, to totp_secret_enc; reads prefer the sealed copy. Without
+// TOTP_ENC_KEY the sealed column stays NULL and everything works as before —
+// server.js warns about that in production.
+
+/** Column values for a secret being stored. */
+function sealedFor(userId, secret) {
+  return secretBox.isConfigured() ? secretBox.seal(secret, userId) : null;
+}
+
+/**
+ * The usable secret for a row carrying totp_secret / totp_secret_enc.
+ * A sealed copy that will not open (wrong key after a rotation, a row copied
+ * between accounts) is logged and the plaintext used while it still exists;
+ * once the contract step has removed it, that same failure locks the account
+ * out until the key is fixed or the admin is reset (docs/ADMIN-2FA.md).
+ */
+function readSecret(row, userId) {
+  if (row.totp_secret_enc && secretBox.isConfigured()) {
+    try { return secretBox.open(row.totp_secret_enc, userId); } catch (err) {
+      logger.error({ userId, err: err.message }, 'TOTP secret would not decrypt — falling back to the plaintext column');
+    }
+  }
+  return row.totp_secret || null;
+}
 
 /**
  * Is this account protected by a second factor?
@@ -65,7 +99,13 @@ function isProtected(user) {
   return protectedRole(user) && user.totp_enabled === true;
 }
 
-/** Should this account be *pushed* to enrol? (Protected roles that haven't yet.) */
+/**
+ * Does this account owe enrolment? Kept for callers that already hold a
+ * `admin_anywhere` flag — but nothing ever called it, which is how an admin who
+ * never enrolled signed in on a password alone until 2026-09-18. The rule is
+ * ENFORCED in auth/mfaPolicy.js, on every session read; that file, not this
+ * function, is what makes enrolment mandatory (and knows the test exemption).
+ */
 function shouldEnrol(user) {
   return protectedRole(user) && user.totp_enabled !== true;
 }
@@ -83,11 +123,12 @@ function shouldEnrol(user) {
 async function beginEnrolment(userId, accountLabel) {
   const secret = totp.generateSecret();
   await dbQuery(
-    `UPDATE users SET totp_secret = $1, totp_enabled = FALSE, totp_confirmed_at = NULL, totp_last_step = NULL
-      WHERE id = $2`,
-    [secret, userId]
+    `UPDATE users SET totp_secret = $1, totp_secret_enc = $2,
+                      totp_enabled = FALSE, totp_confirmed_at = NULL, totp_last_step = NULL
+      WHERE id = $3`,
+    [secret, sealedFor(userId, secret), userId]
   );
-  const uri = totp.otpauthUri({ secret, account: accountLabel, issuer: ISSUER });
+  const uri = totp.otpauthUri({ secret, account: accountLabel, issuer: issuer() });
 
   // The QR is generated server-side and handed over as a data: URI, so no QR
   // library reaches the browser and the client only ever sets an <img src>.
@@ -121,12 +162,13 @@ async function beginEnrolment(userId, accountLabel) {
  * leave stale fallbacks working.
  */
 async function confirmEnrolment(userId, code) {
-  const { rows } = await dbQuery('SELECT totp_secret, totp_enabled FROM users WHERE id = $1', [userId]);
+  const { rows } = await dbQuery('SELECT totp_secret, totp_secret_enc, totp_enabled FROM users WHERE id = $1', [userId]);
   const row = rows[0];
-  if (!row || !row.totp_secret) return { ok: false, reason: 'NOT_STARTED' };
+  const secret = row ? readSecret(row, userId) : null;
+  if (!secret) return { ok: false, reason: 'NOT_STARTED' };
   if (row.totp_enabled) return { ok: false, reason: 'ALREADY_ENABLED' };
 
-  const result = totp.verifyCode(row.totp_secret, code);
+  const result = totp.verifyCode(secret, code);
   if (!result.valid) return { ok: false, reason: 'BAD_CODE' };
 
   const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => generateRecoveryCode());
@@ -148,7 +190,8 @@ async function confirmEnrolment(userId, code) {
 async function disable(userId) {
   await dbQuery('DELETE FROM user_recovery_codes WHERE user_id = $1', [userId]);
   await dbQuery(
-    `UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, totp_confirmed_at = NULL, totp_last_step = NULL
+    `UPDATE users SET totp_secret = NULL, totp_secret_enc = NULL,
+                      totp_enabled = FALSE, totp_confirmed_at = NULL, totp_last_step = NULL
       WHERE id = $1`,
     [userId]
   );
@@ -194,7 +237,7 @@ async function verifyChallenge(challengeId, code) {
 
   const { rows } = await dbQuery(
     `SELECT c.id, c.user_id, c.attempts, c.expires_at,
-            u.totp_secret, u.totp_enabled, u.totp_last_step, u.disabled
+            u.totp_secret, u.totp_secret_enc, u.totp_enabled, u.totp_last_step, u.disabled
        FROM mfa_challenges c JOIN users u ON u.id = c.user_id
       WHERE c.id = $1`,
     [challengeId]
@@ -207,14 +250,21 @@ async function verifyChallenge(challengeId, code) {
     return { ok: false, reason: 'EXPIRED' };
   }
   // Re-check state that may have changed since the password step.
-  if (ch.disabled || !ch.totp_enabled || !ch.totp_secret) {
+  const secret = readSecret(ch, ch.user_id);
+  if (ch.disabled || !ch.totp_enabled || !secret) {
     await dbQuery('DELETE FROM mfa_challenges WHERE id = $1', [challengeId]);
     return { ok: false, reason: 'INVALID' };
   }
 
-  const totpResult = totp.verifyCode(ch.totp_secret, code, { lastUsedStep: ch.totp_last_step });
+  const totpResult = totp.verifyCode(secret, code, { lastUsedStep: ch.totp_last_step });
   if (totpResult.valid) {
-    await dbQuery('UPDATE users SET totp_last_step = $1 WHERE id = $2', [totpResult.step, ch.user_id]);
+    // Admins enrolled before migration 107 (or before TOTP_ENC_KEY was set)
+    // have only the plaintext. A successful sign-in is the moment to seal it:
+    // COALESCE keeps this from ever replacing a sealed copy that exists.
+    await dbQuery(
+      'UPDATE users SET totp_last_step = $1, totp_secret_enc = COALESCE(totp_secret_enc, $2) WHERE id = $3',
+      [totpResult.step, ch.totp_secret_enc ? null : sealedFor(ch.user_id, secret), ch.user_id]
+    );
     await dbQuery('DELETE FROM mfa_challenges WHERE id = $1', [challengeId]);
     return { ok: true, userId: ch.user_id, usedRecoveryCode: false };
   }
