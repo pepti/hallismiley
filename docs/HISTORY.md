@@ -52,6 +52,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 | 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
 | 2026-09-23 | [`/ready` details and the product-import body behind the gate](#ready-and-import-order-2026-09-23) | Two findings from rekstrarkerfid's 2026-09-19 review, fixed in the engine: anonymous `/ready` returns status/uptime/timestamp only (`checks` follow the `/metrics` rule, `internalsDenied()`; admins read `GET /api/v1/admin/events/health`); the 4 MB import and 5 MB change-request parsers moved into their routers behind the gates, `sanitizeBody` re-applied; the review found `sanitizeBody`'s tag regex quadratic (100 kb of `<` = 2.3 s, before any limiter) — replaced by a linear, byte-identical `stripTags()`; no migration |
+| 2026-09-23 | [The seller area follows the 2FA switch; a dismissible two-step reminder](#mfa-reminder-2026-09-23) | Halli: sellers optional too, "but put a reminder somewhere, and a checkmark not to see the reminder again"; `sellerRoutes.js` rule 4 only under `required`; `mfa_reminder` on the session (`mfaPolicy.reminderCandidate`, never under `required`); migration 109 `users.mfa_reminder_dismissed_at` + `POST /auth/mfa-reminder/dismiss`; notice atop the admin shell and the seller area, ✕ per page load, the checkbox saves at once; e2e runs a second server under `required` for the enrolment spec; copy DRAFT |
 
 ---
 
@@ -1803,3 +1804,117 @@ Tests: `observability.test.js` pins the anonymous `/ready` body to
 (it was 400 — parsed before auth), that an admin still gets the 4 MB limit, and
 that the import body is still sanitized. Eight of the new tests fail on the
 old code. No migration.
+
+<a id="mfa-reminder-2026-09-23"></a>
+## 2026-09-23 — The seller area follows the 2FA switch, and a dismissible two-step reminder
+
+**Why.** Halli, the same day enrolment went optional
+([mfa-optional-2026-09-23](#mfa-optional-2026-09-23)): make the seller area's
+2FA optional too, "but put a reminder somewhere, and a checkmark not to see
+the reminder again".
+
+**The seller area.** `routes/sellerRoutes.js` rule 4 now asks
+`mfaPolicy.enrolmentRequired()` (per request, so a suite can flip it): under
+`required` every route but `GET /me` still needs `totp_enabled`; under the
+`optional` default a published seller reads leads, accounts and commission
+statements with a password. `/me`'s `mfa_ready` now means "the rest of the
+area answers this session" (`totp_enabled || !enrolmentRequired()`), so the
+SPA's forced notice appears only under `required` — and an SPA cached from
+before this release reads the new meaning correctly.
+
+**The reminder.**
+- *Who*: `mfaPolicy.reminderCandidate(user, roles)` — `mfaService.shouldEnrol`
+  (protected role, no TOTP) and never under `required` (the forced flow applies
+  there, exempt accounts included). `authController.roleFields` adds
+  `mfa_reminder` to every session payload (login, login/totp, session, signup,
+  party magic link): for a candidate it reads `totp_enabled` and the dismissal
+  from the ROW, because its five callers hand in five differently-selected user
+  objects; everyone else costs no query.
+- *Storage*: no existing per-user store fitted — `admin_nav_config` (053) is
+  the admin sidebar's layout blob (and sellers on the public box are not
+  admins), `theme` a single id, and `PATCH /api/v1/users/me` is the validated
+  profile form. So engine migration **109** `109_user_mfa_reminder`:
+  `users.mfa_reminder_dismissed_at TIMESTAMPTZ` (NULL = not dismissed).
+  Additive (invariant 14: the previous release neither reads nor writes it);
+  downstreams take it as-is — the engine owns `users`.
+- *Endpoint*: `POST /auth/mfa-reminder/dismiss`, beside `/auth/totp/*` (the
+  auth writes live under `/auth`, not `/api/v1/auth`): its own limiter (30 / 15
+  min per IP — not `authLimiter`, whose counter is the login budget), CSRF,
+  session; the body is ignored, so it only ever stamps the caller's own row;
+  `COALESCE` keeps the first time, a repeat is 200 `{ mfa_reminder: false }`.
+- *Where*: `public/js/components/mfaReminder.js` (+ `public/css/mfa-reminder.css`,
+  tokens only — the page surface with an `--accent-ink` rule, not the
+  `--warning` wash of a forced notice) is mounted at the top of the admin shell's
+  content pane by `renderAdminShell` (the one layout every `/admin/*` view
+  shares) and at the top of `SellerAreaView`. A `region` labelled by its title;
+  a short line; **Setja upp í Prófíl** → `/profile?focus=2fa` (ProfileView now
+  takes `qs`, scrolls the Tveggja þátta staðfesting panel into view and focuses
+  its heading; the seller area's forced-notice link goes there too); the
+  checkbox **Ekki sýna þetta aftur**; ✕ **Loka áminningu** last in the DOM, so
+  focus runs text → link → checkbox → close. Closing moves focus to the page's
+  heading.
+- *Behaviour, picked and made obvious*: ✕ hides it until the page is next
+  loaded (a module flag — moving between admin screens does not bring it back,
+  a reload does; nothing saved). **Ticking the checkbox saves at once** and
+  closes the notice with a toast ("Áminningin birtist ekki aftur. Tveggja þátta
+  staðfestingu finnurðu alltaf í Prófíl."); on failure the box unticks and the
+  error shows in the notice. The client merge is silent (`updateCachedUser(…,
+  { silent: true })`), so the admin screen is not rebuilt. Enrolling ends the
+  reminder by itself; turning 2FA off later does not bring back a dismissed one.
+- *Copy* (`mfaReminder.*`, IS first, EN mirror — **DRAFT**, Halli approves):
+  title "Bættu tveggja þátta staðfestingu við aðganginn" / "Add two-step
+  sign-in to your account"; text "Aðgangurinn þinn er aðeins varinn með
+  lykilorði. Með kóða úr auðkennisappi í símanum dugar stolið lykilorð ekki
+  eitt og sér." / "Your account is protected by a password only. With a code
+  from an authenticator app on your phone, a stolen password is not enough on
+  its own."; "Setja upp í Prófíl" / "Set it up in Profile"; "Ekki sýna þetta
+  aftur" / "Don't show this again"; "Loka áminningu" / "Close reminder"; the
+  toast above / "The reminder won't show again. Two-step sign-in is always in
+  your Profile."; "Ekki tókst að vista valið. Reyndu aftur." / "Could not save
+  your choice. Please try again."
+
+**e2e: two servers.** The reminder exists only under `optional`, the forced
+flow only under `required`, the mode is per instance, and a per-request switch
+would be a test backdoor. Playwright's `webServer` is now an array: the main
+server (`E2E_PORT`) runs the instance default `optional` — every spec, and the
+new `e2e/mfa-reminder.spec.js`; a second (`E2E_REQUIRED_PORT`, default
+`E2E_PORT + 1`, same database, boots after the first so its migrations are
+no-ops under the advisory lock) runs `required`, and
+`e2e/admin-totp-enrolment.spec.js` points at it (`test.use({ baseURL,
+storageState })` from `E2E_REQUIRED_BASE_URL`, which the config exports).
+Both behaviours stay covered in a real browser. The main server no longer
+needs `ADMIN_TOTP_EXEMPT`; the second exempts only `testadmin`. Side effect,
+on purpose: `testadmin` is an unenrolled admin under `optional`, so every admin
+spec now runs with the reminder on screen.
+
+**Tests.** `tests/integration/mfaReminder.test.js` (new): the flag for an
+unenrolled admin, a role-set admin and an `accounts` holder; never for a plain
+user or a `leads`-only seller; false once enrolled, once dismissed, and under
+`required`; on the login payload; the endpoint's 401 envelope, stamp + flag,
+idempotence (first time kept), own-row-only whatever the body names, and CSRF
+(403 without a token, 200 with one — the test-mode bypass switched off for
+those requests). `tests/integration/sellerArea.test.js`: under the default a
+seller without 2FA gets 200 on leads/accounts/statements and
+`mfa_reminder: true`; under `required` the old 403s, `mfa_ready: false`, no
+reminder, and 200 after enrolling. `tests/unit/mfaPolicy.test.js`:
+`reminderCandidate` (who, who never, never under `required`).
+`e2e/mfa-reminder.spec.js`: an unenrolled admin sees the labelled region atop
+`/admin`; ✕ survives an SPA move and not a reload; "Setja upp í Prófíl" opens
+the panel in view; ticking the box removes it, toasts, stamps the row, and a
+reload keeps it gone (`mfa_reminder: false`); a fresh second admin is still
+reminded. The first full e2e run caught the `?focus=2fa` scroll landing out
+of view for an admin: Prófíll inserts the landing-background editors ABOVE the
+2FA panel after an `await`, pushing it back down — the scroll now runs last.
+Final runs: unit 1567 passed; full Jest 157 suites, 3490 passed, 1 skipped;
+full Playwright 221 passed across both servers. Checked by eye on Bjart, Glóð
+and Miðnætti and at 375px.
+
+**Downstreams.** Nothing product-side: the reminder mounts in the engine's
+`renderAdminShell` and `SellerAreaView`, so every product whose admin screens
+use the shared shell gets it; a product with its own admin or seller layout
+that bypasses those would need to call `renderMfaReminder()` itself (none in
+the estate today). Migration 109 arrives with the merge, no alias. rekstrarkerfid
+(which chose `required` for itself before the estate-wide `optional`) sees no
+reminder if its `config/client.json` says `required`. `playwright.config.js` is
+engine-owned, so the second e2e server arrives with the merge; a downstream
+runs its e2e with `E2E_PORT + 1` free as well.

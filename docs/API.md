@@ -103,6 +103,12 @@ Return the current session/user info without requiring auth.
 
 Use this on page load to restore session state.
 
+Every session payload (`/auth/login`, `/auth/login/totp`, `/auth/session`, signup,
+party magic link) also carries `mfa_enrolment_required` (true only under
+`security.mfa.enrolment = required`, for a protected account without TOTP) and
+`mfa_reminder` (true only under `optional`, for a protected account without TOTP
+that has not dismissed the reminder) — `docs/ADMIN-2FA.md`.
+
 ---
 
 ### Other `/auth` routes (`server/routes/authRoutes.js`)
@@ -114,6 +120,7 @@ Use this on page load to restore session state.
 | `POST /auth/resend-verification` | 5 / minute per IP |
 | `POST /auth/forgot-password`, `POST /auth/reset-password` | 25 / hour per IP |
 | `POST /auth/totp/setup`, `/totp/confirm`, `/totp/disable` | session + CSRF |
+| `POST /auth/mfa-reminder/dismiss` | 30 / 15 min per IP, CSRF, session. "Don't show this again" on the two-step reminder: stamps the caller's own `users.mfa_reminder_dismissed_at` (the body is ignored), idempotent, `200 { "mfa_reminder": false }` (mfa-reminder-2026-09-23) |
 | `GET /auth/check-username/:username`, `GET /auth/check-email/:email` | 150 / hour per IP |
 | `POST /auth/party-magic-login` | 50 / 15 min per IP (hidden party module) |
 | `GET /auth/google`, `/google/callback`, `/facebook`, `/facebook/callback` | `socialLoginGate` — answer `404` unless `SOCIAL_LOGIN_ENABLED=true` (OFF on this instance: no OAuth app configured) |
@@ -287,7 +294,7 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
-| `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me`; per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
+| `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me` only under `security.mfa.enrolment = required` (mfa-reminder-2026-09-23); per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
 | `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
 | `/api/v1/admin/mcp-tokens` | `mcpAdminRoutes.js` | admin | `docs/mcp.md` |

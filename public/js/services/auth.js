@@ -38,6 +38,12 @@ export function isAdmin()         { return getRoles().includes('admin'); }
 // false and every admin call would 403 — this flag is how the SPA knows to walk
 // the person to the set-up panel instead of showing them a plain user's site.
 export function mfaEnrolmentRequired() { return !!_user?.mfa_enrolment_required; }
+// The other half, under the DEFAULT `optional`: a protected account without
+// two-step that has not ticked "don't show this again" gets a dismissible
+// reminder atop the admin shell and the seller area (components/mfaReminder.js).
+// The server decides — role, enrolment, mode and the per-account dismissal
+// (authController.roleFields, mfa-reminder-2026-09-23).
+export function mfaReminderDue() { return _user?.mfa_reminder === true; }
 // Editor = admin or moderator. Used to gate edit-mode UI for site content
 // (party page, news, projects) where moderators have full edit/delete rights.
 export function canEdit()         { return getRoles().some(r => r === 'admin' || r === 'moderator'); }
@@ -408,6 +414,21 @@ export async function totpDisable(password) {
   // Not just a flag: without two-step the server stops treating the account as
   // an admin, so roles and views change with it.
   await refreshSession();
+  return data;
+}
+
+// "Don't show this again" on the two-step reminder. Stored per account on the
+// server, so it holds on every device. A silent cache merge, not an
+// authchange: the router re-navigates on authchange, which would rebuild the
+// admin screen the person is using just to drop a notice.
+export async function dismissMfaReminder() {
+  const headers = await _csrfHeaders();
+  const res = await fetch('/auth/mfa-reminder/dismiss', {
+    method: 'POST', credentials: 'include', headers, body: '{}',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Could not save');
+  updateCachedUser({ mfa_reminder: false }, { silent: true });
   return data;
 }
 

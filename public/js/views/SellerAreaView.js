@@ -21,6 +21,7 @@ import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { isk, statusChip as accountChip, TIER_KEY } from './AdminAccountsView.js';
 import { drawerHtml, statusChip as statementChip } from '../components/CommissionStatement.js';
+import { renderMfaReminder } from '../components/mfaReminder.js';
 
 const SECTIONS = [
   { id: 'leads', flag: 'can_leads', label: 'seller.tab.leads' },
@@ -82,11 +83,16 @@ export class SellerAreaView {
       ? t('seller.publishedAt', { date: formatDateTime(publishedAt) })
       : t('seller.neverPublished');
 
+    // `mfa_ready` = the rest of the area answers this session: enrolled, or
+    // the instance does not REQUIRE enrolment (sellerRoutes.js rule 4 follows
+    // security.mfa.enrolment since mfa-reminder-2026-09-23). Under `optional`
+    // an unenrolled seller reads with a password and gets the dismissible
+    // reminder above the header instead of this block.
     let body;
     if (!mfaReady) {
       body = `<div class="seller-area__notice" role="status">
           <p>${escHtml(t('seller.mfaNeeded'))}</p>
-          <a class="btn btn--primary btn--sm" href="${escHtml(href('/profile'))}" data-testid="seller-mfa-link">${escHtml(t('seller.mfaCta'))}</a>
+          <a class="btn btn--primary btn--sm" href="${escHtml(href('/profile'))}?focus=2fa" data-testid="seller-mfa-link">${escHtml(t('seller.mfaCta'))}</a>
         </div>`;
     } else if (!sections.length) {
       body = `<p class="seller-area__muted">${escHtml(t('seller.noSections'))}</p>`;
@@ -109,6 +115,9 @@ export class SellerAreaView {
         <p class="seller-area__muted">${escHtml(t('seller.subtitle'))} ${escHtml(stamp)}</p>
       </header>
       ${body}`;
+
+    const reminder = renderMfaReminder();
+    if (reminder) this._inner().prepend(reminder);
 
     const tabs = [...this._el.querySelectorAll('.seller-area__tab')];
     tabs.forEach((btn, i) => {

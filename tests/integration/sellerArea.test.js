@@ -8,7 +8,9 @@
 //     the commission rates or the payee kennitala;
 //   • only a correctly signed, fresh, newer snapshot is applied;
 //   • a seller sees their own accounts and statements and nobody else's, only
-//     from a proven email, only with 2FA on;
+//     from a proven email — with a password under the default enrolment mode
+//     `optional`, only with 2FA on under `required` (rule 4 follows
+//     security.mfa.enrolment since mfa-reminder-2026-09-23);
 //   • on ops both routes do not exist.
 const request = require('supertest');
 const app = require('../../server/app');
@@ -99,9 +101,13 @@ beforeEach(async () => {
   expect(st.status).toBe(201);
 });
 
+const MODE_ENV = 'CLIENT_CONFIG_SECURITY_MFA_ENROLMENT';
+let modeBefore;
+beforeAll(() => { modeBefore = process.env[MODE_ENV]; });
 afterAll(() => {
   delete process.env.INSTANCE_ROLE;
   delete process.env.SELLER_PUBLISH_SECRET;
+  if (modeBefore === undefined) delete process.env[MODE_ENV]; else process.env[MODE_ENV] = modeBefore;
 });
 
 // Skipped as a whole on a product that hides, disables or forks the feature
@@ -210,6 +216,7 @@ describe('Seller API (public)', () => {
   const enrol = (id) => db.query('UPDATE users SET totp_enabled = TRUE WHERE id = $1', [id]);
 
   beforeEach(async () => {
+    delete process.env[MODE_ENV];
     asPublic();
     await publish();
     // On the public box the seller is an ordinary account with a matching email.
@@ -237,17 +244,43 @@ describe('Seller API (public)', () => {
     expect((await request(app).get(`${API}/me`).set('Cookie', squatter)).status).toBe(200);
   });
 
-  // Rule 4 in routes/sellerRoutes.js is the seller area's own gate and does
-  // not follow security.mfa.enrolment: this runs under the instance default,
-  // `optional` (mfa-optional-2026-09-23), and a seller still needs 2FA.
-  test('/me works before 2FA; everything else needs it — even with enrolment optional', async () => {
+  // Rule 4 in routes/sellerRoutes.js follows security.mfa.enrolment
+  // (mfa-reminder-2026-09-23). Under the instance default, `optional`, a
+  // seller without 2FA reads the area with a password and the session carries
+  // the reminder; under `required` everything but /me needs 2FA, as before.
+  test('optional (the default): a seller without 2FA reads the area, and is reminded', async () => {
     expect(require('../../server/auth/mfaPolicy').enrolmentMode()).toBe('optional');
+    const me = await request(app).get(`${API}/me`).set('Cookie', annaCookie);
+    expect(me.status).toBe(200);
+    expect(me.body).toMatchObject({ mfa_ready: true, seller: { email: 'anna@test.com', can_leads: true } });
+    expect(me.headers['cache-control']).toBe('no-store');
+    const leads = await request(app).get(`${API}/leads`).set('Cookie', annaCookie);
+    expect(leads.status).toBe(200);
+    expect(leads.body.leads).toHaveLength(2);
+    expect((await request(app).get(`${API}/accounts`).set('Cookie', annaCookie)).status).toBe(200);
+    expect((await request(app).get(`${API}/statements`).set('Cookie', annaCookie)).status).toBe(200);
+
+    const session = await request(app).get('/auth/session').set('Cookie', annaCookie);
+    expect(session.body.user).toMatchObject({ seller: true, mfa_enrolment_required: false, mfa_reminder: true });
+  });
+
+  test('required: /me works before 2FA; everything else needs it', async () => {
+    process.env[MODE_ENV] = 'required';
     const me = await request(app).get(`${API}/me`).set('Cookie', annaCookie);
     expect(me.status).toBe(200);
     expect(me.body).toMatchObject({ mfa_ready: false, seller: { email: 'anna@test.com', can_leads: true } });
     expect(me.headers['cache-control']).toBe('no-store');
     const leads = await request(app).get(`${API}/leads`).set('Cookie', annaCookie);
     expect(leads.status).toBe(403);
+    expect((await request(app).get(`${API}/accounts`).set('Cookie', annaCookie)).status).toBe(403);
+    expect((await request(app).get(`${API}/statements`).set('Cookie', annaCookie)).status).toBe(403);
+    // No reminder under `required` — the forced notice in the area applies.
+    const session = await request(app).get('/auth/session').set('Cookie', annaCookie);
+    expect(session.body.user.mfa_reminder).toBe(false);
+
+    await enrol('pub-anna');
+    expect((await request(app).get(`${API}/me`).set('Cookie', annaCookie)).body.mfa_ready).toBe(true);
+    expect((await request(app).get(`${API}/leads`).set('Cookie', annaCookie)).status).toBe(200);
   });
 
   test('with 2FA: all leads, OWN accounts and statements only', async () => {

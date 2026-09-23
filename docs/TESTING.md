@@ -30,6 +30,7 @@ _Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suit
 - **A prod bug that escaped the suite earns a permanent test** in the tier that would have caught it fastest — and if that test is critical-path, it joins the smoke list.
 - **Never delete inherited specs** (stack invariant: adapt, don't delete). Tiering reorganizes when tests run, never whether they exist.
 - `jest.unit.config.js` derives from `jest.config.js` — config drift between them is a bug. New unit specs must stay DB-free; a unit spec that needs Postgres belongs in `tests/integration/`.
+- **Playwright boots two servers on one database** (`playwright.config.js` `webServer` array, since 2026-09-23): the main one at `E2E_PORT` runs the instance defaults (two-factor enrolment `optional`); a second at `E2E_REQUIRED_PORT` (default `E2E_PORT + 1`) runs `security.mfa.enrolment = required` for `e2e/admin-totp-enrolment.spec.js`, which points at it with `test.use({ baseURL: process.env.E2E_REQUIRED_BASE_URL })`. A spec that needs another per-INSTANCE mode gets a server the same way — never a per-request test switch in production code. Check both ports are free before a local run.
 - **Engine tests read the product identity, never a brand literal** (`clientConfig.identity` server-side, `public/js/utils/identity.js` client-side, `e2e/lib/identity.js` in Playwright — the seam of 2026-09-22). A downstream that sets its `identity` block in `config/client.json` runs the engine's suites unchanged.
 
 ## The feature gate — suites of a hidden feature skip, never get deleted (2026-09-22)
@@ -225,7 +226,7 @@ together):
 | Job | Steps |
 |---|---|
 | `test` — Lint + Integration tests | `npm ci` · `npm audit --audit-level=high` · `npm run lint` · `npm run check:i18n` · runner spec · release-manifest schema · Jest transform cache · `npm run test:ci` (coverage) |
-| `e2e` — E2E tests (Playwright) | Chromium install (cached) · `npm run test:e2e` against a booted server, workers = the runner's CPUs (2), list + html reporters |
+| `e2e` — E2E tests (Playwright) | Chromium install (cached) · `npm run test:e2e` against two booted servers (ports 3000 and 3001 — the second runs 2FA enrolment `required`), workers = the runner's CPUs (2), list + html reporters |
 | `docker` — Docker build + boot smoke test | image build · Trivy (`HIGH,CRITICAL`, `ignore-unfixed`) · boot with `UPLOAD_ROOT` and `DB_SSL=false` declared · readiness probe |
 
 The jobs are deliberately not gated on each other. The `test` job has a

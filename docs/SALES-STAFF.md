@@ -65,9 +65,12 @@ kennitala). A `solufolk` trainee therefore sees Fyrirspurnir only.
 **Onboarding a seller to the area:** give them their role on ops as above,
 then on the PUBLIC site create their account with the **same email**
 (`/admin/customers` → Add customer sends the invite). They set a password,
-log in, and are sent to switch on two-factor sign-in — the area stays shut
-until they do. A self-signed-up account only matches after its email is
-verified.
+log in and see the area. Under the default two-factor mode (`optional`) a
+reminder above the area recommends switching on two-factor sign-in, with a
+"don't show this again" box; on an instance set to `required` they are sent to
+switch it on and the area stays shut until they do (`docs/ADMIN-2FA.md`,
+mfa-reminder-2026-09-23). A self-signed-up account only matches after its
+email is verified.
 
 **Publishing:** on ops, `npm run publish:sellers` (`-- --dry-run` lists who
 would be published). Run it after issuing the month's statements (due by the
