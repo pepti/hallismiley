@@ -273,7 +273,26 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the Organization `@type` stays `Organization` for every product (schema.org
   is fine with it for a personal site; a downstream does not fork it). `loadTemplate()` drops the baked Organization from
   `index.html` and the server emits it from the identity on every page, on the
-  `${APP_URL}/#organization` id everything references.
+  `${APP_URL}/#organization` id everything references. Its `description` is
+  a literal as written or, when it looks like an i18n key (`org.description`),
+  resolved per locale through the overlay; the og:image card every page falls
+  back to is `identity.organization.ogImage` ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)).
+- **A product's own routes are config, never a hook**
+  ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)): `identity.routes`
+  (`{ "/console": { titleKey, descriptionKey?, titleMode?, noindex?, locale? } }`)
+  is merged over `ROUTE_META` / `DEFAULT_META` in `ssrMeta.js` (a
+  `product:<route>` key; the entry replaces the engine row for that route
+  whole — no `site_content` override, no shop section; merged AFTER the literal
+  tables so the parity test's parser still reads them) and over the client
+  table in `pageTitle.js` (`routeMeta()` from the hand-off, in `titleForRoute`).
+  `noindex` → `publicSurface.js` `NOINDEX_ROUTES` / `isDeindexedRoute()`: the
+  `<meta robots>`, a robots.txt Disallow block and the sitemap filter read it
+  (exact routes — a noindex route may still sit in `surface.nav`; hidden routes
+  stay prefix-matched). `locale` → the lock (domain 5). `/manifest.json`
+  describes itself from `routes['/'].descriptionKey` when the landing is
+  re-described. The Service catalogue JSON-LD and the company click-throughs in
+  the suites run only while `/thjonusta` is public (`testServices`,
+  `testCompany`).
 - `pageTitle.js` mirrors `ssrMeta.js`; the parity test parses the server file
   (parts + `titleMode`) and guards that its own parser still matches, so a
   refactor cannot make it assert nothing; `composeTitle` on both sides is held
@@ -298,7 +317,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Canonical host derives from `APP_URL` (still hallismiley.is until the domain
   cutover — intentional, tracked in `PLAN.md`).
 
-**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit)
+**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)
 
 ## 4. Themes, scenes, ambience
 
@@ -386,6 +405,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   suite gets an expected API string or redirect target — the exact translated
   string, never a literal and never weakened. Only the party route's `/is/`
   stays literal (it is locale-locked).
+- **A locale lock has two sources, one reader**
+  ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)):
+  `server/config/i18n.js` `forcedLocaleFor(path)` answers the engine's party
+  lock first, then `identity.routes[*].locale` (prefix-aware like the party
+  lock; `/` locks the landing alone; a locale outside `SUPPORTED_LOCALES` is
+  ignored, never redirected into a loop). Every consumer — the `app.js` 301,
+  the SSR `<head>`, the locale middleware, the sitemap (`onlyLocale`) — asks
+  it; `public/js/i18n/i18n.js` mirrors it off the hand-off
+  (`utils/identity.js` `routeLockFor`), so the Router guard, `href()` and the
+  NavBar switcher follow. Suites ask `forcedLocaleFor(route)` before building
+  a path (`forcedLocaleFor(route) || LC`; `e2e/lib/identity.js` exports it):
+  a locked route 301s under the visitor-default prefix and is listed under
+  its own locale only.
 - IS is the visitor default here (`PUBLIC_DEFAULT_LOCALE`), and it comes from
   the identity seam — `identity.locale.publicDefault`, the env var still
   winning — on both sides (`server/config/i18n.js`; `public/js/i18n/i18n.js`
@@ -404,7 +436,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Two column conventions coexist: news bodies are `_is` siblings, sales guides
   are IS-canonical with `_en` siblings ([sales-staff](HISTORY.md#sales-staff)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)
 
 ## 6. Leads — Fyrirspurnir
 
@@ -910,15 +942,35 @@ company/                  gitignored: plans, decisions, logs, market-research st
   ENGINE (the schema defaults, the email/meta text with those defaults)
   compares `defaults()` or a temp `client.json`, never the resolved instance.
   Another product's feature folder is foreign wherever it is, and an os
-  feature claims `product-migrations/os.js`, never the folder.
+  feature claims `product-migrations/os.js`, never the folder. A Features
+  row in this file may link a foreign feature (the engine's own domain-3 row
+  links `features/os/company-content.md`, foreign in every downstream):
+  `architectureIndex.test.js` tolerates such a link — it must resolve to a
+  file — but never requires it ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)).
 - `identity.surface.nav` is a list of `{ route, labelKey }` records (schema
   type `object[]`, JSON in the env layer); `defaults()` hands out fresh
   records; the client merge takes a record list whole or not at all.
+  `identity.routes` and `identity.theme.swatches` are MAPS (schema type
+  `object`, JSON in the env layer, `$comment` keys dropped at any level,
+  `defaults()` hands out a fresh map; `identity-seam-3`): the server
+  validates every record (`validateRouteMeta`, `validateThemeSwatches`) and
+  the client merge (`resolveIdentity`) copies records with scalar fields only,
+  a non-object map falling back to `{}`. `server/config/identity.js`
+  `productRoutes()` / `utils/identity.js` `routeMeta()` normalise an entry
+  identically (`identityConfig.test.js` holds them equal).
+- **The sync tool regenerates the derived files** ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)):
+  `.engine-paths`, `.gitattributes` and `features/README.md` are written by
+  `scripts/features-index.js` and differ per repo, so
+  `site-factory/engine-sync.js` resolves a conflict on exactly those by running the
+  generator in the downstream and staging the result — never `--theirs`, which
+  would take the engine's product paths (`docs/ENGINE-SYNC.md` §6).
 - **The theme set validates `default ∈ picker` only** (identity-seam-2): the
   root may sit outside the picker (a two-theme product keeps `:root` as an
   unlisted base); `identity.theme.dark` names the ids that paint a dark page
-  and `themePrefs.js` `DARK_THEMES` reads it (an unknown id gets the neutral
-  token swatch). A feature whose registry `flag` resolves to `false` in the
+  and `themePrefs.js` `DARK_THEMES` reads it; `identity.theme.swatches`
+  (`{ id: { bg, fg } }`) feeds `swatchFor` over the engine map (an id neither
+  knows gets the neutral token swatch; identity-seam-3). `theme-boot.js` keeps
+  reading the `<html>` attributes only. A feature whose registry `flag` resolves to `false` in the
   client config is gated `disabled` by `tests/lib/featureGate.js`.
   `/robots.txt` is served by `robotsRoutes.js` with the Disallow lines from
   `hiddenRoutes` per locale; `public/robots.txt` is the engine default.

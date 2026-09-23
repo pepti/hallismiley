@@ -20,7 +20,7 @@
 // /privacy aliases, and /verkefni, hidden 2026-09-03 by Halli). A downstream
 // that wants its shop or its news back lists fewer routes there; it never
 // edits this file. This module was the hand-rolled ancestor of that seam.
-const { identity } = require('./identity');
+const { identity, productRoutes } = require('./identity');
 const HIDDEN_PUBLIC_ROUTES = identity.surface.hiddenRoutes.slice();
 
 // Prefix-aware: '/news' hides '/news/some-slug' too. Locale prefixes are the
@@ -31,6 +31,23 @@ function isHiddenRoute(pathname) {
   return HIDDEN_PUBLIC_ROUTES.some(
     base => pathname === base || pathname.startsWith(base + '/')
   );
+}
+
+// A product's own routes marked `noindex` (identity.routes, identity-seam-3;
+// LedgerLink's `/console` and `/original`). Exact routes, not prefixes: the
+// entry is one route's meta. Unlike a hidden route, a noindex route may still
+// be linked (it can sit in `surface.nav`); it just never reaches a crawler —
+// <meta robots noindex> (ssrMeta), a robots.txt Disallow, and never in the
+// sitemap.
+const NOINDEX_ROUTES = Object.entries(productRoutes())
+  .filter(([, e]) => e.noindex)
+  .map(([route]) => route);
+
+// Everything ssrMeta must mark noindex: the hidden surfaces (by prefix) plus
+// the product's noindex routes (exact).
+function isDeindexedRoute(pathname) {
+  if (!pathname) return false;
+  return isHiddenRoute(pathname) || NOINDEX_ROUTES.includes(pathname);
 }
 
 // The public IA (identity-seam-2, 2026-09-23): the ordered links after "Home"
@@ -47,4 +64,4 @@ const PUBLIC_NAV = identity.surface.nav
 // sitemap, never in the top nav. A product that hides one hides it here too.
 const LEGAL_ROUTES = ['/personuvernd', '/terms'].filter(r => !isHiddenRoute(r));
 
-module.exports = { HIDDEN_PUBLIC_ROUTES, PUBLIC_NAV, LEGAL_ROUTES, isHiddenRoute };
+module.exports = { HIDDEN_PUBLIC_ROUTES, NOINDEX_ROUTES, PUBLIC_NAV, LEGAL_ROUTES, isHiddenRoute, isDeindexedRoute };

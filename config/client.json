@@ -14,7 +14,8 @@
       "default": "ember",
       "root": "classic",
       "picker": ["ember", "classic", "midnight"],
-      "dark": ["ember", "midnight"]
+      "dark": ["ember", "midnight"],
+      "swatches": {}
     },
     "hero": {
       "clip": "/assets/videos/hero-dc7df-v2.mp4",
@@ -29,11 +30,15 @@
       "hiddenRoutes": ["/party", "/halli", "/about", "/news", "/shop", "/projects", "/contact", "/privacy", "/verkefni"],
       "hiddenAdminViews": ["products", "collections", "bins", "orders", "discounts", "sales", "pos", "background"]
     },
+    "routes": {
+      "$comment": "A product's OWN public routes' meta, merged over the engine's ROUTE_META/DEFAULT_META and pageTitle table (identity-seam-3): { \"/console\": { \"titleKey\": \"meta.console.title\", \"descriptionKey\": \"meta.console.description\", \"titleMode\": \"bare\"|\"suffix\", \"noindex\": true|false, \"locale\": \"is\"|null } }. The keys resolve through the i18n overlay (product.<locale>.json); noindex = <meta robots noindex> + a robots.txt Disallow + never in the sitemap; locale = locale-locked like the party pages (301 under any other prefix, one canonical, listed under its own locale only). Empty in the engine."
+    },
     "organization": {
       "email": "info@orangesmiley.is",
       "description": "Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.",
       "logo": "/favicon.svg",
       "image": "/og-image.jpg",
+      "ogImage": "/og-image.jpg",
       "addressLocality": "Hafnarfjörður",
       "addressCountry": "IS",
       "areaServed": "Iceland",

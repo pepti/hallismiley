@@ -93,6 +93,12 @@ const SCHEMA = {
       root:    { type: 'string',   default: 'classic', validate: validateThemeId },
       picker:  { type: 'string[]', default: ['ember', 'classic', 'midnight'], validate: validateThemeIds },
       dark:    { type: 'string[]', default: ['ember', 'midnight'], validate: validateThemeIdList },
+      // Optional picker swatches per theme id — `{ "<id>": { "bg": "#…", "fg":
+      // "#…" } }` (identity-seam-3): a product with its own theme ids paints
+      // its own swatches instead of the engine's neutral fallback.
+      // themePrefs.js `swatchFor` reads it; an id absent here keeps the
+      // engine's swatch (or the token-built neutral one).
+      swatches: { type: 'object', default: {}, validate: validateThemeSwatches },
     },
     hero: {
       // The home hero clip and its still. A new clip gets a NEW filename —
@@ -136,14 +142,42 @@ const SCHEMA = {
         validate: validateViewIds,
       },
     },
+    // A product's OWN public routes' meta (identity-seam-3, 2026-09-23):
+    // `{ "/console": { titleKey, descriptionKey?, titleMode?, noindex?,
+    // locale? } }`. Each entry is merged over the engine's route meta —
+    // ssrMeta.js `ROUTE_META`/`DEFAULT_META` server-side, pageTitle.js
+    // client-side — so a route the engine does not know (hallismiley's
+    // `/aron13ara`, LedgerLink's `/console`) or one it does (`/`) is titled,
+    // described, de-indexed or locale-locked from config, not from a hook.
+    //   titleKey / descriptionKey  i18n keys (engine table or the product
+    //                              overlay `product.<locale>.json`);
+    //   titleMode                  'suffix' (default: part + brand.titleSuffix,
+    //                              or `{brand}` substituted) | 'bare';
+    //   noindex                    true → <meta robots noindex>, a robots.txt
+    //                              Disallow, never in the sitemap;
+    //   locale                     'is' | 'en' → locale-locked like the party
+    //                              pages (config/i18n.js forcedLocaleFor):
+    //                              301 under any other prefix, one canonical,
+    //                              listed under its own locale only.
+    // An entry replaces the engine row for that route whole (no site_content
+    // meta override, no shop section). `$comment` keys inside are ignored.
+    routes: { type: 'object', default: {}, validate: validateRouteMeta },
     organization: {
       // The Organization JSON-LD every page's publisher/provider/author refs
       // resolve to (`${APP_URL}/#organization`). `name` is brand.legalName;
       // `url` and the @id derive from APP_URL at request time.
       email:           { type: 'string',   default: 'info@orangesmiley.is' },
+      // A literal, or (identity-seam-3) an i18n KEY (`org.description`) the
+      // product carries per locale in its `product.<locale>.json` overlay —
+      // ssrMeta's organizationSchema resolves a key through t() at request
+      // time and emits a literal as written.
       description:     { type: 'string',   default: 'Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.' },
       logo:            { type: 'string',   default: '/favicon.svg',  validate: validateAssetPath },
       image:           { type: 'string',   default: '/og-image.jpg', validate: validateAssetPath },
+      // The og:image card every page falls back to (the Organization `image`
+      // above is the entity's picture — the same file here, not the same
+      // idea; identity-seam-3). ssrMeta's OG_IMAGE_PATH reads it.
+      ogImage:         { type: 'string',   default: '/og-image.jpg', validate: validateAssetPath },
       addressLocality: { type: 'string',   default: 'Hafnarfjörður' },
       addressCountry:  { type: 'string',   default: 'IS' },
       areaServed:      { type: 'string',   default: 'Iceland' },
@@ -290,6 +324,46 @@ function validateNavEntries(list) {
   return bad.length ? `has entries that are not { route: "/bare-route", labelKey: "nav.key" } (${bad.join(', ')})` : null;
 }
 
+// identity.routes — a map of bare route (or '/') → the route's meta record.
+// Every field is optional except titleKey; nothing else is read, so nothing
+// else is accepted. A locale is shape-checked here; whether it is SUPPORTED
+// is config/i18n.js's concern (an unsupported lock is ignored there).
+const ROUTE_FIELDS = new Set(['titleKey', 'descriptionKey', 'titleMode', 'noindex', 'locale']);
+function validateRouteMeta(map) {
+  const bad = [];
+  for (const [route, e] of Object.entries(map)) {
+    if (route !== '/' && (!NAV_ROUTE_RE.test(route) || route.endsWith('/'))) { bad.push(`${route}: not a bare route`); continue; }
+    if (!isPlainObject(e)) { bad.push(`${route}: not an object`); continue; }
+    if (typeof e.titleKey !== 'string' || !I18N_KEY_RE.test(e.titleKey)) { bad.push(`${route}: titleKey must be an i18n key`); continue; }
+    if (e.descriptionKey !== undefined && (typeof e.descriptionKey !== 'string' || !I18N_KEY_RE.test(e.descriptionKey))) bad.push(`${route}: descriptionKey must be an i18n key`);
+    else if (e.titleMode !== undefined && e.titleMode !== 'bare' && e.titleMode !== 'suffix') bad.push(`${route}: titleMode must be "bare" or "suffix"`);
+    else if (e.noindex !== undefined && typeof e.noindex !== 'boolean') bad.push(`${route}: noindex must be a boolean`);
+    else if (e.locale !== undefined && e.locale !== null && (typeof e.locale !== 'string' || validateLocaleId(e.locale))) bad.push(`${route}: locale must be a locale id or null`);
+    else {
+      const unknown = Object.keys(e).filter(k => !ROUTE_FIELDS.has(k));
+      if (unknown.length) bad.push(`${route}: unknown field ${unknown.join(', ')}`);
+    }
+  }
+  return bad.length
+    ? `has entries that are not { "/route": { titleKey, descriptionKey?, titleMode?, noindex?, locale? } } (${bad.join('; ')})`
+    : null;
+}
+
+// identity.theme.swatches — theme id → { bg, fg }, each a CSS colour. Kept to
+// the characters a colour literal needs; the values land in a CSS custom
+// property, never in markup.
+const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla)\([0-9 ,.%/]+\)|[a-z]+)$/i;
+function validateThemeSwatches(map) {
+  const bad = [];
+  for (const [id, s] of Object.entries(map)) {
+    if (!THEME_ID_RE.test(id)) { bad.push(`${id}: not a theme id`); continue; }
+    if (!isPlainObject(s) || typeof s.bg !== 'string' || typeof s.fg !== 'string') { bad.push(`${id}: needs { bg, fg }`); continue; }
+    if (!CSS_COLOR_RE.test(s.bg) || !CSS_COLOR_RE.test(s.fg) || !s.bg.trim() || !s.fg.trim()) bad.push(`${id}: bg/fg must be CSS colours`);
+    else if (Object.keys(s).some(k => k !== 'bg' && k !== 'fg')) bad.push(`${id}: unknown field`);
+  }
+  return bad.length ? `has entries that are not { "<theme id>": { bg, fg } } (${bad.join('; ')})` : null;
+}
+
 // Admin view ids are lowercase words (server/auth/adminViews.js). Whether each
 // one EXISTS is checked by tests/unit/admin-surface-parity.test.js against the
 // resolved config — this module stays dependency-free.
@@ -344,7 +418,7 @@ function defaultsFrom(node) {
   const out = {};
   for (const [key, child] of Object.entries(node)) {
     out[key] = isLeaf(child)
-      ? (Array.isArray(child.default) ? child.default.map(cloneValue) : child.default)
+      ? (Array.isArray(child.default) ? child.default.map(cloneValue) : cloneDeep(child.default))
       : defaultsFrom(child);
   }
   return out;
@@ -352,6 +426,22 @@ function defaultsFrom(node) {
 
 function cloneValue(v) {
   return isPlainObject(v) ? { ...v } : v;
+}
+
+// JSON-shaped values only (what a config file or an env var can carry).
+function cloneDeep(v) {
+  if (Array.isArray(v)) return v.map(cloneDeep);
+  if (isPlainObject(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, cloneDeep(x)]));
+  return v;
+}
+
+// Drop `$schema`/`$comment` keys at every level of a (fresh) plain object.
+function stripMeta(v) {
+  if (Array.isArray(v)) return v.map(stripMeta);
+  if (!isPlainObject(v)) return v;
+  const out = {};
+  for (const [k, x] of Object.entries(v)) if (!META_KEYS.has(k)) out[k] = stripMeta(x);
+  return out;
 }
 
 function getIn(obj, segments) {
@@ -424,6 +514,20 @@ function coerce(leaf, raw) {
       }
       if (!Array.isArray(list) || !list.every(isPlainObject)) return { error: 'must be an array of objects' };
       return { value: list.map(cloneValue) };
+    }
+
+    // A map keyed by the product (the route meta, the theme swatches). From
+    // JSON it is an object; an env var carries it as a JSON string. `$comment`
+    // keys inside — on the map or on a record — are documentation, like
+    // everywhere else in the file. What the records must hold is the leaf
+    // validator's job.
+    case 'object': {
+      let obj = raw;
+      if (typeof raw === 'string') {
+        try { obj = JSON.parse(raw.trim()); } catch { return { error: 'must be a JSON object' }; }
+      }
+      if (!isPlainObject(obj)) return { error: 'must be an object' };
+      return { value: stripMeta(cloneDeep(obj)) };
     }
 
     /* istanbul ignore next — unreachable while every leaf uses a type above */

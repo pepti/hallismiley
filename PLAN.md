@@ -174,10 +174,29 @@ chunk lands; add a HISTORY entry for the story.
   moves there. Still literal, by design: the seeded company copy (product
   migrations), `SERVICE_OFFERINGS` + the Rekstrarkerfið entry in the Service
   JSON-LD (company content in `ssrMeta.js`), the `classic` palette hues, the
-  static `public/manifest.json` colours; a product with more themes than the
-  engine adds its own `THEME_SWATCHES` entries (unknown ids get a neutral
-  swatch). Not done, deliberately: a product slot for its OWN public routes'
-  meta (a hook in `ROUTE_META` is still needed for e.g. `/aron13ara`).
+  static `public/manifest.json` colours. Third iteration landed 2026-09-23
+  ([identity-seam-3-2026-09-23](docs/HISTORY.md#identity-seam-3-2026-09-23)):
+  `identity.routes` (a product's own routes' title/description keys, `bare`,
+  `noindex`, `locale`, merged over ssrMeta/pageTitle and read by the locale
+  lock, robots, sitemap and manifest), `organization.description` as an i18n
+  key per locale, `organization.ogImage`, `theme.swatches`; the last
+  engine-site pins gated; site-factory `engine-sync.js` (`feat/engine-sync-regen`,
+  `1e186fe`, not pushed) regenerates `.engine-paths`/`.gitattributes` on
+  conflict. **Hooks that close on each downstream's next sync**: hallismiley —
+  the `/aron13ara` rows in `ssrMeta.js` + `pageTitle.js`, the IS-only lock in
+  `config/i18n.js` + the client mirror, the `localeLock*` cases, the six
+  `engine-sync-2`-marked test lines, the Features-row link (→ `routes:
+  { "/aron13ara": { titleKey, titleMode: "bare", locale: "is" } }` + overlay
+  keys; keep re-running `aron13.spec.js` ×2); LedgerLink — the `/`, `/console`,
+  `/original` rows and the `{brand} — The invoice is already there.` part, the
+  two swatches in `themePrefs.js`, the `identityDownstream` / `pageTitle.test`
+  re-applies; rekstrarkerfid — the landing/eiginleikar/verdskra/um-kerfid
+  rows, the per-locale Organization description, the OG-card path, the
+  swatches, `identityConfig`/`i18nIdentity`/`featureGate` hand edits. Still
+  open, on purpose: rk's `html.js` mark in `theme-boot.js` (rk's own); a
+  crawler-summary hook for a product landing; the sitemap beyond nav + legal
+  (hallismiley's `/shop/products` etc.); the `/party` nav link's class/aria;
+  `classic` as Bjart; `APP_URL` on every downstream's App Service.
 - First upward harvest landed 2026-09-23 ([harvest-rk-totp-2026-09-23](docs/HISTORY.md#harvest-rk-totp-2026-09-23)):
   mandatory 2FA enrolment + TOTP secret sealed at rest (migration 107). Open:
   (a) **before the first deploy of 107, create `TOTP_ENC_KEY` in the instance's

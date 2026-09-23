@@ -16,7 +16,7 @@
 
 const express = require('express');
 const { forcedLocaleFor } = require('../config/i18n');
-const { PUBLIC_NAV, LEGAL_ROUTES } = require('../config/publicSurface');
+const { PUBLIC_NAV, LEGAL_ROUTES, NOINDEX_ROUTES } = require('../config/publicSurface');
 
 const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
@@ -24,13 +24,15 @@ const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/
 // (identity-seam-2, 2026-09-23): the home page (with an extra x-default entry,
 // it is the locale-selection landing), then the nav routes of
 // `identity.surface.nav` in nav order, then the engine's legal pages — each
-// list already minus `identity.surface.hiddenRoutes` (config/publicSurface.js).
+// list already minus `identity.surface.hiddenRoutes` (config/publicSurface.js)
+// and minus any route the product marks `noindex` in `identity.routes`
+// (identity-seam-3: a noindex page may be linked, never advertised).
 // Nothing here is a route literal, so a downstream's sitemap is its own nav.
 const STATIC_ROUTES = [
   { path: '', priority: '1.0', changefreq: 'monthly', includeXDefault: true },
   ...PUBLIC_NAV.map(e => ({ path: e.route, priority: '0.8', changefreq: 'monthly' })),
   ...LEGAL_ROUTES.map(r => ({ path: r, priority: '0.3', changefreq: 'yearly' })),
-];
+].filter(r => !NOINDEX_ROUTES.includes(r.path || '/'));
 
 // XML escaping — URLs can contain &, <, > via slugs in principle even
 // though the DB constraints should forbid it. Cheap safety net.

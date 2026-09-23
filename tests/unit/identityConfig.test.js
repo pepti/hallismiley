@@ -29,9 +29,11 @@ const path = require('path');
 
 const { resolveConfig, defaults } = require('../../server/config/clientConfig');
 const {
-  htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
+  htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames, productRoutes, organizationDescription,
 } = require('../../server/config/identity');
-const { IDENTITY_DEFAULTS, resolveIdentity, publicNav, isHiddenRoute } = require('../../public/js/utils/identity.js');
+const {
+  IDENTITY_DEFAULTS, resolveIdentity, publicNav, isHiddenRoute, routeMeta, routeLockFor,
+} = require('../../public/js/utils/identity.js');
 
 const resolve = (fileConfig = {}, env = {}) => resolveConfig({ fileConfig, env });
 const { role } = JSON.parse(fs.readFileSync(path.join(__dirname, '../../engine.json'), 'utf8'));
@@ -47,7 +49,7 @@ const ORANGE_SMILEY = {
     titleSuffix: ' — Orange Smiley',
   },
   locale: { publicDefault: 'is' },
-  theme: { default: 'ember', root: 'classic', picker: ['ember', 'classic', 'midnight'], dark: ['ember', 'midnight'] },
+  theme: { default: 'ember', root: 'classic', picker: ['ember', 'classic', 'midnight'], dark: ['ember', 'midnight'], swatches: {} },
   hero: {
     clip: '/assets/videos/hero-dc7df-v2.mp4',
     poster: '/assets/videos/hero-dc7df-v2-poster.jpg',
@@ -61,11 +63,14 @@ const ORANGE_SMILEY = {
     hiddenRoutes: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
     hiddenAdminViews: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
   },
+  // The engine has no routes of its own beyond ROUTE_META (identity-seam-3).
+  routes: {},
   organization: {
     email: 'info@orangesmiley.is',
     description: 'Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.',
     logo: '/favicon.svg',
     image: '/og-image.jpg',
+    ogImage: '/og-image.jpg',
     addressLocality: 'Hafnarfjörður',
     addressCountry: 'IS',
     areaServed: 'Iceland',
@@ -98,6 +103,8 @@ describe('identity — the engine defaults are Orange Smiley, pinned once', () =
     const a = defaults().identity;
     a.surface.nav[0].route = '/mutated';
     a.surface.hiddenRoutes.push('/mutated');
+    a.routes['/mutated'] = { titleKey: 'x.y' };
+    a.theme.swatches.mutated = { bg: '#000', fg: '#fff' };
     expect(plain(ENGINE())).toEqual(ORANGE_SMILEY);
   });
 
@@ -131,10 +138,84 @@ describe('identity — validation', () => {
   });
 
   test('a coherent non-default set is accepted as given', () => {
-    const theme = { default: 'glacier', root: 'classic', picker: ['glacier', 'classic', 'midnight', 'ember', 'lava', 'moss'], dark: ['midnight', 'ember', 'lava'] };
+    const theme = { default: 'glacier', root: 'classic', picker: ['glacier', 'classic', 'midnight', 'ember', 'lava', 'moss'], dark: ['midnight', 'ember', 'lava'], swatches: {} };
     const { config, warnings } = resolve({ identity: { theme } });
     expect(warnings).toEqual([]);
     expect(plain(config.identity.theme)).toEqual(theme);
+  });
+
+  test('theme.swatches is a map of theme id → { bg, fg } CSS colours (identity-seam-3)', () => {
+    const swatches = { ledgerlink: { bg: '#0B1A2B', fg: 'rgb(255, 209, 102)' }, 'black-sand': { bg: '#111', fg: '#eee' } };
+    const ok = resolve({ identity: { theme: { swatches } } });
+    expect(ok.warnings).toEqual([]);
+    expect(plain(ok.config.identity.theme.swatches)).toEqual(swatches);
+    // The env layer carries it as JSON.
+    expect(resolve({}, { CLIENT_CONFIG_IDENTITY_THEME_SWATCHES: JSON.stringify(swatches) }).config.identity.theme.swatches).toEqual(swatches);
+
+    for (const bad of [
+      { 'Bad Id': { bg: '#000', fg: '#fff' } },     // not a theme id
+      { ember: { bg: '#000' } },                    // fg missing
+      { ember: { bg: '#000', fg: 'url(x)' } },      // not a colour literal
+      { ember: { bg: '#000', fg: '#fff', x: 1 } },  // unknown field
+      { ember: '#000' },                            // not a record
+    ]) {
+      const { config, warnings } = resolve({ identity: { theme: { swatches: bad } } });
+      expect(warnings).toEqual([expect.stringMatching(/identity\.theme\.swatches has entries that are not/)]);
+      expect(config.identity.theme.swatches).toEqual({});
+    }
+    expect(resolve({ identity: { theme: { swatches: ['x'] } } }).warnings).toEqual([expect.stringMatching(/identity\.theme\.swatches must be an object/)]);
+  });
+
+  test('identity.routes is a map of route → { titleKey, descriptionKey?, titleMode?, noindex?, locale? } (identity-seam-3)', () => {
+    const routes = {
+      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description' },
+      '/console':   { titleKey: 'meta.console.title', titleMode: 'bare', noindex: true },
+      '/original':  { titleKey: 'meta.original.title', noindex: true, $comment: 'ignored, like everywhere in the file' },
+      '/aron13ara': { titleKey: 'meta.aron13.title', titleMode: 'bare', locale: 'is' },
+      '/verkefni':  { titleKey: 'meta.projects.title', locale: null },
+    };
+    const ok = resolve({ identity: { routes } });
+    expect(ok.warnings).toEqual([]);
+    const got = plain(ok.config.identity.routes);
+    expect(got['/original']).toEqual({ titleKey: 'meta.original.title', noindex: true }); // $comment dropped
+    expect(Object.keys(got)).toEqual(Object.keys(routes));
+    expect(resolve({ identity: { routes: { $comment: 'only prose' } } }).config.identity.routes).toEqual({});
+    // The env layer carries it as JSON.
+    const env = resolve({}, { CLIENT_CONFIG_IDENTITY_ROUTES: '{"/console":{"titleKey":"meta.console.title","noindex":true}}' });
+    expect(env.warnings).toEqual([]);
+    expect(env.config.identity.routes).toEqual({ '/console': { titleKey: 'meta.console.title', noindex: true } });
+    expect(resolve({}, { CLIENT_CONFIG_IDENTITY_ROUTES: 'not json' }).warnings).toEqual([expect.stringMatching(/identity\.routes must be a JSON object/)]);
+
+    for (const [bad, why] of [
+      [{ 'console': { titleKey: 'meta.console.title' } }, /not a bare route/],           // no leading slash
+      [{ '/console/': { titleKey: 'meta.console.title' } }, /not a bare route/],         // trailing slash
+      [{ '/en/console': { titleKey: 'meta.console.title' } }, /titleKey|not a bare route/], // a locale prefix is a segment; the shape passes, the lock ignores it — but the key must be an i18n key
+      [{ '/console': 'Console' }, /not an object/],
+      [{ '/console': {} }, /titleKey must be an i18n key/],
+      [{ '/console': { titleKey: 'Console' } }, /titleKey must be an i18n key/],
+      [{ '/console': { titleKey: 'meta.console.title', descriptionKey: 'x' } }, /descriptionKey/],
+      [{ '/console': { titleKey: 'meta.console.title', titleMode: 'plain' } }, /titleMode/],
+      [{ '/console': { titleKey: 'meta.console.title', noindex: 'yes' } }, /noindex/],
+      [{ '/console': { titleKey: 'meta.console.title', locale: 'Icelandic' } }, /locale/],
+      [{ '/console': { titleKey: 'meta.console.title', extra: 1 } }, /unknown field extra/],
+    ]) {
+      const { config, warnings } = resolve({ identity: { routes: bad } });
+      if (bad['/en/console']) { // a valid shape: '/en/console' is just a route to the schema
+        expect(warnings).toEqual([]);
+        continue;
+      }
+      expect(warnings).toEqual([expect.stringMatching(/identity\.routes has entries that are not/)]);
+      expect(warnings[0]).toMatch(why);
+      expect(config.identity.routes).toEqual({});
+    }
+  });
+
+  test('organization.ogImage is an asset path; the Organization image stays its own field', () => {
+    expect(resolve({ identity: { organization: { ogImage: '/og-rk.jpg' } } }).config.identity.organization.ogImage).toBe('/og-rk.jpg');
+    const { config, warnings } = resolve({ identity: { organization: { ogImage: 'og.jpg' } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.organization\.ogImage must be a site-relative path/)]);
+    expect(config.identity.organization.ogImage).toBe('/og-image.jpg');
+    expect(config.identity.organization.image).toBe('/og-image.jpg');
   });
 
   test('dark is a list of theme ids and may be empty', () => {
@@ -310,6 +391,64 @@ describe('identity — the hand-off to the browser', () => {
     expect(resolveIdentity({ surface: { nav: ['/news'] } }).surface.nav).toEqual(ORANGE_SMILEY.surface.nav);
     expect(plain(resolveIdentity(null))).toEqual(ORANGE_SMILEY);
     expect(plain(resolveIdentity(undefined))).toEqual(ORANGE_SMILEY);
+  });
+
+  test('the client merges the maps — routes and theme.swatches — record by record (identity-seam-3)', () => {
+    const merged = resolveIdentity({
+      routes: {
+        '/console': { titleKey: 'meta.console.title', titleMode: 'bare', noindex: true, locale: null, fn: () => 1, nested: { x: 1 } },
+        '/broken': 'not a record',
+      },
+      theme: { swatches: { ledgerlink: { bg: '#0B1A2B', fg: '#FFD166' }, bad: 'x' } },
+      organization: { ogImage: '/og-ll.jpg' },
+    });
+    expect(merged.routes).toEqual({ '/console': { titleKey: 'meta.console.title', titleMode: 'bare', noindex: true, locale: null } });
+    expect(merged.theme.swatches).toEqual({ ledgerlink: { bg: '#0B1A2B', fg: '#FFD166' } });
+    expect(merged.organization.ogImage).toBe('/og-ll.jpg');
+    // A map that is not an object falls back to the empty default, never to null.
+    expect(resolveIdentity({ routes: null }).routes).toEqual({});
+    expect(resolveIdentity({ routes: ['/x'] }).routes).toEqual({});
+    expect(resolveIdentity({ theme: { swatches: null } }).theme.swatches).toEqual({});
+    expect(resolveIdentity({ theme: { swatches: 'x' } }).theme.swatches).toEqual({});
+  });
+
+  test('productRoutes (server) and routeMeta (client) normalise an entry the same way', () => {
+    const { config } = resolve({ identity: { routes: {
+      '/console':   { titleKey: 'meta.console.title', titleMode: 'bare', noindex: true },
+      '/aron13ara': { titleKey: 'meta.aron13.title', locale: 'is' },
+      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description' },
+    } } });
+    const server = productRoutes(config.identity);
+    expect(server).toEqual({
+      '/console':   { titleKey: 'meta.console.title', descriptionKey: null, titleMode: 'bare',   noindex: true,  locale: null },
+      '/aron13ara': { titleKey: 'meta.aron13.title',  descriptionKey: null, titleMode: 'suffix', noindex: false, locale: 'is' },
+      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description', titleMode: 'suffix', noindex: false, locale: null },
+    });
+    const client = resolveIdentity(config.identity);
+    for (const route of Object.keys(server)) expect(routeMeta(route, client)).toEqual(server[route]);
+    expect(routeMeta('/nope', client)).toBeNull();
+    expect(productRoutes(ENGINE())).toEqual({});
+    expect(routeMeta('/', resolveIdentity(ENGINE()))).toBeNull();
+    // The client lock mirrors the server's rule: prefix-aware, '/' exact.
+    expect(routeLockFor('/aron13ara', client)).toBe('is');
+    expect(routeLockFor('/aron13ara/x', client)).toBe('is');
+    expect(routeLockFor('/aron13arax', client)).toBeNull();
+    expect(routeLockFor('/console', client)).toBeNull();
+    const landing = resolveIdentity({ routes: { '/': { titleKey: 'meta.landing.title', locale: 'en' } } });
+    expect(routeLockFor('/', landing)).toBe('en');
+    expect(routeLockFor('/anything', landing)).toBeNull();
+  });
+
+  test('organizationDescription: a literal as written, an i18n key through the tables', () => {
+    const tables = { is: { 'org.description': 'Íslenskt' }, en: { 'org.description': 'Icelandic' } };
+    const i18n = { has: (lc, k) => tables[lc][k] !== undefined, t: (lc, k) => tables[lc][k] };
+    expect(organizationDescription('is', i18n, ENGINE())).toBe(ORANGE_SMILEY.organization.description);
+    const { config } = resolve({ identity: { organization: { description: 'org.description' } } });
+    expect(organizationDescription('is', i18n, config.identity)).toBe('Íslenskt');
+    expect(organizationDescription('en', i18n, config.identity)).toBe('Icelandic');
+    // A key the tables do not carry is emitted as written — never the empty string.
+    const missing = resolve({ identity: { organization: { description: 'org.missing' } } }).config.identity;
+    expect(organizationDescription('en', i18n, missing)).toBe('org.missing');
   });
 
   test('publicNav (client) is the nav minus the hidden routes, prefix-aware like the server', () => {
