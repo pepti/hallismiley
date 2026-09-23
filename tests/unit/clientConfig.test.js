@@ -380,6 +380,36 @@ describe('clientConfig — boot log', () => {
   });
 });
 
+describe('clientConfig — security.mfa.enrolment (mfa-optional-2026-09-23)', () => {
+  test('defaults to optional — an instance that says nothing forces no one to enrol', () => {
+    expect(resolve({}).config.security.mfa.enrolment).toBe('optional');
+  });
+
+  test('the file or CLIENT_CONFIG_SECURITY_MFA_ENROLMENT can require it', () => {
+    expect(envNameFor(['security', 'mfa', 'enrolment'])).toBe('CLIENT_CONFIG_SECURITY_MFA_ENROLMENT');
+    expect(resolve({ security: { mfa: { enrolment: 'required' } } }).config.security.mfa.enrolment).toBe('required');
+    const { config, warnings } = resolve({}, { CLIENT_CONFIG_SECURITY_MFA_ENROLMENT: 'required' });
+    expect(config.security.mfa.enrolment).toBe('required');
+    expect(warnings).toEqual([]);
+  });
+
+  test('anything else warns and keeps optional', () => {
+    const { config, warnings } = resolve({ security: { mfa: { enrolment: 'always' } } });
+    expect(config.security.mfa.enrolment).toBe('optional');
+    expect(warnings).toEqual([expect.stringContaining('must be one of optional, required')]);
+  });
+
+  // hallismiley (engine-sync-3): an engine-only pin. The engine's committed file
+  // spells `optional` out; a downstream that leaves it unset (the instruction
+  // here) must still resolve to it.
+  test('this instance spells out optional (Halli, 2026-09-23)', () => {
+    const { fileConfig } = loadFileConfig();
+    const { role } = JSON.parse(fs.readFileSync(path.join(__dirname, '../../engine.json'), 'utf8'));
+    if (role === 'engine') expect(fileConfig.security.mfa.enrolment).toBe('optional');
+    else expect(resolve(fileConfig, {}).config.security.mfa.enrolment).toBe('optional');
+  });
+});
+
 describe('clientConfig — no secrets in the schema', () => {
   test('the live schema holds nothing secret-shaped', () => {
     expect(secretShapedPaths()).toEqual([]);

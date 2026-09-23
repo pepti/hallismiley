@@ -1,5 +1,5 @@
 {
-  "$comment": "Per-instance configuration for hallismiley.is (Halli's portfolio site, engine downstream since the 2026-09-22 graft). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. The `identity` block (engine D-021 seam, 2026-09-22) is what makes this instance Halli's site and not the company's: brand, visitor locale, theme trio, hero clip, hidden surfaces, Organization record (docs/ENGINE-SYNC.md §6). Values restored from the pre-graft base (f7d93b9): WebSite schema name/alternateName, DEFAULT_THEME 'classic' with the six-theme picker of 081_user_theme, the waterfall hero, the Person schema's sameAs. surface.nav is the public IA the base shipped in its top nav (f7d93b9: /projects, /shop, /news, /halli, /contact, /party — identity-seam-2, 2026-09-23); the NavBar, both footers, the sitemap and robots.txt derive from it. hiddenRoutes hides the Orange Smiley company pages (+ /aron13ara, unlisted on purpose) only. theme.dark names the five colour themes, all dark, for the picker rims. selfUpdate stays 'managed' (observe, never act) — hallismiley deploys itself from its own CI on green main, so the fleet updater must not swap its image.",
+  "$comment": "Per-instance configuration for hallismiley.is (Halli's portfolio site, engine downstream since the 2026-09-22 graft). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. The `identity` block (engine D-021 seam, 2026-09-22) is what makes this instance Halli's site and not the company's: brand, visitor locale, theme trio, hero clip, hidden surfaces, Organization record (docs/ENGINE-SYNC.md §6). Values restored from the pre-graft base (f7d93b9): WebSite schema name/alternateName, DEFAULT_THEME 'classic' with the six-theme picker of 081_user_theme, the waterfall hero, the Person schema's sameAs. surface.nav is the public IA the base shipped in its top nav (f7d93b9: /projects, /shop, /news, /halli, /contact, /party — identity-seam-2, 2026-09-23); the NavBar, both footers, the sitemap and robots.txt derive from it. hiddenRoutes hides the Orange Smiley company pages (+ /aron13ara, unlisted on purpose) only; routes carries /aron13ara's meta, noindex and Icelandic lock (identity-seam-3). theme.dark names the five colour themes, all dark, for the picker rims. selfUpdate stays 'managed' (observe, never act) — hallismiley deploys itself from its own CI on green main, so the fleet updater must not swap its image.",
   "identity": {
     "brand": {
       "name": "Halli Smiley",
@@ -71,6 +71,16 @@
         "/aron13ara"
       ],
       "hiddenAdminViews": []
+    },
+    "routes": {
+      "$comment": "This repo's own public routes (engine identity-seam-3, 2026-09-23): /aron13ara, Aron's hidden birthday page, is titled bare from meta.aron13.* in product.<locale>.json, noindexed (meta robots, robots.txt Disallow, never in the sitemap) and locked to Icelandic. Replaces the hooks it had in ssrMeta.js, pageTitle.js and both i18n.js files; its view is still wired in router.js.",
+      "/aron13ara": {
+        "titleKey": "meta.aron13.title",
+        "descriptionKey": "meta.aron13.description",
+        "titleMode": "bare",
+        "noindex": true,
+        "locale": "is"
+      }
     },
     "organization": {
       "email": "halli@hallismiley.is",

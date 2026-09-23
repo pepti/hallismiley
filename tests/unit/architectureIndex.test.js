@@ -238,18 +238,27 @@ describe('cited migrations are exactly the applied ones', () => {
 describe('every feature file is linked from its domain\'s Features row', () => {
   // "<domain>:<id>" pairs from the registry and from the `| Features |` rows.
   // Another product's folder (features/os/ in a downstream) is inert: its
-  // features are not this repo's to document, so ARCHITECTURE need not link them.
+  // features are not this repo's to document, so ARCHITECTURE need not link
+  // them — and since docs/ARCHITECTURE.md is engine-owned and arrives by
+  // merge, a row that DOES link a foreign feature (the engine's own row links
+  // features/os/company-content.md, foreign in every downstream) is allowed
+  // but not required (identity-seam-3): the link must still resolve to a file.
+  const { productId } = require('../../scripts/features-index');
+  const product = productId(ROOT);
+  const isForeign = (file) => { const m = file.match(/^features\/([^/]+)\//); return !!m && m[1] !== product; };
   const registry = new Set(loadFeatures(ROOT).filter((f) => !f.foreign).map((f) => `${f.domain}:${f.id}`));
   const rows = new Set();
+  const foreignLinks = [];
   let domain = null;
   for (const line of ARCH.split('\n')) {
     const h = line.match(/^## (\d+)\. /);
     if (h) domain = h[1];
     if (!/^\| Features \|/.test(line)) continue;
     for (const m of line.matchAll(/\[([\w-]+)\]\(\.\.\/(features\/[\w/-]+\.md)\)/g)) {
-      rows.add(`${domain}:${m[1]}`);
       expect(fs.existsSync(path.join(ROOT, m[2]))).toBe(true);
       expect(path.posix.basename(m[2], '.md')).toBe(m[1]);
+      if (isForeign(m[2])) { foreignLinks.push(m[2]); continue; }
+      rows.add(`${domain}:${m[1]}`);
     }
   }
 
@@ -262,5 +271,13 @@ describe('every feature file is linked from its domain\'s Features row', () => {
   test('the Features rows list exactly the registry, per domain', () => {
     expect(diff(registry, rows)).toEqual([]);
     expect(diff(rows, registry)).toEqual([]);
+  });
+
+  test('a foreign feature link is tolerated, never counted (the engine has none of its own)', () => {
+    // In the engine every features/<p>/ folder is its own product's, so no
+    // link is foreign here; in a downstream the engine's os row is.
+    const { role } = JSON.parse(fs.readFileSync(path.join(ROOT, 'engine.json'), 'utf8'));
+    if (role === 'engine') expect(foreignLinks).toEqual([]);
+    for (const f of foreignLinks) expect(rows.has(`3:${path.posix.basename(f, '.md')}`)).toBe(false);
   });
 });

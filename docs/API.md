@@ -301,6 +301,12 @@ Root-level operational routes: `GET /health` (liveness, no DB), `GET /ready`
 (DB + breaker + memory, `503` when not ready), `GET /metrics`
 (`Authorization: Bearer <METRICS_TOKEN>`), `POST /csp-report`.
 
+Root-level discovery routes, all public and cached 10 minutes:
+`GET /sitemap.xml` (the advertised surface with `<lastmod>` from
+`site_content`), `GET /llms.txt` (the product summary for AI assistants),
+`GET /robots.txt`, `GET /manifest.json` — `sitemapRoutes.js`,
+`robotsRoutes.js`, `manifestRoutes.js`; [ARCHITECTURE §3](ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo).
+
 ---
 
 ## Admin setup

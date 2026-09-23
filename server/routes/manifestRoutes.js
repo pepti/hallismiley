@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { identity } = require('../config/identity');
+const { identity, productRoutes } = require('../config/identity');
 const { PUBLIC_DEFAULT_LOCALE } = require('../config/i18n');
 const { t } = require('../i18n');
 
@@ -32,13 +32,17 @@ function baseManifest() {
   return _base;
 }
 
-/** The manifest for this product — pure over the identity, for the tests. */
+/** The manifest for this product — pure over the identity, for the tests.
+ *  The description is the landing page's: `identity.routes['/']
+ *  .descriptionKey` when the product re-describes its landing
+ *  (identity-seam-3), else the engine's `meta.home.description`. */
 function buildManifest(id = identity, locale = PUBLIC_DEFAULT_LOCALE) {
+  const landing = productRoutes(id)['/'];
   return {
     ...baseManifest(),
     name: id.brand.name,
     short_name: id.brand.name,
-    description: t(locale, 'meta.home.description'),
+    description: t(locale, (landing && landing.descriptionKey) || 'meta.home.description'),
   };
 }
 

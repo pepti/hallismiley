@@ -4,9 +4,9 @@
   "role": "personal",
   "upstream": "https://github.com/orange-smiley/orangesmiley.git",
   "upstreamBranch": "master",
-  "rev": "57362dc5643c9dd66b27aeb36044977fc2f814d2",
-  "syncedAt": "2026-09-23T02:15:57.839Z",
-  "syncedPr": 168,
+  "rev": "61e0920c16ce9405ca9bbf6386a489229027b627",
+  "syncedAt": "2026-09-23T08:30:28.342Z",
+  "syncedPr": null,
   "grafted": {
     "at": "2026-09-22",
     "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
@@ -34,6 +34,13 @@
       "upstreamCommits": 10,
       "conflicts": 9,
       "note": "sync — identity seam v2: surface.nav (the base's six links), theme.dark, page meta as overlay keys; NavBar/sitemap/manifest/robots hooks closed by the engine; aron13.css import restored in the view; residuals: /aron13ara + gated lines in six engine tests"
+    },
+    {
+      "rev": "61e0920c16ce9405ca9bbf6386a489229027b627",
+      "date": "2026-09-23",
+      "upstreamCommits": 14,
+      "conflicts": 11,
+      "note": "sync"
     }
   ]
 }

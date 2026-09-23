@@ -14,6 +14,13 @@
 // Specs assert against these, never against a brand literal, so the engine's
 // e2e suite passes unchanged in a downstream that sets its own identity.
 const { clientConfig } = require('../../server/config/clientConfig');
+// The two route rules the specs need at describe time, read from the same
+// modules the server serves with (identity-seam-3): a hidden route (company
+// pages a downstream hides — the cases that click through them skip) and a
+// locale-locked one (the party pages, `identity.routes[*].locale` — its URL
+// carries that locale, whatever the visitor's).
+const { isHiddenRoute } = require('../../server/config/publicSurface');
+const { forcedLocaleFor } = require('../../server/config/i18n');
 
 const identity = clientConfig.identity;
 
@@ -29,4 +36,4 @@ function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-module.exports = { identity, readIdentity, escapeRe };
+module.exports = { identity, readIdentity, escapeRe, isHiddenRoute, forcedLocaleFor };

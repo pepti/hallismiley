@@ -12,13 +12,13 @@
  * static file to be itself (identity-seam-2, 2026-09-23).
  */
 const express = require('express');
-const { HIDDEN_PUBLIC_ROUTES } = require('../config/publicSurface');
+const { HIDDEN_PUBLIC_ROUTES, NOINDEX_ROUTES } = require('../config/publicSurface');
 const { SUPPORTED_LOCALES } = require('../config/i18n');
 
 const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
 /** The robots.txt for this product — pure over its inputs, for the tests. */
-function buildRobots({ hidden = HIDDEN_PUBLIC_ROUTES, locales = SUPPORTED_LOCALES, appUrl = APP_URL } = {}) {
+function buildRobots({ hidden = HIDDEN_PUBLIC_ROUTES, noindex = NOINDEX_ROUTES, locales = SUPPORTED_LOCALES, appUrl = APP_URL } = {}) {
   const lines = [
     'User-agent: *',
     'Allow: /',
@@ -37,6 +37,14 @@ function buildRobots({ hidden = HIDDEN_PUBLIC_ROUTES, locales = SUPPORTED_LOCALE
       '# site. Each also emits <meta name="robots" content="noindex">.',
     );
     for (const route of hidden) for (const lc of locales) lines.push(`Disallow: /${lc}${route}`);
+  }
+  if (noindex.length) {
+    lines.push(
+      '',
+      "# The product's own noindex routes (identity.routes[*].noindex). Linked,",
+      '# served, never indexed; each also emits <meta name="robots" content="noindex">.',
+    );
+    for (const route of noindex) for (const lc of locales) lines.push(`Disallow: /${lc}${route === '/' ? '/' : route}`);
   }
   lines.push('', `Sitemap: ${appUrl}/sitemap.xml`, '');
   return lines.join('\n');

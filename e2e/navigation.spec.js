@@ -6,12 +6,13 @@ gateSpec(test, __filename);
 // Brand, hero clip and title suffix come from the product identity
 // (config/client.json → <script id="identity">), never from a literal, so the
 // engine's spec passes unchanged in a downstream with its own identity.
-const { identity, readIdentity, escapeRe } = require('./lib/identity');
+const { identity, readIdentity, escapeRe, isHiddenRoute } = require('./lib/identity');
 const { tClient } = require('./lib/locale');
-// hallismiley (engine-sync-2): the cases that click a company page run only
-// where the product lists it (identity.surface.hiddenRoutes hides it here).
-const hiddenRoute = (r) => identity.surface.hiddenRoutes.some((h) => r === h || r.startsWith(h + '/'));
-const testUnlessHidden = (...routes) => (routes.some(hiddenRoute) ? test.skip : test);
+// The company pages (/thjonusta, /um-okkur, /hafa-samband) and the products
+// card are the COMPANY site's: a downstream that hides /thjonusta
+// (hallismiley) links none of them, so the cases that click through them run
+// only where the services page is public (identity-seam-3).
+const testCompany = isHiddenRoute('/thjonusta') ? test.skip : test;
 
 test.describe('Navigation — basic page loads', () => {
 
@@ -33,7 +34,7 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.lol-hero__title')).toContainText('that runs businesses');
   });
 
-  testUnlessHidden('/thjonusta')('the homepage names its products, and the product card leads to the product site', async ({ page }) => {
+  testCompany('the homepage names its products, and the product card leads to the product site', async ({ page }) => {
     // Halli (2026-09-13): anyone who wants to know more about Rekstrarkerfið
     // goes to its own site in a new tab; the company site carries no tiers.
     for (const locale of ['is', 'en']) {
@@ -114,13 +115,13 @@ test.describe('Navigation — basic page loads', () => {
     await expect(page.locator('.gallery-grid__item').first()).toBeVisible();
   });
 
-  testUnlessHidden('/hafa-samband')('Contact page is reachable from the navbar', async ({ page }) => {
+  testCompany('Contact page is reachable from the navbar', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-route="/hafa-samband"]').click();
     await expect(page.locator('#contact-page-form')).toBeAttached();
   });
 
-  testUnlessHidden('/thjonusta')('services page is reachable from the navbar and lists the services', async ({ page }) => {
+  testCompany('services page is reachable from the navbar and lists the services', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-route="/thjonusta"]').click();
     await expect(page.locator('.service-list > .service-item')).toHaveCount(6);
@@ -196,7 +197,7 @@ test.describe('Tab title follows SPA navigation', () => {
   const part = (key, lc) => tClient(key, {}, lc).split('{brand}').join(name);
   const HOME_IS = part('meta.home.title', 'is');
 
-  testUnlessHidden('/thjonusta')('a client-side navigation retitles the tab, matching the SSR title', async ({ page }) => {
+  testCompany('a client-side navigation retitles the tab, matching the SSR title', async ({ page }) => {
     await page.goto('/is/');
     await expect(page).toHaveTitle(HOME_IS);
 
@@ -211,7 +212,7 @@ test.describe('Tab title follows SPA navigation', () => {
     await expect(page).toHaveTitle(`${part('meta.thjonusta.title', 'is')}${titleSuffix}`);
   });
 
-  testUnlessHidden('/um-okkur')('going back restores the previous title', async ({ page }) => {
+  testCompany('going back restores the previous title', async ({ page }) => {
     await page.goto('/is/');
     await page.click('a[href="/is/um-okkur"]');
     await expect(page).toHaveTitle(`${part('meta.umOkkur.title', 'is')}${titleSuffix}`);
@@ -220,7 +221,7 @@ test.describe('Tab title follows SPA navigation', () => {
     await expect(page).toHaveTitle(HOME_IS);
   });
 
-  testUnlessHidden('/thjonusta')('the English side is titled in English', async ({ page }) => {
+  testCompany('the English side is titled in English', async ({ page }) => {
     await page.goto('/en/');
     await page.click('a[href="/en/thjonusta"]');
     await expect(page).toHaveTitle(`${part('meta.thjonusta.title', 'en')}${titleSuffix}`);

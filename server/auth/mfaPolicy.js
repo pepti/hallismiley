@@ -1,13 +1,26 @@
 'use strict';
 /*
- * Two-factor ENROLMENT is mandatory for every protected account.
+ * Two-factor ENROLMENT — optional or mandatory, per instance.
  *
- * mfaService.isProtected() only ever challenged accounts that had chosen to
- * enrol; shouldEnrol() existed and nothing called it, so an admin who never
- * opened the 2FA panel signed in with a password alone (Öryggisvörður's review
- * in rekstrarkerfid, 2026-09-18; harvested into the engine 2026-09-23).
+ * The switch is `security.mfa.enrolment` in config/client.json
+ * (server/config/clientConfig.js; env CLIENT_CONFIG_SECURITY_MFA_ENROLMENT):
  *
- * The rule, enforced here and nowhere else:
+ *   optional (the DEFAULT since 2026-09-23, Halli: "change mfa to optional")
+ *     mustEnrol() is always false. Nothing below withholds anything, and
+ *     `mfa_enrolment_required` is always false. An account that HAS enrolled
+ *     is still challenged for a code at every sign-in (mfaService — this file
+ *     never touches the challenge), and the Prófíll panel still offers
+ *     enrolment to every protected account (its "password only" hint is the
+ *     recommendation; mfaService.shouldEnrol is the predicate behind it).
+ *   required
+ *     the rule harvested from rekstrarkerfid, described below.
+ *
+ * Why the mandatory mode exists: mfaService.isProtected() only ever challenged
+ * accounts that had chosen to enrol, so an admin who never opened the 2FA
+ * panel signed in with a password alone (Öryggisvörður's review in
+ * rekstrarkerfid, 2026-09-18; harvested into the engine 2026-09-23).
+ *
+ * The rule under `required`, enforced here and nowhere else:
  *
  *   an account the login path would challenge (mfaService.protectedRole: an
  *   admin by primary role or role SET, an `accounts` holder, a published
@@ -25,7 +38,8 @@
  *     view list (withholdViews) — requireView is the one place views are
  *     resolved for a guard, and it asks this file.
  *   • a published seller's routes demand totp_enabled themselves
- *     (routes/sellerRoutes.js, rule 4); the session payload still reports
+ *     (routes/sellerRoutes.js, rule 4) — in BOTH modes, since that rule
+ *     predates this file; under `required` the session payload also reports
  *     mfa_enrolment_required so the SPA walks the seller to the panel.
  * Other roles the account holds keep working: they never required a second
  * factor.
@@ -35,7 +49,8 @@
  * sends the person to Prófíll → Tveggja þátta staðfesting. That part is UX;
  * this part is the gate.
  *
- * ESCAPE HATCH — non-production only. ADMIN_TOTP_EXEMPT is a comma-separated
+ * ESCAPE HATCH — non-production only, and only meaningful under `required`.
+ * ADMIN_TOTP_EXEMPT is a comma-separated
  * list of usernames (or `*`) that are not forced to enrol. It exists for the
  * Jest and Playwright suites, where dozens of admin sign-ins per minute cannot
  * pass TOTP's replay guard (one code per 30-second step), and for a developer's
@@ -48,11 +63,32 @@
 const { protectedRole } = require('../services/mfaService');
 const Role = require('../models/Role');
 const { ALL } = require('./adminViews');
+const { clientConfig, envNameFor, SCHEMA } = require('../config/clientConfig');
 
 const ADMIN = 'admin';
 // The view whose holders the gate protects (ENHANCEMENTS #17): withheld, with
 // the wildcard that implies it, while enrolment is owed.
 const PROTECTED_VIEW = 'accounts';
+
+// security.mfa.enrolment — see the header.
+const ENROLMENT_ENV = envNameFor(['security', 'mfa', 'enrolment']);   // CLIENT_CONFIG_SECURITY_MFA_ENROLMENT
+const ENROLMENT_MODES = SCHEMA.security.mfa.enrolment.enum;
+
+/**
+ * 'optional' | 'required'. The env var is re-read per call, like
+ * ADMIN_TOTP_EXEMPT, so a suite can flip the mode for itself; a value the
+ * schema would reject is ignored here exactly as clientConfig ignored it at
+ * boot, so both readings agree. Otherwise the resolved config decides.
+ */
+function enrolmentMode() {
+  const raw = process.env[ENROLMENT_ENV];
+  if (ENROLMENT_MODES.includes(raw)) return raw;
+  return clientConfig.security.mfa.enrolment;
+}
+
+function enrolmentRequired() {
+  return enrolmentMode() === 'required';
+}
 
 function exemptList() {
   return String(process.env.ADMIN_TOTP_EXEMPT || '')
@@ -85,9 +121,10 @@ function viewsHoldProtected(views) {
  * `user` carries whatever flags the caller could resolve — accounts_holder,
  * seller_holder (utils/adminRole.js, auth/publishedSeller.js); admin-anywhere
  * is read off the role set here, so a caller with the set never has to.
+ * Always false while this instance's enrolment is `optional`.
  */
 function mustEnrol(user, roles) {
-  if (!user || user.totp_enabled === true || isExempt(user)) return false;
+  if (!user || user.totp_enabled === true || !enrolmentRequired() || isExempt(user)) return false;
   return protectedRole({ ...user, admin_anywhere: user.admin_anywhere === true || holdsAdmin(user, roles) });
 }
 
@@ -132,7 +169,8 @@ function applyMfaPolicy(user, roles) {
  * Per-request form, for attachRoles once the role set is known. The
  * `accounts` flag needs the resolved views, so they are looked up (from the
  * Role cache) only when the answer depends on them: an unenrolled, non-exempt
- * account that holds no admin role. Enrolled and exempt accounts, and admins,
+ * account that holds no admin role, on an instance that requires enrolment.
+ * Enrolled and exempt accounts, admins, and every account under `optional`
  * cost nothing extra. A failed lookup leaves the flag unset — the account is
  * then treated as unprotected for this request, which is what it was before
  * this rule existed, and requireView still resolves views for itself.
@@ -141,7 +179,7 @@ async function applyMfaPolicyToRequest(req) {
   const user = req.user;
   if (!user) return user;
   const roles = roleSet(user, user.roles);
-  if (user.totp_enabled !== true && !isExempt(user) && !holdsAdmin(user, roles)
+  if (enrolmentRequired() && user.totp_enabled !== true && !isExempt(user) && !holdsAdmin(user, roles)
       && user.accounts_holder === undefined) {
     try {
       user.accounts_holder = viewsHoldProtected(await Role.getViewsForRoles(roles));
@@ -153,4 +191,5 @@ async function applyMfaPolicyToRequest(req) {
 module.exports = {
   mustEnrol, effectiveRoles, withholdViews, viewsHoldProtected,
   applyMfaPolicy, applyMfaPolicyToRequest, isExempt, holdsAdmin, PROTECTED_VIEW,
+  enrolmentMode, enrolmentRequired, ENROLMENT_ENV,
 };

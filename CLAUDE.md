@@ -13,9 +13,11 @@ theme trio `classic` + six ids (five dark), the waterfall hero, the six-link
 public nav, hidden company pages, Organization — the engine's D-021 seam,
 since the 2026-09-23 syncs); brand strings and the page meta the engine's
 locale tables carry are overlay keys in `public/js/i18n/product.<locale>.json`
-and `server/i18n/product.<locale>.json`. The one residual hook on engine
-files is `/aron13ara` (+ a few gated lines in six engine tests); what the seam still lacks
-is in `docs/HISTORY.md#engine-sync-2-2026-09-23`. `server/config/schema.js` is the
+and `server/i18n/product.<locale>.json`. `/aron13ara`'s meta, noindex and
+Icelandic lock are `identity.routes`; the one residual hook on an engine file is
+its view route in `public/js/router.js` (`docs/HISTORY.md#engine-sync-3-2026-09-23`).
+Two-factor enrolment is the engine default `optional` (`security.mfa.enrolment`,
+not set here). `server/config/schema.js` is the
 engine's; hallismiley's old 080–085 numbering is mapped by the `aliases` in
 `server/config/product-migrations/hs.js`. **Merging `main` deploys**: never
 push an engine sync without green CI, never from a scratch clone.

@@ -1050,10 +1050,14 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
 // never lost to a missing env var. No-ops (like every sender here) when Resend
 // is unconfigured, so dev and test never attempt delivery.
 
+// Resolves true when sent, false when the transport is not configured (like
+// every sender here, dev and test never attempt delivery); throws on a send
+// error — the caller records which on the stored lead (Lead.recordNotification,
+// migration 108), so the inbox shows which enquiries nobody was emailed about.
 async function sendLeadNotification({ submissionId, name, email, message, company, phone, platform, locale = 'is' }) {
   if (!isConfigured()) {
     transportNotConfigured('lead', { submissionId });
-    return;
+    return false;
   }
 
   const to      = (process.env.LEAD_NOTIFY_EMAIL || FROM_ADDR).trim();
@@ -1083,6 +1087,7 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
   const { data, error } = await deliver({ from: FROM, to, replyTo: email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   logger.info({ submissionId, messageId: data.id }, 'lead notification sent');
+  return true;
 }
 
 module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured };

@@ -16,7 +16,7 @@ Product ids in the estate: `os` (orangesmiley, the engine's own company instance
 ## Engine or product?
 
 - Schema that engine code reads or writes → engine. Company-specific copy, seeds and settings values → product, even in the engine repo. That is why `091_home_content_company`, `092_contact_content_company` and `104_sales_guides_services_page` live in `product-migrations/os.js`: they `UPDATE site_content` / `sales_guides` with Orange Smiley text that every product seeds with its own.
-- In a downstream, `/migration-new` defaults to the product array. The exception is a generic feature born there (icelandicstore is the current source of new features): author its migration as an ENGINE entry with the next engine number, mark the commit `Feature: <engine feature id>`, and let the upward PR renumber it if the engine took that number meanwhile — the product file's `aliases` then maps the engine name to the name the downstream's databases already applied. Never give a generic feature a `<id>_` name; an applied name can never be renamed.
+- In a downstream, `/migration-new` defaults to the product array. The exception is a generic feature born there (icelandicstore is the current source of new features): author its migration as an ENGINE entry with the next engine number, mark the commit `Feature: <engine feature id>`, and let the upward PR renumber it if the engine took that number meanwhile — the product file's `aliases` then maps the engine name to the name the downstream's databases already applied, and that name LEAVES `legacy` (an alias value may name nothing in any array — `tests/unit/migrationSet.test.js`; rekstrarkerfid's `093_totp_secret_enc` → engine `107` is the worked case). Never give a generic feature a `<id>_` name; an applied name can never be renamed. When the downstream's migration did MORE than the engine's (rk's `092_leads` created the leads table with the columns the engine's `108_leads_notification` adds), there is no alias: the engine entry is written `IF NOT EXISTS` and runs as a no-op there, and its comment says so.
 
 ## Aliases and superseded
 
@@ -30,6 +30,8 @@ superseded: {
   '091_home_content_company': 'Orange Smiley company copy',   // never executed here
 },
 ```
+
+**Superseding a table means superseding what alters it.** If a product supersedes the engine migration that CREATES a table (rekstrarkerfid supersedes `097_leads` because its own `092_leads` made that table first), it must also supersede every later engine migration that ALTERS it (`108_leads_notification`). On an existing database the ALTER would be a harmless no-op, but on a FRESH one the engine list runs before the product list, so the table does not exist yet and the ALTER fails (`relation "leads" does not exist` — found by rekstrarkerfid's fourth sync, 2026-09-23). `npm test` builds a fresh template, so it catches this; an engine migration that ALTERs a table some product owns should say so in its comment.
 
 `schema_migrations.resolved_from` keeps the reason (`<alias name>` or `superseded: <reason>`); it is NULL for an entry the runner executed. Aliases resolve only when one of the listed names is already applied — on a fresh database the engine entry simply runs. A legacy entry that has an engine equivalent must be REMOVED from `legacy` and listed under `aliases`, or a fresh database runs the DDL twice.
 

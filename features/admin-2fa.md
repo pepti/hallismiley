@@ -4,7 +4,7 @@ name: {is: "Tvíþætt auðkenning", en: "Admin 2FA (TOTP)"}
 domain: 1
 owner: engine
 status: live
-flag: null
+flag: security.mfa.enrolment
 paths:
   - server/services/mfaService.js
   - server/auth/mfaPolicy.js
@@ -24,16 +24,16 @@ paths:
 migrations: [082_admin_totp, 107_totp_secret_enc]
 since: 2026-08-19
 origin: null
-history: [base-sync, ui-kit, review-099, harvest-rk-totp-2026-09-23]
+history: [base-sync, ui-kit, review-099, harvest-rk-totp-2026-09-23, mfa-optional-2026-09-23]
 ---
 
 TOTP enrolment and the login-time second step for protected roles. `mfaService.protectedRole` decides who must enrol (admins, `accounts` holders, published sellers) and the client mirrors it in `auth.isMfaProtected()`.
 
-Since 2026-09-23 enrolment is **mandatory** and the secret is **sealed at rest** — both harvested from rekstrarkerfid (its `admin-totp-enforcement`, 2026-09-18) and widened to the engine's gate. `auth/mfaPolicy.js` runs from `attachRoles` on every session read: an unenrolled admin has `admin` withheld from its role set, an unenrolled `accounts` holder has the view withheld in `requireView`, and the session payload says `mfa_enrolment_required` so the SPA walks the person to the profile panel. `utils/secretBox.js` seals `users.totp_secret` into `totp_secret_enc` (107, expand phase: both columns written, the sealed one read first, a pre-107 account sealed at its next sign-in) under `TOTP_ENC_KEY`; without the key nothing changes. `ADMIN_TOTP_EXEMPT` exempts test accounts and is ignored in production. `reset-admin-totp.js` is the break-glass. Runbook: `docs/ADMIN-2FA.md`.
+Enrolment is a per-instance switch, `security.mfa.enrolment` (the `flag` above): **`optional`** by default (Halli, 2026-09-23) — nobody is forced, the profile panel offers it, an enrolled account is challenged at every sign-in — or **`required`**, the mandatory rule harvested from rekstrarkerfid the same day (its `admin-totp-enforcement`, 2026-09-18) and widened to the engine's gate: `auth/mfaPolicy.js` runs from `attachRoles` on every session read, an unenrolled admin has `admin` withheld from its role set, an unenrolled `accounts` holder has the view withheld in `requireView`, and the session payload says `mfa_enrolment_required` so the SPA walks the person to the profile panel. The seller area demands 2FA in both modes (`sellerRoutes.js` rule 4). The secret is **sealed at rest** in both modes. `utils/secretBox.js` seals `users.totp_secret` into `totp_secret_enc` (107, expand phase: both columns written, the sealed one read first, a pre-107 account sealed at its next sign-in) under `TOTP_ENC_KEY`; without the key nothing changes. `ADMIN_TOTP_EXEMPT` exempts test accounts and is ignored in production. `reset-admin-totp.js` is the break-glass. Runbook: `docs/ADMIN-2FA.md`.
 
 **Rules**
 - The 2FA gate is mirrored: server `protectedRole` and client `isMfaProtected()` widen together; `mfaProtectedClient.test.js` pins them.
 - Enrolment eligibility asks the same predicate the gate does — and an account that already owes enrolment is always eligible.
-- The enrolment rule lives in `mfaPolicy.js` and nowhere else; guards never re-implement it (`forbiddenMessage` only makes the 403 say why).
+- The enrolment rule lives in `mfaPolicy.js` and nowhere else; guards never re-implement it (`forbiddenMessage` only makes the 403 say why). It applies only when `security.mfa.enrolment` is `required`; a test of the mandatory path sets that for itself (`CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`, read per call).
 - Expand/contract (invariant 14): `totp_secret` is still written and read as a fallback until a later release stops writing it (N+1) and drops it (N+2).
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).

@@ -15,8 +15,11 @@
 // gets identity.brand.titleSuffix. The text lives in public/js/i18n/<locale>.json
 // (engine) and product.<locale>.json (a product's override), the brand and the
 // suffix in utils/identity.js (the product's config/client.json), so a
-// downstream never edits this file. A direct load of /thjonusta and a
-// client-side navigation to it must not title the tab differently:
+// downstream never edits this file. A product's OWN routes (`identity.routes`,
+// identity-seam-3 — a route the engine does not know, or one it re-describes)
+// are read from the hand-off in titleForRoute and win over the table below,
+// exactly as ssrMeta merges them over its tables. A direct load of /thjonusta
+// and a client-side navigation to it must not title the tab differently:
 // tests/unit/pageTitle.test.js reads the server file and both tables and
 // fails on any drift, so this comment is enforced rather than hopeful.
 //
@@ -29,7 +32,7 @@
 // account — should set `view.documentTitle` instead of adding a pattern here.
 // The router prefers that whenever it is a non-empty string.
 
-import { getIdentity } from './identity.js';
+import { getIdentity, routeMeta } from './identity.js';
 import { t } from '../i18n/i18n.js';
 
 // Route pattern (as ROUTES in router.js declares it) → the i18n key of its
@@ -53,7 +56,6 @@ const PUBLIC_TITLES = {
   '/shop':          'meta.shop.title',
   '/news':          'meta.news.title',
   '/party':         'meta.party.title',
-  '/aron13ara':     'meta.aron13.title', // hallismiley hook (engine-graft)
 };
 
 // Routes whose part IS the whole title (ssrMeta's `titleMode: 'bare'`).
@@ -63,7 +65,6 @@ const TITLE_MODE = {
   '/shop':  'bare',
   '/news':  'bare',
   '/party': 'bare',
-  '/aron13ara': 'bare', // hallismiley hook (engine-graft)
 };
 
 // A detail route inherits its list's title until the view supplies its own.
@@ -117,6 +118,12 @@ export function titleForRoute(pattern, locale) {
   const lc = locale === 'is' ? 'is' : 'en';
   const site = getIdentity().brand.name;
   const key = INHERITS[pattern] || pattern;
+
+  // The product's OWN routes (identity.routes, identity-seam-3) win over the
+  // engine table for the same route — the same merge ssrMeta.js makes over
+  // ROUTE_META/DEFAULT_META, so a load and a click still agree.
+  const product = routeMeta(key);
+  if (product) return composeTitle(t(product.titleKey), product.titleMode === 'bare' ? 'bare' : undefined);
 
   const titleKey = PUBLIC_TITLES[key];
   if (titleKey) return composeTitle(t(titleKey), TITLE_MODE[key]);

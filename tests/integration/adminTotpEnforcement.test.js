@@ -1,4 +1,8 @@
-// Two-factor ENROLMENT is mandatory — auth/mfaPolicy.js.
+// Two-factor ENROLMENT, mandatory mode — auth/mfaPolicy.js under
+// security.mfa.enrolment = 'required'. The instance default is 'optional'
+// (mfa-optional-2026-09-23); this suite sets 'required' for itself through
+// CLIENT_CONFIG_SECURITY_MFA_ENROLMENT, which the policy reads per request, and
+// the last describe block pins the optional default against the same API.
 //
 // Until 2026-09-18 (rekstrarkerfid; harvested into the engine 2026-09-23) only
 // accounts that had chosen to enrol were ever challenged; an admin who never
@@ -8,8 +12,8 @@
 // yet — it gets a session (it needs one to enrol) and nothing else.
 //
 // tests/env.js exempts the suites at large (ADMIN_TOTP_EXEMPT='*'); this one
-// clears that, so everything here runs under the production rule. The policy
-// reads the variable per request.
+// clears that, so everything here runs under the rule as a `required`
+// production instance applies it. The policy reads both variables per request.
 const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
@@ -28,12 +32,18 @@ const ACCOUNTS_ROUTE = '/api/v1/admin/accounts';
 // Icelandic string, one with ?locale=en the English one.
 const ENROL_MESSAGE = /two-factor|tveggja þátta/i;
 
+const MODE_ENV = 'CLIENT_CONFIG_SECURITY_MFA_ENROLMENT';
 let exemptBefore;
-beforeAll(() => { exemptBefore = process.env.ADMIN_TOTP_EXEMPT; });
-afterAll(() => { process.env.ADMIN_TOTP_EXEMPT = exemptBefore; });
+let modeBefore;
+beforeAll(() => { exemptBefore = process.env.ADMIN_TOTP_EXEMPT; modeBefore = process.env[MODE_ENV]; });
+afterAll(() => {
+  process.env.ADMIN_TOTP_EXEMPT = exemptBefore;
+  if (modeBefore === undefined) delete process.env[MODE_ENV]; else process.env[MODE_ENV] = modeBefore;
+});
 
 beforeEach(async () => {
   delete process.env.ADMIN_TOTP_EXEMPT;
+  process.env[MODE_ENV] = 'required';
   await cleanTables();
   await db.query('TRUNCATE TABLE mfa_challenges, user_recovery_codes RESTART IDENTITY CASCADE');
   // Mirror of the 098 role seed (adminRoles.test.js clears non-system roles).
@@ -325,6 +335,64 @@ describe('the TOTP secret at rest (migration 107, expand phase)', () => {
     } finally {
       process.env.TOTP_ENC_KEY = key;
     }
+  });
+});
+
+describe('security.mfa.enrolment = optional — the instance default (mfa-optional-2026-09-23)', () => {
+  // The outer beforeEach asked for `required`; drop it so config/client.json
+  // (and the schema default) decide, as on a real instance.
+  beforeEach(() => { delete process.env[MODE_ENV]; });
+
+  test('an unenrolled admin signs in as an admin: nothing withheld, nothing owed', async () => {
+    await makeUser({ id: 'opt-admin', username: 'optadmin', role: 'admin' });
+    const res = await login('optadmin');
+
+    expect(res.status).toBe(200);
+    expect(res.body.mfaRequired).toBeUndefined();
+    expect(res.body.user).toMatchObject({
+      username: 'optadmin', role: 'admin', roles: ['admin'], views: ['*'],
+      mfa_enrolment_required: false,
+    });
+    const cookie = sessionCookie(res);
+    expect((await request(app).get(ADMIN_ROUTE).set('Cookie', cookie)).status).toBe(200);
+    expect((await request(app).get(ACCOUNTS_ROUTE).set('Cookie', cookie)).status).toBe(200);
+    const session = await request(app).get('/auth/session').set('Cookie', cookie);
+    expect(session.body.user).toMatchObject({
+      role: 'admin', roles: ['admin'], mfa_enrolment_required: false, totp_enabled: false,
+    });
+  });
+
+  test('an unenrolled accounts holder keeps the accounts view', async () => {
+    await makeUser({ id: 'opt-seller', username: 'optseller', role: 'solumadur' });
+    const res = await login('optseller');
+    expect(res.body.user).toMatchObject({ role: 'solumadur', mfa_enrolment_required: false });
+    expect(res.body.user.views).toContain('accounts');
+    expect((await request(app).get(ACCOUNTS_ROUTE).set('Cookie', sessionCookie(res))).status).toBe(200);
+  });
+
+  test('enrolling is still offered, and an enrolled admin is challenged at every sign-in', async () => {
+    await makeUser({ id: 'opt-admin', username: 'optadmin', role: 'admin' });
+    const { secret } = await enrolThrough(await csrfFor(sessionCookie(await login('optadmin'))));
+    await db.query('UPDATE users SET totp_last_step = NULL WHERE id = $1', ['opt-admin']);
+
+    const again = await login('optadmin');
+    expect(again.body.mfaRequired).toBe(true);
+    expect(again.headers['set-cookie']).toBeUndefined();
+    const done = await request(app).post('/auth/login/totp')
+      .send({ challengeId: again.body.challengeId, code: totp.generateCode(secret) });
+    expect(done.status).toBe(200);
+    expect(done.body.user).toMatchObject({ role: 'admin', mfa_enrolment_required: false, totp_enabled: true });
+  });
+
+  test('switching the instance to `required` withholds admin on the very next request', async () => {
+    await makeUser({ id: 'opt-admin', username: 'optadmin', role: 'admin' });
+    const cookie = sessionCookie(await login('optadmin'));
+    expect((await request(app).get(ADMIN_ROUTE).set('Cookie', cookie)).status).toBe(200);
+
+    process.env[MODE_ENV] = 'required';
+    const refused = await request(app).get(ADMIN_ROUTE).set('Cookie', cookie);
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(ENROL_MESSAGE);
   });
 });
 

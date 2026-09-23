@@ -16,7 +16,7 @@ const SUPPORTED_LOCALES = (process.env.SUPPORTED_LOCALES || 'en,is')
 // content first, so that dimension stays 'en' — flipping it would silently
 // re-home stored rows and break the party module's IS-primary/EN-translated
 // contract. Only the visitor-facing default changes.
-const { identity } = require('./identity');
+const { identity, productRoutes } = require('./identity');
 const PUBLIC_DEFAULT_LOCALE = process.env.PUBLIC_DEFAULT_LOCALE || identity.locale.publicDefault;
 
 // The party pages are a birthday landing for an Iceland-based event with an
@@ -67,26 +67,33 @@ function isPartyPath(pathname) {
   return isPartyPageRoute(pathname) || isPartyApiPath(pathname);
 }
 
-// Hidden one-off pages published in Icelandic only. Exact match after the
-// locale prefix is stripped — no sub-routes, no prefix matching. Each entry is
-// a page with no nav link and no sitemap entry (noindex via publicSurface.js).
-//   /aron13ara — Aron's 13th-birthday puzzle page (2026-09-06).
-// hallismiley residual hook (engine-graft): the engine has no IS-only pages.
-const IS_ONLY_PAGES = new Set(['/aron13ara']);
+// A product's OWN locale-locked routes (identity-seam-3): every entry of
+// `identity.routes` that names a `locale` — hallismiley's `/aron13ara` is
+// Icelandic-only the way the party pages are. Prefix-aware like the party
+// lock ('/aron13ara/x' is locked too); '/' locks the landing alone. A locale
+// the instance does not support is ignored rather than redirected into a
+// 404 loop.
+const ROUTE_LOCKS = Object.entries(productRoutes())
+  .filter(([, e]) => e.locale && SUPPORTED_LOCALES.includes(e.locale))
+  .map(([route, e]) => ({ route, locale: e.locale }));
 
-function isIsOnlyPage(pathname) {
-  return IS_ONLY_PAGES.has(stripLocale(pathname));
+function routeLockFor(pathname) {
+  const stripped = stripLocale(pathname);
+  for (const { route, locale } of ROUTE_LOCKS) {
+    if (stripped === route || (route !== '/' && stripped.startsWith(route + '/'))) return locale;
+  }
+  return null;
 }
 
 // The locale a path is LOCKED to, or null when it may render in any supported
 // locale. Page routes only — see the note above on why the API is excluded.
 // The single place that answers "is this route locale-locked?" server-side;
-// public/js/i18n/i18n.js mirrors it for the SPA.
+// public/js/i18n/i18n.js mirrors it for the SPA. The engine's party lock
+// comes first, then the product's `identity.routes[*].locale`.
 function forcedLocaleFor(pathname) {
   if (!pathname) return null;
   if (isPartyPageRoute(pathname)) return PARTY_FORCED_LOCALE;
-  if (isIsOnlyPage(pathname))     return 'is';
-  return null;
+  return routeLockFor(pathname);
 }
 
 module.exports = {

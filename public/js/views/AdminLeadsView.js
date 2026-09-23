@@ -9,6 +9,17 @@
 // message keeps its line breaks with CSS, never innerHTML. Theme rule: tokens
 // only (invariant 15) — the status chips use the --success/--warning/--error
 // washes, and unread emphasis is weight, not colour.
+//
+// Lead ids are STRINGS here, end to end (rk-feed, 2026-09-23): the engine's
+// are SERIAL, a product whose table predates the engine's (rekstrarkerfid)
+// holds TEXT uuids, and `Number(dataset.id)` turned those into NaN so the
+// detail never opened. Every compare is `String(l.id) === id`; the API client
+// URL-encodes whatever it is given.
+//
+// A row whose notification email never went out (notify_error set, migration
+// 108) carries a small "ekki sent" mark next to the status with the reason on
+// hover, so an enquiry nobody was emailed about is not mistaken for one that
+// was.
 import { isAuthenticated, canSeeView, isAdmin, getUser } from '../services/auth.js';
 import { getLeads, updateLead, deleteLead, leadsCsvUrl } from '../services/leads.js';
 import { escHtml } from '../utils/escHtml.js';
@@ -32,6 +43,14 @@ const STATUSES = Object.keys(STATUS_KEY);
 function chip(status) {
   const key = STATUS_KEY[status] || STATUS_KEY.new;
   return `<span class="leads-chip leads-chip--${escHtml(status)}">${escHtml(t(key))}</span>`;
+}
+
+// The "not emailed" mark: only when the outcome was recorded as a failure.
+// A null/null row (pre-108, or the email still in flight) shows nothing.
+function unsentMark(l) {
+  if (!l.notify_error) return '';
+  const hint = t('leads.notEmailedHint', { error: l.notify_error });
+  return ` <span class="leads-mark leads-mark--unsent" title="${escHtml(hint)}" aria-label="${escHtml(hint)}" data-unsent>${escHtml(t('leads.notEmailed'))}</span>`;
 }
 
 export class AdminLeadsView {
@@ -173,10 +192,10 @@ export class AdminLeadsView {
     body.querySelectorAll('tr.leads-row').forEach(tr => {
       tr.addEventListener('click', (e) => {
         if (e.target.closest('a, button')) return;
-        this._toggle(Number(tr.dataset.id));
+        this._toggle(tr.dataset.id);
       });
       tr.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._toggle(Number(tr.dataset.id)); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._toggle(tr.dataset.id); }
       });
     });
     body.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {
@@ -186,13 +205,13 @@ export class AdminLeadsView {
   }
 
   _row(l) {
-    const open = l.id === this._openId;
-    return `<tr class="leads-row${l.status === 'new' ? ' leads-row--new' : ''}${open ? ' is-open' : ''}" data-id="${l.id}" tabindex="0" aria-expanded="${open ? 'true' : 'false'}">
+    const open = String(l.id) === this._openId;
+    return `<tr class="leads-row${l.status === 'new' ? ' leads-row--new' : ''}${open ? ' is-open' : ''}" data-id="${escHtml(String(l.id))}" tabindex="0" aria-expanded="${open ? 'true' : 'false'}">
       <td class="leads-cell--date">${escHtml(formatDateTime(l.created_at))}</td>
       <td class="leads-cell--name">${escHtml(l.name)}</td>
       <td>${escHtml(l.company || '—')}</td>
       <td>${escHtml(l.current_platform || t('leads.platform.none'))}</td>
-      <td>${chip(l.status)}</td>
+      <td>${chip(l.status)}${unsentMark(l)}</td>
       <td>${escHtml(l.owner_name || t('leads.ownerNone'))}</td>
     </tr>`;
   }
@@ -210,13 +229,14 @@ export class AdminLeadsView {
   }
 
   _toggle(id) {
-    this._openId = this._openId === id ? null : id;
+    const key = String(id);
+    this._openId = this._openId === key ? null : key;
     this._paintTable();
   }
 
   _paintDetail(id) {
-    const l = (this._data.leads || []).find(x => x.id === id);
-    const tr = this._el.querySelector(`tr.leads-row[data-id="${id}"]`);
+    const l = (this._data.leads || []).find(x => String(x.id) === id);
+    const tr = [...this._el.querySelectorAll('tr.leads-row')].find(row => row.dataset.id === id);
     if (!l || !tr) return;
     const me = getUser()?.id;
     const mine = l.owner_user_id && l.owner_user_id === me;

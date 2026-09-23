@@ -252,8 +252,16 @@
 .ice-band-panel .legal-header { margin: 0; padding: 0; border: 0; }
 .ice-band-panel .legal-meta { margin-bottom: 0; }
 /* "PERSÓNUVERNDARSTEFNA" is one 20-letter word at 2rem + tracking: on a phone
-   the band's overflow clip would cut it, so it scales with the viewport. */
-.ice-band-panel .legal-title { font-size: clamp(1.2rem, 5.4vw, 2rem); overflow-wrap: anywhere; }
+   the band's overflow clip would cut it, so it scales with the viewport. The
+   floor is 0.95rem, not 1.2rem: at 320px the higher floor wrapped the word
+   mid-letter (rekstrarkerfid's qa-chrome-findings, rk-feed 2026-09-23), and a
+   heading may break at a space but never inside a word — overflow-wrap:
+   normal, hyphens: manual, so only an explicit soft hyphen could split it. */
+.ice-band-panel .legal-title {
+  font-size: clamp(0.95rem, 4.8vw, 2rem);
+  overflow-wrap: normal;
+  hyphens: manual;
+}
 .ice-band-panel .not-found__inner { max-width: 32em; margin: 0 auto; text-align: center; }
 .ice-band-panel .not-found__code { color: #FDE7D3; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
 .ice-band-panel .not-found__desc { color: #F5EDE2; }

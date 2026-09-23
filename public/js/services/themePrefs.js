@@ -75,11 +75,17 @@ export const THEME_SWATCHES = {
   midnight: 'linear-gradient(135deg, #FFD166 0%, #000000 60%)',
 };
 
-// The swatch for a picker id. A product theme the engine map does not know
-// (a downstream's own id from identity.theme.picker) gets a neutral fill
-// built from the live tokens rather than an invalid `undefined` — the picker
-// stays usable while the downstream adds its own entry.
+// The swatch for a picker id. The product's own `identity.theme.swatches`
+// entry (`{ bg, fg }`, identity-seam-3) wins — rendered as the same
+// accent→background gradient the engine's use — then the engine map; a
+// theme neither knows (a downstream's own id from identity.theme.picker)
+// gets a neutral fill built from the live tokens rather than an invalid
+// `undefined`, so the picker stays usable while the downstream adds its entry.
 export function swatchFor(id) {
+  const own = IDENTITY_THEME.swatches && IDENTITY_THEME.swatches[id];
+  if (own && typeof own.bg === 'string' && typeof own.fg === 'string') {
+    return `linear-gradient(135deg, ${own.fg} 0%, ${own.bg} 70%)`;
+  }
   return THEME_SWATCHES[id] || 'linear-gradient(135deg, var(--gold) 0%, var(--bg-base) 70%)';
 }
 

@@ -114,7 +114,7 @@ describe('the parsers found the registry (guard)', () => {
     const leads = features.find((f) => f.id === 'leads');
     expect(leads.name).toEqual({ is: 'Fyrirspurnir', en: 'Leads' });
     expect(leads.paths).toContain('server/routes/leadsRoutes.js');
-    expect(leads.migrations).toEqual(['097_leads']);
+    expect(leads.migrations).toEqual(['097_leads', '108_leads_notification']);
   });
 
   test('the frontmatter parser handles the emitted subset', () => {

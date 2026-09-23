@@ -4,6 +4,10 @@
 // (covered against the API in tests/integration/adminTotpEnforcement.test.js);
 // this is the person's side of it, in a real browser, end to end.
 //
+// This is the MANDATORY mode — security.mfa.enrolment = 'required', which
+// playwright.config.js sets for the e2e server. An instance's default is
+// 'optional' (mfa-optional-2026-09-23), where none of this applies.
+//
 // The shared `testadmin` is exempt by name (playwright.config.js); `enroladmin`
 // is not, so it meets the production rule. One sign-in per test — TOTP's
 // replay guard allows one code per 30-second step.
@@ -33,7 +37,7 @@ async function signIn(page) {
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('Admin two-step enrolment is mandatory', () => {
+test.describe('Admin two-step enrolment is mandatory under security.mfa.enrolment = required', () => {
   test.beforeAll(() => {
     script('setup-admin.js', ADMIN.username, ADMIN.email, ADMIN.password);
     // The e2e database is reused between runs: start from "never enrolled".

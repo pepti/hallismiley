@@ -44,7 +44,7 @@ const logger = require('./logger');
     process.exit(1);
   }
   if (process.env.NODE_ENV === 'production' && process.env.ADMIN_TOTP_EXEMPT) {
-    logger.warn('[server] ADMIN_TOTP_EXEMPT is set but IGNORED when NODE_ENV=production — every admin must enrol a second factor');
+    logger.warn('[server] ADMIN_TOTP_EXEMPT is set but IGNORED when NODE_ENV=production — under security.mfa.enrolment=required every protected account must enrol a second factor');
   }
 }
 

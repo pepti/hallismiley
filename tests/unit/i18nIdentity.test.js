@@ -67,8 +67,10 @@ describe('server i18n — implicit {siteName} / {legalName} / {siteHost}', () =>
     expect(t('en', 'email.footer', { appUrl: 'x' })).not.toContain('{siteHost}');
   });
 
-  // hallismiley (engine-sync-2): engine-only — this repo overlays meta.home.title etc.
-  testEngine('the page meta reads exactly as the literals ssrMeta.js carried until identity-seam-2', () => {
+  // Engine-only: t() reads this repo's product overlay from disk, and a
+  // downstream overlays `meta.home.title` with its own wording (hallismiley,
+  // engine-sync-2) — the literals below are the ENGINE's text.
+  testEngine('the page meta reads exactly as the literals ssrMeta.js carried until identity-seam-2 (the engine only)', () => {
     const { t, has } = fresh();
     expect(t('en', 'meta.home.title')).toBe('{brand} — AI-driven software company');
     expect(t('is', 'meta.home.title')).toBe('{brand} — hugbúnaðarhús knúið gervigreind');
