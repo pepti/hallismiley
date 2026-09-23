@@ -166,9 +166,9 @@ describe('identity — validation', () => {
     expect(resolve({ identity: { theme: { swatches: ['x'] } } }).warnings).toEqual([expect.stringMatching(/identity\.theme\.swatches must be an object/)]);
   });
 
-  test('identity.routes is a map of route → { titleKey, descriptionKey?, titleMode?, noindex?, locale? } (identity-seam-3)', () => {
+  test('identity.routes is a map of route → { titleKey, descriptionKey?, titleMode?, noindex?, locale?, contentKeys? } (identity-seam-3, rk-feed)', () => {
     const routes = {
-      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description' },
+      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description', contentKeys: ['landing', 'home_hero'] },
       '/console':   { titleKey: 'meta.console.title', titleMode: 'bare', noindex: true },
       '/original':  { titleKey: 'meta.original.title', noindex: true, $comment: 'ignored, like everywhere in the file' },
       '/aron13ara': { titleKey: 'meta.aron13.title', titleMode: 'bare', locale: 'is' },
@@ -197,6 +197,8 @@ describe('identity — validation', () => {
       [{ '/console': { titleKey: 'meta.console.title', titleMode: 'plain' } }, /titleMode/],
       [{ '/console': { titleKey: 'meta.console.title', noindex: 'yes' } }, /noindex/],
       [{ '/console': { titleKey: 'meta.console.title', locale: 'Icelandic' } }, /locale/],
+      [{ '/console': { titleKey: 'meta.console.title', contentKeys: 'verdskra' } }, /contentKeys/],
+      [{ '/console': { titleKey: 'meta.console.title', contentKeys: ['Verðskrá'] } }, /contentKeys/],
       [{ '/console': { titleKey: 'meta.console.title', extra: 1 } }, /unknown field extra/],
     ]) {
       const { config, warnings } = resolve({ identity: { routes: bad } });
@@ -416,13 +418,13 @@ describe('identity — the hand-off to the browser', () => {
     const { config } = resolve({ identity: { routes: {
       '/console':   { titleKey: 'meta.console.title', titleMode: 'bare', noindex: true },
       '/aron13ara': { titleKey: 'meta.aron13.title', locale: 'is' },
-      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description' },
+      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description', contentKeys: ['landing', 'home_hero'] },
     } } });
     const server = productRoutes(config.identity);
     expect(server).toEqual({
-      '/console':   { titleKey: 'meta.console.title', descriptionKey: null, titleMode: 'bare',   noindex: true,  locale: null },
-      '/aron13ara': { titleKey: 'meta.aron13.title',  descriptionKey: null, titleMode: 'suffix', noindex: false, locale: 'is' },
-      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description', titleMode: 'suffix', noindex: false, locale: null },
+      '/console':   { titleKey: 'meta.console.title', descriptionKey: null, titleMode: 'bare',   noindex: true,  locale: null, contentKeys: [] },
+      '/aron13ara': { titleKey: 'meta.aron13.title',  descriptionKey: null, titleMode: 'suffix', noindex: false, locale: 'is', contentKeys: [] },
+      '/':          { titleKey: 'meta.landing.title', descriptionKey: 'meta.landing.description', titleMode: 'suffix', noindex: false, locale: null, contentKeys: ['landing', 'home_hero'] },
     });
     const client = resolveIdentity(config.identity);
     for (const route of Object.keys(server)) expect(routeMeta(route, client)).toEqual(server[route]);

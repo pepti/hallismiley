@@ -10,13 +10,30 @@
  * are deliberately ABSENT: they still render and still work, but the sitemap
  * must not advertise what ssrMeta marks noindex, or the two contradict.
  *
- * Response is cached for 10 minutes (+ 5 min stale-while-revalidate)
+ * <lastmod> (rk-feed, 2026-09-23; born in rekstrarkerfid 0a928c9): the last
+ * admin save of the site_content rows a page renders, either locale — the
+ * engine's rows per route from ssrMeta.contentKeysForRoute, a product route's
+ * from identity.routes[*].contentKeys. A page whose copy lives only in the
+ * locale files gets none: search engines learn to ignore a sitemap whose
+ * lastmod is not truthful, so a deploy timestamp would be worse than no value.
+ * One query, cached in-process for the same 10 minutes as the response.
+ *
+ * /llms.txt (llmstxt.org; same origin): a plain-Markdown summary of the
+ * product for AI assistants — brand, description, every advertised page with
+ * its title and description per locale — built from the identity seam and the
+ * same meta tables the pages read, so nothing is a second copy to keep in
+ * sync. Gated on nothing: every product wants it.
+ *
+ * Responses are cached for 10 minutes (+ 5 min stale-while-revalidate)
  * so bot crawl spikes don't thrash the database.
  */
 
 const express = require('express');
-const { forcedLocaleFor } = require('../config/i18n');
+const db      = require('../config/database');
+const { forcedLocaleFor, SUPPORTED_LOCALES, PUBLIC_DEFAULT_LOCALE } = require('../config/i18n');
 const { PUBLIC_NAV, LEGAL_ROUTES, NOINDEX_ROUTES } = require('../config/publicSurface');
+const { identity, organizationDescription } = require('../config/identity');
+const { t, has } = require('../i18n');
 
 const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
@@ -107,18 +124,68 @@ function urlEntry({ localePath, lastmod, priority = '0.5', changefreq = 'monthly
   return lines.concat(isLines).join('\n');
 }
 
+// ── <lastmod> ──────────────────────────────────────────────────────────────
+// Lazy: ssrMeta reads router.js + the locale files at load, and app.js loads
+// it anyway; requiring it here at module top would only reorder that.
+function ssrMeta() { return require('../middleware/ssrMeta'); }
+
+/** route → site_content keys, for every advertised route that has any. */
+function lastmodKeys() {
+  const out = {};
+  for (const r of STATIC_ROUTES) {
+    const keys = ssrMeta().contentKeysForRoute(r.path || '/');
+    if (keys.length) out[r.path] = keys;
+  }
+  return out;
+}
+
+const LASTMOD_TTL_MS = 10 * 60 * 1000;
+let lastmodCache = { at: 0, value: null };
+
+/** route → 'YYYY-MM-DD' of the newest row among its keys (either locale). */
+async function fetchLastmods() {
+  if (lastmodCache.value && Date.now() - lastmodCache.at < LASTMOD_TTL_MS) return lastmodCache.value;
+  const out = {};
+  const byRoute = lastmodKeys();
+  const keys = [...new Set(Object.values(byRoute).flat())];
+  if (keys.length) {
+    try {
+      const { rows } = await db.query(
+        'SELECT key, MAX(updated_at) AS updated_at FROM site_content WHERE key = ANY($1) GROUP BY key',
+        [keys]
+      );
+      const byKey = Object.fromEntries(rows.map(r => [r.key, new Date(r.updated_at).getTime()]));
+      for (const [p, ks] of Object.entries(byRoute)) {
+        const times = ks.map(k => byKey[k]).filter(Number.isFinite);
+        if (times.length) out[p] = new Date(Math.max(...times)).toISOString().slice(0, 10);
+      }
+    } catch {
+      /* a sitemap without lastmod is still a valid sitemap */
+    }
+  }
+  lastmodCache = { at: Date.now(), value: out };
+  return out;
+}
+
+/** Drops the cached lastmods — for the tests and for an admin save. */
+function invalidateLastmodCache() {
+  lastmodCache = { at: 0, value: null };
+}
+
 async function buildSitemap() {
   // No detail routes are advertised. Projects (case studies) were the one
   // surface listed here until 2026-09-03, when /verkefni joined the hidden
   // list (Halli); linking its details now would contradict the noindex
   // ssrMeta emits, same as news and products before it.
   const urls = [];
+  const lastmods = await fetchLastmods();
 
   // Static pages. Locale-locked routes are derived from config/i18n rather than
   // flagged in the table above, so the lock has exactly one source of truth.
   for (const r of STATIC_ROUTES) {
     urls.push(urlEntry({
       localePath: r.path,
+      lastmod: lastmods[r.path],
       priority: r.priority,
       changefreq: r.changefreq,
       includeXDefault: !!r.includeXDefault,
@@ -136,7 +203,60 @@ async function buildSitemap() {
   ].join('\n');
 }
 
+// ── /llms.txt ──────────────────────────────────────────────────────────────
+// The page name is the translated PART: the brand suffix a <title> carries is
+// stripped, and the home title's leading "Brand — " becomes "Brand: …" so the
+// list reads as pages, not as tabs.
+function pageName(title) {
+  const { name, titleSuffix } = identity.brand;
+  if (titleSuffix && title.endsWith(titleSuffix)) return title.slice(0, -titleSuffix.length);
+  if (title.startsWith(`${name} — `)) return `${name}: ${title.slice(name.length + 3)}`;
+  return title;
+}
+
+function llmsPageLine(locale, route) {
+  const m = ssrMeta().metaForRoute(locale, route);
+  if (!m) return null;
+  const url = route === '/' ? `${APP_URL}/${locale}/` : `${APP_URL}/${locale}${route}`;
+  return `- [${pageName(m.title)}](${url})${m.description ? `: ${m.description}` : ''}`;
+}
+
+function buildLlmsTxt() {
+  const { brand, organization } = identity;
+  const locales = [PUBLIC_DEFAULT_LOCALE, ...SUPPORTED_LOCALES.filter(lc => lc !== PUBLIC_DEFAULT_LOCALE)];
+  const advertised = STATIC_ROUTES.map(r => r.path || '/');
+  const description = organizationDescription(PUBLIC_DEFAULT_LOCALE, { has, t });
+  const place = [organization.addressLocality, organization.areaServed].filter(Boolean).join(', ');
+  const lines = [
+    `# ${brand.name}`,
+    '',
+    `> ${description}`,
+    '',
+    `${brand.legalName}${place ? `, ${place}` : ''}. Default language: ${PUBLIC_DEFAULT_LOCALE}; also: ${SUPPORTED_LOCALES.filter(lc => lc !== PUBLIC_DEFAULT_LOCALE).join(', ') || 'none'}. Every page below exists under each locale prefix unless listed once.`,
+  ];
+  for (const locale of locales) {
+    const items = advertised
+      .filter(route => { const lock = forcedLocaleFor(route); return !lock || lock === locale; })
+      .map(route => llmsPageLine(locale, route))
+      .filter(Boolean);
+    if (!items.length) continue;
+    lines.push('', `## Pages (${locale})`, '', ...items);
+  }
+  lines.push('', '## Optional', '', `- [Sitemap](${APP_URL}/sitemap.xml)`, '');
+  return lines.join('\n');
+}
+
 const router = express.Router();
+
+router.get('/llms.txt', (req, res, next) => {
+  try {
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=600, stale-while-revalidate=300');
+    res.status(200).send(buildLlmsTxt());
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/sitemap.xml', async (req, res, next) => {
   try {
@@ -149,4 +269,4 @@ router.get('/sitemap.xml', async (req, res, next) => {
   }
 });
 
-module.exports = { router, buildSitemap };
+module.exports = { router, buildSitemap, buildLlmsTxt, lastmodKeys, invalidateLastmodCache };

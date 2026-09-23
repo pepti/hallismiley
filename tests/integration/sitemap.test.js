@@ -17,6 +17,8 @@
  */
 const request = require('supertest');
 const app     = require('../../server/app');
+const db      = require('../../server/config/database');
+const { lastmodKeys, invalidateLastmodCache } = require('../../server/routes/sitemapRoutes');
 const { HIDDEN_PUBLIC_ROUTES, NOINDEX_ROUTES, PUBLIC_NAV, LEGAL_ROUTES } = require('../../server/config/publicSurface');
 const { clientConfig } = require('../../server/config/clientConfig');
 // A locale-locked route (the party pages; `identity.routes[*].locale`) is
@@ -122,5 +124,70 @@ describe('GET /sitemap.xml', () => {
 
   test('no references to the retired halliprojects.is domain', () => {
     expect(res.text).not.toMatch(/halliprojects\.is/);
+  });
+});
+
+// <lastmod> = the newest site_content row a page renders (rk-feed, 2026-09-23):
+// engine routes from ssrMeta.contentKeysForRoute, product routes from
+// identity.routes[*].contentKeys. A route with no rows carries none.
+describe('GET /sitemap.xml — <lastmod>', () => {
+  const entryOf = (text, locale, path) => {
+    const at = text.search(locOf(locale, path));
+    if (at < 0) return null;
+    const tail = text.slice(at);
+    return tail.slice(0, tail.indexOf('</url>'));
+  };
+  // The first advertised route that has content keys, under a locale it is listed in.
+  const keyed = Object.entries(lastmodKeys()).find(([p]) => ADVERTISED.includes(p || '/'));
+  const unkeyed = ADVERTISED.find((p) => !(Object.prototype.hasOwnProperty.call(lastmodKeys(), p === '/' ? '' : p)));
+
+  afterAll(() => invalidateLastmodCache());
+
+  test('the routes with content keys are advertised routes and the keys look like site_content keys (guard)', () => {
+    for (const [p, keys] of Object.entries(lastmodKeys())) {
+      expect(ADVERTISED).toContain(p || '/');
+      expect(keys.length).toBeGreaterThan(0);
+      for (const k of keys) expect(k).toMatch(/^[a-z0-9_]+$/);
+    }
+  });
+
+  test('follows the last save of a row the page renders, and is absent where no row backs the page', async () => {
+    if (!keyed) return; // a product that advertises no content-backed route
+    const [path, keys] = keyed;
+    const route = path || '/';
+    const locale = forcedLocaleFor(route) || 'is';
+    // Make one of the page's rows the newest thing in the table.
+    const { rows } = await db.query('SELECT key, locale FROM site_content WHERE key = ANY($1) LIMIT 1', [keys]);
+    if (!rows[0]) {
+      await db.query(`INSERT INTO site_content (key, locale, value) VALUES ($1, 'is', '{}'::jsonb)
+                      ON CONFLICT (key, locale) DO NOTHING`, [keys[0]]);
+    }
+    await db.query('UPDATE site_content SET updated_at = NOW() WHERE key = ANY($1)', [keys]);
+    invalidateLastmodCache();
+    const fresh = await request(app).get('/sitemap.xml');
+    const today = new Date().toISOString().slice(0, 10);
+    expect(entryOf(fresh.text, locale, route)).toContain(`<lastmod>${today}</lastmod>`);
+    if (unkeyed) {
+      const lc = forcedLocaleFor(unkeyed) || 'is';
+      expect(entryOf(fresh.text, lc, unkeyed)).not.toMatch(/<lastmod>/);
+    }
+  });
+
+  test('the value is a date, never a timestamp, and the result is cached for the response window', async () => {
+    if (!keyed) return;
+    const [path] = keyed;
+    const route = path || '/';
+    const locale = forcedLocaleFor(route) || 'is';
+    invalidateLastmodCache();
+    const a = await request(app).get('/sitemap.xml');
+    expect(entryOf(a.text, locale, route)).toMatch(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
+    // A newer save does not show until the cache is dropped.
+    await db.query('UPDATE site_content SET updated_at = NOW() - interval \'400 days\' WHERE key = ANY($1)', [keyed[1]]);
+    const b = await request(app).get('/sitemap.xml');
+    expect(entryOf(b.text, locale, route)).toBe(entryOf(a.text, locale, route));
+    invalidateLastmodCache();
+    const c = await request(app).get('/sitemap.xml');
+    expect(entryOf(c.text, locale, route)).not.toBe(entryOf(a.text, locale, route));
+    await db.query('UPDATE site_content SET updated_at = NOW() WHERE key = ANY($1)', [keyed[1]]);
   });
 });

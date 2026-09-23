@@ -48,6 +48,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
 | 2026-09-23 | [Identity seam, second iteration — the public IA, the page meta and the engine-only pins (D-021)](#identity-seam-2-2026-09-23) | `identity.surface.nav` drives the nav, both footers and the sitemap; `meta.<key>.*` i18n keys replace the ssrMeta/pageTitle literals; `/manifest.json` and the Product brand from the identity; engine suites assert the visitor default via `tests/lib/locale.js`; engine-only pins gated on `engine.json.role`; the `.view` fade fill-mode dropped (hallismiley's news-editor regression); no migration |
 | 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
+| 2026-09-23 | [rk feed — six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)](#rk-feed-2026-09-23) | Lead ids as strings end to end; migration 108 `notified_at`/`notify_error` + the "ekki sent" inbox mark; the change-request launcher and the contact editor's bar stack (`--cr-widget-clearance`); legal titles on one line at 320px; sitemap `<lastmod>` from `site_content` + `identity.routes[*].contentKeys`, `/llms.txt` for every product (harvested from rk); the alias rule worded as enforced |
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 
 ---
@@ -1293,8 +1294,13 @@ graft) and the rk-only hunks trimmed. Branch `from-rk/2026-09-23`.
   pre-107 account sealed at its next successful sign-in (`COALESCE`); N+1
   stops writing the plaintext, N+2 drops it (invariant 14). rk applied the same
   DDL as `093_totp_secret_enc`; its product file must alias
-  `'107_totp_secret_enc': ['093_totp_secret_enc']` and keep `093` in `legacy`
-  untouched (`docs/MIGRATIONS.md`). Verified in Jest: a plaintext-only account
+  `'107_totp_secret_enc': ['093_totp_secret_enc']` and REMOVE `093` from its
+  `legacy` array — a legacy entry with an engine equivalent is aliased, never
+  kept, or a fresh database runs the DDL twice; `tests/unit/migrationSet.test.js`
+  enforces it (an alias value may name nothing in any array), and rk did
+  exactly that on its next sync (`docs/MIGRATIONS.md`; corrected in
+  [rk-feed](#rk-feed-2026-09-23), the entry first said "keep 093 untouched").
+  Verified in Jest: a plaintext-only account
   signs in and is sealed on the way; a sealed-only row is enough; a foreign
   ciphertext is refused; with no key the plaintext path still works.
 - **Also taken**: `ADMIN_TOTP_EXEMPT` (ignored under `NODE_ENV=production`,
@@ -1550,3 +1556,114 @@ own); a crawler-summary hook for a product landing (LedgerLink's `/`
 crawler block); the sitemap beyond nav + legal (hallismiley's
 `/shop/products` etc.); the `/party` nav link's class/aria; `classic` as
 Bjart. PLAN → Status.
+
+<a id="rk-feed-2026-09-23"></a>
+## 2026-09-23 — rk feed: six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)
+
+**Why.** rekstrarkerfid's two engine syncs of 2026-09-23 (b) left a list of
+things that broke or were missing in ENGINE files — nothing rk could fix in a
+product-owned file for good — and filed them as one issue, "Feed for the
+engine" (orange-smiley/rekstrarkerfid#45). Items 1, 5 and 8 of that list were
+already in identity-seam-3; this chunk takes the rest: 2, 3, 4, 6, 7 and 9.
+Branch `fix/rk-feed`; no downstream file was touched.
+
+**Lead ids are strings, end to end (#2).** The engine's `leads.id` is SERIAL;
+rk's table predates the engine's 097 (its `092_leads`) and holds TEXT uuids —
+and `AdminLeadsView` coerced `dataset.id` with `Number()`, so a uuid became
+NaN and the detail never opened, while `leadsController._id` rejected any
+non-integer with 400. Now `parseLeadId()` (exported) accepts a positive
+integer or a uuid and returns the STRING it was given; `Lead.findById` /
+`update` / `remove` compare `id::text = $1` (the table is bounded by the
+retention job, the cast costs nothing); the view compares `String(l.id)` and
+never coerces. Tests: `tests/unit/leadId.test.js` (the parser) and a
+`leads.test.js` case that walks GET/PATCH/DELETE with a uuid — a clean 404
+here, never a 400 and never the 500 that pg's 22P02 gave before — plus the
+rejected shapes and the integer round-trip.
+
+**The notification outcome on the lead — migration 108 (#4).** rk records
+whether the notification email went out (`notified_at` / `notify_error`)
+since 2026-09-15, when a PROD box with no `RESEND_API_KEY` made every enquiry
+vanish behind a "received" reply; the engine gained `Lead.recordNotification()`
+only inside rk's graft. Now the engine's: `108_leads_notification` adds the
+two columns (`ADD COLUMN IF NOT EXISTS` — on rk's databases both are no-ops
+because its `092_leads` created them, and NO alias is needed: an alias says
+"the same DDL ran under another name", and rk's `rk_001` did far more than
+this; the migration comment says so), `Lead.recordNotification(submissionId,
+error)` never throws (sent → `notified_at = NOW()`, error cleared; failure →
+the reason, capped at 500), `sendLeadNotification` resolves `true` / `false`
+(no transport) / throws, and `contactController` records the outcome once
+the insert and the send have BOTH settled (the write would otherwise race the
+insert), with a trailing catch so the chain can never surface — the visitor's
+200 is untouched. The inbox shows a small "ekki sent" / "not emailed" mark
+next to the status (`leads.notEmailed`, the reason in `leads.notEmailedHint`
+on hover; `--warning` wash, tokens only). `leads:export` carries nothing
+new: workflow columns stay out. Tests: `recordNotification` both ways and
+the never-throw, the controller path under mail true / false / rejected, the
+inbox carrying the fields; `e2e/leads.spec.js` asserts the mark on the e2e
+server (no transport there, so every lead is "email not configured").
+
+**The launcher and the editor's bar stack (#3).** Since the `.view`
+containing-block fix (identity-seam-2) the contact editor's Save/Cancel bar
+(`contact.css`, bottom-right, z 90) and the change-request launcher
+(`#cr-widget`, bottom-right, z 240) are BOTH really fixed to the viewport,
+and the launcher covered the buttons. The widget now sets
+`body.has-cr-widget` on mount and removes it on destroy; `test-env.css` sets
+`--cr-widget-clearance: 64px` on that class; the bar's `bottom` is
+`calc(24px + var(--cr-widget-clearance, 0px))` (12px in the phone rule). A
+length, not a colour, so every theme reads the same (invariant 15). The e2e
+case in `contact.spec.js` signs in an admin on the test stack (the widget is
+always there), opens the editor, asserts the bar's box ends above the widget's
+and clicks Save (`trial`) and Cancel — Playwright refuses a click another
+element intercepts, so the click is the proof.
+
+**Legal titles at 320px (#6).** `.ice-band-panel .legal-title` floored at
+`1.2rem` and wrapped PERSÓNUVERNDARSTEFNA mid-word on a 320px phone
+(rk's `qa-chrome-findings.spec.js`). The floor is `0.95rem` (`clamp(0.95rem,
+4.8vw, 2rem)`), `overflow-wrap: normal; hyphens: manual` — a heading may
+break at a space, never inside a word. `iceland-scene.spec.js` now asserts
+one line and no overflow for both Icelandic titles at 320 and 375px, and every
+word intact for the English ones.
+
+**Sitemap `<lastmod>` and `/llms.txt`, harvested (#7).** rk's
+`sitemapRoutes.js` (its `0a928c9`, 2026-09-15) carried both as product hooks;
+the generic halves are the engine's now, `Feature: public-site`,
+`engine.json.history` records `harvestedFrom: rk@2d9570d`. `<lastmod>` is the
+newest `site_content.updated_at` among the rows a page renders, either
+locale, as a date: engine routes from `ssrMeta.contentKeysForRoute()`
+(`ROUTE_META`'s meta row + what the page renders — `/`: home_hero/skills/
+stats, `/hafa-samband`: the five contact rows), a product route from the new
+`identity.routes[*].contentKeys` (validated as `site_content` keys, mirrored
+in the client `routeMeta` so both halves normalise alike). One query, cached
+in-process for the response's 10 minutes; an admin save (`putContent`,
+`uploadImage`) drops the cache; a page with no row gets no value — a deploy
+timestamp would be a lie search engines learn to ignore. `/llms.txt`
+(llmstxt.org) is the brand as H1, the Organization description (per locale
+through the seam) as the blockquote, the legal name and place, then every
+ADVERTISED page under each locale (a locked route under its lock only) with
+its composed title — the brand suffix stripped, "Brand — x" as "Brand: x" —
+and description from `ssrMeta.metaForRoute()`, so the summary and the
+`<title>` can never disagree; gated on nothing. rk's pricing block
+(`tierSummaries`) stays rk's. Tests: `sitemap.test.js` (lastmod follows a
+save, absent without a row, a date not a timestamp, cached until dropped) and
+the new `tests/integration/llms.test.js`, both reading the resolved seam.
+
+**Wording (#9).** The harvest-rk-totp entry above said rk should keep
+`093_totp_secret_enc` in `legacy` untouched; `docs/MIGRATIONS.md` and
+`tests/unit/migrationSet.test.js` say the opposite and rk did the opposite: a
+legacy entry with an engine equivalent is REMOVED from `legacy` and listed
+under `aliases` (an alias value may name nothing in any array). The entry,
+the "born downstream" paragraph of MIGRATIONS.md and PLAN's open item now
+say that.
+
+**rekstrarkerfid, on its next sync.** Retire its own copies: the
+`recordNotification` / `notified_at` code in `Lead.js` and
+`contactController.js` (the engine's is the same shape; keep rk's `rowId`
+shim in `AdminLeadsView` only until the merge lands), the `LASTMOD_KEYS` /
+`fetchLastmods` hook and the `/llms.txt` route in `sitemapRoutes.js`
+(move the four route→key pairs into `identity.routes[*].contentKeys`;
+the pricing block needs a product slot the engine does not have yet — keep
+that one as a product route until it does), the `_id` uuid shim in
+`leadsController.js`, the `h1.legal-title` override in `landscape.css`, the
+`legacy` comment in `rk.js`. No alias for 108 (both ADDs are no-ops there).
+Its `qa-chrome-findings.spec.js` 320px case and its `crawlerPages.test.js`
+llms/lastmod cases can then point at the engine's.

@@ -215,7 +215,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (robots, sitemap) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
+| Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (`/sitemap.xml` with `<lastmod>`, `/llms.txt`) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
 | Controllers | `server/controllers/contactController.js` |
 | Services | `server/services/indexNow.js`, `server/services/outboundAllowlist.js` |
 | Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization) |
@@ -223,7 +223,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Components | `public/js/components/NavBar.js` |
 | Client | `public/js/router.js`, `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017, 091, 092 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
@@ -313,11 +313,26 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `home_stats`, `contact_*`): a copy change must move the DB row too, guarded
   on `updated_by IS NULL` so admin edits survive ([r1](HISTORY.md#r1)).
 - All copy is DRAFT until Halli approves; draft natively in Icelandic.
-- `.ice-scene--band` is `min-height`, never `height` ([services-page](HISTORY.md#services-page)).
+- `.ice-scene--band` is `min-height`, never `height` ([services-page](HISTORY.md#services-page));
+  `.ice-band-panel .legal-title` floors at `0.95rem` with `overflow-wrap:
+  normal; hyphens: manual` — a legal heading may break at a space, never
+  inside a word, down to 320px (`iceland-scene.spec.js`;
+  [rk-feed](HISTORY.md#rk-feed-2026-09-23)).
+- **The sitemap's `<lastmod>` is truthful or absent** ([rk-feed](HISTORY.md#rk-feed-2026-09-23)):
+  the newest `site_content.updated_at` among the rows a page renders (either
+  locale, as a date) — engine routes from `ssrMeta.contentKeysForRoute()`,
+  a product route from `identity.routes[*].contentKeys`; never a deploy
+  timestamp. One query, cached for the response's 10 minutes; a content save
+  drops the cache (`invalidateLastmodCache`). **`/llms.txt` is every
+  product's** and is built only from the seam and `ssrMeta.metaForRoute()`
+  (brand H1, Organization description, legal name + place, every advertised
+  page per locale — a locked route under its lock only — with the title's
+  PART and the description); product content beyond that (rk's pricing) has
+  no engine slot yet.
 - Canonical host derives from `APP_URL` (still hallismiley.is until the domain
   cutover — intentional, tracked in `PLAN.md`).
 
-**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)
+**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
 
 ## 4. Themes, scenes, ambience
 
@@ -450,9 +465,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Views | `public/js/views/AdminLeadsView.js` |
 | Client | `public/js/services/leads.js` |
 | CSS | `public/css/admin-leads.css` |
-| Jest | `tests/integration/leads.test.js`, `leadsTransfer.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
+| Jest | `tests/integration/leads.test.js`, `leadsTransfer.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js`, `leadId.test.js` |
 | e2e | `e2e/leads.spec.js`, `e2e/sales-handbook.spec.js` (sidebar count) |
-| Migrations | 097 |
+| Migrations | 097, 108 |
 | Features | [leads](../features/leads.md) |
 | Feature doc | `docs/SALES-STAFF.md` (Working the lead inbox) |
 
@@ -475,8 +490,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `source` = `--source` or the file's `instance`; the file lives under
   gitignored `data/` and is deleted after import (`/personuvernd` §3/§6)
   ([leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)).
+- **A lead id is a string end to end** ([rk-feed](HISTORY.md#rk-feed-2026-09-23)):
+  `parseLeadId()` accepts a positive integer or a uuid and returns the text
+  it was given (a product whose table predates 097 holds TEXT uuids); the
+  model compares `id::text`; the inbox view never coerces `dataset.id`.
+- **The notification outcome lives on the row** (migration 108,
+  [rk-feed](HISTORY.md#rk-feed-2026-09-23)): `contactController` records
+  `Lead.recordNotification(submissionId, error)` once the insert and the send
+  have both settled (`sendLeadNotification` → `true` / `false` = no transport
+  / throws); it never throws and never touches the visitor's 200. The inbox
+  marks a row with `notify_error` "ekki sent" with the reason on hover; the
+  export carries neither column.
 
-**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099) · [leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)
+**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099) · [leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
 
 ## 7. Markaður — market research and the prospect list
 
@@ -844,8 +870,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `themePrefs.getEffectiveEnv()` is the one client answer, re-evaluated on
   `authchange` ([test-chrome-admin](HISTORY.md#test-chrome-admin)).
 - Sits in the Þjónusta sidebar group as the support product ([admin-reshape](HISTORY.md#admin-reshape)).
+- **The launcher owns the bottom-right corner while mounted**
+  ([rk-feed](HISTORY.md#rk-feed-2026-09-23)): the widget sets
+  `body.has-cr-widget` on mount / removes it on destroy, `test-env.css` sets
+  `--cr-widget-clearance` on that class, and any page bar that is also
+  `position: fixed` in that corner (the contact editor's Save/Cancel) adds
+  the variable to its `bottom` — a length, so every theme reads the same.
+  `contact.spec.js` proves the bar's buttons take the click with the widget
+  mounted.
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
 
 ## 17. Content, settings, background
 

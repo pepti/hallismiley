@@ -2633,6 +2633,8 @@
   "leads.deleted": "Lead deleted",
   "leads.exportCsv": "Export CSV",
   "leads.platform.none": "None",
+  "leads.notEmailed": "not emailed",
+  "leads.notEmailedHint": "The notification email did not go out: {error}",
   "admin.nav.markadur": "Market",
   "markadur.title": "Market",
   "markadur.subtitle": "Icelandic companies that fit Rekstrarkerfið, judged from their annual accounts. Click a row for the assessment, the figures and the sources.",

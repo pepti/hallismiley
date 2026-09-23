@@ -91,6 +91,9 @@ function productRoutes(id = identity) {
       titleMode: e.titleMode === 'bare' ? 'bare' : 'suffix',
       noindex: e.noindex === true,
       locale: typeof e.locale === 'string' && e.locale ? e.locale : null,
+      // The site_content rows the page renders — the sitemap's <lastmod>
+      // source for a product route (rk-feed, 2026-09-23).
+      contentKeys: Array.isArray(e.contentKeys) ? e.contentKeys.filter(k => typeof k === 'string') : [],
     };
   }
   return out;

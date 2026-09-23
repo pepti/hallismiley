@@ -159,6 +159,10 @@ const SCHEMA = {
     //                              pages (config/i18n.js forcedLocaleFor):
     //                              301 under any other prefix, one canonical,
     //                              listed under its own locale only.
+    //   contentKeys                the site_content keys the page renders
+    //                              (`['verdskra']`); the sitemap's <lastmod>
+    //                              for the route is their newest updated_at
+    //                              (routes/sitemapRoutes.js, rk-feed 2026-09-23).
     // An entry replaces the engine row for that route whole (no site_content
     // meta override, no shop section). `$comment` keys inside are ignored.
     routes: { type: 'object', default: {}, validate: validateRouteMeta },
@@ -328,7 +332,10 @@ function validateNavEntries(list) {
 // Every field is optional except titleKey; nothing else is read, so nothing
 // else is accepted. A locale is shape-checked here; whether it is SUPPORTED
 // is config/i18n.js's concern (an unsupported lock is ignored there).
-const ROUTE_FIELDS = new Set(['titleKey', 'descriptionKey', 'titleMode', 'noindex', 'locale']);
+const ROUTE_FIELDS = new Set(['titleKey', 'descriptionKey', 'titleMode', 'noindex', 'locale', 'contentKeys']);
+// A site_content key: the table's PRIMARY KEY text, as the seeds spell them
+// (home_hero, contact_card, verdskra).
+const CONTENT_KEY_RE = /^[a-z0-9_]{1,64}$/;
 function validateRouteMeta(map) {
   const bad = [];
   for (const [route, e] of Object.entries(map)) {
@@ -339,13 +346,14 @@ function validateRouteMeta(map) {
     else if (e.titleMode !== undefined && e.titleMode !== 'bare' && e.titleMode !== 'suffix') bad.push(`${route}: titleMode must be "bare" or "suffix"`);
     else if (e.noindex !== undefined && typeof e.noindex !== 'boolean') bad.push(`${route}: noindex must be a boolean`);
     else if (e.locale !== undefined && e.locale !== null && (typeof e.locale !== 'string' || validateLocaleId(e.locale))) bad.push(`${route}: locale must be a locale id or null`);
+    else if (e.contentKeys !== undefined && (!Array.isArray(e.contentKeys) || e.contentKeys.some(k => typeof k !== 'string' || !CONTENT_KEY_RE.test(k)))) bad.push(`${route}: contentKeys must be a list of site_content keys`);
     else {
       const unknown = Object.keys(e).filter(k => !ROUTE_FIELDS.has(k));
       if (unknown.length) bad.push(`${route}: unknown field ${unknown.join(', ')}`);
     }
   }
   return bad.length
-    ? `has entries that are not { "/route": { titleKey, descriptionKey?, titleMode?, noindex?, locale? } } (${bad.join('; ')})`
+    ? `has entries that are not { "/route": { titleKey, descriptionKey?, titleMode?, noindex?, locale?, contentKeys? } } (${bad.join('; ')})`
     : null;
 }
 

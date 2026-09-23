@@ -58,6 +58,16 @@ body.is-test-env .test-env-badge {
   gap: 10px;
 }
 
+/* The launcher owns the bottom-right corner while it is mounted: any page bar
+   that is also position:fixed there (the contact editor's Save/Cancel,
+   contact.css) adds --cr-widget-clearance to its bottom offset, so the two
+   stack instead of overlapping. The widget sets body.has-cr-widget on mount
+   and removes it on destroy (ChangeRequestWidget.js); the value is the
+   launcher's height (~40px) + its 20px inset + a gap, and it is a length, not
+   a colour, so every theme reads the same (invariant 15). Elsewhere the
+   variable is unset and the bars fall back to 0px. rk-feed, 2026-09-23. */
+body.has-cr-widget { --cr-widget-clearance: 64px; }
+
 /* Launcher button. */
 #cr-widget .cr-fab {
   display: inline-flex;

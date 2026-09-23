@@ -2,7 +2,9 @@
 // submission is persisted alongside the notification email, the inbox API
 // and its RBAC (read + workflow writes = requireView('leads') via the seeded
 // `solufolk` role; delete + CSV = admin), the first-touch stamp, the no-store
-// posture, the never-throwing insert, and the retention prune.
+// posture, the never-throwing insert, the retention prune, the id shapes the
+// routes accept (integer or uuid, compared as text — rk-feed) and the
+// notification outcome on the row (migration 108).
 // CSRF is bypassed in test mode (see tests/env.js).
 const request = require('supertest');
 const app     = require('../../server/app');
@@ -173,6 +175,85 @@ describe('POST /api/v1/contact → leads row', () => {
   });
 });
 
+// ── The notification outcome on the row (migration 108) ──────────────────────
+
+describe('the notification outcome (notified_at / notify_error)', () => {
+  const emailService = require('../../server/services/emailService');
+  const rowOf = async (email) => {
+    // Poll until the outcome has been recorded — it lands after the insert
+    // AND the send have both settled, strictly after the visitor's 200.
+    for (let i = 0; i < 30; i++) {
+      const { rows } = await db.query('SELECT * FROM leads WHERE email = $1', [email]);
+      if (rows[0] && (rows[0].notified_at || rows[0].notify_error)) return rows[0];
+      await new Promise(r => setTimeout(r, 50));
+    }
+    const { rows } = await db.query('SELECT * FROM leads WHERE email = $1', [email]);
+    return rows[0] || null;
+  };
+
+  test('Lead.recordNotification: sent stamps notified_at and clears the error; a failure keeps the reason, capped', async () => {
+    const { randomUUID } = require('crypto');
+    const sid = randomUUID();
+    const row = await Lead.create({ submissionId: sid, name: 'A', email: 'rn@x.is', message: 'first message here' });
+    await Lead.recordNotification(sid, 'x'.repeat(900));
+    let got = await Lead.findById(row.id);
+    expect(got.notified_at).toBeNull();
+    expect(got.notify_error).toBe('x'.repeat(500));
+    await Lead.recordNotification(sid, null);
+    got = await Lead.findById(row.id);
+    expect(got.notified_at).not.toBeNull();
+    expect(got.notify_error).toBeNull();
+  });
+
+  test('Lead.recordNotification never throws — an unknown submission id or a bad value is swallowed', async () => {
+    await expect(Lead.recordNotification('no-such-submission', 'x')).resolves.toBeUndefined();
+    await expect(Lead.recordNotification(undefined, null)).resolves.toBeUndefined();
+  });
+
+  test('the contact path: a sent email stamps notified_at', async () => {
+    const spy = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(true);
+    try {
+      expect((await request(app).post('/api/v1/contact').send(validPayload({ email: 'sent@example.is' }))).status).toBe(200);
+      const row = await rowOf('sent@example.is');
+      expect(row.notified_at).not.toBeNull();
+      expect(row.notify_error).toBeNull();
+    } finally { spy.mockRestore(); }
+  });
+
+  test('the contact path: no transport → "email not configured"; a send error → its message; the visitor still gets 200', async () => {
+    const off = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(false);
+    try {
+      expect((await request(app).post('/api/v1/contact').send(validPayload({ email: 'off@example.is' }))).status).toBe(200);
+      const row = await rowOf('off@example.is');
+      expect(row.notified_at).toBeNull();
+      expect(row.notify_error).toBe('email not configured');
+    } finally { off.mockRestore(); }
+
+    const boom = jest.spyOn(emailService, 'sendLeadNotification').mockRejectedValue(new Error('Resend error: 502'));
+    try {
+      expect((await request(app).post('/api/v1/contact').send(validPayload({ email: 'boom@example.is' }))).status).toBe(200);
+      const row = await rowOf('boom@example.is');
+      expect(row.notified_at).toBeNull();
+      expect(row.notify_error).toBe('Resend error: 502');
+    } finally { boom.mockRestore(); }
+  });
+
+  test('the inbox carries the outcome, so the view can mark a row that was not emailed', async () => {
+    const off = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(false);
+    try {
+      await request(app).post('/api/v1/contact').send(validPayload({ email: 'mark@example.is' }));
+      await rowOf('mark@example.is');
+    } finally { off.mockRestore(); }
+    const res = await request(app).get('/api/v1/admin/leads').set('Cookie', salesCookie);
+    expect(res.status).toBe(200);
+    const lead = res.body.leads.find(l => l.email === 'mark@example.is');
+    expect(lead.notify_error).toBe('email not configured');
+    expect(lead.notified_at).toBeNull();
+    const one = await request(app).get(`/api/v1/admin/leads/${lead.id}`).set('Cookie', salesCookie);
+    expect(one.body.lead.notify_error).toBe('email not configured');
+  });
+});
+
 // ── Read access (requireView('leads')) ───────────────────────────────────────
 
 describe('GET /api/v1/admin/leads', () => {
@@ -227,6 +308,26 @@ describe('GET /api/v1/admin/leads', () => {
     expect(ok.body.lead.email).toBe('prufa@example.is');
     expect((await request(app).get('/api/v1/admin/leads/999999').set('Cookie', salesCookie)).status).toBe(404);
     expect((await request(app).get('/api/v1/admin/leads/abc').set('Cookie', salesCookie)).status).toBe(400);
+  });
+
+  // Ids are strings end to end (rk-feed, 2026-09-23): a product whose leads
+  // table predates the engine's holds TEXT uuids. The routes accept a uuid
+  // and compare as text — here, against SERIAL ids, that is a clean 404,
+  // never a 400 (rejected shape) and never a 500 (pg 22P02 on `id = $1`).
+  test('a uuid-shaped id is accepted by every route and compared as text (404 here, never 400/500)', async () => {
+    const uuid = '8d3e1c2a-4b5f-4e6d-9a7b-0c1d2e3f4a5b';
+    expect((await request(app).get(`/api/v1/admin/leads/${uuid}`).set('Cookie', salesCookie)).status).toBe(404);
+    expect((await request(app).patch(`/api/v1/admin/leads/${uuid}`).set('Cookie', salesCookie).send({ status: 'contacted' })).status).toBe(404);
+    expect((await request(app).delete(`/api/v1/admin/leads/${uuid}`).set('Cookie', adminCookie)).status).toBe(404);
+    for (const bad of ['0', '-1', '1.5', '1e3', '12abc', '8d3e1c2a-4b5f-4e6d-9a7b']) {
+      expect((await request(app).get(`/api/v1/admin/leads/${encodeURIComponent(bad)}`).set('Cookie', salesCookie)).status).toBe(400);
+    }
+    // The integer path still round-trips through the text compare.
+    const id = await insertLead();
+    const r = await request(app).patch(`/api/v1/admin/leads/${id}`).set('Cookie', salesCookie).send({ note: 'texti' });
+    expect(r.status).toBe(200);
+    expect(String(r.body.lead.id)).toBe(String(id));
+    expect(r.body.lead.note).toBe('texti');
   });
 });
 

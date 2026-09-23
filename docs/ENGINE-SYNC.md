@@ -136,11 +136,14 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
     run only where `engine.json.role` is `engine`. Since identity-seam-3
     (2026-09-23) a product's **own public routes** are config too:
     `identity.routes` — `{ "/console": { titleKey, descriptionKey?,
-    titleMode: "bare"|"suffix", noindex, locale } }` — is merged over the
+    titleMode: "bare"|"suffix", noindex, locale, contentKeys? } }` — is merged over the
     engine's `ROUTE_META`/`DEFAULT_META` (server) and the `pageTitle` table
     (client), `noindex` drives the robots meta + robots.txt + sitemap, and
     `locale` locks the route like the party pages (`forcedLocaleFor` asks
-    the party lock first, then the product's). So a route the engine does
+    the party lock first, then the product's); `contentKeys` names the
+    `site_content` rows the page renders, which is where the sitemap's
+    `<lastmod>` for that route comes from (rk-feed, 2026-09-23). `/llms.txt`
+    is the engine's too, built from the identity and the advertised pages. So a route the engine does
     not know (`/aron13ara`, `/console`) or one the product re-describes
     (`/`) needs no hook in an engine file; the keys live in the product
     overlay. Also in the seam: `organization.description` as an i18n key

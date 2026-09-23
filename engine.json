@@ -17,11 +17,46 @@
       "conflicts": 11,
       "note": "harvest",
       "harvestedFrom": "rk@4df09435115743ef15eeca952fdc9c5467d4bcfa",
-      "commits": ["4df09435115743ef15eeca952fdc9c5467d4bcfa"],
+      "commits": [
+        "4df09435115743ef15eeca952fdc9c5467d4bcfa"
+      ],
       "branch": "from-rk/2026-09-23",
-      "features": ["admin-2fa"],
-      "migrations": { "107_totp_secret_enc": "rk 093_totp_secret_enc (alias in rk.js)" },
-      "trimmed": ["clientConfig.js brand.name (identity seam owns it; issuer wired to identity.brand.name in a follow-up)", "CLAUDE.md", "LESSONS.md", "rk issuer test"]
+      "features": [
+        "admin-2fa"
+      ],
+      "migrations": {
+        "107_totp_secret_enc": "rk 093_totp_secret_enc (alias in rk.js)"
+      },
+      "trimmed": [
+        "clientConfig.js brand.name (identity seam owns it; issuer wired to identity.brand.name in a follow-up)",
+        "CLAUDE.md",
+        "LESSONS.md",
+        "rk issuer test"
+      ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-23",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "rk@2d9570d8132fd923d25e080be07b203f44a7ff1f",
+      "commits": [
+        "0a928c9 (sitemap lastmod + /llms.txt, product hooks made generic)",
+        "86e56d0 (notified_at / notify_error, recordNotification)"
+      ],
+      "branch": "fix/rk-feed",
+      "features": [
+        "public-site",
+        "leads"
+      ],
+      "migrations": {
+        "108_leads_notification": "rk 092_leads already holds the columns; IF NOT EXISTS, no alias"
+      },
+      "trimmed": [
+        "rk tierSummaries pricing block in /llms.txt (product content, no engine slot yet)",
+        "rk LASTMOD_KEYS route table (→ identity.routes[*].contentKeys)"
+      ]
     }
   ]
 }

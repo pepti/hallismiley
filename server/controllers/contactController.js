@@ -4,6 +4,11 @@
 // a no-PII conversion event. Email and row are independent, fire-and-forget:
 // a database problem never delays the visitor or stops the email, and vice
 // versa. /personuvernd §3 + §6 describe this store — change both together.
+// The email's outcome is recorded on the stored row (notified_at /
+// notify_error, migration 108) so the inbox shows which enquiries nobody was
+// emailed about: with no RESEND_API_KEY on PROD every enquiry used to vanish
+// behind a "received" reply (found in rekstrarkerfid, 2026-09-15; harvested
+// 2026-09-23).
 const { randomUUID } = require('crypto');
 const { t }          = require('../i18n');
 const logger         = require('../logger');
@@ -65,7 +70,7 @@ async function submit(req, res, next) {
 
     // Fire-and-forget: neither the notification nor analytics may delay or
     // fail the visitor's response.
-    emailService.sendLeadNotification({
+    const lead = {
       submissionId,
       name: name.trim(),
       email: email.trim(),
@@ -74,21 +79,26 @@ async function submit(req, res, next) {
       phone: phone ? phone.trim() : null,
       platform,
       locale: req.locale,
-    }).catch(err => logger.error({ submissionId, err: err.message }, 'lead notification failed'));
+    };
 
     // The inbox row. Lead.create never throws (it logs the id and returns
-    // null), so the email above and the response already sent are untouched
+    // null), so the email below and the response already sent are untouched
     // by whatever the database does.
-    Lead.create({
-      submissionId,
-      name: name.trim(),
-      email: email.trim(),
-      message: message.trim(),
-      company: company ? company.trim() : null,
-      phone: phone ? phone.trim() : null,
-      platform,
-      locale: req.locale,
-    }).catch(() => {});
+    const stored = Lead.create(lead).catch(() => null);
+
+    // The notification, independent of the row. Its OUTCOME is recorded on
+    // the row once both have settled (the outcome write would otherwise race
+    // the row's insert): null = sent, else a short reason. sendLeadNotification resolves
+    // false when no transport is configured and throws on a send error;
+    // recordNotification never throws, and the trailing catch keeps the whole
+    // chain from ever surfacing as an unhandled rejection.
+    emailService.sendLeadNotification(lead)
+      .then(sent => stored.then(() => Lead.recordNotification(submissionId, sent === false ? 'email not configured' : null)))
+      .catch(err => {
+        logger.error({ submissionId, err: err.message }, 'lead notification failed');
+        return stored.then(() => Lead.recordNotification(submissionId, err.message));
+      })
+      .catch(err => logger.error({ submissionId, err: err.message }, 'lead notification outcome not recorded'));
 
     AnalyticsEvent.record({
       event_type: 'contact_submit',
