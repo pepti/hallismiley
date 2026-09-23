@@ -33,6 +33,8 @@ const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const adminBookkeepingRoutes = require('./routes/adminBookkeepingRoutes');
 const systemRoutes = require('./routes/systemRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
+const { router: manifestRoutes } = require('./routes/manifestRoutes');
+const { router: robotsRoutes } = require('./routes/robotsRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
@@ -584,6 +586,14 @@ app.use('/assets/iceland',  express.static(path.join(__dirname, '../public/asset
 // Dynamic /sitemap.xml — must come BEFORE express.static so it shadows
 // any stale public/sitemap.xml file and reflects live DB state.
 app.use('/', sitemapRoutes);
+// /manifest.json named after the product (identity.brand) — before the
+// static mount for the same reason; public/manifest.json is the engine
+// default it fills in.
+app.use('/', manifestRoutes);
+// /robots.txt with the Disallow lines derived from identity.surface
+// .hiddenRoutes — before the static mount; public/robots.txt is the engine
+// default it replaces.
+app.use('/', robotsRoutes);
 
 // IndexNow key-file endpoint — Bing fetches `/<INDEXNOW_KEY>.txt` to verify
 // ownership before accepting our IndexNow API submissions. Serve it from an

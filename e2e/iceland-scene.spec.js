@@ -9,6 +9,11 @@ const { gateSpec } = require('./lib/featureGate');
 gateSpec(test, __filename);
 const AxeBuilder = require('@axe-core/playwright').default;
 const { loginAsAdmin } = require('./helpers');
+// The theme set and the public nav are the product's (config/client.json):
+// the contrast grade is pinned only where Miðnætti is offered, and the SPA
+// walk follows whatever nav routes wear a scene.
+const { identity } = require('./lib/identity');
+const { ROUTE_SCENE_IMAGES } = require('../server/config/sceneRoutes');
 
 // The session-restore authchange re-renders the view shortly after load, which
 // restarts the .view fade. Anything that measures computed styles (axe,
@@ -47,7 +52,10 @@ test.describe('Iceland scene — engine behaviours (on /is/thjonusta)', () => {
     // theme-boot pre-paint) — setting the attribute after load loses a race
     // with themePrefs.applyTheme() on the session-restore authchange.
     // (Was the mono grayscale check; mono retired 2026-09-02, Miðnætti took
-    // over the contrast job and its grade is what this now pins.)
+    // over the contrast job and its grade is what this now pins.) The grade
+    // is Miðnætti's, so the pin only applies where the product's picker
+    // offers it — a downstream with its own theme set has nothing to pin here.
+    test.skip(!identity.theme.picker.includes('midnight'), 'this product does not offer the midnight theme (identity.theme.picker)');
     await page.addInitScript(() => localStorage.setItem('ws_theme', 'midnight'));
     await page.goto('/is/thjonusta');
     const img = page.locator('.ice-scene--bleed[data-scene="canyon-river"] .ice-scene__img');
@@ -156,10 +164,16 @@ test.describe('Iceland scene — inner pages', () => {
     // Start on the (sceneless, video-hero) home and walk every scene page
     // via the SPA (View Transitions where supported, plain swap elsewhere —
     // both must land cleanly).
+    // The nav is the product's (identity.surface.nav); walk the links that
+    // lead to a scene page (server/config/sceneRoutes.js).
+    const sceneLinks = identity.surface.nav
+      .filter((e) => ROUTE_SCENE_IMAGES[e.route] && !identity.surface.hiddenRoutes.includes(e.route))
+      .map((e) => e.route);
+    test.skip(sceneLinks.length === 0, 'this product links no scene page from its nav');
     await page.goto('/is/');
     await expect(page.locator('video.lol-hero__bg')).toBeAttached({ timeout: 10_000 });
-    for (const link of ['thjonusta', 'um-okkur', 'hafa-samband']) {
-      await page.locator(`.lol-nav__link[data-route="/${link}"]`).first().click();
+    for (const route of sceneLinks) {
+      await page.locator(`.lol-nav__link[data-route="${route}"]`).first().click();
       await expect(page.locator('.ice-scene').first()).toBeVisible({ timeout: 10_000 });
     }
     expect(errors, `Unexpected JS errors: ${errors.join(', ')}`).toEqual([]);

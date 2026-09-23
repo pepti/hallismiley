@@ -54,6 +54,9 @@ global.fetch = jest.fn(async () => ({
 process.env.SOCIAL_LOGIN_ENABLED = 'true';
 
 const app = require('../../server/app');
+// The OAuth callbacks land on the visitor-default locale (tests/lib/locale.js);
+// only the locale-locked party route is a literal `/is/` by design.
+const { localePrefix } = require('../lib/locale');
 const db  = require('../../server/config/database');
 const { cleanTables, createTestAdminUser } = require('../helpers');
 
@@ -135,7 +138,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/#/?error=invalid_state');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=invalid_state`);
   });
 
   test('missing state cookie redirects with invalid_state error', async () => {
@@ -143,7 +146,7 @@ describe('GET /auth/google/callback', () => {
       .get('/auth/google/callback?code=abc&state=test-state-123');
     // no Cookie header
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/#/?error=invalid_state');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=invalid_state`);
   });
 
   test('unverified Google email redirects with google_profile_invalid', async () => {
@@ -154,7 +157,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/#/?error=google_profile_invalid');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=google_profile_invalid`);
   });
 
   test('new user — creates row with google_id, verified, and auto-username', async () => {
@@ -163,7 +166,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
 
     // Sets an auth_session cookie (Lucia).
     const cookies = res.headers['set-cookie'] ?? [];
@@ -197,7 +200,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
 
     const { rows } = await db.query(
       `SELECT username FROM users WHERE email = $1`,
@@ -224,7 +227,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
 
     const countAfter = (await db.query(`SELECT COUNT(*)::int AS n FROM users`)).rows[0].n;
     expect(countAfter).toBe(countBefore);
@@ -245,7 +248,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
 
     const { rows } = await db.query(
       `SELECT google_id, oauth_provider, email_verified
@@ -271,7 +274,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/#/?error=account_disabled');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=account_disabled`);
     // No auth_session cookie should be set.
     const cookies = res.headers['set-cookie'] ?? [];
     expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
@@ -285,7 +288,7 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/#/?error=oauth_failed');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=oauth_failed`);
   });
 
   test('redirects to the returnTo cookie when present and clears it', async () => {
@@ -335,6 +338,6 @@ describe('GET /auth/google/callback', () => {
       .set('Cookie', `${cookieHeader}; google_oauth_return_to=${encodedReturnTo}`);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
   });
 });

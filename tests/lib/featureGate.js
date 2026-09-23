@@ -79,10 +79,23 @@ function createGate({
   localPath = path.join(root, 'features', 'local.json'),
   features = loadFeatures(root),
   product = productId(root),
+  // The resolved client config, for features whose registry `flag` names a
+  // key path there (self-update: modules.selfUpdate.enabled). Read lazily so
+  // building a gate over a synthetic registry never loads the app's config.
+  config = null,
 } = {}) {
   const local = readLocal(localPath);
   const byId = new Map(features.map((f) => [f.id, f]));
   const matchers = features.map((f) => ({ id: f.id, res: (f.paths || []).map(globRe) }));
+
+  function resolvedConfig() {
+    if (config) return config;
+    config = require('../../server/config/clientConfig').clientConfig;
+    return config;
+  }
+  function flagValue(dotted) {
+    return dotted.split('.').reduce((o, k) => (o && typeof o === 'object' && k in o ? o[k] : undefined), resolvedConfig());
+  }
 
   function gate(featureId) {
     const f = byId.get(featureId);
@@ -98,6 +111,16 @@ function createGate({
       return {
         skip: true, status: override.status, feature: featureId,
         reason: `${featureId} is ${override.status} on this product (features/local.json)${override.note ? `: ${override.note}` : ''}`,
+      };
+    }
+    // A feature switched off by its module flag (config/client.json) is
+    // disabled on this instance whatever local.json says: its suites assert
+    // the ON behaviour. A suite that tests the OFF state sets the flag itself
+    // and must not shadow `describe` through this gate.
+    if (f.flag && flagValue(f.flag) === false) {
+      return {
+        skip: true, status: 'disabled', feature: featureId,
+        reason: `${featureId} is switched off on this instance (${f.flag} = false in the client config)`,
       };
     }
     return { skip: false, status: override ? override.status : f.status || null, reason: null, feature: featureId };

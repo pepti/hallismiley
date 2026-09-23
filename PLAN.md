@@ -157,10 +157,27 @@ chunk lands; add a HISTORY entry for the story.
   the HISTORY entry) and lists the engine features it hides in
   `features/local.json`; LedgerLink's and rekstrarkerfid's graft PRs likewise
   (their 32 e2e failures were engine specs on hidden features — the gate skips
-  them once `local.json` says so). Still literal, by design: the seeded company
-  copy (product migrations), the PWA `manifest.json` name, the Product-schema
-  `brand`; a product with more themes than the engine adds its own
-  `THEME_SWATCHES` entries (unknown ids get a neutral swatch).
+  them once `local.json` says so). Second iteration landed 2026-09-23
+  ([identity-seam-2-2026-09-23](docs/HISTORY.md#identity-seam-2-2026-09-23)):
+  `identity.surface.nav` (nav, footers, sitemap), `meta.<key>.*` i18n keys for
+  the page parts, `/manifest.json` and the Product brand from the identity,
+  engine suites on the visitor default, engine-only pins gated on
+  `engine.json.role`, the `.view` fade fill-mode dropped; from LedgerLink's
+  addendum: `theme.dark` + root outside the picker, `/robots.txt` from
+  `hiddenRoutes`, the brand aria-label from `brand.name`, the Service
+  catalogue only while `/thjonusta` is public, the admin specs off the seam,
+  self-update suites gated by `modules.selfUpdate.enabled`. hallismiley's next
+  sync sets `surface.nav` (verkefni/news/halli), overrides `meta.home.title`
+  in its `product.<lc>.json` (the engine part still says "AI-driven software
+  company"), and re-runs `aron13.spec.js` ×2 — not reproducible in the engine
+  (its own view); the `.view` fix is the one engine change that alters what
+  moves there. Still literal, by design: the seeded company copy (product
+  migrations), `SERVICE_OFFERINGS` + the Rekstrarkerfið entry in the Service
+  JSON-LD (company content in `ssrMeta.js`), the `classic` palette hues, the
+  static `public/manifest.json` colours; a product with more themes than the
+  engine adds its own `THEME_SWATCHES` entries (unknown ids get a neutral
+  swatch). Not done, deliberately: a product slot for its OWN public routes'
+  meta (a hook in `ROUTE_META` is still needed for e.g. `/aron13ara`).
 - First upward harvest landed 2026-09-23 ([harvest-rk-totp-2026-09-23](docs/HISTORY.md#harvest-rk-totp-2026-09-23)):
   mandatory 2FA enrolment + TOTP secret sealed at rest (migration 107). Open:
   (a) **before the first deploy of 107, create `TOTP_ENC_KEY` in the instance's

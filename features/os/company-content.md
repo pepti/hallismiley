@@ -6,7 +6,7 @@ owner: os
 status: live
 flag: null
 paths:
-  - server/config/product-migrations/**
+  - server/config/product-migrations/os.js
   - server/scripts/seed-sales-guides.js
   - tests/integration/salesGuidesServicesPage.test.js
   - tests/integration/salesGuidesD001.test.js

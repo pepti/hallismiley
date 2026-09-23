@@ -850,3 +850,25 @@ test-enforced or it rots by the second chunk. For the factory: scaffold
 `docs/ARCHITECTURE.md` + `docs/HISTORY.md` + the parity test from day one,
 and put the "recording a chunk" rule in the template CLAUDE.md. Harvest
 candidates: icelandicstore (index its HISTORY.md), the base (has neither).
+
+## 2026-09-23 — an engine sync put back a bug the downstream had already fixed, because the fix lived in an engine file _(factory)_
+
+hallismiley's `news-editor.spec.js` passed on its pre-graft base and failed
+after taking the engine: the editor overlay sat 56px down and could not
+scroll to its footer. The cause was `main.css` — the engine's `.view`
+fade-in ran with `animation-fill-mode: forwards`, so the end keyframe's
+`translateY(0)` (a transform, not `none`) stayed on `.view` for good and made
+it the containing block of every `position:fixed` descendant. hallismiley had
+dropped the fill-mode months earlier, with a comment saying exactly why; the
+engine never received that fix, and `git merge upstream/master` took the
+engine's file. Two of its `aron13.spec.js` cases fell over in the same run
+and were blamed on the same sync, but they exercise a view the engine does
+not have, so only the `.view` change could be checked here.
+
+**Lesson.** A downstream fix in an engine-owned file is invisible to the
+engine until someone reads the downstream's diff — the merge cannot carry it
+upward. When a sync PR reports "passes before, fails after", diff the
+downstream's version of the failing area against the engine's BEFORE
+suspecting the new engine code; and harvest such fixes up (`engine-harvest.js`
+with a `Feature:` trailer) the day they land downstream, not at the next
+sync. The fix is back in the engine (identity-seam-2) with the spec ported.

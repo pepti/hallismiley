@@ -118,7 +118,7 @@ Also set on any real instance:
 | Variable | Why |
 |---|---|
 | `APP_ENV` | `production` / `test` — the environment label (`server/config/appEnv.js`); drives the RESEND rule above, the MCP `[TEST]/[PROD]` tag and the change-request gate |
-| `APP_URL` | canonical origin: email links, sitemap, SSR canonical/og/JSON-LD, the canonical-host 301. Code default `https://www.orangesmiley.is` since 2026-09-22 (was the base's hallismiley.is) |
+| `APP_URL` | canonical origin: email links, sitemap, SSR canonical/og/JSON-LD, the canonical-host 301, `{siteHost}` in the email strings. **The code fallback (`https://www.orangesmiley.is` since 2026-09-22; before that the base's hallismiley.is) is the ENGINE's origin, not the instance's** — it is not part of the identity seam, so every downstream sets `APP_URL` on its App Service (or `deploy.yml`); a product that forgets inherits the engine's host in its canonical tags, sitemap and email links, and its canonical-host 301 sends traffic to the engine's site |
 | `EMAIL_FROM` | sender. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `info@orangesmiley.is` |
 | `EMAIL_REPLY_TO` | where replies go — the sending domain has no inbox. Added to every message that does not set its own (lead notifications reply to the enquirer). Unset = no Reply-To |
 | `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |

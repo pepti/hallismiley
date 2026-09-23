@@ -4,9 +4,11 @@
 //        t('en', 'email.verify.subject')
 //        t('is', 'email.order.subject', { orderNumber: 'ORD-001' })
 //
-// Two params are IMPLICIT on every call, so the engine's email strings carry
-// no brand literal (the identity seam, 2026-09-22):
+// Three params are IMPLICIT on every call, so the engine's email and meta
+// strings carry no brand literal (the identity seam, 2026-09-22):
 //   {siteName}  identity.brand.name       — "Orange Smiley" here
+//   {legalName} identity.brand.legalName  — "Orange Smiley ehf." (the meta
+//               descriptions name the registered company; identity-seam-2)
 //   {siteHost}  the host of APP_URL, without a leading "www." — "orangesmiley.is"
 // An explicit param of the same name wins. Product-specific wording still goes
 // in product.<locale>.json; these placeholders are for the engine table.
@@ -42,7 +44,15 @@ function siteHost() {
 }
 
 function implicitParams() {
-  return { siteName: identity.brand.name, siteHost: siteHost() };
+  return { siteName: identity.brand.name, legalName: identity.brand.legalName, siteHost: siteHost() };
+}
+
+/** Does the table for `locale` (or its fallback) carry `key`? t() returns
+ *  the key itself for a missing string, which a caller building optional
+ *  copy (a meta description a page may not have) cannot tell from text. */
+function has(locale, key) {
+  if (!locale || !SUPPORTED_LOCALES.includes(locale)) locale = DEFAULT_LOCALE;
+  return _load(locale)[key] !== undefined || _load(DEFAULT_LOCALE)[key] !== undefined;
 }
 
 function t(locale, key, params) {
@@ -60,4 +70,4 @@ function t(locale, key, params) {
   return msg;
 }
 
-module.exports = { t, siteHost, implicitParams };
+module.exports = { t, has, siteHost, implicitParams };

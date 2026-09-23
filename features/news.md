@@ -14,10 +14,11 @@ paths:
   - public/css/news.css
   - tests/integration/news.test.js
   - tests/integration/newsMedia.test.js
+  - e2e/news-editor.spec.js
 migrations: [008_news, 016_news_media]
 since: 2026-08-09
 origin: null
-history: [r1]
+history: [r1, identity-seam-2-2026-09-23]
 ---
 
 News posts with media (016) and `_is` sibling bodies, at `/news` (hidden here) with the article page. A public `/frettir` home is an open item.

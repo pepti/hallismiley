@@ -1,5 +1,5 @@
 {
-  "$comment": "Per-instance configuration for orangesmiley.is (the public company site). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. selfUpdate stays 'managed' until the release channel of SELF-UPDATE-PLAN Phase 5 exists; Orange Smiley's own instances move to the 'canary' channel then, so we soak our own releases before customers see 'stable'. The `identity` block (D-021, 2026-09-22) is what makes this product THIS product — brand, visitor locale, theme trio, hero clip, hidden surfaces, Organization record. This repo is the engine, so its values equal the schema defaults and are spelled out here as the worked example a downstream copies and edits (docs/ENGINE-SYNC.md §6); tests/unit/identityConfig.test.js pins them.",
+  "$comment": "Per-instance configuration for orangesmiley.is (the public company site). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. selfUpdate stays 'managed' until the release channel of SELF-UPDATE-PLAN Phase 5 exists; Orange Smiley's own instances move to the 'canary' channel then, so we soak our own releases before customers see 'stable'. The `identity` block (D-021, 2026-09-22) is what makes this product THIS product — brand, visitor locale, theme trio, hero clip, the public nav (surface.nav: ordered { route, labelKey } entries after Home — the top nav, both footers and the sitemap derive from it), hidden surfaces, Organization record. This repo is the engine, so its values equal the schema defaults and are spelled out here as the worked example a downstream copies and edits (docs/ENGINE-SYNC.md §6); tests/unit/identityConfig.test.js pins them.",
   "identity": {
     "brand": {
       "name": "Orange Smiley",
@@ -13,13 +13,19 @@
     "theme": {
       "default": "ember",
       "root": "classic",
-      "picker": ["ember", "classic", "midnight"]
+      "picker": ["ember", "classic", "midnight"],
+      "dark": ["ember", "midnight"]
     },
     "hero": {
       "clip": "/assets/videos/hero-dc7df-v2.mp4",
       "poster": "/assets/videos/hero-dc7df-v2-poster.jpg"
     },
     "surface": {
+      "nav": [
+        { "route": "/thjonusta",    "labelKey": "nav.thjonusta" },
+        { "route": "/um-okkur",     "labelKey": "nav.umOkkur" },
+        { "route": "/hafa-samband", "labelKey": "nav.hafaSamband" }
+      ],
       "hiddenRoutes": ["/party", "/halli", "/about", "/news", "/shop", "/projects", "/contact", "/privacy", "/verkefni"],
       "hiddenAdminViews": ["products", "collections", "bins", "orders", "discounts", "sales", "pos", "background"]
     },

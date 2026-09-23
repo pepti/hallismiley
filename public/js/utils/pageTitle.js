@@ -7,46 +7,52 @@
 // knúið gervigreind". Crawlers and social unfurls always get the SSR title, so
 // this is purely human-facing — tab labels, bookmark names, browser history.
 //
-// ⚠ PUBLIC page parts below are copied VERBATIM from DEFAULT_META in
-// server/middleware/ssrMeta.js, routed by the same patterns as its ROUTE_META,
-// and composed the same way (server/config/identity.js composeTitle): a part
-// carrying `{brand}` is substituted, a `TITLE_MODE` of 'bare' is used as
-// written, everything else gets identity.brand.titleSuffix. The brand and the
-// suffix come from utils/identity.js (the product's config/client.json), so a
+// ⚠ PUBLIC page parts are i18n KEYS (`meta.<key>.title`, identity-seam-2,
+// 2026-09-23) — the same keys DEFAULT_META in server/middleware/ssrMeta.js
+// names, routed by the same patterns as its ROUTE_META, and composed the same
+// way (server/config/identity.js composeTitle): a part carrying `{brand}` is
+// substituted, a `TITLE_MODE` of 'bare' is used as written, everything else
+// gets identity.brand.titleSuffix. The text lives in public/js/i18n/<locale>.json
+// (engine) and product.<locale>.json (a product's override), the brand and the
+// suffix in utils/identity.js (the product's config/client.json), so a
 // downstream never edits this file. A direct load of /thjonusta and a
-// client-side navigation to it must not title the tab differently.
-// tests/unit/pageTitle.test.js reads that server file and fails on any drift,
-// so this comment is enforced rather than hopeful.
+// client-side navigation to it must not title the tab differently:
+// tests/unit/pageTitle.test.js reads the server file and both tables and
+// fails on any drift, so this comment is enforced rather than hopeful.
 //
-// Admin and account routes have no SSR titles at all (they are noindex), so
-// those strings live only here.
+// The public parts read the ACTIVE message table (t()) — the router calls
+// titleForRoute after loadLocale, so that is the locale it passes. Admin and
+// account routes have no SSR titles at all (they are noindex), so those
+// strings live only here.
 //
 // A detail view that knows its own subject — an article, an invoice, a customer
 // account — should set `view.documentTitle` instead of adding a pattern here.
 // The router prefers that whenever it is a non-empty string.
 
 import { getIdentity } from './identity.js';
+import { t } from '../i18n/i18n.js';
 
-// Route pattern (as ROUTES in router.js declares it) → page part per locale.
+// Route pattern (as ROUTES in router.js declares it) → the i18n key of its
+// page part.
 const PUBLIC_TITLES = {
-  '/':              { en: '{brand} — AI-driven software company', is: '{brand} — hugbúnaðarhús knúið gervigreind' },
-  '/thjonusta':     { en: 'Services',                             is: 'Þjónusta' },
-  '/um-okkur':      { en: 'About us',                             is: 'Um okkur' },
-  '/hafa-samband':  { en: 'Contact',                              is: 'Hafa samband' },
-  '/personuvernd':  { en: 'Privacy Policy',                       is: 'Persónuverndarstefna' },
+  '/':              'meta.home.title',
+  '/thjonusta':     'meta.thjonusta.title',
+  '/um-okkur':      'meta.umOkkur.title',
+  '/hafa-samband':  'meta.contact.title',
+  '/personuvernd':  'meta.privacy.title',
   // Hidden-but-functional surfaces (server/config/publicSurface.js).
-  '/verkefni':      { en: 'Our work',                             is: 'Verkefnin okkar' },
-  '/projects':      { en: 'Our work',                             is: 'Verkefnin okkar' },
-  '/contact':       { en: 'Contact',                              is: 'Hafa samband' },
-  '/privacy':       { en: 'Privacy Policy',                       is: 'Persónuverndarstefna' },
-  '/terms':         { en: 'Terms of Service',                     is: 'Notkunarskilmálar' },
+  '/verkefni':      'meta.projects.title',
+  '/projects':      'meta.projects.title',
+  '/contact':       'meta.contact.title',
+  '/privacy':       'meta.privacy.title',
+  '/terms':         'meta.terms.title',
   // The portfolio surfaces keep their own full titles ("Halli Smiley" is the
   // base's, by design) — TITLE_MODE marks them bare, like the server does.
-  '/halli':         { en: 'About Halli — Where Wood Meets Code',  is: 'Um Halla — Þar sem viður mætir kóða' },
-  '/about':         { en: 'About Halli — Where Wood Meets Code',  is: 'Um Halla — Þar sem viður mætir kóða' },
-  '/shop':          { en: 'Shop — Halli Smiley',                  is: 'Verslun — Halli Smiley' },
-  '/news':          { en: 'News — Halli Smiley',                  is: 'Fréttir — Halli Smiley' },
-  '/party':         { en: "Halli's 40th Birthday Party",          is: '40 ára afmæli Halla' },
+  '/halli':         'meta.halli.title',
+  '/about':         'meta.halli.title',
+  '/shop':          'meta.shop.title',
+  '/news':          'meta.news.title',
+  '/party':         'meta.party.title',
 };
 
 // Routes whose part IS the whole title (ssrMeta's `titleMode: 'bare'`).
@@ -101,7 +107,8 @@ export function composeTitle(part, mode) {
 /**
  * Build the document title for a route.
  * @param {string} pattern route pattern from the router (or the path itself)
- * @param {string} locale  'en' | 'is'
+ * @param {string} locale  'en' | 'is' — the active locale (public parts are
+ *                         read from the active message table)
  * @returns {string}
  */
 export function titleForRoute(pattern, locale) {
@@ -109,8 +116,8 @@ export function titleForRoute(pattern, locale) {
   const site = getIdentity().brand.name;
   const key = INHERITS[pattern] || pattern;
 
-  const part = PUBLIC_TITLES[key];
-  if (part) return composeTitle(part[lc], TITLE_MODE[key]);
+  const titleKey = PUBLIC_TITLES[key];
+  if (titleKey) return composeTitle(t(titleKey), TITLE_MODE[key]);
 
   const section = SECTIONS[key];
   if (section) return composeTitle(section[lc]);

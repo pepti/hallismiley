@@ -82,8 +82,16 @@ body::before {
 
 #app { min-height: calc(100vh - 56px); }
 
+/* No fill-mode on purpose: `forwards` would keep the end keyframe's
+   transform (translateY(0) is NOT `none`) on .view for good, which makes
+   .view the containing block for every position:fixed descendant — modal
+   overlays got sized to the page instead of the viewport and sat 56px down
+   (the nav's height), so the news editor could not scroll to its footer
+   (hallismiley's news-editor.spec.js, back in the engine since
+   identity-seam-2). The end keyframe IS the element's natural state, so
+   nothing jumps when the animation ends. */
 @media (prefers-reduced-motion: no-preference) {
-  .view { animation: fadeIn 300ms ease forwards; }
+  .view { animation: fadeIn 300ms ease; }
 }
 /* While a View Transition runs the router adds .vt-active — the crossfade
    owns the entrance, so the legacy fade must not stack on top of it. */

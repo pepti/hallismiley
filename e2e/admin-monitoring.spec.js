@@ -29,9 +29,12 @@ test.describe('admin monitoring — latest updates card', () => {
   });
 
   test('the stylesheet is applied — cards are styled surfaces, not bare divs', async ({ page }) => {
+    // The tell is a token EVERY theme sets — a surface fill, a border and
+    // padding — not the radius: a product with square corners (radius 0) is
+    // styled too (LedgerLink).
     const styled = await page.locator('.mon-card').first().evaluate((el) => {
       const cs = getComputedStyle(el);
-      return cs.borderRadius !== '0px' && cs.borderTopWidth !== '0px';
+      return cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.borderTopWidth !== '0px' && cs.paddingTop !== '0px';
     });
     expect(styled).toBe(true);
   });

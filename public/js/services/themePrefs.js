@@ -63,9 +63,11 @@ const DEMO_KEY  = 'ws_demo_mode';
 // swatch previews their immersive look.
 // Which themes paint a dark page. Both pickers use it to put an orange rim on
 // the dark swatches — a near-black circle on a light picker otherwise reads as
-// a blob of ink rather than "this is the dark one". Kept here so the two
+// a blob of ink rather than "this is the dark one". The SET is the product's
+// (identity.theme.dark in config/client.json; identity-seam-2) so a downstream
+// with its own themes names its dark ones there; read here so the two
 // pickers cannot disagree about which themes are dark.
-export const DARK_THEMES = new Set(['ember', 'midnight']);
+export const DARK_THEMES = new Set(IDENTITY_THEME.dark);
 
 export const THEME_SWATCHES = {
   classic:  'linear-gradient(135deg, #7B5533 0%, #F2EBE0 70%)',

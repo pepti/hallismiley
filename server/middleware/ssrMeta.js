@@ -38,6 +38,9 @@ const { clientAppEnv }  = require('../config/appEnv');
 const {
   identity, htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
 } = require('../config/identity');
+// The page parts and descriptions are i18n keys (`meta.<key>.*`) resolved
+// through the engine table + the product overlay — identity-seam-2.
+const { t, has: hasText } = require('../i18n');
 
 // Iceland scene hero preloads — the scene engine's LCP insurance. The JSON
 // twin of public/js/scenes/manifest.js (both written by
@@ -45,29 +48,7 @@ const {
 // build) degrades to no preload, never an error.
 let SCENE_MANIFEST = null;
 try { SCENE_MANIFEST = require('../config/sceneManifest.json'); } catch { /* not built yet */ }
-// Route (locale-stripped) → scene image id — kept in step with the
-// assignments in public/js/scenes/sceneDefs.js.
-const ROUTE_SCENE_IMAGES = {
-  // No '/' entry: the home hero is a video again (2026-08-22 revert; the
-  // clip is hero-dc7df since 2026-09-13) — preloading a 200KB+ AVIF the page never paints would burn the
-  // LCP budget it was meant to protect.
-  // iceland-v2 (2026-09-22): Halli's AI-generated set, one scene per page.
-  '/thjonusta': 'canyon-river',
-  '/verkefni': 'rhyolite-ridges',
-  '/projects': 'rhyolite-ridges',
-  '/um-okkur': 'glacier-tongue',
-  '/hafa-samband': 'black-beach',
-  '/contact': 'black-beach',
-  '/personuvernd': 'cave-falls',
-  '/privacy': 'cave-falls',
-  '/terms': 'basalt-canyon',
-  '/signup': 'moss-falls',
-  '/forgot-password': 'snow-rapids',
-  '/reset-password': 'snow-rapids',
-  '/verify-email': 'snow-rapids',
-  '/profile': 'hot-spring',
-  // No 404 entry: an unmatched path has no route to key on here.
-};
+const { ROUTE_SCENE_IMAGES } = require('../config/sceneRoutes');
 function scenePreloadTag(route) {
   const img = SCENE_MANIFEST && SCENE_MANIFEST[ROUTE_SCENE_IMAGES[route]];
   if (!img || !img.sources || !img.sources.avif || !img.sources.avif.length) return '';
@@ -133,56 +114,46 @@ const ROUTE_META = {
   '/party':            { key: 'party' },
 };
 
-// `title` is the PAGE PART; the document title is composeTitle(part, mode)
-// from server/config/identity.js — part + identity.brand.titleSuffix, or the
-// part with `{brand}` substituted (home), or, for `titleMode: 'bare'`, the
-// part as written (the hidden portfolio surfaces keep their own full titles —
-// "Halli Smiley" there is the base's, on purpose). Keep the key order
-// `title, titleMode, description`: tests/unit/pageTitle.test.js parses these
-// lines to hold public/js/utils/pageTitle.js to the same parts and modes.
+// Per static key: the i18n KEYS of the page part (`title`) and the
+// description, plus the title mode. The human text lives in the engine i18n
+// tables (server/i18n/<locale>.json, `meta.<key>.*`; identity-seam-2,
+// 2026-09-23) so a product overrides a title or description in its
+// product.<locale>.json without touching this file. The document title is
+// composeTitle(part, mode) from server/config/identity.js — part +
+// identity.brand.titleSuffix, or the part with `{brand}` substituted (home),
+// or, for `titleMode: 'bare'`, the part as written (the hidden portfolio
+// surfaces keep their own full titles — "Halli Smiley" there is the base's,
+// on purpose). Keep the key order `title, titleMode, description`:
+// tests/unit/pageTitle.test.js parses these lines to hold
+// public/js/utils/pageTitle.js to the same keys and modes, and holds the
+// client and server tables to the same text.
 const DEFAULT_META = {
-  en: {
-    home:           { title: '{brand} — AI-driven software company', description: 'Icelandic software company driven by AI. We build software for small and medium businesses: custom systems, websites, online stores and Rekstrarkerfið.' },
-    thjonusta:      { title: 'Services', description: 'Software for small and medium businesses: custom systems, websites, online stores, integrations and automation. Rekstrarkerfið is our ready-made system for retail and operations.' },
-    umOkkur:        { title: 'About us', description: 'Orange Smiley ehf. is an Icelandic software company: a solo founder assisted by AI agents, building and operating systems for Icelandic SMBs.' },
-    projects:       { title: 'Our work', description: 'Case studies of systems we have built and operate — including a full Shopify-to-own-platform migration for an Icelandic wholesaler.' },
-    halli:          { title: 'About Halli — Where Wood Meets Code', titleMode: 'bare', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
-    shop:           { title: 'Shop — Halli Smiley', titleMode: 'bare', description: 'Apparel, goods, and services from the workshop. Prices include 24% VAT, shipping from Iceland.' },
-    shopProducts:   { title: 'Products — Halli Smiley Shop', titleMode: 'bare', description: 'Physical goods from the workshop: apparel and accessories. Prices include 24% VAT, shipping from Iceland.' },
-    shopTech:       { title: 'Tech Services — Work with Halli', titleMode: 'bare', description: 'Technical advisement, AI teaching sessions, and lectures by Halli. Book a session through the shop.' },
-    shopCarpentry:  { title: 'Carpentry Services — Work with Halli', titleMode: 'bare', description: 'Carpentry advisement and commissioned work — including TV wall artwork. Book a session through the shop.' },
-    news:           { title: 'News — Halli Smiley', titleMode: 'bare', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
-    contact:        { title: 'Contact', description: 'Get a demo or ask about moving your website, store or business system over. We reply within one business day.' },
-    privacy:        { title: 'Privacy Policy' },
-    terms:          { title: 'Terms of Service' },
-    party:          { title: "Halli's 40th Birthday Party", titleMode: 'bare', description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
-  },
-  is: {
-    home:           { title: '{brand} — hugbúnaðarhús knúið gervigreind', description: 'Íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum hugbúnað fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefi, vefverslanir og Rekstrarkerfið.' },
-    thjonusta:      { title: 'Þjónusta', description: 'Hugbúnaður fyrir lítil og meðalstór fyrirtæki: sérsmíðuð kerfi, vefir, vefverslanir, tengingar og sjálfvirkni. Rekstrarkerfið er tilbúin lausn fyrir verslun og rekstur.' },
-    umOkkur:        { title: 'Um okkur', description: 'Orange Smiley ehf. er íslenskt hugbúnaðarfyrirtæki: einn stofnandi með aðstoð gervigreindarumboða sem smíðar og rekur kerfi fyrir íslensk fyrirtæki.' },
-    projects:       { title: 'Verkefnin okkar', description: 'Umfjöllun um kerfi sem við höfum smíðað og rekum — þar á meðal flutning íslenskrar heildverslunar af Shopify yfir á eigið kerfi.' },
-    halli:          { title: 'Um Halla — Þar sem viður mætir kóða', titleMode: 'bare', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
-    shop:           { title: 'Verslun — Halli Smiley', titleMode: 'bare', description: 'Fatnaður, varningur og þjónusta úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
-    shopProducts:   { title: 'Vörur — Verslun Halla Smiley', titleMode: 'bare', description: 'Áþreifanlegar vörur úr verkstæðinu: fatnaður og fylgihlutir. Verð með 24% VSK, sent frá Íslandi.' },
-    shopTech:       { title: 'Tækniþjónusta — Vinnuðu með Halla', titleMode: 'bare', description: 'Tækniráðgjöf, AI-kennsla og fyrirlestrar hjá Halla. Bókaðu tíma í gegnum verslunina.' },
-    shopCarpentry:  { title: 'Smíðaþjónusta — Vinnuðu með Halla', titleMode: 'bare', description: 'Smíðaráðgjöf og sérsmíði — þar á meðal sjónvarpsveggir. Bókaðu tíma í gegnum verslunina.' },
-    news:           { title: 'Fréttir — Halli Smiley', titleMode: 'bare', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
-    contact:        { title: 'Hafa samband', description: 'Fáðu demo eða spurðu um flutning á vef, verslun eða rekstrarkerfi. Við svörum innan eins virks dags.' },
-    privacy:        { title: 'Persónuverndarstefna' },
-    terms:          { title: 'Notkunarskilmálar' },
-    party:          { title: '40 ára afmæli Halla', titleMode: 'bare', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
-  },
+  home:           { title: 'meta.home.title', description: 'meta.home.description' },
+  thjonusta:      { title: 'meta.thjonusta.title', description: 'meta.thjonusta.description' },
+  umOkkur:        { title: 'meta.umOkkur.title', description: 'meta.umOkkur.description' },
+  projects:       { title: 'meta.projects.title', description: 'meta.projects.description' },
+  halli:          { title: 'meta.halli.title', titleMode: 'bare', description: 'meta.halli.description' },
+  shop:           { title: 'meta.shop.title', titleMode: 'bare', description: 'meta.shop.description' },
+  shopProducts:   { title: 'meta.shopProducts.title', titleMode: 'bare', description: 'meta.shopProducts.description' },
+  shopTech:       { title: 'meta.shopTech.title', titleMode: 'bare', description: 'meta.shopTech.description' },
+  shopCarpentry:  { title: 'meta.shopCarpentry.title', titleMode: 'bare', description: 'meta.shopCarpentry.description' },
+  news:           { title: 'meta.news.title', titleMode: 'bare', description: 'meta.news.description' },
+  contact:        { title: 'meta.contact.title', description: 'meta.contact.description' },
+  privacy:        { title: 'meta.privacy.title' },
+  terms:          { title: 'meta.terms.title' },
+  party:          { title: 'meta.party.title', titleMode: 'bare', description: 'meta.party.description' },
 };
 
 // The document title + description for a static key in a locale, composed
-// from the page part above and the product's brand — the ONE place a title
-// is assembled server-side. Falls back through DEFAULT_LOCALE like content.
+// from the translated page part and the product's brand — the ONE place a
+// title is assembled server-side. t() falls back through DEFAULT_LOCALE like
+// content; a description key the tables do not carry (privacy, terms) is
+// simply absent, never the key's name.
 function metaFor(locale, key) {
-  const table = DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE];
-  const entry = table[key] || DEFAULT_META[DEFAULT_LOCALE][key];
+  const entry = DEFAULT_META[key];
   if (!entry) return null;
-  return { title: composeTitle(entry.title, entry.titleMode), description: entry.description };
+  const description = entry.description && hasText(locale, entry.description) ? t(locale, entry.description) : undefined;
+  return { title: composeTitle(t(locale, entry.title), entry.titleMode), description };
 }
 
 // Section labels for breadcrumbs (per locale).
@@ -482,7 +453,9 @@ function productSchema(row, locale, canonical) {
     description: desc,
     image: row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`,
     sku: row.slug,
-    brand: { '@type': 'Brand', name: 'Rekstrarkerfið' },
+    // The shop's goods carry the product's brand (identity-seam-2) — the
+    // company's, not one product's name.
+    brand: { '@type': 'Brand', name: identity.brand.name },
     offers: {
       '@type': 'Offer',
       url: canonical,
@@ -992,7 +965,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     if (route !== '/') {
       // The services page is the one non-home route that carries the offering
       // itself, so the Service catalog belongs on it as well as on /.
-      if (route === '/thjonusta') schemas.push(serviceSchema(locale));
+      if (route === '/thjonusta' && !isHiddenRoute('/thjonusta')) schemas.push(serviceSchema(locale));
 
       let section = null;
       let detailName = null;
@@ -1015,7 +988,9 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       // plus the Service catalog, both resolving to the Organization schema
       // baked into public/index.html.
       schemas.push(websiteSchema());
-      schemas.push(serviceSchema(locale));
+      // The Service catalogue is the company's offering (SERVICE_OFFERINGS +
+      // the product entry): only while the services page is public.
+      if (!isHiddenRoute('/thjonusta')) schemas.push(serviceSchema(locale));
     }
   }
 
