@@ -43,9 +43,8 @@ const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register, dbPoolTotal, dbPoolIdle, dbPoolWaiting } = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
-const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
-const { healthCheckFailed } = require('./observability/alerts');
-const { readMemory } = require('./observability/memoryUsage');
+const { dbCircuitBreakerMiddleware } = require('./observability/circuitBreaker');
+const { runReadinessChecks, readinessBody } = require('./observability/readiness');
 const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
@@ -204,13 +203,11 @@ app.post('/api/v1/shop/webhook',
 // 404 unless INSTANCE_ROLE=public with SELLER_PUBLISH_SECRET set.
 app.use('/api/v1/seller-publish', require('./routes/sellerPublishRoutes'));
 
-// Change-request submissions may carry an inline base64 screenshot, so this
-// path gets a larger JSON limit. Mounted BEFORE the global 100 kb parser —
-// once body-parser sets req._body the global parser short-circuits for this
-// path. Note this parser also runs before the rate limiters and the route's
-// gate (middleware/changeRequestGate.js): a body on this path is parsed before
-// anything can refuse it, which is the price of the ordering trick above.
-app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
+// Change-request submissions may carry an inline base64 screenshot (5 MB).
+// Like the product import below, that body is parsed in its own router
+// (routes/changeRequestRoutes.js) AFTER the submit limiter, the admin gate and
+// CSRF — until 2026-09-23 an app-level 5 MB parser sat here, ahead of all of
+// them, so an anonymous body was parsed and sanitized before the gate 404'd it.
 
 // Product CSV import posts the whole catalogue as JSON rows (up to 4 MB). That
 // body is NOT parsed here: until 2026-09-23 a 4 MB parser sat at this point,
@@ -221,11 +218,12 @@ app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
 // both limiters and — for apply — CSRF. The match is case-insensitive like
 // Express routing, and ends at a slash or end of path, so only the import
 // routes themselves are skipped.
-const PRODUCT_IMPORT_PATH = /^\/api\/v1\/admin\/shop\/products\/import(\/|$)/i;
+// The two large-body paths the global parser leaves unread (see above).
+const LARGE_BODY_PATH = /^\/api\/v1\/(admin\/shop\/products\/import|change-requests)(\/|$)/i;
 const defaultJson = express.json({ limit: '100kb' });
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
-app.use((req, res, next) => (PRODUCT_IMPORT_PATH.test(req.path) ? next() : defaultJson(req, res, next)));
+app.use((req, res, next) => (LARGE_BODY_PATH.test(req.path) ? next() : defaultJson(req, res, next)));
 app.use(cookieParser());
 
 // ── A03 Injection: sanitize all incoming body strings ────────────────────────
@@ -449,78 +447,12 @@ function internalsDenied(req) {
 // the answering process is younger than the container swap. The `checks`
 // detail (pool counts, breaker state, heap and RSS, event-loop lag) goes only
 // to a caller who may read /metrics (internalsDenied above): it told anonymous
-// callers how loaded and how close to its limits the instance was.
+// callers how loaded and how close to its limits the instance was. Admins read
+// the full report at GET /api/v1/admin/events/health (Admin → Monitoring).
+// The checks themselves live in observability/readiness.js.
 app.get('/ready', async (req, res) => {
-  const { query: dbQuery, pool } = require('./config/database');
-
-  async function measureEventLoopLag() {
-    return new Promise(resolve => {
-      const start = process.hrtime.bigint();
-      setImmediate(() => resolve(Number(process.hrtime.bigint() - start) / 1e6));
-    });
-  }
-
-  const checks = {};
-  let overallOk = true;
-
-  // DB connectivity
-  try {
-    await Promise.race([
-      dbQuery('SELECT 1'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-    ]);
-    checks.database = { status: 'ok' };
-  } catch (err) {
-    checks.database = { status: 'error', message: err.message };
-    overallOk = false;
-    healthCheckFailed('database', { message: err.message });
-  }
-
-  // DB pool health
-  checks.dbPool = {
-    status:   pool.waitingCount > 5 ? 'degraded' : 'ok',
-    total:    pool.totalCount,
-    idle:     pool.idleCount,
-    waiting:  pool.waitingCount,
-  };
-  if (pool.waitingCount > 5) overallOk = false;
-
-  // Circuit breaker state
-  checks.circuitBreaker = {
-    status: dbCircuitBreaker.state === 'closed' ? 'ok' : 'degraded',
-    state:  dbCircuitBreaker.state,
-  };
-  if (dbCircuitBreaker.state === 'open') overallOk = false;
-
-  // Memory usage — reported for visibility; does not flip readiness. Reading
-  // comes from observability/memoryUsage.js, shared with the periodic alert so
-  // the two can never disagree again (they did: both used heapUsed/heapTotal,
-  // which V8 grows on demand — see the module header). Ported from
-  // icelandicstore #180.
-  const mem = readMemory();
-  checks.memory = {
-    status:      mem.heapRatio > 0.9 ? 'critical' : mem.heapRatio > 0.8 ? 'degraded' : 'ok',
-    heapUsedMb:  mem.heapUsedMb,
-    heapLimitMb: mem.heapLimitMb,
-    rssMb:       mem.rssMb,
-    ratio:       mem.ratioPct,
-  };
-
-  // Event loop lag — reported for visibility; does not flip readiness.
-  // Short-lived spikes (GC, test noise) shouldn't evict the pod from the LB.
-  const lagMs = await measureEventLoopLag();
-  checks.eventLoop = {
-    status: lagMs > 100 ? 'degraded' : 'ok',
-    lagMs:  Math.round(lagMs),
-  };
-
-  const status = overallOk ? 200 : 503;
-  res.status(status).json({
-    status:    overallOk ? 'ok' : 'degraded',
-    uptime:    Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-    ...(internalsDenied(req) ? {} : { checks }),
-  });
+  const report = await runReadinessChecks();
+  res.status(report.ok ? 200 : 503).json(readinessBody(report, !internalsDenied(req)));
 });
 
 // ── Prometheus metrics endpoint ───────────────────────────────────────────────

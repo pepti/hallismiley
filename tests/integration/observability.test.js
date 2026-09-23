@@ -88,6 +88,18 @@ describe('GET /ready (readiness probe)', () => {
     expect(res.body.checks.eventLoop).toHaveProperty('lagMs');
   });
 
+  // Admin → Monitoring reads the full report here, because an admin's browser
+  // holds neither the metrics token nor a localhost address.
+  test('admin health route returns the checks; anonymous is refused', async () => {
+    const { getTestSessionCookie } = require('../helpers');
+    const cookie = await getTestSessionCookie();
+    const res = await request(app).get('/api/v1/admin/events/health').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.checks).toHaveProperty('database');
+    expect(res.headers['cache-control']).toContain('no-store');
+    expect((await request(app).get('/api/v1/admin/events/health')).status).toBe(401);
+  });
+
   // The checks detail follows the /metrics rule (internalsDenied in app.js).
   // With METRICS_TOKEN set, a caller without it must get the verdict and the
   // uptime deploy.yml reads — and nothing about pool, breaker, heap or lag.

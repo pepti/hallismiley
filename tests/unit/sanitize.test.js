@@ -244,3 +244,38 @@ describe('sanitizeBody — edge cases', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 });
+
+// ── Linear tag stripping (2026-09-23) ─────────────────────────────────────────
+// The old `.replace(/<[^>]*>/g, '')` was quadratic on '<' runs with no '>'
+// (100 kb took 2.3 s, before any rate limiter). stripTags must give the SAME
+// output as that regex on every input, and run in linear time.
+describe('stripTags — same output as /<[^>]*>/g, linear time', () => {
+  const { _stripTags: stripTags } = require('../../server/middleware/sanitize');
+  const viaRegex = (s) => s.replace(/<[^>]*>/g, '');
+
+  test('matches the regex on hand-picked edge cases', () => {
+    for (const s of ['', '<', '>', '<>', 'a<b', 'a>b', '<a<b>>', '<<>>', 'x<y>z<', '<a>b<c', '>>><<<', 'a<b>c<d>e', '<\n>']) {
+      expect(stripTags(s)).toBe(viaRegex(s));
+    }
+  });
+
+  test('matches the regex on 20 000 random strings over <, >, a, space', () => {
+    let seed = 42;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const alphabet = ['<', '>', 'a', ' '];
+    for (let i = 0; i < 20000; i++) {
+      const len = Math.floor(rnd() * 16);
+      let s = '';
+      for (let k = 0; k < len; k++) s += alphabet[Math.floor(rnd() * alphabet.length)];
+      expect(stripTags(s)).toBe(viaRegex(s));
+    }
+  });
+
+  test('a 1 MB run of "<" is handled in well under a second', () => {
+    const req = { body: { a: '<'.repeat(1024 * 1024), b: ['<'.repeat(1024 * 1024)] } };
+    const t = Date.now();
+    sanitizeBody(req, {}, () => {});
+    expect(Date.now() - t).toBeLessThan(500);
+    expect(req.body.a).toBe('<'.repeat(1024 * 1024));
+  });
+});

@@ -51,7 +51,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [rk feed — six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)](#rk-feed-2026-09-23) | Lead ids as strings end to end; migration 108 `notified_at`/`notify_error` + the "ekki sent" inbox mark; the change-request launcher and the contact editor's bar stack (`--cr-widget-clearance`); legal titles on one line at 320px; sitemap `<lastmod>` from `site_content` + `identity.routes[*].contentKeys`, `/llms.txt` for every product (harvested from rk); the alias rule worded as enforced |
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 | 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
-| 2026-09-23 | [`/ready` details and the product-import body behind the gate](#ready-and-import-order-2026-09-23) | Two findings from rekstrarkerfid's 2026-09-19 review, fixed in the engine: anonymous `/ready` returns status/uptime/timestamp only (`checks` follow the `/metrics` rule, `internalsDenied()`); the 4 MB import parser moved from app level into `adminShopRoutes.js` behind auth, limiters and CSRF, `sanitizeBody` re-applied; no migration |
+| 2026-09-23 | [`/ready` details and the product-import body behind the gate](#ready-and-import-order-2026-09-23) | Two findings from rekstrarkerfid's 2026-09-19 review, fixed in the engine: anonymous `/ready` returns status/uptime/timestamp only (`checks` follow the `/metrics` rule, `internalsDenied()`; admins read `GET /api/v1/admin/events/health`); the 4 MB import and 5 MB change-request parsers moved into their routers behind the gates, `sanitizeBody` re-applied; the review found `sanitizeBody`'s tag regex quadratic (100 kb of `<` = 2.3 s, before any limiter) — replaced by a linear, byte-identical `stripTags()`; no migration |
 
 ---
 
@@ -1764,13 +1764,33 @@ engine-sync.
   case-insensitive match that ends at a slash), and `adminShopRoutes.js` parses
   it after `requireAuth` + `requireView('products')`, both limiters and, for
   apply, the header-based CSRF check — with `sanitizeBody` run again, because
-  the global one ran on an empty body. The change-request route keeps the same
-  app-level ordering on purpose for now (its gate is non-prod-or-admin); the
-  same two-line move applies there if it is ever wanted.
+  the global one ran on an empty body. The 5 MB change-request parser had the
+  same shape and got the same move (after the submit limiter, the admin gate
+  and CSRF).
+
+Found by Öryggisvörður reviewing this change, both fixed in the same PR:
+
+- **`sanitizeBody` was quadratic.** `.replace(/<[^>]*>/g, '')` rescans to the
+  end of the string at every `<` that has no `>` after it: 25k, 50k and 100k
+  `<` took 144 ms, 581 ms and 2.3 s here, and it ran on every JSON body BEFORE
+  the rate limiters — one anonymous 100 kb request froze the event loop for
+  seconds, `/health` and `/ready` included; 5 MB on the change-request route
+  (then parsed pre-gate) extrapolates to about an hour. `stripTags()` in
+  `server/middleware/sanitize.js` does the same removal in one linear pass;
+  `tests/unit/sanitize.test.js` fuzzes it against the regex on 20 000 random
+  strings and times 1 MB of `<`. Every downstream runs this file — treat the
+  engine-sync as the ENGINE-SYNC security fast path.
+- **Hiding `checks` would have blanked Admin → Monitoring**, whose health
+  panel fetched `/ready` from the admin's browser (neither token nor
+  localhost). The checks moved to `server/observability/readiness.js`, shared
+  by `/ready` and a new admin-only `GET /api/v1/admin/events/health`
+  (`no-store`), which the screen now reads.
 
 Tests: `observability.test.js` pins the anonymous `/ready` body to
-`status`/`timestamp`/`uptime` and the token unlock;
+`status`/`timestamp`/`uptime`, the token unlock and the admin health route;
+`changeRequests.test.js` pins anonymous malformed JSON → 404 from the gate
+(it was 400: parsed first); `sanitize.test.js` the fuzz and the timing;
 `adminProductImportExport.test.js` pins that anonymous malformed JSON is 401
 (it was 400 — parsed before auth), that an admin still gets the 4 MB limit, and
-that the import body is still sanitized. Three of the new tests fail on the old
-code. No migration.
+that the import body is still sanitized. Eight of the new tests fail on the
+old code. No migration.
