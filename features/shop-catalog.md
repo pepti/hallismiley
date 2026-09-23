@@ -43,4 +43,5 @@ Products, variants, taxonomy, product codes, collections, stock bins and the bar
 **Rules**
 - Hidden, never deleted; routes live.
 - `stock <= 0` is sold out (negative counts as sold out).
+- The 4 MB import body is parsed only after the admin gate, limiters and CSRF, and sanitized there ([history](../docs/HISTORY.md#ready-and-import-order-2026-09-23)).
 - Full rules: [../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface](../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface).

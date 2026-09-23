@@ -212,13 +212,20 @@ app.use('/api/v1/seller-publish', require('./routes/sellerPublishRoutes'));
 // anything can refuse it, which is the price of the ordering trick above.
 app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
 
-// Product CSV import posts the whole catalogue as JSON rows, so this path gets a
-// larger JSON limit. Mounted BEFORE the global 100 kb parser (same pattern as
-// change-requests above); still admin-gated downstream by the shop routes.
-app.use('/api/v1/admin/shop/products/import', express.json({ limit: '4mb' }));
+// Product CSV import posts the whole catalogue as JSON rows (up to 4 MB). That
+// body is NOT parsed here: until 2026-09-23 a 4 MB parser sat at this point,
+// ahead of the rate limiters and the admin gate, so an anonymous caller got a
+// 4 MB body parsed and sanitized before anything could refuse it. The global
+// parser below now skips the import path, and adminShopRoutes.js parses it
+// (and runs sanitizeBody on it) only after requireAuth, requireView('products'),
+// both limiters and — for apply — CSRF. The match is case-insensitive like
+// Express routing, and ends at a slash or end of path, so only the import
+// routes themselves are skipped.
+const PRODUCT_IMPORT_PATH = /^\/api\/v1\/admin\/shop\/products\/import(\/|$)/i;
+const defaultJson = express.json({ limit: '100kb' });
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
-app.use(express.json({ limit: '100kb' }));
+app.use((req, res, next) => (PRODUCT_IMPORT_PATH.test(req.path) ? next() : defaultJson(req, res, next)));
 app.use(cookieParser());
 
 // ── A03 Injection: sanitize all incoming body strings ────────────────────────
@@ -417,7 +424,32 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Who may read process internals (/metrics, and the `checks` detail of /ready):
+// a bearer METRICS_TOKEN when one is configured, otherwise localhost only in
+// production, anyone in dev/test. Returns null when allowed, else the HTTP
+// status /metrics answers with. One rule for both endpoints, so /ready can
+// never disclose what /metrics refuses.
+function internalsDenied(req) {
+  const metricsToken = process.env.METRICS_TOKEN;
+  if (metricsToken) {
+    // Constant-time: `!==` returns at the first differing byte, so response
+    // time would tell a caller how much of a guessed token was right.
+    return safeEqual(req.headers.authorization || '', `Bearer ${metricsToken}`) ? null : 401;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    const ip = req.ip || req.socket.remoteAddress;
+    return (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') ? null : 403;
+  }
+  return null;
+}
+
 // ── Readiness probe — checks DB and system health before accepting traffic ─────
+// Anyone gets the verdict: the HTTP status (200/503), `status`, `uptime` and
+// `timestamp`. `uptime` stays public on purpose — deploy.yml reads it to prove
+// the answering process is younger than the container swap. The `checks`
+// detail (pool counts, breaker state, heap and RSS, event-loop lag) goes only
+// to a caller who may read /metrics (internalsDenied above): it told anonymous
+// callers how loaded and how close to its limits the instance was.
 app.get('/ready', async (req, res) => {
   const { query: dbQuery, pool } = require('./config/database');
 
@@ -487,28 +519,14 @@ app.get('/ready', async (req, res) => {
     status:    overallOk ? 'ok' : 'degraded',
     uptime:    Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
-    checks,
+    ...(internalsDenied(req) ? {} : { checks }),
   });
 });
 
 // ── Prometheus metrics endpoint ───────────────────────────────────────────────
 app.get('/metrics', async (req, res) => {
-  // Auth: bearer token if METRICS_TOKEN is set, otherwise localhost only
-  const metricsToken = process.env.METRICS_TOKEN;
-  if (metricsToken) {
-    // Constant-time: `!==` returns at the first differing byte, so response
-    // time would tell a caller how much of a guessed token was right.
-    const authHeader = req.headers.authorization || '';
-    if (!safeEqual(authHeader, `Bearer ${metricsToken}`)) {
-      return res.status(401).json({ error: 'Unauthorized', code: 401 });
-    }
-  } else if (process.env.NODE_ENV === 'production') {
-    // In prod without a token configured, only allow localhost
-    const ip = req.ip || req.socket.remoteAddress;
-    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
-      return res.status(403).json({ error: 'Forbidden', code: 403 });
-    }
-  }
+  const denied = internalsDenied(req);
+  if (denied) return res.status(denied).json({ error: denied === 401 ? 'Unauthorized' : 'Forbidden', code: denied });
 
   try {
     // prom-client gauges are pull-based: refresh the pool numbers at scrape

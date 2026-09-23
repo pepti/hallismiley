@@ -726,6 +726,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   cart line currently goes straight to Stripe (ENHANCEMENTS #25) ([ui-kit](HISTORY.md#ui-kit)).
 - Product-schema `brand` still names Rekstrarkerfið on every SKU — a known
   post-R1 note, not a rule.
+- The 4 MB product-import body is parsed inside `adminShopRoutes.js`, after
+  `requireAuth`, `requireView('products')`, the limiters and (apply) CSRF, with
+  `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
+  Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
 **History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit)
 
@@ -788,6 +792,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Logs scrub secrets and the `q` param; `app.js` scrubs request URLs in its
   own lines ([review-099](HISTORY.md#review-099)).
 - `checkMemory` runs once a minute from `server.js` (base-sync 2026-09-13).
+- `/metrics` and the `checks` detail of `/ready` share ONE access rule,
+  `internalsDenied()` in `server/app.js` (bearer `METRICS_TOKEN`, else
+  localhost in production). Anonymous `/ready` keeps `status`, `uptime` and
+  `timestamp` — `deploy.yml` reads `uptime` to prove the swap happened, so
+  never remove it from the public body ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - The staff audit log is read on `/admin/monitoring` (domain 8 owns the writes).
 
 **History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2)

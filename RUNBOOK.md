@@ -439,8 +439,11 @@ curl https://<host>/ready      # readiness: 200 only when the DB answers, the po
 
 `/health` answers `{ "status": "ok", "uptime": 12345, "timestamp": "…" }` and
 **never checks the database** — a 200 there with a dead Postgres is normal.
-`/ready` answers `200` with a `checks` object (database, pool, circuit
-breaker, memory, event-loop lag) or `503` with the failing check named — only
+`/ready` answers `200` or `503`. The `checks` object (database, pool, circuit
+breaker, memory, event-loop lag) that names the failing check is returned only
+to a caller who may read `/metrics` — send `Authorization: Bearer $METRICS_TOKEN`
+(or run the curl from the instance itself when no token is set); anyone else
+gets `status`, `uptime` and `timestamp` only (since 2026-09-23). Only — only
 the database check, `pool.waitingCount > 5` and an open breaker flip it to
 503; memory and event-loop lag are reported for visibility and never do
 (`server/app.js`), so an OOM loop shows up in the restart count, not here. The

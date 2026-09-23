@@ -298,8 +298,10 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface) | — |
 
 Root-level operational routes: `GET /health` (liveness, no DB), `GET /ready`
-(DB + breaker + memory, `503` when not ready), `GET /metrics`
-(`Authorization: Bearer <METRICS_TOKEN>`), `POST /csp-report`.
+(DB + breaker + memory, `503` when not ready — anyone gets `status`, `uptime`
+and `timestamp`; the `checks` detail only with the `/metrics` credential),
+`GET /metrics` (`Authorization: Bearer <METRICS_TOKEN>`; without a token
+configured, localhost only in production), `POST /csp-report`.
 
 Root-level discovery routes, all public and cached 10 minutes:
 `GET /sitemap.xml` (the advertised surface with `<lastmod>` from

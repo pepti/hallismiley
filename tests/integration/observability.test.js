@@ -87,6 +87,33 @@ describe('GET /ready (readiness probe)', () => {
     expect(res.body.checks).toHaveProperty('eventLoop');
     expect(res.body.checks.eventLoop).toHaveProperty('lagMs');
   });
+
+  // The checks detail follows the /metrics rule (internalsDenied in app.js).
+  // With METRICS_TOKEN set, a caller without it must get the verdict and the
+  // uptime deploy.yml reads — and nothing about pool, breaker, heap or lag.
+  describe('with METRICS_TOKEN configured', () => {
+    const TOKEN = 'ready-test-token';
+    beforeEach(() => { process.env.METRICS_TOKEN = TOKEN; });
+    afterEach(() => { delete process.env.METRICS_TOKEN; });
+
+    test('anonymous caller gets status, uptime and timestamp only', async () => {
+      const res = await request(app).get('/ready');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['status', 'timestamp', 'uptime']);
+      expect(Number.isInteger(res.body.uptime)).toBe(true);
+    });
+
+    test('a wrong token is treated as anonymous', async () => {
+      const res = await request(app).get('/ready').set('Authorization', 'Bearer nope');
+      expect(res.body).not.toHaveProperty('checks');
+    });
+
+    test('the metrics token unlocks the checks detail', async () => {
+      const res = await request(app).get('/ready').set('Authorization', `Bearer ${TOKEN}`);
+      expect(res.body.checks).toHaveProperty('dbPool');
+      expect(res.body.checks).toHaveProperty('memory');
+    });
+  });
 });
 
 // ── GET /metrics — Prometheus endpoint ───────────────────────────────────────

@@ -51,6 +51,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [rk feed — six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)](#rk-feed-2026-09-23) | Lead ids as strings end to end; migration 108 `notified_at`/`notify_error` + the "ekki sent" inbox mark; the change-request launcher and the contact editor's bar stack (`--cr-widget-clearance`); legal titles on one line at 320px; sitemap `<lastmod>` from `site_content` + `identity.routes[*].contentKeys`, `/llms.txt` for every product (harvested from rk); the alias rule worded as enforced |
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 | 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
+| 2026-09-23 | [`/ready` details and the product-import body behind the gate](#ready-and-import-order-2026-09-23) | Two findings from rekstrarkerfid's 2026-09-19 review, fixed in the engine: anonymous `/ready` returns status/uptime/timestamp only (`checks` follow the `/metrics` rule, `internalsDenied()`); the 4 MB import parser moved from app level into `adminShopRoutes.js` behind auth, limiters and CSRF, `sanitizeBody` re-applied; no migration |
 
 ---
 
@@ -1737,3 +1738,39 @@ under `optional`; kept for a suite that switches to `required`).
 `optional` unless its own `config/client.json` says `required` — Halli's
 instruction is estate-wide, so the sync does NOT set it. hallismiley,
 icelandicstore and LedgerLink get `optional` too. No migration.
+
+<a id="ready-and-import-order-2026-09-23"></a>
+## 2026-09-23 — `/ready` details and the product-import body behind the gate
+
+Two findings Öryggisvörður raised while reviewing rekstrarkerfid's /um-kerfid
+page on 2026-09-19, left open there as "code findings NOT fixed here". Both
+live in the engine, so they are fixed here and reach every downstream by
+engine-sync.
+
+- **`/ready` told anonymous callers how the instance was doing inside**: DB
+  pool counts, circuit-breaker state, heap and RSS in MB, event-loop lag, and
+  the database error message on failure. The verdict (HTTP 200/503, `status`)
+  is all a load balancer needs. Now `internalsDenied()` in `server/app.js` is
+  the one access rule for `/metrics` and for the `checks` detail of `/ready`:
+  a bearer `METRICS_TOKEN` when one is set, otherwise localhost in production,
+  anyone in dev/test. **`uptime` stays public** — `deploy.yml` in the engine and
+  in rekstrarkerfid reads it to prove the answering process is younger than the
+  container swap; removing it would turn every deploy red.
+- **The product-import route parsed 4 MB before anything could refuse it.**
+  `app.use('/api/v1/admin/shop/products/import', express.json({limit:'4mb'}))`
+  sat ahead of the rate limiters and the admin gate (its own comment called it
+  the price of the ordering trick), so an anonymous POST had its body parsed
+  and sanitized first. The global 100 kb parser now skips that path (a
+  case-insensitive match that ends at a slash), and `adminShopRoutes.js` parses
+  it after `requireAuth` + `requireView('products')`, both limiters and, for
+  apply, the header-based CSRF check — with `sanitizeBody` run again, because
+  the global one ran on an empty body. The change-request route keeps the same
+  app-level ordering on purpose for now (its gate is non-prod-or-admin); the
+  same two-line move applies there if it is ever wanted.
+
+Tests: `observability.test.js` pins the anonymous `/ready` body to
+`status`/`timestamp`/`uptime` and the token unlock;
+`adminProductImportExport.test.js` pins that anonymous malformed JSON is 401
+(it was 400 — parsed before auth), that an admin still gets the 4 MB limit, and
+that the import body is still sanitized. Three of the new tests fail on the old
+code. No migration.
