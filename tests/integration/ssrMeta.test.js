@@ -14,12 +14,22 @@ const app     = require('../../server/app');
 // (config/client.json via clientConfig), never a literal: the same suite runs
 // unchanged in a downstream that sets its own identity block.
 const { clientConfig } = require('../../server/config/clientConfig');
+// A locale-locked route (the party pages; a product's `identity.routes[*]
+// .locale`) 301s under any other prefix and renders under its own only, so a
+// path is built with `forcedLocaleFor(route) || LC` — identity-seam-3.
+const { forcedLocaleFor } = require('../../server/config/i18n');
+const { isHiddenRoute } = require('../../server/config/publicSurface');
 const ID     = clientConfig.identity;
 const SUFFIX = ID.brand.titleSuffix;
 // The visitor default and "the other" supported locale (for the cookie cases).
 const LC    = ID.locale.publicDefault;
 const OTHER = LC === 'is' ? 'en' : 'is';
 const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const pathFor = (route) => `/${forcedLocaleFor(route) || LC}${route === '/' ? '/' : route}`;
+// The Service catalogue is the COMPANY's offering: the engine emits it only
+// while /thjonusta is public, so its cases run only there (a downstream that
+// hides the company pages — hallismiley — has no catalogue to assert).
+const testServices = isHiddenRoute('/thjonusta') ? test.skip : test;
 
 describe('SSR meta-injection — SPA catch-all', () => {
   // The root redirect is the visitor default (Icelandic here) unless the
@@ -141,9 +151,12 @@ describe('SSR meta-injection — SPA catch-all', () => {
   // hidden routes are noindexed, home + the nav + the legal pages stay
   // indexable — whatever a downstream puts in each.
   describe('hidden public surfaces', () => {
-    const { PUBLIC_NAV, LEGAL_ROUTES } = require('../../server/config/publicSurface');
-    const hidden = ID.surface.hiddenRoutes.map((r) => `/${LC}${r}`);
-    const indexable = ['/', ...PUBLIC_NAV.map((e) => e.route), ...LEGAL_ROUTES].map((r) => `/${LC}${r === '/' ? '/' : r}`);
+    const { PUBLIC_NAV, LEGAL_ROUTES, NOINDEX_ROUTES } = require('../../server/config/publicSurface');
+    const hidden = ID.surface.hiddenRoutes.map(pathFor);
+    // A nav route the product marks noindex (identity.routes) is linked but
+    // de-indexed — it belongs with the hidden ones here.
+    const indexable = ['/', ...PUBLIC_NAV.map((e) => e.route), ...LEGAL_ROUTES]
+      .filter((r) => !NOINDEX_ROUTES.includes(r)).map(pathFor);
 
     test('the lists are non-trivial (guard)', () => {
       expect(indexable.length).toBeGreaterThan(1);
@@ -171,7 +184,16 @@ describe('SSR meta-injection — SPA catch-all', () => {
       );
 
       test('a hidden detail route is de-indexed too', async () => {
-        const res = await request(app).get(`/${LC}${ID.surface.hiddenRoutes[0]}/some-detail-slug`);
+        const res = await request(app).get(`${pathFor(ID.surface.hiddenRoutes[0])}/some-detail-slug`);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+      });
+    });
+
+    // The product's own noindex routes (identity.routes[*].noindex, identity-seam-3).
+    (NOINDEX_ROUTES.length ? describe : describe.skip)('the product\'s noindex routes', () => {
+      test.each(NOINDEX_ROUTES.map(pathFor))('%s renders, marked noindex', async (path) => {
+        const res = await request(app).get(path);
         expect(res.status).toBe(200);
         expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
       });
@@ -513,12 +535,16 @@ describe('SSR meta-injection — SPA catch-all', () => {
 describe('business JSON-LD', () => {
   const ORG_ID = /"@id":\s*"https?:\/\/[^"]*\/#organization"/;
 
-  test('the home page emits WebSite + Service, both bound to the Organization', async () => {
+  test('the home page emits WebSite bound to the Organization', async () => {
     const res = await request(app).get('/is/');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/"@type":"WebSite"/);
-    expect(res.text).toMatch(/"@type":"Service"/);
     expect(res.text).toMatch(/"publisher":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
+  });
+
+  testServices('the home page emits the Service catalogue too, bound to the Organization (while /thjonusta is public)', async () => {
+    const res = await request(app).get('/is/');
+    expect(res.text).toMatch(/"@type":"Service"/);
     expect(res.text).toMatch(/"provider":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
   });
 
@@ -529,13 +555,13 @@ describe('business JSON-LD', () => {
     expect(res.text).toContain(`"name":${JSON.stringify(ID.brand.legalName)}`);
   });
 
-  test('the services page carries the service catalogue', async () => {
+  testServices('the services page carries the service catalogue', async () => {
     const res = await request(app).get('/is/thjonusta');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/"@type":"OfferCatalog"/);
   });
 
-  test('the catalogue lists the company\'s services, with Rekstrarkerfið as one product in it', async () => {
+  testServices('the catalogue lists the company\'s services, with Rekstrarkerfið as one product in it', async () => {
     // Orange Smiley sells any software a small business needs, and the
     // product's tiers and prices live on its own site (Halli, 2026-09-13).
     const res = await request(app).get('/is/thjonusta');
@@ -551,7 +577,7 @@ describe('business JSON-LD', () => {
     }
   });
 
-  test('no unconfirmed price is published as structured data', async () => {
+  testServices('no unconfirmed price is published as structured data', async () => {
     // Prices are DRAFT until Halli signs off. A number in JSON-LD reads as a
     // commitment, so the catalogue deliberately carries none.
     const res = await request(app).get('/is/thjonusta');

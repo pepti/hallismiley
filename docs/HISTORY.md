@@ -48,6 +48,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
 | 2026-09-23 | [Identity seam, second iteration — the public IA, the page meta and the engine-only pins (D-021)](#identity-seam-2-2026-09-23) | `identity.surface.nav` drives the nav, both footers and the sitemap; `meta.<key>.*` i18n keys replace the ssrMeta/pageTitle literals; `/manifest.json` and the Product brand from the identity; engine suites assert the visitor default via `tests/lib/locale.js`; engine-only pins gated on `engine.json.role`; the `.view` fade fill-mode dropped (hallismiley's news-editor regression); no migration |
 | 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
+| 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 
 ---
 
@@ -1435,3 +1436,117 @@ iteration (PLAN → Status).
 **Docs.** `docs/DEPLOYMENT.md` §5 says the `APP_URL` fallback is the engine's
 origin and every downstream sets it; ENGINE-SYNC §6 lists what the seam owns
 now. No migration.
+
+<a id="identity-seam-3-2026-09-23"></a>
+## 2026-09-23 — Identity seam, third iteration: a product's own routes, the derived files, the last engine pins (D-021)
+
+**Why.** All three downstream syncs onto the second seam asked for the same
+things (pepti/hallismiley#168 sync 3, orange-smiley/ledgerlink#11,
+orange-smiley/rekstrarkerfid#44): a product slot for its OWN public routes'
+meta — hallismiley's `/aron13ara` (Icelandic-only, hidden), LedgerLink's `/`,
+`/console` and `/original` (noindex), rekstrarkerfid's landing rows were
+still hooks in `ssrMeta.js` and `pageTitle.js`; a handful of engine tests
+that still pinned the engine's own site (the meta-literal pin, the Service
+catalogue cases, the six company click-throughs, `identityDownstream`'s
+literal "Our work — Halli Smiley" and its raw-table manifest read, the
+Features row that links `features/os/company-content.md`); and
+`.engine-paths` / `.gitattributes` conflicting on every sync because they are
+generated per repo. Plus the small asks: a per-locale Organization
+description, an og:image path in the seam, picker swatches per theme id.
+
+**`identity.routes` — a product's routes are config.** A map of bare route
+(or `/`) → `{ titleKey, descriptionKey?, titleMode?, noindex?, locale? }`, a
+new `object` schema type in `clientConfig.js` (JSON in the env layer;
+`$comment` keys inside ignored at any level; `defaults()` hands out a fresh
+map; validated per entry — i18n-key shape, `bare|suffix`, boolean, locale
+id, no unknown fields). `server/config/identity.js` `productRoutes()`
+normalises it once. Readers: `ssrMeta.js` merges each entry over
+`ROUTE_META` (`product:<route>` key, replacing any engine row for that route
+whole — no `site_content` override, no shop section) and `DEFAULT_META`
+(the i18n keys + mode), after the literal tables the parity test parses;
+`pageTitle.js` reads the same entries off the hand-off in `titleForRoute`
+and lets them win over its table; `config/i18n.js` `forcedLocaleFor` asks
+the party lock first, then `identity.routes[*].locale` (prefix-aware like the
+party lock, `/` locks the landing alone, an unsupported locale is ignored);
+`publicSurface.js` `NOINDEX_ROUTES` / `isDeindexedRoute()` (exact routes —
+a noindex route may still be linked) drive the `<meta robots>`, a robots.txt
+Disallow block and the sitemap filter; `/manifest.json` describes itself from
+`routes['/'].descriptionKey` when the landing is re-described. The client
+mirror: `utils/identity.js` `routeMeta()` / `routeLockFor()` and a
+record-by-record map merge in `resolveIdentity`; `i18n/i18n.js`
+`forcedLocaleFor` consults the lock, so the Router guard, `href()` and the
+NavBar's switcher follow. The engine's `config/client.json` carries
+`routes: {}` with a `$comment` as the worked example.
+
+**The small asks.** `identity.organization.description` may be an i18n KEY
+(`org.description`) — `organizationSchema(locale)` resolves it through the
+overlay per locale, a literal is emitted as written (`organizationDescription`
+in `identity.js`, table-injected so the module stays free of `server/i18n`).
+`identity.organization.ogImage` is the og:image card every page falls back to
+(`OG_IMAGE_PATH` reads it; `organization.image` stays the entity's picture —
+same file, not the same idea). `identity.theme.swatches` (`{ id: { bg, fg } }`,
+CSS colour literals) feeds `themePrefs.js` `swatchFor` as the same
+accent→background gradient the engine's use, over the engine map, over the
+neutral token fill. `theme-boot.js` is untouched (it keeps reading the
+`<html>` attributes; rk's `html.js` mark stays rk's).
+
+**Engine tests that pinned the engine's site.** `i18nIdentity` — the
+meta-literal pin is `testEngine` (a product overlays `meta.home.title`).
+`ssrMeta.test.js` — the four Service-catalogue cases gate on
+`isHiddenRoute('/thjonusta')` (`testServices`); the hidden/indexable paths
+are built with `forcedLocaleFor(route) || LC`; a describe for the product's
+noindex routes. `sitemap.test.js` — `localesOf(path)` (a locked route once,
+under its locale, with no alternates), the advertised list minus
+`NOINDEX_ROUTES`, the hreflang probe on the first unlocked route.
+`e2e/navigation.spec.js` — the products card and the five company
+click-throughs run only where `/thjonusta` is public; `e2e/business-routes`
+expects a locked nav route under its own locale (`e2e/lib/identity.js` now
+exports `isHiddenRoute` + `forcedLocaleFor`). `identityDownstream.test.js` —
+every expected title is composed from the isolated app's own `t()` (engine
+table + overlay, `{siteName}` etc. resolved to the downstream) with
+`composeTitle`, compared HTML-escaped; the manifest description too; nothing
+literal; hallismiley's block gains `/party` in its nav (listed under `is`
+only); and a second app boots LedgerLink-style with the `routes` block above
+over a mocked overlay and asserts title (bare, escaped `&amp;`), description,
+noindex, the sitemap (locked once, noindex never), robots.txt, the 301s
+(`/en/aron13ara`, bare, sub-route, with an `en` cookie), the canonical with no
+`en` alternate, the manifest, the per-locale Organization description and
+og:image. `architectureIndex` — a Features-row link to another product's
+folder is allowed but not required (the engine's own row links
+`features/os/company-content.md`, foreign in every downstream). `pageTitle
+.test.js` keeps its parse-the-source mechanism for the engine tables and adds
+a routes walk over a synthetic identity and over this repo's committed
+`config/client.json`, loading a fresh `pageTitle` over a stubbed hand-off.
+`localeLock` / `localeLockClient` pin the routes lock on both sides through
+a temp `client.json` / a stubbed hand-off. `featureGate` / `identityConfig`
+had no engine-only pin left ungated (verified).
+
+**The derived files.** `scripts/features-index.js` is idempotent per repo
+already; the fix is in the tool: site-factory `engine-sync.js`
+(`feat/engine-sync-regen`, `1e186fe`) resolves a conflict on exactly
+`.engine-paths`, `.gitattributes` (and `features/README.md`) by running
+`node scripts/features-index.js` in the downstream and staging the result —
+right after the merge, again in `finish()` after `--continue` (once any
+conflicted `features/*.md` the generator reads are resolved), and a
+`--check` before verification; `--theirs` there would take the ENGINE's
+product paths. The report names the regeneration and `engine.json`'s history
+entry records `regenerated`. Smoke: a mini engine with a `features-index.js`
+stub that writes a marker line; a manufactured conflict syncs with exit 0.
+ENGINE-SYNC §6 says so.
+
+**What this closes downstream.** hallismiley: the `/aron13ara` rows in
+`ssrMeta.js` + `pageTitle.js`, the IS-only lock in `config/i18n.js` + the
+client mirror, the cases in the two `localeLock*` tests, the six gated test
+lines, the Features-row link — all become `routes: { "/aron13ara": {
+titleKey, titleMode: "bare", locale: "is" } }` + overlay keys. LedgerLink:
+the `/`, `/console`, `/original` rows and the `{brand} — The invoice is
+already there.` part, the swatches in `themePrefs.js`, the raw-table
+`identityDownstream` edit. rekstrarkerfid: its landing/eiginleikar/verdskra/
+um-kerfid rows, the per-locale description, the OG-card path, the swatches.
+No migration.
+
+**Still open, on purpose.** rk's `html.js` mark in `theme-boot.js` (rk's
+own); a crawler-summary hook for a product landing (LedgerLink's `/`
+crawler block); the sitemap beyond nav + legal (hallismiley's
+`/shop/products` etc.); the `/party` nav link's class/aria; `classic` as
+Bjart. PLAN → Status.

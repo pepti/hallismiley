@@ -29,6 +29,8 @@ export const IDENTITY_DEFAULTS = Object.freeze({
     root: 'classic',
     picker: Object.freeze(['ember', 'classic', 'midnight']),
     dark: Object.freeze(['ember', 'midnight']),
+    // theme id → { bg, fg } (identity-seam-3); services/themePrefs.js swatchFor.
+    swatches: Object.freeze({}),
   }),
   hero: Object.freeze({
     clip: '/assets/videos/hero-dc7df-v2.mp4',
@@ -43,11 +45,16 @@ export const IDENTITY_DEFAULTS = Object.freeze({
     hiddenRoutes: Object.freeze(['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni']),
     hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background']),
   }),
+  // The product's OWN routes' meta (identity-seam-3): route → { titleKey,
+  // descriptionKey?, titleMode?, noindex?, locale? }. utils/pageTitle.js
+  // merges the titles over its table; i18n/i18n.js reads the locale locks.
+  routes: Object.freeze({}),
   organization: Object.freeze({
     email: 'info@orangesmiley.is',
     description: 'Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.',
     logo: '/favicon.svg',
     image: '/og-image.jpg',
+    ogImage: '/og-image.jpg',
     addressLocality: 'Hafnarfjörður',
     addressCountry: 'IS',
     areaServed: 'Iceland',
@@ -73,22 +80,42 @@ function copyList(def, v) {
   return v.map((item) => Object.fromEntries(fields.map((f) => [f, item[f]])));
 }
 
+const isPlain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+// A MAP default (`routes`, `theme.swatches`) is an object keyed by the
+// product — a route, a theme id — whose values are records of scalars. The
+// server validated the records; here a non-object map falls back to the
+// default and a record's scalar fields are copied as they are.
+const MAP_SECTIONS = new Set(['routes']);
+function copyMap(v) {
+  if (!isPlain(v)) return {};
+  const out = {};
+  for (const [k, rec] of Object.entries(v)) {
+    if (!isPlain(rec)) continue;
+    out[k] = Object.fromEntries(Object.entries(rec).filter(([, x]) => x === null || ['string', 'boolean', 'number'].includes(typeof x)));
+  }
+  return out;
+}
+
 /**
  * Merge a parsed hand-off over the defaults. Only keys the defaults know are
  * taken, each checked against the default's type (a string stays a string, a
  * list stays a list of strings — or of records with the default's string
- * fields), so a malformed tag can never leave a field undefined for a reader.
- * Pure; exported for the tests.
+ * fields; a map stays a map of records), so a malformed tag can never leave a
+ * field undefined for a reader. Pure; exported for the tests.
  */
 export function resolveIdentity(raw) {
   const out = {};
   for (const [section, defaults] of Object.entries(IDENTITY_DEFAULTS)) {
     const given = raw && typeof raw === 'object' && raw[section] && typeof raw[section] === 'object' ? raw[section] : {};
+    if (MAP_SECTIONS.has(section)) { out[section] = copyMap(given); continue; }
     const merged = {};
     for (const [key, def] of Object.entries(defaults)) {
       const v = given[key];
       if (Array.isArray(def)) {
         merged[key] = listFits(def, v) ? copyList(def, v) : copyList(def, def);
+      } else if (isPlain(def)) {
+        merged[key] = copyMap(v);
       } else {
         merged[key] = typeof v === typeof def ? v : def;
       }
@@ -96,6 +123,38 @@ export function resolveIdentity(raw) {
     out[section] = merged;
   }
   return out;
+}
+
+/**
+ * The product's meta for `route` (locale-stripped) from `identity.routes`,
+ * normalised like server/config/identity.js productRoutes — every optional
+ * field present with its default — or null when the engine's row applies.
+ */
+export function routeMeta(route, id = getIdentity()) {
+  const e = id.routes && id.routes[route];
+  if (!e || typeof e.titleKey !== 'string') return null;
+  return {
+    titleKey: e.titleKey,
+    descriptionKey: typeof e.descriptionKey === 'string' ? e.descriptionKey : null,
+    titleMode: e.titleMode === 'bare' ? 'bare' : 'suffix',
+    noindex: e.noindex === true,
+    locale: typeof e.locale === 'string' && e.locale ? e.locale : null,
+  };
+}
+
+/**
+ * The locale a product route is locked to (`identity.routes[*].locale`), or
+ * null. Prefix-aware like the server's config/i18n.js routeLockFor; '/' locks
+ * the landing alone. The party lock is i18n/i18n.js's own rule — it asks
+ * this only after that.
+ */
+export function routeLockFor(route, id = getIdentity()) {
+  if (!route) return null;
+  for (const [r, e] of Object.entries(id.routes || {})) {
+    if (!e || typeof e.locale !== 'string' || !e.locale) continue;
+    if (route === r || (r !== '/' && route.startsWith(r + '/'))) return e.locale;
+  }
+  return null;
 }
 
 /**

@@ -102,6 +102,16 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   `merge=ours`.
 - **`package-lock.json`**: take theirs, then `npm install --package-lock-only`
   (the tool does this).
+- **`.engine-paths`, `.gitattributes`, `features/README.md`** are DERIVED —
+  written by `scripts/features-index.js` from `features/**/*.md` — and differ
+  per repo (a product's own feature paths), so they conflict on every sync.
+  Never resolve them by hand and never `--theirs` (that would take the
+  ENGINE's product paths): a sync **regenerates them** — `node
+  scripts/features-index.js`, then `git add` the three. `engine-sync.js` does
+  this right after the merge, again after `--continue` (once any conflicted
+  `features/*.md` the generator reads is resolved), and runs `--check` before
+  verification; the report and `engine.json`'s history entry (`regenerated`)
+  say which files it rewrote (identity-seam-3, 2026-09-23).
 - **Engine tests**: start from theirs, re-apply the product's expectations on
   top (a downstream's spec adaptation is a diff over the engine spec, never a
   fork). Two mechanisms make that diff small, and both are config, not hooks:
@@ -123,9 +133,20 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
     Product-schema brand; engine suites take their expected locale strings
     from `tests/lib/locale.js` (the visitor default), and the engine-only pins
     (committed `client.json` = defaults, empty `local.json`, empty overlays)
-    run only where `engine.json.role` is `engine`. **`APP_URL` is not in the
-    seam**: its code fallback is the engine's origin — set it on every
-    downstream's App Service (`docs/DEPLOYMENT.md` §5).
+    run only where `engine.json.role` is `engine`. Since identity-seam-3
+    (2026-09-23) a product's **own public routes** are config too:
+    `identity.routes` — `{ "/console": { titleKey, descriptionKey?,
+    titleMode: "bare"|"suffix", noindex, locale } }` — is merged over the
+    engine's `ROUTE_META`/`DEFAULT_META` (server) and the `pageTitle` table
+    (client), `noindex` drives the robots meta + robots.txt + sitemap, and
+    `locale` locks the route like the party pages (`forcedLocaleFor` asks
+    the party lock first, then the product's). So a route the engine does
+    not know (`/aron13ara`, `/console`) or one the product re-describes
+    (`/`) needs no hook in an engine file; the keys live in the product
+    overlay. Also in the seam: `organization.description` as an i18n key
+    (per locale), `organization.ogImage`, `theme.swatches`. **`APP_URL` is
+    not in the seam**: its code fallback is the engine's origin — set it on
+    every downstream's App Service (`docs/DEPLOYMENT.md` §5).
   - **Tests for a hidden feature skip; never delete an engine spec.** A
     feature the product hides, disables or forks is recorded in
     `features/local.json`; the feature gate (`tests/lib/featureGate.js`,

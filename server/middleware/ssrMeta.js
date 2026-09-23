@@ -37,7 +37,9 @@ const { clientAppEnv }  = require('../config/appEnv');
 // file used to carry now reads from it — see server/config/identity.js.
 const {
   identity, htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
+  productRoutes, organizationDescription,
 } = require('../config/identity');
+const { isDeindexedRoute } = require('../config/publicSurface');
 // The page parts and descriptions are i18n keys (`meta.<key>.*`) resolved
 // through the engine table + the product overlay — identity-seam-2.
 const { t, has: hasText } = require('../i18n');
@@ -58,7 +60,9 @@ function scenePreloadTag(route) {
 
 const APP_URL        = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
-const OG_IMAGE_PATH  = '/og-image.jpg';
+// The og:image card every page falls back to — the product's
+// (identity.organization.ogImage, identity-seam-3), not a literal.
+const OG_IMAGE_PATH  = identity.organization.ogImage;
 
 // Cached template (read once at boot) + stat watcher for dev hot-reload.
 // index.html is baked with the production origin; swap it for APP_URL here so
@@ -143,6 +147,27 @@ const DEFAULT_META = {
   terms:          { title: 'meta.terms.title' },
   party:          { title: 'meta.party.title', titleMode: 'bare', description: 'meta.party.description' },
 };
+
+// The product's OWN routes (identity.routes in config/client.json,
+// identity-seam-3) merged over the two tables above: each entry becomes a
+// ROUTE_META row keyed `product:<route>` and a DEFAULT_META entry naming its
+// i18n keys and mode — so hallismiley's `/aron13ara` or LedgerLink's
+// `/console` is titled and described from config, and an engine route the
+// product re-describes (`/`) takes the product's entry whole (no site_content
+// override, no shop section). public/js/utils/pageTitle.js merges the same
+// entries client-side from the hand-off; tests/unit/pageTitle.test.js holds
+// the engine tables here to the client's by parsing this file, so the merge
+// happens AFTER the literal tables it parses.
+const PRODUCT_ROUTES = productRoutes();
+for (const [route, e] of Object.entries(PRODUCT_ROUTES)) {
+  const key = `product:${route}`;
+  ROUTE_META[route] = { key, product: true };
+  DEFAULT_META[key] = {
+    title: e.titleKey,
+    titleMode: e.titleMode === 'bare' ? 'bare' : undefined,
+    description: e.descriptionKey || undefined,
+  };
+}
 
 // The document title + description for a static key in a locale, composed
 // from the translated page part and the product's brand — the ONE place a
@@ -490,7 +515,7 @@ function websiteSchema() {
 // downstream gets its own record without forking index.html — the baked copy
 // there is stripped by loadTemplate() and only serves a shell that never
 // passed through here.
-function organizationSchema() {
+function organizationSchema(locale) {
   const org = identity.organization;
   return {
     '@context': 'https://schema.org',
@@ -502,7 +527,8 @@ function organizationSchema() {
     logo:   absUrl(org.logo),
     image:  absUrl(org.image),
     email:  org.email,
-    description: org.description,
+    // A literal, or an i18n key the product carries per locale (identity-seam-3).
+    description: organizationDescription(locale, { has: hasText, t }),
     address: (org.addressCountry || org.addressLocality) ? {
       '@type': 'PostalAddress',
       addressCountry: org.addressCountry,
@@ -1018,7 +1044,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   const ogLocale = locale === 'is' ? 'is_IS' : 'en_IS';
 
   // The Organization leads on every page — everything above references it.
-  const jsonLdHtml = jsonLdScript([organizationSchema(), ...schemas]);
+  const jsonLdHtml = jsonLdScript([organizationSchema(locale), ...schemas]);
 
   // Crawler body content — covers the home page, list pages, and detail
   // pages. Bing and other non-JS crawlers index the initial HTML response,
@@ -1050,7 +1076,9 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   let html = rewriteHead(loadTemplate(), {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
-    robots: isHiddenRoute(route) ? 'noindex, nofollow' : 'index, follow',
+    // Hidden surfaces (by prefix) and the product's own noindex routes
+    // (identity.routes[*].noindex) are de-indexed; everything else is indexable.
+    robots: isDeindexedRoute(route) ? 'noindex, nofollow' : 'index, follow',
     scenePreload: scenePreloadTag(route),
   });
   html = injectCrawlerContent(html, crawlerHtml);

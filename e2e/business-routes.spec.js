@@ -3,11 +3,14 @@ const { test, expect } = require('@playwright/test');
 // this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
 const { gateSpec } = require('./lib/featureGate');
 gateSpec(test, __filename);
-const { identity } = require('./lib/identity');
+const { identity, forcedLocaleFor } = require('./lib/identity');
 // The public IA the nav offers: identity.surface.nav minus the hidden routes
-// (the same rule utils/identity.js publicNav() applies in the NavBar).
+// (the same rule utils/identity.js publicNav() applies in the NavBar). A
+// locale-locked nav route (the party pages, `identity.routes[*].locale`)
+// lands under ITS locale whatever the visitor's — identity-seam-3.
 const NAV = identity.surface.nav.filter((e) =>
   !identity.surface.hiddenRoutes.some((h) => e.route === h || e.route.startsWith(h + '/')));
+const localeOf = (route, locale) => forcedLocaleFor(route) || locale;
 
 /**
  * The public business site, walked end to end in BOTH locales.
@@ -61,7 +64,7 @@ for (const locale of ['is', 'en']) {
       await page.goto(`/${locale}/`);
       for (const { route } of NAV) {
         await page.locator(`.lol-nav__center [data-route="${route}"]`).click();
-        await expect(page).toHaveURL(new RegExp(`/${locale}${route}$`));
+        await expect(page).toHaveURL(new RegExp(`/${localeOf(route, locale)}${route}$`));
         await page.goto(`/${locale}/`);
       }
     });
