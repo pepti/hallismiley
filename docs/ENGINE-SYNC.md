@@ -38,6 +38,32 @@ instances.**
 | `orange-smiley/icelandicstore` | customer #1, live | `ice` | `main` | `engine-sync/<date>` | **Halli** | deploys TEST |
 | `pepti/hallismiley` | personal (Halli's CV/hobby site) | `hs` | `main` | `engine-sync/<date>` | **Halli** | deploys www.hallismiley.is |
 
+### icelandicstore: the customer's daily business comes first (Halli, 2026-09-23)
+
+icelandicstore runs Ísprjón's shop floor every day and Halli builds on it with
+Orri. No engine work may disturb that. The rules, for every agent and session:
+
+- **Reading is always allowed; writing is not.** Clone `origin/main` into a
+  scratch folder and read, diff, assess or harvest from it. Never push a branch
+  to the icelandicstore remote, open a PR there or touch its TEST/PROD databases
+  unless Halli has named the window for that specific change.
+- **The graft and every sync wait for a window Halli and Orri pick** — outside
+  opening hours, never on a day with a planned release or stock count. The PR is
+  prepared and verified in advance; Halli merges it (merging deploys TEST); TEST
+  is checked by Halli/Orri before anything is promoted; PROD stays
+  `promote-prod.yml`, by hand. Rollback is `git revert -m 1` plus a re-deploy.
+- **Security fixes are no exception to the window**, only to its length: the PR
+  is ready the same day, Halli decides when it lands.
+- **The upward path does not touch icelandicstore.** `engine-harvest.js` reads a
+  clone and writes only to the engine. Orri's and Halli's branches are never
+  rebased, force-pushed or merged by an agent.
+- **Never open the parked checkout** `Projects\icelandicstore` (dirty, many
+  worktrees of real work), never `git checkout`/`reset`/`stash` there.
+- Customer-specific code (Regla, Shopify import, order/shelf vision,
+  multi-store, discounts, consignment, builds, workshop) is never changed by a
+  sync; the assessment in `company/ice-graft-assessment-2026-09-22.md` lists the
+  fork boundary and the five decisions that come first.
+
 `engine.json` in each repo carries `product`, `role`, `upstream`,
 `upstreamBranch`, `rev` (engine commit last merged), `syncedAt`, `syncedPr`,
 `grafted`, `productPaths`, `history`. It is product-owned: a sync never
@@ -102,6 +128,16 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   `merge=ours`.
 - **`package-lock.json`**: take theirs, then `npm install --package-lock-only`
   (the tool does this).
+- **`.engine-paths`, `.gitattributes`, `features/README.md`** are DERIVED —
+  written by `scripts/features-index.js` from `features/**/*.md` — and differ
+  per repo (a product's own feature paths), so they conflict on every sync.
+  Never resolve them by hand and never `--theirs` (that would take the
+  ENGINE's product paths): a sync **regenerates them** — `node
+  scripts/features-index.js`, then `git add` the three. `engine-sync.js` does
+  this right after the merge, again after `--continue` (once any conflicted
+  `features/*.md` the generator reads is resolved), and runs `--check` before
+  verification; the report and `engine.json`'s history entry (`regenerated`)
+  say which files it rewrote (identity-seam-3, 2026-09-23).
 - **Engine tests**: start from theirs, re-apply the product's expectations on
   top (a downstream's spec adaptation is a diff over the engine spec, never a
   fork). Two mechanisms make that diff small, and both are config, not hooks:
@@ -123,9 +159,23 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
     Product-schema brand; engine suites take their expected locale strings
     from `tests/lib/locale.js` (the visitor default), and the engine-only pins
     (committed `client.json` = defaults, empty `local.json`, empty overlays)
-    run only where `engine.json.role` is `engine`. **`APP_URL` is not in the
-    seam**: its code fallback is the engine's origin — set it on every
-    downstream's App Service (`docs/DEPLOYMENT.md` §5).
+    run only where `engine.json.role` is `engine`. Since identity-seam-3
+    (2026-09-23) a product's **own public routes** are config too:
+    `identity.routes` — `{ "/console": { titleKey, descriptionKey?,
+    titleMode: "bare"|"suffix", noindex, locale, contentKeys? } }` — is merged over the
+    engine's `ROUTE_META`/`DEFAULT_META` (server) and the `pageTitle` table
+    (client), `noindex` drives the robots meta + robots.txt + sitemap, and
+    `locale` locks the route like the party pages (`forcedLocaleFor` asks
+    the party lock first, then the product's); `contentKeys` names the
+    `site_content` rows the page renders, which is where the sitemap's
+    `<lastmod>` for that route comes from (rk-feed, 2026-09-23). `/llms.txt`
+    is the engine's too, built from the identity and the advertised pages. So a route the engine does
+    not know (`/aron13ara`, `/console`) or one the product re-describes
+    (`/`) needs no hook in an engine file; the keys live in the product
+    overlay. Also in the seam: `organization.description` as an i18n key
+    (per locale), `organization.ogImage`, `theme.swatches`. **`APP_URL` is
+    not in the seam**: its code fallback is the engine's origin — set it on
+    every downstream's App Service (`docs/DEPLOYMENT.md` §5).
   - **Tests for a hidden feature skip; never delete an engine spec.** A
     feature the product hides, disables or forks is recorded in
     `features/local.json`; the feature gate (`tests/lib/featureGate.js`,

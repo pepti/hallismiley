@@ -18,6 +18,9 @@ const {
   runAutoTranslateSideEffect,
 } = require('../services/siteContentTranslate');
 const { submitLocalized } = require('../services/indexNow');
+// A save moves the sitemap's <lastmod> for the page that renders the row
+// (routes/sitemapRoutes.js caches the lookup for 10 minutes; rk-feed 2026-09-23).
+const { invalidateLastmodCache } = require('../routes/sitemapRoutes');
 
 // site_content keys → indexable URL path. Editing any of these warrants an
 // IndexNow ping so Bing re-crawls the page that surfaces the new copy.
@@ -136,6 +139,7 @@ async function putContent(req, res, next) {
     // Send the EN response immediately. The background translation below
     // continues in the same Node process; it does not affect the response.
     res.json(rows[0].value);
+    invalidateLastmodCache();
 
     // IndexNow ping for content keys tied to a known indexable page. Skipped
     // silently when INDEXNOW_KEY is unset or when the key doesn't map to a
@@ -209,6 +213,7 @@ function uploadImage(req, res, next) {
         );
       }
       await client.query('COMMIT');
+      invalidateLastmodCache();
       return res.json({ image_url: imageUrl, field });
     } catch (dbErr) {
       await client.query('ROLLBACK').catch(() => {});

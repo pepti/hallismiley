@@ -31,8 +31,10 @@ export function isAuthenticated() { return !!_user; }
 export function getRoles()        { return _user?.roles || (_user?.role ? [_user.role] : []); }
 export function hasRole(role)     { return getRoles().includes(role); }
 export function isAdmin()         { return getRoles().includes('admin'); }
-// An admin account that has not set up two-step verification yet. The server
-// withholds the admin role from it (server/auth/mfaPolicy.js), so isAdmin() is
+// An admin account that has not set up two-step verification yet, on an
+// instance whose security.mfa.enrolment is `required` (never under the default
+// `optional`). The server then withholds the admin role from it
+// (server/auth/mfaPolicy.js), so isAdmin() is
 // false and every admin call would 403 — this flag is how the SPA knows to walk
 // the person to the set-up panel instead of showing them a plain user's site.
 export function mfaEnrolmentRequired() { return !!_user?.mfa_enrolment_required; }

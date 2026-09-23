@@ -5,7 +5,7 @@
 //   t('nav.home')              // → "Home"
 //   t('shop.inStock', {n: 3}) // → "3 in stock"
 
-import { getIdentity } from '../utils/identity.js';
+import { getIdentity, routeLockFor } from '../utils/identity.js';
 
 export const SUPPORTED_LOCALES = ['en', 'is'];
 // DEFAULT_LOCALE is the MESSAGE-FALLBACK dimension (which JSON backfills a
@@ -63,28 +63,22 @@ function isPartyPath(pathname) {
 }
 
 /** The locale `pathname` is locked to, or null when it may render in any
- *  supported locale. Mirrors server/config/i18n.js forcedLocaleFor. Consumers:
- *  getPreferredLocale + switchLocale + href below, the Router's locale guard,
- *  and the NavBar's language switcher (hidden entirely on locked routes).
+ *  supported locale. Mirrors server/config/i18n.js forcedLocaleFor: the
+ *  engine's party lock first, then the product's own locked routes
+ *  (`identity.routes[*].locale`, identity-seam-3 — read off the hand-off, so
+ *  the SPA and the SSR <head> agree). Consumers: getPreferredLocale +
+ *  switchLocale + href below, the Router's locale guard, and the NavBar's
+ *  language switcher (hidden entirely on locked routes).
  *
  *  Defaults to the current URL so callers on the party page can just ask
  *  `forcedLocaleFor()`. */
-/** Hidden one-off pages published in Icelandic only — exact match, no
- *  sub-routes. Mirrors server/config/i18n.js IS_ONLY_PAGES; kept in lockstep.
- *  hallismiley residual hook (engine-graft). */
-const IS_ONLY_PAGES = ['/aron13ara'];
-
-function isIsOnlyPage(pathname) {
-  if (!pathname) return false;
-  const parts = pathname.split('/').filter(Boolean);
-  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
-  return IS_ONLY_PAGES.includes('/' + parts.join('/'));
-}
-
 export function forcedLocaleFor(pathname = window.location.pathname) {
   if (isPartyPath(pathname)) return PARTY_FORCED_LOCALE;
-  if (isIsOnlyPage(pathname)) return 'is';
-  return null;
+  if (!pathname) return null;
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] && SUPPORTED_LOCALES.includes(parts[0])) parts.shift();
+  const locked = routeLockFor('/' + parts.join('/'));
+  return locked && SUPPORTED_LOCALES.includes(locked) ? locked : null;
 }
 
 /** Determine locale from locale-lock → ?locale= → explicit saved choice →

@@ -89,8 +89,15 @@ module.exports = defineConfig({
       // Must match the origin the browser actually uses, or every state-changing
       // request fails CORS the moment E2E_PORT is set.
       ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || BASE_URL,
-      // Admins must enrol a second factor before they hold admin rights
-      // (server/auth/mfaPolicy.js). The shared `testadmin` signs in dozens of
+      // Two-factor enrolment is OPTIONAL on a real instance by default
+      // (security.mfa.enrolment, mfa-optional-2026-09-23). The e2e server runs
+      // the MANDATORY mode on purpose: one server serves every spec, and
+      // e2e/admin-totp-enrolment.spec.js walks the person's side of the
+      // `required` rule in a real browser. The optional default is pinned
+      // against the API in tests/integration/adminTotpEnforcement.test.js.
+      CLIENT_CONFIG_SECURITY_MFA_ENROLMENT: 'required',
+      // Under `required`, admins must enrol a second factor before they hold
+      // admin rights (server/auth/mfaPolicy.js). The shared `testadmin` signs in dozens of
       // times a minute across four workers, which TOTP's replay guard (one code
       // per 30-second step) cannot serve — so THAT account is exempt, by name,
       // through a switch production ignores, and so are the two per-spec

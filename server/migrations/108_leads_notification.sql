@@ -1,0 +1,21 @@
+-- 108_leads_notification — reference copy; the authoritative entry is in
+-- server/config/schema.js.
+--
+-- The lead notification email's outcome, recorded on the lead (rk-feed,
+-- 2026-09-23): notified_at = when the email went out, notify_error = why it
+-- did not ("email not configured", a Resend error message). The contact
+-- handler records it once the insert and the send have both settled; the
+-- inbox (/admin/leads) marks a row whose email never went out.
+--
+-- Born in rekstrarkerfid: its 092_leads created the table WITH these two
+-- columns (its rk_001_leads_engine_shape then brought the rest of the table
+-- to the engine's shape). On rk's databases both statements are therefore
+-- no-ops — IF NOT EXISTS — and NO alias entry is needed in its product file:
+-- an alias says "the same DDL was applied under another name", and rk_001
+-- did far more than this.
+--
+-- Additive (invariant 14): the previous release neither reads nor writes the
+-- columns. leads:export carries submission fields only, so the transfer
+-- format is unchanged.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS notify_error TEXT;

@@ -51,6 +51,12 @@ test.describe('leads inbox', () => {
     const row = page.locator('tr.leads-row', { hasText: LEAD.name });
     await expect(row).toBeVisible({ timeout: 10_000 });
     await expect(row.locator('.leads-chip')).toHaveText('Ný');
+    // The e2e server has no email transport, so the notification did not go
+    // out — and the inbox says so (migration 108: notify_error on the row),
+    // with the reason on hover.
+    const mark = row.locator('[data-unsent]');
+    await expect(mark).toHaveText('ekki sent');
+    await expect(mark).toHaveAttribute('title', /email not configured/);
 
     // 3. Open it, read the message, mark contacted.
     await row.click();

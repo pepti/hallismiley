@@ -82,7 +82,10 @@ the account on the public site too.
 
 - Every `/hafa-samband` submission lands here the moment it is sent — the
   notification email still goes to `LEAD_NOTIFY_EMAIL`, the row is the copy
-  that cannot be missed. Newest first; a **new** lead is bold.
+  that cannot be missed. Newest first; a **new** lead is bold. A row marked
+  **ekki sent** is one whose notification email never went out (hover for the
+  reason — usually no email transport on that box); the enquiry is only here,
+  so work it from the inbox.
 - **Statuses**: Ný → Haft samband → Unnin / Töpuð. The first move out of Ný
   stamps *who* made contact and *when* (`contacted_at`/`contacted_by`) and is
   never restamped — it records the first human touch, not the latest.

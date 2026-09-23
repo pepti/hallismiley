@@ -6,29 +6,14 @@
  * tests pin the rule itself rather than each consumer's copy of it.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { forcedLocaleFor, isPartyPath, PARTY_FORCED_LOCALE, PUBLIC_DEFAULT_LOCALE } = require('../../server/config/i18n');
 const { resolveLocale } = require('../../server/middleware/locale');
 const { clientConfig } = require('../../server/config/clientConfig');
 
 describe('forcedLocaleFor', () => {
-  // hallismiley (engine-graft): hidden one-off pages (IS_ONLY_PAGES) are locked
-  // too, but they are NOT party paths — isPartyPath drives the party API's
-  // Icelandic default and must stay false for them.
-  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
-    'locks the hidden Icelandic-only page %s',
-    (p) => {
-      expect(forcedLocaleFor(p)).toBe('is');
-      expect(isPartyPath(p)).toBe(false);
-    }
-  );
-
-  test.each(['/aron13ara/x', '/en/aron13ara/admin', '/aron13', '/aron13arab'])(
-    'the hidden-page lock is an exact match — %s stays unlocked',
-    (p) => {
-      expect(forcedLocaleFor(p)).toBeNull();
-    }
-  );
-
   test.each([
     '/party',
     '/en/party',
@@ -83,6 +68,70 @@ describe('forcedLocaleFor', () => {
 
   test('PARTY_FORCED_LOCALE is the locale the party pages are authored in', () => {
     expect(PARTY_FORCED_LOCALE).toBe('is');
+  });
+});
+
+// A product's OWN locked routes — `identity.routes[*].locale` (identity-seam-3;
+// hallismiley's /aron13ara is Icelandic-only the way the party pages are).
+// The rule is read off a temp client.json so it holds in every repo.
+describe('forcedLocaleFor — identity.routes locks', () => {
+  let dir;
+  let i18n;
+  let locale;
+  const savedFile = process.env.CLIENT_CONFIG_FILE;
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'locale-lock-routes-'));
+    fs.writeFileSync(path.join(dir, 'client.json'), JSON.stringify({ identity: { routes: {
+      '/aron13ara': { titleKey: 'meta.aron13.title', titleMode: 'bare', locale: 'is' },
+      '/console':   { titleKey: 'meta.console.title', noindex: true },
+      '/original':  { titleKey: 'meta.original.title', locale: null },
+      '/de-only':   { titleKey: 'meta.de.title', locale: 'de' },   // not a supported locale — no lock
+    } } }));
+    process.env.CLIENT_CONFIG_FILE = path.join(dir, 'client.json');
+    jest.isolateModules(() => {
+      expect(require('../../server/config/clientConfig').problems).toEqual([]);
+      i18n = require('../../server/config/i18n');
+      locale = require('../../server/middleware/locale');
+    });
+  });
+
+  afterAll(() => {
+    if (savedFile === undefined) delete process.env.CLIENT_CONFIG_FILE;
+    else process.env.CLIENT_CONFIG_FILE = savedFile;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara', '/aron13ara/x', '/en/aron13ara/x'])(
+    'locks %s to the route\'s locale', (p) => {
+      expect(i18n.forcedLocaleFor(p)).toBe('is');
+      expect(i18n.isPartyPath(p)).toBe(false); // the party rule is untouched
+    });
+
+  test.each(['/aron13arax', '/console', '/en/console', '/original', '/de-only', '/', '/en/'])(
+    'leaves %s unlocked (no locale, a null locale, an unsupported locale, a longer word)', (p) => {
+      expect(i18n.forcedLocaleFor(p)).toBeNull();
+    });
+
+  test('the party lock still comes first', () => {
+    expect(i18n.forcedLocaleFor('/en/party')).toBe('is');
+  });
+
+  test('the locale middleware reads the lock like it reads the party lock', () => {
+    const req = (p, extra = {}) => ({ path: p, query: {}, headers: {}, cookies: {}, ...extra });
+    expect(locale.resolveLocale(req('/en/aron13ara', { cookies: { locale_choice: 'en' }, query: { locale: 'en' } }))).toBe('is');
+    expect(locale.resolveLocale(req('/en/console', { cookies: { locale_choice: 'en' } }))).toBe('en');
+  });
+
+  test('a lock on "/" locks the landing alone', () => {
+    let m;
+    const file = path.join(dir, 'landing.json');
+    fs.writeFileSync(file, JSON.stringify({ identity: { routes: { '/': { titleKey: 'meta.home.title', locale: 'en' } } } }));
+    process.env.CLIENT_CONFIG_FILE = file;
+    jest.isolateModules(() => { m = require('../../server/config/i18n'); });
+    expect(m.forcedLocaleFor('/')).toBe('en');
+    expect(m.forcedLocaleFor('/is/')).toBe('en');
+    expect(m.forcedLocaleFor('/is/thjonusta')).toBeNull();
   });
 });
 

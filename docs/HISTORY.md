@@ -65,6 +65,10 @@ link to them. "This repo" inside an engine entry means orangesmiley.
 | 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
 | 2026-09-23 | [Engine sync 2 — identity seam v2: the public IA, the page meta, the manifest and robots from `config/client.json` (D-021)](#engine-sync-2-2026-09-23) | hallismiley: up to engine `57362dc`; `identity.surface.nav` = the base's six-link nav, `theme.dark` = the five colour themes, the page meta as overlay keys; the NavBar/sitemap/meta/manifest/robots hooks the first sync listed are closed by the engine; three test-side residuals + `/aron13ara` remain |
 | 2026-09-23 | [Engine sync — identity through the seam, feature gate (D-021)](#engine-sync-2026-09-23) | hallismiley: up to engine `92308d2`; brand/locale/theme trio/hero/hidden surfaces/Organization now in `config/client.json`, the theme and brand hooks retired, `/aron13ara` the one remaining hook; what the seam still lacks |
+| 2026-09-23 | [rk feed — six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)](#rk-feed-2026-09-23) | Lead ids as strings end to end; migration 108 `notified_at`/`notify_error` + the "ekki sent" inbox mark; the change-request launcher and the contact editor's bar stack (`--cr-widget-clearance`); legal titles on one line at 320px; sitemap `<lastmod>` from `site_content` + `identity.routes[*].contentKeys`, `/llms.txt` for every product (harvested from rk); the alias rule worded as enforced |
+| 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
+| 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
+| 2026-09-23 | [Engine sync 3 — MFA optional, identity seam v3: `/aron13ara` through `identity.routes` (D-021)](#engine-sync-3-2026-09-23) | hallismiley: up to engine `61e0920`; `/aron13ara` meta, noindex and Icelandic lock in `config/client.json` `identity.routes`, its hooks in `ssrMeta.js`/`pageTitle.js`/both `i18n.js` and the six engine-test re-applies retired; two-factor enrolment optional by default (not set here); migration 108 runs; router.js is the one hook left |
 
 ---
 
@@ -1555,8 +1559,13 @@ graft) and the rk-only hunks trimmed. Branch `from-rk/2026-09-23`.
   pre-107 account sealed at its next successful sign-in (`COALESCE`); N+1
   stops writing the plaintext, N+2 drops it (invariant 14). rk applied the same
   DDL as `093_totp_secret_enc`; its product file must alias
-  `'107_totp_secret_enc': ['093_totp_secret_enc']` and keep `093` in `legacy`
-  untouched (`docs/MIGRATIONS.md`). Verified in Jest: a plaintext-only account
+  `'107_totp_secret_enc': ['093_totp_secret_enc']` and REMOVE `093` from its
+  `legacy` array — a legacy entry with an engine equivalent is aliased, never
+  kept, or a fresh database runs the DDL twice; `tests/unit/migrationSet.test.js`
+  enforces it (an alias value may name nothing in any array), and rk did
+  exactly that on its next sync (`docs/MIGRATIONS.md`; corrected in
+  [rk-feed](#rk-feed-2026-09-23), the entry first said "keep 093 untouched").
+  Verified in Jest: a plaintext-only account
   signs in and is sealed on the way; a sealed-only row is enough; a foreign
   ciphertext is refused; with no key the plaintext path still works.
 - **Also taken**: `ADMIN_TOTP_EXEMPT` (ignored under `NODE_ENV=production`,
@@ -1938,3 +1947,346 @@ company's kennitala and VAT number). Not a divergence in production: the home
 hero copy comes from the `home_hero` `site_content` row, which hallismiley.is
 has ("Halli / Smiley / and his friend claude"); only an unseeded dev copy
 shows the engine's literal fallback in `HomeView.js`.
+<a id="identity-seam-3-2026-09-23"></a>
+## 2026-09-23 — Identity seam, third iteration: a product's own routes, the derived files, the last engine pins (D-021)
+
+**Why.** All three downstream syncs onto the second seam asked for the same
+things (pepti/hallismiley#168 sync 3, orange-smiley/ledgerlink#11,
+orange-smiley/rekstrarkerfid#44): a product slot for its OWN public routes'
+meta — hallismiley's `/aron13ara` (Icelandic-only, hidden), LedgerLink's `/`,
+`/console` and `/original` (noindex), rekstrarkerfid's landing rows were
+still hooks in `ssrMeta.js` and `pageTitle.js`; a handful of engine tests
+that still pinned the engine's own site (the meta-literal pin, the Service
+catalogue cases, the six company click-throughs, `identityDownstream`'s
+literal "Our work — Halli Smiley" and its raw-table manifest read, the
+Features row that links `features/os/company-content.md`); and
+`.engine-paths` / `.gitattributes` conflicting on every sync because they are
+generated per repo. Plus the small asks: a per-locale Organization
+description, an og:image path in the seam, picker swatches per theme id.
+
+**`identity.routes` — a product's routes are config.** A map of bare route
+(or `/`) → `{ titleKey, descriptionKey?, titleMode?, noindex?, locale? }`, a
+new `object` schema type in `clientConfig.js` (JSON in the env layer;
+`$comment` keys inside ignored at any level; `defaults()` hands out a fresh
+map; validated per entry — i18n-key shape, `bare|suffix`, boolean, locale
+id, no unknown fields). `server/config/identity.js` `productRoutes()`
+normalises it once. Readers: `ssrMeta.js` merges each entry over
+`ROUTE_META` (`product:<route>` key, replacing any engine row for that route
+whole — no `site_content` override, no shop section) and `DEFAULT_META`
+(the i18n keys + mode), after the literal tables the parity test parses;
+`pageTitle.js` reads the same entries off the hand-off in `titleForRoute`
+and lets them win over its table; `config/i18n.js` `forcedLocaleFor` asks
+the party lock first, then `identity.routes[*].locale` (prefix-aware like the
+party lock, `/` locks the landing alone, an unsupported locale is ignored);
+`publicSurface.js` `NOINDEX_ROUTES` / `isDeindexedRoute()` (exact routes —
+a noindex route may still be linked) drive the `<meta robots>`, a robots.txt
+Disallow block and the sitemap filter; `/manifest.json` describes itself from
+`routes['/'].descriptionKey` when the landing is re-described. The client
+mirror: `utils/identity.js` `routeMeta()` / `routeLockFor()` and a
+record-by-record map merge in `resolveIdentity`; `i18n/i18n.js`
+`forcedLocaleFor` consults the lock, so the Router guard, `href()` and the
+NavBar's switcher follow. The engine's `config/client.json` carries
+`routes: {}` with a `$comment` as the worked example.
+
+**The small asks.** `identity.organization.description` may be an i18n KEY
+(`org.description`) — `organizationSchema(locale)` resolves it through the
+overlay per locale, a literal is emitted as written (`organizationDescription`
+in `identity.js`, table-injected so the module stays free of `server/i18n`).
+`identity.organization.ogImage` is the og:image card every page falls back to
+(`OG_IMAGE_PATH` reads it; `organization.image` stays the entity's picture —
+same file, not the same idea). `identity.theme.swatches` (`{ id: { bg, fg } }`,
+CSS colour literals) feeds `themePrefs.js` `swatchFor` as the same
+accent→background gradient the engine's use, over the engine map, over the
+neutral token fill. `theme-boot.js` is untouched (it keeps reading the
+`<html>` attributes; rk's `html.js` mark stays rk's).
+
+**Engine tests that pinned the engine's site.** `i18nIdentity` — the
+meta-literal pin is `testEngine` (a product overlays `meta.home.title`).
+`ssrMeta.test.js` — the four Service-catalogue cases gate on
+`isHiddenRoute('/thjonusta')` (`testServices`); the hidden/indexable paths
+are built with `forcedLocaleFor(route) || LC`; a describe for the product's
+noindex routes. `sitemap.test.js` — `localesOf(path)` (a locked route once,
+under its locale, with no alternates), the advertised list minus
+`NOINDEX_ROUTES`, the hreflang probe on the first unlocked route.
+`e2e/navigation.spec.js` — the products card and the five company
+click-throughs run only where `/thjonusta` is public; `e2e/business-routes`
+expects a locked nav route under its own locale (`e2e/lib/identity.js` now
+exports `isHiddenRoute` + `forcedLocaleFor`). `identityDownstream.test.js` —
+every expected title is composed from the isolated app's own `t()` (engine
+table + overlay, `{siteName}` etc. resolved to the downstream) with
+`composeTitle`, compared HTML-escaped; the manifest description too; nothing
+literal; hallismiley's block gains `/party` in its nav (listed under `is`
+only); and a second app boots LedgerLink-style with the `routes` block above
+over a mocked overlay and asserts title (bare, escaped `&amp;`), description,
+noindex, the sitemap (locked once, noindex never), robots.txt, the 301s
+(`/en/aron13ara`, bare, sub-route, with an `en` cookie), the canonical with no
+`en` alternate, the manifest, the per-locale Organization description and
+og:image. `architectureIndex` — a Features-row link to another product's
+folder is allowed but not required (the engine's own row links
+`features/os/company-content.md`, foreign in every downstream). `pageTitle
+.test.js` keeps its parse-the-source mechanism for the engine tables and adds
+a routes walk over a synthetic identity and over this repo's committed
+`config/client.json`, loading a fresh `pageTitle` over a stubbed hand-off.
+`localeLock` / `localeLockClient` pin the routes lock on both sides through
+a temp `client.json` / a stubbed hand-off. `featureGate` / `identityConfig`
+had no engine-only pin left ungated (verified).
+
+**The derived files.** `scripts/features-index.js` is idempotent per repo
+already; the fix is in the tool: site-factory `engine-sync.js`
+(`feat/engine-sync-regen`, `1e186fe`) resolves a conflict on exactly
+`.engine-paths`, `.gitattributes` (and `features/README.md`) by running
+`node scripts/features-index.js` in the downstream and staging the result —
+right after the merge, again in `finish()` after `--continue` (once any
+conflicted `features/*.md` the generator reads are resolved), and a
+`--check` before verification; `--theirs` there would take the ENGINE's
+product paths. The report names the regeneration and `engine.json`'s history
+entry records `regenerated`. Smoke: a mini engine with a `features-index.js`
+stub that writes a marker line; a manufactured conflict syncs with exit 0.
+ENGINE-SYNC §6 says so.
+
+**What this closes downstream.** hallismiley: the `/aron13ara` rows in
+`ssrMeta.js` + `pageTitle.js`, the IS-only lock in `config/i18n.js` + the
+client mirror, the cases in the two `localeLock*` tests, the six gated test
+lines, the Features-row link — all become `routes: { "/aron13ara": {
+titleKey, titleMode: "bare", locale: "is" } }` + overlay keys. LedgerLink:
+the `/`, `/console`, `/original` rows and the `{brand} — The invoice is
+already there.` part, the swatches in `themePrefs.js`, the raw-table
+`identityDownstream` edit. rekstrarkerfid: its landing/eiginleikar/verdskra/
+um-kerfid rows, the per-locale description, the OG-card path, the swatches.
+No migration.
+
+**Still open, on purpose.** rk's `html.js` mark in `theme-boot.js` (rk's
+own); a crawler-summary hook for a product landing (LedgerLink's `/`
+crawler block); the sitemap beyond nav + legal (hallismiley's
+`/shop/products` etc.); the `/party` nav link's class/aria; `classic` as
+Bjart. PLAN → Status.
+
+<a id="rk-feed-2026-09-23"></a>
+## 2026-09-23 — rk feed: six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)
+
+**Why.** rekstrarkerfid's two engine syncs of 2026-09-23 (b) left a list of
+things that broke or were missing in ENGINE files — nothing rk could fix in a
+product-owned file for good — and filed them as one issue, "Feed for the
+engine" (orange-smiley/rekstrarkerfid#45). Items 1, 5 and 8 of that list were
+already in identity-seam-3; this chunk takes the rest: 2, 3, 4, 6, 7 and 9.
+Branch `fix/rk-feed`; no downstream file was touched.
+
+**Lead ids are strings, end to end (#2).** The engine's `leads.id` is SERIAL;
+rk's table predates the engine's 097 (its `092_leads`) and holds TEXT uuids —
+and `AdminLeadsView` coerced `dataset.id` with `Number()`, so a uuid became
+NaN and the detail never opened, while `leadsController._id` rejected any
+non-integer with 400. Now `parseLeadId()` (exported) accepts a positive
+integer or a uuid and returns the STRING it was given; `Lead.findById` /
+`update` / `remove` compare `id::text = $1` (the table is bounded by the
+retention job, the cast costs nothing); the view compares `String(l.id)` and
+never coerces. Tests: `tests/unit/leadId.test.js` (the parser) and a
+`leads.test.js` case that walks GET/PATCH/DELETE with a uuid — a clean 404
+here, never a 400 and never the 500 that pg's 22P02 gave before — plus the
+rejected shapes and the integer round-trip.
+
+**The notification outcome on the lead — migration 108 (#4).** rk records
+whether the notification email went out (`notified_at` / `notify_error`)
+since 2026-09-15, when a PROD box with no `RESEND_API_KEY` made every enquiry
+vanish behind a "received" reply; the engine gained `Lead.recordNotification()`
+only inside rk's graft. Now the engine's: `108_leads_notification` adds the
+two columns (`ADD COLUMN IF NOT EXISTS` — on rk's databases both are no-ops
+because its `092_leads` created them, and NO alias is needed: an alias says
+"the same DDL ran under another name", and rk's `rk_001` did far more than
+this; the migration comment says so), `Lead.recordNotification(submissionId,
+error)` never throws (sent → `notified_at = NOW()`, error cleared; failure →
+the reason, capped at 500), `sendLeadNotification` resolves `true` / `false`
+(no transport) / throws, and `contactController` records the outcome once
+the insert and the send have BOTH settled (the write would otherwise race the
+insert), with a trailing catch so the chain can never surface — the visitor's
+200 is untouched. The inbox shows a small "ekki sent" / "not emailed" mark
+next to the status (`leads.notEmailed`, the reason in `leads.notEmailedHint`
+on hover; `--warning` wash, tokens only). `leads:export` carries nothing
+new: workflow columns stay out. Tests: `recordNotification` both ways and
+the never-throw, the controller path under mail true / false / rejected, the
+inbox carrying the fields; `e2e/leads.spec.js` asserts the mark on the e2e
+server (no transport there, so every lead is "email not configured").
+
+**The launcher and the editor's bar stack (#3).** Since the `.view`
+containing-block fix (identity-seam-2) the contact editor's Save/Cancel bar
+(`contact.css`, bottom-right, z 90) and the change-request launcher
+(`#cr-widget`, bottom-right, z 240) are BOTH really fixed to the viewport,
+and the launcher covered the buttons. The widget now sets
+`body.has-cr-widget` on mount and removes it on destroy; `test-env.css` sets
+`--cr-widget-clearance: 64px` on that class; the bar's `bottom` is
+`calc(24px + var(--cr-widget-clearance, 0px))` (12px in the phone rule). A
+length, not a colour, so every theme reads the same (invariant 15). The e2e
+case in `contact.spec.js` signs in an admin on the test stack (the widget is
+always there), opens the editor, asserts the bar's box ends above the widget's
+and clicks Save (`trial`) and Cancel — Playwright refuses a click another
+element intercepts, so the click is the proof.
+
+**Legal titles at 320px (#6).** `.ice-band-panel .legal-title` floored at
+`1.2rem` and wrapped PERSÓNUVERNDARSTEFNA mid-word on a 320px phone
+(rk's `qa-chrome-findings.spec.js`). The floor is `0.95rem` (`clamp(0.95rem,
+4.8vw, 2rem)`), `overflow-wrap: normal; hyphens: manual` — a heading may
+break at a space, never inside a word. `iceland-scene.spec.js` now asserts
+one line and no overflow for both Icelandic titles at 320 and 375px, and every
+word intact for the English ones.
+
+**Sitemap `<lastmod>` and `/llms.txt`, harvested (#7).** rk's
+`sitemapRoutes.js` (its `0a928c9`, 2026-09-15) carried both as product hooks;
+the generic halves are the engine's now, `Feature: public-site`,
+`engine.json.history` records `harvestedFrom: rk@2d9570d`. `<lastmod>` is the
+newest `site_content.updated_at` among the rows a page renders, either
+locale, as a date: engine routes from `ssrMeta.contentKeysForRoute()`
+(`ROUTE_META`'s meta row + what the page renders — `/`: home_hero/skills/
+stats, `/hafa-samband`: the five contact rows), a product route from the new
+`identity.routes[*].contentKeys` (validated as `site_content` keys, mirrored
+in the client `routeMeta` so both halves normalise alike). One query, cached
+in-process for the response's 10 minutes; an admin save (`putContent`,
+`uploadImage`) drops the cache; a page with no row gets no value — a deploy
+timestamp would be a lie search engines learn to ignore. `/llms.txt`
+(llmstxt.org) is the brand as H1, the Organization description (per locale
+through the seam) as the blockquote, the legal name and place, then every
+ADVERTISED page under each locale (a locked route under its lock only) with
+its composed title — the brand suffix stripped, "Brand — x" as "Brand: x" —
+and description from `ssrMeta.metaForRoute()`, so the summary and the
+`<title>` can never disagree; gated on nothing. rk's pricing block
+(`tierSummaries`) stays rk's. Tests: `sitemap.test.js` (lastmod follows a
+save, absent without a row, a date not a timestamp, cached until dropped) and
+the new `tests/integration/llms.test.js`, both reading the resolved seam.
+
+**Wording (#9).** The harvest-rk-totp entry above said rk should keep
+`093_totp_secret_enc` in `legacy` untouched; `docs/MIGRATIONS.md` and
+`tests/unit/migrationSet.test.js` say the opposite and rk did the opposite: a
+legacy entry with an engine equivalent is REMOVED from `legacy` and listed
+under `aliases` (an alias value may name nothing in any array). The entry,
+the "born downstream" paragraph of MIGRATIONS.md and PLAN's open item now
+say that.
+
+**rekstrarkerfid, on its next sync.** Retire its own copies: the
+`recordNotification` / `notified_at` code in `Lead.js` and
+`contactController.js` (the engine's is the same shape; keep rk's `rowId`
+shim in `AdminLeadsView` only until the merge lands), the `LASTMOD_KEYS` /
+`fetchLastmods` hook and the `/llms.txt` route in `sitemapRoutes.js`
+(move the four route→key pairs into `identity.routes[*].contentKeys`;
+the pricing block needs a product slot the engine does not have yet — keep
+that one as a product route until it does), the `_id` uuid shim in
+`leadsController.js`, the `h1.legal-title` override in `landscape.css`, the
+`legacy` comment in `rk.js`. No alias for 108 (both ADDs are no-ops there).
+*Correction, same day (rekstrarkerfid#46):* "no-op" held only for an existing
+database. On a fresh one the engine list runs first, rk has superseded `097`,
+so `leads` does not exist yet and 108 fails — rk now lists 108 under
+`superseded`. The general rule is in `docs/MIGRATIONS.md` ("Superseding a
+table means superseding what alters it").
+Its `qa-chrome-findings.spec.js` 320px case and its `crawlerPages.test.js`
+llms/lastmod cases can then point at the engine's.
+<a id="mfa-optional-2026-09-23"></a>
+## 2026-09-23 — Two-factor enrolment is optional by default: `security.mfa.enrolment`
+
+**Why.** Halli, the same day the mandatory rule was harvested from
+rekstrarkerfid ([harvest-rk-totp-2026-09-23](#harvest-rk-totp-2026-09-23)):
+"change mfa to optional". Mandatory enrolment stays in the engine as a mode an
+instance can choose; it is no longer what every instance gets.
+
+**The switch.** `security.mfa.enrolment` in `server/config/clientConfig.js`
+(new `security` section), `'optional' | 'required'`, default **`optional`**;
+env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT` by the file's naming rule; any other
+value warns at boot and keeps the default. This repo's `config/client.json`
+spells out `optional` with a `$comment`.
+
+**What changed, and what did not**
+- `auth/mfaPolicy.js`: `enrolmentMode()` / `enrolmentRequired()` (exported with
+  `ENROLMENT_ENV`). `mustEnrol()` is false unless the mode is `required`, so
+  under `optional` `effectiveRoles` withholds no `admin`, `withholdViews` is
+  never asked to strip `accounts`, no `mfaEnrolmentRequired` flag is set, and
+  every session payload says `mfa_enrolment_required: false` — the SPA
+  (router, LoginModal, ProfileView) never forces the panel. No client code
+  changed. `applyMfaPolicyToRequest` skips its Role lookup under `optional`.
+  The env var is re-read per call (like `ADMIN_TOTP_EXEMPT`) so a suite can
+  flip the mode; a value the schema rejects is ignored there exactly as the
+  boot resolution ignored it, so the two readings agree.
+- Unchanged in both modes: `mfaService`'s login challenge (an enrolled account
+  is asked for a code at every sign-in), the Prófíll 2FA panel and its "password
+  only" hint (the non-blocking recommendation; `shouldEnrol` is its predicate,
+  now documented as a recommendation, never a gate), `secretBox` + migration
+  107 + `TOTP_ENC_KEY`, OAuth / party-magic-link refusals for admins, the
+  break-glass script.
+- **The seller area does not follow the switch.** `routes/sellerRoutes.js`
+  rule 4 (D-020, before the harvest) demands `totp_enabled` for everything but
+  `GET /me`; left as it is on purpose. Dropping that guard, or gating it on
+  `enrolmentRequired()`, is the one-line change if Halli wants sellers optional
+  too (`docs/ADMIN-2FA.md`).
+- `server.js`'s production warning about `ADMIN_TOTP_EXEMPT` now says it
+  matters under `required`.
+
+**Tests.** The mandatory path keeps its coverage by asking for it:
+`tests/unit/mfaPolicy.test.js` sets `required` in every describe that pins the
+rule and adds six cases for `optional` (mode resolves to optional; nobody must
+enrol; roles kept, no flag; no lookup per request; a bad env value ignored;
+`required` restores withholding). `tests/integration/adminTotpEnforcement.test.js`
+sets `required` in its top-level `beforeEach` and adds four API cases under the
+default (an unenrolled admin is an admin with views `['*']` and reaches the
+admin and accounts routes; an unenrolled accounts holder keeps `accounts`; an
+admin can still enrol and is then challenged; switching to `required`
+withholds on the very next request). `tests/unit/clientConfig.test.js` pins the
+leaf (default, file, env name, rejected value, this instance's file).
+`tests/integration/sellerArea.test.js` asserts the mode is `optional` where it
+proves a seller still needs 2FA. The e2e server runs `required`
+(`playwright.config.js`, `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`), so
+`e2e/admin-totp-enrolment.spec.js` still walks the mandatory flow in a browser
+— one server serves every spec, so the optional default is covered by Jest
+only. `ADMIN_TOTP_EXEMPT` stays in `playwright.config.js` (still needed: the e2e
+server is `required`) and in `tests/env.js` (no Jest suite needs it any more
+under `optional`; kept for a suite that switches to `required`).
+
+**Downstreams.** rekstrarkerfid chose mandatory enrolment itself (its
+`admin-totp-enforcement`, 2026-09-18). On its next engine-sync it inherits
+`optional` unless its own `config/client.json` says `required` — Halli's
+instruction is estate-wide, so the sync does NOT set it. hallismiley,
+icelandicstore and LedgerLink get `optional` too. No migration.
+
+<a id="engine-sync-3-2026-09-23"></a>
+## 2026-09-23 — Engine sync 3: MFA optional, identity seam v3 — `/aron13ara` through `identity.routes` (D-021)
+
+Fourth sync, engine `57362dc` → `61e0920` (14 upstream commits). What came
+in: Halli's "change mfa to optional"
+([mfa-optional-2026-09-23](#mfa-optional-2026-09-23): `security.mfa.enrolment`,
+default `optional`), [identity-seam-3](#identity-seam-3-2026-09-23)
+(`identity.routes`), the [rk feed](#rk-feed-2026-09-23) (string lead ids, the
+FAB vs the edit bar, legal titles at 320 px, migration `108_leads_notification`,
+sitemap `<lastmod>` via `contentKeys`, `/llms.txt`), the opacity-only `.view`
+entrance, CI on `[master, main]` (the same fix hallismiley#169 made by hand),
+and the "supersede what alters it" migrations rule.
+
+- **`/aron13ara` is config.** `config/client.json` `identity.routes`:
+  `{ titleKey: meta.aron13.title, descriptionKey: meta.aron13.description,
+  titleMode: bare, noindex: true, locale: is }` — the texts stay in
+  `server/i18n/product.{en,is}.json` and the client overlay. It stays in
+  `surface.hiddenRoutes` too (unlisted). The engine versions of
+  `server/middleware/ssrMeta.js`, `public/js/utils/pageTitle.js`,
+  `server/config/i18n.js`, `public/js/i18n/i18n.js` and the two `localeLock*`
+  tests were taken whole. One behaviour change: the engine's lock is
+  prefix-aware, so `/en/aron13ara/x` now 301s to `/is/aron13ara/x` (the old
+  hook matched the exact route only; there is no sub-route either way).
+- **The six engine-test re-applies are gone** (`hallismiley (engine-sync-2)`
+  in `i18nIdentity`, `identityDownstream`, `sitemap`, `ssrMeta`,
+  `business-routes.spec`, `navigation.spec`): the engine now gates each one
+  (`testEngine`, `isHiddenRoute('/thjonusta')`, `forcedLocaleFor` in the
+  e2e identity helper, locked routes once in the sitemap).
+- **MFA.** `security.mfa.enrolment` is NOT set in this repo's
+  `config/client.json`: the default `optional` is the instruction. An
+  unenrolled admin keeps the admin role and gets
+  `mfa_enrolment_required: false`; an enrolled one is still challenged at
+  sign-in.
+- **Migrations.** 108 alters the engine's `leads` table, which this repo runs
+  unsuperseded (097 is not in `product-migrations/hs.js` `superseded`), so it
+  simply runs; `migrate.js --plan` confirms.
+- `LESSONS.md` stays deleted (product-owned here).
+
+**Hooks on engine files after this sync:** the `/aron13ara` view route in
+`public/js/router.js` (the engine has no seam for a product's own views) and
+the six-theme hues in `public/css/themes.css` (brand token values never
+sync). Test-side, one new line: `tests/unit/clientConfig.test.js` "this
+instance spells out optional" reads the committed `config/client.json` and
+expects `security.mfa.enrolment` written out — an engine-only pin, since a
+downstream that leaves it unset gets the same default. Gated here on
+`engine.json.role` (marked `hallismiley (engine-sync-3)`): the engine keeps its
+pin, this repo asserts its file RESOLVES to `optional`. The engine should take
+the gate.
+

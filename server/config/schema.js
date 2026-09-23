@@ -5347,6 +5347,25 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT`,
     ],
   },
+  {
+    // The lead notification email's outcome, on the lead (rk-feed,
+    // 2026-09-23): notified_at = when it went out, notify_error = why it did
+    // not ("email not configured", a Resend error). contactController records
+    // it after the insert and the send have both settled; the inbox marks a
+    // row whose email never went out. Born in rekstrarkerfid, whose 092_leads
+    // created the table WITH these two columns and whose rk_001 brought the
+    // rest of the table to the engine's shape — so on rk's databases both
+    // ADDs are no-ops (IF NOT EXISTS) and NO alias is needed: an alias says
+    // "the same DDL ran under another name", and rk_001 did far more than
+    // this. Additive (invariant 14): the previous release neither reads nor
+    // writes the columns; the export stays submission-fields-only.
+    // Reference copy: server/migrations/108_leads_notification.sql
+    name: '108_leads_notification',
+    statements: [
+      `ALTER TABLE leads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ`,
+      `ALTER TABLE leads ADD COLUMN IF NOT EXISTS notify_error TEXT`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -10,7 +10,11 @@ const mfaPolicy = require('../../server/auth/mfaPolicy');
 const secretBox = require('../../server/utils/secretBox');
 const { safeEqual } = require('../../server/utils/safeEqual');
 
-const ENV = ['NODE_ENV', 'ADMIN_TOTP_EXEMPT', 'TOTP_ENC_KEY'];
+const ENV = ['NODE_ENV', 'ADMIN_TOTP_EXEMPT', 'TOTP_ENC_KEY', 'CLIENT_CONFIG_SECURITY_MFA_ENROLMENT'];
+// The mandatory path is `security.mfa.enrolment: required`; the instance
+// default is `optional` (mfa-optional-2026-09-23). Each describe that pins the
+// mandatory rule asks for it; the policy reads the variable per call.
+const REQUIRE = () => { process.env.CLIENT_CONFIG_SECURITY_MFA_ENROLMENT = 'required'; };
 let saved;
 beforeEach(() => { saved = Object.fromEntries(ENV.map(k => [k, process.env[k]])); });
 afterEach(() => {
@@ -20,7 +24,7 @@ afterEach(() => {
 const admin = (over = {}) => ({ id: 'u1', username: 'Halli', role: 'admin', totp_enabled: false, ...over });
 
 describe('mustEnrol', () => {
-  beforeEach(() => { delete process.env.ADMIN_TOTP_EXEMPT; });
+  beforeEach(() => { REQUIRE(); delete process.env.ADMIN_TOTP_EXEMPT; });
 
   test('an admin without TOTP must; with it, or without the role, need not', () => {
     expect(mfaPolicy.mustEnrol(admin())).toBe(true);
@@ -43,6 +47,8 @@ describe('mustEnrol', () => {
 });
 
 describe('ADMIN_TOTP_EXEMPT', () => {
+  beforeEach(REQUIRE);
+
   test('exempts by username (case-insensitive) or * outside production', () => {
     process.env.NODE_ENV = 'test';
     process.env.ADMIN_TOTP_EXEMPT = 'someone, halli';
@@ -63,7 +69,7 @@ describe('ADMIN_TOTP_EXEMPT', () => {
 });
 
 describe('applyMfaPolicy', () => {
-  beforeEach(() => { delete process.env.ADMIN_TOTP_EXEMPT; });
+  beforeEach(() => { REQUIRE(); delete process.env.ADMIN_TOTP_EXEMPT; });
 
   test('withholds admin in place and always leaves roles set', () => {
     const u = mfaPolicy.applyMfaPolicy(admin(), ['admin']);
@@ -106,7 +112,7 @@ describe('withholdViews', () => {
 });
 
 describe('applyMfaPolicyToRequest', () => {
-  beforeEach(() => { delete process.env.ADMIN_TOTP_EXEMPT; });
+  beforeEach(() => { REQUIRE(); delete process.env.ADMIN_TOTP_EXEMPT; });
 
   test('uses an accounts flag the caller already resolved without looking views up', async () => {
     const req = { user: admin({ role: 'solumadur', accounts_holder: true, roles: ['solumadur'] }) };
@@ -118,6 +124,54 @@ describe('applyMfaPolicyToRequest', () => {
     const req = { user: admin({ roles: ['admin'] }) };
     await mfaPolicy.applyMfaPolicyToRequest(req);
     expect(req.user).toMatchObject({ role: 'user', roles: ['user'], mfaEnrolmentRequired: true });
+  });
+});
+
+describe('security.mfa.enrolment = optional (the default, mfa-optional-2026-09-23)', () => {
+  beforeEach(() => {
+    delete process.env.CLIENT_CONFIG_SECURITY_MFA_ENROLMENT;
+    delete process.env.ADMIN_TOTP_EXEMPT;
+  });
+
+  test('this instance resolves to optional', () => {
+    expect(mfaPolicy.ENROLMENT_ENV).toBe('CLIENT_CONFIG_SECURITY_MFA_ENROLMENT');
+    expect(mfaPolicy.enrolmentMode()).toBe('optional');
+    expect(mfaPolicy.enrolmentRequired()).toBe(false);
+  });
+
+  test('nobody must enrol — admin, admin by role set, accounts holder, published seller', () => {
+    expect(mfaPolicy.mustEnrol(admin())).toBe(false);
+    expect(mfaPolicy.mustEnrol(admin({ role: 'user' }), ['user', 'admin'])).toBe(false);
+    expect(mfaPolicy.mustEnrol(admin({ role: 'solumadur', accounts_holder: true }), ['solumadur'])).toBe(false);
+    expect(mfaPolicy.mustEnrol(admin({ role: 'user', seller_holder: true }), ['user'])).toBe(false);
+  });
+
+  test('an unenrolled admin keeps admin; an accounts holder keeps its roles and no flag is set', () => {
+    const a = mfaPolicy.applyMfaPolicy(admin(), ['admin', 'moderator']);
+    expect(a).toMatchObject({ role: 'admin', roles: ['admin', 'moderator'] });
+    expect(a.mfaEnrolmentRequired).toBeUndefined();
+    const s = mfaPolicy.applyMfaPolicy(admin({ role: 'solumadur', accounts_holder: true }), ['solumadur']);
+    expect(s.mfaEnrolmentRequired).toBeUndefined();
+    expect(mfaPolicy.effectiveRoles(admin(), ['admin'])).toEqual({ role: 'admin', roles: ['admin'], enrolmentRequired: false });
+  });
+
+  test('the per-request form looks nothing up and withholds nothing', async () => {
+    const req = { user: admin({ role: 'solumadur', roles: ['solumadur'] }) };
+    await mfaPolicy.applyMfaPolicyToRequest(req);
+    expect(req.user.accounts_holder).toBeUndefined();   // no Role lookup under optional
+    expect(req.user.mfaEnrolmentRequired).toBeUndefined();
+  });
+
+  test('a value the schema rejects is ignored, as clientConfig ignored it at boot', () => {
+    process.env.CLIENT_CONFIG_SECURITY_MFA_ENROLMENT = 'REQUIRED';
+    expect(mfaPolicy.enrolmentMode()).toBe('optional');
+    expect(mfaPolicy.mustEnrol(admin())).toBe(false);
+  });
+
+  test('`required` restores the withholding on the next call', () => {
+    REQUIRE();
+    expect(mfaPolicy.enrolmentMode()).toBe('required');
+    expect(mfaPolicy.applyMfaPolicy(admin(), ['admin'])).toMatchObject({ role: 'user', roles: ['user'], mfaEnrolmentRequired: true });
   });
 });
 

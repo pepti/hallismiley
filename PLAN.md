@@ -31,11 +31,18 @@ incidents that used to live in `CLAUDE.md` are in the same file, from
   theme set and the page meta (overlay `meta.*` keys) are config; the nav,
   sitemap, manifest and robots present as this site; `news-editor.spec.js`
   went up to the engine ([engine-sync-2-2026-09-23](docs/HISTORY.md#engine-sync-2-2026-09-23)).
+- 2026-09-23 — engine sync to `61e0920` (MFA optional + identity seam v3 + the
+  rk feed): `/aron13ara`'s meta, noindex and Icelandic lock are
+  `identity.routes`; the hooks in `ssrMeta.js`, `pageTitle.js`, both `i18n.js`
+  and the six engine-test re-applies are retired; two-factor enrolment is the
+  engine default `optional`; migration 108 runs
+  ([engine-sync-3-2026-09-23](docs/HISTORY.md#engine-sync-3-2026-09-23)).
 
 **Open — what the identity seam still lacks (engine changes, Halli decides)**
 Since the 57362dc sync the list is § "What the seam still lacks" in
 [engine-sync-2-2026-09-23](docs/HISTORY.md#engine-sync-2-2026-09-23):
-`identity.routes` for `/aron13ara`, the `identityDownstream.test.js` title
+(the 61e0920 sync closed `identity.routes` for `/aron13ara`, the title
+literals in `identityDownstream.test.js` and the ungated `i18nIdentity` pin) the `identityDownstream.test.js` title
 literals (so `meta.projects.title` is not overlaid), the nav-only sitemap,
 Bjart-as-classic, `APP_URL` on the App Service, the per-repo `features-index`
 output; plus two test-side residuals for the engine (`i18nIdentity` meta pin

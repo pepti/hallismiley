@@ -129,6 +129,85 @@ describe('pageTitle mirrors the server', () => {
   });
 });
 
+// ── identity.routes: the product's OWN routes (identity-seam-3) ─────────────
+// The engine part above is parsed from the source; the product part is
+// config, so it is asserted separately: for a hand-off carrying `routes`, the
+// client titles each route exactly as the server composes it from the same
+// entry (key, mode) over the same table text. Two identities are walked — a
+// synthetic one (so the mechanism is exercised in the engine, whose committed
+// routes are empty) and this repo's committed config/client.json, resolved
+// the way the server resolves it.
+const { resolveConfig } = require('../../server/config/clientConfig');
+const COMMITTED = resolveConfig({ fileConfig: readJson('config/client.json'), env: {} }).config.identity;
+const SYNTHETIC = resolveConfig({ fileConfig: { identity: {
+  brand: { name: 'LedgerLink', titleSuffix: ' — LedgerLink' },
+  routes: {
+    '/':          { titleKey: 'meta.home.title' },                      // an engine route re-described
+    '/console':   { titleKey: 'meta.shop.title', titleMode: 'bare' },   // a product route, bare
+    '/original':  { titleKey: 'meta.projects.title', noindex: true },   // a product route, suffixed
+    '/thjonusta': { titleKey: 'meta.umOkkur.title' },                   // an engine route re-keyed
+  },
+} }, env: {} }).config.identity;
+
+/** A fresh pageTitle over a page whose <script id="identity"> carries `id`. */
+function pageTitleFor(id) {
+  const savedDoc = global.document;
+  global.document = { getElementById: (x) => (x === 'identity' ? { textContent: JSON.stringify(id) } : null) };
+  let mod;
+  try {
+    jest.isolateModules(() => {
+      mod = require('../../public/js/utils/pageTitle.js');
+      // The hand-off is read lazily, on the first call — read it now, while
+      // the stubbed document is in place, so the module keeps this identity.
+      expect(require('../../public/js/utils/identity.js').getIdentity().brand.name).toBe(id.brand.name);
+    });
+  } finally {
+    if (savedDoc === undefined) delete global.document; else global.document = savedDoc;
+  }
+  return mod;
+}
+
+describe.each([['a synthetic identity', SYNTHETIC], ['this repo\'s committed config/client.json', COMMITTED]])(
+  'identity.routes — %s', (_label, id) => {
+    const routes = Object.entries(id.routes);
+    const mod = pageTitleFor(id);
+
+    test('the guard: the synthetic identity has routes, and the committed one resolves', () => {
+      if (id === SYNTHETIC) expect(routes.length).toBeGreaterThan(2);
+      expect(id.brand.name).toBeDefined();
+    });
+
+    for (const [route, e] of routes) {
+      for (const lc of ['en', 'is']) {
+        test(`${route} (${lc}): both tables carry ${e.titleKey}, and the tab is titled as the server would`, () => {
+          expect(CLIENT[lc][e.titleKey]).toBeDefined();
+          expect(SERVER[lc][e.titleKey]).toBeDefined();
+          expect(CLIENT[lc][e.titleKey]).toBe(SERVER[lc][e.titleKey]);
+          mockLocale.lc = lc;
+          const mode = e.titleMode === 'bare' ? 'bare' : undefined;
+          expect(mod.titleForRoute(route, lc)).toBe(serverIdentity.composeTitle(SERVER[lc][e.titleKey], mode, id));
+        });
+      }
+    }
+
+    test('a route the product does not describe still takes the engine table', () => {
+      mockLocale.lc = 'is';
+      const engineRoute = Object.keys(__tables.PUBLIC_TITLES).find((r) => !id.routes[r] && r !== '/');
+      expect(engineRoute).toBeDefined();
+      expect(mod.titleForRoute(engineRoute, 'is'))
+        .toBe(serverIdentity.composeTitle(CLIENT.is[__tables.PUBLIC_TITLES[engineRoute]], __tables.TITLE_MODE[engineRoute], id));
+    });
+  });
+
+test('the synthetic walk really overrode the engine rows (guard)', () => {
+  const mod = pageTitleFor(SYNTHETIC);
+  mockLocale.lc = 'en';
+  expect(mod.titleForRoute('/console', 'en')).toBe(CLIENT.en['meta.shop.title']);                 // bare
+  expect(mod.titleForRoute('/original', 'en')).toBe(`${CLIENT.en['meta.projects.title']} — LedgerLink`);
+  expect(mod.titleForRoute('/thjonusta', 'en')).toBe(`${CLIENT.en['meta.umOkkur.title']} — LedgerLink`); // re-keyed
+  expect(mod.titleForRoute('/', 'en')).toBe(CLIENT.en['meta.home.title'].split('{brand}').join('LedgerLink'));
+});
+
 describe('composeTitle (client) agrees with composeTitle (server)', () => {
   test.each([
     ['a page part gets the suffix', 'Þjónusta', undefined],

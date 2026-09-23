@@ -18,9 +18,21 @@ function _noStore(res) {
   res.setHeader('Cache-Control', 'no-store');
 }
 
+// A lead id is a STRING end to end (rk-feed, 2026-09-23). The engine's
+// leads.id is SERIAL, but a product whose table predates the engine's 097
+// (rekstrarkerfid: TEXT uuids from its 092_leads) serves the same routes and
+// the same inbox, so the controller accepts either shape — a positive integer
+// or a uuid — and hands the model the text it was given; the model compares
+// `id::text`. Anything else is 400 before a query is built. The inbox view
+// never coerces an id either (AdminLeadsView: dataset.id is compared as text).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function parseLeadId(raw) {
+  const s = String(raw ?? '').trim();
+  if (UUID_RE.test(s)) return s.toLowerCase();
+  return /^[1-9]\d{0,17}$/.test(s) ? s : null;
+}
 function _id(req) {
-  const id = Number(req.params.id);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  return parseLeadId(req.params.id);
 }
 
 function _listParams(req) {
@@ -125,3 +137,4 @@ const leadsController = {
 };
 
 module.exports = leadsController;
+module.exports.parseLeadId = parseLeadId;

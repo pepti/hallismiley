@@ -46,15 +46,6 @@ beforeEach(() => {
 });
 
 describe('forcedLocaleFor (client mirror of the server rule)', () => {
-  // hallismiley (engine-graft): the hidden Icelandic-only page.
-  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara'])(
-    'locks the hidden Icelandic-only page %s',
-    (p) => {
-      browseTo(p);
-      expect(i18n.forcedLocaleFor(p)).toBe('is');
-    }
-  );
-
   test.each(['/party', '/en/party', '/is/party', '/party/admin', '/en/party/login'])(
     'locks %s to Icelandic',
     (p) => {
@@ -63,13 +54,54 @@ describe('forcedLocaleFor (client mirror of the server rule)', () => {
     }
   );
 
-  test.each(['/projects', '/en/projects', '/shop', '/party-supplies', '/partygoers', '/aron13ara/x', '/aron13arab'])(
+  test.each(['/projects', '/en/projects', '/shop', '/party-supplies', '/partygoers'])(
     'leaves %s unlocked',
     (p) => {
       browseTo(p);
       expect(i18n.forcedLocaleFor(p)).toBeNull();
     }
   );
+});
+
+// The product's own locked routes (identity.routes[*].locale, identity-seam-3)
+// reach the SPA through the <script id="identity"> hand-off; a fresh module
+// pair is loaded over a stubbed document that carries one.
+describe('forcedLocaleFor — identity.routes locks (client mirror)', () => {
+  let m;
+  beforeAll(() => {
+    browseTo('/en/aron13ara');
+    const handoff = { routes: {
+      '/aron13ara': { titleKey: 'meta.aron13.title', titleMode: 'bare', locale: 'is' },
+      '/console':   { titleKey: 'meta.console.title', noindex: true },
+      '/de-only':   { titleKey: 'meta.de.title', locale: 'de' },
+    } };
+    global.document.getElementById = (id) => (id === 'identity' ? { textContent: JSON.stringify(handoff) } : null);
+    jest.isolateModules(() => { m = require('../../public/js/i18n/i18n.js'); });
+  });
+
+  test.each(['/aron13ara', '/en/aron13ara', '/is/aron13ara', '/aron13ara/x', '/en/aron13ara/x'])('locks %s', (p) => {
+    expect(m.forcedLocaleFor(p)).toBe('is');
+  });
+
+  test.each(['/aron13arax', '/console', '/en/console', '/de-only', '/', '/en/projects'])('leaves %s unlocked', (p) => {
+    expect(m.forcedLocaleFor(p)).toBeNull();
+  });
+
+  test('the party lock still comes first, and the current URL is the default argument', () => {
+    expect(m.forcedLocaleFor('/en/party')).toBe('is');
+    expect(m.forcedLocaleFor()).toBe('is'); // browsing /en/aron13ara
+    expect(m.getPreferredLocale()).toBe('is');
+  });
+
+  test('href() to a product-locked route is that locale, from an English page', async () => {
+    browseTo('/en/projects', { savedChoice: 'en' });
+    global.document.getElementById = (id) => (id === 'identity' ? { textContent: JSON.stringify({ routes: { '/aron13ara': { titleKey: 'meta.aron13.title', locale: 'is' } } }) } : null);
+    let mm;
+    jest.isolateModules(() => { mm = require('../../public/js/i18n/i18n.js'); });
+    await mm.loadLocale('en');
+    expect(mm.href('/aron13ara')).toBe('/is/aron13ara');
+    expect(mm.href('/shop')).toBe('/en/shop');
+  });
 });
 
 describe('href() while the visitor is on the locked party page', () => {

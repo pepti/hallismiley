@@ -128,7 +128,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `accounts` holder) and client `auth.isMfaProtected()` must widen together;
   `tests/unit/mfaProtectedClient.test.js` pins them, and enrolment eligibility
   asks the same predicate the gate does ([ui-kit](HISTORY.md#ui-kit), [review-099](HISTORY.md#review-099)).
-- Enrolment is MANDATORY for every protected account, and the rule lives in
+- Two-factor ENROLMENT is a per-instance switch, `security.mfa.enrolment`
+  (`config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`), and it
+  defaults to `optional`: `mfaPolicy.mustEnrol()` is false unless the instance
+  says `required`, so nothing is withheld and `mfa_enrolment_required` is
+  always false, while an account that HAS enrolled is challenged at every
+  sign-in in both modes (the challenge is `mfaService`'s, untouched by the
+  switch). The policy re-reads the env var per call so a suite can flip it; a
+  test of the mandatory path sets `required` for itself. The seller area's own
+  `totp_enabled` demand (`sellerRoutes.js` rule 4) does not follow the switch
+  ([mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)).
+- Under `required`, enrolment is mandatory for every protected account, and the rule lives in
   `auth/mfaPolicy.js` and nowhere else: `attachRoles` (the one session reader
   every middleware shares) withholds `admin` from an unenrolled admin's role
   set and `requireView` withholds the `accounts` view from an unenrolled
@@ -164,7 +174,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
@@ -225,7 +235,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (robots, sitemap) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
+| Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (`/sitemap.xml` with `<lastmod>`, `/llms.txt`) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
 | Controllers | `server/controllers/contactController.js` |
 | Services | `server/services/indexNow.js`, `server/services/outboundAllowlist.js` |
 | Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization); `server/utils/canonicalHost.js` (hallismiley's `APP_URL` → host resolver; the engine's `app.js` resolves inline — see Ownership notes) |
@@ -233,7 +243,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Components | `public/js/components/NavBar.js` |
 | Client | `public/js/router.js`, `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js`; `canonicalHost.test.js` (hallismiley) |
+| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js`; `canonicalHost.test.js` (hallismiley) |
 | e2e | `e2e/business-routes.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017 |
 | Features | [public-site](../features/public-site.md), [hallismiley-site](../features/hs/hallismiley-site.md) (hs); the engine's own product feature `features/os/company-content.md` is foreign here (inert, not linked) |
@@ -254,10 +264,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - **hallismiley:** `identity.surface.nav` is the base's six-link nav
   (`/projects`, `/shop`, `/news`, `/halli`, `/contact`, `/party`), `theme.dark`
   the five colour themes, and the base's page meta lives in
-  `server/i18n/product.{en,is}.json` + the client overlay (`meta.*`). The one
-  hook on engine files is `/aron13ara` (route, `ROUTE_META`/`DEFAULT_META`
-  key rows, `pageTitle.js`, the IS-only lock) — until the engine's
-  `identity.routes`; see [engine-sync-2-2026-09-23](HISTORY.md#engine-sync-2-2026-09-23).
+  `server/i18n/product.{en,is}.json` + the client overlay (`meta.*`). `/aron13ara`'s
+  meta, noindex and Icelandic lock are `identity.routes` in `config/client.json`
+  (engine identity-seam-3); the one hook left on an engine file is its view
+  route in `router.js` — see [engine-sync-3](HISTORY.md#engine-sync-3-2026-09-23).
 - Public IA is `/`, `/thjonusta`, `/um-okkur`, `/hafa-samband`, `/personuvernd`;
   everything else is in `publicSurface.js` — hidden, still served.
 - **hallismiley (engine-graft):** the portfolio IA the site shipped before the
@@ -303,7 +313,26 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the Organization `@type` stays `Organization` for every product (schema.org
   is fine with it for a personal site; a downstream does not fork it). `loadTemplate()` drops the baked Organization from
   `index.html` and the server emits it from the identity on every page, on the
-  `${APP_URL}/#organization` id everything references.
+  `${APP_URL}/#organization` id everything references. Its `description` is
+  a literal as written or, when it looks like an i18n key (`org.description`),
+  resolved per locale through the overlay; the og:image card every page falls
+  back to is `identity.organization.ogImage` ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)).
+- **A product's own routes are config, never a hook**
+  ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)): `identity.routes`
+  (`{ "/console": { titleKey, descriptionKey?, titleMode?, noindex?, locale? } }`)
+  is merged over `ROUTE_META` / `DEFAULT_META` in `ssrMeta.js` (a
+  `product:<route>` key; the entry replaces the engine row for that route
+  whole — no `site_content` override, no shop section; merged AFTER the literal
+  tables so the parity test's parser still reads them) and over the client
+  table in `pageTitle.js` (`routeMeta()` from the hand-off, in `titleForRoute`).
+  `noindex` → `publicSurface.js` `NOINDEX_ROUTES` / `isDeindexedRoute()`: the
+  `<meta robots>`, a robots.txt Disallow block and the sitemap filter read it
+  (exact routes — a noindex route may still sit in `surface.nav`; hidden routes
+  stay prefix-matched). `locale` → the lock (domain 5). `/manifest.json`
+  describes itself from `routes['/'].descriptionKey` when the landing is
+  re-described. The Service catalogue JSON-LD and the company click-throughs in
+  the suites run only while `/thjonusta` is public (`testServices`,
+  `testCompany`).
 - `pageTitle.js` mirrors `ssrMeta.js`; the parity test parses the server file
   (parts + `titleMode`) and guards that its own parser still matches, so a
   refactor cannot make it assert nothing; `composeTitle` on both sides is held
@@ -324,11 +353,26 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `home_stats`, `contact_*`): a copy change must move the DB row too, guarded
   on `updated_by IS NULL` so admin edits survive ([r1](HISTORY.md#r1)).
 - All copy is DRAFT until Halli approves; draft natively in Icelandic.
-- `.ice-scene--band` is `min-height`, never `height` ([services-page](HISTORY.md#services-page)).
+- `.ice-scene--band` is `min-height`, never `height` ([services-page](HISTORY.md#services-page));
+  `.ice-band-panel .legal-title` floors at `0.95rem` with `overflow-wrap:
+  normal; hyphens: manual` — a legal heading may break at a space, never
+  inside a word, down to 320px (`iceland-scene.spec.js`;
+  [rk-feed](HISTORY.md#rk-feed-2026-09-23)).
+- **The sitemap's `<lastmod>` is truthful or absent** ([rk-feed](HISTORY.md#rk-feed-2026-09-23)):
+  the newest `site_content.updated_at` among the rows a page renders (either
+  locale, as a date) — engine routes from `ssrMeta.contentKeysForRoute()`,
+  a product route from `identity.routes[*].contentKeys`; never a deploy
+  timestamp. One query, cached for the response's 10 minutes; a content save
+  drops the cache (`invalidateLastmodCache`). **`/llms.txt` is every
+  product's** and is built only from the seam and `ssrMeta.metaForRoute()`
+  (brand H1, Organization description, legal name + place, every advertised
+  page per locale — a locked route under its lock only — with the title's
+  PART and the description); product content beyond that (rk's pricing) has
+  no engine slot yet.
 - Canonical host derives from `APP_URL` (still hallismiley.is until the domain
   cutover — intentional, tracked in `PLAN.md`).
 
-**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [engine-graft](HISTORY.md#engine-graft)
+**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23) · [rk-feed](HISTORY.md#rk-feed-2026-09-23) · [engine-graft](HISTORY.md#engine-graft) · [engine-sync-3](HISTORY.md#engine-sync-3-2026-09-23)
 
 ## 4. Themes, scenes, ambience
 
@@ -427,6 +471,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   suite gets an expected API string or redirect target — the exact translated
   string, never a literal and never weakened. Only the party route's `/is/`
   stays literal (it is locale-locked).
+- **A locale lock has two sources, one reader**
+  ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)):
+  `server/config/i18n.js` `forcedLocaleFor(path)` answers the engine's party
+  lock first, then `identity.routes[*].locale` (prefix-aware like the party
+  lock; `/` locks the landing alone; a locale outside `SUPPORTED_LOCALES` is
+  ignored, never redirected into a loop). Every consumer — the `app.js` 301,
+  the SSR `<head>`, the locale middleware, the sitemap (`onlyLocale`) — asks
+  it; `public/js/i18n/i18n.js` mirrors it off the hand-off
+  (`utils/identity.js` `routeLockFor`), so the Router guard, `href()` and the
+  NavBar switcher follow. Suites ask `forcedLocaleFor(route)` before building
+  a path (`forcedLocaleFor(route) || LC`; `e2e/lib/identity.js` exports it):
+  a locked route 301s under the visitor-default prefix and is listed under
+  its own locale only.
 - IS is the visitor default here (`PUBLIC_DEFAULT_LOCALE`), and it comes from
   the identity seam — `identity.locale.publicDefault`, the env var still
   winning — on both sides (`server/config/i18n.js`; `public/js/i18n/i18n.js`
@@ -445,14 +502,13 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Two column conventions coexist: news bodies are `_is` siblings, sales guides
   are IS-canonical with `_en` siblings ([sales-staff](HISTORY.md#sales-staff)).
 
-- **hallismiley (engine-graft):** `/aron13ara` is an Icelandic-only page —
-  `IS_ONLY_PAGES` in `server/config/i18n.js` (exact match after the locale
-  prefix, no sub-routes) and its mirror in `public/js/i18n/i18n.js`, a residual
-  hook with its cases in `tests/unit/localeLock.test.js` and
-  `localeLockClient.test.js`. The visitor default is the engine's `is`; the
-  base's `en` is an open divergence ([engine-graft](HISTORY.md#engine-graft)).
+- **hallismiley:** `/aron13ara` is locked to Icelandic by
+  `identity.routes['/aron13ara'].locale` in `config/client.json` (the
+  engine's prefix-aware lock, both sides; the `IS_ONLY_PAGES` hook and its
+  `localeLock*` cases retired in [engine-sync-3](HISTORY.md#engine-sync-3-2026-09-23)).
+  The visitor default is `en` (`identity.locale.publicDefault`).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [engine-graft](HISTORY.md#engine-graft)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23) · [engine-graft](HISTORY.md#engine-graft) · [engine-sync-3](HISTORY.md#engine-sync-3-2026-09-23)
 
 ## 6. Leads — Fyrirspurnir
 
@@ -466,9 +522,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Views | `public/js/views/AdminLeadsView.js` |
 | Client | `public/js/services/leads.js` |
 | CSS | `public/css/admin-leads.css` |
-| Jest | `tests/integration/leads.test.js`, `leadsTransfer.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js` |
+| Jest | `tests/integration/leads.test.js`, `leadsTransfer.test.js`; `tests/unit/leadsRetention.test.js`, `leadRateLimit.test.js`, `leadId.test.js` |
 | e2e | `e2e/leads.spec.js`, `e2e/sales-handbook.spec.js` (sidebar count) |
-| Migrations | 097 |
+| Migrations | 097, 108 |
 | Features | [leads](../features/leads.md) |
 | Feature doc | `docs/SALES-STAFF.md` (Working the lead inbox) |
 
@@ -491,8 +547,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `source` = `--source` or the file's `instance`; the file lives under
   gitignored `data/` and is deleted after import (`/personuvernd` §3/§6)
   ([leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)).
+- **A lead id is a string end to end** ([rk-feed](HISTORY.md#rk-feed-2026-09-23)):
+  `parseLeadId()` accepts a positive integer or a uuid and returns the text
+  it was given (a product whose table predates 097 holds TEXT uuids); the
+  model compares `id::text`; the inbox view never coerces `dataset.id`.
+- **The notification outcome lives on the row** (migration 108,
+  [rk-feed](HISTORY.md#rk-feed-2026-09-23)): `contactController` records
+  `Lead.recordNotification(submissionId, error)` once the insert and the send
+  have both settled (`sendLeadNotification` → `true` / `false` = no transport
+  / throws); it never throws and never touches the visitor's 200. The inbox
+  marks a row with `notify_error` "ekki sent" with the reason on hover; the
+  export carries neither column.
 
-**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099) · [leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22)
+**History**: [leads](HISTORY.md#leads) · [review-099](HISTORY.md#review-099) · [leads-transfer-2026-09-22](HISTORY.md#leads-transfer-2026-09-22) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
 
 ## 7. Markaður — market research and the prospect list
 
@@ -743,8 +810,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - **hallismiley (engine-graft):** these were LIVE public surfaces (nav +
   sitemap) before the graft; the engine hides them and its tests pin the
   hiding — open divergence, see [engine-graft](HISTORY.md#engine-graft).
-  `/aron13ara` is a residual hook: route in `router.js`, meta in `ssrMeta.js`
-  + `pageTitle.js`, noindex via `HIDDEN_PUBLIC_ROUTES`; unlisted, IS-only.
+  `/aron13ara`: its view route in `router.js` is the residual hook; its meta,
+  noindex and Icelandic lock are `identity.routes` in `config/client.json`
+  ([engine-sync-3](HISTORY.md#engine-sync-3-2026-09-23)); unlisted via
+  `identity.surface.hiddenRoutes`.
 - The party album is fully public by owner decision (2026-07-26): no auth on
   `POST /photos`, exempt from the write limiter; `DELETE /photos/:id` keeps
   `requireAuth`. The news editor overlay is `position:fixed` and must not live
@@ -871,8 +940,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `themePrefs.getEffectiveEnv()` is the one client answer, re-evaluated on
   `authchange` ([test-chrome-admin](HISTORY.md#test-chrome-admin)).
 - Sits in the Þjónusta sidebar group as the support product ([admin-reshape](HISTORY.md#admin-reshape)).
+- **The launcher owns the bottom-right corner while mounted**
+  ([rk-feed](HISTORY.md#rk-feed-2026-09-23)): the widget sets
+  `body.has-cr-widget` on mount / removes it on destroy, `test-env.css` sets
+  `--cr-widget-clearance` on that class, and any page bar that is also
+  `position: fixed` in that corner (the contact editor's Save/Cancel) adds
+  the variable to its `bottom` — a length, so every theme reads the same.
+  `contact.spec.js` proves the bar's buttons take the click with the widget
+  mounted.
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
 
 ## 17. Content, settings, background
 
@@ -969,15 +1046,35 @@ company/                  gitignored: plans, decisions, logs, market-research st
   ENGINE (the schema defaults, the email/meta text with those defaults)
   compares `defaults()` or a temp `client.json`, never the resolved instance.
   Another product's feature folder is foreign wherever it is, and an os
-  feature claims `product-migrations/os.js`, never the folder.
+  feature claims `product-migrations/os.js`, never the folder. A Features
+  row in this file may link a foreign feature (the engine's own domain-3 row
+  links `features/os/company-content.md`, foreign in every downstream):
+  `architectureIndex.test.js` tolerates such a link — it must resolve to a
+  file — but never requires it ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)).
 - `identity.surface.nav` is a list of `{ route, labelKey }` records (schema
   type `object[]`, JSON in the env layer); `defaults()` hands out fresh
   records; the client merge takes a record list whole or not at all.
+  `identity.routes` and `identity.theme.swatches` are MAPS (schema type
+  `object`, JSON in the env layer, `$comment` keys dropped at any level,
+  `defaults()` hands out a fresh map; `identity-seam-3`): the server
+  validates every record (`validateRouteMeta`, `validateThemeSwatches`) and
+  the client merge (`resolveIdentity`) copies records with scalar fields only,
+  a non-object map falling back to `{}`. `server/config/identity.js`
+  `productRoutes()` / `utils/identity.js` `routeMeta()` normalise an entry
+  identically (`identityConfig.test.js` holds them equal).
+- **The sync tool regenerates the derived files** ([identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)):
+  `.engine-paths`, `.gitattributes` and `features/README.md` are written by
+  `scripts/features-index.js` and differ per repo, so
+  `site-factory/engine-sync.js` resolves a conflict on exactly those by running the
+  generator in the downstream and staging the result — never `--theirs`, which
+  would take the engine's product paths (`docs/ENGINE-SYNC.md` §6).
 - **The theme set validates `default ∈ picker` only** (identity-seam-2): the
   root may sit outside the picker (a two-theme product keeps `:root` as an
   unlisted base); `identity.theme.dark` names the ids that paint a dark page
-  and `themePrefs.js` `DARK_THEMES` reads it (an unknown id gets the neutral
-  token swatch). A feature whose registry `flag` resolves to `false` in the
+  and `themePrefs.js` `DARK_THEMES` reads it; `identity.theme.swatches`
+  (`{ id: { bg, fg } }`) feeds `swatchFor` over the engine map (an id neither
+  knows gets the neutral token swatch; identity-seam-3). `theme-boot.js` keeps
+  reading the `<html>` attributes only. A feature whose registry `flag` resolves to `false` in the
   client config is gated `disabled` by `tests/lib/featureGate.js`.
   `/robots.txt` is served by `robotsRoutes.js` with the Disallow lines from
   `hiddenRoutes` per locale; `public/robots.txt` is the engine default.
