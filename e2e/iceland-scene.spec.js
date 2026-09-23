@@ -120,6 +120,54 @@ test.describe('Iceland scene — inner pages', () => {
     });
   }
 
+  // The legal headings are one long word each in Icelandic (PERSÓNUVERNDAR-
+  // STEFNA, NOTKUNARSKILMÁLAR). Down to 320px they must render on ONE line —
+  // a mid-word break is a bug (rekstrarkerfid's qa-chrome-findings found the
+  // 1.2rem floor wrapping it; rk-feed 2026-09-23). In English the titles are
+  // two words and may wrap at the space, but never overflow the panel.
+  test('the legal headings fit on one line at 320px and 375px — no mid-word break', async ({ page }) => {
+    for (const width of [320, 375]) {
+      await page.setViewportSize({ width, height: 800 });
+      for (const path of ['/is/personuvernd', '/is/terms']) {
+        await page.goto(path);
+        const h1 = page.locator('h1.legal-title');
+        await expect(h1).toBeVisible();
+        const lines = await h1.evaluate((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+        });
+        expect(lines, `${path} at ${width}px`).toBe(1);
+        const fits = await h1.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+        expect(fits, `${path} at ${width}px overflows`).toBe(true);
+      }
+      for (const path of ['/en/personuvernd', '/en/terms']) {
+        await page.goto(path);
+        const h1 = page.locator('h1.legal-title');
+        await expect(h1).toBeVisible();
+        // Every word intact: each word's rects share one top, and the heading
+        // does not overflow its panel.
+        const wordsIntact = await h1.evaluate((el) => {
+          const text = el.textContent;
+          const node = el.firstChild;
+          if (!node || node.nodeType !== Node.TEXT_NODE) return true;
+          let ok = true;
+          const re = /\S+/g;
+          let m;
+          while ((m = re.exec(text))) {
+            const range = document.createRange();
+            range.setStart(node, m.index);
+            range.setEnd(node, m.index + m[0].length);
+            const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+            if (tops.size > 1) ok = false;
+          }
+          return ok && el.scrollWidth <= el.clientWidth + 1;
+        });
+        expect(wordsIntact, `${path} at ${width}px`).toBe(true);
+      }
+    }
+  });
+
   test('/is/profile moves its header onto the hot spring, listeners intact', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/is/profile');

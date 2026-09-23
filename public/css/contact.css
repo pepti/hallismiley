@@ -415,7 +415,7 @@
   .availability__edit-controls { top: 12px; right: 12px; }
   .contact-view__edit-btn { top: 12px; right: 12px; }
   .contact-view__edit-controls {
-    left: 12px; right: 12px; bottom: 12px;
+    left: 12px; right: 12px; bottom: calc(12px + var(--cr-widget-clearance, 0px));
     justify-content: center;
   }
 }
@@ -451,7 +451,9 @@
 
 .contact-view__edit-controls {
   position: fixed;
-  bottom: 24px;
+  /* Above the change-request launcher when it is mounted (test-env.css sets
+     --cr-widget-clearance on body.has-cr-widget); 24px otherwise. */
+  bottom: calc(24px + var(--cr-widget-clearance, 0px));
   right: 24px;
   z-index: 90;
   display: flex;

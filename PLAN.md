@@ -204,10 +204,23 @@ chunk lands; add a HISTORY entry for the story.
   hand); after it every unenrolled admin is walked through enrolment at next
   sign-in — save the recovery codes; (b) rekstrarkerfid's next engine-sync
   adds `'107_totp_secret_enc': ['093_totp_secret_enc']` to `aliases` in its
-  `rk.js` (its `legacy` keeps 093 as is); (c) the authenticator issuer now reads
+  `rk.js` and removes 093 from its `legacy` (done on rk's 2026-09-23 sync;
+  the rule as `migrationSet.test.js` enforces it); (c) the authenticator issuer now reads
   `identity.brand.name` (rk reads its own `brand.name`; on rk's next sync the
   two readers must agree on `identity.brand.name`); (d) release N+1 stops writing `totp_secret`, N+2 drops it;
   (e) next rk candidates: `social-login-gate`, `request-logging`.
+- rk feed landed 2026-09-23 ([rk-feed-2026-09-23](docs/HISTORY.md#rk-feed-2026-09-23)):
+  orange-smiley/rekstrarkerfid#45 items 2/3/4/6/7/9 — lead ids as strings,
+  migration 108 (`notified_at`/`notify_error` + the "ekki sent" mark), the
+  launcher/editor-bar stacking, legal titles at 320px, sitemap `<lastmod>` +
+  `/llms.txt` (harvested), the alias wording. Open: (a) rekstrarkerfid's
+  next sync retires its own `recordNotification`, `/llms.txt`, lastmod and
+  `rowId`/`_id` shims and moves its four route→key pairs into
+  `identity.routes[*].contentKeys` (list in the HISTORY entry; no alias for
+  108 — its columns already exist there); (b) rk's pricing block in its
+  `/llms.txt` has no engine slot — a product-content hook for llms.txt is a
+  later seam item; (c) a `contentKeys` field for an ENGINE route a product
+  re-describes (`/`) replaces the engine's list, by the routes rule.
 - Engine upstream (D-021, [engine-upstream-2026-09-22](docs/HISTORY.md#engine-upstream-2026-09-22)):
   the first syncs, in order — LedgerLink and icelandicstore in parallel (both
   need the one-time graft; ice's PR waits for Halli's window), then

@@ -83,16 +83,20 @@ function copyList(def, v) {
 const isPlain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
 // A MAP default (`routes`, `theme.swatches`) is an object keyed by the
-// product — a route, a theme id — whose values are records of scalars. The
-// server validated the records; here a non-object map falls back to the
-// default and a record's scalar fields are copied as they are.
+// product — a route, a theme id — whose values are records of scalars (or of
+// string lists: a route's `contentKeys`). The server validated the records;
+// here a non-object map falls back to the default and a record's fields are
+// copied as they are.
 const MAP_SECTIONS = new Set(['routes']);
+const isStringList = (x) => Array.isArray(x) && x.every((s) => typeof s === 'string');
 function copyMap(v) {
   if (!isPlain(v)) return {};
   const out = {};
   for (const [k, rec] of Object.entries(v)) {
     if (!isPlain(rec)) continue;
-    out[k] = Object.fromEntries(Object.entries(rec).filter(([, x]) => x === null || ['string', 'boolean', 'number'].includes(typeof x)));
+    out[k] = Object.fromEntries(Object.entries(rec)
+      .filter(([, x]) => x === null || ['string', 'boolean', 'number'].includes(typeof x) || isStringList(x))
+      .map(([f, x]) => [f, Array.isArray(x) ? x.slice() : x]));
   }
   return out;
 }
@@ -139,6 +143,9 @@ export function routeMeta(route, id = getIdentity()) {
     titleMode: e.titleMode === 'bare' ? 'bare' : 'suffix',
     noindex: e.noindex === true,
     locale: typeof e.locale === 'string' && e.locale ? e.locale : null,
+    // The site_content rows the page renders — read server-side only (the
+    // sitemap's <lastmod>), mirrored here so both halves normalise alike.
+    contentKeys: Array.isArray(e.contentKeys) ? e.contentKeys.filter((k) => typeof k === 'string') : [],
   };
 }
 

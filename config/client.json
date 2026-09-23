@@ -31,7 +31,7 @@
       "hiddenAdminViews": ["products", "collections", "bins", "orders", "discounts", "sales", "pos", "background"]
     },
     "routes": {
-      "$comment": "A product's OWN public routes' meta, merged over the engine's ROUTE_META/DEFAULT_META and pageTitle table (identity-seam-3): { \"/console\": { \"titleKey\": \"meta.console.title\", \"descriptionKey\": \"meta.console.description\", \"titleMode\": \"bare\"|\"suffix\", \"noindex\": true|false, \"locale\": \"is\"|null } }. The keys resolve through the i18n overlay (product.<locale>.json); noindex = <meta robots noindex> + a robots.txt Disallow + never in the sitemap; locale = locale-locked like the party pages (301 under any other prefix, one canonical, listed under its own locale only). Empty in the engine."
+      "$comment": "A product's OWN public routes' meta, merged over the engine's ROUTE_META/DEFAULT_META and pageTitle table (identity-seam-3): { \"/console\": { \"titleKey\": \"meta.console.title\", \"descriptionKey\": \"meta.console.description\", \"titleMode\": \"bare\"|\"suffix\", \"noindex\": true|false, \"locale\": \"is\"|null, \"contentKeys\": [\"verdskra\"] } }. The keys resolve through the i18n overlay (product.<locale>.json); noindex = <meta robots noindex> + a robots.txt Disallow + never in the sitemap; locale = locale-locked like the party pages (301 under any other prefix, one canonical, listed under its own locale only); contentKeys = the site_content rows the page renders, the sitemap's <lastmod> source for that route. Empty in the engine."
     },
     "organization": {
       "email": "info@orangesmiley.is",

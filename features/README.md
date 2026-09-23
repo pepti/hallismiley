@@ -28,7 +28,7 @@ Downstream overrides go in `features/local.json`.
 | `scene-engine` | Landslagssviðsmyndir / Scene engine | 4 | engine | live | — | — | [scene-engine.md](scene-engine.md) |
 | `themes` | Þemu / Themes | 4 | engine | live | — | `083_user_theme`, `084_user_theme_widen`, `094_theme_set_three`, `106_user_theme_check_drop` | [themes.md](themes.md) |
 | `i18n` | Tungumál / i18n | 5 | engine | live | — | `028_i18n_user_locale`, `029_i18n_site_content_locale`, `030_i18n_site_content_icelandic`, `031_i18n_news_products_locale`, `032_i18n_news_icelandic_backfill`, `033_i18n_projects_locale`, `034_i18n_projects_icelandic_backfill`, `035_i18n_ai_news_icelandic_backfill`, `036_i18n_contact_icelandic_backfill`, `037_i18n_contact_icelandic_backfill_retry`, `038_i18n_contact_icelandic_insert` | [i18n.md](i18n.md) |
-| `leads` | Fyrirspurnir / Leads | 6 | engine | live | — | `097_leads` | [leads.md](leads.md) |
+| `leads` | Fyrirspurnir / Leads | 6 | engine | live | — | `097_leads`, `108_leads_notification` | [leads.md](leads.md) |
 | `markadur` | Markaður / Market research list | 7 | engine | live | — | `093_market_research` | [markadur.md](markadur.md) |
 | `market-import` | Innlestur markaðsgagna / Market data importer | 7 | engine | live | — | — | [market-import.md](market-import.md) |
 | `commission` | Söluþóknun / Commission | 8 | engine | live | — | `102_commission_settlement` | [commission.md](commission.md) |

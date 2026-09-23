@@ -872,3 +872,19 @@ downstream's version of the failing area against the engine's BEFORE
 suspecting the new engine code; and harvest such fixes up (`engine-harvest.js`
 with a `Feature:` trailer) the day they land downstream, not at the next
 sync. The fix is back in the engine (identity-seam-2) with the spec ported.
+
+## 2026-09-23 — a product's fixes in engine files arrive as a list, and two guards read prose _(factory)_
+
+rekstrarkerfid filed the engine defects its syncs hit as one issue ("Feed for
+the engine", rk#45) instead of harvesting each fix: right call — its shims
+(`Number(id)` → `rowId`, the `_id` uuid branch, the `legal-title` override,
+`recordNotification`) were product-side patches over engine files, and the
+engine fix is different from any of them (ids as strings end to end, a
+migration, a token). Two surprises while landing them: the schema-integrity
+guard parses SQL keywords out of controller COMMENTS too (an "UPDATE would
+race the INSERT" sentence became a missing table called `would`), and the
+client identity merge whitelists a route record's field TYPES, so a new
+`string[]` field silently vanished on the client until `copyMap` learned
+lists. Both are the guards doing their job; the lesson is to run
+`test:unit` before assuming a green lint means the docs are the only thing
+left.

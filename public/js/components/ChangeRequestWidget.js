@@ -200,6 +200,11 @@ export class ChangeRequestWidget {
       <div class="cr-panel" id="cr-panel" role="dialog" aria-label="${esc(t('changeRequest.title'))}" hidden></div>
     `;
     document.body.appendChild(this.root);
+    // Tells the page's own viewport-fixed bottom-right bars (the contact
+    // editor's Save/Cancel) to sit above the launcher: they read
+    // --cr-widget-clearance, which test-env.css sets on this class only
+    // (rk-feed, 2026-09-23 — the two used to overlap).
+    document.body.classList.add('has-cr-widget');
     this.root.querySelector('#cr-fab').addEventListener('click', () => this.togglePanel());
     this.root.querySelector('#cr-demo-toggle')?.addEventListener('click', () => this.toggleDemoMode());
     this._updateFab();
@@ -256,6 +261,7 @@ export class ChangeRequestWidget {
     window.removeEventListener('hashchange', this._onNav);
     this.root?.remove();
     this.root = null;
+    document.body.classList.remove('has-cr-widget');
     document.querySelector('.lol-nav .test-env-badge')?.remove();
   }
 

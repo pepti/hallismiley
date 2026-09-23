@@ -2633,6 +2633,8 @@
   "leads.deleted": "Fyrirspurn eytt",
   "leads.exportCsv": "Sækja CSV",
   "leads.platform.none": "Ekkert",
+  "leads.notEmailed": "ekki sent",
+  "leads.notEmailedHint": "Tilkynningarpóstur barst ekki: {error}",
   "admin.nav.markadur": "Markaður",
   "markadur.title": "Markaður",
   "markadur.subtitle": "Íslensk fyrirtæki sem passa Rekstrarkerfinu, metin úr ársreikningum. Smelltu á línu til að sjá matið, tölurnar og heimildirnar.",

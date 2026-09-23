@@ -38,6 +38,20 @@
 .leads-chip--won       { background: var(--success-dim); color: var(--success); }
 .leads-chip--lost      { background: var(--error-dim);   color: var(--error); }
 
+/* "ekki sent" — the notification email never went out (notify_error set,
+   migration 108). Same recipe as a chip, the --warning wash, and the reason
+   rides the title attribute so nothing visitor-written is painted here. */
+.leads-mark {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: help;
+}
+.leads-mark--unsent { background: var(--warning-dim); color: var(--warning); }
+
 .leads-detail-row td { background: var(--bg-surface); }
 .leads-detail { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) 0 var(--sp-3); }
 .leads-detail__contact { font-size: 0.9rem; color: var(--text-secondary); }

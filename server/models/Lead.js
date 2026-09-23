@@ -1,5 +1,12 @@
 // Lead — one /hafa-samband enquiry, persisted alongside the notification
-// email so a missed email never loses a prospect (migration 097_leads).
+// email so a missed email never loses a prospect (migration 097_leads; the
+// email's outcome on the row since 108_leads_notification).
+//
+// Ids are compared as TEXT (`l.id::text = $1`): the engine's column is SERIAL,
+// a product whose table predates 097 (rekstrarkerfid) holds TEXT uuids, and
+// the controller hands either through as the string it received (rk-feed,
+// 2026-09-23). The table is bounded by the retention job, so the cast costs
+// nothing measurable.
 //
 // PII table. Never log field values — only the submission id. Retention is
 // enforced by server/services/leadsCleanup.js (LEAD_RETENTION_DAYS); every
@@ -29,7 +36,7 @@ function clamp(value, max) {
 const COLUMNS = `
   l.id, l.submission_id, l.name, l.email, l.company, l.phone, l.current_platform,
   l.message, l.source, l.locale, l.status, l.owner_user_id, l.contacted_at,
-  l.contacted_by, l.note, l.created_at, l.updated_at,
+  l.contacted_by, l.note, l.notified_at, l.notify_error, l.created_at, l.updated_at,
   COALESCE(o.display_name, o.username) AS owner_name,
   COALESCE(c.display_name, c.username) AS contacted_by_name
 `;
@@ -115,7 +122,7 @@ class Lead {
   }
 
   static async findById(id) {
-    const { rows } = await db.query(`SELECT ${COLUMNS} ${JOINS} WHERE l.id = $1`, [id]);
+    const { rows } = await db.query(`SELECT ${COLUMNS} ${JOINS} WHERE l.id::text = $1`, [String(id)]);
     return rows[0] || null;
   }
 
@@ -136,10 +143,10 @@ class Lead {
          owner_user_id = CASE WHEN $5::boolean THEN $6 ELSE owner_user_id END,
          contacted_at  = CASE WHEN $2 IS NOT NULL AND $2 <> 'new' AND contacted_at IS NULL THEN NOW() ELSE contacted_at END,
          contacted_by  = CASE WHEN $2 IS NOT NULL AND $2 <> 'new' AND contacted_at IS NULL THEN $7 ELSE contacted_by END
-       WHERE id = $1
+       WHERE id::text = $1
        RETURNING id`,
       [
-        id, setStatus,
+        String(id), setStatus,
         setNote, setNote ? clamp(note, MAX_NOTE) : null,
         setOwner, setOwner ? (ownerUserId ? String(ownerUserId) : null) : null,
         actorId ? String(actorId) : null,
@@ -149,9 +156,33 @@ class Lead {
     return this.findById(id);
   }
 
+  /**
+   * The notification email's outcome, recorded on the row so the inbox shows
+   * which enquiries nobody was emailed about (migration 108: notified_at /
+   * notify_error). `error` null = sent (stamps notified_at, clears the
+   * error); else a short reason (kept, capped, notified_at untouched). Keyed
+   * by submission_id — the one id the contact path holds before the insert
+   * returns. Never throws: an unrecorded outcome must not surface anywhere.
+   * Born in rekstrarkerfid (2026-09-15: with no RESEND_API_KEY on PROD every
+   * enquiry vanished behind a "received" reply), harvested 2026-09-23.
+   */
+  static async recordNotification(submissionId, error = null) {
+    try {
+      await db.query(
+        `UPDATE leads
+            SET notified_at  = CASE WHEN $2::text IS NULL THEN NOW() ELSE notified_at END,
+                notify_error = $2::text
+          WHERE submission_id = $1`,
+        [String(submissionId), error ? String(error).slice(0, 500) : null]
+      );
+    } catch (err) {
+      logger.error({ submissionId, err: err.message }, 'lead notification outcome not recorded');
+    }
+  }
+
   /** Hard delete = PII erasure. Returns true when a row went. */
   static async remove(id) {
-    const { rowCount } = await db.query(`DELETE FROM leads WHERE id = $1`, [id]);
+    const { rowCount } = await db.query(`DELETE FROM leads WHERE id::text = $1`, [String(id)]);
     return rowCount > 0;
   }
 

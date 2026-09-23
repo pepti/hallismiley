@@ -1088,3 +1088,27 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   res.setHeader('Vary', 'Accept-Language, Cookie');
   res.send(html);
 };
+
+// For routes/sitemapRoutes.js (/llms.txt, rk-feed 2026-09-23): the composed
+// title + description of a static route in a locale, from the same tables a
+// page load reads — so the crawler summary and the <title> can never say two
+// different things. Null for a route the tables do not know.
+module.exports.metaForRoute = function metaForRoute(locale, route) {
+  const entry = ROUTE_META[route];
+  return entry ? metaFor(locale, entry.key) : null;
+};
+// The site_content rows an ENGINE static route renders (the sitemap's
+// <lastmod> source): the meta-override row of ROUTE_META plus what the
+// crawler/SPA render for the page. A product route's list is
+// identity.routes[*].contentKeys (config/identity.js productRoutes).
+module.exports.contentKeysForRoute = function contentKeysForRoute(route) {
+  const entry = ROUTE_META[route];
+  if (!entry) return [];
+  if (entry.product) return (PRODUCT_ROUTES[route] && PRODUCT_ROUTES[route].contentKeys) || [];
+  const extra = {
+    '/':             ['home_hero', 'home_skills', 'home_stats'],
+    '/hafa-samband': ['contact_hero', 'contact_card', 'contact_form', 'contact_availability', 'contact_footer'],
+    '/contact':      ['contact_hero', 'contact_card', 'contact_form', 'contact_availability', 'contact_footer'],
+  }[route] || [];
+  return [...new Set([entry.contentKey, ...extra].filter(Boolean))];
+};
