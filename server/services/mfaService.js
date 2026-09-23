@@ -100,11 +100,12 @@ function isProtected(user) {
 }
 
 /**
- * Does this account owe enrolment? Kept for callers that already hold a
- * `admin_anywhere` flag — but nothing ever called it, which is how an admin who
- * never enrolled signed in on a password alone until 2026-09-18. The rule is
- * ENFORCED in auth/mfaPolicy.js, on every session read; that file, not this
- * function, is what makes enrolment mandatory (and knows the test exemption).
+ * SHOULD this account enrol? A recommendation, never a gate: true for a
+ * protected account without TOTP whatever the instance's
+ * `security.mfa.enrolment` says. Whether enrolment is ENFORCED is
+ * auth/mfaPolicy.js's call, on every session read — only under `required`
+ * (the default is `optional`, 2026-09-23); that file, not this function,
+ * withholds anything (and knows the test exemption).
  */
 function shouldEnrol(user) {
   return protectedRole(user) && user.totp_enabled !== true;

@@ -209,6 +209,18 @@ chunk lands; add a HISTORY entry for the story.
   `identity.brand.name` (rk reads its own `brand.name`; on rk's next sync the
   two readers must agree on `identity.brand.name`); (d) release N+1 stops writing `totp_secret`, N+2 drops it;
   (e) next rk candidates: `social-login-gate`, `request-logging`.
+- 2FA enrolment made OPTIONAL by default, same day ([mfa-optional-2026-09-23](docs/HISTORY.md#mfa-optional-2026-09-23)):
+  `security.mfa.enrolment` = `optional` | `required` in `config/client.json`
+  (this instance: `optional`), so harvest item (a)'s "walked through
+  enrolment at next sign-in" now happens only on an instance set to
+  `required`. Open: (a) the seller area still demands 2FA for everything but
+  `/me` (`sellerRoutes.js` rule 4) — Halli decides whether sellers follow the
+  switch too (one-line change in `docs/ADMIN-2FA.md`); (b) rekstrarkerfid
+  chose mandatory enrolment itself but inherits `optional` on its next sync
+  unless its own `config/client.json` says `required` — Halli's instruction
+  is estate-wide, so the sync must NOT add it; (c) the e2e server runs
+  `required` (the enrolment spec needs it), so the optional default is
+  covered by Jest only.
 - rk feed landed 2026-09-23 ([rk-feed-2026-09-23](docs/HISTORY.md#rk-feed-2026-09-23)):
   orange-smiley/rekstrarkerfid#45 items 2/3/4/6/7/9 — lead ids as strings,
   migration 108 (`notified_at`/`notify_error` + the "ekki sent" mark), the

@@ -1,17 +1,52 @@
-# Two-factor sign-in — mandatory enrolment and the secret at rest
+# Two-factor sign-in — optional or mandatory enrolment, and the secret at rest
 
-Every account the login path challenges must have TOTP two-factor sign-in
-enabled: an account holding `admin` (primary role or anywhere in its role
-set), a holder of the `accounts` view (a seller who owns customer accounts,
-ENHANCEMENTS #17) and a published seller on the public instance (D-020). Since
-2026-09-23 that is a rule the server enforces, not an option on the profile
-page. The rule was written in rekstrarkerfid on 2026-09-18 (Öryggisvörður's
+The accounts two-factor sign-in protects are: an account holding `admin`
+(primary role or anywhere in its role set), a holder of the `accounts` view (a
+seller who owns customer accounts, ENHANCEMENTS #17) and a published seller on
+the public instance (D-020) — `mfaService.protectedRole`. Whether such an
+account MUST enrol is a per-instance switch.
+
+## Optional or required — `security.mfa.enrolment`
+
+| Value | What it means |
+|---|---|
+| **`optional`** — the default (Halli, 2026-09-23: "change mfa to optional") | Nobody is forced to enrol. An unenrolled admin is an admin; an unenrolled `accounts` holder has the `accounts` view; nothing is withheld and `mfa_enrolment_required` is always `false`, so the SPA never sends anyone to the panel. **Prófíll → Tveggja þátta staðfesting** still offers enrolment to every protected account, with the "password only" hint as the recommendation. An account that HAS enrolled is challenged for a code at every sign-in exactly as before, and the secret is sealed at rest the same way. |
+| **`required`** | The mandatory rule below: an unenrolled protected account has what made it protected withheld until it enrols. |
+
+Set it in `config/client.json`:
+
+```json
+"security": { "mfa": { "enrolment": "required" } }
+```
+
+or per deployment with the app setting `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT=required`
+(the env var wins over the file, like every `CLIENT_CONFIG_*`). Any other value
+warns at boot and keeps the default. This repo's `config/client.json` spells out
+`optional`. Moving an instance from `optional` to `required` takes effect on each
+account's next request — an unenrolled admin who is signed in loses the admin
+area there and then and is sent to the panel; plan the switch with the admins.
+
+**The seller area is not governed by this switch.** `/api/v1/seller` rule 4
+(`server/routes/sellerRoutes.js`) demands `totp_enabled` for every route except
+`GET /me`, and it predates the mandatory-enrolment harvest (D-020). So under
+`optional` a published seller signs in without a code but still has to enrol
+before the seller area shows leads, accounts or commission statements. If Halli
+wants the seller area optional too, the one-line change is to drop that
+`router.use((req, res, next) => { if (req.user.totp_enabled !== true) … })`
+guard — or make it `if (enrolmentRequired() && req.user.totp_enabled !== true)`
+with `enrolmentRequired` from `auth/mfaPolicy.js` — and update
+`tests/integration/sellerArea.test.js` ("/me works before 2FA; everything else
+needs it").
+
+The mandatory rule was written in rekstrarkerfid on 2026-09-18 (Öryggisvörður's
 review while fact-checking its /um-kerfid page, which promises "TOTP fyrir
-stjórnendur") and harvested into the engine under D-021; the engine's gate is
-wider than rk's, so the policy here withholds the role for an admin and the
-view for an accounts holder.
+stjórnendur") and harvested into the engine under D-021 on 2026-09-23, first as
+the only behaviour, the same day as this switch (history:
+`mfa-optional-2026-09-23`). The engine's gate is wider than rk's, so under
+`required` the policy withholds the role for an admin and the view for an
+accounts holder.
 
-## The rule
+## The rule under `required`
 
 A protected account **without** TOTP is not that yet:
 
@@ -53,7 +88,11 @@ it. `mfaService.protectedRole` decides WHO is protected (mirrored on the client
 by `auth.isMfaProtected()`, pinned by `tests/unit/mfaProtectedClient.test.js`);
 the policy decides what an unenrolled protected account may do.
 
-## What an admin sees the first time
+## What an admin sees the first time (under `required`)
+
+Under `optional` an unenrolled admin simply signs in and uses the admin area;
+setting up two-step is steps 3–4 below, from the profile page, whenever they
+choose.
 
 1. Signs in with username and password.
 2. Lands on **Prófíll → Tveggja þátta staðfesting** with a notice that the
@@ -83,21 +122,26 @@ node server/scripts/reset-admin-totp.js <username>
 
 It clears the TOTP secret (both columns), the recovery codes and any login in
 flight, and **ends every session** the account has. Password and role are
-untouched. At the next sign-in the account owes enrolment again (steps above).
+untouched. At the next sign-in the account signs in with its password alone —
+under `required` it then owes enrolment again (steps above); under `optional`
+it can set two-step up again from the profile page.
 
 On Azure: run it from a workstation whose IP is on the PostgreSQL firewall
 allow-list, with `DATABASE_URL` taken from the instance's Key Vault, or from the
 web app's SSH console. Log who asked and why — the script does not.
 
-If the *only* admin is locked out, this script is the only door. There is no
-environment switch that turns the rule off in production.
+If the *only* admin is locked out, this script is the only door. Setting
+`security.mfa.enrolment` to `optional` does NOT help an admin who has enrolled
+and lost the phone: the challenge for an enrolled account is the same in both
+modes. `ADMIN_TOTP_EXEMPT` does not work in production either.
 
 ## Configuration
 
 | Variable | Meaning |
 |---|---|
 | `TOTP_ENC_KEY` | 32-byte key (base64 or hex) that encrypts TOTP secrets at rest. **Set it on every real instance** — see below. Malformed → the server refuses to boot. Unset → secrets stay in plaintext and production logs a warning at boot. |
-| `ADMIN_TOTP_EXEMPT` | Comma-separated usernames (or `*`) not forced to enrol. **Ignored when `NODE_ENV=production`** — which includes the Azure TEST stack; the server warns at boot if it finds it there. It exists for the Jest and Playwright suites (dozens of admin sign-ins a minute cannot pass TOTP's one-code-per-30-seconds replay guard) and for a developer's local database. `tests/env.js` sets `*`; `playwright.config.js` exempts `testadmin` by name. |
+| `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT` | `optional` (default) or `required` — overrides `security.mfa.enrolment` in `config/client.json` (above). Not a secret. |
+| `ADMIN_TOTP_EXEMPT` | Comma-separated usernames (or `*`) not forced to enrol — meaningful only under `required`. **Ignored when `NODE_ENV=production`** — which includes the Azure TEST stack; the server warns at boot if it finds it there. It exists for the Jest and Playwright suites (dozens of admin sign-ins a minute cannot pass TOTP's one-code-per-30-seconds replay guard) and for a developer's local database. The e2e server runs `required` (`playwright.config.js`, so `e2e/admin-totp-enrolment.spec.js` walks the mandatory rule in a browser) and still exempts `testadmin` and two per-spec admins by name; `tests/env.js` sets `*`, which no Jest suite needs under the `optional` default any more — it stays for a suite that switches to `required`. |
 
 Generate a key:
 
@@ -141,7 +185,8 @@ the boot log.
    `TOTP_ENC_KEY is not set` warning.
 2. Make sure nobody has set `ADMIN_TOTP_EXEMPT` on the web app.
 3. Deploy. Migration `107` applies at boot.
-4. Every protected account that has **not** enrolled is sent to the set-up
-   panel at its next sign-in (or next page load, if signed in). Enrolled
-   accounts notice nothing.
+4. Under `required`, every protected account that has **not** enrolled is sent
+   to the set-up panel at its next sign-in (or next page load, if signed in).
+   Under `optional` (the default) nobody is sent anywhere; ask the admins to
+   enrol from the profile page. Enrolled accounts notice nothing in either mode.
 5. Have each admin confirm they saved their recovery codes.

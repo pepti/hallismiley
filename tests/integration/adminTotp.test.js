@@ -67,9 +67,11 @@ beforeEach(async () => {
   csrf = await csrfHeaders(adminCookie);
 });
 
-// Runs under tests/env.js's ADMIN_TOTP_EXEMPT='*', so this is the CHALLENGE's
-// scope only: no TOTP, no challenge. What such an admin may then DO — nothing,
-// until it enrols — is adminTotpEnforcement.test.js, under the production rule.
+// Runs under the instance default (security.mfa.enrolment = optional) and
+// tests/env.js's ADMIN_TOTP_EXEMPT='*', so this is the CHALLENGE's scope only:
+// no TOTP, no challenge. What such an admin may then DO — everything under
+// `optional`, nothing until it enrols under `required` — is
+// adminTotpEnforcement.test.js.
 describe('Login — accounts WITHOUT 2FA are not challenged', () => {
   test('an admin with no TOTP gets a session, not a challenge', async () => {
     const res = await login('totpadmin');

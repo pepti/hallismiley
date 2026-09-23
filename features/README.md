@@ -16,7 +16,7 @@ Downstream overrides go in `features/local.json`.
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
-| `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | — | `082_admin_totp`, `107_totp_secret_enc` | [admin-2fa.md](admin-2fa.md) |
+| `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | `security.mfa.enrolment` | `082_admin_totp`, `107_totp_secret_enc` | [admin-2fa.md](admin-2fa.md) |
 | `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique` | [auth-sessions.md](auth-sessions.md) |
 | `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles` | [rbac-roles.md](rbac-roles.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |

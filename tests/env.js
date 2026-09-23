@@ -30,11 +30,12 @@ process.env.CSRF_SECRET     = 'test-csrf-secret-not-used-in-test-mode';
 // the feature mock `server/services/translator` directly.
 process.env.TRANSLATE_ENABLED = 'false';
 process.env.ANTHROPIC_API_KEY = '';
-// Admins must enrol a second factor before they are admins (auth/mfaPolicy.js).
-// The suites mint admin sessions by the hundred and none of them is about 2FA,
-// so they are exempt — a switch production ignores. The suites that ARE about
-// it (adminTotpEnforcement, adminTotp) clear this per test; the policy reads
-// the variable on every request.
+// Two-factor enrolment is OPTIONAL by default (security.mfa.enrolment,
+// mfa-optional-2026-09-23), so no suite needs this any more. It stays as a
+// belt-and-braces for a suite that switches an instance to `required`
+// (CLIENT_CONFIG_SECURITY_MFA_ENROLMENT, read per request by auth/mfaPolicy.js)
+// while minting admin sessions by the hundred — a switch production ignores.
+// adminTotpEnforcement, the suite that IS about the mandatory rule, clears it.
 process.env.ADMIN_TOTP_EXEMPT = '*';
 // A fixed key so the encrypted-at-rest path (utils/secretBox.js) is what the
 // suites exercise by default. 32 bytes, base64. Test-only.

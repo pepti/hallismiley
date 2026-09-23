@@ -237,7 +237,11 @@ describe('Seller API (public)', () => {
     expect((await request(app).get(`${API}/me`).set('Cookie', squatter)).status).toBe(200);
   });
 
-  test('/me works before 2FA; everything else needs it', async () => {
+  // Rule 4 in routes/sellerRoutes.js is the seller area's own gate and does
+  // not follow security.mfa.enrolment: this runs under the instance default,
+  // `optional` (mfa-optional-2026-09-23), and a seller still needs 2FA.
+  test('/me works before 2FA; everything else needs it — even with enrolment optional', async () => {
+    expect(require('../../server/auth/mfaPolicy').enrolmentMode()).toBe('optional');
     const me = await request(app).get(`${API}/me`).set('Cookie', annaCookie);
     expect(me.status).toBe(200);
     expect(me.body).toMatchObject({ mfa_ready: false, seller: { email: 'anna@test.com', can_leads: true } });
