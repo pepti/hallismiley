@@ -611,6 +611,7 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
   // mirror; the engine's is exercised only where the engine owns `/`.
   const testEngineHome = ID.routes && ID.routes['/'] ? test.skip : test;
   const saved = [];
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
   // The page is still one page: the template's singletons appear once.
   function expectOnePage(html) {
@@ -676,6 +677,18 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
     expect(res.text).toContain(`<meta property="og:description" content="${ESCAPED}" />`);
     expectOnePage(res.text);
     jsonLdBlocks(res.text);
+  });
+
+  // No login needed on this one: og:url is built from req.path, so the
+  // patterns in a URL reached the replacement string too (Öryggisvörður).
+  test('the request path reaches og:url and the canonical literally', async () => {
+    // (A backtick is percent-encoded by the client, so it never reaches here raw.)
+    const route = "/zz-$'-$&-$$";
+    const res = await request(app).get(`/${LC}${route}`);
+    const url = esc(`https://www.hallismiley.is/${LC}${route}`);
+    expect(res.text).toContain(`<meta property="og:url" content="${url}" />`);
+    expect(res.text).toMatch(new RegExp(`rel="canonical" href="${escRe(url)}"`));
+    expectOnePage(res.text);
   });
 
   testEngineHome('a site_content heading reaches the crawler mirror literally', async () => {
