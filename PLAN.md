@@ -168,10 +168,9 @@ chunk lands; add a HISTORY entry for the story.
   hand); after it every unenrolled admin is walked through enrolment at next
   sign-in — save the recovery codes; (b) rekstrarkerfid's next engine-sync
   adds `'107_totp_secret_enc': ['093_totp_secret_enc']` to `aliases` in its
-  `rk.js` (its `legacy` keeps 093 as is); (c) the authenticator issuer is still
-  the base literal `Icelandic Store` — it follows `identity.brand.name` once the
-  identity seam lands (rk reads `brand.name`; that hunk was trimmed to keep off
-  `clientConfig.js`); (d) release N+1 stops writing `totp_secret`, N+2 drops it;
+  `rk.js` (its `legacy` keeps 093 as is); (c) the authenticator issuer now reads
+  `identity.brand.name` (rk reads its own `brand.name`; on rk's next sync the
+  two readers must agree on `identity.brand.name`); (d) release N+1 stops writing `totp_secret`, N+2 drops it;
   (e) next rk candidates: `social-login-gate`, `request-logging`.
 - Engine upstream (D-021, [engine-upstream-2026-09-22](docs/HISTORY.md#engine-upstream-2026-09-22)):
   the first syncs, in order — LedgerLink and icelandicstore in parallel (both

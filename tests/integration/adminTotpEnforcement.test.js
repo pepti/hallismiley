@@ -220,6 +220,19 @@ describe('enrolling is what makes the account an admin', () => {
     expect((await post('/auth/totp/setup', csrf)).status).toBe(403);
   });
 
+  test('the authenticator entry is named after THIS instance (identity seam), not customer #1', async () => {
+    const { identity } = require('../../server/config/identity');
+    await makeUser({ id: 'enf-admin', username: 'enfadmin', role: 'admin' });
+    const setup = await post('/auth/totp/setup', await csrfFor(sessionCookie(await login('enfadmin'))));
+    expect(setup.status).toBe(200);
+    // The query uses URLSearchParams (space → "+"), the label encodeURIComponent
+    // (space → "%20") — utils/totp.js otpauthUri; a brand with a space, like
+    // this instance's, tells the two apart.
+    expect(setup.body.uri).toContain(new URLSearchParams({ issuer: identity.brand.name }).toString());
+    expect(setup.body.uri).toContain(encodeURIComponent(`${identity.brand.name}:`));
+    expect(setup.body.uri).not.toMatch(/Icelandic/i);
+  });
+
   test('turning 2FA off puts the admin back behind the gate until they enrol again', async () => {
     await makeUser({ id: 'enf-admin', username: 'enfadmin', role: 'admin' });
     const csrf = await csrfFor(sessionCookie(await login('enfadmin')));

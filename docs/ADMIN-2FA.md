@@ -65,11 +65,11 @@ the policy decides what an unenrolled protected account may do.
    manager. Each works once, in place of a code from the app.
 5. *Ég er búin(n) að vista þá* → the admin area opens.
 
-The authenticator entry is still named `Icelandic Store` (the literal the
-base shipped with, `mfaService.js`). rekstrarkerfid reads it from
-`config/client.json` (`brand.name`); the engine's identity seam owns that
-config section, so the issuer follows it once the seam lands — an open item in
-`PLAN.md`.
+The authenticator entry is named after the instance: `identity.brand.name`
+in `config/client.json` (the identity seam, `server/config/identity.js`;
+`Orange Smiley` here, env `CLIENT_CONFIG_IDENTITY_BRAND_NAME`). An entry
+enrolled earlier keeps the name the app stored at enrolment until the person
+turns two-step off and sets it up again.
 
 ## Break-glass: an admin has lost the phone AND the recovery codes
 

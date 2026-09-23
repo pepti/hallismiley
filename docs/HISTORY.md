@@ -46,7 +46,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
 | 2026-09-22 | [Leads transfer — enquiries from the other instances reach ops (D-020 step 4)](#leads-transfer-2026-09-22) | `leads:export` (submission fields only) / `leads:import` (one transaction, `ON CONFLICT DO NOTHING`, an ops row is never updated); by hand weekly, a timer once ops is on Azure; no migration |
 | 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
-| 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer and `brand.name` left to the identity seam |
+| 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
 
 ---
 
@@ -1302,10 +1302,10 @@ graft) and the rk-only hunks trimmed. Branch `from-rk/2026-09-23`.
   the `/metrics` bearer compare; `docs/ADMIN-2FA.md` (runbook, three-release
   plan, rollout); `.env.example` and `docs/DEPLOYMENT.md` §5 rows.
 - **Trimmed from the pick**: rk's `brand.name` section in `clientConfig.js`
-  and the `issuer()` read of it (the identity seam in flight owns that file —
-  the issuer stays the base literal until it lands, PLAN → Status); rk's
-  CLAUDE.md / LESSONS.md hunks; rk's issuer test; the `/api/v1/content/um_kerfid`
-  probe (engine key `home`).
+  (the identity seam, merged from master the same day, owns that file; the
+  issuer is then wired to `identity.brand.name` in a follow-up commit on the
+  branch, with rk's issuer test re-added against the seam); rk's CLAUDE.md /
+  LESSONS.md hunks; the `/api/v1/content/um_kerfid` probe (engine key `home`).
 - **Tests**: `tests/unit/mfaPolicy.test.js` (policy incl. the wider gate,
   `withholdViews`, `applyMfaPolicyToRequest`, secretBox, safeEqual);
   `tests/integration/adminTotpEnforcement.test.js` (20, under the production

@@ -36,14 +36,13 @@ const CHALLENGE_TTL_MS   = 5 * 60 * 1000;
 const MAX_CHALLENGE_ATTEMPTS = 5;
 const RECOVERY_CODE_COUNT = 10;
 
-// What the authenticator app shows beside the entry. Still the literal the base
-// shipped with: rekstrarkerfid reads it from config/client.json (brand.name,
-// its 2026-09-18 commit), and the engine's identity seam (in flight,
-// 2026-09-23) owns that section here — when it lands, this becomes
-// clientConfig.identity.brand.name. Left alone in the harvest so the two do
-// not collide on clientConfig.js.
-const ISSUER = 'Icelandic Store';
-const issuer = () => ISSUER;
+// What the authenticator app shows beside the entry. It is the INSTANCE's name
+// from the identity seam (config/client.json → identity.brand.name), not a
+// literal: this was 'Icelandic Store' — customer #1's name, inherited with the
+// code — on every instance until rekstrarkerfid fixed it (2026-09-18, its
+// brand.name); the engine wires it to the seam that landed 2026-09-22.
+const { identity } = require('../config/identity');
+const issuer = () => identity.brand.name;
 
 // ── The secret, at rest ─────────────────────────────────────────────────────
 // Expand phase (migration 107, rk's 093): the secret is written to BOTH totp_secret and,
