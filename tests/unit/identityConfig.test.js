@@ -1,0 +1,291 @@
+'use strict';
+
+/**
+ * The identity seam (2026-09-22): a downstream product owns its brand, visitor
+ * locale, theme trio, hero clip, hidden surfaces and Organization record in
+ * `identity.*` of config/client.json, resolved by server/config/clientConfig.js
+ * and handed to the browser by ssrMeta. Three things are pinned here:
+ *
+ *  1. THE ENGINE DEFAULTS ARE ORANGE SMILEY'S CURRENT VALUES, spelled out once.
+ *     An engine with no `identity` block must behave exactly as it did before
+ *     the seam, and the client fallback (public/js/utils/identity.js) must
+ *     equal the server schema, so neither can drift on its own.
+ *  2. Validation: a picker without its default/root is rejected as a trio; ids,
+ *     routes, locales, asset paths and sameAs URLs are shape-checked.
+ *  3. The hand-off: the <html data-*-theme> attributes and the
+ *     <script id="identity"> tag, including the `</` escape, and that a
+ *     NON-default identity flows through the config readers a downstream
+ *     depends on (publicSurface, themes, i18n). The rendered page for the
+ *     non-default case is tests/integration/identityDownstream.test.js.
+ */
+const fs   = require('fs');
+const os   = require('os');
+const path = require('path');
+
+const { resolveConfig, defaults } = require('../../server/config/clientConfig');
+const {
+  htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
+} = require('../../server/config/identity');
+const { IDENTITY_DEFAULTS, resolveIdentity } = require('../../public/js/utils/identity.js');
+
+const resolve = (fileConfig = {}, env = {}) => resolveConfig({ fileConfig, env });
+
+// ── 1. The engine defaults, pinned once ──────────────────────────────────────
+
+const ORANGE_SMILEY = {
+  brand: {
+    name: 'Orange Smiley',
+    legalName: 'Orange Smiley ehf.',
+    alternateNames: ['Orangesmiley', 'Orange Smiley ehf.', 'orange smiley', 'Rekstrarkerfið', 'Rekstrarkerfi'],
+    titleSuffix: ' — Orange Smiley',
+  },
+  locale: { publicDefault: 'is' },
+  theme: { default: 'ember', root: 'classic', picker: ['ember', 'classic', 'midnight'] },
+  hero: {
+    clip: '/assets/videos/hero-dc7df-v2.mp4',
+    poster: '/assets/videos/hero-dc7df-v2-poster.jpg',
+  },
+  surface: {
+    hiddenRoutes: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
+    hiddenAdminViews: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+  },
+  organization: {
+    email: 'info@orangesmiley.is',
+    description: 'Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.',
+    logo: '/favicon.svg',
+    image: '/og-image.jpg',
+    addressLocality: 'Hafnarfjörður',
+    addressCountry: 'IS',
+    areaServed: 'Iceland',
+    knowsAbout: ['Web Development', 'E-commerce', 'Inventory Management', 'Invoicing', 'VAT Accounting', 'Shopify Migration', 'Node.js', 'PostgreSQL'],
+    sameAs: [],
+  },
+};
+
+// JSON round-trip strips Object.freeze so toEqual compares plain shapes.
+const plain = (v) => JSON.parse(JSON.stringify(v));
+
+describe('identity — the engine defaults are Orange Smiley, pinned once', () => {
+  test('the server schema defaults equal the pinned values', () => {
+    expect(plain(defaults().identity)).toEqual(ORANGE_SMILEY);
+  });
+
+  test('an empty config resolves to the same values with no warnings', () => {
+    const { config, warnings } = resolve({});
+    expect(plain(config.identity)).toEqual(ORANGE_SMILEY);
+    expect(warnings).toEqual([]);
+  });
+
+  test('the client fallback (public/js/utils/identity.js) equals the server schema', () => {
+    expect(plain(IDENTITY_DEFAULTS)).toEqual(plain(defaults().identity));
+  });
+
+  test("this instance's committed config/client.json spells the same values out", () => {
+    const file = JSON.parse(fs.readFileSync(path.join(__dirname, '../../config/client.json'), 'utf8'));
+    expect(file.identity).toBeDefined();
+    expect(plain(resolve(file).config.identity)).toEqual(ORANGE_SMILEY);
+  });
+});
+
+// ── 2. Validation ─────────────────────────────────────────────────────────────
+
+describe('identity — validation', () => {
+  test('a picker that lacks the default is rejected as a trio, keeping the engine set', () => {
+    const { config, warnings } = resolve({ identity: { theme: { default: 'glacier', picker: ['ember', 'classic'] } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.theme\.picker .* does not include "glacier"/)]);
+    expect(plain(config.identity.theme)).toEqual(ORANGE_SMILEY.theme);
+  });
+
+  test('a picker that lacks the root is rejected too', () => {
+    const { config, warnings } = resolve({ identity: { theme: { picker: ['ember', 'midnight'] } } });
+    expect(warnings).toEqual([expect.stringMatching(/does not include "classic"/)]);
+    expect(plain(config.identity.theme)).toEqual(ORANGE_SMILEY.theme);
+  });
+
+  test('a coherent non-default trio is accepted as given', () => {
+    const theme = { default: 'glacier', root: 'classic', picker: ['glacier', 'classic', 'midnight', 'ember', 'lava', 'moss'] };
+    const { config, warnings } = resolve({ identity: { theme } });
+    expect(warnings).toEqual([]);
+    expect(plain(config.identity.theme)).toEqual(theme);
+  });
+
+  test('a theme id that would break html[data-theme] warns and keeps the default', () => {
+    const { config, warnings } = resolve({ identity: { theme: { picker: ['ember', 'classic', 'Mid Night'] } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.theme\.picker has ids that do not match/)]);
+    expect(config.identity.theme.picker).toEqual(ORANGE_SMILEY.theme.picker);
+  });
+
+  test('the env layer can set the picker as a comma list, and it still has to be coherent', () => {
+    const ok = resolve({}, { CLIENT_CONFIG_IDENTITY_THEME_PICKER: 'ember,classic' });
+    expect(ok.warnings).toEqual([]);
+    expect(ok.config.identity.theme.picker).toEqual(['ember', 'classic']);
+
+    const bad = resolve({}, { CLIENT_CONFIG_IDENTITY_THEME_PICKER: 'midnight' });
+    expect(bad.warnings).toEqual([expect.stringMatching(/does not include "ember" and "classic"/)]);
+    expect(bad.config.identity.theme.picker).toEqual(ORANGE_SMILEY.theme.picker);
+  });
+
+  test('hidden routes must be bare routes — no locale prefix, no trailing slash, never "/"', () => {
+    const { config, warnings } = resolve({ identity: { surface: { hiddenRoutes: ['/news/', '/'] } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.surface\.hiddenRoutes has entries that are not bare routes/)]);
+    expect(config.identity.surface.hiddenRoutes).toEqual(ORANGE_SMILEY.surface.hiddenRoutes);
+    expect(resolve({ identity: { surface: { hiddenRoutes: [] } } }).config.identity.surface.hiddenRoutes).toEqual([]);
+  });
+
+  test('an admin view id is a lowercase word; existence is the parity test’s job', () => {
+    const { warnings } = resolve({ identity: { surface: { hiddenAdminViews: ['Orders'] } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.surface\.hiddenAdminViews has entries that are not admin view ids/)]);
+  });
+
+  test('the visitor-default locale is a locale id', () => {
+    expect(resolve({ identity: { locale: { publicDefault: 'en' } } }).config.identity.locale.publicDefault).toBe('en');
+    const { config, warnings } = resolve({ identity: { locale: { publicDefault: 'Icelandic' } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.locale\.publicDefault must be a lowercase locale id/)]);
+    expect(config.identity.locale.publicDefault).toBe('is');
+  });
+
+  test('a hero clip is a site path or an https URL', () => {
+    expect(resolve({ identity: { hero: { clip: 'https://cdn.example.is/hero.mp4' } } }).warnings).toEqual([]);
+    const { warnings } = resolve({ identity: { hero: { clip: 'assets/videos/x.mp4' } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.hero\.clip must be a site-relative path/)]);
+  });
+
+  test('brand names must not be empty', () => {
+    const { config, warnings } = resolve({ identity: { brand: { name: '  ' } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.brand\.name must not be empty/)]);
+    expect(config.identity.brand.name).toBe('Orange Smiley');
+  });
+
+  test('sameAs entries are https URLs', () => {
+    const { warnings } = resolve({ identity: { organization: { sameAs: ['http://facebook.com/x', 'nope'] } } });
+    expect(warnings).toEqual([expect.stringMatching(/identity\.organization\.sameAs has entries that are not https URLs/)]);
+  });
+});
+
+// ── 3. The hand-off ───────────────────────────────────────────────────────────
+
+const DOWNSTREAM = {
+  brand: { name: 'Halli Smiley', legalName: 'Halli Smiley', alternateNames: ['hallismiley'], titleSuffix: ' — Halli Smiley' },
+  locale: { publicDefault: 'en' },
+  theme: { default: 'glacier', root: 'classic', picker: ['glacier', 'classic', 'midnight', 'ember', 'lava', 'moss'] },
+  hero: { clip: '/assets/videos/waterfall.mp4', poster: '/assets/videos/waterfall-poster.jpg' },
+  surface: { hiddenRoutes: [], hiddenAdminViews: [] },
+  organization: { sameAs: ['https://github.com/pepti'] },
+};
+
+describe('identity — the hand-off to the browser', () => {
+  test('the <html> attributes carry the theme trio', () => {
+    const attrs = htmlIdentityAttrs();
+    expect(attrs).toBe('data-default-theme="ember" data-theme-picker="ember classic midnight" data-root-theme="classic"');
+    const { config } = resolve({ identity: DOWNSTREAM });
+    expect(htmlIdentityAttrs(config.identity))
+      .toBe('data-default-theme="glacier" data-theme-picker="glacier classic midnight ember lava moss" data-root-theme="classic"');
+  });
+
+  test('the script tag round-trips the identity', () => {
+    const tag = identityScriptTag();
+    expect(tag.startsWith('<script id="identity" type="application/json">')).toBe(true);
+    expect(tag.endsWith('</script>')).toBe(true);
+    const json = tag.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '');
+    expect(JSON.parse(json)).toEqual(ORANGE_SMILEY);
+  });
+
+  test('a value cannot close the script element early: `</` is written as `<\\/`', () => {
+    const { config } = resolve({ identity: { brand: { name: 'x</script><script>alert(1)</script>', legalName: '<!-- y' } } });
+    const tag = identityScriptTag(config.identity);
+    const body = tag.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '');
+    expect(body).not.toContain('</script>');
+    expect(body).not.toContain('<!--');
+    expect(body).toContain('<\\/script>');
+    // …and it is still the same JSON to a parser.
+    expect(JSON.parse(body).brand.name).toBe('x</script><script>alert(1)</script>');
+    expect(JSON.parse(body).brand.legalName).toBe('<!-- y');
+  });
+
+  test('composeTitle: suffix, {brand} substitution, bare', () => {
+    expect(composeTitle('Þjónusta')).toBe('Þjónusta — Orange Smiley');
+    expect(composeTitle('{brand} — hugbúnaðarhús')).toBe('Orange Smiley — hugbúnaðarhús');
+    expect(composeTitle('Shop — Halli Smiley', 'bare')).toBe('Shop — Halli Smiley');
+    const { config } = resolve({ identity: DOWNSTREAM });
+    expect(composeTitle('Services', undefined, config.identity)).toBe('Services — Halli Smiley');
+    expect(composeTitle('{brand} — craft and code', undefined, config.identity)).toBe('Halli Smiley — craft and code');
+  });
+
+  test('the Organization alternateName is the brand plus its variants, minus the legal name', () => {
+    expect(organizationAlternateNames()).toEqual(['Orange Smiley', 'Orangesmiley', 'orange smiley', 'Rekstrarkerfið', 'Rekstrarkerfi']);
+    const { config } = resolve({ identity: DOWNSTREAM });
+    expect(organizationAlternateNames(config.identity)).toEqual(['hallismiley']);
+  });
+
+  test('the client merges a hand-off over its defaults and ignores what it cannot use', () => {
+    const merged = resolveIdentity({
+      brand: { name: 'Halli Smiley', titleSuffix: 42 },
+      theme: { picker: ['glacier', 3], default: 'glacier' },
+      hero: null,
+      bogus: { x: 1 },
+    });
+    expect(merged.brand.name).toBe('Halli Smiley');
+    expect(merged.brand.titleSuffix).toBe(' — Orange Smiley');   // wrong type → default
+    expect(merged.theme.picker).toEqual(['ember', 'classic', 'midnight']); // not all strings → default
+    expect(merged.theme.default).toBe('glacier');
+    expect(merged.hero.clip).toBe('/assets/videos/hero-dc7df-v2.mp4');
+    expect(merged.bogus).toBeUndefined();
+    expect(plain(resolveIdentity(null))).toEqual(ORANGE_SMILEY);
+    expect(plain(resolveIdentity(undefined))).toEqual(ORANGE_SMILEY);
+  });
+});
+
+// ── 3b. A non-default identity reaches the config readers ────────────────────
+// What a downstream needs: with its own client.json, the server-side readers
+// (publicSurface, themes, i18n) resolve to ITS values, not the engine's.
+
+describe('identity — a downstream identity flows through the config readers', () => {
+  let dir;
+  const savedFile = process.env.CLIENT_CONFIG_FILE;
+  const savedLocale = process.env.PUBLIC_DEFAULT_LOCALE;
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-seam-'));
+    fs.writeFileSync(path.join(dir, 'client.json'), JSON.stringify({ identity: DOWNSTREAM }));
+    process.env.CLIENT_CONFIG_FILE = path.join(dir, 'client.json');
+    delete process.env.PUBLIC_DEFAULT_LOCALE;
+  });
+
+  afterAll(() => {
+    if (savedFile === undefined) delete process.env.CLIENT_CONFIG_FILE;
+    else process.env.CLIENT_CONFIG_FILE = savedFile;
+    if (savedLocale !== undefined) process.env.PUBLIC_DEFAULT_LOCALE = savedLocale;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('publicSurface, themes and i18n read the downstream values', () => {
+    jest.isolateModules(() => {
+      const { clientConfig, problems } = require('../../server/config/clientConfig');
+      expect(problems).toEqual([]);
+      expect(clientConfig.identity.brand.name).toBe('Halli Smiley');
+
+      const { HIDDEN_PUBLIC_ROUTES, isHiddenRoute } = require('../../server/config/publicSurface');
+      expect(HIDDEN_PUBLIC_ROUTES).toEqual([]);
+      expect(isHiddenRoute('/news')).toBe(false);
+      expect(isHiddenRoute('/shop/some-slug')).toBe(false);
+
+      const { THEMES } = require('../../server/config/themes');
+      expect(THEMES).toEqual(['glacier', 'classic', 'midnight', 'ember', 'lava', 'moss']);
+
+      const { PUBLIC_DEFAULT_LOCALE, DEFAULT_LOCALE } = require('../../server/config/i18n');
+      expect(PUBLIC_DEFAULT_LOCALE).toBe('en');
+      expect(DEFAULT_LOCALE).toBe('en'); // the content dimension is untouched
+    });
+  });
+
+  test('the env var PUBLIC_DEFAULT_LOCALE still wins over the identity, as before the seam', () => {
+    process.env.PUBLIC_DEFAULT_LOCALE = 'is';
+    try {
+      jest.isolateModules(() => {
+        expect(require('../../server/config/i18n').PUBLIC_DEFAULT_LOCALE).toBe('is');
+      });
+    } finally {
+      delete process.env.PUBLIC_DEFAULT_LOCALE;
+    }
+  });
+});

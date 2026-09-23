@@ -5,14 +5,18 @@
 //   t('nav.home')              // → "Home"
 //   t('shop.inStock', {n: 3}) // → "3 in stock"
 
+import { getIdentity } from '../utils/identity.js';
+
 export const SUPPORTED_LOCALES = ['en', 'is'];
 // DEFAULT_LOCALE is the MESSAGE-FALLBACK dimension (which JSON backfills a
 // missing key) — it mirrors the server's content dimension and stays 'en'.
 // PUBLIC_DEFAULT_LOCALE is what a brand-new visitor with no signal reads the
-// site in — Orange Smiley is an Icelandic business, so 'is'. Mirrors
-// server/config/i18n.js.
+// site in — the PRODUCT's choice, identity.locale.publicDefault in
+// config/client.json ('is' for Orange Smiley, an Icelandic business), handed
+// to the page by ssrMeta and read here through utils/identity.js. Mirrors
+// server/config/i18n.js, which reads the same seam.
 export const DEFAULT_LOCALE        = 'en';
-export const PUBLIC_DEFAULT_LOCALE = 'is';
+export const PUBLIC_DEFAULT_LOCALE = getIdentity().locale.publicDefault;
 
 let _locale   = DEFAULT_LOCALE;
 let _messages = {};

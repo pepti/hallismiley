@@ -36,9 +36,101 @@ const path = require('path');
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 // Schema = defaults + validation, in one tree. A node is a leaf iff it has an
-// own `default`; anything else is a nested section. Adding a module means
-// adding a section here and nothing else.
+// own `type` AND `default`; anything else is a nested section. Adding a module
+// means adding a section here and nothing else.
 const SCHEMA = {
+  // ── Identity: what makes this product THIS product ─────────────────────────
+  //
+  // The engine is authored here and merged into every downstream (D-021).
+  // Everything a downstream would otherwise have to fork out of an engine file
+  // to look like itself — its name, its visitor locale, its theme set, its hero
+  // clip, which engine surfaces it hides, its Organization record — lives
+  // under this key instead, so `config/client.json` (product-owned, never
+  // synced) is the one file a product edits. The defaults ARE Orange Smiley's
+  // current values: an engine with no `identity` block behaves exactly as it
+  // did before the seam existed, and tests/unit/identityConfig.test.js pins
+  // those values ONCE so they cannot drift silently.
+  //
+  // Consumers (server): middleware/ssrMeta.js (titles, og:site_name, the
+  // Organization + WebSite JSON-LD, the <html data-*-theme> attributes and the
+  // `<script id="identity">` hand-off), config/i18n.js (PUBLIC_DEFAULT_LOCALE),
+  // config/publicSurface.js (hidden routes), config/themes.js (theme ids).
+  // Consumers (client): public/js/utils/identity.js parses the hand-off once
+  // and everything else reads it — theme-boot.js reads the <html> attributes
+  // because it runs before any module can.
+  identity: {
+    brand: {
+      // The name on the nav lockup, the footer, og:site_name and the tab
+      // fallback. A proper noun: the same in every locale.
+      name:      { type: 'string', default: 'Orange Smiley', validate: validateNonEmpty },
+      // The registered company, for the Organization record and <meta author>.
+      legalName: { type: 'string', default: 'Orange Smiley ehf.', validate: validateNonEmpty },
+      // Branded search variants bound to the site in the WebSite/Organization
+      // schemas, so knowledge graphs treat them as one entity.
+      alternateNames: { type: 'string[]', default: ['Orangesmiley', 'Orange Smiley ehf.', 'orange smiley', 'Rekstrarkerfið', 'Rekstrarkerfi'] },
+      // Appended to every page-part title ("Þjónusta" + " — Orange Smiley").
+      // The page parts stay in ssrMeta.js / pageTitle.js; a part that carries
+      // a `{brand}` placeholder (the home page) is substituted instead of
+      // suffixed. Leading space and dash included on purpose: the product
+      // decides the separator.
+      titleSuffix: { type: 'string', default: ' — Orange Smiley' },
+    },
+    locale: {
+      // The locale a visitor with no signal reads the site in. The env var
+      // PUBLIC_DEFAULT_LOCALE still wins over this (config/i18n.js), as it
+      // did before the seam. Must be one of SUPPORTED_LOCALES.
+      publicDefault: { type: 'string', default: 'is', validate: validateLocaleId },
+    },
+    theme: {
+      // `default` is what a visitor gets with nothing stored; `root` is the
+      // theme whose tokens ARE :root (no data-theme attribute); `picker` is the
+      // set, in picker order. The cross-field check below rejects a picker
+      // that lacks the default or the root and restores all three defaults.
+      default: { type: 'string',   default: 'ember',   validate: validateThemeId },
+      root:    { type: 'string',   default: 'classic', validate: validateThemeId },
+      picker:  { type: 'string[]', default: ['ember', 'classic', 'midnight'], validate: validateThemeIds },
+    },
+    hero: {
+      // The home hero clip and its still. A new clip gets a NEW filename —
+      // the public/ mount caches for an hour.
+      clip:   { type: 'string', default: '/assets/videos/hero-dc7df-v2.mp4',        validate: validateAssetPath },
+      poster: { type: 'string', default: '/assets/videos/hero-dc7df-v2-poster.jpg', validate: validateAssetPath },
+    },
+    surface: {
+      // Engine routes this product keeps functional but off every discovery
+      // surface (nav, sitemap, search). Prefix-aware: '/news' hides
+      // '/news/<slug>' too. See config/publicSurface.js.
+      hiddenRoutes: {
+        type: 'string[]',
+        default: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
+        validate: validateRoutePaths,
+      },
+      // Admin screens hidden from the sidebar for accounts that hold every
+      // view; routes and ids stay live and grantable. Every id must be a real
+      // ADMIN_VIEW_IDS entry — tests/unit/admin-surface-parity.test.js checks
+      // the resolved list, so a typo cannot silently hide nothing.
+      hiddenAdminViews: {
+        type: 'string[]',
+        default: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+        validate: validateViewIds,
+      },
+    },
+    organization: {
+      // The Organization JSON-LD every page's publisher/provider/author refs
+      // resolve to (`${APP_URL}/#organization`). `name` is brand.legalName;
+      // `url` and the @id derive from APP_URL at request time.
+      email:           { type: 'string',   default: 'info@orangesmiley.is' },
+      description:     { type: 'string',   default: 'Icelandic software company building and operating websites, online stores and business systems for small and medium businesses — one platform, one monthly subscription.' },
+      logo:            { type: 'string',   default: '/favicon.svg',  validate: validateAssetPath },
+      image:           { type: 'string',   default: '/og-image.jpg', validate: validateAssetPath },
+      addressLocality: { type: 'string',   default: 'Hafnarfjörður' },
+      addressCountry:  { type: 'string',   default: 'IS' },
+      areaServed:      { type: 'string',   default: 'Iceland' },
+      knowsAbout:      { type: 'string[]', default: ['Web Development', 'E-commerce', 'Inventory Management', 'Invoicing', 'VAT Accounting', 'Shopify Migration', 'Node.js', 'PostgreSQL'] },
+      // Profile URLs (LinkedIn, Facebook, GitHub…) for schema.org sameAs.
+      sameAs:          { type: 'string[]', default: [], validate: validateHttpsUrls },
+    },
+  },
   modules: {
     selfUpdate: {
       // Is the module present on this instance at all? Off means: no checker,
@@ -112,10 +204,73 @@ function validateTimeZone(value) {
   }
 }
 
+// ── Identity validators ──────────────────────────────────────────────────────
+// Each guards the shape a consumer relies on; the value is already coerced to
+// the leaf's declared type, so a string[] validator receives an array.
+
+function validateNonEmpty(value) {
+  return String(value).trim() === '' ? 'must not be empty' : null;
+}
+
+// A BCP-47-ish primary tag: 'is', 'en', 'pt-br'. Membership in
+// SUPPORTED_LOCALES is config/i18n.js's concern (it is env-driven).
+function validateLocaleId(value) {
+  return /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/.test(value) ? null : 'must be a lowercase locale id such as "is"';
+}
+
+// Theme ids ride html[data-theme="…"] and localStorage; keep them attribute-
+// and-CSS-safe.
+const THEME_ID_RE = /^[a-z][a-z0-9-]*$/;
+function validateThemeId(value) {
+  return THEME_ID_RE.test(value) ? null : 'must be a theme id matching ^[a-z][a-z0-9-]*$';
+}
+function validateThemeIds(list) {
+  if (!list.length) return 'must list at least one theme';
+  const bad = list.filter(id => !THEME_ID_RE.test(id));
+  if (bad.length) return `has ids that do not match ^[a-z][a-z0-9-]*$ (${bad.join(', ')})`;
+  if (new Set(list).size !== list.length) return 'must not repeat a theme id';
+  return null;
+}
+
+// A site-relative path ('/assets/…') or an absolute https URL (a CDN).
+function validateAssetPath(value) {
+  if (/^\/[^\s"'<>]*$/.test(value)) return null;
+  if (/^https:\/\/[^\s"'<>]+$/.test(value)) return null;
+  return 'must be a site-relative path starting with "/" or an https URL';
+}
+
+// Hidden routes are matched by prefix against the locale-stripped path, so
+// each must be a bare '/segment[/…]' — no locale prefix, no trailing slash,
+// never '/' itself (that would hide the whole site).
+function validateRoutePaths(list) {
+  const bad = list.filter(p => !/^\/[a-z0-9][a-z0-9/_-]*$/i.test(p) || p.endsWith('/'));
+  return bad.length ? `has entries that are not bare routes like "/news" (${bad.join(', ')})` : null;
+}
+
+// Admin view ids are lowercase words (server/auth/adminViews.js). Whether each
+// one EXISTS is checked by tests/unit/admin-surface-parity.test.js against the
+// resolved config — this module stays dependency-free.
+function validateViewIds(list) {
+  const bad = list.filter(id => !/^[a-z][a-z0-9_-]*$/.test(id));
+  return bad.length ? `has entries that are not admin view ids (${bad.join(', ')})` : null;
+}
+
+function validateHttpsUrls(list) {
+  const bad = list.filter(u => {
+    try { return new URL(u).protocol !== 'https:'; } catch { return true; }
+  });
+  return bad.length ? `has entries that are not https URLs (${bad.join(', ')})` : null;
+}
+
 // ── Schema helpers ───────────────────────────────────────────────────────────
 
+// A leaf carries BOTH `type` and `default`. Checking `default` alone would
+// misread a section that has a child leaf called `default` (identity.theme
+// .default is exactly that) as a leaf of its own.
 function isLeaf(node) {
-  return !!node && typeof node === 'object' && Object.prototype.hasOwnProperty.call(node, 'default');
+  return !!node && typeof node === 'object'
+    && Object.prototype.hasOwnProperty.call(node, 'default')
+    && Object.prototype.hasOwnProperty.call(node, 'type');
 }
 
 function isPlainObject(value) {
@@ -322,6 +477,19 @@ function resolveConfig({ fileConfig = {}, env = process.env, schema = SCHEMA } =
   }
   if (!window.days.length) {
     warnings.push('modules.selfUpdate.maintenanceWindow.days is empty — auto updates would never run');
+  }
+
+  // The theme trio only makes sense together: a default the picker does not
+  // offer would paint a theme nobody can choose back, and a root outside the
+  // picker would leave :root's tokens unreachable. Reject the whole trio and
+  // fall back to the schema's, rather than half of a product's choice.
+  const theme = config.identity && config.identity.theme;
+  const missing = theme ? [theme.default, theme.root].filter(id => !theme.picker.includes(id)) : [];
+  if (missing.length) {
+    warnings.push(
+      `identity.theme.picker [${theme.picker.join(', ')}] does not include ${missing.map(m => `"${m}"`).join(' and ')} — keeping the default theme set`
+    );
+    config.identity.theme = defaultsFrom(schema).identity.theme;
   }
 
   return { config, warnings };

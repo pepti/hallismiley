@@ -104,6 +104,12 @@ afterAll(() => {
   delete process.env.SELLER_PUBLISH_SECRET;
 });
 
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this suite belongs to, or when the feature is another product's
+// (features/local.json — see tests/lib/featureGate.js). Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('Snapshot (ops)', () => {
   test('publishes sellers by their views; never admins, disabled users, rates or kennitala', async () => {
     const snap = await buildSnapshot(db.pool);

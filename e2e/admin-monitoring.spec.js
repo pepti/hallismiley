@@ -2,6 +2,10 @@
 // stylesheet, which the H4 harvest had left behind (the view rendered with no
 // admin-monitoring.css until 2026-09-02).
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { loginAsAdmin } = require('./helpers');
 
 test.use({ viewport: { width: 1280, height: 900 } });

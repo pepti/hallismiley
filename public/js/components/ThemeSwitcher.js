@@ -9,7 +9,7 @@
 import { t } from '../i18n/i18n.js';
 import { isAdmin } from '../services/auth.js';
 import {
-  THEMES, THEME_SWATCHES, DARK_THEMES, getTheme, setTheme,
+  THEMES, swatchFor, DARK_THEMES, getTheme, setTheme,
   getServerEnv, getEffectiveEnv, setTestOverride,
 } from '../services/themePrefs.js';
 import {
@@ -164,7 +164,7 @@ export class ThemeSwitcher {
     wire('theme-switcher__amb-sound', soundEnabled, setSoundEnabled);
 
     this.popover.querySelectorAll('.theme-switcher__swatch').forEach((btn) => {
-      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
+      btn.style.setProperty('--swatch', swatchFor(btn.dataset.themeId));
       btn.addEventListener('click', () => {
         setTheme(btn.dataset.themeId);
         this.popover.querySelectorAll('.theme-switcher__swatch')

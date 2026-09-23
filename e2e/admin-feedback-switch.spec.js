@@ -4,6 +4,10 @@
 // governs the live site. Persisting the switch is what is under test here; the
 // server gate itself is covered by tests/integration/changeRequests.test.js.
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { loginAsAdmin } = require('./helpers');
 
 test.use({ viewport: { width: 1280, height: 900 } });

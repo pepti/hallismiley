@@ -104,7 +104,24 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   (the tool does this).
 - **Engine tests**: start from theirs, re-apply the product's expectations on
   top (a downstream's spec adaptation is a diff over the engine spec, never a
-  fork).
+  fork). Two mechanisms make that diff small, and both are config, not hooks:
+  - **Identity is config, not a hook.** Brand, legal name, title suffix,
+    visitor-default locale, theme trio, hero clip, hidden public routes,
+    hidden admin views and the Organization record live under `identity.*` in
+    `config/client.json` (schema + Orange Smiley defaults in
+    `server/config/clientConfig.js`; the email strings take `{siteName}` /
+    `{siteHost}` from the same seam). Engine code AND engine tests read the
+    seam — `clientConfig.identity` server-side, `utils/identity.js` client-side,
+    `e2e/lib/identity.js` in Playwright — so a downstream sets its block once
+    and the engine's suites assert its values. A sync never conflicts on a
+    brand literal because the engine carries none.
+  - **Tests for a hidden feature skip; never delete an engine spec.** A
+    feature the product hides, disables or forks is recorded in
+    `features/local.json`; the feature gate (`tests/lib/featureGate.js`,
+    `e2e/lib/featureGate.js`) maps each suite to its feature through the
+    registry's `paths` and `test.skip`s it with the note. Another product's
+    feature files (`features/<other>/`) are inert, so their suites skip too.
+    `describe.skip` by hand in a downstream is the smell this replaces.
 - **Migrations**: the engine array (`schema.js`) is taken verbatim; the product
   array (`product-migrations/<id>.js`) is local. Never renumber, never move an
   entry between the two arrays in a downstream — `aliases` and `superseded`
@@ -115,11 +132,15 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
 
 ## 7. What never syncs
 
-`company/` · `config/client.json` · `.env*` · brand token VALUES
-(`variables.css` / `themes.css` hues — the machinery syncs, the hues do not) ·
-the `publicSurface.js` lists · `fleet.json` · `features/local.json` ·
-`features/<product>/` · `engine.json`. These are product-owned by definition
-and appear in `.engine-paths`.
+`company/` · `config/client.json` (including its `identity` block — the
+product's brand, locale, theme trio, hero, hidden surfaces, Organization) ·
+`.env*` · brand token VALUES (`variables.css` / `themes.css` hues — the
+machinery syncs, the hues do not) · `fleet.json` · `features/local.json` ·
+`features/<product>/` · `engine.json` · `server/i18n/product.*.json` and
+`public/js/i18n/product.*.json`. These are product-owned by definition and
+appear in `.engine-paths`. (`publicSurface.js` and `adminSurface.js` DO sync
+since 2026-09-22: their lists come from `identity.surface.*`, so the files
+carry no product data any more.)
 
 ## 8. The upward path
 

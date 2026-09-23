@@ -45,6 +45,12 @@ const row = async (slug) => (await db.query('SELECT title, summary, body FROM sa
 const FLAT_TIERS = [/\b59\b/, /\b79\b/, /39\s*\/\s*59\s*\/\s*79/, /Vefur\s*(?:—|\()?\s*39\b/,
   /fellur niður með árssamningi/, /Flöt áskrift/, /kostar áskrift/];
 
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this suite belongs to, or when the feature is another product's
+// (features/local.json — see tests/lib/featureGate.js). Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('os_001 — sales guides on the D-001 price model and the demo instance', () => {
   beforeEach(async () => { await db.query('DELETE FROM sales_guides WHERE slug = ANY($1)', [SLUGS]); });
   afterAll(async () => { await db.query('DELETE FROM sales_guides WHERE slug = ANY($1)', [SLUGS]); });

@@ -1,0 +1,84 @@
+'use strict';
+
+// ── Product identity, resolved ───────────────────────────────────────────────
+//
+// `clientConfig.identity` is the seam (server/config/clientConfig.js: schema
+// defaults < config/client.json < CLIENT_CONFIG_IDENTITY_* env). This module is
+// its one server-side reader plus the pure helpers that turn it into the bits
+// the SSR'd page carries — kept free of the database and of Express so the
+// unit tier can exercise them (tests/unit/identityConfig.test.js).
+//
+// The client hand-off has two halves, because the theme has to be on <html>
+// before first paint and theme-boot.js runs before any module can parse JSON:
+//   • htmlIdentityAttrs()  → data-default-theme / data-theme-picker /
+//                            data-root-theme on <html>, read by theme-boot.js;
+//   • identityScriptTag()  → <script id="identity" type="application/json">,
+//                            parsed once by public/js/utils/identity.js for
+//                            everything else (brand, locale, hero, surfaces).
+
+const { clientConfig } = require('./clientConfig');
+
+/** The resolved identity for this instance (deep-frozen with the config). */
+const identity = clientConfig.identity;
+
+/**
+ * Attributes for the <html> element, as one string ready to splice after
+ * `lang="…"`. theme-boot.js reads them with the engine defaults as fallback,
+ * so a shell served without SSR still boots.
+ */
+function htmlIdentityAttrs(id = identity) {
+  const t = id.theme;
+  return `data-default-theme="${escAttr(t.default)}" data-theme-picker="${escAttr(t.picker.join(' '))}" data-root-theme="${escAttr(t.root)}"`;
+}
+
+/**
+ * The JSON hand-off. `</` is escaped as `<\/` (a legal JSON escape) so no
+ * value can close the script element early; `<!--` likewise, so an HTML
+ * comment opener inside a value cannot swallow the rest of the head.
+ */
+function identityScriptTag(id = identity) {
+  const json = JSON.stringify(id)
+    .replace(/<\//g, '<\\/')
+    .replace(/<!--/g, '\\u003c!--');
+  return `<script id="identity" type="application/json">${json}</script>`;
+}
+
+/**
+ * Compose a document title from a page part.
+ *   • `mode === 'bare'`          → the part as written (the hidden portfolio
+ *                                  surfaces keep their own full titles);
+ *   • a part carrying `{brand}`  → the placeholder substituted, no suffix
+ *                                  (the home page: "Orange Smiley — …");
+ *   • otherwise                  → part + brand.titleSuffix.
+ * public/js/utils/pageTitle.js composes exactly the same way for client-side
+ * navigation; tests/unit/pageTitle.test.js and identityConfig.test.js hold
+ * the two together.
+ */
+function composeTitle(part, mode, id = identity) {
+  const s = String(part ?? '');
+  if (mode === 'bare') return s;
+  if (s.includes('{brand}')) return s.split('{brand}').join(id.brand.name);
+  return s + id.brand.titleSuffix;
+}
+
+/** Organization alternateName: the brand plus its variants, minus the legal
+ *  name that is already `name`. Order preserved, duplicates dropped. */
+function organizationAlternateNames(id = identity) {
+  const out = [];
+  for (const n of [id.brand.name, ...id.brand.alternateNames]) {
+    if (n && n !== id.brand.legalName && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+function escAttr(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+module.exports = {
+  identity,
+  htmlIdentityAttrs,
+  identityScriptTag,
+  composeTitle,
+  organizationAlternateNames,
+};
