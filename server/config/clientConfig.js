@@ -84,11 +84,15 @@ const SCHEMA = {
     theme: {
       // `default` is what a visitor gets with nothing stored; `root` is the
       // theme whose tokens ARE :root (no data-theme attribute); `picker` is the
-      // set, in picker order. The cross-field check below rejects a picker
-      // that lacks the default or the root and restores all three defaults.
+      // set, in picker order; `dark` names the ids that paint a dark page (the
+      // pickers rim those swatches). The cross-field check below rejects a
+      // picker that lacks the DEFAULT and restores the whole set. The root
+      // need not be in the picker (identity-seam-2): a two-theme product can
+      // keep :root as an unlisted base and offer only its own ids.
       default: { type: 'string',   default: 'ember',   validate: validateThemeId },
       root:    { type: 'string',   default: 'classic', validate: validateThemeId },
       picker:  { type: 'string[]', default: ['ember', 'classic', 'midnight'], validate: validateThemeIds },
+      dark:    { type: 'string[]', default: ['ember', 'midnight'], validate: validateThemeIdList },
     },
     hero: {
       // The home hero clip and its still. A new clip gets a NEW filename —
@@ -97,6 +101,23 @@ const SCHEMA = {
       poster: { type: 'string', default: '/assets/videos/hero-dc7df-v2-poster.jpg', validate: validateAssetPath },
     },
     surface: {
+      // The public IA, in order: the links after "Home" in the top nav and
+      // both footers, and (with '/' and the legal pages) the sitemap. Each
+      // entry is { route, labelKey }: a bare engine route and the i18n key of
+      // its label (engine table or the product overlay). A downstream lists
+      // its own — hallismiley: verkefni, news, halli. Home is never listed:
+      // the lockup and the first link are always '/'. A route that is also in
+      // hiddenRoutes is dropped by the readers (config/publicSurface.js,
+      // utils/identity.js) rather than advertised and noindexed at once.
+      nav: {
+        type: 'object[]',
+        default: [
+          { route: '/thjonusta',    labelKey: 'nav.thjonusta' },
+          { route: '/um-okkur',     labelKey: 'nav.umOkkur' },
+          { route: '/hafa-samband', labelKey: 'nav.hafaSamband' },
+        ],
+        validate: validateNavEntries,
+      },
       // Engine routes this product keeps functional but off every discovery
       // surface (nav, sitemap, search). Prefix-aware: '/news' hides
       // '/news/<slug>' too. See config/publicSurface.js.
@@ -226,6 +247,10 @@ function validateThemeId(value) {
 }
 function validateThemeIds(list) {
   if (!list.length) return 'must list at least one theme';
+  return validateThemeIdList(list);
+}
+// The same shape, but empty is fine (a product may paint no dark theme).
+function validateThemeIdList(list) {
   const bad = list.filter(id => !THEME_ID_RE.test(id));
   if (bad.length) return `has ids that do not match ^[a-z][a-z0-9-]*$ (${bad.join(', ')})`;
   if (new Set(list).size !== list.length) return 'must not repeat a theme id';
@@ -245,6 +270,24 @@ function validateAssetPath(value) {
 function validateRoutePaths(list) {
   const bad = list.filter(p => !/^\/[a-z0-9][a-z0-9/_-]*$/i.test(p) || p.endsWith('/'));
   return bad.length ? `has entries that are not bare routes like "/news" (${bad.join(', ')})` : null;
+}
+
+// A nav entry is a bare route (same shape as a hidden route) plus the i18n
+// key of its label. Nothing else is read, so nothing else is accepted.
+const NAV_ROUTE_RE = /^\/[a-z0-9][a-z0-9/_-]*$/i;
+const I18N_KEY_RE  = /^[a-z0-9_$]+(?:\.[a-z0-9_$-]+)+$/i;
+function validateNavEntries(list) {
+  const bad = [];
+  const seen = new Set();
+  for (const e of list) {
+    if (!isPlainObject(e) || typeof e.route !== 'string' || typeof e.labelKey !== 'string') { bad.push(JSON.stringify(e)); continue; }
+    if (!NAV_ROUTE_RE.test(e.route) || e.route.endsWith('/')) bad.push(e.route);
+    else if (!I18N_KEY_RE.test(e.labelKey)) bad.push(`${e.route}: ${e.labelKey}`);
+    else if (Object.keys(e).some(k => k !== 'route' && k !== 'labelKey')) bad.push(`${e.route}: unknown field`);
+    else if (seen.has(e.route)) bad.push(`${e.route} repeated`);
+    seen.add(e.route);
+  }
+  return bad.length ? `has entries that are not { route: "/bare-route", labelKey: "nav.key" } (${bad.join(', ')})` : null;
 }
 
 // Admin view ids are lowercase words (server/auth/adminViews.js). Whether each
@@ -295,15 +338,20 @@ function walkSchema(node, visit, segments = []) {
   }
 }
 
-/** Fresh defaults tree (fresh arrays, so callers can never share mutable state). */
+/** Fresh defaults tree (fresh arrays and fresh objects inside them, so
+ *  callers can never share mutable state). */
 function defaultsFrom(node) {
   const out = {};
   for (const [key, child] of Object.entries(node)) {
     out[key] = isLeaf(child)
-      ? (Array.isArray(child.default) ? child.default.slice() : child.default)
+      ? (Array.isArray(child.default) ? child.default.map(cloneValue) : child.default)
       : defaultsFrom(child);
   }
   return out;
+}
+
+function cloneValue(v) {
+  return isPlainObject(v) ? { ...v } : v;
 }
 
 function getIn(obj, segments) {
@@ -364,6 +412,18 @@ function coerce(leaf, raw) {
         return { error: 'must be an array of strings' };
       }
       return { value: list };
+    }
+
+    // A list of plain objects (the nav entries). From JSON it is already an
+    // array; an env var carries it as a JSON string. What the objects must
+    // hold is the leaf validator's job.
+    case 'object[]': {
+      let list = raw;
+      if (typeof raw === 'string') {
+        try { list = JSON.parse(raw.trim()); } catch { return { error: 'must be a JSON array of objects' }; }
+      }
+      if (!Array.isArray(list) || !list.every(isPlainObject)) return { error: 'must be an array of objects' };
+      return { value: list.map(cloneValue) };
     }
 
     /* istanbul ignore next — unreachable while every leaf uses a type above */
@@ -479,15 +539,15 @@ function resolveConfig({ fileConfig = {}, env = process.env, schema = SCHEMA } =
     warnings.push('modules.selfUpdate.maintenanceWindow.days is empty — auto updates would never run');
   }
 
-  // The theme trio only makes sense together: a default the picker does not
-  // offer would paint a theme nobody can choose back, and a root outside the
-  // picker would leave :root's tokens unreachable. Reject the whole trio and
-  // fall back to the schema's, rather than half of a product's choice.
+  // The theme set only makes sense together: a default the picker does not
+  // offer would paint a theme nobody can choose back. Reject the whole set and
+  // fall back to the schema's, rather than half of a product's choice. The
+  // root may sit outside the picker (a two-theme product keeps :root as an
+  // unlisted base); `dark` ids outside the picker are simply never asked for.
   const theme = config.identity && config.identity.theme;
-  const missing = theme ? [theme.default, theme.root].filter(id => !theme.picker.includes(id)) : [];
-  if (missing.length) {
+  if (theme && !theme.picker.includes(theme.default)) {
     warnings.push(
-      `identity.theme.picker [${theme.picker.join(', ')}] does not include ${missing.map(m => `"${m}"`).join(' and ')} — keeping the default theme set`
+      `identity.theme.picker [${theme.picker.join(', ')}] does not include "${theme.default}" — keeping the default theme set`
     );
     config.identity.theme = defaultsFrom(schema).identity.theme;
   }

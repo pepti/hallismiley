@@ -82,10 +82,11 @@ test.describe('admin nav — hidden-by-policy retail lines', () => {
     await expect(page.locator('.admin-sidebar a[data-route="/admin/books/pos"]')).toHaveCount(0);
     // No orphan "Verslun" header for an all-hidden group.
     await expect(page.locator('.admin-sidebar__group-title', { hasText: /^Verslun$/ })).toHaveCount(0);
-    // Payroll stays (Halli), and the business groups are there.
-    await expect(page.locator(PAYROLL_LINK)).toHaveCount(1);
-    await expect(page.locator('.admin-sidebar a[data-route="/admin/handbok"]')).toHaveCount(1);
-    await expect(page.locator('.admin-sidebar a[data-route="/admin/feedback"]')).toHaveCount(1);
+    // Payroll stays (Halli), and the business groups are there — each only
+    // where this product does not hide the line (identity.surface.hiddenAdminViews).
+    for (const [id, link] of [['payroll', PAYROLL_LINK], ['handbok', '.admin-sidebar a[data-route="/admin/handbok"]'], ['feedback', '.admin-sidebar a[data-route="/admin/feedback"]']]) {
+      await expect(page.locator(link)).toHaveCount(HIDDEN.includes(id) ? 0 : 1);
+    }
   });
 
   test('an admin can reveal a hidden line in edit mode, it persists, and Reset re-hides it', async ({ page }) => {

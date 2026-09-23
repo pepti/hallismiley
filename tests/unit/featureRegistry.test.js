@@ -237,11 +237,14 @@ describe('another product\'s folder is inert in a downstream', () => {
   fs.cpSync(path.join(ROOT, 'features'), path.join(tmp, 'features'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'engine.json'), JSON.stringify({ product: 'zz', role: 'product' }));
 
-  test('features/os/* load as foreign and claim no product-owned path', () => {
+  test('every other product’s folder loads as foreign and claims no product-owned path', () => {
     const loaded = idx.loadFeatures(tmp);
     const foreign = loaded.filter((f) => f.foreign);
     expect(foreign.length).toBeGreaterThan(0);
-    expect(foreign.every((f) => f.file.startsWith('features/os/'))).toBe(true);
+    // The engine's own folder (features/os/) is foreign to "zz", and so is any
+    // other product folder a downstream carries — never the engine level.
+    expect(foreign.every((f) => f.folderOwner !== 'engine' && f.folderOwner !== 'zz')).toBe(true);
+    expect(foreign.some((f) => f.file.startsWith('features/os/'))).toBe(true);
     const paths = idx.generateAll(tmp)['.engine-paths'];
     const lines = paths.split(/\r?\n/);
     // Foreign feature paths never reach the per-feature block (the fixed block

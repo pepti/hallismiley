@@ -17,6 +17,12 @@ beforeEach(async () => {
   userCookie  = await getTestSessionCookie(await createTestRegularUser());
 });
 
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('GET /api/v1/system/version — access', () => {
   test('anonymous callers get 401 in the standard envelope', async () => {
     const res = await request(app).get(URL);

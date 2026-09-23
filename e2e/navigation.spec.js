@@ -7,6 +7,7 @@ gateSpec(test, __filename);
 // (config/client.json → <script id="identity">), never from a literal, so the
 // engine's spec passes unchanged in a downstream with its own identity.
 const { identity, readIdentity, escapeRe } = require('./lib/identity');
+const { tClient } = require('./lib/locale');
 
 test.describe('Navigation — basic page loads', () => {
 
@@ -140,15 +141,24 @@ test.describe('Navigation — basic page loads', () => {
 // has the URL, and the underlying APIs and admin surfaces are untouched.
 test.describe('Hidden surfaces — unlinked but functional', () => {
 
-  test('the public nav offers only the business routes', async ({ page }) => {
+  test('the public nav offers home + identity.surface.nav and none of the hidden routes', async ({ page }) => {
+    // The list is the product's (config/client.json), read through the same
+    // seam the NavBar reads — never a route literal.
     await page.goto('/');
+    const served = await readIdentity(page);
+    expect(served.surface.nav).toEqual(identity.surface.nav);
     const nav = page.locator('.lol-nav__center');
-    for (const route of ['/party', '/shop', '/news', '/halli', '/projects', '/contact', '/verkefni']) {
+    const hidden = (r) => identity.surface.hiddenRoutes.some((h) => r === h || r.startsWith(h + '/'));
+    const shown = identity.surface.nav.filter((e) => !hidden(e.route)).map((e) => e.route);
+    const links = nav.locator('.lol-nav__link[data-route]');
+    await expect(links).toHaveCount(1 + shown.length);
+    expect(await links.evaluateAll((as) => as.map((a) => a.dataset.route))).toEqual(['/', ...shown]);
+    for (const route of identity.surface.hiddenRoutes) {
       await expect(nav.locator(`[data-route="${route}"]`)).toHaveCount(0);
     }
-    for (const route of ['/', '/thjonusta', '/um-okkur', '/hafa-samband']) {
-      await expect(nav.locator(`[data-route="${route}"]`)).toHaveCount(1);
-    }
+    // The footer nav row carries the same list.
+    const footer = page.locator('.lol-footer__top .lol-footer__nav-link');
+    await expect(footer).toHaveCount(1 + shown.length);
   });
 
   test('the personal bio page still renders at its route', async ({ page }) => {
@@ -175,10 +185,12 @@ test.describe('Tab title follows SPA navigation', () => {
   // hugbúnaðarhús knúið gervigreind". utils/pageTitle.js + the router hook fixed
   // that; tests/unit/pageTitle.test.js pins the page parts against the server's,
   // and this pins that a CLIENT-SIDE navigation actually applies them. The
-  // brand and the suffix are the product identity's; the page parts are the
-  // engine's (ssrMeta DEFAULT_META).
+  // brand and the suffix are the product identity's; the page parts are i18n
+  // keys (`meta.<key>.title`, engine table + product overlay) composed the
+  // same way on both sides — read here from the SPA table (e2e/lib/locale.js).
   const { name, titleSuffix } = identity.brand;
-  const HOME_IS = `${name} — hugbúnaðarhús knúið gervigreind`;
+  const part = (key, lc) => tClient(key, {}, lc).split('{brand}').join(name);
+  const HOME_IS = part('meta.home.title', 'is');
 
   test('a client-side navigation retitles the tab, matching the SSR title', async ({ page }) => {
     await page.goto('/is/');
@@ -187,18 +199,18 @@ test.describe('Tab title follows SPA navigation', () => {
     // Navigate the way a visitor does — click the nav, no page load.
     await page.click('a[href="/is/thjonusta"]');
     await expect(page).toHaveURL(/\/is\/thjonusta$/);
-    await expect(page).toHaveTitle(`Þjónusta${titleSuffix}`);
+    await expect(page).toHaveTitle(`${part('meta.thjonusta.title', 'is')}${titleSuffix}`);
 
     // And a direct load of the same URL must agree, or the tab would say one
     // thing on load and another after a click.
     await page.goto('/is/thjonusta');
-    await expect(page).toHaveTitle(`Þjónusta${titleSuffix}`);
+    await expect(page).toHaveTitle(`${part('meta.thjonusta.title', 'is')}${titleSuffix}`);
   });
 
   test('going back restores the previous title', async ({ page }) => {
     await page.goto('/is/');
     await page.click('a[href="/is/um-okkur"]');
-    await expect(page).toHaveTitle(`Um okkur${titleSuffix}`);
+    await expect(page).toHaveTitle(`${part('meta.umOkkur.title', 'is')}${titleSuffix}`);
     await page.goBack();
     await expect(page).toHaveURL(/\/is\/$/);
     await expect(page).toHaveTitle(HOME_IS);
@@ -207,7 +219,7 @@ test.describe('Tab title follows SPA navigation', () => {
   test('the English side is titled in English', async ({ page }) => {
     await page.goto('/en/');
     await page.click('a[href="/en/thjonusta"]');
-    await expect(page).toHaveTitle(`Services${titleSuffix}`);
+    await expect(page).toHaveTitle(`${part('meta.thjonusta.title', 'en')}${titleSuffix}`);
   });
 
   test('the nav lockup and the footer carry the brand the server handed the page', async ({ page }) => {

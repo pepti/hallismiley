@@ -1,6 +1,6 @@
 import { isAuthenticated, getUser, logout, updateProfile, hasAnyAdminView, isSeller } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
-import { getIdentity } from '../utils/identity.js';
+import { getIdentity, publicNav } from '../utils/identity.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
 import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES, forcedLocaleFor } from '../i18n/i18n.js';
@@ -82,7 +82,7 @@ export class NavBar {
     return `
       <!-- Left: Brand -->
       <div class="lol-nav__brand">
-        <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="${t('nav.brandAriaLabel')}">
+        <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="${escHtml(t('nav.brandAriaLabel', { siteName: getIdentity().brand.name }))}">
           <div class="lol-nav__logo-icon" aria-hidden="true">
             <!-- The emblem: cut-corner plate, molten gradient rim, inner
                  hairline, engraved smile ("4.1", Halli's pick 2026-08-09).
@@ -123,12 +123,14 @@ export class NavBar {
         </a>
       </div>
 
-      <!-- Center: Navigation links + (on mobile) language toggle + auth CTAs -->
+      <!-- Center: Navigation links + (on mobile) language toggle + auth CTAs.
+           Home, then the product's public IA (identity.surface.nav minus its
+           hidden routes — utils/identity.js publicNav()): the engine carries
+           no route literal here, so a downstream lists its own pages in
+           config/client.json and this bar follows. -->
       <div class="lol-nav__center" id="nav-menu">
         <a href="${navHref('/')}"             class="lol-nav__link" data-route="/"             data-i18n="nav.home">${t('nav.home')}</a>
-        <a href="${navHref('/thjonusta')}"    class="lol-nav__link" data-route="/thjonusta"    data-i18n="nav.thjonusta">${t('nav.thjonusta')}</a>
-        <a href="${navHref('/um-okkur')}"     class="lol-nav__link" data-route="/um-okkur"     data-i18n="nav.umOkkur">${t('nav.umOkkur')}</a>
-        <a href="${navHref('/hafa-samband')}" class="lol-nav__link" data-route="/hafa-samband" data-i18n="nav.hafaSamband">${t('nav.hafaSamband')}</a>
+        ${publicNav().map(e => `<a href="${navHref(e.route)}" class="lol-nav__link" data-route="${escHtml(e.route)}" data-i18n="${escHtml(e.labelKey)}">${escHtml(t(e.labelKey))}</a>`).join('\n        ')}
         <div class="lol-nav__mobile-extras">
           ${this._langSwitcherHtml()}
           <div class="lol-nav__auth" id="nav-auth-mobile"></div>

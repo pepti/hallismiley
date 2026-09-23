@@ -35,6 +35,12 @@ afterEach(() => {
   else process.env.SELF_UPDATE_TRIGGER_URL = savedTrigger;
 });
 
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('POST /api/v1/system/updates/:id/apply — access', () => {
   test('anonymous is 401', async () => {
     const res = await request(app).post(applyUrl(update.id));

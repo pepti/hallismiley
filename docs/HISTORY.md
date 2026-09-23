@@ -46,6 +46,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
 | 2026-09-22 | [Leads transfer — enquiries from the other instances reach ops (D-020 step 4)](#leads-transfer-2026-09-22) | `leads:export` (submission fields only) / `leads:import` (one transaction, `ON CONFLICT DO NOTHING`, an ops row is never updated); by hand weekly, a timer once ops is on Azure; no migration |
 | 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
+| 2026-09-23 | [Identity seam, second iteration — the public IA, the page meta and the engine-only pins (D-021)](#identity-seam-2-2026-09-23) | `identity.surface.nav` drives the nav, both footers and the sitemap; `meta.<key>.*` i18n keys replace the ssrMeta/pageTitle literals; `/manifest.json` and the Product brand from the identity; engine suites assert the visitor default via `tests/lib/locale.js`; engine-only pins gated on `engine.json.role`; the `.view` fade fill-mode dropped (hallismiley's news-editor regression); no migration |
 | 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
 
 ---
@@ -1318,3 +1319,119 @@ graft) and the rk-only hunks trimmed. Branch `from-rk/2026-09-23`.
 **Next harvest candidates seen in rk** (not picked): `features/rk/social-login-gate.md`
 and `features/rk/request-logging.md`; the issuer/`brand.name` hunk once the
 identity seam has landed.
+<a id="identity-seam-2-2026-09-23"></a>
+## 2026-09-23 — Identity seam, second iteration: the public IA, the page meta and the engine-only pins (D-021)
+
+**Why.** hallismiley's second sync (PR pepti/hallismiley#168, the engine at
+`92308d2`) took the first seam and showed what it still lacked — every item
+engine-side, nothing a downstream could fix in a product-owned file: the
+`NavBar.js` links and `sitemapRoutes.js` `STATIC_ROUTES` were the company's
+three pages as literals (so Halli's site linked three noindexed pages and
+advertised none of its own), the page parts and descriptions in
+`DEFAULT_META` were company copy, the home `home-products` card and the
+`manifest.json` name were the company's, the Product-schema `brand` was one
+product's name, and 128 Jest cases plus three e2e cases asserted Icelandic API
+strings and `/is/` redirects that are only true where the visitor default is
+`is`. Six engine tests pinned facts about the engine's own repo (the committed
+`client.json`, an empty `local.json`, `features/os/` being the only foreign
+folder, os_001 being in the migration set, `midnight` being in the picker) and
+went red on any downstream. And two of hallismiley's own specs failed after
+taking the engine.
+
+**The public IA is config.** `identity.surface.nav` — an ordered list of
+`{ route, labelKey }` records (a new `object[]` schema type in
+`clientConfig.js`, JSON in the env layer, validated per entry; defaults = the
+business nav with its existing `nav.*` keys) — joins `hiddenRoutes`.
+`publicSurface.js` derives `PUBLIC_NAV` (nav minus hidden; hidden wins) and
+`LEGAL_ROUTES`; `utils/identity.js` mirrors both as `publicNav()` /
+`isHiddenRoute()`, with the record-list merge in `resolveIdentity`. The
+NavBar, the home and contact footers and the sitemap (`/`, nav in nav order,
+legal — one entry per locale) read those; the home products card renders only
+while `/thjonusta` is public; the footer mail icon is
+`identity.organization.email`. `config/client.json` spells `nav` out as the
+worked example.
+
+**The page meta is i18n.** `DEFAULT_META` in `ssrMeta.js` and `PUBLIC_TITLES`
+in `pageTitle.js` now name KEYS — `meta.<key>.title` (both tables) and
+`meta.<key>.description` (server table) — and the text moved into the engine
+i18n tables, so a product overrides a title or description in its
+`product.<locale>.json` on both sides. The company's name in a description is
+`{legalName}`, a third implicit param of `t()` (the tables still carry no
+brand); `has(locale, key)` tells an absent description (privacy, terms) from
+text. `pageTitle.test.js` keeps its read-the-source mechanism: it parses
+`ROUTE_META` and the key-based `DEFAULT_META`, holds the client keys and modes
+to the server's, holds the client and server tables to the SAME TEXT per title
+key, and composes both sides over the on-disk table. `/manifest.json` is a
+small route (`manifestRoutes.js`, before the static mount) that fills
+`name`/`short_name`/`description` from the identity over the static engine
+default; the Product-schema `brand` is `identity.brand.name`. The Organization
+`@type` stays `Organization`: schema.org accepts it for a personal site, and
+a downstream does not fork it.
+
+**Tests assert the resolved config.** `tests/lib/locale.js` exposes
+`PUBLIC_DEFAULT_LOCALE` (what `config/i18n.js` resolved), `tx(key, params)`
+(the server table in that locale), `tClient(key)` (the SPA table, for e2e)
+and `localePrefix()`; `auth`, `auth.google`, `auth.facebook`, `contact`,
+`media`, `projects`, `localeLock` and `signup-flow.spec.js` now compare
+against the exact translated string or the `localePrefix()` target — no assertion
+weakened, and the party route's `/is/` stays literal because it is
+locale-locked. Engine-only pins are gated on `engine.json.role`:
+`identityConfig.test.js` compares `defaults()` and passes the identity into
+every hand-off helper; `i18nIdentity.test.js` resolves a temp `client.json`;
+`featureGate.test.js` splits "every suite maps to a feature" (everywhere) from
+"nothing is gated" (engine); `featureRegistry.test.js` accepts any foreign
+folder, and `features/os/company-content.md` claims
+`product-migrations/os.js`, not the folder (it was claiming a downstream's
+own `<id>.js`); `salesGuidesD001.test.js` reconstructs the old text inside the
+gated describe; `iceland-scene.spec.js` pins Miðnætti's grade only where the
+picker offers it and walks the nav routes that wear a scene
+(`server/config/sceneRoutes.js`, split out of ssrMeta so the spec does not
+pull the middleware's database and template watcher into the runner).
+`identityDownstream.test.js` now runs hallismiley's real block (brand,
+`en`, classic + six-theme picker, waterfall, the three company pages hidden,
+nav = verkefni/news/halli) and asserts the served nav, the sitemap, the
+titles, the `{legalName}` description, the manifest and the noindex split.
+
+**The downstream regressions.** hallismiley's `news-editor.spec.js` (overlay
+at y=56, 0 expected) was the ENGINE's: `main.css` had `.view { animation:
+fadeIn 300ms ease forwards }` — the end keyframe's `translateY(0)` is not
+`none`, so the fill kept `.view` the containing block of every
+`position:fixed` descendant, and the overlay sat below the 56px nav, sized to
+the page. hallismiley's pre-graft base had already dropped the fill-mode and
+the engine's sync had put it back. Fixed here (no fill; the end keyframe IS
+the natural state) and the spec ported as `e2e/news-editor.spec.js` (news
+feature, gated). `aron13.spec.js` ×2 ("crafting cells never stable") is a
+hallismiley-only view the engine cannot run; its CSS has the same
+reduced-motion block before and after the graft and nothing in the engine's
+`motion.js` / `reveal.js` touches it, so it is not reproduced here — the
+`.view` fix is the one engine change that alters what moves on that page,
+and hallismiley re-runs the spec on its next sync (PLAN → Status).
+
+**LedgerLink's addendum (its second sync, orange-smiley/ledgerlink#11), folded
+in where engine-side.** The theme set now validates `default ∈ picker` only
+(a two-theme product keeps `:root` as an unlisted base) and
+`identity.theme.dark` names the dark ids — `themePrefs.js` `DARK_THEMES`
+reads it, the swatch fallback stays token-built. `nav.brandAriaLabel` is
+`{siteName} home` / `{siteName} — forsíða`, composed from `brand.name`. The
+Service catalogue JSON-LD (the company's offering) is emitted only while
+`/thjonusta` is public. `/robots.txt` is a route (`robotsRoutes.js`) whose
+Disallow lines come from `hiddenRoutes` per locale, over the static engine
+default. Engine tests that pinned this repo: `architectureIndex` ignores
+foreign features; `identityDownstream` and `pageTitle.test` take the home
+part from the table; `admin-surface.spec` asserts payroll/handbók/feedback
+only where not hidden; `admin-nav-colors.spec` tints the first line the
+product does not hide; `admin-monitoring.spec` reads a surface fill + border
++ padding as the styling tell, not the radius; and the feature gate treats a
+feature whose registry `flag` resolves to `false` as `disabled`, so the seven
+self-update suites that assert the ON state (`describeForSpec`) and
+`admin-updates.spec.js` skip on a product that ships the module off. No
+Barlow probe exists in the engine's suites (it is LedgerLink's own). **Not
+done, on purpose:** `identity.routes` (a product slot for its own public
+routes' meta, titleMode and noindex merged over `ROUTE_META` /
+`DEFAULT_META` / `PUBLIC_TITLES`) — a hook in `ssrMeta.js` and `pageTitle.js`
+is still needed for a route like `/aron13ara` or `/console`; it is the next
+iteration (PLAN → Status).
+
+**Docs.** `docs/DEPLOYMENT.md` §5 says the `APP_URL` fallback is the engine's
+origin and every downstream sets it; ENGINE-SYNC §6 lists what the seam owns
+now. No migration.

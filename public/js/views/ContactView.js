@@ -10,6 +10,7 @@
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { SceneStage } from '../scenes/SceneStage.js';
+import { publicNav } from '../utils/identity.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // Pick the locale-resolved slice of a `{ en, is }` default blob. Falls back
@@ -545,15 +546,14 @@ export class ContactView {
 
     return `
     <footer class="lol-footer" data-section="footer">
-      <!-- The business routes, matching the home footer. Six of the seven
-           links here used to be hidden surfaces (publicSurface.js) — /shop,
-           /news, /halli, /party and the /projects and /contact aliases —
-           which this footer was quietly publishing to every visitor. -->
+      <!-- Home + the product's public IA (identity.surface.nav minus its
+           hidden routes), matching the home footer and the top nav. Six of
+           the seven links here used to be hidden surfaces (/shop, /news,
+           /halli, /party and the /projects and /contact aliases) which this
+           footer was quietly publishing to every visitor. -->
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
         <a href="${href('/')}"              class="lol-footer__nav-link">${t('nav.home')}</a>
-        <a href="${href('/thjonusta')}"     class="lol-footer__nav-link">${t('nav.thjonusta')}</a>
-        <a href="${href('/um-okkur')}"      class="lol-footer__nav-link">${t('nav.umOkkur')}</a>
-        <a href="${href('/hafa-samband')}"  class="lol-footer__nav-link">${t('nav.hafaSamband')}</a>
+        ${publicNav().map(e => `<a href="${href(e.route)}" class="lol-footer__nav-link">${escHtml(t(e.labelKey))}</a>`).join('\n        ')}
       </nav>
 
       <div class="lol-footer__brand">

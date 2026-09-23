@@ -4,6 +4,10 @@ const { test, expect } = require('@playwright/test');
 const { gateSpec } = require('./lib/featureGate');
 gateSpec(test, __filename);
 const { identity } = require('./lib/identity');
+// The public IA the nav offers: identity.surface.nav minus the hidden routes
+// (the same rule utils/identity.js publicNav() applies in the NavBar).
+const NAV = identity.surface.nav.filter((e) =>
+  !identity.surface.hiddenRoutes.some((h) => e.route === h || e.route.startsWith(h + '/')));
 
 /**
  * The public business site, walked end to end in BOTH locales.
@@ -35,8 +39,10 @@ for (const locale of ['is', 'en']) {
         await page.goto(`/${locale}${route.path || '/'}`);
 
         // The nav is present on every business page and offers exactly the
-        // business routes.
-        await expect(page.locator('.lol-nav__center [data-route="/thjonusta"]')).toHaveCount(1);
+        // product's public IA (identity.surface.nav).
+        for (const entry of NAV) {
+          await expect(page.locator(`.lol-nav__center [data-route="${entry.route}"]`)).toHaveCount(1);
+        }
 
         const expected = route[locale];
         if (expected) {
@@ -53,9 +59,9 @@ for (const locale of ['is', 'en']) {
 
     test(`the whole nav is walkable in ${locale}`, async ({ page }) => {
       await page.goto(`/${locale}/`);
-      for (const path of ['/thjonusta', '/um-okkur', '/hafa-samband']) {
-        await page.locator(`.lol-nav__center [data-route="${path}"]`).click();
-        await expect(page).toHaveURL(new RegExp(`/${locale}${path}$`));
+      for (const { route } of NAV) {
+        await page.locator(`.lol-nav__center [data-route="${route}"]`).click();
+        await expect(page).toHaveURL(new RegExp(`/${locale}${route}$`));
         await page.goto(`/${locale}/`);
       }
     });

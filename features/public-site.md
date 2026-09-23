@@ -9,6 +9,8 @@ paths:
   - server/routes/contactRoutes.js
   - server/controllers/contactController.js
   - server/routes/sitemapRoutes.js
+  - server/routes/manifestRoutes.js
+  - server/routes/robotsRoutes.js
   - server/services/indexNow.js
   - server/config/publicSurface.js
   - server/middleware/ssrMeta.js
@@ -49,14 +51,15 @@ paths:
 migrations: [017_home_stats_content]
 since: 2026-08-09
 origin: null
-history: [homepage, r1, services-page, ui-kit, go-live]
+history: [homepage, r1, services-page, ui-kit, go-live, identity-seam-2-2026-09-23]
 ---
 
 The SPA shell and the visitor pages: home (video hero), `/thjonusta`, `/um-okkur`, `/hafa-samband` (the contact form that becomes a lead), `/personuvernd`, terms and 404; the router with View Transitions; SSR meta + JSON-LD (`ssrMeta.js`), robots + sitemap, IndexNow pings and the hidden-route policy (`publicSurface.js`). The company copy itself is the product's (`os/company-content`); the engine ships the structure and the JS fallbacks. `HomeView._tiers()/_steps()` are dormant with their i18n.
 
 **Rules**
 - Identity comes from the seam, never a literal: brand name, title suffix, `og:site_name`, `<meta author>`, the Organization + WebSite JSON-LD, the hero clip and the hidden-route list all read `identity.*` (`config/client.json` via `server/config/identity.js` server-side, `public/js/utils/identity.js` client-side). `ssrMeta.js` and `pageTitle.js` hold page PARTS; the document title is part + suffix (or `{brand}` substituted; `titleMode: 'bare'` for the portfolio surfaces).
-- Everything not in the public IA is in `identity.surface.hiddenRoutes`, read by `publicSurface.js`: hidden from nav, sitemap and search, still served.
+- The public IA is `identity.surface.nav` (ordered `{ route, labelKey }`) minus `identity.surface.hiddenRoutes`, derived once server-side (`publicSurface.js` `PUBLIC_NAV` / `LEGAL_ROUTES`) and once client-side (`utils/identity.js` `publicNav()` / `isHiddenRoute()`); the NavBar, both footers, the sitemap and the noindex rule read those, never a route literal. The home products card renders only while `/thjonusta` is public. Everything hidden is still served.
+- The page parts and descriptions are i18n keys (`meta.<key>.title` / `.description`; `ssrMeta.js` `DEFAULT_META` and `pageTitle.js` name the keys, the tables carry the text, a product overrides in `product.<locale>.json`). `/manifest.json` (`manifestRoutes.js`), `/robots.txt` (`robotsRoutes.js`, Disallow lines from `hiddenRoutes` per locale) and the Product-schema `brand` read the identity; the Service catalogue JSON-LD is emitted only while `/thjonusta` is public; the Organization `@type` stays `Organization` for every product.
 - No product tiers or prices on the company site; `SERVICE_OFFERINGS` mirrors the locale service names; `productSite.js` builds the one product-site URL.
 - A new hero clip gets a NEW filename (`identity.hero`); under reduced motion / Save-Data the hero shows the poster with no autoplay; `e2e/navigation.spec.js` pins the served clip to the config's.
 - The canonical origin is `APP_URL`; `public/index.html` is baked with it and `ssrMeta.js` swaps it on load (and drops the baked Organization, re-emitting it from the identity on every page) — change the two together.

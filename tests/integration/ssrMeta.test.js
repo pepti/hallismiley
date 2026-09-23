@@ -137,18 +137,19 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
   // "Hidden from nav/SSR/sitemap, still functional" — the routes render a
   // full page; they are simply de-indexed. See server/config/publicSurface.js.
+  // Both lists are the product's (identity.surface.*), never literals: the
+  // hidden routes are noindexed, home + the nav + the legal pages stay
+  // indexable — whatever a downstream puts in each.
   describe('hidden public surfaces', () => {
-    test.each(['/is/party', '/is/halli', '/is/news', '/is/shop', '/is/projects', '/is/contact'])(
-      '%s still renders, marked noindex',
-      async (path) => {
-        const res = await request(app).get(path);
-        expect(res.status).toBe(200);
-        expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
-        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
-      }
-    );
+    const { PUBLIC_NAV, LEGAL_ROUTES } = require('../../server/config/publicSurface');
+    const hidden = ID.surface.hiddenRoutes.map((r) => `/${LC}${r}`);
+    const indexable = ['/', ...PUBLIC_NAV.map((e) => e.route), ...LEGAL_ROUTES].map((r) => `/${LC}${r === '/' ? '/' : r}`);
 
-    test.each(['/is/', '/is/thjonusta', '/is/um-okkur', '/is/hafa-samband', '/is/personuvernd'])(
+    test('the lists are non-trivial (guard)', () => {
+      expect(indexable.length).toBeGreaterThan(1);
+    });
+
+    test.each(indexable)(
       '%s stays indexable',
       async (path) => {
         const res = await request(app).get(path);
@@ -157,10 +158,23 @@ describe('SSR meta-injection — SPA catch-all', () => {
       }
     );
 
-    test('a hidden detail route is de-indexed too', async () => {
-      const res = await request(app).get('/is/news/some-article-slug');
-      expect(res.status).toBe(200);
-      expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+    // A product may hide nothing; `.each` refuses an empty list.
+    (hidden.length ? describe : describe.skip)('the hidden routes', () => {
+      test.each(hidden)(
+        '%s still renders, marked noindex',
+        async (path) => {
+          const res = await request(app).get(path);
+          expect(res.status).toBe(200);
+          expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
+          expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+        }
+      );
+
+      test('a hidden detail route is de-indexed too', async () => {
+        const res = await request(app).get(`/${LC}${ID.surface.hiddenRoutes[0]}/some-detail-slug`);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+      });
     });
   });
 

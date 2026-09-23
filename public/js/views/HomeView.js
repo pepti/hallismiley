@@ -7,7 +7,7 @@ import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../
 import { SceneStage } from '../scenes/SceneStage.js';
 import { productSiteUrl } from '../utils/productSite.js';
 import { motionAllowed, onMotionChange } from '../utils/motion.js';
-import { getIdentity } from '../utils/identity.js';
+import { getIdentity, publicNav, isHiddenRoute } from '../utils/identity.js';
 
 // The home hero clip and its still — the PRODUCT's, from identity.hero in
 // config/client.json (utils/identity.js; the engine default is Orange
@@ -374,7 +374,11 @@ export class HomeView {
   // Deep product marketing lives on the product's own site — this card's job
   // is to say what Rekstrarkerfið is and hand the visitor to rekstrarkerfi.is
   // in a new tab (Halli, 2026-09-13; /thjonusta no longer presents the product).
+  // It is the COMPANY's section: it renders only while the services page is
+  // part of this product's public IA — a downstream that hides /thjonusta
+  // (identity.surface.hiddenRoutes) has no products to list here.
   _products() {
+    if (isHiddenRoute('/thjonusta')) return '';
     return `
     <section class="home-products" aria-labelledby="home-products-title">
       <div class="home-products__header">
@@ -770,15 +774,15 @@ export class HomeView {
     return `
     <footer class="lol-footer">
 
+      <!-- Home + the product's public IA (identity.surface.nav minus its
+           hidden routes), the same list the top nav and the sitemap use. -->
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
         <a href="${href('/')}"             class="lol-footer__nav-link">${t('nav.home')}</a>
-        <a href="${href('/thjonusta')}"    class="lol-footer__nav-link">${t('nav.thjonusta')}</a>
-        <a href="${href('/um-okkur')}"     class="lol-footer__nav-link">${t('nav.umOkkur')}</a>
-        <a href="${href('/hafa-samband')}" class="lol-footer__nav-link">${t('nav.hafaSamband')}</a>
+        ${publicNav().map(e => `<a href="${href(e.route)}" class="lol-footer__nav-link">${escHtml(t(e.labelKey))}</a>`).join('\n        ')}
       </nav>
 
       <div class="lol-footer__social">
-        <a id="footer-email-icon" href="${href('/hafa-samband')}"
+        <a id="footer-email-icon" href="${href(isHiddenRoute('/hafa-samband') ? '/' : '/hafa-samband')}"
            class="lol-footer__social-icon" aria-label="Send email">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -807,13 +811,15 @@ export class HomeView {
     </footer>`;
   }
 
-  // ── Footer email icon — obfuscated mailto built from JS parts ────────
+  // ── Footer email icon — the mailto is set here, not in the markup, so the
+  // address never lives in the static HTML. It is the product's
+  // (identity.organization.email), the same address the Organization JSON-LD
+  // carries; the href in the markup is the contact page, for a page whose
+  // scripts never ran.
   _initFooterLinks(view) {
     const icon = view.querySelector('#footer-email-icon');
-    if (icon) {
-      const parts = ['info', 'orangesmiley', 'is'];
-      icon.href = `mailto:${parts[0]}@${parts[1]}.${parts[2]}`;
-    }
+    const email = getIdentity().organization.email;
+    if (icon && email) icon.href = `mailto:${email}`;
   }
 
   // ── Hero video — ensure autoplay fires after mount ────────────────────
