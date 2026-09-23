@@ -38,6 +38,32 @@ instances.**
 | `orange-smiley/icelandicstore` | customer #1, live | `ice` | `main` | `engine-sync/<date>` | **Halli** | deploys TEST |
 | `pepti/hallismiley` | personal (Halli's CV/hobby site) | `hs` | `main` | `engine-sync/<date>` | **Halli** | deploys www.hallismiley.is |
 
+### icelandicstore: the customer's daily business comes first (Halli, 2026-09-23)
+
+icelandicstore runs Ísprjón's shop floor every day and Halli builds on it with
+Orri. No engine work may disturb that. The rules, for every agent and session:
+
+- **Reading is always allowed; writing is not.** Clone `origin/main` into a
+  scratch folder and read, diff, assess or harvest from it. Never push a branch
+  to the icelandicstore remote, open a PR there or touch its TEST/PROD databases
+  unless Halli has named the window for that specific change.
+- **The graft and every sync wait for a window Halli and Orri pick** — outside
+  opening hours, never on a day with a planned release or stock count. The PR is
+  prepared and verified in advance; Halli merges it (merging deploys TEST); TEST
+  is checked by Halli/Orri before anything is promoted; PROD stays
+  `promote-prod.yml`, by hand. Rollback is `git revert -m 1` plus a re-deploy.
+- **Security fixes are no exception to the window**, only to its length: the PR
+  is ready the same day, Halli decides when it lands.
+- **The upward path does not touch icelandicstore.** `engine-harvest.js` reads a
+  clone and writes only to the engine. Orri's and Halli's branches are never
+  rebased, force-pushed or merged by an agent.
+- **Never open the parked checkout** `Projects\icelandicstore` (dirty, many
+  worktrees of real work), never `git checkout`/`reset`/`stash` there.
+- Customer-specific code (Regla, Shopify import, order/shelf vision,
+  multi-store, discounts, consignment, builds, workshop) is never changed by a
+  sync; the assessment in `company/ice-graft-assessment-2026-09-22.md` lists the
+  fork boundary and the five decisions that come first.
+
 `engine.json` in each repo carries `product`, `role`, `upstream`,
 `upstreamBranch`, `rev` (engine commit last merged), `syncedAt`, `syncedPr`,
 `grafted`, `productPaths`, `history`. It is product-owned: a sync never
