@@ -1786,6 +1786,15 @@ Found by Öryggisvörður reviewing this change, both fixed in the same PR:
   by `/ready` and a new admin-only `GET /api/v1/admin/events/health`
   (`no-store`), which the screen now reads.
 
+Found on the re-review, fixed here too: **`validate.js`'s `EMAIL_RE` backtracks
+quadratically** on a run of `.` between two `@` — `'a@' + '.'×99 000 + '@'` in
+the anonymous signup body held the event loop 3.5 s, and `signupLimiter` (75 per
+10 min per IP) does not bound that. `isEmail()` checks the RFC 5321 254-character
+limit before the regex, at all three call sites. Noted, not changed:
+`ssrMeta.js` strips tags from stored content with `/<[^>]+>/g`, the same shape;
+only admins write that content — switch it to `stripTags` when the file is next
+touched.
+
 Tests: `observability.test.js` pins the anonymous `/ready` body to
 `status`/`timestamp`/`uptime`, the token unlock and the admin health route;
 `changeRequests.test.js` pins anonymous malformed JSON → 404 from the gate

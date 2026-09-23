@@ -3,7 +3,7 @@
 // Works for logged-out testers on the test stack; softAuth attaches the user
 // when a session cookie is present, and has to run BEFORE the gate because the
 // gate checks the role set. The 5 MB JSON limit for inline screenshots is
-// mounted in app.js, ahead of the global parser.
+// applied on the route below, after the limiter, the gate and CSRF.
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
 const router    = express.Router();

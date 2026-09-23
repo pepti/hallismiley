@@ -135,6 +135,12 @@ function validateQuery(req, res, next) {
 // ── User / auth validation ────────────────────────────────────────────────────
 
 const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// EMAIL_RE backtracks quadratically on a long run of '.' between two '@'
+// ('a@' + '.'.repeat(99000) + '@' held the event loop 3.5 s, on the anonymous
+// signup route). An address is at most 254 characters (RFC 5321), so the length
+// check runs first and the regex only ever sees a short string. Stricter, not
+// looser. Use isEmail(), never EMAIL_RE.test() on request input.
+const isEmail = (v) => typeof v === 'string' && v.length <= 254 && EMAIL_RE.test(v);
 // Icelandic letters (both cases) are allowed so OAuth-derived usernames like
 // "jónþórsson" pass validation on subsequent profile updates.
 const USERNAME_RE = /^[a-zA-Z0-9_áéíóúýðþæöÁÉÍÓÚÝÐÞÆÖ]{3,40}$/;
@@ -203,7 +209,7 @@ function validateSignup(req, res, next) {
 
   if (!email || typeof email !== 'string') {
     errors.push({ key: 'validation.email.required' });
-  } else if (!EMAIL_RE.test(email.trim())) {
+  } else if (!isEmail(email.trim())) {
     errors.push({ key: 'validation.email.invalid' });
   }
 
@@ -242,7 +248,7 @@ function validatePartyRequest(req, res, next) {
 
   if (!email || typeof email !== 'string') {
     errors.push({ key: 'validation.email.required' });
-  } else if (!EMAIL_RE.test(email.trim())) {
+  } else if (!isEmail(email.trim())) {
     errors.push({ key: 'validation.email.invalid' });
   }
 
@@ -847,7 +853,7 @@ function _accountBody(src, errors, { isCreate }) {
     if (v.length > max) { errors.push({ key: 'validation.account.fieldMaxLength', params: { field, n: max } }); continue; }
     picked[field] = v.trim();
   }
-  if (src.contact_email && typeof src.contact_email === 'string' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(src.contact_email.trim())) {
+  if (src.contact_email && typeof src.contact_email === 'string' && !isEmail(src.contact_email.trim())) {
     errors.push({ key: 'validation.account.emailInvalid' });
   }
   for (const [field, [min, max]] of Object.entries(ACCOUNT_INTS)) {
@@ -931,6 +937,7 @@ function validateAccountPatch(req, res, next) {
 }
 
 module.exports = {
+  _isEmail: isEmail,
   validateProject,
   validateQuery,
   validateLeadUpdate,

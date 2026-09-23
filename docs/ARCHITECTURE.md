@@ -113,6 +113,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
 **Rules that must hold**
+- Emails are validated with `isEmail()` (length ≤ 254 BEFORE the regex; `EMAIL_RE`
+  alone backtracks quadratically on anonymous input) ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - Lucia v3 owns sessions; there is no JWT layer (invariant 3).
 - The 2FA gate is mirrored: server `mfaService.protectedRole` (admin or
   `accounts` holder) and client `auth.isMfaProtected()` must widen together;
@@ -164,7 +166,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
