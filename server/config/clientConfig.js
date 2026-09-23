@@ -190,6 +190,25 @@ const SCHEMA = {
       sameAs:          { type: 'string[]', default: [], validate: validateHttpsUrls },
     },
   },
+  security: {
+    mfa: {
+      // Must a protected account (an admin by role or role set, an `accounts`
+      // holder, a published seller — mfaService.protectedRole) ENROL a second
+      // factor before it may act as what it is?
+      //   optional → no one is forced. The Prófíll panel offers enrolment and
+      //              an account that HAS enrolled is challenged at every
+      //              sign-in exactly as before; nothing is withheld.
+      //   required → auth/mfaPolicy.js withholds `admin` / the `accounts` view
+      //              until the account enrols, and the SPA walks it to the
+      //              panel (harvest-rk-totp-2026-09-23).
+      // Default optional (Halli, 2026-09-23). mfaPolicy re-reads the env var
+      // per call so a test can flip it; a deployment's env does not change
+      // while it runs, so that reads what was resolved here. The
+      // published-seller routes demand totp_enabled
+      // themselves (routes/sellerRoutes.js rule 4) whatever this says.
+      enrolment: { type: 'string', default: 'optional', enum: ['optional', 'required'] },
+    },
+  },
   modules: {
     selfUpdate: {
       // Is the module present on this instance at all? Off means: no checker,

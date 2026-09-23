@@ -46,6 +46,12 @@
       "sameAs": []
     }
   },
+  "security": {
+    "mfa": {
+      "$comment": "Halli 2026-09-23: 'change mfa to optional'. 'optional' = nobody is forced to enrol two-factor sign-in; the Prófíll panel offers it and an account that has enrolled is challenged at every sign-in. 'required' = an unenrolled admin / accounts holder has admin / the accounts view withheld until it enrols (server/auth/mfaPolicy.js). Published sellers need 2FA for the seller area either way (routes/sellerRoutes.js rule 4). Env override: CLIENT_CONFIG_SECURITY_MFA_ENROLMENT. docs/ADMIN-2FA.md.",
+      "enrolment": "optional"
+    }
+  },
   "modules": {
     "selfUpdate": {
       "enabled": true,

@@ -50,6 +50,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [Harvest from rekstrarkerfid — mandatory 2FA enrolment, TOTP secret sealed at rest (D-021, first upward pick)](#harvest-rk-totp-2026-09-23) | rk `4df0943` cherry-picked with `-x`; `auth/mfaPolicy.js` from `attachRoles`, widened to the engine's gate (role withheld for admins, `accounts` view for holders); `utils/secretBox.js` + migration 107 (rk's 093, aliased); `ADMIN_TOTP_EXEMPT`, `TOTP_ENC_KEY`, break-glass script; issuer wired to `identity.brand.name` after the seam merged |
 | 2026-09-23 | [rk feed — six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)](#rk-feed-2026-09-23) | Lead ids as strings end to end; migration 108 `notified_at`/`notify_error` + the "ekki sent" inbox mark; the change-request launcher and the contact editor's bar stack (`--cr-widget-clearance`); legal titles on one line at 320px; sitemap `<lastmod>` from `site_content` + `identity.routes[*].contentKeys`, `/llms.txt` for every product (harvested from rk); the alias rule worded as enforced |
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
+| 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
 
 ---
 
@@ -1672,3 +1673,67 @@ so `leads` does not exist yet and 108 fails — rk now lists 108 under
 table means superseding what alters it").
 Its `qa-chrome-findings.spec.js` 320px case and its `crawlerPages.test.js`
 llms/lastmod cases can then point at the engine's.
+<a id="mfa-optional-2026-09-23"></a>
+## 2026-09-23 — Two-factor enrolment is optional by default: `security.mfa.enrolment`
+
+**Why.** Halli, the same day the mandatory rule was harvested from
+rekstrarkerfid ([harvest-rk-totp-2026-09-23](#harvest-rk-totp-2026-09-23)):
+"change mfa to optional". Mandatory enrolment stays in the engine as a mode an
+instance can choose; it is no longer what every instance gets.
+
+**The switch.** `security.mfa.enrolment` in `server/config/clientConfig.js`
+(new `security` section), `'optional' | 'required'`, default **`optional`**;
+env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT` by the file's naming rule; any other
+value warns at boot and keeps the default. This repo's `config/client.json`
+spells out `optional` with a `$comment`.
+
+**What changed, and what did not**
+- `auth/mfaPolicy.js`: `enrolmentMode()` / `enrolmentRequired()` (exported with
+  `ENROLMENT_ENV`). `mustEnrol()` is false unless the mode is `required`, so
+  under `optional` `effectiveRoles` withholds no `admin`, `withholdViews` is
+  never asked to strip `accounts`, no `mfaEnrolmentRequired` flag is set, and
+  every session payload says `mfa_enrolment_required: false` — the SPA
+  (router, LoginModal, ProfileView) never forces the panel. No client code
+  changed. `applyMfaPolicyToRequest` skips its Role lookup under `optional`.
+  The env var is re-read per call (like `ADMIN_TOTP_EXEMPT`) so a suite can
+  flip the mode; a value the schema rejects is ignored there exactly as the
+  boot resolution ignored it, so the two readings agree.
+- Unchanged in both modes: `mfaService`'s login challenge (an enrolled account
+  is asked for a code at every sign-in), the Prófíll 2FA panel and its "password
+  only" hint (the non-blocking recommendation; `shouldEnrol` is its predicate,
+  now documented as a recommendation, never a gate), `secretBox` + migration
+  107 + `TOTP_ENC_KEY`, OAuth / party-magic-link refusals for admins, the
+  break-glass script.
+- **The seller area does not follow the switch.** `routes/sellerRoutes.js`
+  rule 4 (D-020, before the harvest) demands `totp_enabled` for everything but
+  `GET /me`; left as it is on purpose. Dropping that guard, or gating it on
+  `enrolmentRequired()`, is the one-line change if Halli wants sellers optional
+  too (`docs/ADMIN-2FA.md`).
+- `server.js`'s production warning about `ADMIN_TOTP_EXEMPT` now says it
+  matters under `required`.
+
+**Tests.** The mandatory path keeps its coverage by asking for it:
+`tests/unit/mfaPolicy.test.js` sets `required` in every describe that pins the
+rule and adds six cases for `optional` (mode resolves to optional; nobody must
+enrol; roles kept, no flag; no lookup per request; a bad env value ignored;
+`required` restores withholding). `tests/integration/adminTotpEnforcement.test.js`
+sets `required` in its top-level `beforeEach` and adds four API cases under the
+default (an unenrolled admin is an admin with views `['*']` and reaches the
+admin and accounts routes; an unenrolled accounts holder keeps `accounts`; an
+admin can still enrol and is then challenged; switching to `required`
+withholds on the very next request). `tests/unit/clientConfig.test.js` pins the
+leaf (default, file, env name, rejected value, this instance's file).
+`tests/integration/sellerArea.test.js` asserts the mode is `optional` where it
+proves a seller still needs 2FA. The e2e server runs `required`
+(`playwright.config.js`, `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`), so
+`e2e/admin-totp-enrolment.spec.js` still walks the mandatory flow in a browser
+— one server serves every spec, so the optional default is covered by Jest
+only. `ADMIN_TOTP_EXEMPT` stays in `playwright.config.js` (still needed: the e2e
+server is `required`) and in `tests/env.js` (no Jest suite needs it any more
+under `optional`; kept for a suite that switches to `required`).
+
+**Downstreams.** rekstrarkerfid chose mandatory enrolment itself (its
+`admin-totp-enforcement`, 2026-09-18). On its next engine-sync it inherits
+`optional` unless its own `config/client.json` says `required` — Halli's
+instruction is estate-wide, so the sync does NOT set it. hallismiley,
+icelandicstore and LedgerLink get `optional` too. No migration.

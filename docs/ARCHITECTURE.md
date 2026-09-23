@@ -118,7 +118,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `accounts` holder) and client `auth.isMfaProtected()` must widen together;
   `tests/unit/mfaProtectedClient.test.js` pins them, and enrolment eligibility
   asks the same predicate the gate does ([ui-kit](HISTORY.md#ui-kit), [review-099](HISTORY.md#review-099)).
-- Enrolment is MANDATORY for every protected account, and the rule lives in
+- Two-factor ENROLMENT is a per-instance switch, `security.mfa.enrolment`
+  (`config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`), and it
+  defaults to `optional`: `mfaPolicy.mustEnrol()` is false unless the instance
+  says `required`, so nothing is withheld and `mfa_enrolment_required` is
+  always false, while an account that HAS enrolled is challenged at every
+  sign-in in both modes (the challenge is `mfaService`'s, untouched by the
+  switch). The policy re-reads the env var per call so a suite can flip it; a
+  test of the mandatory path sets `required` for itself. The seller area's own
+  `totp_enabled` demand (`sellerRoutes.js` rule 4) does not follow the switch
+  ([mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)).
+- Under `required`, enrolment is mandatory for every protected account, and the rule lives in
   `auth/mfaPolicy.js` and nowhere else: `attachRoles` (the one session reader
   every middleware shares) withholds `admin` from an unenrolled admin's role
   set and `requireView` withholds the `accounts` view from an unenrolled
@@ -154,7 +164,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
