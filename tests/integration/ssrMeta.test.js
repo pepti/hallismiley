@@ -685,7 +685,7 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
     // (A backtick is percent-encoded by the client, so it never reaches here raw.)
     const route = "/zz-$'-$&-$$";
     const res = await request(app).get(`/${LC}${route}`);
-    const url = esc(`https://www.hallismiley.is/${LC}${route}`);
+    const url = esc(`${process.env.APP_URL}/${LC}${route}`);
     expect(res.text).toContain(`<meta property="og:url" content="${url}" />`);
     expect(res.text).toMatch(new RegExp(`rel="canonical" href="${escRe(url)}"`));
     expectOnePage(res.text);

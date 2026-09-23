@@ -95,8 +95,12 @@ describe('server i18n — implicit {siteName} / {legalName} / {siteHost}', () =>
   test('a param value is inserted literally — `$` replacement patterns are not expanded', () => {
     const { t } = fresh();
     const v = "A $& B $` C $' D $$ E";
-    expect(t('en', 'email.order.subject', { orderNumber: v, siteName: 'S' })).toBe(`Your S order ${v}`);
-    expect(t('en', 'email.verify.subject', { siteName: v })).toBe(`Verify your ${v} account`);
+    // Expected = the same message with a plain marker swapped for `v`, so the
+    // case holds whatever wording a product overlay gives these strings.
+    const expected = (key, param) => t('en', key, { [param]: '@@' }).split('@@').join(v);
+    expect(t('en', 'email.order.subject', { orderNumber: v })).toBe(expected('email.order.subject', 'orderNumber'));
+    expect(t('en', 'email.verify.subject', { siteName: v })).toBe(expected('email.verify.subject', 'siteName'));
+    expect(t('en', 'email.verify.subject', { siteName: v })).toContain(v);
   });
 
   test('{siteHost} is the APP_URL host without a leading www.', () => {
