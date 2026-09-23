@@ -1,40 +1,35 @@
 'use strict';
 /*
- * Dynamic sitemap.xml — covers the 13 static list pages plus every
- * published news article, active product, and project. Regenerated
- * on each request from DB state; projected sitemap size stays
- * well under Google's 50,000-URL / 50 MiB limit for the foreseeable
- * future, so a single SELECT per table is plenty.
+ * Dynamic sitemap.xml — the PUBLIC surface only: home, the product's nav
+ * routes and the legal pages (STATIC_ROUTES below, derived from the identity
+ * seam). Regenerated on each request; projected sitemap size stays well under
+ * Google's 50,000-URL / 50 MiB limit for the foreseeable future.
+ *
+ * Hidden-but-functional surfaces (party, bio, news, shop, and the superseded
+ * /projects · /contact · /privacy aliases — see server/config/publicSurface.js)
+ * are deliberately ABSENT: they still render and still work, but the sitemap
+ * must not advertise what ssrMeta marks noindex, or the two contradict.
  *
  * Response is cached for 10 minutes (+ 5 min stale-while-revalidate)
  * so bot crawl spikes don't thrash the database.
  */
 
 const express = require('express');
-const { query } = require('../config/database');
 const { forcedLocaleFor } = require('../config/i18n');
+const { PUBLIC_NAV, LEGAL_ROUTES } = require('../config/publicSurface');
 
-const APP_URL = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
+const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
-// Static list pages — one entry per locale. The home page gets an extra
-// x-default entry because it's the locale-selection landing.
-//
-// /shop/{products,tech,carpentry} are department sub-routes from
-// shop-redesign step 2 — each gets its own SEO entry so search indexes
-// land users on the specific section instead of the umbrella /shop page.
+// Static pages — one entry per locale. The list is the PRODUCT's public IA
+// (identity-seam-2, 2026-09-23): the home page (with an extra x-default entry,
+// it is the locale-selection landing), then the nav routes of
+// `identity.surface.nav` in nav order, then the engine's legal pages — each
+// list already minus `identity.surface.hiddenRoutes` (config/publicSurface.js).
+// Nothing here is a route literal, so a downstream's sitemap is its own nav.
 const STATIC_ROUTES = [
-  { path: '',                 priority: '1.0', changefreq: 'monthly', includeXDefault: true  },
-  { path: '/projects',        priority: '0.9', changefreq: 'weekly'                          },
-  { path: '/halli',           priority: '0.8', changefreq: 'monthly'                         },
-  { path: '/shop',            priority: '0.8', changefreq: 'weekly'                          },
-  { path: '/shop/products',   priority: '0.8', changefreq: 'weekly'                          },
-  { path: '/shop/tech',       priority: '0.7', changefreq: 'weekly'                          },
-  { path: '/shop/carpentry',  priority: '0.7', changefreq: 'weekly'                          },
-  { path: '/news',            priority: '0.7', changefreq: 'weekly'                          },
-  { path: '/contact',         priority: '0.6', changefreq: 'monthly'                         },
-  { path: '/party',           priority: '0.7', changefreq: 'weekly'                          },
-  { path: '/privacy',         priority: '0.3', changefreq: 'yearly'                          },
-  { path: '/terms',           priority: '0.3', changefreq: 'yearly'                          },
+  { path: '', priority: '1.0', changefreq: 'monthly', includeXDefault: true },
+  ...PUBLIC_NAV.map(e => ({ path: e.route, priority: '0.8', changefreq: 'monthly' })),
+  ...LEGAL_ROUTES.map(r => ({ path: r, priority: '0.3', changefreq: 'yearly' })),
 ];
 
 // XML escaping — URLs can contain &, <, > via slugs in principle even
@@ -46,13 +41,6 @@ function xmlEscape(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-function isoDate(d) {
-  if (!d) return null;
-  const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
 }
 
 // Build a <url> entry with both locales linked via hreflang.
@@ -118,24 +106,10 @@ function urlEntry({ localePath, lastmod, priority = '0.5', changefreq = 'monthly
 }
 
 async function buildSitemap() {
-  // Run all three content queries in parallel. These are small indexed
-  // scans — hundreds of microseconds each on a healthy pool.
-  const [projectsRes, newsRes, productsRes] = await Promise.all([
-    query('SELECT id, updated_at FROM projects ORDER BY updated_at DESC'),
-    query(
-      `SELECT slug, published_at, updated_at
-         FROM news_articles
-        WHERE published = TRUE
-        ORDER BY published_at DESC NULLS LAST`
-    ),
-    query(
-      `SELECT slug, updated_at
-         FROM products
-        WHERE active = TRUE
-        ORDER BY updated_at DESC`
-    ),
-  ]);
-
+  // No detail routes are advertised. Projects (case studies) were the one
+  // surface listed here until 2026-09-03, when /verkefni joined the hidden
+  // list (Halli); linking its details now would contradict the noindex
+  // ssrMeta emits, same as news and products before it.
   const urls = [];
 
   // Static pages. Locale-locked routes are derived from config/i18n rather than
@@ -147,36 +121,6 @@ async function buildSitemap() {
       changefreq: r.changefreq,
       includeXDefault: !!r.includeXDefault,
       onlyLocale: forcedLocaleFor(r.path || '/'),
-    }));
-  }
-
-  // Projects — ID-based routes
-  for (const row of projectsRes.rows) {
-    urls.push(urlEntry({
-      localePath: `/projects/${row.id}`,
-      lastmod: isoDate(row.updated_at),
-      priority: '0.7',
-      changefreq: 'monthly',
-    }));
-  }
-
-  // News articles — slug-based routes
-  for (const row of newsRes.rows) {
-    urls.push(urlEntry({
-      localePath: `/news/${row.slug}`,
-      lastmod: isoDate(row.updated_at || row.published_at),
-      priority: '0.6',
-      changefreq: 'monthly',
-    }));
-  }
-
-  // Products — slug-based routes
-  for (const row of productsRes.rows) {
-    urls.push(urlEntry({
-      localePath: `/shop/${row.slug}`,
-      lastmod: isoDate(row.updated_at),
-      priority: '0.7',
-      changefreq: 'weekly',
     }));
   }
 

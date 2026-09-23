@@ -1,58 +1,67 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { loginAsAdmin } = require('./helpers');
 
+/**
+ * Admin inline editing on the home page.
+ *
+ * These tests used to drive the skills/stats editor (`edit-page-btn`). The
+ * business home page no longer renders those portfolio sections, so their
+ * editor has nothing to attach to — the editable surface that remains is the
+ * hero, and it is the one that matters commercially (headline, sub-headline
+ * and CTA label are the copy Halli will actually want to tune).
+ *
+ * The assertions are unchanged in intent: hidden from anonymous visitors,
+ * offered to admins, activates contenteditable, shows a save/cancel bar, and
+ * cancel reverts. The skills/stats content rows and their API still exist —
+ * whether to surface them again is an ENHANCEMENTS.md decision, not something
+ * this spec should assume either way.
+ */
 test.describe('Editable homepage', () => {
 
-  test('Edit Page button NOT visible for logged-out users', async ({ page }) => {
+  test('Edit button NOT visible for logged-out users', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('[data-testid="edit-page-btn"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="edit-hero-btn"]')).toHaveCount(0);
   });
 
-  test('Edit Page button IS visible for admin', async ({ page }) => {
+  test('Edit button IS visible for admin', async ({ page }) => {
     await loginAsAdmin(page);
-    await expect(page.locator('[data-testid="edit-page-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-hero-btn"]')).toBeVisible();
   });
 
-  test('clicking Edit Page activates contenteditable on content elements', async ({ page }) => {
+  test('clicking Edit activates contenteditable on hero fields', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('[data-testid="edit-page-btn"]').click();
+    await page.locator('[data-testid="edit-hero-btn"]').click();
 
-    // At least one editable element should have contenteditable=true
-    const first = page.locator('[data-field]').first();
+    const first = page.locator('[data-hero-field]').first();
     await expect(first).toHaveAttribute('contenteditable', 'true');
   });
 
-  test('edit bar (save/cancel) appears after clicking Edit Page', async ({ page }) => {
+  test('edit bar (save/cancel) appears after clicking Edit', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('[data-testid="edit-page-btn"]').click();
+    await page.locator('[data-testid="edit-hero-btn"]').click();
 
-    await expect(page.locator('[data-testid="edit-controls"]')).toBeVisible();
-    await expect(page.locator('[data-testid="edit-save-btn"]')).toBeVisible();
-    await expect(page.locator('[data-testid="edit-cancel-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-hero-controls"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-hero-save"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-hero-cancel"]')).toBeVisible();
   });
 
-  test('cancel reverts editable fields and hides edit bar', async ({ page }) => {
+  test('cancel reverts edited fields and hides the edit bar', async ({ page }) => {
     await loginAsAdmin(page);
-    await page.locator('[data-testid="edit-page-btn"]').click();
+    await page.locator('[data-testid="edit-hero-btn"]').click();
 
-    // Capture original text of a content element
-    const target = page.locator('[data-field="title"]');
-    const original = await target.textContent();
+    const target   = page.locator('[data-hero-field="subtitle"]');
+    const original = (await target.textContent()).trim();
 
-    // Type something different
     await target.fill('CHANGED_TEXT_XYZ');
+    await page.locator('[data-testid="edit-hero-cancel"]').click();
 
-    // Cancel
-    await page.locator('[data-testid="edit-cancel-btn"]').click();
-
-    // Text should revert
-    await expect(target).toHaveText(original.trim());
-
-    // Edit bar should be gone
-    await expect(page.locator('[data-testid="edit-controls"]')).not.toBeVisible();
-
-    // Edit button should be back
-    await expect(page.locator('[data-testid="edit-page-btn"]')).toBeVisible();
+    await expect(target).toHaveText(original);
+    await expect(page.locator('[data-testid="edit-hero-controls"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="edit-hero-btn"]')).toBeVisible();
   });
 
 });

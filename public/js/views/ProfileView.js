@@ -1,11 +1,12 @@
-import { isAuthenticated, isMfaProtected, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
+import { isAuthenticated, isMfaProtected, mfaEnrolmentRequired, refreshSession, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
 import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
+import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
-import { THEMES, THEME_SWATCHES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
+import { THEMES, swatchFor, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -21,6 +22,7 @@ export class ProfileView {
   // left to remove it.
   destroy() {
     this._disposed = true;
+    this._scene?.destroy();
     if (this._onThemeChange) {
       window.removeEventListener('themechange', this._onThemeChange);
       this._onThemeChange = null;
@@ -55,8 +57,46 @@ export class ProfileView {
       this._bindPassword(el);
       this._bindSessions(el, sessions);
       this._bindTheme(el);
-      if (isMfaProtected()) {
+      // A hot spring — your own warm spot (iceland-v2, 2026-09-22). The header
+      // node moves into the band AFTER its listeners are bound, so they come
+      // with it; with no manifest entry it simply stays where it is.
+      const header = wrap.querySelector('.profile-header');
+      if (header && !this._disposed) this._scene = mountSceneHeader(el, 'profile', header);
+      // An account that OWES enrolment has what made it protected withheld from
+      // its session (admin role, accounts view), so isMfaProtected() alone would
+      // hide the one panel it needs — mfaEnrolmentRequired() is the other half.
+      if (isMfaProtected() || mfaEnrolmentRequired()) {
         this._renderTotp(el);
+        // Sent here to set it up (LoginModal / router): put the panel in view.
+        if (mfaEnrolmentRequired()) el.querySelector('#totp-section')?.scrollIntoView({ block: 'center' });
+      }
+
+      // Admin-only: the landing-page background editor and, below it, the
+      // background library manager — both inserted right after the language
+      // section. Mounted as components (each owns its own data and events) and
+      // shared with /admin/background, so the two surfaces never drift.
+      // Gated on the SERVER-provided role, not a client flag.
+      if (profile.role === 'admin') {
+        // These editors are optional chrome, and this is the ONLY await that runs
+        // after wrap.innerHTML is populated — so a rejected import() (stale chunk
+        // after a deploy, a blocked request) would otherwise reach the outer catch
+        // and replace a fully working profile page with an error line, taking 2FA,
+        // password change and session revocation down with it. Contain it here.
+        try {
+          const langSection = el.querySelector('#lang-section');
+          if (langSection) {
+            const [{ LandingBackgroundAdmin }, { BackgroundLibraryAdmin }] = await Promise.all([
+              import('../components/LandingBackgroundAdmin.js'),
+              import('../components/BackgroundLibraryAdmin.js'),
+            ]);
+            const landing = new LandingBackgroundAdmin({ section: true }).render();
+            langSection.insertAdjacentElement('afterend', landing);
+            landing.insertAdjacentElement('afterend', new BackgroundLibraryAdmin({ section: true }).render());
+          }
+        } catch {
+          // Profile itself stays usable; the editors live at /admin/background too.
+          // Intentionally silent — nothing here is load-bearing for the page.
+        }
       }
     } catch (err) {
       wrap.innerHTML = `<p class="profile-error">Failed to load profile: ${escHtml(err.message)}</p>`;
@@ -85,6 +125,7 @@ export class ProfileView {
              </div>
            </form>`
         : `<p class="profile-hint">${t('profile.twoStepOff')}</p>
+           ${mfaEnrolmentRequired() ? `<p class="profile-hint totp-required" role="status" data-testid="totp-required"><strong>${t('profile.twoStepRequired')}</strong></p>` : ''}
            <p class="form-error" id="totp-error" aria-live="polite"></p>
            <div class="form-actions">
              <button type="button" class="btn btn--primary" id="totp-start" data-testid="totp-start">${t('profile.twoStepSetUp')}</button>
@@ -162,7 +203,12 @@ export class ProfileView {
           <div class="form-actions">
             <button type="button" class="btn btn--primary" id="totp-done">${t('profile.twoStepSavedThem')}</button>
           </div>`;
-        body.querySelector('#totp-done').addEventListener('click', repaint);
+        // Only now: refreshSession() fires authchange, the router re-renders this
+        // view, and the codes are gone for good. It also turns the account into
+        // the admin it is — the nav grows its admin entries.
+        body.querySelector('#totp-done').addEventListener('click', async () => {
+          try { await refreshSession(); } catch { repaint(); }
+        });
       } catch (err) { err2.textContent = err.message; }
     });
   }
@@ -281,12 +327,14 @@ export class ProfileView {
       </section>
 
       <!-- Two-step verification. Shown to exactly the accounts the login path
-           challenges — admins by PRIMARY role or by role SET — because offering
-           it elsewhere would promise protection that never engages, and
-           withholding it from a challenged account locks that account out.
-           The predicate is auth.isMfaProtected(), mirroring mfaService.
-           Rendered from the session's totp_enabled flag. -->
-      ${isMfaProtected() ? `
+           challenges — admins by primary role or role SET, and accounts holders
+           (ENHANCEMENTS #17) — because offering it elsewhere would promise
+           protection that never engages, and withholding it from a challenged
+           account locks that account out. The predicate is
+           auth.isMfaProtected(), mirroring mfaService — OR the account owes
+           enrolment (mfaEnrolmentRequired: the server withheld the very role or
+           view isMfaProtected would read). Rendered from the session's totp_enabled flag. -->
+      ${(isMfaProtected() || mfaEnrolmentRequired()) ? `
       <section class="profile-section" id="totp-section" data-testid="totp-section">
         <h2 class="profile-section__title">${t('profile.twoStepTitle')}</h2>
         <div id="totp-body"></div>
@@ -598,7 +646,7 @@ export class ProfileView {
       return `
         <button type="button" class="profile-theme" role="radio" data-theme-id="${escHtml(id)}"
                 aria-checked="${id === active}" tabindex="${id === active ? '0' : '-1'}">
-          <span class="profile-theme__swatch${id === 'black-sand' ? ' profile-theme__swatch--dark' : ''}" aria-hidden="true"></span>
+          <span class="profile-theme__swatch${DARK_THEMES.has(id) ? ' profile-theme__swatch--dark' : ''}" aria-hidden="true"></span>
           <span class="profile-theme__name">${escHtml(name)}</span>
         </button>`;
     }).join('');
@@ -615,7 +663,7 @@ export class ProfileView {
 
     const buttons = [...grid.querySelectorAll('.profile-theme')];
     buttons.forEach((btn) => {
-      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
+      btn.style.setProperty('--swatch', swatchFor(btn.dataset.themeId));
     });
 
     // Reflect a selection made anywhere (here or the floating switcher).

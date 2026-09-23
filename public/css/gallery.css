@@ -251,7 +251,7 @@ body.lb-open { overflow: hidden; }
   width: 64px; height: 44px;
   background: rgba(30, 35, 40, 0.7);
   border: 1px solid var(--border-dim);
-  color: var(--gold-light);
+  color: var(--accent-ink);
   font-size: 1.5rem; line-height: 1;
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition), color var(--transition);

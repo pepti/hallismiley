@@ -10,7 +10,16 @@
 // click, so a naive implementation either swallows the selection or needs two
 // clicks to move the popover between rows.
 const { test, expect } = require('@playwright/test');
-const { loginAsAdmin } = require('./helpers');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
+const { seedAdminUser, signInViaApi } = require('./lib/accounts');
+
+// Tints live in the per-admin layout blob, which admin-surface.spec.js also
+// writes (Reset). Its own admin keeps another worker's Reset from wiping a
+// tint between the save and the reload this spec checks (e2e/lib/accounts.js).
+const COLORS_ADMIN = { username: 'e2ecolorsadmin', email: 'colors-admin@e2e.test', password: 'ColorsAdmin123' };
 
 // The base helpers have no gotoAndSettle — same behaviour inlined.
 async function gotoAndSettle(page, path) {
@@ -18,10 +27,25 @@ async function gotoAndSettle(page, path) {
   await page.waitForLoadState('networkidle');
 }
 
-const ROW   = '[data-item-id="orders"]';
-const TRIG  = '[data-tint-btn="orders"]';
+// A line that is VISIBLE in view mode on this instance — the retail lines
+// (orders, products, …) are hidden by policy (components/adminSurface.js) and
+// only render in edit mode, so a tint on them could not be checked on the
+// live nav link. The second picker test still uses `products` as its other
+// trigger: edit mode renders every line.
+// Which line is visible is the product's (identity.surface.hiddenAdminViews):
+// the first of these the product does not hide is the one tinted here.
+const { identity } = require('./lib/identity');
+const CANDIDATES = [
+  ['invoices', '/admin/books/invoices'],
+  ['payroll', '/admin/books/payroll'],
+  ['feedback', '/admin/feedback'],
+  ['general', '/admin/general'],
+];
+const [VIEW, ROUTE] = CANDIDATES.find(([id]) => !identity.surface.hiddenAdminViews.includes(id)) || CANDIDATES[0];
+const ROW   = `[data-item-id="${VIEW}"]`;
+const TRIG  = `[data-tint-btn="${VIEW}"]`;
 const POP   = '.admin-sidebar__tint-pop';
-const LINK  = '.admin-sidebar a[data-route="/admin/shop/orders"]';
+const LINK  = `.admin-sidebar a[data-route="${ROUTE}"]`;
 
 // Edit mode is a desktop affordance (the toggle is hidden under 640px).
 test.use({ viewport: { width: 1280, height: 900 } });
@@ -32,8 +56,10 @@ async function enterEditMode(page) {
 }
 
 test.describe('admin nav — row colours', () => {
+  test.beforeAll(async () => { await seedAdminUser(COLORS_ADMIN); });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await signInViaApi(page, COLORS_ADMIN);
     await gotoAndSettle(page, '/admin');
     await enterEditMode(page);
     // Start from a known state — a previous test may have left tints behind.

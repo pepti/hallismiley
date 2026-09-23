@@ -48,7 +48,7 @@ function drawDeliveryNote(doc, { order, items, store }) {
 
   // ── Header: store identity left, document title right ──────────────────────
   doc.fillColor(INK).font('Helvetica-Bold').fontSize(20)
-    .text(store.store_name || 'Halli Smiley', MARGIN, MARGIN, { width: innerW * 0.6 });
+    .text(store.store_name || 'Orange Smiley', MARGIN, MARGIN, { width: innerW * 0.6 });
   doc.font('Helvetica').fontSize(9).fillColor(MUTED);
   [store.address1, store.address2, [store.zip, store.city].filter(Boolean).join(' '), store.country, store.phone]
     .filter(s => s && String(s).trim())

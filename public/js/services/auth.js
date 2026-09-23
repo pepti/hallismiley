@@ -31,6 +31,11 @@ export function isAuthenticated() { return !!_user; }
 export function getRoles()        { return _user?.roles || (_user?.role ? [_user.role] : []); }
 export function hasRole(role)     { return getRoles().includes(role); }
 export function isAdmin()         { return getRoles().includes('admin'); }
+// An admin account that has not set up two-step verification yet. The server
+// withholds the admin role from it (server/auth/mfaPolicy.js), so isAdmin() is
+// false and every admin call would 403 — this flag is how the SPA knows to walk
+// the person to the set-up panel instead of showing them a plain user's site.
+export function mfaEnrolmentRequired() { return !!_user?.mfa_enrolment_required; }
 // Editor = admin or moderator. Used to gate edit-mode UI for site content
 // (party page, news, projects) where moderators have full edit/delete rights.
 export function canEdit()         { return getRoles().some(r => r === 'admin' || r === 'moderator'); }
@@ -41,16 +46,22 @@ export function canEdit()         { return getRoles().some(r => r === 'admin' ||
 export function getViews()        { return _user?.views || []; }
 export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
 export function hasAnyAdminView() { return getViews().length > 0; }
+// Holds every view (the admin role resolves to ['*']). The sidebar's
+// hidden-by-policy set (components/adminSurface.js) applies only to these
+// accounts — a custom role's explicit grant list is already its whole nav.
+export function hasAllViews()     { return getViews().includes('*'); }
 
-// Mirrors server/services/mfaService.js: the 2FA gate protects an admin by
-// PRIMARY role or by role SET (`admin_anywhere`), and isAdmin() already reads
-// the set — but ProfileView gated its enrolment panel on the primary role
-// alone, so a set-only admin was challenged with no way to comply.
-//
-// An instance that widens the server predicate must widen this in step. Orange
-// Smiley, for example, adds `|| canSeeView('accounts')` for sellers who reach
-// customer data (its ENHANCEMENTS #17).
-export function isMfaProtected() { return isAdmin(); }
+// Mirrors server/services/mfaService.js protectedRole(): admin (primary role
+// OR role set — getRoles() covers both, which is the `admin_anywhere` case),
+// or an accounts holder. ENHANCEMENTS #17 widened the SERVER gate to sellers
+// who own customer accounts without widening the enrolment UI, so a seller was
+// pushed to enrol and had no panel to enrol from. The server stays the
+// authority; this exists so the two cannot drift silently again.
+// D-020 widened both again: a published seller on the public instance.
+export function isMfaProtected() { return isAdmin() || canSeeView('accounts') || isSeller(); }
+// Seller area (D-020): the session says so only on the public instance, for a
+// user the latest ops snapshot lists. UX only — /api/v1/seller re-checks.
+export function isSeller() { return _user?.seller === true; }
 
 // Merge a partial update into the cached user (e.g. after a profile change).
 // Dispatches authchange so listeners re-render.
@@ -173,6 +184,16 @@ export async function logout() {
   // while the UI still showed the signed-in basket, so a qty change or remove
   // during that window wrote the ex-user's lines into the guest basket.
   _user = null;
+  _dispatch();
+}
+
+// Re-read the session and tell everyone. Used when the ROLE picture changes
+// under a live session: confirming two-step set-up turns the account into the
+// admin it is (roles, views), turning it off takes that away again.
+export async function refreshSession() {
+  const res  = await fetch('/auth/session', { credentials: 'include', cache: 'no-store' });
+  const data = await res.json();
+  _user = data.authenticated ? data.user : null;
   _dispatch();
 }
 
@@ -366,7 +387,11 @@ export async function totpConfirm(code) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not confirm');
-  updateCachedUser({ totp_enabled: true });
+  // SILENT: the router re-renders the current view on every authchange, and the
+  // view is about to show the recovery codes — which exist for this one moment
+  // and cannot be fetched again. The panel calls refreshSession() once the
+  // person says they have saved them.
+  updateCachedUser({ totp_enabled: true }, { silent: true });
   return data;
 }
 
@@ -378,7 +403,9 @@ export async function totpDisable(password) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not turn off');
-  updateCachedUser({ totp_enabled: false });
+  // Not just a flag: without two-step the server stops treating the account as
+  // an admin, so roles and views change with it.
+  await refreshSession();
   return data;
 }
 

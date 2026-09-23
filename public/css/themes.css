@@ -1,22 +1,378 @@
 /* ── Site themes ─────────────────────────────────────────────────────────────
-   Five selectable alternate colour themes (picker:
-   public/js/components/ThemeSwitcher.js). `classic` is the site's existing
-   dark charcoal+gold look — the :root default in variables.css, with no
-   data-theme attribute. The attribute lives on <html>, set pre-paint by
-   /js/theme-boot.js and at runtime by services/themePrefs.js.
+   Three themes, one switch (picker: public/js/components/ThemeSwitcher.js, and
+   the Appearance section in ProfileView):
 
-   This site is dark by default and its component CSS is consistently
-   token-driven, so an alternate theme only has to REDEFINE the tokens below —
-   every tokenized component re-skins automatically. (Unlike the upstream store
-   this was ported from, there is no light baseline, so the light→dark fixes —
-   logo inversion, ink-flip hovers, admin status pills — are intentionally
-   omitted; they are not needed here.)
+     ember     — GLÓÐ, THE DEFAULT since 2026-09-02: the earth palette after
+                 sundown — brown-black page, sand and tan where Bjart has brown.
+     classic   — BJART, the light option: beige paper, brown ink, orange on
+                 the mark alone. Its tokens live in variables.css as :root, so
+                 it carries NO data-theme attribute — "root" and "default"
+                 are different ideas here (theme-boot.js / themePrefs.js).
+     midnight  — MIÐNÆTTI, high contrast: true black, white ink, one bright
+                 warm accent, edges drawn as lines rather than shadows.
 
-   glacier / moss / lava / aurora are immersive COLOUR themes: a deep tinted
-   surface set + light text + a gradient backdrop + gradient primary buttons.
-   black-sand is a neutral dark with solid backgrounds. html[data-theme="x"]
-   (0,1,1) out-specifies :root (0,1,0); this file is imported last in main.css,
-   so no existing component CSS needs edits. */
+   History: Halli settled on Ash-dark on 2026-08-09, flipped to a light main
+   theme on 2026-08-20 (five themes: orange, black, white), re-hued to beige
+   and brown on 2026-09-01, and cut the set from five to three on 2026-09-02 —
+   "five is too many to maintain". Pappír had become Bjart a shade deeper, and
+   Svart & hvítt's job (contrast) went to the new Miðnætti. Every extra theme
+   is another full audit per change; three is what one person can keep honest.
+
+   The theme IDs are load-bearing. `classic` must stay the id of the :root
+   default (theme-boot.js and themePrefs.js both encode "classic = no
+   attribute"). `light` and `mono` no longer ship a token set: migration 094
+   moved every account that had picked one to classic, and the client lists
+   normalise a stale localStorage value the same way. The users.theme CHECK
+   still ADMITS the old ids on purpose — invariant 14: the previous release's
+   container may write them during a swap, so the constraint narrows in a
+   later release, not this one.
+
+   Component CSS is token-driven, so a theme is mostly token overrides. Where
+   a component hard-coded a colour, the fix belongs in the token contract
+   (--on-accent, --accent-ink) rather than in per-theme patches — see the
+   "Cross-theme contract tokens" note in variables.css. The only rules below
+   the token blocks are ones that genuinely cannot be expressed as a value.
+
+   html[data-theme="x"] (0,1,1) out-specifies :root (0,1,0); this file is
+   imported last in main.css. */
+
+
+/* ── GLÓÐ — the earth palette after sundown ──────────────────────────────────
+   Was the site's :root default from 2026-08-09 to the light flip (theme name
+   "Ash"), kept with its charcoal-and-orange values until 2026-09-02. Re-hued
+   then to be Bjart's dark sibling rather than a survivor of an earlier
+   palette: brown-black paper, cream ink, and sand-to-tan where Bjart has
+   brown. Orange stays on the mark and nowhere else.
+
+   Contrast on base #1A1410 / surface #221B16:
+     --text-primary   #F2E8DA  15.05 / 14.02
+     --text-secondary #C9B9A4   9.52 /  8.86
+     --text-muted     #9A8B78   5.50 /  5.13
+     --gold           #C9A277   7.74 /  7.21   (the accent — tan)
+     --gold-light     #E6CDA8  11.87 / 11.05   (also --accent-ink here)
+   --gold-dark #A67C4E (4.88 / 4.54) is the gradient tail and border colour;
+   it clears AA but is not the text step. The accent gradient is a LIGHT fill,
+   so its label is the near-black page: #1A1410 on #E6CDA8 is 11.87 : 1 and on
+   #C9A277 7.74 : 1 — the inverse of Bjart, which --on-accent exists for. */
+html[data-theme="ember"] {
+  color-scheme: dark;
+
+  --bg-base:     #1A1410;
+  --bg-base-rgb: 26, 20, 16;
+  --bg-surface:  #221B16;
+  --bg-elevated: #2A2219;
+  --bg-nav:      #140F0C;
+  --bg-nav-rgb:  20, 15, 12;
+  --bg-hover:    #332A22;
+  --bg-tint:     none;
+  --overlay:     rgba(0, 0, 0, 0.62);
+
+  /* Hairlines in sand at low alpha — the dark counterpart of Bjart's ink. */
+  --border:       rgba(230, 205, 168, 0.30);
+  --border-dim:   rgba(230, 205, 168, 0.17);
+  --border-light: rgba(230, 205, 168, 0.08);
+
+  /* The ramp inverts on a dark page: light = brightest, dark = the tail. */
+  --gold:         #C9A277;
+  --gold-light:   #E6CDA8;
+  --gold-dark:    #A67C4E;
+  --gold-glow:    rgba(201, 162, 119, 0.10);
+  --glow-around:  0 0 30px rgba(201, 162, 119, 0.14);
+  /* The sharp accent — warm off-white, spent sparingly. */
+  --teal:         #E8DFD2;
+  --teal-dim:     rgba(232, 223, 210, 0.08);
+
+  --accent-gradient:     linear-gradient(135deg, #E6CDA8 0%, #C9A277 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(230, 205, 168, 0.18), rgba(201, 162, 119, 0.18));
+  --hero-title-glow: none;
+
+  --accent-amber:     #C9A277;
+  --accent-amber-dim: rgba(201, 162, 119, 0.10);
+  --accent-blue:      #E8DFD2;
+  --accent-blue-dim:  rgba(232, 223, 210, 0.08);
+
+  --text-primary:   #F2E8DA;
+  --text-secondary: #C9B9A4;
+  --text-muted:     #9A8B78;
+
+  --on-accent:       #1A1410;
+  --accent-ink:      #E6CDA8;
+  --accent-hover:    #E6CDA8;
+  /* Scene grade — Glóð: dusk. Warm, darkened toward the brown-black page. */
+  --scene-filter: brightness(0.8) saturate(0.85) sepia(0.16) hue-rotate(-6deg);
+  --scene-scrim: linear-gradient(180deg, rgba(20, 15, 12, 0.42) 0%, rgba(20, 15, 12, 0.26) 40%, rgba(26, 20, 16, 0.72) 100%);
+  --scene-chip-bg: rgba(20, 15, 12, 0.62);
+  --scene-chip-fg: #F2E8DA;
+  --scene-aurora: 1;
+  --ambient-opacity: 1;
+  --hero-gradient:   linear-gradient(155deg, #241C15 0%, #1A1410 46%, #2A1E12 100%);
+  --bg-gradient:     none;
+
+  /* Status on the dark page (page / card): success 8.49 / 7.91 · error
+     6.34 / 5.90 · warning 9.49 / 8.84. */
+  --success:     #5FC48F;
+  --success-dim: rgba(95, 196, 143, 0.16);
+  --error:       #E8776F;
+  --error-dim:   rgba(232, 119, 111, 0.16);
+  --danger:      #E8776F;
+  --warning:     #E2B45E;
+  --warning-dim: rgba(226, 180, 94, 0.16);
+
+  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.75);
+  --shadow-gold:  0 0 20px rgba(201, 162, 119, 0.18);
+
+  /* Light-on-dark sidebar tints — the counterpart to the :root set. */
+  --nav-tint-red:     #F59289;
+  --nav-tint-rose:    #FDA4AF;
+  --nav-tint-brown:   #D2A679;
+  --nav-tint-amber:   #F0C868;
+  --nav-tint-lime:    #A3E635;
+  --nav-tint-green:   #5EE08F;
+  --nav-tint-teal:    #5FD6D0;
+  --nav-tint-slate:   #A8B3C4;
+  --nav-tint-blue:    #93B8FA;
+  --nav-tint-violet:  #CBB6F2;
+  --nav-tint-fuchsia: #F0ABFC;
+  --nav-tint-pink:    #F79AD3;
+  --nav-tint-a:       26%;
+  /* The mark keeps its own orange on every theme (see variables.css). */
+  --brand-mark-light: #EA580C;
+  --brand-mark:       #C2410C;
+  --brand-mark-dark:  #9A3412;
+}
+
+
+/* ── MIÐNÆTTI — high contrast: very dark, very bright ────────────────────────
+   Replaced 2026-09-02 (Halli): the third theme is the contrast one — black
+   page, white ink, one bright warm accent — taking over the job Svart &
+   hvítt used to do, without the bright orange the old Miðnætti turned all
+   the way up. The rules of a high-contrast theme, followed rather than
+   approximated: secondary text stays bright (no "muted" that is really dim),
+   edges are drawn as lines (borders at high alpha, a card outline instead of
+   a blur shadow), and nothing depends on a tint the eye may not separate.
+
+   Contrast on base #000000 / surface #0A0A0A:
+     --text-primary   #FFFFFF  21.00 / 19.80
+     --text-secondary #E6E6E6  16.83 / 15.86
+     --text-muted     #BDBDBD  11.18 / 10.54
+     --gold           #FFD166  14.56 / 13.73   --gold-dark #F2B93B 11.78 / 11.10
+   The accent is bright, so filled controls take a BLACK label (black on
+   #FFD166 is 14.56 : 1, on #FFE9A8 17.47 : 1) — that is what --on-accent is
+   for. */
+html[data-theme="midnight"] {
+  color-scheme: dark;
+
+  --bg-base:     #000000;
+  --bg-base-rgb: 0, 0, 0;
+  --bg-surface:  #0A0A0A;
+  --bg-elevated: #161616;
+  --bg-nav:      #000000;
+  --bg-nav-rgb:  0, 0, 0;
+  --bg-hover:    #1F1F1F;
+  --bg-tint:     none;
+  --overlay:     rgba(0, 0, 0, 0.78);
+
+  /* Edges as lines: high alpha, so a border is visible as a border. */
+  --border:       rgba(255, 255, 255, 0.55);
+  --border-dim:   rgba(255, 255, 255, 0.32);
+  --border-light: rgba(255, 255, 255, 0.16);
+
+  --gold:         #FFD166;
+  --gold-light:   #FFE9A8;
+  --gold-dark:    #F2B93B;
+  --gold-glow:    rgba(255, 209, 102, 0.12);
+  /* A crisp ring, not a blur: glow softens exactly the edge this theme wants. */
+  --glow-around:  0 0 0 2px rgba(255, 209, 102, 0.6);
+  /* Sharp accent = white, spent sparingly against all that black. */
+  --teal:         #FFFFFF;
+  --teal-dim:     rgba(255, 255, 255, 0.10);
+
+  --accent-gradient:     linear-gradient(135deg, #FFE9A8 0%, #FFD166 100%);
+  --accent-gradient-dim: linear-gradient(135deg, rgba(255, 233, 168, 0.18), rgba(255, 209, 102, 0.18));
+  --hero-title-glow: none;
+
+  --accent-amber:     #FFD166;
+  --accent-amber-dim: rgba(255, 209, 102, 0.14);
+  --accent-blue:      #FFFFFF;
+  --accent-blue-dim:  rgba(255, 255, 255, 0.10);
+
+  --text-primary:   #FFFFFF;
+  --text-secondary: #E6E6E6;
+  --text-muted:     #BDBDBD;
+
+  --on-accent:       #000000;
+  --accent-ink:      #FFD166;
+  --accent-hover:    #FFE9A8;
+  /* Scene grade — Miðnætti: cut hard toward black and pushed for contrast, so
+     the photograph stays a backdrop the white copy can sit on. */
+  --scene-filter: brightness(0.5) saturate(0.6) contrast(1.15);
+  --scene-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.35) 40%, rgba(0, 0, 0, 0.86) 100%);
+  --scene-chip-bg: rgba(0, 0, 0, 0.75);
+  --scene-chip-fg: #FFFFFF;
+  --scene-aurora: 1;
+  /* No ambient drift: a wash behind the page is the opposite of contrast. */
+  --ambient-opacity: 0;
+  --hero-gradient:   linear-gradient(155deg, #0A0A0A 0%, #000000 50%, #0A0A0A 100%);
+  --bg-gradient:     none;
+
+  /* Status (page / card): success 13.60 / 12.82 · error 8.33 / 7.85 ·
+     warning 12.22 / 11.52. */
+  --success:     #6EE7A0;
+  --success-dim: rgba(110, 231, 160, 0.18);
+  --error:       #FF7B72;
+  --error-dim:   rgba(255, 123, 114, 0.18);
+  --danger:      #FF7B72;
+  --warning:     #FFB84D;
+  --warning-dim: rgba(255, 184, 77, 0.18);
+
+  /* Outlines instead of shadows — a blur on black is invisible; a line reads. */
+  --shadow-card:  0 0 0 1px rgba(255, 255, 255, 0.18);
+  --shadow-modal: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 16px 56px rgba(0, 0, 0, 0.9);
+  --shadow-gold:  0 0 0 2px rgba(255, 209, 102, 0.5);
+
+  /* Light-on-dark sidebar tints — a dark theme must bring its own or it
+     inherits the :root beige-surface set and the tints go near-invisible. */
+  --nav-tint-red:     #F59289;
+  --nav-tint-rose:    #FDA4AF;
+  --nav-tint-brown:   #D2A679;
+  --nav-tint-amber:   #F0C868;
+  --nav-tint-lime:    #A3E635;
+  --nav-tint-green:   #5EE08F;
+  --nav-tint-teal:    #5FD6D0;
+  --nav-tint-slate:   #A8B3C4;
+  --nav-tint-blue:    #93B8FA;
+  --nav-tint-violet:  #CBB6F2;
+  --nav-tint-fuchsia: #F0ABFC;
+  --nav-tint-pink:    #F79AD3;
+  --nav-tint-a:       30%;
+  /* The mark keeps its own orange on every theme (see variables.css). */
+  --brand-mark-light: #EA580C;
+  --brand-mark:       #C2410C;
+  --brand-mark-dark:  #9A3412;
+}
+
+
+/* ── Shared theme plumbing ───────────────────────────────────────────────────
+   Unscoped on purpose. These used to be pinned to html[data-theme] — which
+   silently skipped the :root default, harmless while the default was the only
+   theme that wanted the fallback value, and a bug the moment --bg-gradient
+   meant something on the default. Every token below has a per-theme value, so
+   a bare selector is both correct and one rule instead of six. */
+body {
+  background-image: var(--bg-gradient, none);
+  background-attachment: fixed;
+}
+.btn--primary { background: var(--accent-gradient, var(--gold)); color: var(--on-accent); }
+.btn--primary:hover { box-shadow: 0 0 24px var(--gold-glow); }
+
+/* Hover fill for filled controls. layout.css brightens to --gold-light, which
+   is the DECORATIVE end of the ramp — white on #EA580C is 3.56 : 1, under AA
+   for the small caps these controls use. --accent-hover is the per-theme fill
+   that keeps --on-accent legible (it darkens in light themes and brightens in
+   dark ones — same intent, opposite direction). */
+.lol-nav__cta:hover,
+.skip-nav:hover { background: var(--accent-hover); box-shadow: 0 2px 12px var(--gold-glow); }
+
+/* The ambient drift (main.css) is tuned for a near-black page; on paper it
+   reads as a dirty smudge. Gated by token rather than by theme selector so a
+   new theme opts in with a value, not an edit here. */
+body::before { opacity: var(--ambient-opacity, 1); }
+
+/* Filled controls paint an accent background and need a label that contrasts
+   the FILL, not the page. Formerly `color: var(--bg-nav)` in layout.css,
+   which happened to be right for every light theme and wrong for both dark
+   ones (near-black label on a bright orange fill). */
+.skip-nav,
+.lol-nav__cta,
+.lol-nav__lang-opt--active,
+.lol-nav__lang-opt--active:hover {
+  color: var(--on-accent);
+}
+/* ...but the GHOST CTA is transparent-backed, so the rule above would paint
+   the label in the fill colour over the page. Class doubled to out-specify. */
+.lol-nav__cta.lol-nav__cta--ghost {
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+.lol-nav__cta.lol-nav__cta--ghost:hover {
+  background: var(--accent-amber-dim);
+  border-color: var(--gold);
+  color: var(--accent-ink);
+}
+
+/* Section headings that hard-code #fff in the portfolio CSS. Token-driven now,
+   so they read on every theme instead of only the dark ones. (These surfaces
+   are hidden from nav per publicSurface.js but still routable, so they still
+   have to be legible.) */
+.lol-news__title,
+.lol-projects__title,
+.lol-skills__title { color: var(--text-primary); }
+
+
+/* ── hallismiley residual hook (engine-graft, 2026-09-22) ─────────────────────
+   The five colour themes of the base's 081_user_theme, carried on top of the
+   engine's three (Glóð, Bjart, Miðnætti — which the engine's own tests pin
+   and which therefore stay in the picker). The token sets are the base's
+   (`git show f7d93b9:public/css/themes.css`) unchanged; the bridge block
+   first gives the engine-only tokens the base never had (status set, scene
+   grade, --on-accent/--accent-ink, sidebar tints, the brand mark) a value
+   that reads on a dark page, so nothing falls back to Bjart's paper values.
+   Adding a theme here means: this block, THEMES in themePrefs.js +
+   theme-boot.js + server/config/themes.js, and its name in the product
+   overlay public/js/i18n/product.<locale>.json. */
+html[data-theme="glacier"],
+html[data-theme="moss"],
+html[data-theme="lava"],
+html[data-theme="aurora"],
+html[data-theme="black-sand"] {
+  --bg-tint:     none;
+  --overlay:     rgba(0, 0, 0, 0.62);
+  --glow-around: 0 0 30px var(--gold-glow);
+  --accent-gradient-dim: linear-gradient(135deg, var(--accent-amber-dim), var(--teal-dim));
+  --hero-title-glow: none;
+  /* Filled controls take the nav-dark label; accent-as-text is the light end
+     of each theme's own ramp, which every one of these sets ≥ 4.5:1 on its
+     base. */
+  --on-accent:    var(--bg-nav);
+  --accent-ink:   var(--gold-light);
+  --accent-hover: var(--gold-light);
+  /* Scene grade + ambience: the Glóð (ember) values — a dark warm cut. */
+  --scene-filter: brightness(0.8) saturate(0.85) sepia(0.16) hue-rotate(-6deg);
+  --scene-scrim: linear-gradient(180deg, rgba(20, 15, 12, 0.42) 0%, rgba(20, 15, 12, 0.26) 40%, rgba(26, 20, 16, 0.72) 100%);
+  --scene-chip-bg: rgba(0, 0, 0, 0.55);
+  --scene-chip-fg: var(--text-primary);
+  --scene-aurora: 1;
+  --ambient-opacity: 1;
+  --hero-gradient: var(--bg-gradient, linear-gradient(155deg, var(--bg-elevated) 0%, var(--bg-base) 100%));
+  /* Status on a dark page — the ember set (measured there ≥ 5.9:1). */
+  --success:     #5FC48F;
+  --success-dim: rgba(95, 196, 143, 0.16);
+  --error:       #E8776F;
+  --error-dim:   rgba(232, 119, 111, 0.16);
+  --danger:      #E8776F;
+  --warning:     #E2B45E;
+  --warning-dim: rgba(226, 180, 94, 0.16);
+  --shadow-gold: 0 0 20px var(--gold-glow);
+  /* Light-on-dark sidebar tints — the counterpart to the :root set. */
+  --nav-tint-red:     #F59289;
+  --nav-tint-rose:    #FDA4AF;
+  --nav-tint-brown:   #D2A679;
+  --nav-tint-amber:   #F0C868;
+  --nav-tint-lime:    #A3E635;
+  --nav-tint-green:   #5EE08F;
+  --nav-tint-teal:    #5FD6D0;
+  --nav-tint-slate:   #A8B3C4;
+  --nav-tint-blue:    #93B8FA;
+  --nav-tint-violet:  #CBB6F2;
+  --nav-tint-fuchsia: #F0ABFC;
+  --nav-tint-pink:    #F79AD3;
+  --nav-tint-a:       26%;
+  /* The mark keeps its own orange on every theme (see variables.css). */
+  --brand-mark-light: #EA580C;
+  --brand-mark:       #C2410C;
+  --brand-mark-dark:  #9A3412;
+}
 
 /* ── Glacier — deep fjord navy + ice blue ── */
 html[data-theme="glacier"] {
@@ -178,17 +534,8 @@ html[data-theme="black-sand"] {
   --text-muted:     rgba(237, 234, 228, 0.55);
   --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-modal: 0 8px 30px rgba(0, 0, 0, 0.65);
+  /* Solid backgrounds: no backdrop gradient; buttons take the gold ramp
+     rather than :root's brown one. */
+  --bg-gradient:     none;
+  --accent-gradient: linear-gradient(135deg, #F0D08A 0%, #E8C06A 100%);
 }
-
-/* ── Immersive backdrop + gradient buttons (colour themes only) ───────────────
-   Only glacier/moss/lava/aurora define --bg-gradient + --accent-gradient.
-   classic (no attribute) keeps variables.css's --bg-tint; black-sand (no
-   gradient vars) falls back to its solid --bg-base. */
-html[data-theme] body {
-  background-image: var(--bg-gradient, none);
-  background-attachment: fixed;
-}
-html[data-theme] .btn--primary { background: var(--accent-gradient, var(--gold)); }
-html[data-theme] .btn--primary:hover { box-shadow: 0 0 24px var(--gold-glow); }
-
-

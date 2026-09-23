@@ -2,5 +2,22 @@ User-agent: *
 Allow: /
 Disallow: /auth/
 Disallow: /api/
+# Admin shell (incl. the internal sales handbook). All content behind it is
+# auth-gated at the API layer; this just keeps the shell out of crawlers.
+Disallow: /admin
+Disallow: /en/admin
+Disallow: /is/admin
 
-Sitemap: https://www.hallismiley.is/sitemap.xml
+# Hidden-but-functional surfaces (server/config/publicSurface.js). They still
+# render for anyone with the URL; they are simply not part of the public
+# business site. Each also emits <meta name="robots" content="noindex">.
+Disallow: /en/party
+Disallow: /is/party
+Disallow: /en/halli
+Disallow: /is/halli
+Disallow: /en/news
+Disallow: /is/news
+Disallow: /en/shop
+Disallow: /is/shop
+
+Sitemap: https://www.orangesmiley.is/sitemap.xml

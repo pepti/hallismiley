@@ -7,8 +7,10 @@
 // APP_ENV (the <meta name="app-env"> stamped by ssrMeta.js). The override is
 // purely client-side, and it can only ever turn the test affordances OFF —
 // never on. See getEffectiveEnv(): the blue TEST chrome means "this really is
-// the TEST stack" and nothing else. The change-request submit endpoint is
-// gated by the server's real APP_ENV regardless (requireTestEnv).
+// the TEST stack, and you are an admin" and nothing else. The change-request
+// submit endpoint is gated server-side regardless (changeRequestGate: an admin
+// on the test stack, or an admin with the Admin → Feedback switch on) — no
+// browser state opens it.
 // `ws_demo_mode` — '1' = demo mode on; absent = off. A presentation overlay
 // layered on top of TEST (see test-env.css / ChangeRequestWidget); purely
 // client-side and only meaningful while the test affordances are showing.
@@ -17,7 +19,7 @@
 // the theme read + admin guard — keep the two in sync.
 //
 // The theme has a SECOND home for logged-in users: users.theme on the account
-// (migration 081_user_theme). localStorage stays the pre-paint cache — it is
+// (migration 083_user_theme). localStorage stays the pre-paint cache — it is
 // the only store a synchronous <head> script can read — while the account copy
 // makes the choice follow the LOGIN to another browser or device:
 //   • change → setTheme() writes localStorage AND PATCHes /users/me;
@@ -25,10 +27,31 @@
 //     server value back into localStorage and repaints.
 // Anonymous visitors are unaffected: no session, no write, browser-local only.
 
-import { getUser, isAuthenticated, updateProfile, updateCachedUser } from './auth.js';
+import { getUser, isAuthenticated, isAdmin, updateProfile, updateCachedUser } from './auth.js';
+import { getIdentity } from '../utils/identity.js';
 
-export const THEMES = ['classic', 'glacier', 'moss', 'lava', 'aurora', 'black-sand'];
-const DEFAULT_THEME = 'classic';
+// The theme trio is the PRODUCT's — identity.theme in config/client.json,
+// handed to the page by ssrMeta (utils/identity.js parses it; theme-boot.js
+// reads the same values off <html data-*-theme> because it runs pre-paint).
+// The engine defaults are Orange Smiley's: picker order Glóð first, then the
+// light, then high contrast. 'classic' is BJART (light) since 2026-08-20 — the
+// id outlived the palette it was named for, and is kept because it is the
+// root theme ("no data-theme attribute"). The set was cut from five to three
+// on 2026-09-02 (Halli): a stale localStorage or account value for a retired
+// id normalises to the default below (getTheme/setTheme both gate on THEMES).
+// A product with more themes lists them in its picker AND gives each a token
+// set in themes.css; migration 106 dropped the users.theme CHECK so no engine
+// migration is needed for that.
+const IDENTITY_THEME = getIdentity().theme;
+export const THEMES = IDENTITY_THEME.picker.slice();
+// Two ideas that used to be one value. ROOT_THEME is the theme whose tokens
+// ARE :root — it carries no data-theme attribute (invariant 13; theme-boot.js
+// encodes the same rule). DEFAULT_THEME is what a visitor gets with nothing
+// stored: Glóð since 2026-09-02 (Halli). While the two coincided, picking the
+// default deleted the stored key; now every choice is stored explicitly, so
+// changing the default later never flips a choice someone actually made.
+const ROOT_THEME    = IDENTITY_THEME.root;
+const DEFAULT_THEME = IDENTITY_THEME.default;
 const THEME_KEY = 'ws_theme';
 const TEST_KEY  = 'ws_test_override';
 const DEMO_KEY  = 'ws_demo_mode';
@@ -38,14 +61,27 @@ const DEMO_KEY  = 'ws_demo_mode';
 // theme regardless of which one is active, so these can't come from the live
 // CSS variables. The colour themes show an accent→background gradient so the
 // swatch previews their immersive look.
+// Which themes paint a dark page. Both pickers use it to put an orange rim on
+// the dark swatches — a near-black circle on a light picker otherwise reads as
+// a blob of ink rather than "this is the dark one". The SET is the product's
+// (identity.theme.dark in config/client.json; identity-seam-2) so a downstream
+// with its own themes names its dark ones there; read here so the two
+// pickers cannot disagree about which themes are dark.
+export const DARK_THEMES = new Set(IDENTITY_THEME.dark);
+
 export const THEME_SWATCHES = {
-  classic: '#202020',
-  glacier: 'linear-gradient(135deg, #5FB4E8 0%, #0B2138 100%)',
-  moss: 'linear-gradient(135deg, #6FD08E 0%, #0F2418 100%)',
-  lava: 'linear-gradient(135deg, #FF8347 0%, #221210 100%)',
-  aurora: 'linear-gradient(135deg, #CDB8FB 0%, #123E39 100%)',
-  'black-sand': '#1A1A1A',
+  classic:  'linear-gradient(135deg, #7B5533 0%, #F2EBE0 70%)',
+  ember:    'linear-gradient(135deg, #E6CDA8 0%, #1A1410 70%)',
+  midnight: 'linear-gradient(135deg, #FFD166 0%, #000000 60%)',
 };
+
+// The swatch for a picker id. A product theme the engine map does not know
+// (a downstream's own id from identity.theme.picker) gets a neutral fill
+// built from the live tokens rather than an invalid `undefined` — the picker
+// stays usable while the downstream adds its own entry.
+export function swatchFor(id) {
+  return THEME_SWATCHES[id] || 'linear-gradient(135deg, var(--gold) 0%, var(--bg-base) 70%)';
+}
 
 function read(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -77,7 +113,7 @@ export function getTheme() {
 // never waits on the network to repaint.
 export function setTheme(theme, { persist = true } = {}) {
   const next = THEMES.includes(theme) ? theme : DEFAULT_THEME;
-  write(THEME_KEY, next === DEFAULT_THEME ? null : next);
+  write(THEME_KEY, next);
   _current = next;
   applyTheme();
   // Lets the two pickers (switcher popover, profile Appearance section) keep
@@ -202,11 +238,16 @@ export function setTestOverride(value) {
 // One-way clamp on purpose: on the TEST stack an admin may hide the chrome for
 // a demo (override 'production'), but no browser state can make PROD wear the
 // TEST colours. That keeps the blue badge a trustworthy "you are NOT on the
-// live site" signal, and stops an admin from being handed a change-request
-// widget whose submit endpoint 404s in production (requireTestEnv). A stale
+// live site" signal, and stops a non-admin from being handed a change-request
+// widget whose submit endpoint 404s in production (changeRequestGate). A stale
 // 'test' override left in a PROD browser is simply ignored.
+//
+// And even on TEST the chrome is an admin's tool, not the visitor's (Halli,
+// 2026-09-22): logged out, or signed in without the admin role, the site looks
+// exactly like production. Callers re-evaluate on 'authchange'.
 export function getEffectiveEnv() {
   if (getServerEnv() !== 'test') return 'production';
+  if (!isAdmin()) return 'production';
   return getTestOverride() === 'production' ? 'production' : 'test';
 }
 
@@ -225,7 +266,7 @@ export function applyTheme() {
   // classic is the :root default → no attribute. Every other theme (including
   // black-sand) applies everywhere, admin included; the admin CSS is tokenized
   // and themes.css carries the dark-mode admin fixes.
-  if (theme === DEFAULT_THEME) {
+  if (theme === ROOT_THEME) {
     document.documentElement.removeAttribute('data-theme');
   } else {
     document.documentElement.setAttribute('data-theme', theme);

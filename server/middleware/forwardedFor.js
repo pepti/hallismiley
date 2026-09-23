@@ -3,11 +3,10 @@
 // string straight through as `req.ip`, and express-rate-limit's key generator
 // returns any non-IPv6 string verbatim — so on Azure every TCP connection got
 // its own rate-limit bucket. Measured on icelandicstore TEST and PROD 2026-09-12
-// (ported to the base 2026-09-22 from icelandicstore, after orangesmiley.is
-// logged ERR_ERL_INVALID_IP_ADDRESS on its first day): three fresh connections,
-// three `RateLimit-Remaining: 49`. Every IP-keyed limiter (global, writes,
-// login, contact, MCP pre-auth) and the brute-force tracker were keyed per
-// connection, not per client.
+// (ported here 2026-09-22 after orangesmiley.is logged ERR_ERL_INVALID_IP_ADDRESS
+// on its first day): three fresh connections, three `RateLimit-Remaining: 49`.
+// Every IP-keyed limiter (global, writes, login, contact, MCP pre-auth) and the
+// brute-force tracker were keyed per connection, not per client.
 //
 // This strips the port from each forwarded entry BEFORE Express reads the
 // header, so req.ip is a bare address everywhere downstream. It only touches

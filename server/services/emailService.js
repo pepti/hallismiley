@@ -2,13 +2,20 @@
 // Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
 const { t }      = require('../i18n');
+// New senders log through pino (stack invariant). The older senders in this
+// file still use console.log — converting all of them is proposed separately
+// rather than folded into an unrelated change.
 const logger     = require('../logger');
 
-const APP_URL   = process.env.APP_URL || 'https://www.hallismiley.is';
-// Send from the real owner mailbox (a verified Google Workspace address) rather
-// than a noreply@ alias, so mail actually delivers. Override with EMAIL_FROM.
-const FROM_ADDR = process.env.EMAIL_FROM || 'halli@hallismiley.is';
-const FROM      = `Halli Smiley <${FROM_ADDR}>`;
+const APP_URL   = process.env.APP_URL || 'https://www.orangesmiley.is';
+// Production sends from the fleet domain (D-015: <slug>@mail.orangesmiley.is,
+// verified in Resend). Override with EMAIL_FROM.
+const FROM_ADDR = process.env.EMAIL_FROM || 'info@orangesmiley.is';
+const FROM      = `Orange Smiley <${FROM_ADDR}>`;
+// The sending domain has no inbox, so replies go to EMAIL_REPLY_TO (the
+// owner's mailbox) unless a message sets its own replyTo (lead notifications
+// reply to the enquirer).
+const REPLY_TO  = (process.env.EMAIL_REPLY_TO || '').trim();
 
 // Staging safety: when EMAIL_ALLOWLIST is set (comma-separated addresses),
 // every message is redirected to those addresses instead of its real
@@ -56,6 +63,7 @@ function sendFailed(channel, detail) {
 // bounded wait, loud failure. Returns Resend's { data, error } shape.
 async function deliver(payload, channel = 'generic') {
   const msg = { ...payload, to: applyAllowlist(payload.to) };
+  if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
   try {
     const result = await Promise.race([
       getClient().emails.send(msg),
@@ -111,8 +119,8 @@ function emailShell(title, bodyHtml, locale = 'en') {
           <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#1a1a1a 0%,#0d0d0d 100%);padding:32px 40px;border-bottom:2px solid #c9a84c;">
-              <h1 style="margin:0;font-size:28px;font-weight:700;color:#c9a84c;letter-spacing:1px;">Halli Smiley</h1>
-              <p style="margin:4px 0 0;font-size:13px;color:#666;letter-spacing:2px;text-transform:uppercase;">hallismiley.is</p>
+              <h1 style="margin:0;font-size:28px;font-weight:700;color:#c9a84c;letter-spacing:1px;">Orange Smiley</h1>
+              <p style="margin:4px 0 0;font-size:13px;color:#666;letter-spacing:2px;text-transform:uppercase;">orangesmiley.is</p>
             </td>
           </tr>
           <!-- Body -->
@@ -737,7 +745,7 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
     recipients.map(r => {
       const to = typeof r === 'string' ? r : r.email;
       const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
-      return client.emails.send({ from: FROM, to, subject: finalSubject, html });
+      return client.emails.send({ from: FROM, to, subject: finalSubject, html, ...(REPLY_TO && { replyTo: REPLY_TO }) });
     })
   );
 
@@ -1036,38 +1044,45 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
   console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
 }
 
-// ── Contact form → the admins ─────────────────────────────────────────────────
-// One mail per submission, Reply-To set to the visitor so answering is a reply.
-// The submission id is in the footer so the log line and the mail can be
-// matched without the log ever carrying the PII.
-async function sendContactNotification({ submissionId, adminEmails, name, email, message, topic, locale = 'en' }) {
-  if (!adminEmails || adminEmails.length === 0) return;
+// ── Lead notification to the company inbox ───────────────────────────────────
+// Sent when the business contact form (/hafa-samband) is submitted. Goes to
+// LEAD_NOTIFY_EMAIL, falling back to the configured From address so a lead is
+// never lost to a missing env var. No-ops (like every sender here) when Resend
+// is unconfigured, so dev and test never attempt delivery.
+
+async function sendLeadNotification({ submissionId, name, email, message, company, phone, platform, locale = 'is' }) {
   if (!isConfigured()) {
-    transportNotConfigured('contact', { submissionId });
+    transportNotConfigured('lead', { submissionId });
     return;
   }
-  const subject = t(locale, 'email.contact.subject', { name });
+
+  const to      = (process.env.LEAD_NOTIFY_EMAIL || FROM_ADDR).trim();
+  const subject = t(locale, 'email.lead.subject', { name });
+
   const row = (label, value) => `
       <tr>
         <td style="padding:10px 0;color:#666;font-size:13px;width:150px;border-top:1px solid #1a1a1a;">${escapeHtml(label)}</td>
         <td style="padding:10px 0;color:#e0e0e0;font-size:14px;border-top:1px solid #1a1a1a;">${escapeHtml(value || '—')}</td>
       </tr>`;
+
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.contact.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.contact.body'))}</p>
+    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid #222;">
-      ${row(t(locale, 'email.contact.nameLabel'), name)}
-      ${row(t(locale, 'email.contact.emailLabel'), email)}
-      ${row(t(locale, 'email.contact.topicLabel'), topic)}
+      ${row(t(locale, 'email.lead.nameLabel'), name)}
+      ${row(t(locale, 'email.lead.companyLabel'), company)}
+      ${row(t(locale, 'email.lead.emailLabel'), email)}
+      ${row(t(locale, 'email.lead.phoneLabel'), phone)}
+      ${row(t(locale, 'email.lead.platformLabel'), platform)}
     </table>
-    <p style="margin:0 0 8px;font-size:13px;color:#666;">${escapeHtml(t(locale, 'email.contact.messageLabel'))}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#666;">${escapeHtml(t(locale, 'email.lead.messageLabel'))}</p>
     <p style="margin:0 0 24px;font-size:15px;color:#e0e0e0;line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</p>
     <p style="margin:0;font-size:12px;color:#555;">${escapeHtml(submissionId)}</p>
   `, locale);
 
-  const { data, error } = await deliver({ from: FROM, to: adminEmails, replyTo: email, subject, html }, 'contact');
+  const { data, error } = await deliver({ from: FROM, to, replyTo: email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  logger.info({ submissionId, messageId: data && data.id, recipients: adminEmails.length }, 'contact notification sent');
+  logger.info({ submissionId, messageId: data.id }, 'lead notification sent');
 }
 
-module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendContactNotification, emailHealthCheck, isConfigured };
+module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured };

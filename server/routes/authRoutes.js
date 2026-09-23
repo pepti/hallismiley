@@ -10,18 +10,20 @@ const { requireAuth } = require('../auth/middleware');
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
-// Brute-force protection on login
+// Brute-force protection on login. Every auth ceiling below is ×5 its
+// original (ice #201); the security cost was raised with Halli and accepted
+// 2026-09-02 — account lockout after 5 failed attempts is the real guard.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   skip: isTest,
   message: { error: 'Too many auth attempts, try again later.', code: 429 },
 });
 
-// Signup: 15 registrations per 10 minutes per IP
+// Signup: 75 registrations per 10 minutes per IP
 const signupLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 15,
+  max: 75,
   skip: isTest,
   message: { error: 'Too many signup attempts, try again later.', code: 429 },
 });
@@ -29,32 +31,32 @@ const signupLimiter = rateLimit({
 // Availability checks: tight limit to deter enumeration
 const checkLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 30,
+  max: 150,
   skip: isTest,
   message: { error: 'Too many requests, try again later.', code: 429 },
 });
 
-// Resend verification: 1 request per minute per IP
+// Resend verification: 5 requests per minute per IP
 const resendLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 1,
+  max: 5,
   skip: isTest,
-  message: { error: 'Please wait 1 minute before requesting another verification email.', code: 429 },
+  message: { error: 'Too many verification emails requested, please wait a minute.', code: 429 },
 });
 
-// Password-reset flow: 5 requests per hour per IP to limit flooding / token guessing
+// Password-reset flow: 25 requests per hour per IP to limit flooding / token guessing
 const resetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 25,
   skip: isTest,
   message: { error: 'Too many password reset requests, please try again in an hour.', code: 429 },
 });
 
-// Magic-link login: 10 attempts per 15 min per IP. Defence-in-depth on top of
+// Magic-link login: 50 attempts per 15 min per IP. Defence-in-depth on top of
 // the unguessable 256-bit token (looked up by sha256 hash).
 const magicLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   skip: isTest,
   message: { error: 'Too many sign-in attempts, try again later.', code: 429 },
 });
@@ -93,13 +95,13 @@ router.get('/check-email/:email',       checkLimiter, authController.checkEmail)
 
 // ── Social login kill-switch ──────────────────────────────────────────────────
 // Two-layer flag ported from icelandicstore (#153 there), with the DEFAULT
-// INVERTED: social login is live on this site, so the routes stay open unless
-// SOCIAL_LOGIN_ENABLED=false is set explicitly (there, they 404 unless it is
-// set true). The client half is SOCIAL_LOGIN_ENABLED in
+// default OFF here: no OAuth app is configured for this instance, so the
+// routes 404 unless SOCIAL_LOGIN_ENABLED=true is set explicitly (the base,
+// where social login is live, inverts this). The client half is SOCIAL_LOGIN_ENABLED in
 // public/js/utils/features.js — both must flip to change the experience
 // cleanly. Read per-request so tests can toggle it via env.
 const socialLoginGate = (req, res, next) => {
-  if (process.env.SOCIAL_LOGIN_ENABLED !== 'false') return next();
+  if (process.env.SOCIAL_LOGIN_ENABLED === 'true') return next();
   return res.status(404).json({ error: 'Not found', code: 404 });
 };
 

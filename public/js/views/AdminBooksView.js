@@ -45,7 +45,9 @@ export class AdminBooksView {
           </select>
         </label>
         <div class="books-actions">
-          <a class="btn btn--ghost" href="${escHtml(href('/admin/books/settings'))}">${escHtml(t('adminBooks.settings.link'))}</a>
+          <a class="btn btn--ghost" href="${escHtml(href('/admin/books/settings'))}">
+            ${escHtml(t('adminBooks.settings.link'))}
+          </a>
         </div>
       </div>
       <div id="books-readiness"></div>
@@ -74,12 +76,24 @@ export class AdminBooksView {
         to: to.toISOString().slice(0, 10),
       });
       if (generation !== this._generation) return; // a newer request has landed
-      readiness.innerHTML = readinessBanner(data.readiness);
+      readiness.innerHTML = readinessBanner(data.readiness) + this._intakeHtml(data.intake_pending);
       body.innerHTML = this._renderBody(data);
     } catch (err) {
       if (generation !== this._generation) return;
       body.innerHTML = errorBanner(err.message);
     }
+  }
+
+  // Documents waiting in the intake queue for a person. One number, in front of
+  // the operator, is what makes a queue get worked.
+  _intakeHtml(count) {
+    const n = Number(count) || 0;
+    if (!n) return '';
+    return `
+      <div class="books-banner books-banner--info" role="status">
+        ${escHtml(t('adminBooks.dashboard.intakePending', { count: n }))}
+        <a class="btn btn--ghost" href="${escHtml(href('/admin/books/expenses'))}">${escHtml(t('adminBooks.dashboard.intakeOpen'))}</a>
+      </div>`;
   }
 
   _renderBody(data) {

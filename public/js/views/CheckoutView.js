@@ -14,7 +14,7 @@ function _esc(s) {
 // ISO-3166 alpha-2 country list (subset — Iceland + EU/EEA + a few others).
 // Display names live in the locale files under checkout.countryName.<code>;
 // they used to be hardcoded English here, so the IS locale showed an English list.
-const COUNTRIES = ['IS', 'DK', 'NO', 'SE', 'FI', 'DE', 'FR', 'NL', 'ES', 'IT', 'IE', 'GB', 'US']
+const COUNTRIES = ["IS", "DK", "NO", "SE", "FI", "DE", "FR", "NL", "ES", "IT", "IE", "GB", "US"]
   .map(code => ({ code }));
 
 export class CheckoutView {

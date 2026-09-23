@@ -11,7 +11,10 @@ const usePretty = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV 
 // the param name is kept, only its value is redacted.
 function scrubUrl(url) {
   if (typeof url !== 'string' || url.indexOf('?') === -1) return url;
-  return url.replace(/([?&](?:token|code|state|verify|reset|secret|api[_-]?key)=)[^&#]*/gi, '$1[REDACTED]');
+  // `q` joined the list when the leads inbox shipped: staff search it by name
+  // and email, so the search term is visitor PII and must not sit in the
+  // access log, which has none of the no-store discipline the module keeps.
+  return url.replace(/([?&](?:token|code|state|verify|reset|secret|api[_-]?key|q)=)[^&#]*/gi, '$1[REDACTED]');
 }
 
 const logger = pino({

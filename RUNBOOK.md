@@ -1,22 +1,30 @@
-# Runbook — Halli Smiley
+# Runbook — Orange Smiley
 
-Operational procedures for the production deployment on Azure App Service.
+Operational procedures for the deployment on Azure App Service — **which does
+not exist yet** (`docs/DEPLOYMENT.md` owns that fact and its date; deploy is a
+manual dispatch that fails at its guard until Halli arms it).
+Until then the Azure sections below are the base's procedures with the
+resource names replaced by placeholders. The placeholders are the repository
+variables `deploy.yml` reads; read the live values from GitHub → Settings →
+Variables, never from this file.
 
-Key resource names (see also project memory):
-
-| Resource | Name |
+| Placeholder | Comes from |
 | --- | --- |
-| Resource group | `hallismiley-rg` |
-| App Service | `hallismiley-app` |
-| Container registry | `hallismileyacr.azurecr.io` |
-| Postgres Flexible Server | `hallismiley-db` |
+| `<RESOURCE_GROUP>` | `vars.RESOURCE_GROUP` |
+| `<WEBAPP_NAME>` | `vars.WEBAPP_NAME` |
+| `<ACR_NAME>`, `<IMAGE_NAME>` | `vars.ACR_NAME`, `vars.IMAGE_NAME` (images are tagged `:<sha>` and `:sha-<sha>`) |
+| `<DB_SERVER>`, `<db-admin>`, `<dbname>` | the Postgres Flexible Server, decided at provisioning |
+| `<STORAGE_ACCOUNT>`, `<PLAN_NAME>`, `<host>` | likewise |
+
+The sections that are live today regardless of hosting: **Seeding the Shop**,
+**Analytics**, **Bókhald**, **Local Development — Test Database**.
 
 ---
 
 ## Rollback Procedures
 
 The deploy pipeline tags every image with its commit SHA
-(`hallismileyacr.azurecr.io/hallismiley:<sha>`), so a rollback is a one-command
+(`<ACR_NAME>.azurecr.io/<IMAGE_NAME>:<sha>`), so a rollback is a one-command
 swap of which tag the App Service points at — no rebuild, no CI rerun.
 
 ### Pin App Service to a previous image SHA (preferred)
@@ -24,28 +32,22 @@ swap of which tag the App Service points at — no rebuild, no CI rerun.
 ```bash
 # 1. List recent image tags in ACR, newest first.
 az acr repository show-tags \
-  --name hallismileyacr --repository hallismiley \
+  --name <ACR_NAME> --repository <IMAGE_NAME> \
   --orderby time_desc --top 20 -o tsv
 
 # 2. Point the App Service at the previous-known-good tag.
 az webapp config container set \
-  --resource-group hallismiley-rg \
-  --name hallismiley-app \
-  --container-image-name hallismileyacr.azurecr.io/hallismiley:<previous-sha>
+  --resource-group <RESOURCE_GROUP> \
+  --name <WEBAPP_NAME> \
+  --container-image-name <ACR_NAME>.azurecr.io/<IMAGE_NAME>:<previous-sha>
 
 # 3. Force a restart so the new image is actually running.
 az webapp restart \
-  --resource-group hallismiley-rg --name hallismiley-app
+  --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME>
 ```
 
-Verify that the NEW image is running — `/health` says nothing about which image
-answers: `curl -s https://www.hallismiley.is/ready` must show `uptime` reset to
-seconds, and `az webapp config container show -g hallismiley-rg -n hallismiley-app
---query linuxFxVersion` must name the tag you pinned (~30–60s on the B1 tier —
-no slots, read 2026-09-12; brief unavailability during the swap). The `weekly-purge`
-task keeps every tag younger than 14 days plus the 10 newest older ones (see
-Container Registry Housekeeping) — record the tag you are rolling back to, confirm
-it still exists, and lock it for the window.
+Verify with `curl https://<host>/ready` (NOT `/health`, which never checks the database) once the restart settles
+(~30–60s on the B1 tier; brief unavailability during the swap).
 
 > A rollback re-deploys the previous Docker image but does NOT revert the
 > database. If the rollback target used a different schema, run a corrective
@@ -57,23 +59,61 @@ When the bad change is small and you'd rather have CI validate the rollback:
 
 ```bash
 git revert <bad-commit-sha>
-git push origin main
+git push origin master
 ```
 
-CI runs against the revert commit; on green, the gated Deploy workflow
-auto-fires and ships the reverted code. Takes ~15 minutes (CI ≈ 12, deploy ≈ 2,
-restart) vs. the ~1 minute of the image-pin approach. A schema reversal can ONLY
-ship this way — migrations run at boot of the new image (Database Migration
-Rollback below); an image pin never reverts a migration.
+CI runs against the revert commit. **Nothing auto-deploys in this repo** — on
+green, dispatch `Deploy to Azure` by hand (next section). Merge + CI + a
+dispatched deploy is ~10 minutes vs. the ~1 minute of the image-pin approach.
 
-### Emergency manual deploy (skip CI gate)
+### Dispatching a deploy (the only kind there is)
 
-Used yesterday after the subscription outage — fires Deploy directly without
-waiting for a new CI run:
+`deploy.yml` is `workflow_dispatch`-only (ENHANCEMENTS #1, 2026-08-19). It does
+not wait for CI and it will not run from CI; its first step fails with
+"Deploy target not configured" while the repository variables are unset:
 
 ```bash
-gh workflow run "Deploy to Azure" --ref main
+gh workflow run "Deploy to Azure" --ref master
 ```
+
+---
+
+## Backups and restore (when an instance exists)
+
+Azure Database for PostgreSQL Flexible Server takes daily full + log backups
+for point-in-time restore on its own (default retention 7 days, configurable
+to 35; geo-redundant storage is a per-server option). Read the live setting:
+
+```bash
+az postgres flexible-server show \
+  --resource-group <RESOURCE_GROUP> --name <DB_SERVER> \
+  --query "{retention:backup.backupRetentionDays, geoRedundant:backup.geoRedundantBackup}"
+```
+
+**Point-in-time restore creates a NEW server** — repoint the App Service's
+`DATABASE_URL` at it once it is healthy:
+
+```bash
+az postgres flexible-server restore \
+  --resource-group <RESOURCE_GROUP> \
+  --name <DB_SERVER>-restore-$(date +%Y%m%d) \
+  --source-server <DB_SERVER> \
+  --restore-time "2026-05-12T12:00:00Z"
+```
+
+**Ad-hoc logical dump / restore** (host-independent; works against the dev DB
+today — note the laptop needs a firewall rule to reach the managed server,
+`docs/DEPLOYMENT.md` §6):
+
+```bash
+pg_dump "postgresql://<db-admin>:<url-encoded-pw>@<DB_SERVER>.postgres.database.azure.com:5432/<dbname>?sslmode=require" \
+  --no-acl --no-owner -F c -f backup_$(date +%Y%m%d).dump
+pg_restore --clean --no-acl --no-owner \
+  -d "postgresql://USER:PW@HOST:5432/DBNAME?sslmode=require" backup_YYYYMMDD.dump
+```
+
+The books' fylgiskjöl live outside the database (`BOOKS_UPLOAD_ROOT`) and the
+yearly archive to media in Iceland (Bókhald below) is the statutory copy.
 
 ---
 
@@ -81,61 +121,36 @@ gh workflow run "Deploy to Azure" --ref main
 
 Migrations are forward-only in this project. To undo a schema change:
 
-1. **Append a new entry to the `migrations` array in `server/config/schema.js`**
-   with the next sequence number. The runner (`server/scripts/migrate.js`)
-   reads ONLY that array — a `.sql` file dropped into `server/migrations/` is
-   never read (those files are human-readable mirrors), so the old advice here
-   was a silent no-op.
-2. Deploy; `migrate()` runs at container startup, one transaction per
-   migration under a session advisory lock. A reversal that fails rolls back
-   and the new container crash-loops on boot — test it on a copy first.
-3. Remember invariant 14 (expand/contract, `docs/SELF-UPDATE.md`): a
-   `DROP COLUMN` reversal while an older image is what you are rolling back to
-   is exactly the case it forbids.
+1. Write a new migration SQL file that reverses the change.
+2. Place it in `server/migrations/` with the next sequence number.
+3. Deploy and let `migrate.js` apply it automatically on startup.
 
 Example — dropping a column added by mistake:
-```js
-// server/config/schema.js — appended to the migrations array
-{
-  name: '085_drop_some_column',
-  statements: ['ALTER TABLE projects DROP COLUMN IF EXISTS some_column'],
-},
+```sql
+-- server/migrations/002_rollback_example.sql
+ALTER TABLE projects DROP COLUMN IF EXISTS some_column;
 ```
-
-The DATA rollback is Postgres point-in-time restore (`README.md` → Database
-Backup Strategy, 7-day retention): a restore creates a new server and
-`DATABASE_URL` is repointed at it.
 
 ---
 
 ## Container Registry Housekeeping
 
-A scheduled ACR task named `weekly-purge` (created 2026-06-11 UTC) lives in Azure —
-not in this repo — and prunes old images from `hallismileyacr` every Sunday at
-03:00 UTC. Its step, read from the task on 2026-09-12:
-`acr purge --filter 'hallismiley:.*' --ago 14d --keep 10 --untagged` — keep the
-10 newest tags on the `hallismiley` repository, delete every tag older than 14
-days beyond those, plus untagged manifests (last three runs succeeded). The
-`ferdabox` repository is not matched by the filter. Without this task the
-registry grows ~340 MB per deploy forever — it had reached 38.5 GB (vs. 10 GB
-included in the Basic tier) before the first manual purge on 2026-06-10.
-
-Two consequences of the rule (2026-09-12): every deploy now pushes two SHA tags
-(`:<sha>` and `:sha-<sha>`), so "keep 10" protects roughly the last FIVE builds
-beyond 14 days — rollback-by-older-SHA depth is that, not ten deploys. And any
-`:stable` / `:canary` tag `promote.yml` ever creates matches the filter: after
-14 days it is purged, and `--untagged` can then delete the very digest a
-published manifest points at — lock a promoted digest's tag (recipe below).
-Changing the filter is an ACR task edit, Halli's act.
+Inherited procedure from the base (its registry had a scheduled ACR task named
+`weekly-purge`, created 2026-06-10, after growing to 38.5 GB against a 10 GB
+Basic tier — ~340 MB per deploy). **No such task exists for this repo because
+no registry does.** When one is provisioned, recreate the task: run weekly,
+keep the 10 newest tags on the `<IMAGE_NAME>` repository (`latest` + recent
+commit SHAs), delete every tag older than 14 days beyond those plus untagged
+manifests.
 
 ```bash
 # Inspect the task / trigger a run now / pause it:
-az acr task show --registry hallismileyacr --name weekly-purge -o table
-az acr task run  --registry hallismileyacr --name weekly-purge
-az acr task update --registry hallismileyacr --name weekly-purge --status Disabled
+az acr task show --registry <ACR_NAME> --name weekly-purge -o table
+az acr task run  --registry <ACR_NAME> --name weekly-purge
+az acr task update --registry <ACR_NAME> --name weekly-purge --status Disabled
 
 # Registry storage usage (the meter lags deletions by minutes–hours):
-az acr show-usage --name hallismileyacr -o table
+az acr show-usage --name <ACR_NAME> -o table
 ```
 
 > **Interaction with rollbacks:** if prod stays pinned to an image older than
@@ -144,8 +159,8 @@ az acr show-usage --name hallismileyacr -o table
 > For any long-lived rollback, lock the tag (and unlock it once back on HEAD):
 
 ```bash
-az acr repository update --name hallismileyacr \
-  --image hallismiley:<sha> --delete-enabled false --write-enabled false
+az acr repository update --name <ACR_NAME> \
+  --image <IMAGE_NAME>:<sha> --delete-enabled false --write-enabled false
 ```
 
 ---
@@ -166,13 +181,13 @@ node server/scripts/seed-shop.js --reset
 node server/scripts/seed-shop.js
 
 # Prod (Azure Postgres — NEVER pass --reset here):
-DATABASE_URL='postgresql://halliadmin:<url-encoded-pass>@hallismiley-db.postgres.database.azure.com:5432/hallismiley?sslmode=require' \
+DATABASE_URL='postgresql://<db-admin>:<url-encoded-pass>@<DB_SERVER>.postgres.database.azure.com:5432/<dbname>?sslmode=require' \
 DB_SSL=true \
 UPLOAD_ROOT=/tmp/seed-out \
 node server/scripts/seed-shop.js
 # Then upload the generated image files to the Azure Files share:
 az storage file upload-batch \
-  --account-name hallismileyfs --destination uploads --destination-path products \
+  --account-name <STORAGE_ACCOUNT> --destination uploads --destination-path products \
   --source /tmp/seed-out/products --auth-mode key
 ```
 
@@ -206,13 +221,10 @@ only in process memory and regenerates whenever the container restarts (and at
 that day, so they may be counted twice. This is an accepted trade-off of the
 cookieless design — total page views are unaffected; only same-day uniques.
 
-**Retention / pruning (manual).** Nothing prunes `page_views` or
-`analytics_events`: the two daily in-process timers in `server/server.js` cover
-`event_logs` (`EVENT_LOG_RETENTION_DAYS`, default 90) and expired
-`user_sessions` (the update checker is also started but returns immediately
-while the self-update module is off), and both timers restart with the
-container — a container recycled daily never reaches its 24 h tick, only the
-boot run. So these two tables grow until pruned. `page_views` is the only one that grows quickly;
+**Retention / pruning (manual).** Nothing prunes `page_views` — the daily
+schedulers in `server/server.js` cover `event_logs` (`EVENT_LOG_RETENTION_DAYS`),
+`leads` (`LEAD_RETENTION_DAYS`) and expired sessions, not analytics — so the
+table grows until pruned. `page_views` is the only one that grows quickly;
 `analytics_events` is tiny (conversions only) — keep it. To prune old views
 (e.g. older than ~13 months), run against the target DB:
 
@@ -235,19 +247,14 @@ The books refuse to issue documents until the seller identity is set, and every 
 screen shows a standing warning until each step is done. That is the mechanism, not a
 nag.
 
-1. **Seller identity**: seller name, kennitala, VSK number, address — on
-   `/admin/books/settings` (the "Stillingar" button on the books overview; ported
-   from orangesmiley on 2026-09-12; the API behind it is
-   `PATCH /api/v1/admin/bookkeeping/settings`). Nothing can be invoiced without
-   these — an invoice without them is not a valid sales document under Reglugerð
-   50/1993.
-2. **Confirm the chart of accounts** on the same screen (the chart is rendered
-   above the button). Clears the `coa_confirmed_at` warning. Take the chart to the
-   accountant first; changing an account code after entries exist is expensive,
-   because history cannot be re-pointed.
+1. **`/admin/books` → settings**: seller name, kennitala, VSK number, address. Nothing
+   can be invoiced without these — an invoice without them is not a valid sales document
+   under Reglugerð 50/1993.
+2. **Confirm the chart of accounts.** Clears the `coa_confirmed_at` warning. Take the
+   chart to the accountant first; changing an account code after entries exist is
+   expensive, because history cannot be re-pointed.
 3. **EUR rate**, if invoicing in EUR: `npm run books:fx -- --date=YYYY-MM-DD --rate=NNN.NN`.
-   An EUR invoice is **blocked** with no rate on file, or with a rate older than 14 days
-   (`FxRate.MAX_STALENESS_DAYS`), rather than guessing one.
+   An EUR invoice is **blocked** with no rate on file rather than guessing one.
 4. **Payroll**, if running it: enter the year's figures and **confirm** them. Payroll
    refuses to compute against an unconfirmed year.
 5. **Opening balances**, if the business existed before these books: post the changeover
@@ -261,12 +268,8 @@ nag.
    overridden, but the reason is stored with the return.
 3. File. This snapshots the figures and **locks the period** — nothing can be posted into
    it afterwards without an explicit unlock.
-4. Filing itself posts the settlement entry (VAT accounts → `2290 Virðisaukaskattur
-   til greiðslu`, dated the last day of the period — `vatService.js`). Paying
-   Skatturinn is a separate event with no endpoint: record the bank line as
-   `explained` against 2290 in reconciliation, or post a manual entry
-   Dr 2290 / Cr 1900 **dated the payment date** — the filed period is locked
-   (`books_assert_period_open`), so a back-dated entry is refused.
+4. Pay Skatturinn, then record it: the settlement moves `2290 Virðisaukaskattur til
+   greiðslu` against the bank.
 
 **Unlocking a filed period** is audited and reverses the settlement entry on its own date.
 Do it only to correct a real error, and expect the correction to be visible in the journal
@@ -317,7 +320,7 @@ Two things to get right, both of which produce a believable wrong number:
 settings.
 
 **An EUR invoice is refused** — no exchange rate on file for the issue date, or the newest
-one is older than 14 days. `npm run books:fx`. The refusal is deliberate: a guessed rate silently
+one is stale. `npm run books:fx`. The refusal is deliberate: a guessed rate silently
 misstates revenue.
 
 **"Payroll figures have not been confirmed"** — working as designed. Enter and confirm the
@@ -363,75 +366,61 @@ disabled. Check in this order:
 
 ```bash
 # Is the App Service stopped?
-az webapp show --resource-group hallismiley-rg --name hallismiley-app \
+az webapp show --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> \
   --query "{state:state, availabilityState:availabilityState}" -o json
 
 # Is the subscription enabled?
 az account show --query "{name:name, state:state}" -o json
 ```
 
-If `state: "Stopped"` → `az webapp start --resource-group hallismiley-rg --name hallismiley-app`.
+If `state: "Stopped"` → `az webapp start --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME>`.
 If the subscription is disabled → resolve billing in Azure Portal first; the
 App Service will auto-resume once the subscription is reactivated.
 
-### No response, or Azure's own error page (Node is not listening)
-
-`/health` is unconditional 200 whenever the process is up (`server/app.js`) —
-it never returns 503. If it does not answer at all, the container has not
-reached `listen()`: a boot failure, a failed migration (`[server] Startup
-failed` in the log), or missing app settings.
+### /ready returns 503, or /health does not answer (Node is running but failing)
 
 1. Tail container logs:
    ```bash
-   az webapp log tail --resource-group hallismiley-rg --name hallismiley-app
+   az webapp log tail --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME>
    ```
 2. Verify required app settings are in place:
    ```bash
-   az webapp config appsettings list --resource-group hallismiley-rg --name hallismiley-app -o table
+   az webapp config appsettings list --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> -o table
    ```
-   Missing `DATABASE_URL`, `CSRF_SECRET`, `ALLOWED_ORIGINS` or `NODE_ENV` (and
-   `UPLOAD_ROOT` under `NODE_ENV=production`, `RESEND_API_KEY` under
-   `APP_ENV=production`) are startup failures (`server/server.js`
+   Missing `DATABASE_URL`, `CSRF_SECRET`, `ALLOWED_ORIGINS` or `NODE_ENV` —
+   and `RESEND_API_KEY` when `APP_ENV=production`, `UPLOAD_ROOT` when
+   `NODE_ENV=production` — are startup failures (`server/server.js`
    `REQUIRED_ENV`, `server/config/paths.js`). Compare against `.env.example`.
-
-### `/ready` returns 503 while `/health` returns 200 (Node is up, a dependency is not)
-
-`/ready` flips to 503 on exactly three conditions: the `SELECT 1` fails or
-exceeds 3 s, `pool.waitingCount > 5`, or the DB circuit breaker is `open`
-(`half-open` reports `degraded` at 200). Memory and event-loop lag are reported
-in `checks` but never flip it. A DB failure also logs a pino line tagged
-`event: 'alert'` (`observability/securityLogger.js`), greppable in the log tail.
-
-3. Check Postgres reachability — `hallismiley-db.postgres.database.azure.com`
+3. Check Postgres reachability — `<DB_SERVER>.postgres.database.azure.com`
    must accept inbound from App Service outbound IPs:
    ```bash
    az postgres flexible-server firewall-rule list \
-     --resource-group hallismiley-rg --name hallismiley-db -o table
+     --resource-group <RESOURCE_GROUP> --name <DB_SERVER> -o table
    ```
 4. If the DB is up but the server is crashing, look for `[server] Startup failed`
    in `az webapp log tail` output.
 
 ### Out-of-memory / container restart loop
 
-1. Open the **Metrics** blade for `hallismiley-app` in the Azure Portal — chart
+1. Open the **Metrics** blade for `<WEBAPP_NAME>` in the Azure Portal — chart
    *Memory Working Set* and *CPU Percentage* over the last 24h.
 2. If caused by a bad deploy, roll back via the image-pin recipe above.
 3. If persistent, scale the plan up:
    ```bash
    az appservice plan update \
-     --resource-group hallismiley-rg --name hallismiley-plan --sku B2
+     --resource-group <RESOURCE_GROUP> --name <PLAN_NAME> --sku B2
    ```
    B1 has 1.75 GB; B2 has 3.5 GB.
 
 ### High rate-limit 429 errors
 
-1. Hit `/ready` directly — if it is 200, the source is a bot/crawler.
+1. Hit `/health` directly — if the server is healthy, the source is a bot/crawler.
 2. Inspect recent requests via App Service Log Stream or
    `az webapp log tail`. Use the `requestId` field to correlate.
 3. Add an IP access restriction if needed:
    ```bash
    az webapp config access-restriction add \
-     --resource-group hallismiley-rg --name hallismiley-app \
+     --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME> \
      --rule-name block-abuse --action Deny --ip-address <ip>/32 --priority 100
    ```
 4. Tighten rate limits in `server/app.js` or `server/routes/authRoutes.js` if
@@ -444,81 +433,25 @@ in `checks` but never flip it. A DB failure also logs a pino line tagged
 Two probes, and they answer different questions (`server/app.js`):
 
 ```bash
-curl https://www.hallismiley.is/health     # liveness: 200 whenever the process is up
-curl https://www.hallismiley.is/ready      # readiness: 200 only when the DB answers, the pool is not backed up and the breaker is closed
+curl https://<host>/health     # liveness: 200 whenever the process is up
+curl https://<host>/ready      # readiness: 200 only when the DB answers, the pool is not backed up and the breaker is closed
 ```
 
 `/health` answers `{ "status": "ok", "uptime": 12345, "timestamp": "…" }` and
 **never checks the database** — a 200 there with a dead Postgres is normal.
-`/ready` answers `200` with a `checks` object (database, dbPool,
-circuitBreaker, memory, eventLoop) or `503` with the failing check named; only
-the database check, `pool.waitingCount > 5` and an open breaker flip it.
-Both probes are public and exempt from the HTTPS and canonical-host redirects,
-so they answer on the apex and on `hallismiley-app.azurewebsites.net` too.
-The previous version of this section documented a `"database"` key on
-`/health` that never existed (fixed 2026-09-12).
-
-`/ready`'s `uptime` is the cheapest proof that a deploy actually swapped the
-container: it resets to seconds. The App Service health-check path is `/health`
-(set 2026-09-12): Azure pings the LIVENESS probe, so a dead process gets the
-instance recycled, while a `/ready` 503 (a database problem) is deliberately
-NOT something Azure restarts the container for — a restart would not fix it.
-
-### Merged but not live
-
-A **red `Deploy to Azure` run** is one of two things (`.github/workflows/deploy.yml`):
-`alert-ci-blocked` fired because CI on `main` was not `success` — including
-**cancelled** — and the job exits 1 on purpose so the run shows red; or
-`alert-deploy-failed` because the `deploy` job itself errored. Both try to
-e-mail `halli@hallismiley.is` via Resend — the `RESEND_API_KEY` repository
-secret exists since 2026-09-12 (evening), so the e-mail is real; without the
-secret the step skips silently and the run colour is the only alert. On a
-healthy deploy both alert jobs show
-`skipped`. Recovery: fix CI and re-run it (`gh run rerun <ci-run-id> --failed`
-re-fires `workflow_run` on completion), or the emergency dispatch above — never
-dispatch over a red CI run to skip it.
-
-### Where an error goes
-
-Every error is a pino line in the container log (`az webapp log tail`).
-Sentry receives it only if `SENTRY_DSN` is set — it is not on the live site
-(read 2026-09-12). The in-app alerts (`server/observability/alerts.js`) write to
-the security log and post to a webhook only if `ALERT_WEBHOOK_URL` is set.
-Four alerts exist and all four can fire since 2026-09-12: brute-force login
-(5 failures / 5 min per IP), the `/ready` database failure, high error rate
-(> 5 % of 50+ requests in the rolling window — fed from `httpMetrics.js` on
-every response) and high memory (heap ratio over the threshold, checked once a
-minute from `server.js`). Before that date the last two had no caller and could
-never fire.
-
-### Event log (Admin → Monitoring)
-
-Migration 083 added `event_logs`: server errors and the client error beacon
-(`/api/v1/events`) land there and are read at `/admin/monitoring` (admin only;
-API `/api/v1/admin/events`). Retention `EVENT_LOG_RETENTION_DAYS` (default 90),
-pruned daily. Look there for error spikes and auth anomalies before reaching
-for the log tail.
-
-### `/metrics`
-
-Prometheus text, gated by `Authorization: Bearer <METRICS_TOKEN>` (set on the
-live site; without it the route is localhost-only in production). Nothing
-scrapes it — exposed, unscraped; there is no dashboard.
-
-### Self-update (`docs/SELF-UPDATE.md`)
-
-On this site the module is off: every `/api/v1/system/*` route answers 404,
-which is the module gate, not a broken deploy. When it is ever turned on:
-`system_updates` rows (migration 082), post-boot verification marks a row
-`failed` after a 15-minute grace with `failureReason` on `/admin/updates`, and
-`POST /api/v1/system/updates/:id/rollback` re-triggers the previous digest.
-Until then the image-pin recipe above IS the rollback.
+`/ready` answers `200` with a `checks` object (database, pool, circuit
+breaker, memory, event-loop lag) or `503` with the failing check named — only
+the database check, `pool.waitingCount > 5` and an open breaker flip it to
+503; memory and event-loop lag are reported for visibility and never do
+(`server/app.js`), so an OOM loop shows up in the restart count, not here. The
+previous version of this section documented a `"database"` key on `/health`
+that does not exist (fixed 2026-09-11).
 
 ---
 
 ## Environment Variable Reference
 
-See `README.md → Environment Variables`, `docs/DEPLOYMENT.md` §5 (what each setting does in code) and `.env.example` for the full list.
+See `README.md → Environment variables`, `docs/DEPLOYMENT.md` §5 (boot requirements) and `.env.example` for the full list.
 
 ---
 
@@ -527,17 +460,17 @@ See `README.md → Environment Variables`, `docs/DEPLOYMENT.md` §5 (what each s
 Live tail from the terminal (Pino structured JSON, one line per request):
 
 ```bash
-az webapp log tail --resource-group hallismiley-rg --name hallismiley-app
+az webapp log tail --resource-group <RESOURCE_GROUP> --name <WEBAPP_NAME>
 ```
 
-In the portal: **App Service `hallismiley-app` → Monitoring → Log Stream**.
+In the portal: **App Service `<WEBAPP_NAME>` → Monitoring → Log Stream**.
 
 Use the `requestId` field (`X-Request-ID` header on the corresponding response)
 to correlate log lines across a single request. Filter further by severity
 with `jq`:
 
 ```bash
-az webapp log tail -g hallismiley-rg -n hallismiley-app \
+az webapp log tail -g <RESOURCE_GROUP> -n <WEBAPP_NAME> \
   | grep -E '^\{' | jq 'select(.level >= 40)'   # warn (40) and above
 ```
 
@@ -555,32 +488,34 @@ Postgres with the matching credentials.
 
 | Setting | Value |
 | --- | --- |
-| Host / port | `localhost:5432` |
-| Admin user / password | `postgres` / `postgres` |
-| Test database name | `hallismiley_test` (auto-created) |
+| Host / port / credentials | from `DATABASE_URL` (`.env`), else `postgres:postgres@localhost:5432` |
+| Base test database name | `orangesmiley_<branch-slug>_test` (auto-created; per-branch since 2026-09-02) |
+| Per run | `…_tmpl_test` + `…_w1_test` … `_w4_test`, dropped again by globalTeardown |
 
 The DB name **must** end in `_test` — `globalSetup` refuses to drop anything
-else as a safety check.
+else as a safety check. `npm test` prints the base it resolved on its first
+line; `npm run test:db:clean` drops databases left behind by killed runs.
+See `docs/TESTING.md` (Per-branch, per-worker databases).
 
 **Quickest path — disposable Postgres in Docker:**
 
 ```bash
-docker run --rm -d --name halli-pg-test \
+docker run --rm -d --name os-pg-test \
   -p 5432:5432 \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=postgres \
   postgres:16-alpine
 
-npm test                       # creates hallismiley_test, migrates, runs suite
-docker stop halli-pg-test      # tear down when done
+npm test                       # derives the per-branch DBs, migrates, runs suite
+docker stop os-pg-test      # tear down when done
 ```
 
 **Using an existing Postgres** (Homebrew, system service, etc.) — ensure the
 admin role can `CREATE DATABASE`, then point Jest at it:
 
 ```bash
-TEST_DATABASE_URL='postgresql://USER:PASS@HOST:5432/hallismiley_test' npm test
+TEST_DATABASE_URL='postgresql://USER:PASS@HOST:5432/orangesmiley_test' npm test
 ```
 
 **Skipping the seeded test DB is what makes `npm test` fail locally.** If

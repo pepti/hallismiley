@@ -36,7 +36,7 @@ things worth a look:
 - `4100` Sala vöru 24% vs `4110` Sala þjónustu 24% — the split exists because goods and
   services are zero-rated differently on export. Is one revenue account per rate enough,
   or do you want revenue split by line of business as well?
-- `6900` Risna og gjafir, `6910` Fæði starfsmanna and `6610` Rekstur fólksbifreiða (migration 085) are flagged `input_vat_blocked`, so
+- `6900` Risna og gjafir, `6910` Fæði starfsmanna and `6610` Rekstur fólksbifreiða (migration 103) are flagged `input_vat_blocked`, so
   input VAT on them is refused with a reason recorded. Are those the right three, and are
   there others?
 - `1990` Óvissureikningur is where a payment with no obvious home is parked visibly rather
@@ -176,11 +176,11 @@ when:
    not prove input tax,
 3. the vat_code is `exempt` or `none`,
 4. the expense is a passenger car or its running costs — account `6610 Rekstur
-   fólksbifreiða` is flagged `input_vat_blocked` (migration 085, 2026-09-12);
-   `6600 Rekstur atvinnubifreiða` stays `input_24` for sendi-/vörubifreiðar. The
-   072 seed had 6600 deductible with a description saying the opposite; 085
-   resolved it by splitting rather than flipping, so existing 6600 lines keep
-   their meaning.
+   fólksbifreiða` is flagged `input_vat_blocked` (migration 103, ported 2026-09-13
+   from the base's 085 of 2026-09-12); `6600 Rekstur atvinnubifreiða` stays
+   `input_24` for sendi-/vörubifreiðar. The 072 seed had 6600 deductible with a
+   description saying the opposite; 103 resolved it by splitting rather than
+   flipping, so existing 6600 lines keep their meaning.
 
    **What we need back on 6600/6610:** is the split right — 6600 `input_24` for
    sendi-/vörubifreiðar (with the under-5.000-kg exclusive-use condition left to
@@ -262,6 +262,53 @@ single manual entry.
 
 ---
 
+## 11. Innborgun á smíðaverk — fyrirframgreiðsla og langtímaverkefni
+
+**Spurning.** Byggingargjald (uppsetningargjald) er innheimt 50% við undirritun og 50%
+við gangsetningu (D-005). Við færum fyrri helminginn sem **fyrirframinnheimtar tekjur
+(skuld)** við útgáfu reiknings og tekjufærum hann fyrst við gangsetningu, í samræmi við
+11. gr. og 26. gr. laga nr. 3/2006. Er það sú meðferð sem þú vilt sjá?
+
+**Undirspurning sem skiptir máli við áramót:** ef smíðaverk hefst í nóvember og lýkur í
+febrúar, á þá að innleysa hagnaðinn **hlutfallslega eftir framvindu** skv. 25. gr. laga
+nr. 3/2006 (áfangaaðferð), eða við afhendingu eins og D-005 gerir ráð fyrir? Fyrir verk
+sem byrjar og endar innan sama reikningsárs er niðurstaðan sú sama; hún er það ekki
+þegar verkið nær yfir áramót.
+
+**Núverandi meðferð í kerfinu.** Nýr lykill **2150 Fyrirframinnheimtar tekjur** (skuld).
+Innborgunarreikningur: D 1100 Viðskiptakröfur 359.600 / K 2150 290.000 / K 2200
+Útskattur 69.600. Við gangsetningu er lokareikningur gefinn út (K 4110 290.000 / K 2200
+69.600) og innborgunin innleyst: D 2150 290.000 / K 4110 290.000.
+
+**Virðisaukaskattur er óháður tekjufærslunni og breytist ekki.** Skv. 2. mgr. 13. gr.
+laga nr. 50/1988 telst afhending hafa farið fram á útgáfudegi reiknings, og skv. 3. mgr.
+sömu greinar telst fyrirframgreiðsla til skattskyldrar veltu á því tímabili sem greiðslan
+fer fram. Öll veltan (290.000) og allur útskatturinn (69.600) af innborguninni fara því á
+**reit A og reit D á því uppgjörstímabili sem innborgunarreikningurinn er dagsettur**,
+þótt tekjurnar séu ekki færðar í rekstrarreikning fyrr en við gangsetningu. Lykill 2150
+ber þess vegna `vat_code = output_24` og telst með í reit A.
+
+**Afleiðing sem þarf að hafa í huga við RSK 10.25:** velta skv. VSK-skýrslum og tekjur
+skv. ársreikningi munu ekki stemma innan ársins; mismunurinn er nákvæmlega staðan á
+lykli 2150. Það er ástæðan fyrir því að hann er sérgreindur lykill en ekki hluti af
+öðrum skuldalykli.
+
+**Það sem við þurfum til baka.**
+
+1. Staðfestingu á meðferðinni.
+2. Númer og heiti lykilsins eins og þú vilt hafa hann — lyklaborðið er gögn og enn
+   óstaðfest (`coa_confirmed_at` er NULL) og **ekkert hefur verið bókað**, svo breyting
+   kostar ekkert í dag en er dýr eftir fyrstu færslu.
+3. Undir hvaða línu í skammtímaskuldum ársreiknings hann á að birtast.
+4. Svarið við 25. gr. áður en fyrsta smíðaverkið nær yfir áramót.
+
+**Ekki spurt hér, en tengt:** mánaðarlegur þjónustusamningur er reikningsfærður fyrirfram
+fyrir einn mánuð í senn og er **ekki** færður sem fyrirframinnheimtar tekjur; við gefum
+reikninginn út innan þess mánaðar sem hann tekur til, svo hann er að fullu áunninn við
+hver reikningsskil. Ef við færum að rukka ársfjórðung eða ár fyrirfram breytist það, og
+sama 2150-vélin á þá við.
+
+---
 ## Standing notes
 
 - **Amounts are whole ISK.** Everything is stored as BIGINT; there are no subunits and no

@@ -3,6 +3,34 @@
 const { lucia } = require('./lucia');
 const { resolveLocale } = require('../middleware/locale');
 const UserRole = require('../models/UserRole');
+const logger   = require('../logger');
+const { applyMfaPolicyToRequest } = require('./mfaPolicy');
+
+// Resolve the user's full role SET (cached, models/UserRole.js) and attach it
+// as req.user.roles — the authoritative set for permission decisions; users.role
+// stays the denormalized primary. One copy of this, shared by requireAuth,
+// optionalAuth and middleware/softAuth.js: it used to be pasted into each.
+//
+// On a read error, fall back to the primary alone so auth never breaks on a
+// transient user_roles failure — and log it, because for an admin granted only
+// through the role set that fallback is a silent demotion for this request,
+// indistinguishable downstream from a deliberate deny.
+//
+// Then the two-factor policy: a protected account that has not enrolled a
+// second factor is not that yet — `admin` is withheld from role + roles HERE,
+// so every guard and every inline role check downstream refuses without having
+// to know the rule (auth/mfaPolicy.js). Because every session reader goes
+// through attachRoles, this is the one place the rule is applied.
+async function attachRoles(req, user) {
+  try {
+    const roles = await UserRole.listForUser(user.id);
+    req.user.roles = roles.length ? roles : [user.role];
+  } catch (err) {
+    logger.warn({ err: err.message, userId: user.id }, 'role set lookup failed; falling back to users.role for this request');
+    req.user.roles = [user.role];
+  }
+  await applyMfaPolicyToRequest(req);
+}
 
 async function requireAuth(req, res, next) {
   const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
@@ -36,17 +64,7 @@ async function requireAuth(req, res, next) {
   req.user    = user;
   req.session = session;
 
-  // Multi-role: resolve the user's full role SET (cached) so requireRole /
-  // requireView can union across it. users.role stays the denormalized "primary";
-  // req.user.roles is the authoritative set for permission decisions. Fall back to
-  // the primary alone if the lookup fails, so auth never breaks on a transient
-  // user_roles read error.
-  try {
-    const roles = await UserRole.listForUser(user.id);
-    req.user.roles = roles.length ? roles : [user.role];
-  } catch {
-    req.user.roles = [user.role];
-  }
+  await attachRoles(req, user);
 
   // The global locale middleware ran before auth (req.user was undefined), so
   // the user's saved preferred_locale couldn't participate in resolution.
@@ -78,15 +96,10 @@ async function optionalAuth(req, res, next) {
 
     req.user    = user;
     req.session = session;
-    try {
-      const roles = await UserRole.listForUser(user.id);
-      req.user.roles = roles.length ? roles : [user.role];
-    } catch {
-      req.user.roles = [user.role];
-    }
+    await attachRoles(req, user);
     req.locale = resolveLocale(req);
   } catch { /* treat any validation error as anonymous */ }
   next();
 }
 
-module.exports = { requireAuth, optionalAuth };
+module.exports = { requireAuth, optionalAuth, attachRoles };

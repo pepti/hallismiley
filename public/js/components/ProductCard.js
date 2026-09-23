@@ -12,7 +12,9 @@ function _esc(s) {
 }
 
 function stockBadgeHtml(stock) {
-  if (stock === 0) {
+  // <= 0, not === 0: a short fulfilment or an admin correction can leave a
+  // NEGATIVE count, which must still read as sold out (ice #202).
+  if (stock <= 0) {
     return `<span class="product-card__badge product-card__badge--out"
                    data-testid="stock-badge-out">${t('shop.outOfStock')}</span>`;
   }

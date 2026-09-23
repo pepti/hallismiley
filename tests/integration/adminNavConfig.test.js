@@ -28,6 +28,8 @@ describe('PATCH /api/v1/admin/nav-config — personalization flags', () => {
       collapsed: ['shop'],
       hiddenSections: ['site'],
       hiddenItems: ['orders'],
+      // A policy-hidden line this admin switched back on (adminSurface.js).
+      revealedItems: ['products'],
     };
 
     const patch = await request(app)
@@ -39,12 +41,22 @@ describe('PATCH /api/v1/admin/nav-config — personalization flags', () => {
       collapsed: ['shop'],
       hiddenSections: ['site'],
       hiddenItems: ['orders'],
+      revealedItems: ['products'],
     });
 
     // Persisted — a fresh GET returns the same flags.
     const get = await request(app).get('/api/v1/admin/nav-config').set('Cookie', adminCookie);
     expect(get.status).toBe(200);
     expect(get.body.config.hiddenItems).toEqual(['orders']);
+    expect(get.body.config.revealedItems).toEqual(['products']);
+  });
+
+  test('rejects a non-array revealedItems flag — 400', async () => {
+    const res = await request(app)
+      .patch('/api/v1/admin/nav-config')
+      .set('Cookie', adminCookie)
+      .send({ config: { v: 1, sections: [], revealedItems: 'products' } });
+    expect(res.status).toBe(400);
   });
 
   test('a layout with the flags omitted is still valid (flags are optional)', async () => {

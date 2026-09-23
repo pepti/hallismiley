@@ -1,0 +1,127 @@
+/* Seller area (/solusvaedi, D-020) — the read-only published copy on the
+   public instance. Tokens only (invariant 15): every colour below is a theme
+   token, and the status chips are the acct-* / leads-* ones the admin uses.
+   Layout: a narrow reading column, not the admin grid — a seller opens this
+   on a phone between meetings. The tab row is a ledger rule, not pills. */
+
+.seller-area {
+  min-height: calc(100vh - 68px);
+  background: var(--bg-base);
+  padding: var(--sp-8) var(--sp-4);
+}
+.seller-area__inner {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex; flex-direction: column; gap: var(--sp-5);
+}
+.seller-area__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  margin: 0 0 var(--sp-1);
+}
+.seller-area__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  line-height: 1.1;
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-2);
+}
+.seller-area__muted { color: var(--text-secondary); margin: 0; }
+.seller-area__error { color: var(--error); margin: 0; }
+
+.seller-area__notice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--warning);
+  background: var(--warning-dim);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+}
+.seller-area__notice p { margin: 0; flex: 1 1 20rem; }
+
+.seller-area__tabs {
+  display: flex; gap: var(--sp-5);
+  border-bottom: 1px solid var(--border-dim);
+  /* overflow-x:auto turns overflow-y to auto as well, so nothing here may
+     overhang vertically — the underline is an inset shadow, not a -1px border. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.seller-area__tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: var(--sp-2) 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition), box-shadow var(--transition);
+}
+.seller-area__tab:hover { color: var(--text-primary); }
+.seller-area__tab[aria-selected="true"] {
+  color: var(--text-primary);
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+.seller-area__tab:focus-visible,
+.seller-area__panel:focus-visible,
+.seller-item > summary:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+/* Inside the clipped tab row an outset ring would be cut off. */
+.seller-area__tab:focus-visible { outline-offset: -2px; }
+
+.seller-area__scroll { overflow-x: auto; }
+
+.seller-list { list-style: none; margin: 0; padding: 0; }
+.seller-list > li { border-bottom: 1px solid var(--border-dim); }
+
+.seller-item > summary {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  cursor: pointer;
+  list-style: none;
+}
+.seller-item > summary::-webkit-details-marker { display: none; }
+.seller-item[open] > summary .seller-item__name { color: var(--accent-ink); }
+.seller-item__date {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.seller-item__name {
+  color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.seller-item__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+}
+.seller-item__facts dt { font-size: 0.8rem; color: var(--text-muted); }
+.seller-item__facts dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+.seller-item__label {
+  font-size: 0.8rem; color: var(--text-muted);
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+.seller-item__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-3);
+}
+.seller-item__body { padding: 0 0 var(--sp-4); }
+
+@media (max-width: 560px) {
+  .seller-item > summary { grid-template-columns: 1fr auto; }
+  .seller-item__date { grid-column: 1 / -1; }
+}

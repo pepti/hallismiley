@@ -1,5 +1,5 @@
 // Floating theme switcher — a discreet FAB (bottom-left, opposite the
-// change-request widget) opening a small popover with the six site themes
+// change-request widget) opening a small popover with the five site themes
 // (see themes.css) and, for admins only, a per-browser TEST-mode switch that
 // overrides the server's app-env (see services/themePrefs.js).
 //
@@ -9,12 +9,14 @@
 import { t } from '../i18n/i18n.js';
 import { isAdmin } from '../services/auth.js';
 import {
-  THEMES, THEME_SWATCHES, getTheme, setTheme,
+  THEMES, swatchFor, DARK_THEMES, getTheme, setTheme,
   getServerEnv, getEffectiveEnv, setTestOverride,
 } from '../services/themePrefs.js';
+import {
+  ambienceEnabled, setAmbienceEnabled, soundEnabled, setSoundEnabled,
+} from '../services/ambiencePrefs.js';
 
 const PALETTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.21-1.79 3-4 3h-2.5a2.5 2.5 0 0 0-1.9 4.13c.37.43.4 1.06.03 1.5-.4.47-1 .87-1.63.37Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="16" cy="9.5" r="1"/></svg>';
-
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -51,6 +53,9 @@ export class ThemeSwitcher {
     window.addEventListener('spa:navigate', this._onNav);
     window.addEventListener('popstate', this._onNav);
     window.addEventListener('authchange', this._onAuthChange);
+    // Mounted once outside #app, so the router never relabels it — i18n.js fires
+    // this after the message table is swapped. Never torn down, so no unbind.
+    window.addEventListener('localechange', () => { this._refreshFabLabel(); if (this.open) this._close(); });
     return this.root;
   }
 
@@ -102,7 +107,7 @@ export class ThemeSwitcher {
     const active = getTheme();
     const swatches = THEMES.map((id) => {
       const name = t(`themeSwitcher.theme.${id}`);
-      return `<button type="button" class="theme-switcher__swatch${id === 'black-sand' ? ' theme-switcher__swatch--dark' : ''}"
+      return `<button type="button" class="theme-switcher__swatch${DARK_THEMES.has(id) ? ' theme-switcher__swatch--dark' : ''}"
         data-theme-id="${id}" aria-pressed="${id === active}"
         aria-label="${esc(name)}" title="${esc(name)}"></button>`;
     }).join('');
@@ -124,14 +129,42 @@ export class ThemeSwitcher {
       </div>` : '';
 
     this.popover.setAttribute('aria-label', t('themeSwitcher.title'));
+    const ambRow = (cls, label, note, checked) => `
+      <div class="theme-switcher__test ${cls}">
+        <span class="theme-switcher__test-text">
+          <span class="theme-switcher__test-label">${esc(label)}</span>
+          <span class="theme-switcher__test-note">${esc(note)}</span>
+        </span>
+        <button type="button" class="theme-switcher__toggle" role="switch"
+          aria-checked="${checked}" aria-label="${esc(label)}">
+          <span class="theme-switcher__toggle-knob"></span>
+        </button>
+      </div>`;
+
     this.popover.innerHTML = `
       <div class="theme-switcher__title">${esc(t('themeSwitcher.title'))}</div>
       <div class="theme-switcher__swatches">${swatches}</div>
+      ${ambRow('theme-switcher__amb', t('themeSwitcher.ambience'), t('themeSwitcher.ambienceNote'), ambienceEnabled())}
+      ${ambRow('theme-switcher__amb-sound', t('themeSwitcher.ambienceSound'), t('themeSwitcher.ambienceSoundNote'), soundEnabled())}
       ${testRow}
     `;
 
+    // The two ambience switches — flip the pref; ambiencePrefs broadcasts
+    // 'ambiencechange' and the engine (if loaded) reacts live.
+    const wire = (cls, get, set) => {
+      const btn = this.popover.querySelector(`.${cls} .theme-switcher__toggle`);
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const on = !get();
+        set(on);
+        btn.setAttribute('aria-checked', String(on));
+      });
+    };
+    wire('theme-switcher__amb', ambienceEnabled, setAmbienceEnabled);
+    wire('theme-switcher__amb-sound', soundEnabled, setSoundEnabled);
+
     this.popover.querySelectorAll('.theme-switcher__swatch').forEach((btn) => {
-      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
+      btn.style.setProperty('--swatch', swatchFor(btn.dataset.themeId));
       btn.addEventListener('click', () => {
         setTheme(btn.dataset.themeId);
         this.popover.querySelectorAll('.theme-switcher__swatch')
@@ -139,7 +172,7 @@ export class ThemeSwitcher {
       });
     });
 
-    const toggle = this.popover.querySelector('.theme-switcher__toggle');
+    const toggle = this.popover.querySelector('.theme-switcher__test:not(.theme-switcher__amb):not(.theme-switcher__amb-sound) .theme-switcher__toggle');
     if (toggle) {
       toggle.addEventListener('click', () => {
         const on = toggle.getAttribute('aria-checked') !== 'true';
@@ -162,7 +195,8 @@ export class ThemeSwitcher {
       return null;
     });
     if (!m) return;
-    if (on) m.mountChangeRequestWidget();
-    else m.unmountChangeRequestWidget();
+    // Not a plain mount/unmount pair: on a PROD site where an admin switched
+    // the widget on, leaving TEST mode must keep it (minus the test chrome).
+    m.syncChangeRequestWidget();
   }
 }

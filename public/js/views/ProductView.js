@@ -314,7 +314,7 @@ export class ProductView {
         return;
       }
       const stock = this._effectiveStock();
-      if (stock === 0) return;
+      if (stock <= 0) return; // negative = oversold, still sold out (ice #202)
       const qtyInput = this._view.querySelector('#shop-qty');
       const qty = Math.max(1, Math.min(stock, Math.floor(Number(qtyInput.value) || 1)));
       cart.add(p, variant, qty);
@@ -387,7 +387,7 @@ export class ProductView {
       if (qtyInp) qtyInp.disabled = true;
       return;
     }
-    if (stock === 0) {
+    if (stock <= 0) {
       stockEl.innerHTML = `<span class="shop-product__stock--out" data-testid="stock-out">${_esc(c.out_of_stock_label)}</span>`;
       if (addBtn) { addBtn.disabled = true; addBtn.textContent = c.out_of_stock_label; }
       if (qtyInp) qtyInp.disabled = true;

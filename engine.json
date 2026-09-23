@@ -1,0 +1,39 @@
+{
+  "$comment": "Engine provenance for this repo (D-021). product = migration prefix + product-migrations filename; role = engine | product | customer | personal. rev/history are written by site-factory/engine-sync.js. Product-owned: a sync never overwrites this file. productPaths = engine files this repo keeps FORKED wholesale on top of .engine-paths; empty here — every hallismiley-specific change to an engine file is a listed residual hook (docs/HISTORY.md#engine-graft), not a fork.",
+  "product": "hs",
+  "role": "personal",
+  "upstream": "https://github.com/orange-smiley/orangesmiley.git",
+  "upstreamBranch": "master",
+  "rev": "57362dc5643c9dd66b27aeb36044977fc2f814d2",
+  "syncedAt": "2026-09-23T02:15:57.839Z",
+  "syncedPr": 168,
+  "grafted": {
+    "at": "2026-09-22",
+    "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
+    "mergeBase": "fdf9581dc6ad7db1d4160a34a7b074595281866a"
+  },
+  "productPaths": [],
+  "history": [
+    {
+      "rev": "1e0099519dcc4bc7fc711778ee997c9ce7050a28",
+      "date": "2026-09-22",
+      "upstreamCommits": 270,
+      "conflicts": 114,
+      "note": "graft"
+    },
+    {
+      "rev": "92308d2047fd41ca5b7360bab71065e788d5127e",
+      "date": "2026-09-23",
+      "upstreamCommits": 14,
+      "conflicts": 16,
+      "note": "sync — identity through the seam (config/client.json), theme + brand hooks retired, feature gate; /aron13ara the one hook left"
+    },
+    {
+      "rev": "57362dc5643c9dd66b27aeb36044977fc2f814d2",
+      "date": "2026-09-23",
+      "upstreamCommits": 10,
+      "conflicts": 9,
+      "note": "sync — identity seam v2: surface.nav (the base's six links), theme.dark, page meta as overlay keys; NavBar/sitemap/manifest/robots hooks closed by the engine; aron13.css import restored in the view; residuals: /aron13ara + gated lines in six engine tests"
+    }
+  ]
+}

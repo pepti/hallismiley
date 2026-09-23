@@ -1,4 +1,8 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const AxeBuilder = require('@axe-core/playwright').default;
 const { loginAsAdmin, createTestUser } = require('./helpers');
 
@@ -12,16 +16,6 @@ const { loginAsAdmin, createTestUser } = require('./helpers');
 // instance's contract would mean redeploying it — and the server-side transition
 // they end in is covered exhaustively by the Jest suites
 // (tests/integration/updateApplier.test.js).
-
-// The BASE ships the self-update module OFF (no config/client.json), and off
-// means genuinely absent: the sidebar drops the Updates line and /admin/updates
-// 404s. Probe once per test and skip when dormant — instances that enable the
-// module (a 401 here, since the endpoint then exists behind auth) run the full
-// suite. Keeping the spec in the engine is the point: it travels to every fleet.
-test.beforeEach(async ({ request }) => {
-  const res = await request.get('/api/v1/system/version');
-  test.skip(res.status() === 404, 'self-update module dormant in the base — instance suites cover this');
-});
 
 const UPDATES_API = '**/api/v1/system/updates';
 

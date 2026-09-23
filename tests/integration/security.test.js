@@ -215,6 +215,8 @@ describe('GET /health', () => {
 describe('Cross-Origin-Resource-Policy', () => {
   test('/assets/brand is cross-origin (embeddable in transactional email)', async () => {
     const res = await request(app).get('/assets/brand/logo.png');
+    // The header matters even on 404 — the override middleware sets it before
+    // the static handler decides whether the file exists.
     expect(res.headers['cross-origin-resource-policy']).toBe('cross-origin');
   });
 

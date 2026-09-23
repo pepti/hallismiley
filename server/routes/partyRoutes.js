@@ -12,6 +12,7 @@ const { csrfProtect }              = require('../middleware/csrf');
 const { validatePartyRequest }     = require('../middleware/validate');
 const { partyUploadDir }           = require('../config/paths');
 const { MIME_TO_EXT }              = require('../middleware/upload');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
@@ -180,6 +181,7 @@ router.post('/cover-image',
       next();
     });
   },
+  verifyImageBytes,
   partyController.uploadCoverImage);
 
 // ── RSVP ─────────────────────────────────────────────────────────────────────
@@ -417,6 +419,7 @@ router.post('/photos',
       next();
     });
   },
+  verifyImageBytes,
   partyController.uploadPhoto);
 
 router.get('/photos',

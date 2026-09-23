@@ -1,0 +1,119 @@
+{
+  "$comment": "Per-instance configuration for hallismiley.is (Halli's portfolio site, engine downstream since the 2026-09-22 graft). Resolved by server/config/clientConfig.js; CLIENT_CONFIG_* env vars override anything here. NO SECRETS — this file is committed and logged in full at boot. The `identity` block (engine D-021 seam, 2026-09-22) is what makes this instance Halli's site and not the company's: brand, visitor locale, theme trio, hero clip, hidden surfaces, Organization record (docs/ENGINE-SYNC.md §6). Values restored from the pre-graft base (f7d93b9): WebSite schema name/alternateName, DEFAULT_THEME 'classic' with the six-theme picker of 081_user_theme, the waterfall hero, the Person schema's sameAs. surface.nav is the public IA the base shipped in its top nav (f7d93b9: /projects, /shop, /news, /halli, /contact, /party — identity-seam-2, 2026-09-23); the NavBar, both footers, the sitemap and robots.txt derive from it. hiddenRoutes hides the Orange Smiley company pages (+ /aron13ara, unlisted on purpose) only. theme.dark names the five colour themes, all dark, for the picker rims. selfUpdate stays 'managed' (observe, never act) — hallismiley deploys itself from its own CI on green main, so the fleet updater must not swap its image.",
+  "identity": {
+    "brand": {
+      "name": "Halli Smiley",
+      "legalName": "Halli Smiley",
+      "alternateNames": [
+        "Hallismiley",
+        "Halli",
+        "halli smiley"
+      ],
+      "titleSuffix": " — Halli Smiley"
+    },
+    "locale": {
+      "publicDefault": "en"
+    },
+    "theme": {
+      "default": "classic",
+      "root": "classic",
+      "picker": [
+        "classic",
+        "glacier",
+        "moss",
+        "lava",
+        "aurora",
+        "black-sand"
+      ],
+      "dark": [
+        "glacier",
+        "moss",
+        "lava",
+        "aurora",
+        "black-sand"
+      ]
+    },
+    "hero": {
+      "clip": "/assets/videos/waterfall-bk-v1.mp4",
+      "poster": "/assets/videos/waterfall-bk-v1-poster.jpg"
+    },
+    "surface": {
+      "nav": [
+        {
+          "route": "/projects",
+          "labelKey": "nav.projects"
+        },
+        {
+          "route": "/shop",
+          "labelKey": "nav.shop"
+        },
+        {
+          "route": "/news",
+          "labelKey": "nav.news"
+        },
+        {
+          "route": "/halli",
+          "labelKey": "nav.halli"
+        },
+        {
+          "route": "/contact",
+          "labelKey": "nav.contact"
+        },
+        {
+          "route": "/party",
+          "labelKey": "nav.party"
+        }
+      ],
+      "hiddenRoutes": [
+        "/thjonusta",
+        "/um-okkur",
+        "/hafa-samband",
+        "/aron13ara"
+      ],
+      "hiddenAdminViews": []
+    },
+    "organization": {
+      "email": "halli@hallismiley.is",
+      "description": "Icelandic carpenter and computer scientist with twenty years of precision joinery and timber framing, combined with full-stack web development in Node.js and PostgreSQL.",
+      "logo": "/favicon.svg",
+      "image": "/og-image.jpg",
+      "addressLocality": "Hafnarfjörður",
+      "addressCountry": "IS",
+      "areaServed": "Iceland",
+      "knowsAbout": [
+        "Carpentry",
+        "Timber Framing",
+        "Hand-Cut Joinery",
+        "Cabinetry",
+        "JavaScript",
+        "Node.js",
+        "PostgreSQL",
+        "Full-Stack Development",
+        "REST APIs"
+      ],
+      "sameAs": [
+        "https://github.com/pepti",
+        "https://www.linkedin.com/in/halliv/"
+      ]
+    }
+  },
+  "modules": {
+    "selfUpdate": {
+      "enabled": true,
+      "mode": "managed",
+      "channel": "stable",
+      "manifestUrl": "https://releases.orangesmiley.is/store/{channel}.json",
+      "allowCriticalOutsideWindow": true,
+      "maintenanceWindow": {
+        "days": [
+          "tue",
+          "wed",
+          "thu"
+        ],
+        "fromHour": 3,
+        "toHour": 5,
+        "tz": "Atlantic/Reykjavik"
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+/* /admin — the company overview cards (views/AdminView.js).
+   Tokens only, so the cards survive every theme (invariant 15). The "Latest
+   changes" card reuses the .mon-update* rows from admin-monitoring.css. */
+
+.admin-subtitle {
+  margin: var(--sp-1) 0 0;
+  font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+
+.dash-card {
+  display: flex; flex-direction: column;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  min-height: 140px;
+}
+/* The changes list is the one card that wants the room. */
+.dash-card[data-card="changes"] { grid-column: 1 / -1; }
+
+.dash-card__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.dash-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.85rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-primary);
+}
+.dash-card__link {
+  font-size: 0.8rem; white-space: nowrap;
+  color: var(--accent-ink); text-decoration: none;
+}
+.dash-card__link:hover, .dash-card__link:focus-visible { text-decoration: underline; }
+.dash-card__body { flex: 1 1 auto; }
+.dash-card__loading, .dash-card__note { margin: 0; font-size: 0.9rem; color: var(--text-muted); }
+.dash-card__error { margin: 0; font-size: 0.9rem; color: var(--error); }
+
+/* Label + value rows (books, handbook, users). */
+.dash-stat {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border-light);
+  font-size: 0.9rem;
+}
+.dash-stat:first-child { border-top: 0; }
+.dash-stat__label { color: var(--text-secondary); }
+.dash-stat__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.dash-stat--warn .dash-stat__value { color: var(--warning); }
+
+/* One headline number (change requests, monitoring). */
+.dash-big { display: flex; flex-direction: column; gap: var(--sp-1); }
+.dash-big__value {
+  font-family: var(--font-display);
+  font-size: 2.4rem; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.dash-big__label { font-size: 0.85rem; color: var(--text-muted); }
+.dash-big--warn .dash-big__value { color: var(--warning); }
+.dash-big--ok   .dash-big__value { color: var(--success); }
+
+.dash-empty { margin-top: var(--sp-5); color: var(--text-muted); }

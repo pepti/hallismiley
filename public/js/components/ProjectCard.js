@@ -1,9 +1,19 @@
-// Category fallback images — Iceland landscapes, no people, no foreign flags
+// Category fallback image, for a project with no image of its own. The site's
+// own licensed Iceland set (credited in CREDITS.md from the footer) — these
+// were four hotlinked Unsplash photos, two of them of a carpentry workshop.
 const CATEGORY_IMAGES = {
-  tech:        'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=500&fit=crop&q=80&auto=format',
-  carpentry:   'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=800&h=500&fit=crop&q=80&auto=format',
-  remodelling: 'https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800&h=500&fit=crop&q=80&auto=format',
-  tools:       'https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=800&h=500&fit=crop&q=80&auto=format',
+  tech:      '/assets/iceland/highland-road-960.91fae09a.jpg',
+  carpentry: '/assets/iceland/braided-960.25ce942d.jpg',
+};
+const FALLBACK_IMAGE = CATEGORY_IMAGES.tech;
+
+// The badge printed the raw enum key at the visitor — an Icelandic reader saw
+// "CARPENTRY" on a card whose every other word was Icelandic. Same labels the
+// filter row uses; an unlabelled category falls back to no badge rather than
+// leaking the key.
+const CATEGORY_LABELS = {
+  tech:      'projects.tech',
+  carpentry: 'projects.carpentry',
 };
 
 import { escHtml } from '../utils/escHtml.js';
@@ -25,14 +35,17 @@ export class ProjectCard {
     card.setAttribute('tabindex', '0');
     card.setAttribute('aria-label', `${t('projects.viewProject')}: ${title}`);
 
-    const bgImg = image_url || CATEGORY_IMAGES[category] || CATEGORY_IMAGES.tech;
+    const bgImg = image_url || CATEGORY_IMAGES[category] || FALLBACK_IMAGE;
+    const badge = CATEGORY_LABELS[category]
+      ? `<span class="project-card__category project-card__category--${escHtml(category)}">${escHtml(t(CATEGORY_LABELS[category]))}</span>`
+      : '';
 
     card.innerHTML = `
       <div class="project-card__image">
         <img class="project-card__image-bg"
              src="${escHtml(bgImg)}" alt="${escHtml(title)}" loading="lazy">
         <div class="project-card__image-overlay"></div>
-        <span class="project-card__category project-card__category--${escHtml(category)}">${escHtml(category)}</span>
+        ${badge}
         <span class="project-card__year">${year}</span>
         ${featured ? `<span class="project-card__featured-star" title="${t('projects.featured')}">★</span>` : ''}
       </div>

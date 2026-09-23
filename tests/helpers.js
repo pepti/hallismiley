@@ -7,6 +7,21 @@ const { Scrypt } = require('oslo/password');
 
 const scrypt = new Scrypt();
 
+// The fixture password is a per-run constant (tests/env.js pins
+// ADMIN_PASSWORD), but oslo pure-JS scrypt costs ~100-200ms per hash and
+// the create*User helpers run in per-test beforeEach hooks — a big admin
+// suite pays ~100+ identical hashes per run. Memoise by plaintext so each
+// distinct password is hashed once per Jest worker (ice #224). Server-side
+// hashing in the auth routes is untouched; only fixture setup takes the
+// cached hash.
+const passwordHashCache = new Map();
+function getPasswordHash(password) {
+  if (!passwordHashCache.has(password)) {
+    passwordHashCache.set(password, scrypt.hash(password));
+  }
+  return passwordHashCache.get(password);
+}
+
 // Lucia validates sessions by primary-key lookup, not by format, so any
 // unique opaque string works as a session id in tests. 30d expiry is just
 // "far enough in the future that no test trips the expiry check."
@@ -57,7 +72,7 @@ async function upsertUserOn(client, { id, email, username, password_hash, role }
  * Returns the user's id.
  */
 async function createTestAdminUser() {
-  const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
+  const hash = await getPasswordHash(process.env.ADMIN_PASSWORD);
   const client = await db.pool.connect();
   try {
     return await upsertUserOn(client, adminUserSpec(hash));
@@ -70,7 +85,7 @@ async function createTestAdminUser() {
  * Inserts a test moderator user. Returns the user's id.
  */
 async function createTestModeratorUser() {
-  const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
+  const hash = await getPasswordHash(process.env.ADMIN_PASSWORD);
   const client = await db.pool.connect();
   try {
     return await upsertUserOn(client, {
@@ -89,7 +104,7 @@ async function createTestModeratorUser() {
  * Inserts a test regular user. Returns the user's id.
  */
 async function createTestRegularUser() {
-  const hash = await scrypt.hash(process.env.ADMIN_PASSWORD);
+  const hash = await getPasswordHash(process.env.ADMIN_PASSWORD);
   const client = await db.pool.connect();
   try {
     return await upsertUserOn(client, {
@@ -146,7 +161,7 @@ async function getTestSessionCookie(userId) {
   try {
     const id = userId ?? await upsertUserOn(
       client,
-      adminUserSpec(await scrypt.hash(process.env.ADMIN_PASSWORD))
+      adminUserSpec(await getPasswordHash(process.env.ADMIN_PASSWORD))
     );
 
     const sessionId = generateSessionId();

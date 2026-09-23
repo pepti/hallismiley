@@ -18,7 +18,12 @@ ClaudeHalliProjectskeys/
 data/
 
 # Claude IDE files
-.claude/
+.claude/*
+# …except the engine-canonical rules and commands (D-021): tracked here and
+# received by every downstream through `git merge upstream/master`. Worktrees,
+# settings and per-machine files under .claude/ stay ignored.
+!.claude/rules/
+!.claude/commands/
 .claude.zip
 
 # Codex CLI local tooling (hooks reference local .claude/ scripts)
@@ -32,6 +37,14 @@ npm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Build identity — stamped into the image at build time by
+# scripts/generate-version.js, never committed (a committed stamp would lie
+# the moment anyone edited code without rebuilding).
+server/version.json
+# Same rule for the recent-changes stamp (server/scripts/generate-changes.js):
+# written on the build host right before docker build, never committed.
+server/changes.json
 
 # Build output
 dist/
@@ -58,5 +71,11 @@ public/assets/responsive-screenshots/
 # never statically served. Local-disk fallback for BOOKS_UPLOAD_ROOT.
 private-uploads/
 
-# Build identity — stamped by scripts/generate-version.js at docker build
-server/version.json
+# site-factory
+data/import/
+
+# Company/business docs — belong in the future orange-smiley/company repo, not the website repo
+company/
+
+# Iceland scene source photos (originals; only generated derivatives ship)
+assets-src/

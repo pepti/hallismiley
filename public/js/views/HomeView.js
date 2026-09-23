@@ -4,96 +4,169 @@
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { SceneStage } from '../scenes/SceneStage.js';
+import { productSiteUrl } from '../utils/productSite.js';
+import { motionAllowed, onMotionChange } from '../utils/motion.js';
+import { getIdentity, publicNav, isHiddenRoute } from '../utils/identity.js';
+
+// The home hero clip and its still — the PRODUCT's, from identity.hero in
+// config/client.json (utils/identity.js; the engine default is Orange
+// Smiley's hero-dc7df-v2). The poster is the loop's first frame, so the switch
+// between the still (reduced motion, Save-Data, before the first frame
+// decodes) and playback never jumps. A new clip gets a new filename: the
+// generic public/ static mount caches for an hour.
+const HERO_VIDEO_SRC    = getIdentity().hero.clip;
+const HERO_VIDEO_POSTER = getIdentity().hero.poster;
 
 
 // ── Project categories (champion-selector style) ──────────────────────────
 // Icons are NOT editable — keyed by category id and merged at render time.
+// One icon per discipline id. The ids are the company's lines of work
+// (2026-09-01) — they replaced the portfolio's tech/carpentry/remodelling/
+// tools set, which put timber joinery and workshop tools on the front page of
+// a software company. Decorative only: these tiles swap a preview image, they
+// are not the /verkefni category filter and are not the projects.category enum.
 const CATEGORY_ICONS = {
-  tech: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-           <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-         </svg>`,
-  carpentry: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>`,
-  remodelling: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                </svg>`,
-  tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+  web: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="16" rx="2"/>
+          <path d="M2 9h20"/><circle cx="5.5" cy="6.5" r="0.6" fill="currentColor"/>
+        </svg>`,
+  store: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M3 7h18l-1.5 12.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5z"/>
+            <path d="M8.5 10V6a3.5 3.5 0 0 1 7 0v4"/>
           </svg>`,
+  operations: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                 <path d="M4 3h12l4 4v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+                 <path d="M8 12h8M8 16h8M8 8h4"/>
+               </svg>`,
+  ai: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+         <rect x="6" y="6" width="12" height="12" rx="2"/>
+         <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8"/>
+       </svg>`,
 };
 
 // Default discipline content — fallback if API row is unavailable. Shaped
 // as { en, is } for locale-aware fallback (picked via pick() at load time).
+//
+// DRAFT (2026-09-01): the four lines of work the company sells, replacing the
+// portfolio's disciplines. Since 2026-09-03 (Halli: show examples of our own
+// work) each tile is a screenshot of the product itself — two from the product
+// site rekstrarkerfi.is (sibling repo, for variety: Halli 2026-09-03) and two
+// from a running instance seeded with the books demo
+// (server/scripts/seed-books-demo.js):
+//   vefur       — rekstrarkerfi.is landing page: a web page the company built.
+//   verslun     — rekstrarkerfi.is "Verslun & pantanir" feature card.
+//   rekstur     — the invoice list: amounts, VSK, what is outstanding.
+//   gervigreind — a change request being written: pick an element on the
+//                 page, describe the change, the AI builds it.
+// 800×800 JPEGs in public/assets/disciplines/, content-hashed in the filename:
+// /assets/ is served with max-age=3600, so a tile overwritten under the same
+// name kept showing the old picture for an hour (2026-09-03). Halli can replace
+// any of them from the inline editor (image upload per category).
 const DEFAULT_DISCIPLINE_CONTENT = {
   en: {
     eyebrow:     'Browse by',
-    heading:     'Discipline',
-    description: 'From precision timber frames and hand-cut joinery to full-stack web applications — every project is built to last.',
+    heading:     'What we build',
+    description: 'One system with four faces. Every customer runs the same core; what differs is how much of it they switch on, and the modules we fit to their business.',
     categories: [
-      { id: 'tech',        label: 'Tech',        type: 'Full-Stack Applications', img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
-      { id: 'carpentry',   label: 'Carpentry',   type: 'Joinery & Timber Work',   img: '/assets/projects/arnarhraun/img_1795.jpg' },
-      { id: 'remodelling', label: 'Remodelling', type: 'Interior Renovation',     img: '/assets/projects/arnarhraun/img_1071.jpg' },
-      { id: 'tools',       label: 'Tools',       type: 'Workshop & Dev Tooling',  img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+      { id: 'web',        label: 'Web',        type: 'Sites & content',            img: '/assets/disciplines/vefur.7f8d247c.jpg' },
+      { id: 'store',      label: 'Store',      type: 'Catalogue & checkout',       img: '/assets/disciplines/verslun.21ab6017.jpg' },
+      { id: 'operations', label: 'Operations', type: 'Inventory, invoicing & VAT', img: '/assets/disciplines/rekstur.40399c5b.jpg' },
+      { id: 'ai',         label: 'AI',         type: 'Agents that build & operate', img: '/assets/disciplines/gervigreind.fde5f2fa.jpg' },
     ],
   },
   is: {
     eyebrow:     'Skoða eftir',
-    heading:     'Sviði',
-    description: 'Allt frá nákvæmum timburgrindum og handskornum fellingum til fullra vefforrita — hvert verkefni byggt til að endast.',
+    heading:     'Því sem við smíðum',
+    description: 'Eitt kerfi með fjórum hliðum. Allir viðskiptavinir keyra sama kjarnann; það sem er ólíkt er hversu mikið af honum er kveikt á og hvaða einingar við sníðum að rekstrinum.',
     categories: [
-      { id: 'tech',        label: 'Tækni',       type: 'Fullur tæknistafli',       img: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=800&fit=crop&q=80&auto=format' },
-      { id: 'carpentry',   label: 'Smíði',       type: 'Fellingar & timburvinna',  img: '/assets/projects/arnarhraun/img_1795.jpg' },
-      { id: 'remodelling', label: 'Endurnýjun',  type: 'Innanhússfrágangur',       img: '/assets/projects/arnarhraun/img_1071.jpg' },
-      { id: 'tools',       label: 'Verkfæri',    type: 'Verkstæði & þróunarverkfæri', img: 'https://images.unsplash.com/photo-1557054055-72388d9f6141?w=800&h=800&fit=crop&q=80&auto=format' },
+      { id: 'web',        label: 'Vefur',      type: 'Vefir og efnisstjórnun',      img: '/assets/disciplines/vefur.7f8d247c.jpg' },
+      { id: 'store',      label: 'Verslun',    type: 'Vörulisti og greiðslur',      img: '/assets/disciplines/verslun.21ab6017.jpg' },
+      { id: 'operations', label: 'Rekstur',    type: 'Lager, reikningar og VSK',    img: '/assets/disciplines/rekstur.40399c5b.jpg' },
+      { id: 'ai',         label: 'Gervigreind', type: 'Umboð sem smíða og reka',    img: '/assets/disciplines/gervigreind.fde5f2fa.jpg' },
     ],
   },
 };
 
-// ── Default skills content — used as fallback if API is unavailable ───────
+// ── Default skills content — used as fallback if API is unavailable.
+// DRAFT (2026-09-01): company copy — what Orange Smiley does. Shaped as
+// { en, is } like the hero and discipline defaults; _loadContent() picks the
+// locale slice, so what reaches the inline editor is always the flat row
+// shape the API stores. ──
 const DEFAULT_SKILLS_CONTENT = {
-  eyebrow:     'Two Decades of',
-  title:       'Craft\n& Code',
-  description: 'Twenty years of carpentry precision — reading grain, cutting to the line, fitting without gaps — applied to every line of code. The same principles that make a mortise-and-tenon joint last a century make software maintainable.',
-  items: [
-    { label: 'Languages', value: 'JS · Python · SQL' },
-    { label: 'Backend',   value: 'Node · Express · REST' },
-    { label: 'Database',  value: 'PostgreSQL · Redis' },
-    { label: 'Carpentry', value: '20+ yrs hand & power tools' },
-    { label: 'Cloud',     value: 'Azure' },
-    { label: 'Security',  value: 'OWASP · OAuth 2.0 · RS256' },
-  ],
-  image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+  en: {
+    eyebrow:     'What we do',
+    title:       'We build it\n& we run it',
+    description: 'Orange Smiley is an Icelandic software house driven by AI. We build business systems and then operate them — hosting, monitoring, security and the changes you ask for. AI agents do the custom work, which is why bespoke costs subscription money instead of consultancy money.',
+    items: [
+      { label: 'Web',        value: 'Sites · stores · checkout' },
+      { label: 'Operations', value: 'Inventory · invoicing · VAT' },
+      { label: 'AI',         value: 'Agents build and maintain' },
+      { label: 'Platform',   value: 'Node · PostgreSQL · Azure' },
+      { label: 'Running it', value: 'Hosting · updates · 24/7 watch' },
+      { label: 'Security',   value: 'OWASP · 2FA · audit logging' },
+    ],
+    image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+  },
+  is: {
+    eyebrow:     'Það sem við gerum',
+    title:       'Við smíðum\n& við rekum',
+    description: 'Orange Smiley er íslenskt hugbúnaðarhús knúið gervigreind. Við smíðum rekstrarkerfi og rekum þau svo áfram — hýsingu, vöktun, öryggi og breytingarnar sem þú biður um. Gervigreindin vinnur sérsmíðina, þess vegna kostar hún áskrift en ekki ráðgjafartíma.',
+    items: [
+      { label: 'Vefur',    value: 'Vefir · verslanir · greiðslur' },
+      { label: 'Rekstur',  value: 'Lager · reikningar · VSK' },
+      { label: 'Gervigreind', value: 'Umboð smíða og viðhalda' },
+      { label: 'Undirstaða', value: 'Node · PostgreSQL · Azure' },
+      { label: 'Umsjón',   value: 'Hýsing · uppfærslur · vöktun' },
+      { label: 'Öryggi',   value: 'OWASP · 2FA · aðgerðaskrár' },
+    ],
+    image_url: 'https://images.unsplash.com/photo-1564603527476-8837eac5a22f?w=700&h=900&fit=crop&q=80&auto=format',
+  },
 };
 
-// ── Default stats content — used as fallback if API is unavailable ───────
-const DEFAULT_STATS_CONTENT = [
-  { num: '22+', label: 'Years Carpentry Experience' },
-  { num: '15+', label: 'Years Coding Experience' },
-  { num: '6+',  label: 'Years Tech Management' },
-  { num: '40',  label: 'Years of creating all kinds of trouble' },
-];
+// ── Default stats content — used as fallback if API is unavailable.
+// DRAFT (2026-09-01): company numbers, { en, is } like the rest. ──
+const DEFAULT_STATS_CONTENT = {
+  en: [
+    { num: '2026', label: 'Founded in Iceland' },
+    { num: '1',    label: 'Product — Rekstrarkerfið' },
+    { num: '20+',  label: 'Years building software' },
+    { num: '24/7', label: 'Monitored and operated' },
+  ],
+  is: [
+    { num: '2026', label: 'Stofnað á Íslandi' },
+    { num: '1',    label: 'Vara — Rekstrarkerfið' },
+    { num: '20+',  label: 'Ára reynsla af hugbúnaðarsmíði' },
+    { num: '24/7', label: 'Vöktun og rekstur' },
+  ],
+};
 
 // ── Default hero content — fallback if API row is unavailable. Shaped as
 // { en, is } for locale-aware fallback (picked via getLocale() at load time).
-// Values mirror the previous hardcoded title + halli.tagline + home.viewProjects
-// i18n entries so first-load (no DB row yet) renders identically to before.
+// DRAFT (2026-09-01): the hero introduces the COMPANY. The product pitch it
+// used to carry ("Allt kerfið þitt á einum stað") is now Rekstrarkerfið's
+// own tagline, in the products section below and on /thjonusta. ──
 const DEFAULT_HERO_CONTENT = {
   en: {
-    title_first:  'Halli',
-    title_second: 'Smiley',
-    subtitle:     'Where wood meets code',
-    cta_label:    'View Projects',
+    title_first:  'We build software',
+    title_second: 'that runs businesses',
+    subtitle:     'Orange Smiley is an Icelandic software house driven by AI — we build the systems your company runs on, and we keep them running.',
+    cta_label:    'Get in touch',
   },
   is: {
-    title_first:  'Halli',
-    title_second: 'Smiley',
-    subtitle:     'Þar sem tré og tækni mætast',
-    cta_label:    'Skoða verkefni',
+    title_first:  'Við smíðum hugbúnað',
+    title_second: 'sem rekur fyrirtæki',
+    subtitle:     'Orange Smiley er íslenskt hugbúnaðarhús knúið gervigreind — við smíðum kerfin sem fyrirtækið þitt keyrir á og höldum þeim gangandi.',
+    cta_label:    'Hafa samband',
   },
 };
+
+// The stats fallback for the active locale, deep-copied so callers can hand
+// it straight to the inline editor without writing through to the constant.
+function _defaultStats() {
+  const rows = DEFAULT_STATS_CONTENT[getLocale()] || DEFAULT_STATS_CONTENT.en;
+  return JSON.parse(JSON.stringify(rows));
+}
 
 // Historical rows in site_content were sometimes saved as an object with
 // numeric string keys (`{"0": {...}, "1": {...}}`) instead of a JSON array.
@@ -104,7 +177,7 @@ function _coerceStatsArray(data) {
     const vals = Object.values(data).filter(v => v && typeof v === 'object' && 'num' in v && 'label' in v);
     if (vals.length) return vals;
   }
-  return [...DEFAULT_STATS_CONTENT];
+  return _defaultStats();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -114,8 +187,9 @@ export class HomeView {
     this._statsContent = null;  // stats — loaded from API in render()
     this._discipline = null;    // discipline (projects categories) — loaded from API
     this._heroContent = null;   // hero — loaded from API in render()
-    this._landingBg = null;     // landing background config — video (default) | photo | plain
+    this._landingBg = null;     // landing background config — video (default) | scene | gradient | photo | plain
     this._newsArticles = [];
+    this._scenes = [];          // SceneStage instances (destroyed with the view)
   }
 
   async render() {
@@ -131,8 +205,15 @@ export class HomeView {
     const view = document.createElement('div');
     view.className = 'view';
 
+    // The original hallismiley composition, restored 2026-08-22 (Halli's
+    // call: the scene-band cutovers between photographs didn't work — back
+    // to the one-canvas homepage and iterate from there). The business
+    // tier/step sections are the dormant ones now (_tiers/_steps below);
+    // the Iceland scene engine stays on the inner pages and remains an
+    // admin-selectable hero background mode.
     view.innerHTML = `
       ${this._hero()}
+      ${this._products()}
       ${this._news()}
       ${this._projects()}
       ${this._skills()}
@@ -144,6 +225,7 @@ export class HomeView {
     this._initProjects(view);
     this._initContactForm(view);
     this._initHeroVideo(view);
+    this._initHeroScene(view); // scene mode is still admin-selectable
     this._initHeroEdit(view);
     this._initSkillsEdit(view);
     this._initDisciplineEdit(view);
@@ -160,7 +242,8 @@ export class HomeView {
         return;
       }
     } catch { /* network error — fall through to default */ }
-    this._content = { ...DEFAULT_SKILLS_CONTENT };
+    const defaults = DEFAULT_SKILLS_CONTENT[getLocale()] || DEFAULT_SKILLS_CONTENT.en;
+    this._content = JSON.parse(JSON.stringify(defaults));
   }
 
   // ── Load stats content from API ────────────────────────────────────────
@@ -173,7 +256,7 @@ export class HomeView {
         return;
       }
     } catch { /* network error — fall through to default */ }
-    this._statsContent = [...DEFAULT_STATS_CONTENT];
+    this._statsContent = _defaultStats();
   }
 
   // ── Load discipline (projects categories) content from API ─────────────
@@ -209,7 +292,11 @@ export class HomeView {
     this._heroContent = JSON.parse(JSON.stringify(defaults));
   }
 
-  // ── Load landing background config (admin-configurable; video is default) ──
+  // ── Load landing background config (admin-configurable; the HERO VIDEO
+  // is the default again — Halli's call (2026-08-22), reverting the
+  // one-day scene default. Scene/gradient/photo/plain all remain available
+  // through the admin background settings, so nothing admins could pick was
+  // lost. ──
   async _loadLandingBg() {
     try {
       const res = await fetch('/api/v1/content/landing_background?locale=en');
@@ -217,7 +304,7 @@ export class HomeView {
         const data = await res.json();
         if (data && typeof data === 'object') { this._landingBg = data; return; }
       }
-    } catch { /* network error — fall through to video default */ }
+    } catch { /* network error — fall through to the video default */ }
     this._landingBg = { mode: 'video', photo_url: null, veil_percent: 100 };
   }
 
@@ -226,21 +313,38 @@ export class HomeView {
     const h  = this._heroContent || DEFAULT_HERO_CONTENT.en;
     const bg = this._landingBg || { mode: 'video', photo_url: null, veil_percent: 100 };
     const veil = Math.max(0, Math.min(100, Number.isFinite(bg.veil_percent) ? bg.veil_percent : 100));
-    // Background: video (default) | photo (a library image) | plain. The photo
-    // layer uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
+    // Background: video (default) | scene (the Iceland scene engine, mounted
+    // after render into the section) | gradient | photo (a library image) |
+    // plain. gradient and plain add no media layer at all. The photo layer
+    // uses its own class so _initHeroVideo's `.lol-hero__bg` lookup only
     // matches the real <video>.
     let bgEl = '';
     if (bg.mode === 'photo' && bg.photo_url) {
       bgEl = `<div class="lol-hero__photobg" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${escHtml(bg.photo_url)}')" aria-hidden="true"></div>`;
-    } else if (bg.mode !== 'plain') {
-      bgEl = `<video class="lol-hero__bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+    } else if (bg.mode === 'video') {
+      // Reduced motion or Save-Data: no autoplay and no download — the
+      // poster stands in as a still. _initHeroVideo follows a live change of
+      // the OS setting in either direction.
+      const moving = motionAllowed();
+      bgEl = `<video class="lol-hero__bg"${moving ? ' autoplay' : ''} muted loop playsinline preload="${moving ? 'auto' : 'none'}" poster="${HERO_VIDEO_POSTER}" aria-hidden="true">
         <!-- TODO (production): move this video to a CDN to avoid serving large assets through Node.js -->
-        <source src="/assets/videos/waterfall-bk-v1.mp4" type="video/mp4">
+        <source src="${HERO_VIDEO_SRC}" type="video/mp4">
       </video>`;
     }
-    const overlay = bg.mode === 'plain' ? '' : `<div class="lol-hero__overlay" aria-hidden="true" style="opacity:${veil / 100}"></div>`;
+    // The veil exists to hold text legible over MEDIA. Over the gradient it
+    // would only mute a background that was designed for this copy already —
+    // and it is built from --bg-nav-rgb, so on a light theme it would wash the
+    // hero out rather than darken it.
+    const overlay = bgEl ? `<div class="lol-hero__overlay" aria-hidden="true" style="opacity:${veil / 100}"></div>` : '';
+    // Media modes still carry light-on-dark hero text; scene mode does too
+    // (white over the scrim), so both wear --media. The scene slot itself is
+    // filled in _initHeroScene after render.
+    const isScene = bg.mode === 'scene';
+    const mediaCls = (bgEl || isScene) ? ' lol-hero--media' : '';
+    const sceneCls = isScene ? ' lol-hero--scene' : '';
+    const sceneStrength = isScene ? ` style="--scene-scrim-strength:${(veil / 100).toFixed(2)}"` : '';
     return `
-    <section class="lol-hero" aria-label="Introduction">
+    <section class="lol-hero${mediaCls}${sceneCls}" id="main-content" aria-label="${t('home.heroAriaLabel')}"${sceneStrength}>
       ${bgEl}
       ${overlay}
 
@@ -250,13 +354,97 @@ export class HomeView {
           <span class="lol-hero__title-second" data-hero-field="title_second">${escHtml(h.title_second)}</span>
         </h1>
         <p class="lol-hero__subtitle" data-hero-field="subtitle">${escHtml(h.subtitle)}</p>
-        <a href="${href('/projects')}" class="lol-hero__cta" data-hero-field="cta_label">${escHtml(h.cta_label)}</a>
+        <a href="${href('/hafa-samband')}" class="lol-hero__cta" data-hero-field="cta_label">${escHtml(h.cta_label)}</a>
       </div>
 
       <div class="lol-hero__scroll" aria-hidden="true">
-        <span>Scroll</span>
+        <span>${t('home.scrollHint')}</span>
         <div class="lol-hero__scroll-line"></div>
       </div>
+    </section>`;
+  }
+
+  // ── DORMANT since 2026-08-22 (hallismiley-layout revert): service-tier
+  // teaser — three cards → /thjonusta. Kept, with its i18n, for the coming
+  // content pass — Halli decides where the tiers return. ──────────────────
+  // ── SECTION: Products ──────────────────────────────────────────────────
+  // The company site names its products here (Halli, 2026-09-01). One entry
+  // today; the grid takes a second card without restructuring, which is the
+  // whole point of listing products rather than pitching the one we have.
+  // Deep product marketing lives on the product's own site — this card's job
+  // is to say what Rekstrarkerfið is and hand the visitor to rekstrarkerfi.is
+  // in a new tab (Halli, 2026-09-13; /thjonusta no longer presents the product).
+  // It is the COMPANY's section: it renders only while the services page is
+  // part of this product's public IA — a downstream that hides /thjonusta
+  // (identity.surface.hiddenRoutes) has no products to list here.
+  _products() {
+    if (isHiddenRoute('/thjonusta')) return '';
+    return `
+    <section class="home-products" aria-labelledby="home-products-title">
+      <div class="home-products__header">
+        <span class="home-products__eyebrow">${t('home.productsEyebrow')}</span>
+        <h2 class="home-products__title" id="home-products-title">${t('home.productsTitle')}</h2>
+      </div>
+      <div class="home-products__grid">
+        <article class="home-products__card">
+          <span class="home-products__badge">${t('home.productRekstrarBadge')}</span>
+          <h3 class="home-products__name">${t('home.productRekstrarName')}</h3>
+          <p class="home-products__tagline">${t('home.productRekstrarTagline')}</p>
+          <p class="home-products__desc">${t('home.productRekstrarDesc')}</p>
+          <a href="${productSiteUrl(getLocale())}" target="_blank" rel="noopener" class="btn btn--primary home-products__cta">
+            ${t('home.productRekstrarCta')}<span class="sr-only"> ${t('common.opensNewTab')}</span>
+            <span class="home-products__cta-icon" aria-hidden="true">↗</span>
+          </a>
+        </article>
+      </div>
+    </section>`;
+  }
+
+  _tiers() {
+    const tiers = [
+      { name: t('home.tierVefurName'),   desc: t('home.tierVefurDesc') },
+      { name: t('home.tierVerslunName'), desc: t('home.tierVerslunDesc') },
+      { name: t('home.tierReksturName'), desc: t('home.tierReksturDesc') },
+    ];
+    return `
+    <section class="home-tiers" aria-labelledby="home-tiers-title">
+      <div class="section__header">
+        <h2 class="section__title" id="home-tiers-title">${t('home.tiersTitle')}</h2>
+      </div>
+      <div class="home-tiers__grid">
+        ${tiers.map((tier, i) => `
+        <a href="${href('/thjonusta')}" class="home-tiers__card${i === 1 ? ' home-tiers__card--featured' : ''}">
+          <span class="home-tiers__numeral" aria-hidden="true">${['I', 'II', 'III'][i]}</span>
+          <h3 class="home-tiers__name">${tier.name}</h3>
+          <p class="home-tiers__desc">${tier.desc}</p>
+        </a>`).join('')}
+      </div>
+      <div class="home-tiers__cta-row">
+        <a href="${href('/thjonusta')}" class="btn btn--primary">${t('home.tiersCta')}</a>
+      </div>
+    </section>`;
+  }
+
+  // ── DORMANT since 2026-08-22 (see _tiers above): how it works — 3 steps ──
+  _steps() {
+    const steps = [
+      { title: t('home.step1Title'), desc: t('home.step1Desc') },
+      { title: t('home.step2Title'), desc: t('home.step2Desc') },
+      { title: t('home.step3Title'), desc: t('home.step3Desc') },
+    ];
+    return `
+    <section class="home-steps" aria-labelledby="home-steps-title">
+      <div class="section__header">
+        <h2 class="section__title" id="home-steps-title">${t('home.stepsTitle')}</h2>
+      </div>
+      <ol class="home-steps__list">
+        ${steps.map((step, i) => `
+        <li class="home-steps__item">
+          <span class="home-steps__num" aria-hidden="true">${i + 1}</span>
+          <h3 class="home-steps__title">${step.title}</h3>
+          <p class="home-steps__desc">${step.desc}</p>
+        </li>`).join('')}
+      </ol>
     </section>`;
   }
 
@@ -428,15 +616,12 @@ export class HomeView {
     return `
     <section class="lol-news" id="news" aria-label="Latest news">
       <div class="lol-news__inner">
+        <!-- The /news list is a hidden surface (publicSurface.js): unlinked,
+             noindex, still functional. The heading and the view-all link used
+             to point straight at it from the public homepage — the individual
+             article links stay, since those are what get shared. -->
         <div class="lol-news__header">
-          <a href="${href('/news')}" class="lol-news__heading-link"><h2 class="lol-news__heading">${t('nav.news')}</h2></a>
-          <a href="${href('/news')}" class="lol-news__view-all">
-            ${t('home.viewAll')}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </a>
+          <h2 class="lol-news__heading">${t('nav.news')}</h2>
         </div>
         <div class="lol-news__grid">${cards}</div>
       </div>
@@ -467,7 +652,6 @@ export class HomeView {
           <h2 class="lol-projects__heading" data-disc-field="heading">${escHtml(d.heading)}</h2>
           <p class="lol-projects__desc" data-disc-field="description">${escHtml(d.description)}</p>
           <div class="lol-projects__btns">
-            <a href="${href('/projects')}" class="lol-btn--gold">${t('home.viewAllProjects')}</a>
             <a href="${href('/')}" class="lol-btn--teal" id="contact-btn">${t('home.getInTouch')}</a>
           </div>
           <div class="lol-projects__categories" role="tablist" aria-label="Project disciplines">
@@ -590,30 +774,15 @@ export class HomeView {
     return `
     <footer class="lol-footer">
 
+      <!-- Home + the product's public IA (identity.surface.nav minus its
+           hidden routes), the same list the top nav and the sitemap use. -->
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
-        <a href="${href('/')}"         class="lol-footer__nav-link">${t('nav.home')}</a>
-        <a href="${href('/projects')}" class="lol-footer__nav-link">${t('nav.projects')}</a>
-        <a href="${href('/shop')}"     class="lol-footer__nav-link">${t('nav.shop')}</a>
-        <a href="${href('/news')}"     class="lol-footer__nav-link">${t('nav.news')}</a>
-        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
-        <a href="${href('/contact')}"  class="lol-footer__nav-link">${t('nav.contact')}</a>
-        <a href="${href('/party')}"    class="lol-footer__nav-link">${t('nav.party')}</a>
+        <a href="${href('/')}"             class="lol-footer__nav-link">${t('nav.home')}</a>
+        ${publicNav().map(e => `<a href="${href(e.route)}" class="lol-footer__nav-link">${escHtml(t(e.labelKey))}</a>`).join('\n        ')}
       </nav>
 
       <div class="lol-footer__social">
-        <a href="https://github.com/pepti/hallismiley" target="_blank" rel="noopener noreferrer"
-           class="lol-footer__social-icon" aria-label="GitHub profile">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-        </a>
-        <a href="https://www.linkedin.com/in/halliv/" target="_blank" rel="noopener noreferrer"
-           class="lol-footer__social-icon" aria-label="LinkedIn profile">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-          </svg>
-        </a>
-        <a id="footer-email-icon" href="#contact"
+        <a id="footer-email-icon" href="${href(isHiddenRoute('/hafa-samband') ? '/' : '/hafa-samband')}"
            class="lol-footer__social-icon" aria-label="Send email">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -624,30 +793,76 @@ export class HomeView {
       </div>
 
       <div class="lol-footer__brand">
-        <div class="lol-footer__logo">Halli Smiley</div>
+        <div class="lol-footer__logo">${escHtml(getIdentity().brand.name)}</div>
         <p class="lol-footer__copy">
-          &copy; ${new Date().getFullYear()} Halli Smiley. ${t('footer.tagline')}
+          &copy; ${new Date().getFullYear()} ${t('footer.companyLine')}
         </p>
         <nav class="lol-footer__legal" aria-label="${t('nav.legalNav')}">
-          <a href="${href('/privacy')}" class="lol-footer__legal-link">${t('footer.privacy')}</a>
+          <a href="${href('/personuvernd')}" class="lol-footer__legal-link">${t('footer.privacy')}</a>
           <a href="${href('/terms')}"   class="lol-footer__legal-link">${t('footer.terms')}</a>
+          <!-- CC BY attribution for the scene photography — the credits file
+               is generated by scripts/build-iceland-scenes.js. Served as a
+               plain document; the license requires reasonable attribution,
+               and a legal-row link is the standard web form of it. -->
+          <a href="/assets/iceland/CREDITS.md" class="lol-footer__legal-link" target="_blank" rel="noopener">${t('footer.photoCredits')}</a>
         </nav>
       </div>
 
     </footer>`;
   }
 
-  // ── Footer email icon — obfuscated mailto built from JS parts ────────
+  // ── Footer email icon — the mailto is set here, not in the markup, so the
+  // address never lives in the static HTML. It is the product's
+  // (identity.organization.email), the same address the Organization JSON-LD
+  // carries; the href in the markup is the contact page, for a page whose
+  // scripts never ran.
   _initFooterLinks(view) {
     const icon = view.querySelector('#footer-email-icon');
-    if (icon) {
-      const parts = ['halli', 'hallismiley', 'is'];
-      icon.href = `mailto:${parts[0]}@${parts[1]}.${parts[2]}`;
-    }
+    const email = getIdentity().organization.email;
+    if (icon && email) icon.href = `mailto:${email}`;
   }
 
   // ── Hero video — ensure autoplay fires after mount ────────────────────
+  // ── Iceland scene: hero ─────────────────────────────────────────────────
+  // The stage is prepended into the section so the existing hero content
+  // (data-hero-field spans, CTA, scroll hint) stacks above it unchanged.
+  _initHeroScene(view) {
+    const host = view.querySelector('.lol-hero--scene');
+    if (!host) return;
+    const stage = new SceneStage('home', { variant: 'hero' });
+    host.prepend(stage.el());
+    stage.mount();
+    this._scenes.push(stage);
+  }
+
+  // ── DORMANT since 2026-08-22: Iceland scene section bands (tiers/steps).
+  // Not called — the sections it decorates are dormant too, and the band
+  // cutovers are what Halli reverted. Kept with them for the content pass. ──
+  _initBandScenes(view) {
+    const bands = [
+      ['homeTiers', view.querySelector('.home-tiers')],
+      ['homeSteps', view.querySelector('.home-steps')],
+    ];
+    for (const [key, section] of bands) {
+      if (!section) continue;
+      const stage = new SceneStage(key, { variant: 'band' });
+      const el = stage.el();
+      el.classList.add('ice-scene--backdrop');
+      section.classList.add('home-section--scene');
+      section.prepend(el);
+      stage.mount();
+      this._scenes.push(stage);
+    }
+  }
+
+  destroy() {
+    this._scenes.forEach((s) => s.destroy());
+    this._scenes = [];
+    if (this._unsubHeroMotion) { this._unsubHeroMotion(); this._unsubHeroMotion = null; }
+  }
+
   _initHeroVideo(view) {
+    if (this._unsubHeroMotion) { this._unsubHeroMotion(); this._unsubHeroMotion = null; }
     const video = view.querySelector('.lol-hero__bg');
     if (!video) return;
 
@@ -658,10 +873,26 @@ export class HomeView {
     video.muted       = true;
     video.playsInline = true;
 
+    // The clip is a continuous camera move, so it obeys utils/motion.js like
+    // every other animated surface: reduced motion (or Save-Data) keeps the
+    // poster still, and flipping the OS setting mid-visit starts or stops it.
+    this._unsubHeroMotion = onMotionChange(() => {
+      if (motionAllowed()) {
+        video.preload = 'auto';
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    });
+    if (!motionAllowed()) {
+      video.pause();
+      return;
+    }
+
     requestAnimationFrame(() => {
       video.play().catch(() => {
         const resume = () => {
-          video.play().catch(() => {});
+          if (motionAllowed()) video.play().catch(() => {});
           document.removeEventListener('click',      resume);
           document.removeEventListener('touchstart', resume);
         };

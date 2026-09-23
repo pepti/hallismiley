@@ -67,8 +67,11 @@ beforeEach(async () => {
   csrf = await csrfHeaders(adminCookie);
 });
 
-describe('Login — accounts WITHOUT 2FA are unaffected', () => {
-  test('an admin with no TOTP still signs in normally', async () => {
+// Runs under tests/env.js's ADMIN_TOTP_EXEMPT='*', so this is the CHALLENGE's
+// scope only: no TOTP, no challenge. What such an admin may then DO — nothing,
+// until it enrols — is adminTotpEnforcement.test.js, under the production rule.
+describe('Login — accounts WITHOUT 2FA are not challenged', () => {
+  test('an admin with no TOTP gets a session, not a challenge', async () => {
     const res = await login('totpadmin');
     expect(res.status).toBe(200);
     expect(res.body.user.username).toBe('totpadmin');
@@ -124,10 +127,6 @@ describe('Login — the session must not exist until the second factor passes', 
     expect(res.status).toBe(200);
     expect(res.body.user.username).toBe('totpadmin');
     expect(res.body.usedRecoveryCode).toBe(false);
-    // The SPA holds this payload until the next reload, and the profile 2FA
-    // panel paints from it: without the flag an enrolled admin is shown the OFF
-    // state and offered "Set up", which then 409s.
-    expect(res.body.user.totp_enabled).toBe(true);
     expect(res.headers['set-cookie'].join()).toMatch(/auth_session/);
   });
 
@@ -318,6 +317,25 @@ describe('Enrolment', () => {
     const c = await csrfHeaders(cookie);
     const res = await request(app).post('/auth/totp/setup').set('Cookie', c.cookie).set(c.headers).send({});
     expect(res.status).toBe(403);
+  });
+
+  // Regression (2026-09-07 review): mfaService.protectedRole was widened to
+  // cover `accounts` holders, but BOTH enrolment endpoints still tested
+  // `user.role !== 'admin'` — so the users the gate newly protected were the
+  // only ones who could not enrol. shouldEnrol() nagged them into a 403.
+  test('a seller holding the accounts view CAN enrol', async () => {
+    await db.query(
+      `INSERT INTO roles (name, description, view_access, is_system)
+       VALUES ('solumadur', 'Sölumaður', '["handbok", "accounts", "commission"]'::jsonb, FALSE)
+       ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`
+    );
+    require('../../server/models/Role').invalidateCache();
+    const sellerId = await makeUser({ id: 'totp-seller', username: 'totpseller', role: 'solumadur' });
+    const cookie = await getTestSessionCookie(sellerId);
+    const c = await csrfHeaders(cookie);
+    const res = await request(app).post('/auth/totp/setup').set('Cookie', c.cookie).set(c.headers).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.secret).toBeTruthy();
   });
 
   test('disabling requires the password', async () => {

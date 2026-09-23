@@ -1,5 +1,6 @@
-import { isAuthenticated, canEdit, getUser, logout, updateProfile, hasAnyAdminView } from '../services/auth.js';
+import { isAuthenticated, getUser, logout, updateProfile, hasAnyAdminView, isSeller } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { getIdentity, publicNav } from '../utils/identity.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
 import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES, forcedLocaleFor } from '../i18n/i18n.js';
@@ -81,23 +82,55 @@ export class NavBar {
     return `
       <!-- Left: Brand -->
       <div class="lol-nav__brand">
-        <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="${t('nav.brandAriaLabel')}">
-          <div class="lol-nav__logo-icon" aria-hidden="true">H</div>
-          <div class="lol-nav__logo-text">Halli<br>Smiley</div>
+        <a href="${navHref('/')}" class="lol-nav__logo" data-route="/" aria-label="${escHtml(t('nav.brandAriaLabel', { siteName: getIdentity().brand.name }))}">
+          <div class="lol-nav__logo-icon" aria-hidden="true">
+            <!-- The emblem: cut-corner plate, molten gradient rim, inner
+                 hairline, engraved smile ("4.1", Halli's pick 2026-08-09).
+                 Colors ride the theme tokens via the classes in layout.css;
+                 the gradient stops reference tokens inline (SVG gradients
+                 cannot be colored from an external stylesheet). -->
+            <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" focusable="false">
+              <defs>
+                <linearGradient id="os-mark-rim" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" style="stop-color: var(--brand-mark-light)"/>
+                  <stop offset="1" style="stop-color: var(--brand-mark-dark)"/>
+                </linearGradient>
+              </defs>
+              <path class="lol-nav__logo-mark-plate" d="M16 1 29 8v16L16 31 3 24V8z"
+                    stroke="url(#os-mark-rim)" stroke-width="1.6"/>
+              <path class="lol-nav__logo-mark-hairline" d="M16 3.4 26.9 9.3v13.4L16 28.6 5.1 22.7V9.3z" fill="none" stroke-width="0.5"/>
+              <!-- Eyes: vertical bars filled with the rim gradient, so they share
+                   the plate edge's light source (Halli's pick 2026-08-10, sample 06).
+                   They carry no theme class — a CSS fill declaration would out-rank
+                   the presentation attribute and kill the gradient; the gradient's own
+                   stops ride the --brand-mark-* ramp, which every theme defines as
+                   the same orange, so the mark reads identically on all five. -->
+              <rect x="10.2" y="10.5" width="2.5" height="5.4" rx="1.25" fill="url(#os-mark-rim)"/>
+              <rect x="19.3" y="10.5" width="2.5" height="5.4" rx="1.25" fill="url(#os-mark-rim)"/>
+              <path class="lol-nav__logo-mark-smile" d="M10.4 19c1.6 2.7 3.5 4 5.6 4s4-1.3 5.6-4"
+                    fill="none" stroke-width="2.1" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <!-- Company lockup: this is the company site (Halli's call 2026-09-01),
+               so the company name carries the mark. The name stands on its own —
+               the descriptor line under it was dropped the same day (Halli).
+               Rekstrarkerfið is a product: it is named on the product surfaces
+               (/thjonusta, the home products section), not here. The name is
+               identity.brand.name (config/client.json via utils/identity.js) —
+               a proper noun reads the same in both locales, same as the home
+               footer's logo line. -->
+          <div class="lol-nav__logo-text"><strong>${escHtml(getIdentity().brand.name)}</strong></div>
         </a>
       </div>
 
-      <!-- Center: Navigation links + (on mobile) language toggle + auth CTAs -->
+      <!-- Center: Navigation links + (on mobile) language toggle + auth CTAs.
+           Home, then the product's public IA (identity.surface.nav minus its
+           hidden routes — utils/identity.js publicNav()): the engine carries
+           no route literal here, so a downstream lists its own pages in
+           config/client.json and this bar follows. -->
       <div class="lol-nav__center" id="nav-menu">
-        <a href="${navHref('/')}"        class="lol-nav__link" data-route="/"        data-i18n="nav.home">${t('nav.home')}</a>
-        <a href="${navHref('/projects')}" class="lol-nav__link" data-route="/projects" data-i18n="nav.projects">${t('nav.projects')}</a>
-        <a href="${navHref('/shop')}"     class="lol-nav__link" data-route="/shop"     data-i18n="nav.shop">${t('nav.shop')}</a>
-        <a href="${navHref('/news')}"     class="lol-nav__link" data-route="/news"     data-i18n="nav.news">${t('nav.news')}</a>
-        <a href="${navHref('/halli')}"    class="lol-nav__link" data-route="/halli"    data-i18n="nav.halli">${t('nav.halli')}</a>
-        <a href="${navHref('/contact')}"  class="lol-nav__link" data-route="/contact"  data-i18n="nav.contact">${t('nav.contact')}</a>
-        <a href="${navHref('/party')}"    class="lol-nav__link lol-nav__party-link" data-route="/party"
-           id="nav-party-link" aria-label="${t('nav.partyAriaLabel')}" data-i18n-aria="nav.partyAriaLabel"
-           data-i18n="nav.party">${t('nav.party')}</a>
+        <a href="${navHref('/')}"             class="lol-nav__link" data-route="/"             data-i18n="nav.home">${t('nav.home')}</a>
+        ${publicNav().map(e => `<a href="${navHref(e.route)}" class="lol-nav__link" data-route="${escHtml(e.route)}" data-i18n="${escHtml(e.labelKey)}">${escHtml(t(e.labelKey))}</a>`).join('\n        ')}
         <div class="lol-nav__mobile-extras">
           ${this._langSwitcherHtml()}
           <div class="lol-nav__auth" id="nav-auth-mobile"></div>
@@ -127,7 +160,7 @@ export class NavBar {
                           class="lol-nav__lang-opt${lc === current ? ' lol-nav__lang-opt--active' : ''}"
                           data-locale="${lc}"
                           aria-pressed="${lc === current}"
-                          aria-label="${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}">${lc.toUpperCase()}</button>`)
+                          aria-label="${lc.toUpperCase()} — ${t('nav.switchTo' + lc.charAt(0).toUpperCase() + lc.slice(1))}">${lc.toUpperCase()}</button>`)
       .join('');
     // `hidden` when the first render lands directly on a locale-locked route
     // (party) — otherwise the toggle would paint before syncLocaleLock runs.
@@ -235,17 +268,14 @@ export class NavBar {
         <a href="${navHref('/profile')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/profile">
           ${t('nav.profile')}
         </a>
+        ${isSeller() ? `
+        <a href="${navHref('/solusvaedi')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/solusvaedi" data-testid="nav-seller-area${suffix}">
+          ${t('nav.sellerArea')}
+        </a>` : ''}
         ${hasAnyAdminView() ? `
         <a href="${navHref('/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/admin">
           ${t('nav.admin')}
         </a>` : ''}
-        ${canEdit() ? `
-        <a href="${navHref('/party/admin')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/party/admin">
-          ${t('nav.partyAdmin')}
-        </a>` : ''}
-        <a href="${navHref('/orders')}" class="lol-nav__dropdown-item" role="menuitem" data-route="/orders">
-          ${t('nav.myOrders')}
-        </a>
         <hr class="lol-nav__dropdown-divider"/>
         <button class="lol-nav__dropdown-item lol-nav__dropdown-item--danger" role="menuitem" data-signout data-testid="nav-signout${suffix}">
           ${t('nav.signOut')}

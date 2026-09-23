@@ -4,20 +4,27 @@
 // Multi-role: views are the UNION across the user's full role set (req.user.roles).
 // Resolved views are memoised on req so multiple requireView() guards on one
 // request resolve the set only once.
+//
+// Two-factor policy (auth/mfaPolicy.js): an `accounts` holder who has not
+// enrolled a second factor has that view — and a wildcard grant — withheld
+// here, the one place views are resolved for a guard. An unenrolled ADMIN
+// never gets this far as one: attachRoles already stripped `admin` from the
+// role set the views are resolved from.
 const Role = require('../models/Role');
 const { ALL } = require('./adminViews');
+const { heldRoles, forbiddenMessage } = require('./roles');
+const { withholdViews } = require('./mfaPolicy');
 
 function requireView(viewId) {
   return async function viewGuard(req, res, next) {
     try {
       if (!req.user) return res.status(401).json({ error: 'Unauthorized', code: 401 });
       if (!req._resolvedViews) {
-        const held = Array.isArray(req.user.roles) ? req.user.roles : [req.user.role];
-        req._resolvedViews = await Role.getViewsForRoles(held);
+        req._resolvedViews = await Role.getViewsForRoles(heldRoles(req.user));
       }
-      const views = req._resolvedViews;
+      const views = withholdViews(req._resolvedViews, req.user.mfaEnrolmentRequired === true);
       if (views.includes(ALL) || views.includes(viewId)) return next();
-      return res.status(403).json({ error: 'Forbidden', code: 403 });
+      return res.status(403).json({ error: forbiddenMessage(req), code: 403 });
     } catch (err) { next(err); }
   };
 }

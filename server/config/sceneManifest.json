@@ -1,0 +1,652 @@
+{
+  "canyon-river": {
+    "width": 1280,
+    "height": 720,
+    "focal": "55% 55%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABQAD/8QAIhAAAgICAQMFAAAAAAAAAAAAAQIDBAARIiExYQUSE0FR/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgH/xAAXEQEBAQEAAAAAAAAAAAAAAAAAARES/9oADAMBAAIRAxEAPwAaH1CwI+Mzg/WnOJRmaSsHWxLICvIlzxOApLKU2CpH4RiNK5YqINFPjYcwB1bBdJrZIKgM0vXsS29+csynspK+q4ZPd3DdgfHjLDlXqP/Z",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/canyon-river-480.cde4b45e.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/canyon-river-960.bd7349ce.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/canyon-river-1280.794c1d76.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/canyon-river-480.360022df.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/canyon-river-960.913b04e2.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/canyon-river-1280.f227038d.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/canyon-river-480.152d40d0.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/canyon-river-960.ad216cd6.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/canyon-river-1280.950f6d22.jpg"
+        }
+      ]
+    }
+  },
+  "rhyolite-ridges": {
+    "width": 1280,
+    "height": 720,
+    "focal": "50% 40%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAMEBf/EACIQAAIBBAIBBQAAAAAAAAAAAAECEQADBCESMQUTFEFSkf/EABUBAQEAAAAAAAAAAAAAAAAAAAID/8QAGREAAwADAAAAAAAAAAAAAAAAAAERAiFR/9oADAMBAAIRAxEAPwBQzb7yBkPEGCTuhPI5tsckyHg/YTFQjNHXooetxBpnuLVsKwsgsTuTqpV9KaLX85mhCeaN8SV1+9UVmZOTdcFW4QD0FoprNgiP/9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/rhyolite-ridges-480.81077e0a.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/rhyolite-ridges-960.b1884e7b.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/rhyolite-ridges-1280.cc637892.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/rhyolite-ridges-480.d577d654.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/rhyolite-ridges-960.c0a41fd2.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/rhyolite-ridges-1280.b1493117.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/rhyolite-ridges-480.e650a07f.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/rhyolite-ridges-960.40a20b8d.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/rhyolite-ridges-1280.b7f32390.jpg"
+        }
+      ]
+    }
+  },
+  "glacier-tongue": {
+    "width": 1280,
+    "height": 720,
+    "focal": "50% 58%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAGAAAAgMAAAAAAAAAAAAAAAAAAAUCBAb/xAAhEAACAgIBBAMAAAAAAAAAAAABAgMRAAQSBSExMhOBkf/EABUBAQEAAAAAAAAAAAAAAAAAAAID/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECIRExUf/aAAwDAQACEQMRAD8AjD1DdkdVYBQxotVfZxhszDWjT4ITzZaZwGCk5lNbk3LxSi++MH25UhVUZhGw9bxJyxsLSLUm5tsfZhXiuw/MMWvMxsrQqrBwyd9HR//Z",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/glacier-tongue-480.077f28ee.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/glacier-tongue-960.9cc8653a.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/glacier-tongue-1280.d5c4dce5.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/glacier-tongue-480.510133aa.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/glacier-tongue-960.4681e7bb.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/glacier-tongue-1280.a79020b9.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/glacier-tongue-480.7fc98aee.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/glacier-tongue-960.8fded3a1.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/glacier-tongue-1280.073def26.jpg"
+        }
+      ]
+    }
+  },
+  "black-beach": {
+    "width": 1280,
+    "height": 720,
+    "focal": "60% 55%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAQGA//EACEQAAIBBAICAwAAAAAAAAAAAAECAwAEBRESMRMhgZLB/8QAFQEBAQAAAAAAAAAAAAAAAAAAAQL/xAAVEQEBAAAAAAAAAAAAAAAAAAAAEf/aAAwDAQACEQMRAD8ALLKzXVykPneInZ5FuX5W15mJsffxWzTPISVLkgaCn491Ji4KyBo9qV9gjvdM29ybjIRy3XKZtge2111TAtXyRXtU+1FKQPFkXIVCkmtsCdg0Upf/2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/black-beach-480.2c54d91d.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/black-beach-960.973a9c1f.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/black-beach-1280.09b449d2.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/black-beach-480.609d9327.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/black-beach-960.3e311edf.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/black-beach-1280.38dae4e8.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/black-beach-480.3dafbaa2.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/black-beach-960.1d6f3caa.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/black-beach-1280.080dbe67.jpg"
+        }
+      ]
+    }
+  },
+  "cave-falls": {
+    "width": 1280,
+    "height": 720,
+    "focal": "35% 50%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAUGAf/EACEQAAIBBAICAwAAAAAAAAAAAAECAwAEESEFEhNRMUHB/8QAFgEBAQEAAAAAAAAAAAAAAAAAAQAC/8QAGBEBAAMBAAAAAAAAAAAAAAAAAAERIUH/2gAMAwEAAhEDEQA/AJayiR3Cvpew2PVVl1wHEz27GB/BLGmWAbP1nYP5Ulb3PhI6LjJ+aY3HNPL1xEqtgdmBO6zoLZIhGTvPoUVs9z5SCyjRzrVFFT1P/9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/cave-falls-480.90ffcf6e.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/cave-falls-960.d368da90.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/cave-falls-1280.6c66b3dd.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/cave-falls-480.5717bb37.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/cave-falls-960.4db1a2cd.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/cave-falls-1280.5a41503f.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/cave-falls-480.da69f576.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/cave-falls-960.d42936dd.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/cave-falls-1280.d4cc6a58.jpg"
+        }
+      ]
+    }
+  },
+  "basalt-canyon": {
+    "width": 1280,
+    "height": 720,
+    "focal": "55% 50%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABQAE/8QAIhAAAgEEAgEFAAAAAAAAAAAAAQIEAAMRIQUSYRMxMlHR/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAH/xAAWEQEBAQAAAAAAAAAAAAAAAAAAEQH/2gAMAwEAAhEDEQA/AA05icvwk3B4DUnKmcmsK1dSXddSuWGgRREGOrFWbYPsP2lZM70I5XpknQ+s1KaMfk5tzOZV0+O1VZLzZcEayd4qpVf/2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/basalt-canyon-480.820620b7.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/basalt-canyon-960.c87c744a.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/basalt-canyon-1280.3e906a78.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/basalt-canyon-480.0b67d2a5.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/basalt-canyon-960.bdc690cf.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/basalt-canyon-1280.25c46ba7.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/basalt-canyon-480.b02ba959.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/basalt-canyon-960.bada69d9.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/basalt-canyon-1280.0f56bb60.jpg"
+        }
+      ]
+    }
+  },
+  "moss-falls": {
+    "width": 1280,
+    "height": 720,
+    "focal": "50% 45%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFwABAQEBAAAAAAAAAAAAAAAABAAFBv/EACYQAAIBAwMBCQAAAAAAAAAAAAECAwAEEQUGE0ESFSEiMWJxodH/xAAVAQEBAAAAAAAAAAAAAAAAAAABAv/EABgRAAMBAQAAAAAAAAAAAAAAAAABEQJB/9oADAMBAAIRAxEAPwA1vuG4t3HLk+01qJuG4FhNO0aMq+A6EHP361ysV0Q2SvawMYJp/eSS2D27wqEODgCpzeg3AWoag9zJySvyMerflVGmSPPlDfGaqIKdP//Z",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/moss-falls-480.adc36ee6.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/moss-falls-960.e11f85de.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/moss-falls-1280.5d5de337.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/moss-falls-480.d32d2756.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/moss-falls-960.913acc7f.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/moss-falls-1280.5c6057da.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/moss-falls-480.a98e5052.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/moss-falls-960.f8ac229f.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/moss-falls-1280.83be4619.jpg"
+        }
+      ]
+    }
+  },
+  "snow-rapids": {
+    "width": 1280,
+    "height": 720,
+    "focal": "45% 60%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAGAAAAwEBAAAAAAAAAAAAAAAAAAQFAgb/xAAmEAACAgECAwkAAAAAAAAAAAABAwIRAAQSITFBBRMiM1FhkaGx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAYEQACAwAAAAAAAAAAAAAAAAAAAQIREv/aAAwDAQACEQMRAD8AThq4zEZOX3i7ELHA/mNyfplafw6Vyok35tk/Wc9I2wJhNhMGEyJNCR9aHLLWq7RS4w0wTt3nZGQ6E9eeNInKVOjTnARAKT7RLbJ+MMhPbKLNoa07eBldE1hh0PJ//9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/snow-rapids-480.6898c139.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/snow-rapids-960.6bc96e62.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/snow-rapids-1280.30bdf47c.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/snow-rapids-480.4292ff79.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/snow-rapids-960.ef771906.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/snow-rapids-1280.272fe16a.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/snow-rapids-480.c442f194.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/snow-rapids-960.5b7a5c72.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/snow-rapids-1280.d7ec8890.jpg"
+        }
+      ]
+    }
+  },
+  "hot-spring": {
+    "width": 1280,
+    "height": 720,
+    "focal": "40% 65%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAGAAAAgMAAAAAAAAAAAAAAAAAAAMCBAX/xAAjEAACAgEEAQUBAAAAAAAAAAABAgMRAAQFEiETIiQxQWLR/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAL/xAAZEQACAwEAAAAAAAAAAAAAAAAAAQIDURL/2gAMAwEAAhEDEQA/AGxbwsi2ukkv8kf3HtuoC+uCcE9rVC8xNLNqS3FGSko9g5YjliZl8gcM/VrVZSs0lwwZNuuoDH2qlT8cmOGQ5w6VrPlavoNQwwrGOEf/2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/hot-spring-480.dc150e1e.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/hot-spring-960.71f64182.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/hot-spring-1280.30dba144.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/hot-spring-480.279a3010.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/hot-spring-960.7ec15bad.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/hot-spring-1280.d3ef48cf.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/hot-spring-480.1a8997f3.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/hot-spring-960.2fefb07c.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/hot-spring-1280.9f3c2219.jpg"
+        }
+      ]
+    }
+  },
+  "braided-sand": {
+    "width": 1280,
+    "height": 720,
+    "focal": "50% 50%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABQAD/8QAIxAAAgEDBAEFAAAAAAAAAAAAAQIDAAQREiEiMWEzQVFxkf/EABUBAQEAAAAAAAAAAAAAAAAAAAEC/8QAFxEAAwEAAAAAAAAAAAAAAAAAAAERIf/aAAwDAQACEQMRAD8AHtLzBKzrHIMcQ46NJyQWl1ZLlGifdhoIbHwD4okssi6Co6796or6Wz4KQy4wD0R9GotEzkgx6UyP4B3FVIwXUV5G2mBBIVwxKgZ/KqpOg8P/2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-sand-480.30857403.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-sand-960.662df3fc.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-sand-1280.9b2c3792.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-sand-480.7cd8ebb3.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-sand-960.74ad95b6.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-sand-1280.c8dfcd11.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-sand-480.493c9468.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-sand-960.36ec59b4.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-sand-1280.b1c5bdf1.jpg"
+        }
+      ]
+    }
+  },
+  "ice-lagoon": {
+    "width": 1280,
+    "height": 720,
+    "focal": "65% 60%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAGAAAAwEBAAAAAAAAAAAAAAAAAAIFAwT/xAAlEAACAgECBAcAAAAAAAAAAAABAgARAwUhBBIxQRUiUWFicaH/xAAWAQEBAQAAAAAAAAAAAAAAAAADAQL/xAAZEQADAQEBAAAAAAAAAAAAAAAAAREhEjH/2gAMAwEAAhEDEQA/AFwqquBibb5Idvyb5cBxKzGrB3KhhV+1SKurcQGtaN+p6RjrWUOOYuwJrc3X1F2+k7STw7MpRbDvlN9ghEJO8aZvJTBu3SoTdDtP/9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/ice-lagoon-480.14d3888b.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/ice-lagoon-960.1931f769.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/ice-lagoon-1280.a442be68.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/ice-lagoon-480.f1322208.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/ice-lagoon-960.51cd041a.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/ice-lagoon-1280.bd0e467e.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/ice-lagoon-480.9c3b924d.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/ice-lagoon-960.5f330925.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/ice-lagoon-1280.119edd50.jpg"
+        }
+      ]
+    }
+  },
+  "braided-moss": {
+    "width": 1280,
+    "height": 720,
+    "focal": "50% 50%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAQFAv/EACIQAAIBBAIBBQAAAAAAAAAAAAECEQADBCESMRNBUWGB8f/EABYBAQEBAAAAAAAAAAAAAAAAAAIBBP/EABkRAAIDAQAAAAAAAAAAAAAAAAABAhEhUf/aAAwDAQACEQMRAD8AhA6gifiqeLiQJJLk77gRSQSxYyPAyvccmCxMD8qk9w2sZuCKPHGux9UJvKLHpnIuxKLAQdcBoH2opC7dUMSycjMkn1orPcnoqR//2Q==",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-moss-480.e014cf2d.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-moss-960.a2cf60f1.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-moss-1280.3135ae05.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-moss-480.383766a6.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-moss-960.bc8d8139.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-moss-1280.d973cc9c.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-moss-480.f37cebe9.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-moss-960.71edf898.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-moss-1280.c84c9014.jpg"
+        }
+      ]
+    }
+  },
+  "braided-valley": {
+    "width": 1280,
+    "height": 720,
+    "focal": "55% 50%",
+    "lqip": "data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAAOABgDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABQAE/8QAIxAAAgECBQUBAAAAAAAAAAAAAQIRAAMEISIxQRITI0Jhcf/EABYBAQEBAAAAAAAAAAAAAAAAAAQAAf/EABkRAAIDAQAAAAAAAAAAAAAAAAABAhEhMf/aAAwDAQACEQMRAD8AFSW1OcjsaRwKrdsMz24EwHBgmirU3HCA9I3gcUutwthgiaQMqp8oyHbNDZ+OJPrGw+/tVZMPefuQvI5NVBtrBmM//9k=",
+    "sources": {
+      "avif": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-valley-480.048a5739.avif"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-valley-960.c221daac.avif"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-valley-1280.a40f62e6.avif"
+        }
+      ],
+      "webp": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-valley-480.667a10ca.webp"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-valley-960.3fea7bd7.webp"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-valley-1280.51e47140.webp"
+        }
+      ],
+      "jpeg": [
+        {
+          "w": 480,
+          "src": "/assets/iceland/braided-valley-480.3b4c124e.jpg"
+        },
+        {
+          "w": 960,
+          "src": "/assets/iceland/braided-valley-960.7b6a2862.jpg"
+        },
+        {
+          "w": 1280,
+          "src": "/assets/iceland/braided-valley-1280.d23b05d9.jpg"
+        }
+      ]
+    }
+  }
+}

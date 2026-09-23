@@ -1,24 +1,18 @@
 # Security Audit — HalliProjects (hallismiley.is)
 
-> **Point-in-time record, frozen (banner added 2026-09-12).** Checked against
-> this repo's code on 2026-09-12: **15 of the 16 findings are closed** — 3.1 SVG
-> upload (closed by a different mechanism than the audit proposed: SVG is not in
-> the `ALLOWED_IMAGE_TYPES` allowlist and the stored extension is derived from
-> the server-accepted MIME, `server/middleware/upload.js`; bytes are still not
-> sniffed), 3.2 (`resetLimiter` on forgot/reset, `server/routes/authRoutes.js`),
-> 3.3 + 3.4 + 3.16 (`REQUIRED_ENV` in `server/server.js` — `CSRF_SECRET` and
-> `NODE_ENV` are boot-fatal, no fallback secret; the auth limiters skip only
-> under `test`), 3.5 + 3.6 (`server/middleware/sanitize.js` recurses and
-> keeps rich-text fields through an allowlist sanitizer), 3.7 (`securityLogger`
-> wired into auth, OAuth, bookkeeping, MCP and alerts), 3.8–3.10
-> (`contactController` logs an id only; `emailService` logs no links;
-> `alerts.js` masks the webhook URL), 3.11 (`csrfProtect` on logout), 3.12
-> (`escHtml` in `NavBar.js`), 3.14 (CORP `same-site`), 3.15 (`/csp-report`
-> live). **Still open: 3.13** — `style-src 'unsafe-inline'` remains in the CSP
-> (`server/app.js`). Appendix A's route inventory predates the shop, books,
-> party, monitoring and MCP surfaces. The body below is not maintained. Current
-> posture: `SECURE_SDLC.md`.
-
+> **Inherited point-in-time record, frozen (banner added 2026-09-11).** The audit
+> was of the base at 2026-04-16; this repo inherited the fixes. Checked against
+> this repo's code on 2026-09-11: **15 of the 16 findings are closed here** —
+> 3.1 (`server/middleware/verifyImageBytes.js` magic-byte sniffing + the upload
+> allowlists), 3.2 (`resetLimiter` on both reset routes, `authRoutes.js`), 3.3
+> and 3.4 and 3.16 (`REQUIRED_ENV` in `server/server.js` — `CSRF_SECRET` and
+> `NODE_ENV` are boot-fatal), 3.5 and 3.6 (`sanitize.js` recurses; rich-text
+> fields go through the allowlist sanitizer), 3.7 (`securityLogger` wired,
+> `alerts.js` failed-login threshold), 3.8–3.10 (`observability/logger.js`
+> redaction + URL scrubbing), 3.11 (`csrfProtect` on logout), 3.14 (CORP
+> `same-site`), 3.15 (`/csp-report`). **Still open: 3.13** — `style-src
+> 'unsafe-inline'` remains in the CSP (`server/app.js`). The body below is not
+> maintained; `ArticleView.js` and `keys/` no longer exist here.
 **Date:** 2026-04-16  
 **Auditor:** Claude Sonnet 4.6 (code review / static analysis)  
 **Scope:** Full-stack Node.js/Express SPA — server, middleware, routes, controllers, models, client-side JS, Dockerfile, secrets

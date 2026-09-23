@@ -11,6 +11,7 @@ const { requireAuth }                            = require('../auth/middleware')
 const { requireRole }                            = require('../auth/roles');
 const { csrfProtect }                            = require('../middleware/csrf');
 const { createProjectUpload }                    = require('../middleware/upload');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 // ── Public read endpoints (A03: query params validated) ───────────────────────
 router.get('/',             validateQuery, projectController.getAll);
@@ -60,6 +61,7 @@ router.post('/:id/media',
       next();
     });
   },
+  verifyImageBytes,
   projectController.addMedia);
 
 router.patch('/:id/media/:mediaId',
@@ -110,6 +112,7 @@ router.post('/:id/videos',
       next();
     });
   },
+  verifyImageBytes,
   projectController.addVideo);
 
 router.patch('/:id/videos/:videoId',

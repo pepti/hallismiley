@@ -29,17 +29,52 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
-const { DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
+const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
+const { isHiddenRoute } = require('../config/publicSurface');
+const { clientAppEnv }  = require('../config/appEnv');
+// The product's identity (config/client.json via clientConfig): brand, title
+// suffix, theme trio, Organization record. Every brand-bearing literal this
+// file used to carry now reads from it — see server/config/identity.js.
+const {
+  identity, htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
+} = require('../config/identity');
+// The page parts and descriptions are i18n keys (`meta.<key>.*`) resolved
+// through the engine table + the product overlay — identity-seam-2.
+const { t, has: hasText } = require('../i18n');
 
-const APP_URL        = (process.env.APP_URL || 'https://www.hallismiley.is').replace(/\/$/, '');
+// Iceland scene hero preloads — the scene engine's LCP insurance. The JSON
+// twin of public/js/scenes/manifest.js (both written by
+// scripts/build-iceland-scenes.js). Absent manifest (fresh clone before a
+// build) degrades to no preload, never an error.
+let SCENE_MANIFEST = null;
+try { SCENE_MANIFEST = require('../config/sceneManifest.json'); } catch { /* not built yet */ }
+const { ROUTE_SCENE_IMAGES } = require('../config/sceneRoutes');
+function scenePreloadTag(route) {
+  const img = SCENE_MANIFEST && SCENE_MANIFEST[ROUTE_SCENE_IMAGES[route]];
+  if (!img || !img.sources || !img.sources.avif || !img.sources.avif.length) return '';
+  const srcset = img.sources.avif.map((x) => `${x.src} ${x.w}w`).join(', ');
+  return `<link rel="preload" as="image" type="image/avif" imagesrcset="${srcset}" imagesizes="100vw" fetchpriority="high" id="ssr-scene-preload">`;
+}
+
+const APP_URL        = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 const INDEX_PATH     = path.join(__dirname, '..', '..', 'public', 'index.html');
 const OG_IMAGE_PATH  = '/og-image.jpg';
 
 // Cached template (read once at boot) + stat watcher for dev hot-reload.
+// index.html is baked with the production origin; swap it for APP_URL here so
+// nothing baked (canonical, hreflang, og:url fallbacks) points at another
+// host. The baked Organization JSON-LD is dropped at the same time: it is only
+// the no-SSR fallback, and every SSR'd page gets the one built from
+// `identity` (organizationSchema below) so a downstream never forks
+// index.html to change its company record.
+const BAKED_ORIGIN = 'https://www.orangesmiley.is';
+const BAKED_ORG_RE = /[ \t]*<script type="application\/ld\+json">(?:(?!<\/script>)[\s\S])*"@type":\s*"Organization"(?:(?!<\/script>)[\s\S])*<\/script>\n?/;
 let _template = null;
 function loadTemplate() {
   if (_template) return _template;
-  _template = fs.readFileSync(INDEX_PATH, 'utf8');
+  _template = fs.readFileSync(INDEX_PATH, 'utf8')
+    .split(BAKED_ORIGIN).join(APP_URL)
+    .replace(BAKED_ORG_RE, '');
   return _template;
 }
 if (process.env.NODE_ENV !== 'production') {
@@ -58,6 +93,13 @@ if (process.env.NODE_ENV !== 'production') {
 // each section is independently SEO-indexable.
 const ROUTE_META = {
   '/':                 { key: 'home',           contentKey: 'home_skills' },
+  // ── Business IA (canonical Icelandic slugs) ──
+  '/thjonusta':        { key: 'thjonusta' },
+  '/verkefni':         { key: 'projects' },
+  '/um-okkur':         { key: 'umOkkur' },
+  '/hafa-samband':     { key: 'contact',        contentKey: 'contact_hero' },
+  '/personuvernd':     { key: 'privacy' },
+  // ── Legacy portfolio routes (functional, de-emphasized) ──
   '/projects':         { key: 'projects' },
   '/halli':            { key: 'halli',          contentKey: 'halli_bio' },
   '/about':            { key: 'halli',          contentKey: 'halli_bio' },
@@ -70,57 +112,71 @@ const ROUTE_META = {
   '/privacy':          { key: 'privacy' },
   '/terms':            { key: 'terms' },
   '/party':            { key: 'party' },
-  // Hidden one-off pages: locale-locked in server/config/i18n.js, absent from
-  // the sitemap, and `noindex` here so a shared link never lands in an index.
-  '/aron13ara':        { key: 'aron13',         noindex: true },
+  // hallismiley hook (engine-graft): Aron's birthday page — unlisted, IS-only
+  // (server/config/i18n.js IS_ONLY_PAGES), noindexed via identity.surface.
+  '/aron13ara':        { key: 'aron13' },
 };
 
+// Per static key: the i18n KEYS of the page part (`title`) and the
+// description, plus the title mode. The human text lives in the engine i18n
+// tables (server/i18n/<locale>.json, `meta.<key>.*`; identity-seam-2,
+// 2026-09-23) so a product overrides a title or description in its
+// product.<locale>.json without touching this file. The document title is
+// composeTitle(part, mode) from server/config/identity.js — part +
+// identity.brand.titleSuffix, or the part with `{brand}` substituted (home),
+// or, for `titleMode: 'bare'`, the part as written (the hidden portfolio
+// surfaces keep their own full titles — "Halli Smiley" there is the base's,
+// on purpose). Keep the key order `title, titleMode, description`:
+// tests/unit/pageTitle.test.js parses these lines to hold
+// public/js/utils/pageTitle.js to the same keys and modes, and holds the
+// client and server tables to the same text.
 const DEFAULT_META = {
-  en: {
-    home:           { title: 'Halli Smiley — Icelandic Carpenter & Computer Scientist', description: 'Portfolio of Halli, an Icelandic carpenter and computer scientist. Twenty years of precision joinery and timber framing combined with full-stack web development.' },
-    projects:       { title: 'Projects — Halli Smiley', description: 'Selected carpentry and software projects by Halli — hand-cut joinery, timber frames, custom web apps.' },
-    halli:          { title: 'About Halli — Where Wood Meets Code', description: 'The long-form story of Halli: an Icelandic craftsman who moves between wood and software with the same discipline and care.' },
-    shop:           { title: 'Shop — Halli Smiley', description: 'Apparel, goods, and services from the workshop. Prices include 24% VAT, shipping from Iceland.' },
-    shopProducts:   { title: 'Products — Halli Smiley Shop', description: 'Physical goods from the workshop: apparel and accessories. Prices include 24% VAT, shipping from Iceland.' },
-    shopTech:       { title: 'Tech Services — Work with Halli', description: 'Technical advisement, AI teaching sessions, and lectures by Halli. Book a session through the shop.' },
-    shopCarpentry:  { title: 'Carpentry Services — Work with Halli', description: 'Carpentry advisement and commissioned work — including TV wall artwork. Book a session through the shop.' },
-    news:           { title: 'News — Halli Smiley', description: 'Updates from the workshop, notes on projects in progress, and occasional writing on the craft-code overlap.' },
-    contact:        { title: 'Contact — Halli Smiley', description: 'Reach Halli about carpentry commissions, software work, or anything at the intersection of the two.' },
-    privacy:        { title: 'Privacy Policy — Halli Smiley' },
-    terms:          { title: 'Terms of Service — Halli Smiley' },
-    party:          { title: "Halli's 40th Birthday Party", description: "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP." },
-    // Icelandic-only page; the en copy exists so a lookup can never fall
-    // through to the home title, but the lock means it is never rendered.
-    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
-  },
-  is: {
-    home:           { title: 'Halli Smiley — Íslenskur smiður & tölvunarfræðingur', description: 'Verkefnasafn Halla, íslensks smiðs og tölvunarfræðings. Tuttugu ára nákvæmni í smíði og grindarsmíði sem sameinast fullgildri vefforritun.' },
-    projects:       { title: 'Verkefni — Halli Smiley', description: 'Valin smíða- og hugbúnaðarverkefni Halla — handskornar fellingar, burðargrindur, sérsmíðuð vefforrit.' },
-    halli:          { title: 'Um Halla — Þar sem viður mætir kóða', description: 'Löng saga Halla: íslenskur handverksmaður sem flakkar á milli viðar og hugbúnaðar með sama aga og umhyggju.' },
-    shop:           { title: 'Verslun — Halli Smiley', description: 'Fatnaður, varningur og þjónusta úr verkstæðinu. Verð með 24% VSK, sent frá Íslandi.' },
-    shopProducts:   { title: 'Vörur — Verslun Halla Smiley', description: 'Áþreifanlegar vörur úr verkstæðinu: fatnaður og fylgihlutir. Verð með 24% VSK, sent frá Íslandi.' },
-    shopTech:       { title: 'Tækniþjónusta — Vinnuðu með Halla', description: 'Tækniráðgjöf, AI-kennsla og fyrirlestrar hjá Halla. Bókaðu tíma í gegnum verslunina.' },
-    shopCarpentry:  { title: 'Smíðaþjónusta — Vinnuðu með Halla', description: 'Smíðaráðgjöf og sérsmíði — þar á meðal sjónvarpsveggir. Bókaðu tíma í gegnum verslunina.' },
-    news:           { title: 'Fréttir — Halli Smiley', description: 'Fréttir úr verkstæðinu, glósur um verkefni í vinnslu og stöku skrif um handverk og forritun.' },
-    contact:        { title: 'Samband — Halli Smiley', description: 'Hafðu samband við Halla um smíðaverkefni, hugbúnaðarverkefni eða eitthvað þar á milli.' },
-    privacy:        { title: 'Persónuverndarstefna — Halli Smiley' },
-    terms:          { title: 'Notkunarskilmálar — Halli Smiley' },
-    party:          { title: '40 ára afmæli Halla', description: 'Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.' },
-    aron13:         { title: 'Til hamingju með 13 ára afmælið, Aron!', description: 'Þrjár þrautir, tvær gjafir. Leystu þær í röð!' },
-  },
+  home:           { title: 'meta.home.title', description: 'meta.home.description' },
+  thjonusta:      { title: 'meta.thjonusta.title', description: 'meta.thjonusta.description' },
+  umOkkur:        { title: 'meta.umOkkur.title', description: 'meta.umOkkur.description' },
+  projects:       { title: 'meta.projects.title', description: 'meta.projects.description' },
+  halli:          { title: 'meta.halli.title', titleMode: 'bare', description: 'meta.halli.description' },
+  shop:           { title: 'meta.shop.title', titleMode: 'bare', description: 'meta.shop.description' },
+  shopProducts:   { title: 'meta.shopProducts.title', titleMode: 'bare', description: 'meta.shopProducts.description' },
+  shopTech:       { title: 'meta.shopTech.title', titleMode: 'bare', description: 'meta.shopTech.description' },
+  shopCarpentry:  { title: 'meta.shopCarpentry.title', titleMode: 'bare', description: 'meta.shopCarpentry.description' },
+  news:           { title: 'meta.news.title', titleMode: 'bare', description: 'meta.news.description' },
+  contact:        { title: 'meta.contact.title', description: 'meta.contact.description' },
+  privacy:        { title: 'meta.privacy.title' },
+  terms:          { title: 'meta.terms.title' },
+  party:          { title: 'meta.party.title', titleMode: 'bare', description: 'meta.party.description' },
+  // hallismiley hook (engine-graft): the text is in server/i18n/product.<locale>.json.
+  aron13:         { title: 'meta.aron13.title', titleMode: 'bare', description: 'meta.aron13.description' },
 };
+
+// The document title + description for a static key in a locale, composed
+// from the translated page part and the product's brand — the ONE place a
+// title is assembled server-side. t() falls back through DEFAULT_LOCALE like
+// content; a description key the tables do not carry (privacy, terms) is
+// simply absent, never the key's name.
+function metaFor(locale, key) {
+  const entry = DEFAULT_META[key];
+  if (!entry) return null;
+  const description = entry.description && hasText(locale, entry.description) ? t(locale, entry.description) : undefined;
+  return { title: composeTitle(t(locale, entry.title), entry.titleMode), description };
+}
 
 // Section labels for breadcrumbs (per locale).
 const SECTION_LABELS = {
-  en: { projects: 'Projects', news: 'News', shop: 'Shop' },
+  en: { projects: 'Our work', news: 'News', shop: 'Shop' },
   is: { projects: 'Verkefni', news: 'Fréttir', shop: 'Verslun' },
 };
 
+// URL path segment per section — projects moved to the canonical Icelandic
+// slug /verkefni (business IA); news/shop keep their legacy segments.
+const SECTION_PATHS = { projects: 'verkefni', news: 'news', shop: 'shop' };
+
 // Detail-route patterns. Order matters only because each returns on first match.
 const DETAIL_PATTERNS = [
-  { re: /^\/news\/([^/]+)$/,    type: 'news'    },
-  { re: /^\/shop\/([^/]+)$/,    type: 'product' },
-  { re: /^\/projects\/(\d+)$/,  type: 'project' },
+  { re: /^\/news\/([^/]+)$/,     type: 'news'    },
+  { re: /^\/shop\/([^/]+)$/,     type: 'product' },
+  { re: /^\/verkefni\/(\d+)$/,   type: 'project' },
+  { re: /^\/projects\/(\d+)$/,   type: 'project' },
 ];
 
 function extractDetail(route) {
@@ -147,9 +203,11 @@ function extractLocale(req) {
 
   if (hasLocalePrefix) return { locale: parts[0], rest };
 
-  // Unprefixed non-party path — keep the historic DEFAULT_LOCALE fallback so
-  // SEO for /, /projects, etc. stays unchanged.
-  return { locale: DEFAULT_LOCALE, rest: pathname };
+  // Unprefixed non-party path — render in the visitor-facing default so the
+  // crawler-visible <head> for / etc. is Icelandic. Content lookups inside
+  // still fall back through DEFAULT_LOCALE (the content dimension) when an
+  // IS entry is missing.
+  return { locale: PUBLIC_DEFAULT_LOCALE, rest: pathname };
 }
 
 function esc(s) {
@@ -354,7 +412,7 @@ function breadcrumbSchema({ section, detailName, localePath, locale }) {
     items.push({
       '@type': 'ListItem', position: 2,
       name: SECTION_LABELS[locale]?.[section] || SECTION_LABELS.en[section] || section,
-      item: `${APP_URL}/${locale}/${section}`,
+      item: `${APP_URL}/${locale}/${SECTION_PATHS[section] || section}`,
     });
   }
   if (detailName) {
@@ -381,8 +439,8 @@ function articleSchema(row, locale, canonical) {
     datePublished: row.published_at ? new Date(row.published_at).toISOString() : undefined,
     dateModified:  row.updated_at   ? new Date(row.updated_at).toISOString()   : undefined,
     image: image ? absUrl(image) : undefined,
-    author:    { '@type': 'Person', name: 'Halli' },
-    publisher: { '@type': 'Person', name: 'Halli' },
+    author:    { '@id': `${APP_URL}/#organization` },
+    publisher: { '@id': `${APP_URL}/#organization` },
     mainEntityOfPage: canonical,
   };
 }
@@ -400,7 +458,9 @@ function productSchema(row, locale, canonical) {
     description: desc,
     image: row.image_url ? absUrl(row.image_url) : `${APP_URL}${OG_IMAGE_PATH}`,
     sku: row.slug,
-    brand: { '@type': 'Brand', name: 'Halli Smiley' },
+    // The shop's goods carry the product's brand (identity-seam-2) — the
+    // company's, not one product's name.
+    brand: { '@type': 'Brand', name: identity.brand.name },
     offers: {
       '@type': 'Offer',
       url: canonical,
@@ -413,19 +473,96 @@ function productSchema(row, locale, canonical) {
 
 function websiteSchema() {
   // Emitted only on the home page. The alternateName array binds branded
-  // search variants (one-word "Hallismiley", spaced "Halli Smiley") to the
-  // site so Bing's knowledge graph treats them as the same entity. The
-  // publisher reference resolves to the Person schema baked into
-  // public/index.html (same @id).
+  // search variants (one-word "Orangesmiley", the ehf. form) to the site so
+  // knowledge graphs treat them as the same entity. The publisher reference
+  // resolves to organizationSchema() below (same @id), emitted on every page.
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     '@id':  `${APP_URL}/#website`,
     url:    APP_URL,
-    name:   'Halli Smiley',
-    alternateName: ['Hallismiley', 'Halli', 'halli smiley'],
-    inLanguage: ['en', 'is'],
-    publisher: { '@id': `${APP_URL}/#person` },
+    name:   identity.brand.name,
+    alternateName: identity.brand.alternateNames.slice(),
+    inLanguage: SUPPORTED_LOCALES.slice(),
+    publisher: { '@id': `${APP_URL}/#organization` },
+  };
+}
+
+// The company itself, on EVERY page: the Article/Product/CreativeWork/Service
+// schemas and the WebSite all reference `${APP_URL}/#organization`, and a
+// dangling @id yields a broken knowledge graph. Built from
+// identity.organization + identity.brand (config/client.json), which is how a
+// downstream gets its own record without forking index.html — the baked copy
+// there is stripped by loadTemplate() and only serves a shell that never
+// passed through here.
+function organizationSchema() {
+  const org = identity.organization;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    '@id':  `${APP_URL}/#organization`,
+    name:   identity.brand.legalName,
+    alternateName: organizationAlternateNames(),
+    url:    APP_URL,
+    logo:   absUrl(org.logo),
+    image:  absUrl(org.image),
+    email:  org.email,
+    description: org.description,
+    address: (org.addressCountry || org.addressLocality) ? {
+      '@type': 'PostalAddress',
+      addressCountry: org.addressCountry,
+      addressLocality: org.addressLocality,
+    } : undefined,
+    areaServed: org.areaServed ? { '@type': 'Country', name: org.areaServed } : undefined,
+    knowsAbout: org.knowsAbout.length ? org.knowsAbout.slice() : undefined,
+    sameAs: org.sameAs.length ? org.sameAs.slice() : undefined,
+  };
+}
+
+// What the company sells, as an OfferCatalog. Emitted on / and /thjonusta.
+// Halli (2026-09-13): Orange Smiley builds any software a small or medium
+// business needs, so the catalogue lists the services and then Rekstrarkerfið
+// as one product, pointing at its own site. No tiers and no prices here:
+// those live on rekstrarkerfi.is (Halli, 2026-09-13), and an unconfirmed
+// number in structured data reads as a commitment.
+// Mirrors thjonusta.service.* in the locale files; change them together.
+const SERVICE_OFFERINGS = [
+  { en: 'Custom systems',             is: 'Sérsmíðuð kerfi' },
+  { en: 'Websites and online stores', is: 'Vefir og vefverslanir' },
+  { en: 'Integrations',               is: 'Tengingar milli kerfa' },
+  { en: 'Automation and AI',          is: 'Sjálfvirkni og gervigreind' },
+  { en: 'Moving off legacy systems',  is: 'Flutningur af eldri kerfum' },
+  { en: 'Hosting and maintenance',    is: 'Hýsing og viðhald' },
+];
+
+function serviceSchema(locale) {
+  const isIS = locale === 'is';
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    '@id': `${APP_URL}/#service`,
+    serviceType: isIS ? 'Hugbúnaðargerð og vefþjónusta' : 'Software development and web services',
+    provider: { '@id': `${APP_URL}/#organization` },
+    areaServed: { '@type': 'Country', name: 'Iceland' },
+    inLanguage: isIS ? 'is-IS' : 'en-US',
+    hasOfferCatalog: {
+      '@type': 'OfferCatalog',
+      name: isIS ? 'Þjónusta' : 'Services',
+      itemListElement: [
+        ...SERVICE_OFFERINGS.map(service => ({
+          '@type': 'Offer',
+          itemOffered: { '@type': 'Service', name: isIS ? service.is : service.en },
+        })),
+        {
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name: 'Rekstrarkerfið',
+            url: `https://rekstrarkerfi.is/${isIS ? 'is' : 'en'}/`,
+          },
+        },
+      ],
+    },
   };
 }
 
@@ -438,7 +575,7 @@ function creativeWorkSchema(row, locale, canonical) {
     dateCreated: row.year ? String(row.year) : undefined,
     dateModified: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
     image: row.image_url ? absUrl(row.image_url) : undefined,
-    creator: { '@type': 'Person', name: 'Halli' },
+    creator: { '@id': `${APP_URL}/#organization` },
     inLanguage: locale === 'is' ? 'is-IS' : 'en-US',
     url: canonical,
     genre: row.category,
@@ -472,7 +609,7 @@ function jsonLdScript(schemas) {
 // non-JS crawlers. Contains an <h1>, excerpts, and real anchor links.
 
 function crawlerListHtml(section, rows, locale) {
-  const heading = DEFAULT_META[locale]?.[section]?.title || DEFAULT_META.en[section].title;
+  const heading = metaFor(locale, section).title;
   const items = rows.map(row => {
     if (section === 'news') {
       const title   = pickLocale(row, 'title', 'title_is', locale);
@@ -489,7 +626,7 @@ function crawlerListHtml(section, rows, locale) {
     if (section === 'projects') {
       const title = pickLocale(row, 'title', 'title_is', locale);
       const desc  = pickLocale(row, 'description', 'description_is', locale);
-      const href  = `/${locale}/projects/${row.id}`;
+      const href  = `/${locale}/verkefni/${row.id}`;
       return `<li><a href="${esc(href)}"><h2>${esc(title)}</h2></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
     }
     return '';
@@ -536,7 +673,7 @@ async function crawlerHomeHtml(locale) {
   } catch {
     return '';
   }
-  const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE]).home;
+  const defaults = metaFor(locale, 'home');
 
   // Hero — heading + tagline. Field names match what HomeView reads (heading,
   // tagline, subheading). Fall back to the page-level meta defaults so the
@@ -576,13 +713,13 @@ async function crawlerHomeHtml(locale) {
     }
   }
 
-  // Featured projects — top 3 with anchor links into /<locale>/projects/<id>.
+  // Featured projects — top 3 with anchor links into /<locale>/verkefni/<id>.
   if (Array.isArray(projectRows) && projectRows.length) {
     const sectionHeading = locale === 'is' ? 'Valin verkefni' : 'Featured projects';
     const li = projectRows.map(row => {
       const title = pickLocale(row, 'title', 'title_is', locale);
       const desc  = pickLocale(row, 'description', 'description_is', locale);
-      const href  = `/${locale}/projects/${row.id}`;
+      const href  = `/${locale}/verkefni/${row.id}`;
       return `<li><a href="${esc(href)}"><h3>${esc(title)}</h3></a><p>${esc(stripHtml(desc).slice(0, 200))}</p></li>`;
     }).join('');
     parts.push(`<h2>${esc(sectionHeading)}</h2><ul>${li}</ul>`);
@@ -631,7 +768,7 @@ function removeById(html, id) {
   return html.replace(selfRe, '');
 }
 
-function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots }) {
+function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots, scenePreload }) {
   if (/<title\b/i.test(html)) {
     html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
   }
@@ -639,18 +776,19 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${esc(description)}" id="ssr-description" />`
   );
-  // Per-route robots directive (ROUTE_META `noindex`). The template's default
-  // "index, follow" is left alone for every route that does not set one.
-  if (robots) {
-    html = html.replace(
-      /<meta\s+name="robots"[^>]*>/i,
-      `<meta name="robots" content="${esc(robots)}" />`
-    );
-  }
+  // Hidden-but-functional surfaces (config/publicSurface.js) are de-indexed;
+  // everything else keeps the template's index,follow.
+  html = html.replace(
+    /<meta\s+name="robots"[^>]*>/i,
+    `<meta name="robots" content="${esc(robots || 'index, follow')}" id="ssr-robots" />`
+  );
   // App environment for the client (drives the in-app feedback widget + TEST
-  // chrome). Explicit APP_ENV wins; otherwise any non-production NODE_ENV is
-  // treated as "test" so the widget is available in dev/staging, hidden in prod.
-  const appEnv = process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'test');
+  // chrome). Stamped from config/appEnv.js — the same predicate the change-
+  // request gate opens on decides what is stamped as "test", so the widget can
+  // never mount on a stack whose submits the gate would 404. (This used to
+  // stamp any non-production NODE_ENV as "test" on its own; a NODE_ENV=staging
+  // stack then showed the widget to everyone while the gate treated it as live.)
+  const appEnv = clientAppEnv();
   html = html.replace(
     /<meta\s+name="app-env"[^>]*>/i,
     `<meta name="app-env" content="${esc(appEnv)}" id="ssr-app-env" />`
@@ -704,13 +842,35 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   html = hreflang['x-default']
     ? replaceById(html, 'ssr-hreflang-default', { rel: 'alternate', hreflang: 'x-default', href: hreflang['x-default'] })
     : removeById(html, 'ssr-hreflang-default');
-  html = html.replace(/<html\b[^>]*\blang="[^"]*"/i, `<html lang="${esc(ogLocale.split('_')[0])}"`);
+  // The product identity rides the shell in two places (server/config/
+  // identity.js): the theme trio as <html data-*-theme> attributes, which the
+  // render-blocking theme-boot.js reads before any module runs, and the whole
+  // record as <script id="identity"> for public/js/utils/identity.js.
+  html = html.replace(
+    /<html\b[^>]*\blang="[^"]*"/i,
+    `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}`
+  );
+  // The brand-bearing static tags: og:site_name is the brand, author the
+  // registered company. Baked in index.html for the no-SSR case only.
+  html = html.replace(
+    /<meta\s+property="og:site_name"[^>]*>/i,
+    `<meta property="og:site_name" content="${esc(identity.brand.name)}" />`
+  );
+  html = html.replace(
+    /<meta\s+name="author"[^>]*>/i,
+    `<meta name="author" content="${esc(identity.brand.legalName)}" />`
+  );
 
-  // Inject per-route JSON-LD just before </head>. The baked Person schema
-  // on home stays in place (inside <head> before this insertion point).
-  if (jsonLd) {
-    html = html.replace(/<\/head>/i, `  ${jsonLd}\n</head>`);
+  // Hero-image preload for scene routes — ahead of the main stylesheet so
+  // the LCP fetch starts before CSS parse blocks anything.
+  if (scenePreload) {
+    html = html.replace(/<link rel="stylesheet" href="\/css\/main\.css"/i,
+      `${scenePreload}\n  <link rel="stylesheet" href="/css/main.css"`);
   }
+  // Inject the identity hand-off and the per-route JSON-LD just before
+  // </head>. The Organization is part of jsonLd on every page.
+  const tail = [identityScriptTag(), jsonLd].filter(Boolean).join('\n  ');
+  html = html.replace(/<\/head>/i, `  ${tail}\n</head>`);
   return html;
 }
 
@@ -756,7 +916,7 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       const sectionKey = detail.section === 'shop' ? 'shop'
                        : detail.section === 'news' ? 'news'
                        : 'projects';
-      const d = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[sectionKey];
+      const d = metaFor(locale, sectionKey);
       title       = d.title;
       description = d.description;
       ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
@@ -780,22 +940,23 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
         description = stripHtml(pickLocale(detailRow, 'description', 'description_is', locale)).slice(0, 200);
         ogImage     = detailRow.image_url ? absUrl(detailRow.image_url) : `${APP_URL}${OG_IMAGE_PATH}`;
         schemas.push(creativeWorkSchema(detailRow, locale, canonical));
-        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/projects/${detailRow.id}`, locale }));
+        schemas.push(breadcrumbSchema({ section: 'projects', detailName: title, localePath: `/verkefni/${detailRow.id}`, locale }));
       }
     }
   } else {
     // ── List / static page ──────────────────────────────────────────────
     const meta = staticMeta;
     const key  = meta?.key;
-    const defaults = (DEFAULT_META[locale] || DEFAULT_META[DEFAULT_LOCALE])[key] || {};
+    const defaults = metaFor(locale, key) || {};
+    const home     = metaFor(DEFAULT_LOCALE, 'home');
     // For shop section sub-routes we deliberately do NOT pull meta_title /
     // meta_description from shop_hero — the shared hero copy applies to the
     // landing only. Per-section pages get the DEFAULT_META titles so each
     // route stays independently SEO-indexable.
     const override = (meta?.contentKey && !meta.section) ? await fetchContentMeta(meta.contentKey, locale) : null;
 
-    title       = override?.title       || defaults.title       || DEFAULT_META[DEFAULT_LOCALE].home.title;
-    description = override?.description || defaults.description || DEFAULT_META[DEFAULT_LOCALE].home.description;
+    title       = override?.title       || defaults.title       || home.title;
+    description = override?.description || defaults.description || home.description;
     ogImage     = `${APP_URL}${OG_IMAGE_PATH}`;
 
     // Party links share the admin-uploaded cover photo instead of the generic
@@ -805,13 +966,16 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       if (partyOg) ogImage = partyOg;
     }
 
-    // Breadcrumbs on any non-home page — except noindex pages, which should
-    // not hand crawlers structured data they were told not to index.
-    if (route !== '/' && !meta?.noindex) {
+    // Breadcrumbs on any non-home page.
+    if (route !== '/') {
+      // The services page is the one non-home route that carries the offering
+      // itself, so the Service catalog belongs on it as well as on /.
+      if (route === '/thjonusta' && !isHiddenRoute('/thjonusta')) schemas.push(serviceSchema(locale));
+
       let section = null;
       let detailName = null;
-      if (route === '/projects' || route === '/news' || route === '/shop') {
-        section = route.slice(1);
+      if (route === '/verkefni' || route === '/projects' || route === '/news' || route === '/shop') {
+        section = route === '/verkefni' ? 'projects' : route.slice(1);
       } else if (meta?.section) {
         // Shop sub-route — breadcrumb is Home › Shop › <Section title>
         section = meta.section;
@@ -825,10 +989,13 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
       });
       if (bc) schemas.push(bc);
     } else {
-      // Home page — emit WebSite schema (alongside the baked Person schema
-      // in public/index.html). Binds brand-name variants for knowledge-graph
-      // matching on Bing/Google.
+      // Home page — WebSite (brand-name variants for knowledge-graph matching)
+      // plus the Service catalog, both resolving to the Organization schema
+      // baked into public/index.html.
       schemas.push(websiteSchema());
+      // The Service catalogue is the company's offering (SERVICE_OFFERINGS +
+      // the product entry): only while the services page is public.
+      if (!isHiddenRoute('/thjonusta')) schemas.push(serviceSchema(locale));
     }
   }
 
@@ -855,7 +1022,8 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     };
   const ogLocale = locale === 'is' ? 'is_IS' : 'en_IS';
 
-  const jsonLdHtml = jsonLdScript(schemas);
+  // The Organization leads on every page — everything above references it.
+  const jsonLdHtml = jsonLdScript([organizationSchema(), ...schemas]);
 
   // Crawler body content — covers the home page, list pages, and detail
   // pages. Bing and other non-JS crawlers index the initial HTML response,
@@ -887,7 +1055,8 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   let html = rewriteHead(loadTemplate(), {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
-    robots: staticMeta?.noindex ? 'noindex, nofollow' : null,
+    robots: isHiddenRoute(route) ? 'noindex, nofollow' : 'index, follow',
+    scenePreload: scenePreloadTag(route),
   });
   html = injectCrawlerContent(html, crawlerHtml);
 

@@ -1,0 +1,33 @@
+---
+id: themes
+name: {is: "Þemu", en: Themes}
+domain: 4
+owner: engine
+status: live
+flag: null
+paths:
+  - server/config/themes.js
+  - public/js/components/ThemeSwitcher.js
+  - public/js/theme-boot.js
+  - public/js/services/themePrefs.js
+  - public/js/utils/chartTheme.js
+  - public/js/utils/motion.js
+  - public/css/themes.css
+  - public/css/theme-switcher.css
+  - scripts/audit-text-contrast.js
+  - scripts/self-host-fonts.js
+  - tests/unit/themePrefsAccount.client.test.js
+  - tests/unit/themePrefsEnv.client.test.js
+migrations: [083_user_theme, 084_user_theme_widen, 094_theme_set_three, 106_user_theme_check_drop]
+since: 2026-08-09
+origin: null
+history: [base-sync, scene-engine, identity-seam-2026-09-22]
+---
+
+The multi-theme engine: token sets per `html[data-theme]` in `themes.css`, the render-blocking `theme-boot.js`, `themePrefs` (local + per-account preference, 083/084) and the picker. The theme SET is the product's — `identity.theme` (`default`, `root`, `picker`) in `config/client.json`, engine default Glóð/`ember` first, `classic` owns `:root`, `midnight`; 106 drops the old CHECK so a downstream can add its own ids. `chartTheme.js` feeds canvases at draw time; `motion.js` is the one reduced-motion answer.
+
+**Rules**
+- The theme trio comes from the identity seam, never a literal: `server/config/themes.js` and `themePrefs.js` read it; `theme-boot.js` reads the same values off `<html data-default-theme / data-theme-picker / data-root-theme>` because it runs pre-paint (invariant 13). Its literal fallbacks are the engine defaults for a shell that never passed through SSR. Every picker id still needs a token set in `themes.css` (product-owned hue values).
+- Every new UI must survive a theme switch; no colour literals in component CSS (invariant 15).
+- Re-skin by re-hueing token values; never delete the boot script or hardcode one palette.
+- Full rules: [../docs/ARCHITECTURE.md#4-themes-scenes-ambience](../docs/ARCHITECTURE.md#4-themes-scenes-ambience).

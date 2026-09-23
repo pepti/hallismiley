@@ -15,7 +15,8 @@ const MAX_BODY = 5000;
 // it with escHtml, so any surviving markup displays as literal text. Safe either
 // way; don't read that allowlist as licence to start rendering note HTML.
 
-const rolesOf = (req) => (Array.isArray(req.user.roles) ? req.user.roles : [req.user.role]);
+const { heldRoles } = require('../auth/roles');
+const rolesOf = (req) => heldRoles(req.user);
 const isAdminViewer = (req) => rolesOf(req).includes('admin');
 
 const adminCustomerNoteController = {

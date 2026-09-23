@@ -26,11 +26,34 @@ if (missing.length) {
 }
 
 const logger = require('./logger');
+
+// ── Admin two-factor configuration ─────────────────────────────────────────────
+// A TOTP_ENC_KEY that is set but malformed must stop the boot: the alternative
+// is discovering it when an admin tries to enrol. Unset is allowed for now (the
+// secret stays in its plaintext column, as it always was) but said out loud.
+// ADMIN_TOTP_EXEMPT is a test/dev convenience that production ignores
+// (auth/mfaPolicy.js) — finding it set there means someone expected otherwise.
+{
+  const secretBox = require('./utils/secretBox');
+  try {
+    if (!secretBox.isConfigured() && process.env.NODE_ENV === 'production') {
+      logger.warn(`[server] ${secretBox.KEY_ENV} is not set — admin TOTP secrets are stored unencrypted (docs/ADMIN-2FA.md)`);
+    }
+  } catch (err) {
+    logger.fatal(`[server] ${err.message}`);
+    process.exit(1);
+  }
+  if (process.env.NODE_ENV === 'production' && process.env.ADMIN_TOTP_EXEMPT) {
+    logger.warn('[server] ADMIN_TOTP_EXEMPT is set but IGNORED when NODE_ENV=production — every admin must enrol a second factor');
+  }
+}
+
 const app    = require('./app');
 const { pool } = require('./config/database');
 const { checkMemory } = require('./observability/alerts');
 const { migrate } = require('./scripts/migrate');
 const { startEventLogCleanup } = require('./services/eventLogCleanup');
+const { startLeadsCleanup } = require('./services/leadsCleanup');
 const { startTokenCleanup } = require('./services/tokenCleanup');
 const { logResolvedConfig } = require('./config/clientConfig');
 const { startUpdateChecker } = require('./services/updateChecker');
@@ -77,6 +100,7 @@ async function start() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     startEventLogCleanup(); // daily event_logs prune (EVENT_LOG_RETENTION_DAYS)
+    startLeadsCleanup();    // daily leads prune (LEAD_RETENTION_DAYS — the /personuvernd promise)
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
   });
 

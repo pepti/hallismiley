@@ -48,7 +48,15 @@ global.fetch = jest.fn(async () => ({
   json: async () => mockUserinfo.response,
 }));
 
+// Social login ships OFF on this instance — this suite tests the providers
+// LIVE, so opt in before the app is required (the gate reads env per request,
+// but set it up-front for clarity).
+process.env.SOCIAL_LOGIN_ENABLED = 'true';
+
 const app = require('../../server/app');
+// The OAuth callbacks land on the visitor-default locale (tests/lib/locale.js);
+// only the locale-locked party route is a literal `/is/` by design.
+const { localePrefix } = require('../lib/locale');
 const db  = require('../../server/config/database');
 const { cleanTables, createTestAdminUser } = require('../helpers');
 
@@ -121,7 +129,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=invalid_state');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=invalid_state`);
   });
 
   test('missing state cookie redirects with invalid_state error', async () => {
@@ -129,7 +137,7 @@ describe('GET /auth/facebook/callback', () => {
       .get('/auth/facebook/callback?code=abc&state=test-state-xyz');
     // no Cookie header
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=invalid_state');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=invalid_state`);
   });
 
   test('missing email redirects with facebook_profile_invalid', async () => {
@@ -142,7 +150,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=facebook_profile_invalid');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=facebook_profile_invalid`);
   });
 
   test('new user — creates row with facebook_id, verified, and auto-username', async () => {
@@ -151,7 +159,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
 
     // Sets an auth_session cookie (Lucia).
     const cookies = res.headers['set-cookie'] ?? [];
@@ -185,7 +193,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
 
     const countAfter = (await db.query(`SELECT COUNT(*)::int AS n FROM users`)).rows[0].n;
     expect(countAfter).toBe(countBefore);
@@ -208,7 +216,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=email_already_registered');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=email_already_registered`);
 
     // No session was issued and the existing account is unchanged (not linked).
     const cookies = res.headers['set-cookie'] ?? [];
@@ -237,7 +245,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=account_disabled');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=account_disabled`);
     // No auth_session cookie should be set.
     const cookies = res.headers['set-cookie'] ?? [];
     expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
@@ -251,7 +259,7 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', cookieHeader);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/#/?error=oauth_failed');
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=oauth_failed`);
   });
 
   test('redirects to the returnTo cookie when present and clears it', async () => {
@@ -286,6 +294,6 @@ describe('GET /auth/facebook/callback', () => {
       .set('Cookie', `${cookieHeader}; facebook_oauth_return_to=${encodedReturnTo}`);
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe(`${localePrefix()}/`);
   });
 });

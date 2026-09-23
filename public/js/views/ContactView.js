@@ -9,6 +9,8 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { SceneStage } from '../scenes/SceneStage.js';
+import { publicNav } from '../utils/identity.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 
 // Pick the locale-resolved slice of a `{ en, is }` default blob. Falls back
@@ -22,22 +24,25 @@ function pick(defaultsBlob) {
 // Each DEFAULT_* is shaped as { en, is } so the view falls back to
 // locale-appropriate copy when no admin-edited site_content row exists.
 // Resolve at _loadAllContent() time via s.defaults[getLocale()] || s.defaults.en.
+// DRAFT (2026-09-01): company voice — "we", not "I". This is Orange Smiley's
+// lead form, and the SSR description already promises a reply within one
+// business day, so the page says the same thing.
 const DEFAULT_HERO = {
   en: {
     eyebrow:     'Get in touch',
-    title_line1: "Let's build something",
-    title_accent: 'in wood or in code.',
+    title_line1: 'Tell us about your operation',
+    title_accent: '— we take care of the systems.',
     subtitle:
-      'Commissions, collaborations, hiring, or just saying hi — ' +
-      'I read every message and reply from my own inbox.',
+      'Moving off Shopify, Wix or WordPress, starting something new, or just ' +
+      'weighing it up — we read every message and reply within one business day.',
   },
   is: {
     eyebrow:     'Hafa samband',
-    title_line1: 'Smíðum eitthvað saman',
-    title_accent: 'í viði eða í kóða.',
+    title_line1: 'Segðu okkur frá rekstrinum',
+    title_accent: '— við sjáum um kerfin.',
     subtitle:
-      'Verkefni, samstarf, ráðningar eða bara til að heilsa — ' +
-      'ég les öll skilaboð og svara úr minni eigin inbox.',
+      'Á leið af Shopify, Wix eða WordPress, að byrja á einhverju nýju eða bara ' +
+      'að skoða málin — við lesum öll skilaboð og svörum innan eins virks dags.',
   },
 };
 
@@ -61,21 +66,21 @@ const CARD_ICONS = {
              </svg>`,
 };
 
+// The company's contact details, not the founder's. The personal GitHub and
+// LinkedIn rows went with the portfolio — a prospect writing to a software
+// company wants the company's inbox. (CARD_ICONS keeps its github/linkedin
+// entries: the rows are admin-editable, so an instance may add them back.)
 const DEFAULT_CARD = {
   en: {
     items: [
-      { type: 'email',    label: 'Email',    value: 'halli [at] hallismiley [dot] is', href: 'halli@hallismiley.is' },
-      { type: 'github',   label: 'GitHub',   value: 'pepti/hallismiley',               href: 'https://github.com/pepti/hallismiley' },
-      { type: 'linkedin', label: 'LinkedIn', value: 'halliv',                          href: 'https://www.linkedin.com/in/halliv/' },
-      { type: 'location', label: 'Based in', value: 'Hafnarfjörður · GMT',             meta:  'Typical reply within 2–3 days' },
+      { type: 'email',    label: 'Email',    value: 'info [at] orangesmiley [dot] is', href: 'info@orangesmiley.is' },
+      { type: 'location', label: 'Based in', value: 'Hafnarfjörður · GMT',             meta:  'Reply within one business day' },
     ],
   },
   is: {
     items: [
-      { type: 'email',    label: 'Netfang',     value: 'halli [at] hallismiley [dot] is', href: 'halli@hallismiley.is' },
-      { type: 'github',   label: 'GitHub',      value: 'pepti/hallismiley',               href: 'https://github.com/pepti/hallismiley' },
-      { type: 'linkedin', label: 'LinkedIn',    value: 'halliv',                          href: 'https://www.linkedin.com/in/halliv/' },
-      { type: 'location', label: 'Staðsetning', value: 'Hafnarfjörður · GMT',             meta:  'Yfirleitt svar innan 2–3 daga' },
+      { type: 'email',    label: 'Netfang',     value: 'info [at] orangesmiley [dot] is', href: 'info@orangesmiley.is' },
+      { type: 'location', label: 'Staðsetning', value: 'Hafnarfjörður · GMT',             meta:  'Svar innan eins virks dags' },
     ],
   },
 };
@@ -83,125 +88,140 @@ const DEFAULT_CARD = {
 const DEFAULT_FORM = {
   en: {
     eyebrow:         'Send a message',
-    title:           'Tell me what you are thinking about',
+    title:           'Tell us what you need',
     submit_label:    'Send Message',
     fallback_prefix: 'Prefer email?',
-    fallback_link:   'Write to me directly.',
+    fallback_link:   'Write to us directly.',
   },
   is: {
     eyebrow:         'Sendu skilaboð',
-    title:           'Segðu mér hvað þú ert að hugsa um',
+    title:           'Segðu okkur hvað þig vantar',
     submit_label:    'Senda skilaboð',
     fallback_prefix: 'Frekar netfang?',
-    fallback_link:   'Sendu mér tölvupóst beint.',
+    fallback_link:   'Sendu okkur tölvupóst beint.',
   },
 };
 
+// DRAFT (2026-09-01): what the company takes on, replacing the freelancer's
+// availability list (carpentry commissions and speaking gigs).
 const DEFAULT_AVAILABILITY = {
   en: {
     eyebrow: 'Right now',
-    title: 'What I am open to',
+    title: 'What we take on',
     cards: [
-      { status: 'open',    label: 'Freelance software',         body: 'Taking on small to mid-size web projects — backend, full-stack, automation, tooling.' },
-      { status: 'open',    label: 'Carpentry commissions',      body: 'Taking carpentry work in Iceland — joinery, furniture, interior fit-out.' },
-      { status: 'limited', label: 'Collaborations & speaking',  body: 'Happy to talk about interesting ideas at the intersection of craft and code.' },
+      { status: 'open',    label: 'Moving off Shopify, Wix or WordPress', body: 'We migrate the store, the products and the customers onto Rekstrarkerfið, and keep it running afterwards.' },
+      { status: 'open',    label: 'A new site or online store',           body: 'From a company site to a full store with inventory and invoicing — one system, one monthly invoice.' },
+      { status: 'limited', label: 'Custom systems & partnerships',        body: 'Work that does not fit a subscription. We take it on when it fits what we are building.' },
     ],
   },
   is: {
     eyebrow: 'Núna',
-    title: 'Hvað ég er tilbúinn í',
+    title: 'Hvað við tökum að okkur',
     cards: [
-      { status: 'open',    label: 'Hugbúnaður í lausavinnu',     body: 'Tek að mér lítil og meðalstór vefverkefni — bakendi, fullur stafli, sjálfvirkni, verkfæri.' },
-      { status: 'open',    label: 'Smíðaverkefni',               body: 'Tek að mér smíðaverkefni á Íslandi — fellingar, húsgögn, innanhússfrágang.' },
-      { status: 'limited', label: 'Samstarf & erindi',           body: 'Fús til að ræða áhugaverðar hugmyndir á mörkum handverks og kóða.' },
+      { status: 'open',    label: 'Flutningur af Shopify, Wix eða WordPress', body: 'Við flytjum verslunina, vörurnar og viðskiptavinina yfir á Rekstrarkerfið og rekum það áfram.' },
+      { status: 'open',    label: 'Nýr vefur eða vefverslun',                 body: 'Allt frá fyrirtækjavef upp í verslun með lager og reikningagerð — eitt kerfi, einn mánaðarreikningur.' },
+      { status: 'limited', label: 'Sérlausnir og samstarf',                   body: 'Verkefni sem passa ekki í áskrift. Við tökum þau að okkur þegar þau falla að því sem við erum að byggja.' },
     ],
   },
 };
 
+// DRAFT (2026-09-01): the same stack list, but it is evidence now rather than
+// an offer to fork. The page used to invite visitors to clone the portfolio
+// and link the founder's personal GitHub; a prospect reading a software
+// company's contact page wants to know the thing is soberly built.
 const DEFAULT_BUILT_WITH = {
   en: {
     eyebrow: 'Under the hood',
-    title:   'Built with — and yours to clone',
+    title:   'How Rekstrarkerfið is built',
     body1:
-      'This site is a hand-built portfolio running on Node.js and Express with a PostgreSQL ' +
-      'database and a vanilla-JS single-page frontend — no framework, no build step. Auth uses ' +
-      'Lucia with CSRF and Helmet hardening, email goes through Resend, uploads through Multer, ' +
-      'observability through Pino and Sentry, and the whole thing deploys to Azure App Service.',
+      'This site runs on the same platform our customers do: Node.js and Express with a ' +
+      'PostgreSQL database and a vanilla-JS single-page frontend — no framework, no build step. ' +
+      'Auth uses Lucia with CSRF and Helmet hardening, email goes through Resend, uploads ' +
+      'through Multer, observability through Pino and Sentry, deployed on Azure App Service.',
     body2:
-      'The full source is on GitHub — feel free to fork or clone it. If you would like a hand ' +
-      'getting it running or keeping it maintained, drop me a line and I am happy to help ' +
-      'with setup, hosting, or ongoing maintenance.',
+      'One shared core carries every customer, and per-customer features ship as flagged ' +
+      'modules on top of it rather than forks — which is what lets AI agents build and ' +
+      'maintain the custom work, and what keeps every instance patchable on the same day.',
     pills: [
       'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
       'Helmet', 'CSRF', 'Resend', 'Multer',
       'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure',
     ],
-    github_btn_label: 'View on GitHub',
-    email_btn_label:  'Email me for setup help',
-    github_url:       'https://github.com/pepti/hallismiley',
+    email_btn_label:  'Ask us about the platform',
   },
   is: {
     eyebrow: 'Undir húddinu',
-    title:   'Byggt með — og þitt að afrita',
+    title:   'Hvernig Rekstrarkerfið er byggt',
     body1:
-      'Þessi síða er handsmíðað verkefnasafn sem keyrir á Node.js og Express með PostgreSQL ' +
-      'gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn rammi, ' +
-      'ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, tölvupóstur ' +
-      'fer í gegnum Resend, skráarupphleðsla í gegnum Multer, vöktun gegnum Pino og Sentry, ' +
-      'og allt saman er dreift á Azure App Service.',
+      'Þessi vefur keyrir á sama kerfi og viðskiptavinir okkar: Node.js og Express með ' +
+      'PostgreSQL gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn ' +
+      'rammi, ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, ' +
+      'tölvupóstur fer gegnum Resend, skráarupphleðsla gegnum Multer, vöktun gegnum Pino og ' +
+      'Sentry, allt keyrt á Azure App Service.',
     body2:
-      'Öll frumskrár eru á GitHub — þér er velkomið að klóna eða fork-a. Ef þig vantar aðstoð ' +
-      'við að koma þessu í loftið eða halda því við, hafðu samband og ég aðstoða með ánægju ' +
-      'við uppsetningu, hýsingu eða áframhaldandi umsjón.',
+      'Einn sameiginlegur kjarni ber alla viðskiptavini og sérlausnir bætast ofan á hann sem ' +
+      'einingar með rofa — ekki afrit af kerfinu. Þess vegna getur gervigreindin smíðað og ' +
+      'viðhaldið sérsmíðinni, og þess vegna má uppfæra öll kerfin sama daginn.',
     pills: [
       'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
       'Helmet', 'CSRF', 'Resend', 'Multer',
       'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure',
     ],
-    github_btn_label: 'Skoða á GitHub',
-    email_btn_label:  'Sendu mér póst um uppsetningu',
-    github_url:       'https://github.com/pepti/hallismiley',
+    email_btn_label:  'Spurðu okkur um kerfið',
   },
 };
 
+// The page's own footer. It still signed off as "Halli Smiley — a portfolio of
+// nothing and everything" and pointed its legal links at /privacy, the hidden
+// alias, rather than the canonical /personuvernd the rest of the site uses.
 const DEFAULT_FOOTER = {
   en: {
-    brand_name:  'Halli Smiley',
-    copy_suffix: 'A portfolio of nothing and everything.',
+    brand_name:  'Orange Smiley',
+    copy_suffix: 'An Icelandic software house driven by AI.',
     legal_links: [
-      { label: 'Privacy Policy',   href: '/privacy' },
+      { label: 'Privacy Policy',   href: '/personuvernd' },
       { label: 'Terms of Service', href: '/terms' },
     ],
   },
   is: {
-    brand_name:  'Halli Smiley',
-    copy_suffix: 'Verkefnasafn um allt og ekkert.',
+    brand_name:  'Orange Smiley',
+    copy_suffix: 'Íslenskt hugbúnaðarhús knúið gervigreind.',
     legal_links: [
-      { label: 'Persónuverndarstefna', href: '/privacy' },
+      { label: 'Persónuverndarstefna', href: '/personuvernd' },
       { label: 'Notkunarskilmálar',    href: '/terms' },
     ],
   },
 };
 
-// Topic dropdown options for the contact form. Values stay the same in both
-// locales (they're server-side enum keys) — only the human-readable labels
-// switch. Resolved at render time via TOPICS[getLocale()] || TOPICS.en.
-const TOPICS = {
+// Values stay the same in both locales (they're server-side enum keys) — only
+// the human-readable labels switch. Resolved at render time via
+// PLATFORMS[getLocale()] || PLATFORMS.en.
+// The system a prospect is moving off — the single most useful qualifying
+// answer, so it replaces the portfolio-era "topic" selector. Values must
+// match KNOWN_PLATFORMS in server/controllers/contactController.js; anything
+// unrecognised is recorded as 'other' rather than rejected.
+const PLATFORMS = {
   en: [
-    { value: '',              label: 'What is this about?' },
-    { value: 'carpentry',     label: 'Carpentry commission' },
-    { value: 'software',      label: 'Software work' },
-    { value: 'collaboration', label: 'Collaboration' },
-    { value: 'press',         label: 'Press & speaking' },
-    { value: 'other',         label: 'Other' },
+    { value: '',            label: 'What are you using today?' },
+    { value: 'shopify',     label: 'Shopify' },
+    { value: 'wix',         label: 'Wix' },
+    { value: 'wordpress',   label: 'WordPress' },
+    { value: 'woocommerce', label: 'WooCommerce' },
+    { value: 'squarespace', label: 'Squarespace' },
+    { value: 'dk',          label: 'DK / Regla / Payday (accounting only)' },
+    { value: 'none',        label: 'Nothing yet' },
+    { value: 'other',       label: 'Something else' },
   ],
   is: [
-    { value: '',              label: 'Hvað er þetta um?' },
-    { value: 'carpentry',     label: 'Smíðaverkefni' },
-    { value: 'software',      label: 'Hugbúnaðarvinna' },
-    { value: 'collaboration', label: 'Samstarf' },
-    { value: 'press',         label: 'Fjölmiðlar & erindi' },
-    { value: 'other',         label: 'Annað' },
+    { value: '',            label: 'Hvað notar þú í dag?' },
+    { value: 'shopify',     label: 'Shopify' },
+    { value: 'wix',         label: 'Wix' },
+    { value: 'wordpress',   label: 'WordPress' },
+    { value: 'woocommerce', label: 'WooCommerce' },
+    { value: 'squarespace', label: 'Squarespace' },
+    { value: 'dk',          label: 'DK / Regla / Payday (bara bókhald)' },
+    { value: 'none',        label: 'Ekkert ennþá' },
+    { value: 'other',       label: 'Eitthvað annað' },
   ],
 };
 
@@ -245,11 +265,25 @@ export class ContactView {
       ${this._footerHtml()}
     `;
 
+    // The black beach and sea stack behind the hero — mounted INSIDE the existing decoration
+    // node so the admin-editable data-section/data-field tree is untouched.
+    const heroBg = view.querySelector('.contact-hero__bg');
+    if (heroBg) {
+      this._scene = new SceneStage('hafaSamband', { variant: 'hero' });
+      heroBg.appendChild(this._scene.el());
+      this._scene.mount();
+      heroBg.closest('.contact-hero')?.classList.add('contact-hero--scene');
+    }
+
     this._initEmailLinks(view);
     this._initForm(view);
     this._initBuiltWithButtons(view);
     this._initPageEdit(view);
     return view;
+  }
+
+  destroy() {
+    this._scene?.destroy();
   }
 
   // ── Load all site_content rows in parallel; fall back to defaults on 404 ──
@@ -356,30 +390,23 @@ export class ContactView {
   // ── SECTION 3: Inquiry form ────────────────────────────────────────────
   _formHtml() {
     const f = this._form;
-    const topicOptions = (TOPICS[getLocale()] || TOPICS.en).map(t =>
-      `<option value="${escHtml(t.value)}">${escHtml(t.label)}</option>`
+    const platformOptions = (PLATFORMS[getLocale()] || PLATFORMS.en).map(p =>
+      `<option value="${escHtml(p.value)}">${escHtml(p.label)}</option>`
     ).join('');
 
     return `
     <section class="contact-form-section" id="contact-form-section"
-             aria-label="Inquiry form" data-section="form">
+             aria-label="${t('contact.formAriaLabel')}" data-section="form">
       <div class="contact-form-section__inner">
         <p class="contact-form-section__eyebrow" data-field="eyebrow">${escHtml(f.eyebrow)}</p>
         <h2 class="contact-form-section__title" data-field="title">${escHtml(f.title)}</h2>
 
         <form class="contact-form contact-form--page" id="contact-page-form" novalidate
-              aria-label="Inquiry form">
+              aria-label="${t('contact.formAriaLabel')}">
           <!-- Honeypot — hidden from real users, bots fill it in -->
           <input type="text" name="website" id="contact-page-honeypot"
                  tabindex="-1" autocomplete="off" aria-hidden="true"
                  style="position:absolute;left:-9999px;opacity:0;height:0;width:0;pointer-events:none;" />
-
-          <div class="contact-form__field">
-            <label for="contact-page-topic" class="contact-form__label">${t('contact.topic')}</label>
-            <select id="contact-page-topic" name="topic" class="contact-form__input contact-form__select">
-              ${topicOptions}
-            </select>
-          </div>
 
           <div class="contact-form__row">
             <div class="contact-form__field">
@@ -390,12 +417,32 @@ export class ContactView {
                      required autocomplete="name" placeholder="${t('contact.namePlaceholder')}" maxlength="100" />
             </div>
             <div class="contact-form__field">
+              <label for="contact-page-company" class="contact-form__label">${t('contact.company')}</label>
+              <input type="text" id="contact-page-company" name="company" class="contact-form__input"
+                     autocomplete="organization" placeholder="${t('contact.companyPlaceholder')}" maxlength="150" />
+            </div>
+          </div>
+
+          <div class="contact-form__row">
+            <div class="contact-form__field">
               <label for="contact-page-email" class="contact-form__label">
                 ${t('contact.email')} <span aria-hidden="true" class="required-mark">*</span>
               </label>
               <input type="email" id="contact-page-email" name="email" class="contact-form__input"
                      required autocomplete="email" placeholder="${t('contact.emailPlaceholder')}" maxlength="200" />
             </div>
+            <div class="contact-form__field">
+              <label for="contact-page-phone" class="contact-form__label">${t('contact.phone')}</label>
+              <input type="tel" id="contact-page-phone" name="phone" class="contact-form__input"
+                     autocomplete="tel" placeholder="${t('contact.phonePlaceholder')}" maxlength="40" />
+            </div>
+          </div>
+
+          <div class="contact-form__field">
+            <label for="contact-page-platform" class="contact-form__label">${t('contact.currentPlatform')}</label>
+            <select id="contact-page-platform" name="current_platform" class="contact-form__input contact-form__select">
+              ${platformOptions}
+            </select>
           </div>
 
           <div class="contact-form__field">
@@ -469,12 +516,10 @@ export class ContactView {
           ${pills}
         </div>
 
+        <!-- The "View on GitHub" button went with the clone-this-portfolio
+             framing: it pointed at the founder's personal repository, which
+             is not what this section is evidence of any more. -->
         <div class="built-with__actions">
-          <a href="${escHtml(b.github_url || DEFAULT_BUILT_WITH.en.github_url)}"
-             target="_blank" rel="noopener noreferrer"
-             class="lol-btn--gold built-with__btn">
-            <span data-field="github_btn_label">${escHtml(b.github_btn_label)}</span>
-          </a>
           <button type="button" class="lol-btn--teal built-with__btn" id="built-with-email-btn">
             <span data-field="email_btn_label">${escHtml(b.email_btn_label)}</span>
           </button>
@@ -501,14 +546,14 @@ export class ContactView {
 
     return `
     <footer class="lol-footer" data-section="footer">
+      <!-- Home + the product's public IA (identity.surface.nav minus its
+           hidden routes), matching the home footer and the top nav. Six of
+           the seven links here used to be hidden surfaces (/shop, /news,
+           /halli, /party and the /projects and /contact aliases) which this
+           footer was quietly publishing to every visitor. -->
       <nav class="lol-footer__top" aria-label="${t('nav.footerNav')}">
-        <a href="${href('/')}"         class="lol-footer__nav-link">${t('nav.home')}</a>
-        <a href="${href('/projects')}" class="lol-footer__nav-link">${t('nav.projects')}</a>
-        <a href="${href('/shop')}"     class="lol-footer__nav-link">${t('nav.shop')}</a>
-        <a href="${href('/news')}"     class="lol-footer__nav-link">${t('nav.news')}</a>
-        <a href="${href('/halli')}"    class="lol-footer__nav-link">${t('nav.halli')}</a>
-        <a href="${href('/contact')}"  class="lol-footer__nav-link">${t('nav.contact')}</a>
-        <a href="${href('/party')}"    class="lol-footer__nav-link">${t('nav.party')}</a>
+        <a href="${href('/')}"              class="lol-footer__nav-link">${t('nav.home')}</a>
+        ${publicNav().map(e => `<a href="${href(e.route)}" class="lol-footer__nav-link">${escHtml(t(e.labelKey))}</a>`).join('\n        ')}
       </nav>
 
       <div class="lol-footer__brand">
@@ -554,16 +599,14 @@ export class ContactView {
     });
   }
 
-  // ── Init: "Email me for setup help" pre-fills topic + scrolls to form ──
+  // ── Init: "Email me for setup help" pre-fills the form + scrolls to it ──
   _initBuiltWithButtons(view) {
     const btn = view.querySelector('#built-with-email-btn');
     if (!btn) return;
     btn.addEventListener('click', () => {
-      const topic = view.querySelector('#contact-page-topic');
-      if (topic) topic.value = 'collaboration';
       const message = view.querySelector('#contact-page-message');
       if (message && !message.value.trim()) {
-        message.value = 'Hi Halli — I am interested in cloning the portfolio repo and would like a hand with setup.';
+        message.value = t('contact.builtWithPrefill');
       }
       view.querySelector('#contact-form-section')?.scrollIntoView({ behavior: 'smooth' });
       setTimeout(() => view.querySelector('#contact-page-name')?.focus(), 500);
@@ -585,7 +628,9 @@ export class ContactView {
       const name     = form.querySelector('#contact-page-name').value.trim();
       const email    = form.querySelector('#contact-page-email').value.trim();
       const message  = form.querySelector('#contact-page-message').value.trim();
-      const topic    = form.querySelector('#contact-page-topic').value || null;
+      const company  = form.querySelector('#contact-page-company').value.trim() || null;
+      const phone    = form.querySelector('#contact-page-phone').value.trim() || null;
+      const platform = form.querySelector('#contact-page-platform').value || null;
 
       if (!name || !email || !message) {
         status.className = 'contact-form__status contact-form__status--error';
@@ -602,7 +647,7 @@ export class ContactView {
         const res = await fetch('/api/v1/contact', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, message, topic, website: honeypot }),
+          body: JSON.stringify({ name, email, message, company, phone, current_platform: platform, website: honeypot }),
         });
 
         if (res.ok) {
@@ -826,9 +871,7 @@ export class ContactView {
       body1:            this._readField(section, 'body1',            this._builtWith.body1),
       body2:            this._readField(section, 'body2',            this._builtWith.body2),
       pills,
-      github_btn_label: this._readField(section, 'github_btn_label', this._builtWith.github_btn_label),
       email_btn_label:  this._readField(section, 'email_btn_label',  this._builtWith.email_btn_label),
-      github_url:       this._builtWith.github_url || DEFAULT_BUILT_WITH.en.github_url,
     };
   }
 

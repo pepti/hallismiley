@@ -569,7 +569,13 @@ async function verify(outDir) {
       // upload checksum is the statutory anchor, and comparing against the export
       // checksum would happily certify a file that was already wrong when archived.
       if (now !== d.checksum_recorded) {
-        failures.push(`${d.archived_as} (${d.original_name}): checksum differs from the upload record`);
+        // Every failure line is "<path>: <reason>" — the path first, nothing else
+        // before the colon. Anything reading this report (an operator scanning it,
+        // the archive test matching failures back to manifest entries) splits on
+        // that first colon, so the human file name belongs in the reason, not
+        // inside the path. It used to sit before the colon, which made the
+        // document lines unmatchable — see LESSONS.md 2026-08-27.
+        failures.push(`${d.archived_as}: checksum differs from the upload record (${d.original_name})`);
       }
     } catch (err) {
       failures.push(`${d.archived_as}: ${err.code === 'ENOENT' ? 'missing' : err.message}`);

@@ -22,8 +22,7 @@ describe('clientConfig — defaults', () => {
   test('a missing file yields the safe defaults', () => {
     const { config, warnings } = resolve({});
     expect(selfUpdate(config)).toEqual({
-      // The base ships the module OFF — instances flip it on in config/client.json.
-      enabled: false,
+      enabled: true,
       mode: 'managed',
       channel: 'stable',
       manifestUrl: 'https://releases.orangesmiley.is/store/{channel}.json',
@@ -323,14 +322,11 @@ describe('clientConfig — file loading', () => {
 });
 
 describe('clientConfig — singleton', () => {
-  test('the BASE has no committed config/client.json — the module stays dormant', () => {
-    // Deliberate: client.json is per-instance (the factory writes it at
-    // provisioning). The engine itself must build, boot and test green with
-    // the whole module switched off.
-    expect(require('fs').existsSync(CONFIG_FILE)).toBe(false);
+  test("this instance's committed config/client.json resolves without problems", () => {
     const { fileConfig, problems } = loadFileConfig(CONFIG_FILE);
     expect(problems).toEqual([]);
-    expect(fileConfig).toEqual({});
+    expect(resolve(fileConfig).warnings).toEqual([]);
+    expect(fileConfig.modules.selfUpdate.mode).toBe('managed');
   });
 
   test('the exported config is deep-frozen', () => {
@@ -372,8 +368,7 @@ describe('clientConfig — boot log', () => {
     expect(message).toContain('resolved instance configuration');
     expect(payload.config).toBe(clientConfig);
     expect(payload.config.modules.selfUpdate.mode).toBe('managed');
-    // No client.json in the base — the resolved config's source is the defaults.
-    expect(payload.source).toBe('defaults');
+    expect(payload.source).toBe(CONFIG_FILE);
   });
 
   test('this instance boots clean — no warnings, no errors', () => {

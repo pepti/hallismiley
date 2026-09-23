@@ -57,6 +57,12 @@ beforeEach(async () => {
   await db.query('TRUNCATE TABLE system_updates RESTART IDENTITY');
 });
 
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('new-version detection', () => {
   test('records a newer release as available', async () => {
     const res = await run();

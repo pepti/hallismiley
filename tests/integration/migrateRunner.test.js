@@ -6,10 +6,15 @@
 // next boot replays them and crash-loops the deploy (boot-time migrations run
 // before app.listen). These tests pin the rollback behaviour.
 //
-// schema.js is mocked so the real 88-migration list isn't involved; the array
-// is mutated in place because migrate.js destructures it at require time.
+// migrationSet.js (engine + product arrays, aliases, superseded) is mocked so
+// the real list isn't involved; the objects are mutated in place because
+// migrate.js destructures them at require time.
 const mockMigrations = [];
-jest.mock('../../server/config/schema', () => ({ migrations: mockMigrations }));
+const mockAliases = {};
+const mockSuperseded = {};
+jest.mock('../../server/config/migrationSet', () => ({
+  migrations: mockMigrations, aliases: mockAliases, superseded: mockSuperseded,
+}));
 
 const { migrate } = require('../../server/scripts/migrate');
 const db = require('../../server/config/database');
@@ -26,6 +31,11 @@ async function isRecorded(name) {
   return rows.length > 0;
 }
 
+async function resolvedFrom(name) {
+  const { rows } = await db.query('SELECT resolved_from FROM schema_migrations WHERE name = $1', [name]);
+  return rows.length ? rows[0].resolved_from : undefined;
+}
+
 async function cleanup() {
   await db.query(`DROP TABLE IF EXISTS ${PROBE}`);
   await db.query("DELETE FROM schema_migrations WHERE name LIKE 'zz_test_%'");
@@ -33,6 +43,8 @@ async function cleanup() {
 
 beforeEach(async () => {
   mockMigrations.length = 0;
+  for (const k of Object.keys(mockAliases)) delete mockAliases[k];
+  for (const k of Object.keys(mockSuperseded)) delete mockSuperseded[k];
   await cleanup();
 });
 
@@ -104,5 +116,81 @@ describe('migrate() — one transaction per migration', () => {
     await expect(migrate()).rejects.toThrow(/zz_test_first_fails/);
     expect(await isRecorded('zz_test_never_reached')).toBe(false);
     expect(await probeExists()).toBe(false);
+  });
+});
+
+describe('migrate() — aliases, superseded and --plan (invariant #4, D-021)', () => {
+  it('records an aliased engine name as applied without running its statements', async () => {
+    // The product's database already holds the same DDL under its old name.
+    await db.query("INSERT INTO schema_migrations (name) VALUES ('zz_test_old_name')");
+    mockMigrations.push({
+      name: 'zz_test_engine_name',
+      statements: [`CREATE TABLE ${PROBE} (id INT PRIMARY KEY)`],
+    });
+    mockAliases.zz_test_engine_name = ['zz_test_other', 'zz_test_old_name'];
+
+    await migrate();
+
+    expect(await probeExists()).toBe(false);          // never executed
+    expect(await isRecorded('zz_test_engine_name')).toBe(true);
+    expect(await resolvedFrom('zz_test_engine_name')).toBe('zz_test_old_name');
+  });
+
+  it('runs an aliased entry normally when none of its aliases is applied', async () => {
+    mockMigrations.push({
+      name: 'zz_test_engine_name',
+      statements: [`CREATE TABLE ${PROBE} (id INT PRIMARY KEY)`],
+    });
+    mockAliases.zz_test_engine_name = ['zz_test_never_applied'];
+
+    await migrate();
+
+    expect(await probeExists()).toBe(true);
+    expect(await resolvedFrom('zz_test_engine_name')).toBeNull();
+  });
+
+  it('records a superseded name with its reason and never executes it', async () => {
+    mockMigrations.push({
+      name: 'zz_test_superseded',
+      statements: ['SELECT * FROM a_table_that_does_not_exist'],   // would throw if run
+    });
+    mockSuperseded.zz_test_superseded = 'product keeps its own variant';
+
+    await expect(migrate()).resolves.toBeUndefined();
+    expect(await isRecorded('zz_test_superseded')).toBe(true);
+    expect(await resolvedFrom('zz_test_superseded')).toBe('superseded: product keeps its own variant');
+  });
+
+  it('resolves an alias and runs a real migration in the same locked run', async () => {
+    await db.query("INSERT INTO schema_migrations (name) VALUES ('zz_test_old_name')");
+    mockMigrations.push(
+      { name: 'zz_test_engine_name', statements: ['SELECT * FROM a_table_that_does_not_exist'] },
+      { name: 'zz_test_real', statements: [`CREATE TABLE ${PROBE} (id INT PRIMARY KEY)`] },
+    );
+    mockAliases.zz_test_engine_name = ['zz_test_old_name'];
+
+    await migrate();
+
+    expect(await isRecorded('zz_test_engine_name')).toBe(true);
+    expect(await isRecorded('zz_test_real')).toBe(true);
+    expect(await probeExists()).toBe(true);
+  });
+
+  it('--plan executes nothing and records nothing', async () => {
+    await db.query("INSERT INTO schema_migrations (name) VALUES ('zz_test_old_name')");
+    mockMigrations.push(
+      { name: 'zz_test_engine_name', statements: [`CREATE TABLE ${PROBE} (id INT PRIMARY KEY)`] },
+      { name: 'zz_test_superseded', statements: ['SELECT 1'] },
+      { name: 'zz_test_real', statements: [`CREATE TABLE ${PROBE} (id INT PRIMARY KEY)`] },
+    );
+    mockAliases.zz_test_engine_name = ['zz_test_old_name'];
+    mockSuperseded.zz_test_superseded = 'reason';
+
+    await migrate({ plan: true });
+
+    expect(await probeExists()).toBe(false);
+    expect(await isRecorded('zz_test_engine_name')).toBe(false);
+    expect(await isRecorded('zz_test_superseded')).toBe(false);
+    expect(await isRecorded('zz_test_real')).toBe(false);
   });
 });

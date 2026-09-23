@@ -20,6 +20,26 @@ import { mountMining, formatTime } from './aron13-games/mining.js';
 import { mountCatch } from './aron13-games/catch.js';
 import { mountCrafting } from './aron13-games/crafting.js';
 
+// The page's stylesheet is product-owned (public/css/aron13.css) and the
+// engine's main.css does not @import it (the base's did — the import was lost
+// in the 2026-09-22 graft, which is why the crafting cells measured 0×0 in
+// e2e/aron13.spec.js). The view loads it itself, once, and waits for it so
+// the first paint is styled — no hook on an engine file.
+const STYLESHEET = '/css/aron13.css';
+function ensureStylesheet() {
+  const existing = document.querySelector('link[data-aron13-css]');
+  if (existing) return existing.sheet ? Promise.resolve() : new Promise(res => existing.addEventListener('load', res, { once: true }));
+  return new Promise(resolve => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = STYLESHEET;
+    link.dataset.aron13Css = '1';
+    link.addEventListener('load', resolve, { once: true });
+    link.addEventListener('error', resolve, { once: true }); // render unstyled rather than never
+    document.head.appendChild(link);
+  });
+}
+
 const STORAGE_KEY = 'aron13:step';
 const BEST_KEY = 'aron13:best';
 const CONFETTI_COUNT = 110;
@@ -127,6 +147,7 @@ export class Aron13View {
   }
 
   async render() {
+    await ensureStylesheet();
     const view = document.createElement('div');
     view.className = 'view a13-view';
     // Return visits get a compact hero so the game is near the top.

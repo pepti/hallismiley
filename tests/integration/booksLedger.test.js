@@ -72,9 +72,9 @@ describe('chart of accounts', () => {
 
   it('flags the statutory non-deductible input-VAT accounts', async () => {
     // Entertainment (risna), staff meals and passenger cars (6610, migration
-    // 085) are three of the four statutory exclusions; encoding them on the COA
+    // 103) are three of the four statutory exclusions; encoding them on the COA
     // lets the UI warn before the claim. 6600 stays deductible for commercial
-    // vehicles — the split is the whole point of 085.
+    // vehicles — the split is the whole point of 103.
     const { rows } = await db.query(
       `SELECT code FROM ledger_accounts WHERE input_vat_blocked ORDER BY code`
     );

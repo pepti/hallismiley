@@ -1,0 +1,99 @@
+/* /admin/markadur — Markaður, the prospect list (views/AdminMarketView.js).
+   Tokens only (invariant 15). Status chips follow the .mon-pill recipe; the
+   drawer sits on the surface tokens with a border, so it reads on all three
+   themes without a colour literal. */
+
+.markadur-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.markadur-filter { display: flex; flex-direction: column; gap: 2px; font-size: 0.75rem; color: var(--text-muted); }
+.markadur-filter select {
+  font: inherit; font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-dim); border-radius: var(--radius-sm, 4px);
+  background: var(--bg-surface); color: var(--text-primary);
+}
+.markadur-count { margin: var(--sp-2) 0 0; font-size: 0.8rem; color: var(--text-muted); }
+
+.markadur-table td.num, .markadur-table th.num, .markadur-years td.num, .markadur-years th.num {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.markadur-table th[aria-sort] { text-align: right; }
+.markadur-table th[aria-sort]:first-child { text-align: left; }
+.markadur-sort {
+  font: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; text-transform: inherit;
+  color: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+}
+.markadur-sort:hover, .markadur-sort:focus-visible, .markadur-sort.is-active { color: var(--text-primary); }
+.markadur-row { cursor: pointer; }
+.markadur-row:hover td, .markadur-row:focus-visible td { background: var(--bg-hover); }
+.markadur-name { display: block; color: var(--text-primary); font-weight: 600; }
+.markadur-kt { display: block; font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.markadur-chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  /* Neutral chip (candidate, and any status the map does not cover).
+     --text-muted here is 4.24:1 on Gló0 — --text-secondary is 7.3:1. */
+  background: var(--bg-hover); color: var(--text-secondary);
+  white-space: nowrap;
+}
+.markadur-chip--researched      { color: var(--accent-ink); }
+.markadur-chip--shortlist       { background: var(--warning-dim); color: var(--warning); }
+.markadur-chip--handed_to_sales { background: var(--success-dim); color: var(--success); }
+.markadur-chip--rejected        { background: var(--error-dim);   color: var(--error); }
+
+/* Drawer */
+.markadur-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--overlay);
+}
+.markadur-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 61;
+  width: min(720px, 100vw);
+  /* Vertical scroll only: a wide table inside must scroll in its own wrap,
+     or focusing the close button drags the whole drawer sideways. */
+  overflow-y: auto; overflow-x: hidden;
+  padding: var(--sp-5);
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-dim);
+  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
+}
+.markadur-drawer__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.markadur-drawer__title { margin: 0; font-family: var(--font-display); font-size: 1.4rem; line-height: 1.15; }
+.markadur-drawer__close {
+  flex: none; width: 2rem; height: 2rem;
+  border: 1px solid var(--border-dim); border-radius: 999px;
+  background: transparent; color: var(--text-secondary);
+  font-size: 1.2rem; line-height: 1; cursor: pointer;
+}
+.markadur-drawer__close:hover, .markadur-drawer__close:focus-visible { color: var(--text-primary); border-color: var(--text-muted); }
+.markadur-drawer__status { margin: var(--sp-3) 0; display: flex; align-items: center; gap: var(--sp-3); }
+.markadur-fit { font-size: 0.85rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.markadur-drawer__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.markadur-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-2) var(--sp-4); margin-bottom: var(--sp-4); }
+.markadur-fact { display: flex; flex-direction: column; font-size: 0.85rem; }
+.markadur-fact span { color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.markadur-fact strong { font-weight: 600; overflow-wrap: anywhere; }
+.markadur-fact a { color: var(--accent-ink); }
+.markadur-drawer__h {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: 0.75rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.markadur-drawer__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; color: var(--text-primary); }
+.markadur-years-wrap { overflow-x: auto; }
+.markadur-drawer__muted { color: var(--text-muted); font-size: 0.85rem; }
+.markadur-sources { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); font-size: 0.85rem; }
+.markadur-sources li { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: baseline; }
+.markadur-sources__type { font-weight: 600; color: var(--text-secondary); }
+.markadur-sources a { color: var(--accent-ink); overflow-wrap: anywhere; }
+.markadur-drawer__report { margin: 0; font-size: 0.85rem; }
+.markadur-drawer__report code { font-family: var(--font-mono); background: var(--bg-hover); padding: 1px 6px; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .markadur-drawer { width: 100vw; padding: var(--sp-4); }
+}

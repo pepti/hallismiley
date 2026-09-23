@@ -19,14 +19,18 @@ const { t } = require('../../server/i18n');
 
 // Helper: read Icelandic text for a key to assert error messages.
 function tIs(key, params) { return t('is', key, params); }
+// The brand in every email string is the identity's (`{siteName}`, injected by
+// t()); asserting the resolved value keeps this suite true in a downstream.
+const { identity } = require('../../server/config/identity');
+const NAME = identity.brand.name;
 
 describe('server/i18n t() helper', () => {
   test('returns exact English copy for a known key', () => {
-    expect(t('en', 'email.verify.subject')).toBe('Verify your Halli Smiley account');
+    expect(t('en', 'email.verify.subject')).toBe(`Verify your ${NAME} account`);
   });
 
   test('returns Icelandic copy for a known key', () => {
-    expect(t('is', 'email.verify.subject')).toBe('Staðfestu Halli Smiley aðganginn þinn');
+    expect(t('is', 'email.verify.subject')).toBe(`Staðfestu ${NAME} aðganginn þinn`);
   });
 
   test('falls back to English when Icelandic key is missing', () => {
@@ -42,7 +46,7 @@ describe('server/i18n t() helper', () => {
   });
 
   test('unknown locale falls back to DEFAULT_LOCALE (en)', () => {
-    expect(t('xx', 'email.verify.subject')).toBe('Verify your Halli Smiley account');
+    expect(t('xx', 'email.verify.subject')).toBe(`Verify your ${NAME} account`);
   });
 });
 

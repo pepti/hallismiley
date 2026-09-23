@@ -2,9 +2,6 @@
 // "what exactly am I running?". Admin-gated on purpose: "which version" is also
 // "which published CVEs apply to me", so it is never public.
 const request = require('supertest');
-// Base ships the module OFF — switch it on before app require (env is read
-// at require time), the same way an instance would.
-process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED = 'true';
 const app     = require('../../server/app');
 const {
   createTestAdminUser, createTestRegularUser, getTestSessionCookie, cleanTables,
@@ -19,6 +16,12 @@ beforeEach(async () => {
   adminCookie = await getTestSessionCookie(await createTestAdminUser());
   userCookie  = await getTestSessionCookie(await createTestRegularUser());
 });
+
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
 
 describe('GET /api/v1/system/version — access', () => {
   test('anonymous callers get 401 in the standard envelope', async () => {

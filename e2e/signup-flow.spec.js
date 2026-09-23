@@ -1,5 +1,12 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { TEST_ADMIN }   = require('./helpers');
+// The status copy is the visitor default's (identity.locale.publicDefault),
+// read from the SPA table — never an Icelandic literal (e2e/lib/locale.js).
+const { tClient } = require('./lib/locale');
 
 test.describe('Signup flow', () => {
 
@@ -31,12 +38,17 @@ test.describe('Signup flow', () => {
     await expect(page.locator('#req-number')).toHaveClass(/req--met/);
   });
 
+  // A visitor with no signal reads the visitor default (Accept-Language is
+  // not a signal). "Lykilorðin stemma" is a prefix of "Lykilorðin stemma ekki",
+  // so assert the full text plus the status class.
   test('mismatched confirm password shows error status', async ({ page }) => {
     await page.goto('/#/signup');
     await page.fill('#signup-password', 'ValidPass1');
     await page.fill('#signup-confirm', 'DifferentPass1');
 
-    await expect(page.locator('#confirm-status')).toContainText(/do not match/i);
+    const status = page.locator('#confirm-status');
+    await expect(status).toHaveText(`✗ ${tClient('signup.passwordsMismatch')}`);
+    await expect(status).toHaveClass(/status--err/);
   });
 
   test('matching confirm password shows positive status', async ({ page }) => {
@@ -44,7 +56,9 @@ test.describe('Signup flow', () => {
     await page.fill('#signup-password', 'ValidPass1');
     await page.fill('#signup-confirm', 'ValidPass1');
 
-    await expect(page.locator('#confirm-status')).toContainText(/match/i);
+    const status = page.locator('#confirm-status');
+    await expect(status).toHaveText(`✓ ${tClient('signup.passwordsMatch')}`);
+    await expect(status).toHaveClass(/status--ok/);
   });
 
   test('weak password on submit shows validation error', async ({ page }) => {
@@ -66,7 +80,8 @@ test.describe('Signup flow', () => {
     await page.fill('#signup-confirm', 'Different1');
     await page.click('#signup-btn');
 
-    await expect(page.locator('#signup-error')).toContainText(/do not match/i);
+    // The submit-time error is the same i18n string, in the visitor default.
+    await expect(page.locator('#signup-error')).toHaveText(tClient('signup.passwordsMismatch'));
   });
 
   test('duplicate username shows server-side error', async ({ page }) => {

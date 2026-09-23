@@ -1,10 +1,17 @@
 name: CI
 
+# The long-lived branch of this repo is MASTER. This used to say [main] and
+# CI never ran once (0 Actions runs at 2026-09-02); every "CI green" before
+# that date was a local run.
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
+  schedule:
+    # Once a week even when nothing is pushed: notices a newly-published npm
+    # advisory (npm audit) or a base-image CVE (Trivy) between merges (ice #233).
+    - cron: "17 5 * * 1"
 
 # The workflow only needs to read the repo. Actions are SHA-pinned (with a
 # `# vN` comment dependabot keeps in sync) so a hijacked tag can't run
@@ -12,8 +19,8 @@ on:
 permissions:
   contents: read
 
-# Superseded PR pushes cancel their in-flight run; main runs are NEVER
-# cancelled — a `cancelled` CI conclusion on main would skip the deploy AND
+# Superseded PR pushes cancel their in-flight run; master runs are NEVER
+# cancelled — a `cancelled` CI conclusion on master would skip the deploy AND
 # fire the deploy-blocked alert email for a commit that was simply superseded.
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,11 +30,10 @@ jobs:
   test:
     name: Lint + Integration tests
     runs-on: ubuntu-latest
-    # Serial Jest (maxWorkers: 1) with coverage ran 1366 s of the old 1800 s
-    # budget on the 2026-09-08 PR run (34205854404) and 515 s on the merge
-    # three hours later — a 2.6× spread on the same suite. A slow runner
-    # would have cancelled the run and, on main, fail-closed the deploy for
-    # no reason.
+    # 45, not 30: on a contended private-repo runner (2 vCPU) ice measured a
+    # 3.7x run-to-run spread on an identical tree, and a fully green suite
+    # that ran long turned into a red CI run with no failing test (ice #233).
+    # A higher ceiling costs nothing unless hit.
     timeout-minutes: 45
 
     services:
@@ -36,7 +42,7 @@ jobs:
         env:
           POSTGRES_USER:     postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB:       hallismiley_test
+          POSTGRES_DB:       orangesmiley_test
         ports:
           - 5432:5432
         options: >-
@@ -55,8 +61,12 @@ jobs:
           node-version: 24
           cache: npm
 
+      # --prefer-offline: serve from the setup-node cache instead of
+      # revalidating every package against the registry. --no-audit: the audit
+      # gate is its own explicit step, so the implicit install-time audit is a
+      # duplicate network round trip. --fund: console noise.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --fund=false
 
       - name: Audit dependencies
         run: npm audit --audit-level=high
@@ -67,18 +77,60 @@ jobs:
       - name: i18n keys in sync
         run: npm run check:i18n
 
+      # jest.config.js maxWorkers is calibrated against the runner spec; print
+      # the truth on every run (a private-repo ubuntu-latest is 2 vCPU / 7 GB).
+      - name: Runner spec (calibrates maxWorkers — see jest.config.js)
+        run: |
+          echo "vCPU: $(nproc)"
+          free -h | head -2
+
+      # The release manifest is what every deployed instance polls to decide
+      # what to become, and it is validated by the SAME code the instances run
+      # (server/services/updateChecker.js). Building one here with a dummy
+      # digest proves the publisher can always produce a document the fleet will
+      # accept — the alternative is finding out at promote time, with a release
+      # half out the door.
+      - name: Release manifest schema
+        run: |
+          node scripts/build-manifest.js \
+            --channel=stable \
+            --digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --out=/tmp/manifest-dryrun.json
+          node scripts/check-manifest.js /tmp/manifest-dryrun.json
+
+      # Jest re-parses, re-instruments and re-generates every server + test file
+      # from cold on every run (plus the transformed lucia/oslo/htmlparser2
+      # chain). Persisting the transform cache skips that. Safe by construction:
+      # Jest keys each entry on file CONTENT, so a stale entry is impossible —
+      # the worst case is a miss. jest.config.js is in the key because the
+      # coverage settings are part of the transform.
+      - name: Restore Jest transform cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/jest-cache
+          key: jest-${{ runner.os }}-${{ hashFiles('package-lock.json', 'babel.config.js', 'jest.config.js') }}-${{ github.sha }}
+          restore-keys: |
+            jest-${{ runner.os }}-${{ hashFiles('package-lock.json', 'babel.config.js', 'jest.config.js') }}-
+
+      # tests/globalSetup.js migrates ONE template database and clones it per
+      # Jest worker (orangesmiley_w1_test … _w4_test); the service container's
+      # POSTGRES_DB above is only the base name the derivation starts from.
       - name: Run tests with coverage
         env:
           NODE_ENV:            test
-          TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/hallismiley_test
-          # ADMIN_USERNAME / ADMIN_PASSWORD are set by tests/env.js
-        run: npm run test:ci
+          TEST_DATABASE_URL:   postgresql://postgres:postgres@localhost:5432/orangesmiley_test
+          # ADMIN_USERNAME / ADMIN_PASSWORD_HASH are set by tests/env.js
+        run: npm run test:ci -- --cacheDirectory "${{ runner.temp }}/jest-cache"
 
   e2e:
     name: E2E tests (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: test
+    # Deliberately NOT gated on the test job: this job is fully independent
+    # (own checkout, own npm ci, own Postgres, no artifacts flow from test),
+    # and anything gating on CI reads the OVERALL workflow conclusion — a red
+    # test job still fails the run whether or not e2e ran. Running it in
+    # parallel takes its minutes off the critical path (ice #224).
 
     services:
       postgres:
@@ -86,7 +138,7 @@ jobs:
         env:
           POSTGRES_USER:     postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB:       hallismiley_e2e
+          POSTGRES_DB:       orangesmiley_e2e
         ports:
           - 5432:5432
         options: >-
@@ -106,8 +158,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
-
+        run: npm ci --prefer-offline --no-audit --fund=false
 
       # The browser download from the Playwright CDN intermittently hangs until
       # the job's 30-minute timeout kills it (4× on 2026-08-19) — and on main a
@@ -146,13 +197,12 @@ jobs:
           printf 'Acquire::http::Timeout "15";\nAcquire::https::Timeout "15";\nAcquire::Retries "2";\n' \
             | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
           # The runner image starts its own apt-get in the background (image
-          # provisioning / unattended upgrades). Seen on orangesmiley on
-          # 2026-09-11: every install attempt died instantly with "Could not
-          # get lock /var/lib/apt/lists/lock. It is held by process N
-          # (apt-get)" — exit 100 three times in a row, on four of five runs.
-          # Preventive here (same runner image, same steps): make apt wait for
-          # the lock instead of failing, and wait for the holder to finish
-          # before the first attempt.
+          # provisioning / unattended upgrades). On 2026-09-11 every install
+          # attempt below died instantly with "Could not get lock
+          # /var/lib/apt/lists/lock. It is held by process N (apt-get)" — exit
+          # 100 three times in a row, on four of five master runs. Make apt
+          # wait for the lock instead of failing, and wait for the holder to
+          # finish before the first attempt.
           printf 'DPkg::Lock::Timeout "300";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-lock >/dev/null
 
       - name: Wait for the runner's background apt-get to finish
@@ -221,19 +271,18 @@ jobs:
               exit 0
             fi
             echo "::warning::Playwright OS dep install attempt ${attempt} failed or hung after 3 minutes — retrying"
-            # Not `apt-get update`: install-deps runs its own update, and a
-            # second one here only re-contends for the apt lock.
             sleep 15
           done
           echo "::error::Playwright OS dependency install failed after 3 attempts"
           exit 1
 
+
       - name: Run E2E tests
         env:
           CI:              "true"
           NODE_ENV:        test
-          E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hallismiley_e2e_ci_test
-          DATABASE_URL:    postgresql://postgres:postgres@localhost:5432/hallismiley_e2e
+          E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orangesmiley_e2e_ci_test
+          DATABASE_URL:    postgresql://postgres:postgres@localhost:5432/orangesmiley_e2e
           ALLOWED_ORIGINS: http://localhost:3000
         run: npm run test:e2e
 
@@ -249,10 +298,9 @@ jobs:
     name: Docker build + boot smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Gate on test — otherwise a green Docker job can mask a red test job
-    # at the workflow-summary level, and the workflow_run trigger in
-    # deploy.yml only sees the overall conclusion.
-    needs: test
+    # Not gated on the test job (ice #233): a workflow conclusion aggregates
+    # ALL its jobs, so a red test job fails the run whether or not this one
+    # ran — the gate only serialised the two and lengthened the critical path.
 
     services:
       postgres:
@@ -260,7 +308,7 @@ jobs:
         env:
           POSTGRES_USER:     postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB:       hallismiley_smoke
+          POSTGRES_DB:       orangesmiley_smoke
         ports:
           - 5432:5432
         options: >-
@@ -272,9 +320,40 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 50 # generate-changes.js reads recent history (see deploy.yml)
 
+      # server/changes.json — the "Latest updates" list on Admin → Monitoring.
+      # Written on the build host because the Docker context has no .git;
+      # COPY server/ picks it up. Never fails the build (ice #209).
+      - name: Stamp recent changes
+        run: node server/scripts/generate-changes.js
+
+      # Same build-args as deploy.yml, so the smoke image reports a real
+      # identity instead of gitSha "unknown".
       - name: Build Docker image
-        run: docker build -t hallismiley:smoke .
+        run: |
+          docker build -t orangesmiley:smoke \
+            --build-arg GIT_SHA="${{ github.sha }}" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            .
+
+      # Container scan. This gates the deploy, because deploy.yml only fires on
+      # a successful CI run — so a HIGH/CRITICAL finding in the base image or an
+      # OS package stops the release here rather than after it is live.
+      #
+      # ignore-unfixed is not laziness: a finding with no available fix cannot
+      # be acted on by this repo, and a permanently-red gate is a gate people
+      # learn to route around. Those still show in the report artifact.
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: orangesmiley:smoke
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
 
       # Boot the production image against an empty database: proves the
       # container starts, the migration runner applies the full chain from
@@ -283,19 +362,19 @@ jobs:
       - name: Boot smoke test
         run: |
           # UPLOAD_ROOT: paths.js fails a production boot without it (the
-          # ephemeral-disk guard) — declare it like a real deploy does.
-          # DB_SSL=false: the runner's Postgres speaks plain TCP; production
-          # defaults to TLS-on, and this is the one documented opt-out case,
-          # never Azure.
+          # ephemeral-disk guard from base-sync wave 6A) — declare it like a
+          # real deploy does. DB_SSL=false: the runner's Postgres speaks plain
+          # TCP; production defaults TLS on, and this is the one documented
+          # opt-out case, never Azure.
           docker run -d --name smoke --network host \
             -e NODE_ENV=production \
             -e PORT=3000 \
-            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_smoke \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orangesmiley_smoke \
             -e DB_SSL=false \
             -e UPLOAD_ROOT=/app/uploads \
             -e ALLOWED_ORIGINS=http://localhost:3000 \
             -e CSRF_SECRET=$(openssl rand -hex 32) \
-            hallismiley:smoke
+            orangesmiley:smoke
           for i in $(seq 1 45); do
             if curl -fsS http://localhost:3000/health > /dev/null 2>&1; then
               echo "/health OK after ~$((i*2))s"

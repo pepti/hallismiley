@@ -2,6 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const db   = require('../config/database');
+const { foldIcelandic } = require('../utils/slug');
 const logger = require('../logger');
 const { UPLOAD_ROOT } = require('../config/paths');
 const emailService = require('../services/emailService');
@@ -30,7 +31,7 @@ const { approveGuest, declineGuest, grantInstantAccess, sendWelcome } = require(
 const { DEFAULT_PARTY_INFO, LOCALE_NEUTRAL_INFO_KEYS, readPartyInfo } = require('../services/partyInfo');
 
 // Base URL for links embedded in emails (mirrors emailService).
-const APP_URL = process.env.APP_URL || 'https://www.hallismiley.is';
+const APP_URL = process.env.APP_URL || 'https://www.orangesmiley.is';
 // One-click email-approval token lifetime. Short by design — the owner acts soon
 // after the request; the magic link issued on approval is the long-lived one.
 const APPROVAL_ACTION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
@@ -226,10 +227,9 @@ async function _categoryExists(key) {
 // caller falls back to a generated key — the key is internal plumbing, so it
 // never needs to be pretty, only stable and unique.
 function _slugifyCategoryKey(label) {
-  const folded = String(label || '')
-    .toLowerCase()
-    .replace(/þ/g, 'th').replace(/ð/g, 'd').replace(/æ/g, 'ae')
-    .normalize('NFD').replace(/\p{M}/gu, '');
+  // Same fold as every other generated slug (utils/slug.js); the 40-char
+  // clamp is this key's own rule.
+  const folded = foldIcelandic(label);
   return folded
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')

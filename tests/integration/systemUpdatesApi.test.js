@@ -5,11 +5,6 @@
 // view, writes are hard admin. An ops role that can watch a fleet must not be
 // able to switch an instance to auto and let it restart itself at 03:00.
 const request = require('supertest');
-// The BASE ships the self-update module OFF (no config/client.json). This
-// suite tests the module LIVE, so switch it on the way an instance would —
-// before the app is required (clientConfig reads env at require time).
-process.env.CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED = 'true';
-
 const app = require('../../server/app');
 const db  = require('../../server/config/database');
 const Role = require('../../server/models/Role');
@@ -43,6 +38,12 @@ beforeEach(async () => {
   plainCookie   = await getTestSessionCookie(await createTestRegularUser());
   watcherCookie = await getTestSessionCookie(await createUpdateWatcher());
 });
+
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
 
 describe('GET /api/v1/system/updates — access', () => {
   test('anonymous is 401', async () => {

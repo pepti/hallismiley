@@ -1,9 +1,17 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 
+// The site is Icelandic by default, so the project card's aria-label is now
+// "Skoða verkefni: <title>" rather than "View project: <title>". Match on the
+// project title alone — it comes from the database (title/title_is are both
+// "Stofan Bakhús") and is therefore locale-independent.
 async function openStofanBakhus(page) {
   await page.goto('/#/projects');
   await page.waitForSelector('.project-card', { timeout: 10_000 });
-  await page.getByRole('button', { name: /View project: Stofan Bakhús/i }).click();
+  await page.getByRole('button', { name: /Stofan Bakhús/i }).click();
   await page.waitForSelector('.gallery-grid', { timeout: 10_000 });
 }
 

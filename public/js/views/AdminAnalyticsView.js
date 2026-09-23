@@ -5,9 +5,10 @@ import { renderAdminShell } from '../components/AdminSidebar.js';
 import { chartTokens } from '../utils/chartTheme.js';
 
 const RANGES  = [7, 30, 90];
-// Colours are NOT module constants any more: this block was frozen at one
-// theme's values and wrong on the other five. The build function reads
-// chartTokens() at draw time instead (utils/chartTheme.js).
+// Colours are NOT module constants any more: this block had drifted to the
+// original LoL palette (#C8AA6E gold) and matched no live theme. The build
+// function reads chartTokens() at draw time instead (utils/chartTheme.js) so
+// every theme paints the charts in its own vocabulary.
 
 export class AdminAnalyticsView {
   constructor() {
@@ -191,7 +192,7 @@ export class AdminAnalyticsView {
   }
 
   _buildCharts(Chart) {
-    // Theme Chart.js for the dark surface (default text is near-black).
+    // Live tokens, read at draw time — a canvas doesn't react to data-theme.
     const ct = chartTokens();
     Chart.defaults.color = ct.axis;
     Chart.defaults.borderColor = ct.grid;
@@ -237,7 +238,7 @@ export class AdminAnalyticsView {
   }
 
   _doughnut(Chart, sel, agg) {
-    const ct = chartTokens(); // per-draw: doughnuts rebuild on range change
+    const ct = chartTokens(); // per-draw: the doughnuts rebuild on range change
     const ctx = this._el.querySelector(sel);
     if (!ctx || !agg.labels.length) return;
     this._charts.push(new Chart(ctx, {

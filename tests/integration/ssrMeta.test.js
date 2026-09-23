@@ -10,40 +10,54 @@
  */
 const request = require('supertest');
 const app     = require('../../server/app');
+// Everything brand-bearing is asserted against the product identity
+// (config/client.json via clientConfig), never a literal: the same suite runs
+// unchanged in a downstream that sets its own identity block.
+const { clientConfig } = require('../../server/config/clientConfig');
+const ID     = clientConfig.identity;
+const SUFFIX = ID.brand.titleSuffix;
+// The visitor default and "the other" supported locale (for the cookie cases).
+const LC    = ID.locale.publicDefault;
+const OTHER = LC === 'is' ? 'en' : 'is';
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 describe('SSR meta-injection — SPA catch-all', () => {
-  test('GET / redirects to preferred-locale path based on Accept-Language', async () => {
-    const res = await request(app)
-      .get('/')
-      .set('Accept-Language', 'is-IS,is;q=0.9');
+  // The root redirect is the visitor default (Icelandic here) unless the
+  // visitor has explicitly chosen otherwise. Accept-Language is NOT a signal:
+  // most Icelandic browsers report en-US, so honouring it would serve the
+  // English site to the exact audience this one is written for.
+  test.each([
+    ['an Icelandic browser',      'is-IS,is;q=0.9'],
+    ['an English browser',        'en-US,en;q=0.9'],
+    ['an unsupported language',   'de-DE'],
+  ])('GET / lands on the visitor default for %s', async (_label, acceptLanguage) => {
+    const res = await request(app).get('/').set('Accept-Language', acceptLanguage);
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`/${LC}/`);
   });
 
-  test('GET / falls back to en when Accept-Language has no supported match', async () => {
-    const res = await request(app)
-      .get('/')
-      .set('Accept-Language', 'de-DE');
+  test('GET / with no locale signal at all lands on the visitor default', async () => {
+    const res = await request(app).get('/');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe(`/${LC}/`);
   });
 
-  test('locale_choice cookie beats Accept-Language on root redirect', async () => {
+  test('an explicit locale_choice cookie is what moves the landing page', async () => {
     const res = await request(app)
       .get('/')
-      .set('Cookie', 'locale_choice=is')
-      .set('Accept-Language', 'en-US');
+      .set('Cookie', `locale_choice=${OTHER}`)
+      .set('Accept-Language', 'is-IS');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/is/');
+    expect(res.headers.location).toBe(`/${OTHER}/`);
   });
 
   test('legacy preferred_locale cookie is ignored (polluted by the old fallback bug)', async () => {
     const res = await request(app)
       .get('/')
-      .set('Cookie', 'preferred_locale=is')
+      .set('Cookie', `preferred_locale=${OTHER}`)
       .set('Accept-Language', 'en-US');
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/en/');
+    expect(res.headers.location).toBe(`/${LC}/`);
   });
 
   test('GET /en/ renders index.html with EN meta tags', async () => {
@@ -51,9 +65,121 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
     expect(res.text).toMatch(/<html lang="en"/);
-    expect(res.text).toMatch(/<title id="ssr-title">[^<]*(Carpenter|Halli)[^<]*<\/title>/);
+    expect(res.text).toMatch(new RegExp(`<title id="ssr-title">[^<]*${escRe(ID.brand.name)}[^<]*</title>`));
     expect(res.text).toMatch(/property="og:locale" content="en_IS"/);
     expect(res.text).toMatch(/rel="canonical" href="[^"]*\/en\/"/);
+  });
+
+  test('scene routes preload their hero image; the video home does not', async () => {
+    // Injected by ssrMeta from server/config/sceneManifest.json — the tag must
+    // sit BEFORE the main stylesheet so the fetch starts ahead of CSS parse.
+    const th = await request(app).get('/is/thjonusta');
+    expect(th.status).toBe(200);
+    const preloadAt = th.text.indexOf('id="ssr-scene-preload"');
+    const cssAt = th.text.indexOf('href="/css/main.css"');
+    expect(preloadAt).toBeGreaterThan(-1);
+    expect(cssAt).toBeGreaterThan(preloadAt);
+    expect(th.text).toMatch(/<link rel="preload" as="image"[^>]*fetchpriority="high"/);
+    expect(th.text).toMatch(/imagesrcset="[^"]*\/assets\/iceland\/canyon-river-[^"]*\.avif[^"]*"/);
+
+    // Home is the waterfall video again (2026-08-22 revert): a scene preload
+    // there would fetch ~200KB the page never paints.
+    const home = await request(app).get('/is/');
+    expect(home.status).toBe(200);
+    expect(home.text).not.toContain('id="ssr-scene-preload"');
+  });
+
+  test('business routes render locale-aware business meta, titled with the brand suffix', async () => {
+    const th = await request(app).get('/is/thjonusta');
+    expect(th.status).toBe(200);
+    expect(th.text).toContain(`<title id="ssr-title">Þjónusta${SUFFIX}</title>`);
+    expect(th.text).toMatch(/rel="canonical" href="[^"]*\/is\/thjonusta"/);
+
+    const um = await request(app).get('/en/um-okkur');
+    expect(um.status).toBe(200);
+    expect(um.text).toContain(`<title id="ssr-title">About us${SUFFIX}</title>`);
+
+    const hs = await request(app).get('/is/hafa-samband');
+    expect(hs.status).toBe(200);
+    expect(hs.text).toContain(`<title id="ssr-title">Hafa samband${SUFFIX}</title>`);
+
+    const pv = await request(app).get('/is/personuvernd');
+    expect(pv.status).toBe(200);
+    expect(pv.text).toContain(`<title id="ssr-title">Persónuverndarstefna${SUFFIX}</title>`);
+
+    const vk = await request(app).get('/is/verkefni');
+    expect(vk.status).toBe(200);
+    expect(vk.text).toContain(`<title id="ssr-title">Verkefnin okkar${SUFFIX}</title>`);
+    expect(vk.text).toMatch(/rel="alternate" hreflang="en" href="[^"]*\/en\/verkefni"/);
+  });
+
+  // The identity seam (2026-09-22): the product's config/client.json reaches
+  // the browser through the shell — the theme trio as <html> attributes for
+  // the pre-paint theme-boot.js, the whole record as <script id="identity">
+  // for utils/identity.js — and the brand-bearing static tags follow it.
+  describe('identity hand-off', () => {
+    test('the theme trio rides <html> and the identity rides the script tag', async () => {
+      const res = await request(app).get('/is/');
+      expect(res.text).toContain(
+        `<html lang="is" data-default-theme="${ID.theme.default}" data-theme-picker="${ID.theme.picker.join(' ')}" data-root-theme="${ID.theme.root}">`
+      );
+      const m = res.text.match(/<script id="identity" type="application\/json">([\s\S]*?)<\/script>/);
+      expect(m).not.toBeNull();
+      expect(JSON.parse(m[1])).toEqual(JSON.parse(JSON.stringify(ID)));
+    });
+
+    test('og:site_name is the brand and <meta author> the registered company', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.text).toContain(`<meta property="og:site_name" content="${ID.brand.name}" />`);
+      expect(res.text).toContain(`<meta name="author" content="${ID.brand.legalName}" />`);
+    });
+  });
+
+  // "Hidden from nav/SSR/sitemap, still functional" — the routes render a
+  // full page; they are simply de-indexed. See server/config/publicSurface.js.
+  // Both lists are the product's (identity.surface.*), never literals: the
+  // hidden routes are noindexed, home + the nav + the legal pages stay
+  // indexable — whatever a downstream puts in each.
+  describe('hidden public surfaces', () => {
+    const { PUBLIC_NAV, LEGAL_ROUTES } = require('../../server/config/publicSurface');
+    // hallismiley (engine-sync-2): a locale-locked route (/party, /aron13ara)
+    // renders only under its locale — the visitor-default prefix 301s there.
+    const { forcedLocaleFor } = require('../../server/config/i18n');
+    const lcOf = (r) => forcedLocaleFor(r) || LC;
+    const hidden = ID.surface.hiddenRoutes.map((r) => `/${lcOf(r)}${r}`);
+    const indexable = ['/', ...PUBLIC_NAV.map((e) => e.route), ...LEGAL_ROUTES].map((r) => `/${lcOf(r)}${r === '/' ? '/' : r}`);
+
+    test('the lists are non-trivial (guard)', () => {
+      expect(indexable.length).toBeGreaterThan(1);
+    });
+
+    test.each(indexable)(
+      '%s stays indexable',
+      async (path) => {
+        const res = await request(app).get(path);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<meta name="robots" content="index, follow"/);
+      }
+    );
+
+    // A product may hide nothing; `.each` refuses an empty list.
+    (hidden.length ? describe : describe.skip)('the hidden routes', () => {
+      test.each(hidden)(
+        '%s still renders, marked noindex',
+        async (path) => {
+          const res = await request(app).get(path);
+          expect(res.status).toBe(200);
+          expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
+          expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+        }
+      );
+
+      test('a hidden detail route is de-indexed too', async () => {
+        const res = await request(app).get(`/${LC}${ID.surface.hiddenRoutes[0]}/some-detail-slug`);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+      });
+    });
   });
 
   test('GET /is/halli renders IS-language meta', async () => {
@@ -88,11 +214,25 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.body).toEqual(expect.objectContaining({ error: expect.any(String), code: 404 }));
   });
 
-  // These prefixes are exempt from the global rate limiter (STATIC_ASSET_RE in
-  // app.js), so a miss must terminate at a cheap 404 and never reach the
-  // SSR/DB path — even extensionless, even with an HTML Accept header.
+  // ── Static-asset prefixes (base fix 2b6842c, ported 2026-09-01) ───────────
+  // /assets, /js, /css and /fonts GETs are exempt from the global rate
+  // limiter (utils/staticAsset.js). Two things must therefore hold, and
+  // they are asserted here because the limiter itself is skipped under
+  // NODE_ENV=test: a miss under those prefixes must terminate at a cheap JSON
+  // 404 rather than reaching the SSR/DB path (ssrMeta only skips paths that
+  // carry a file extension, so extensionless + Accept: text/html used to fall
+  // through to database-backed meta rendering), and the exemption must not be
+  // wider than those four prefixes.
+
   test('missed static-asset paths return JSON 404, never the SPA shell', async () => {
-    for (const path of ['/assets/party/venue/gone.jpg', '/assets/no-extension', '/js/nope.js', '/css/nope.css', '/fonts/nope.woff2']) {
+    for (const path of [
+      '/assets/iceland/gone.avif',
+      '/assets/no-extension',
+      '/js/nope.js',
+      '/js/no-extension',
+      '/css/nope.css',
+      '/fonts/nope.woff2',
+    ]) {
       const res = await request(app).get(path).set('Accept', 'text/html');
       expect(res.status).toBe(404);
       expect(res.headers['content-type']).toMatch(/application\/json/);
@@ -100,14 +240,34 @@ describe('SSR meta-injection — SPA catch-all', () => {
     }
   });
 
-  test('existing static assets still serve (venue photo, incl. non-ASCII name)', async () => {
-    const ok = await request(app).get('/assets/party/venue/Steggjun_myrarkot.jpg');
-    expect(ok.status).toBe(200);
-    expect(ok.headers['content-type']).toMatch(/image\/jpeg/);
-    const accented = await request(app).get('/assets/party/venue/' + encodeURIComponent('Mýrarkot_veislusalur.jpg'));
-    expect(accented.status).toBe(200);
-    expect(accented.headers['content-type']).toMatch(/image\/jpeg/);
+  test('existing static assets still serve under every exempt prefix', async () => {
+    const css = await request(app).get('/css/main.css');
+    expect(css.status).toBe(200);
+    expect(css.headers['content-type']).toMatch(/text\/css/);
+
+    const js = await request(app).get('/js/router.js');
+    expect(js.status).toBe(200);
+    expect(js.headers['content-type']).toMatch(/javascript/);
+
+    const img = await request(app).get('/assets/waterfall-cover.jpg');
+    expect(img.status).toBe(200);
+    expect(img.headers['content-type']).toMatch(/image\/jpeg/);
+
+    const font = await request(app).get('/fonts/barlow-400-normal-latin.woff2');
+    expect(font.status).toBe(200);
   });
+
+  // Tightness: the prefix must be the WHOLE first segment and must sit at the
+  // root. Anything else is an ordinary SPA route and still gets the shell —
+  // if one of these ever 404s as JSON, the exemption has grown too wide.
+  test.each(['/assetsguide/intro', '/is/assets/yfirlit', '/is/css-tips'])(
+    '%s is not treated as a static-asset path',
+    async (path) => {
+      const res = await request(app).get(path).set('Accept', 'text/html');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/html/);
+    }
+  );
 
   test('response carries cache headers for CDN/edge caching', async () => {
     const res = await request(app).get('/en/');
@@ -213,39 +373,6 @@ describe('SSR meta-injection — SPA catch-all', () => {
   // The page is a birthday landing for an all-Icelandic guest list. English is
   // not published: see server/config/i18n.js forcedLocaleFor.
 
-  // ── Hidden birthday page: Icelandic-only AND noindex ───────────────────────
-  // /aron13ara is a one-off puzzle page for one reader. It is locked through
-  // the same forcedLocaleFor rule as the party pages, kept out of the sitemap,
-  // and carries a noindex robots meta so a shared link never gets indexed.
-
-  describe('birthday page — hidden and Icelandic-only', () => {
-    test('/en/aron13ara and /aron13ara permanently redirect to /is/aron13ara', async () => {
-      for (const path of ['/en/aron13ara', '/aron13ara']) {
-        const res = await request(app).get(path);
-        expect(res.status).toBe(301);
-        expect(res.headers.location).toBe('/is/aron13ara');
-      }
-    });
-
-    test('/is/aron13ara renders its own Icelandic title, noindex, and no breadcrumbs', async () => {
-      const res = await request(app).get('/is/aron13ara');
-      expect(res.status).toBe(200);
-      expect(res.text).toMatch(/<html lang="is"/);
-      expect(res.text).toMatch(/<title id="ssr-title">Til hamingju með 13 ára afmælið, Aron!<\/title>/);
-      expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow" \/>/);
-      expect(res.text).toMatch(/rel="canonical"[^>]*href="https:\/\/www\.hallismiley\.is\/is\/aron13ara"/);
-      expect(res.text).not.toMatch(/hreflang="en"/);
-      expect(res.text).not.toContain('BreadcrumbList');
-      expect(res.text).not.toContain('Verkefnasafn Halla');
-    });
-
-    test('other routes keep the default index, follow directive', async () => {
-      const res = await request(app).get('/en/projects');
-      expect(res.status).toBe(200);
-      expect(res.text).toMatch(/<meta name="robots" content="index, follow" \/>/);
-    });
-  });
-
   describe('party page — locale lock', () => {
     test('/en/party permanently redirects to /is/party', async () => {
       const res = await request(app).get('/en/party');
@@ -318,13 +445,24 @@ describe('SSR meta-injection — SPA catch-all', () => {
   });
 
   describe('home page — WebSite schema + crawler content', () => {
-    test('emits a WebSite JSON-LD schema with brand-name alternates', async () => {
+    test('emits a WebSite JSON-LD schema with the identity’s brand-name alternates', async () => {
       const res = await request(app).get('/en/');
       expect(res.status).toBe(200);
       expect(res.text).toMatch(/<script type="application\/ld\+json">[^<]*"@type":"WebSite"/);
-      expect(res.text).toMatch(/"alternateName":\["Hallismiley","Halli","halli smiley"\]/);
-      // Publisher reference resolves to the baked Person schema's @id.
-      expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#person"\}/);
+      expect(res.text).toContain(`"name":"${ID.brand.name}","alternateName":${JSON.stringify(ID.brand.alternateNames)}`);
+      // Publisher reference resolves to the Organization schema's @id.
+      expect(res.text).toMatch(/"publisher":\{"@id":"https:\/\/www\.hallismiley\.is\/#organization"\}/);
+    });
+
+    // index.html is baked with https://www.orangesmiley.is; the template loader
+    // swaps that origin for APP_URL (the tests run as hallismiley.is) and drops
+    // the baked Organization block, which the server re-emits from the identity
+    // on the same @id the publisher refs point at.
+    test('the Organization JSON-LD is built on APP_URL, once, from the identity', async () => {
+      const res = await request(app).get('/en/');
+      expect(res.text).toContain('"@type":"Organization","@id":"https://www.hallismiley.is/#organization"');
+      expect(res.text.match(/"@type":\s*"Organization"/g)).toHaveLength(1);
+      expect(res.text).not.toContain('https://www.orangesmiley.is');
     });
 
     test('does not emit WebSite schema on non-home pages', async () => {
@@ -368,5 +506,70 @@ describe('SSR meta-injection — SPA catch-all', () => {
       const res = await request(app).get('/abc123def456ghi789.txt');
       expect(res.status).toBe(404);
     });
+  });
+});
+
+// ── Structured data for the business (job 2F) ────────────────────────────────
+// The Organization is baked into public/index.html; everything the server
+// emits references it by @id. A dangling reference yields a broken knowledge
+// graph, so the two halves are asserted together.
+
+describe('business JSON-LD', () => {
+  const ORG_ID = /"@id":\s*"https?:\/\/[^"]*\/#organization"/;
+  // hallismiley (engine-sync-2): the Service catalogue (the company's offering)
+  // is emitted only while /thjonusta is public (identity-seam-2).
+  const { isHiddenRoute } = require('../../server/config/publicSurface');
+  const testServices = isHiddenRoute('/thjonusta') ? test.skip : test;
+
+  testServices('the home page emits WebSite + Service, both bound to the Organization', async () => {
+    const res = await request(app).get('/is/');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/"@type":"WebSite"/);
+    expect(res.text).toMatch(/"@type":"Service"/);
+    expect(res.text).toMatch(/"publisher":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
+    expect(res.text).toMatch(/"provider":\{"@id":"https?:\/\/[^"]*\/#organization"\}/);
+  });
+
+  test('the Organization the server references actually exists, named after the identity', async () => {
+    const res = await request(app).get('/is/');
+    expect(res.text).toMatch(/"@type":\s*"Organization"/);
+    expect(res.text).toMatch(ORG_ID);
+    expect(res.text).toContain(`"name":${JSON.stringify(ID.brand.legalName)}`);
+  });
+
+  testServices('the services page carries the service catalogue', async () => {
+    const res = await request(app).get('/is/thjonusta');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/"@type":"OfferCatalog"/);
+  });
+
+  testServices('the catalogue lists the company\'s services, with Rekstrarkerfið as one product in it', async () => {
+    // Orange Smiley sells any software a small business needs, and the
+    // product's tiers and prices live on its own site (Halli, 2026-09-13).
+    const res = await request(app).get('/is/thjonusta');
+    const block = (res.text.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [])
+      .find(b => b.includes('OfferCatalog'));
+    const service = JSON.parse(block.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, ''));
+    const items = service.hasOfferCatalog.itemListElement;
+    expect(items.map(i => i.itemOffered?.name).filter(Boolean)).toContain('Sérsmíðuð kerfi');
+    const product = items.find(i => i.itemOffered?.name === 'Rekstrarkerfið');
+    expect(product.itemOffered.url).toBe('https://rekstrarkerfi.is/is/');
+    for (const tier of ['Vefur', 'Verslun', 'Rekstur']) {
+      expect(block).not.toMatch(new RegExp(`"name":"${tier}"`));
+    }
+  });
+
+  test('no unconfirmed price is published as structured data', async () => {
+    // Prices are DRAFT until Halli signs off. A number in JSON-LD reads as a
+    // commitment, so the catalogue deliberately carries none.
+    const res = await request(app).get('/is/thjonusta');
+    const jsonLd = res.text.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
+    const service = jsonLd.find(b => b.includes('OfferCatalog')) || '';
+    expect(service).not.toMatch(/"price"/);
+  });
+
+  test('other business routes do not carry the service catalogue', async () => {
+    const res = await request(app).get('/is/um-okkur');
+    expect(res.text).not.toMatch(/"@type":"OfferCatalog"/);
   });
 });

@@ -1,15 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
-  <rect width="200" height="200" fill="#0A1428"/>
-  <!-- Tetris S-piece -->
-  <g transform="translate(35,55)">
-    <rect x="60" y="0"  width="55" height="55" rx="4" fill="#00CFCF"/>
-    <rect x="115" y="0" width="55" height="55" rx="4" fill="#00CFCF"/>
-    <rect x="5"  y="55" width="55" height="55" rx="4" fill="#00CFCF"/>
-    <rect x="60" y="55" width="55" height="55" rx="4" fill="#00CFCF"/>
-    <!-- Shine -->
-    <rect x="68" y="8"  width="20" height="8" rx="2" fill="rgba(255,255,255,0.35)"/>
-    <rect x="123" y="8" width="20" height="8" rx="2" fill="rgba(255,255,255,0.35)"/>
-    <rect x="13" y="63" width="20" height="8" rx="2" fill="rgba(255,255,255,0.35)"/>
-    <rect x="68" y="63" width="20" height="8" rx="2" fill="rgba(255,255,255,0.35)"/>
-  </g>
+  <rect width="200" height="200" fill="#E8853D"/>
+  <circle cx="100" cy="100" r="66" fill="#1C1916"/>
+  <path d="M72 68v44M128 68v44" fill="none" stroke="#F3B577" stroke-width="8" stroke-linecap="round"/>
+  <path d="M70 130c9 10 20 15 30 15s21-5 30-15" fill="none" stroke="#F3B577" stroke-width="12" stroke-linecap="round"/>
 </svg>

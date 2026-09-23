@@ -1,5 +1,5 @@
 /**
- * Cookie Consent — hallismiley.is
+ * Cookie Consent — orangesmiley.is
  *
  * Shows a consent banner on first visit.
  * Analytics are only loaded after the user explicitly accepts.
@@ -8,6 +8,10 @@
  * To wire up a real GA4 Measurement ID, set:
  *   window.GA_MEASUREMENT_ID = 'G-XXXXXXXXXX';
  * in a script tag before this file loads, then deploy.
+ *
+ * This is a classic script that runs before the ES-module i18n layer, so it
+ * carries its own copy of the handful of strings it needs rather than
+ * importing t(). Keep both locales in step with public/js/i18n/*.json.
  */
 
 (function () {
@@ -15,7 +19,42 @@
 
   var STORAGE_KEY = 'cookie_consent';
   var SUPPORTED_LOCALES = ['en', 'is'];
-  var DEFAULT_LOCALE = 'en';
+  // Visitor-facing default for the banner when no signal resolves a locale —
+  // the product's identity.locale.publicDefault, read off the same
+  // <script id="identity"> hand-off utils/identity.js parses (this is a
+  // classic script, so it reads the tag itself). 'is' is the engine default.
+  var DEFAULT_LOCALE = 'is';
+  try {
+    var identityEl = document.getElementById('identity');
+    var identity = identityEl ? JSON.parse(identityEl.textContent) : null;
+    var publicDefault = identity && identity.locale && identity.locale.publicDefault;
+    if (SUPPORTED_LOCALES.indexOf(publicDefault) !== -1) DEFAULT_LOCALE = publicDefault;
+  } catch (_e) { /* a malformed tag reads as "no tag" */ }
+
+  var STRINGS = {
+    is: {
+      aria:    'Samþykki fyrir vafrakökum',
+      before:  'Þessi vefur notar vafrakökur fyrir vefmælingar. Sjá ',
+      link:    'persónuverndarstefnu',
+      after:   '. Samþykkir þú mælingavafrakökur?',
+      accept:  'Samþykkja',
+      decline: 'Hafna',
+      privacyPath: '/personuvernd'
+    },
+    en: {
+      aria:    'Cookie consent',
+      before:  'This site uses cookies for analytics. See our ',
+      link:    'Privacy Policy',
+      after:   '. Do you consent to analytics cookies?',
+      accept:  'Accept',
+      decline: 'Decline',
+      privacyPath: '/personuvernd'
+    }
+  };
+
+  function strings() {
+    return STRINGS[resolveLocale()] || STRINGS.is;
+  }
 
   function getConsent() {
     try {
@@ -76,11 +115,12 @@
   }
 
   function createBanner() {
+    var s = strings();
     var banner = document.createElement('div');
     banner.id = 'cookie-consent-banner';
     banner.setAttribute('role', 'dialog');
     banner.setAttribute('aria-modal', 'false');
-    banner.setAttribute('aria-label', 'Cookie consent');
+    banner.setAttribute('aria-label', s.aria);
     // Compact card pinned to the bottom-right corner (was a full-width bottom
     // bar). Stacks the message above the Accept/Decline buttons. Shown on every
     // page until the visitor chooses.
@@ -114,31 +154,31 @@
     // prefixed href at click time and route through the SPA — a static
     // '#/privacy' no longer works since the router moved to clean URLs.
     var privacyLink = document.createElement('a');
-    privacyLink.textContent = 'Privacy Policy';
+    privacyLink.textContent = s.link;
     privacyLink.style.cssText = 'color:#a0a090;text-decoration:underline';
-    privacyLink.href = '/' + resolveLocale() + '/privacy';
+    privacyLink.href = '/' + resolveLocale() + s.privacyPath;
     privacyLink.addEventListener('click', function (e) {
       if (e.defaultPrevented || e.button !== 0 ||
           e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
-      var target = '/' + resolveLocale() + '/privacy';
+      var target = '/' + resolveLocale() + strings().privacyPath;
       history.pushState(null, '', target);
       window.dispatchEvent(new Event('spa:navigate'));
     });
 
-    text.appendChild(document.createTextNode('This site uses cookies for analytics. See our '));
+    text.appendChild(document.createTextNode(s.before));
     text.appendChild(privacyLink);
-    text.appendChild(document.createTextNode('. Do you consent to analytics cookies?'));
+    text.appendChild(document.createTextNode(s.after));
 
     var actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end';
 
     var acceptBtn = document.createElement('button');
-    acceptBtn.textContent = 'Accept';
+    acceptBtn.textContent = s.accept;
     acceptBtn.style.cssText = [
       'padding:0.4rem 1rem',
-      'background:#c8b882',
-      'color:#111',
+      'background:#D8C3A5',
+      'color:#100D0A',
       'border:none',
       'border-radius:3px',
       'cursor:pointer',
@@ -147,7 +187,7 @@
     ].join(';');
 
     var declineBtn = document.createElement('button');
-    declineBtn.textContent = 'Decline';
+    declineBtn.textContent = s.decline;
     declineBtn.style.cssText = [
       'padding:0.4rem 1rem',
       'background:transparent',

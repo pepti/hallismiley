@@ -9,6 +9,7 @@ const { requireAuth }                              = require('../auth/middleware
 const { requireRole }                              = require('../auth/roles');
 const { csrfProtect }                              = require('../middleware/csrf');
 const { createNewsUpload }                         = require('../middleware/upload');
+const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 // ── Public read endpoints ─────────────────────────────────────────────────────
 // NOTE: /admin/list must be registered before /:slug so Express does not treat
@@ -67,6 +68,7 @@ router.post('/:id/media',
       next();
     });
   },
+  verifyImageBytes,
   newsController.addMedia);
 
 router.patch('/:id/media/:mediaId',

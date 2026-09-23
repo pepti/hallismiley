@@ -52,13 +52,20 @@ server/services/bookkeeping/
   posService.js            counter sales
   documentService.js       fylgiskjöl — upload, checksum, private storage
   auditLog.js              who did what (closed action vocabulary)
+  intakeService.js         the capture spine: proposals in, createExpense() out (096)
+  intakeShape.js           the intake row's validated shape
+  replay.js, replayCase.js the replay benchmark (books:replay) and its case format
+  peppol/                  UBL 2.1 / BIS 3.0 emitter (095): ublInvoice, party, vatCategory,
+                           identifiers, conformance, xml, index
 
+server/models/Commission.js                        seller commission on service invoices (098/102)
 server/controllers/adminBookkeepingController.js   the whole HTTP surface
 server/routes/adminBookkeepingRoutes.js            gating
 server/services/bookkeepingPdf.js                  invoice, receipt and payslip PDFs
 server/scripts/books-fetch-fx.js                   exchange rates
 server/scripts/books-archive-export.js             the 7-year archive (see gr. 20)
-server/scripts/books-backfill-orders.js            issue invoices for historical paid orders (npm run books:backfill)
+server/scripts/books-backfill-orders.js            issue invoices for historical paid orders
+server/scripts/books-replay.js                     replay a recorded period into a *_replay DB
 server/scripts/seed-books-demo.js                  demo data for a software business
 
 public/js/views/AdminBooksView.js         overview
@@ -70,22 +77,25 @@ public/js/views/AdminBankView.js
 public/js/views/AdminLedgerView.js
 public/js/views/AdminPayrollView.js
 public/js/views/AdminPosView.js
+public/js/views/AdminBooksSettingsView.js  /admin/books/settings — seller identity, chart confirmation, FX
+public/js/views/AdminCommissionView.js    /admin/commission — statements, payouts (view id commission)
 public/js/views/booksShared.js            isk(), status pills, readiness banner
 ```
 
 Schema lives in `server/config/schema.js` — migrations **072** (foundation), 073
 (expenses), 074 (product VAT rate), 075 (reconciliation), 076 (payroll lifecycle), 077
-(counter sales), **078** (payroll integrity — séreign employee/employer totals on
-`payroll_runs`, and it re-defines all three 076 payroll guards: a payslip cannot be
-reparented onto a draft run, every figure and the attribution of a final run are
-frozen, and a used year's rates including `municipal_rate` / `source_note` /
-`confirmed_by` are frozen — read 078, not 076, for the current bodies), **079** (POS
-idempotency — a partial unique index on caller-supplied `client:` payment keys), **085**
-(vehicle accounts, 2026-09-12 — 6600 stays the deductible commercial-vehicle account, new
+(counter sales), 078 (payroll integrity triggers), 079 (POS idempotency), **095**
+(structured party block + `invoice_ubl_exports`), **096** (capture spine: `source_kind`
++ `books_intake`), 099 (`invoices.account_id` / `service_kind` / `service_period` +
+the double-issue indexes), **100** (buyer party from `customer_accounts`, the 072 guard
+widened to the new columns), **101** (`2150 Fyrirframinnheimtar tekjur`: the build
+deposit as deferred revenue, released on the final half), **103** (vehicle accounts,
+2026-09-13 from the base's 085 — 6600 stays the deductible commercial-vehicle account, new
 blocked `6610 Rekstur fólksbifreiða`; the chart is corrected by migration, never by editing
-072). The
-`.sql` files under `server/migrations/` are generated mirrors for human reading;
-**schema.js wins** if they ever disagree.
+072), plus the commission ledger in 098 and 102 (`commission_events`, statements,
+payouts, clawback). The `.sql` files under
+`server/migrations/` are generated mirrors for human reading; **schema.js wins** if
+they ever disagree.
 
 ---
 
@@ -100,7 +110,8 @@ journal_lines     entry_id, account_id, debit, credit, memo, vat_rate, sort_orde
 ```
 
 `ledger_accounts` is the chart: code, name, type (asset/liability/equity/revenue/expense),
-`vat_code`, `input_vat_blocked`, `is_active`.
+`vat_code`, `input_vat_blocked` (TRUE on 6610 fólksbifreiðar, 6900 risna and 6910 fæði —
+the statutory input-VAT exclusions, refused with a reason on the expense), `is_active`.
 
 ### Posting
 
@@ -145,7 +156,7 @@ to be careful.
 | Requirement | Where it lives |
 |---|---|
 | Reglugerð 505/2013 gr. 8 — an identifiable person behind every entry | `created_by` NOT NULL with ON DELETE RESTRICT, plus `books_audit_log` |
-| gr. 9 — posted entries are append-only | `books_forbid_posted_entry_mutation`, `books_forbid_posted_line_mutation`, `books_forbid_line_insert_into_posted`, `books_protect_issued_invoice`, `books_protect_issued_invoice_line`, `books_forbid_invoice_line_insert_into_issued`, `books_forbid_any_mutation` (payments, credit notes, VSK returns, the audit log), `books_protect_expense`, `books_protect_document`, `books_freeze_settled_link`, `books_protect_payroll_run`, `books_protect_payslip`, `books_protect_payroll_rates` |
+| gr. 9 — posted entries are append-only | `books_forbid_posted_entry_mutation`, `books_forbid_posted_line_mutation`, `books_forbid_line_insert_into_posted`, `books_protect_issued_invoice` (extended by migration 100 to the structured party columns), `books_protect_issued_invoice_line`, `books_forbid_invoice_line_insert_into_issued`, `books_protect_expense`, `books_protect_document`, `books_protect_payroll_run`, `books_protect_payslip`, `books_protect_payroll_rates`; `books_forbid_any_mutation` on the commission statement tables (102) |
 | gr. 14 — áreiðanleiki (reliability) of stored documents | SHA-256 on every upload, re-verified on every read and on every archive export |
 | gr. 16 — a gapless number series per document type | `bookkeeping_counters` under a row lock |
 | Reglugerð 50/1993 — what a sales document must show | snapshotted onto the invoice row at issue, and printed from that row, so a reprint years later reproduces the document as issued |
@@ -164,7 +175,7 @@ Two properties worth stating outright because they constrain everything else:
 
 ## Money
 
-Whole ISK, as BIGINT, everywhere in the books — no float in the money path. A foreign-currency original is captured in **that currency's minor units** (EUR 20.00 is `2000`; `utils/fx.js`, `expenseService.js`), then converted at the captured rate. The expense form converts at the edge (`public/js/utils/money.js`, the ESM twin of `MINOR_UNITS` — keep the two tables in sync): a person types `20.00`, the API receives `2000`, and the input's step follows the currency. Until 2026-09-12 the base form sent the typed figure raw, so EUR 20.00 booked as EUR 0.20.
+Whole ISK, as BIGINT, everywhere. There is no minor unit and no float in the money path.
 
 `pg` returns BIGINT as a **string**, so every read path coerces with `Number()`. When you
 add a query, coerce.
@@ -228,7 +239,7 @@ Each area is a view id, a service, a screen, and a set of postings.
 
 ### Invoices
 
-Issued from a paid order (`POST /invoices/from-order/:orderId`, `invoiceService.createFromOrder`) — there is no standalone invoice path in the base. (Counter-sale receipts, `series = 'receipt'`, are the other row kind in the `invoices` table — `posService.js`, migration 077 — so a grep finds two INSERTs.) Snapshots seller and customer detail at issue.
+Issued from a paid order, or standalone. Snapshots seller and customer detail at issue.
 Payments, refunds and credit notes are separate facts:
 
 - a **payment** is cash in,
@@ -329,6 +340,32 @@ The day's takings are split by tender because that is how a drawer is counted �
 figure should equal what is physically there, and the card figure what the acquirer will
 settle. One total answers neither question.
 
+### Service invoices and the build deposit (migrations 099 – 101)
+
+`invoiceService.createServiceInvoice()` issues a company's own service documents against a
+`customer_accounts` row: the build halves (50 % / 50 %), the recurring month, overage. Two
+partial unique indexes (099) make a double issue a 409 rather than a second statutory
+document. The buyer party comes from the account (100); the invoice keeps the value **as
+at issue**.
+
+The first build half is a **prepayment**, not revenue (101): it is credited to
+`2150 Fyrirframinnheimtar tekjur` and released into revenue by a `revenue_recognition`
+entry that issuing the final half posts in the same transaction. VSK does **not** wait —
+`2150` carries `vat_code = output_24` and `vatService.ADVANCE_TURNOVER_ACCOUNTS` counts it
+into reitur A in the period the deposit invoice is dated (l. nr. 50/1988 13. gr.). The
+standing invariant: **2150 never goes debit**; crediting a released deposit goes against
+the account it was recognised into.
+
+### Commission (migrations 098 and 102)
+
+Not a books area in the RBAC sense (view id `commission`, its own scope in
+`server/auth/commissionScope.js`), but it posts nothing and derives everything from the
+invoice ledger, so it belongs in the "what does this post" picture: `Commission.recordForInvoice`
+snapshots seller and rate per service invoice; payability is an **amount**
+(`PAYABLE_NOW_ISK`, netting credit notes and refunds proportionally) rather than a flag;
+102 adds seller-month statements over a running balance, payouts and clawback by set-off.
+Details: `docs/HISTORY.md` (accounts-commission, review-099, migrations-100-102) and `docs/ACCOUNTANT-QUESTIONS.md` §11.
+
 ---
 
 ## Security model
@@ -347,7 +384,8 @@ being given what each person earns.
 
 `ADMIN_VIEW_IDS` in `server/auth/adminViews.js` must stay 1:1 with `ADMIN_NAV` in
 `AdminSidebar.js` — a unit test enforces the parity, because an id with no screen is
-ungrantable and a screen with no id is a dead link.
+ungrantable and a screen with no id is a dead link. The one sanctioned exception is
+`PERMISSION_VIEW_IDS` (`allaccounts`): grantable, no sidebar line, subtracted by the test.
 
 Other notes:
 
@@ -355,8 +393,9 @@ Other notes:
   later outside every declared prefix cannot inherit only `requireAuth`.
 - `export.csv` paths are declared **before** any `:id`/`:code` pattern that would swallow
   them.
-- PDF and document routes carry a tighter `docLimiter`, placed **before** the view check so
-  refused attempts count against it too.
+- PDF, CSV and document routes carry a tighter `docLimiter`, placed **before** the view
+  check so refused attempts count against it too (`GET /documents/:id` was the one
+  exception until 2026-09-12).
 - Every CSV cell goes through formula neutralisation (`utils/csv.js`). Guest checkout names
   and supplier names typed off a paper invoice are attacker-controlled, and an export is a
   real delivery mechanism into a bookkeeper's spreadsheet.
@@ -374,34 +413,91 @@ npm run seed:books -- --wipe             # ...replacing what is there
 npm run books:fx -- --date=2026-08-06 --rate=143.20
 npm run books:archive -- --out=./archive/2026
 npm run books:archive -- --verify-only --out=./archive/2026
+npm run books:replay -- --all             # replay recorded periods, diff against the FILED figures
+# GET /api/v1/admin/bookkeeping/invoices/:id/ubl.xml — the same issued invoice as a
+# Peppol BIS Billing 3.0 (UBL 2.1 / EN 16931) document; see server/services/bookkeeping/peppol/
+npm run books:replay -- --case=D:/customer1/2025-P6.json --db=postgresql://…/customer1_replay
 ```
+
+`books:replay` drops and recreates its target schema, so it refuses any database whose
+name does not end in `_replay` (`createdb orangesmiley_replay` once). Cases live in
+`server/fixtures/books-replay/` (this company's own) or outside the repo (a customer's);
+the format and the reason the D-split is diffed are in `server/services/bookkeeping/replayCase.js`.
 
 Tests:
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hallismiley_books_test npm test
+npm test                                            # 4 workers, a database each
+npx jest tests/integration/booksReports.test.js     # one suite, still on its own worker DB
 ```
 
-The suite is serial by configuration (`jest.config.js` `maxWorkers: 1`; `--runInBand`
-adds nothing). The `TEST_DATABASE_URL` is not optional advice. Jest's globalSetup
-**drops** the test database, so two sessions sharing `hallismiley_test` produce a
-hundred nondeterministic failures across unrelated suites.
+Since 2026-09-02 the test databases are derived per branch and per Jest worker
+(`tests/workerDb.js`: `orangesmiley_<branch>_w<N>_test`, migrated from one template), so
+two worktrees never share one and `TEST_DATABASE_URL` is only needed to pin a fixed name —
+see `docs/TESTING.md`. The old advice here (a hand-named `hallismiley_books_test` and
+`--runInBand`) predates that.
 
 ### First run
 
 The books refuse to issue anything until the seller identity is set, and every screen shows
-a standing warning until it is. The screen is `/admin/books/settings`
-(`AdminBooksSettingsView`, reached from the "Stillingar" button on the overview;
-ported from orangesmiley 2026-09-12 and narrowed to what this base's
-`Setting.updateBookkeepingSettings` accepts — no Peppol party block, and the chart
-confirmation is a date only). Reads ride the `books` view, writes are admin. In order:
+a standing warning until it is — the warning links to `/admin/books/settings`, where all
+of it is done. In order:
 
-1. Útgefandi → seller name, kennitala, VSK number, address (`PATCH …/settings`).
-2. Bókhaldslykill → read the chart, then confirm (clears the `coa_confirmed_at` warning).
-3. Gengi → an EUR rate, if you invoice in EUR (`POST …/fx-rates`, or `npm run
-   books:fx`); the screen shows freshness per currency IN USE, and a rate older than
-   14 days is refused (`FxRate.MAX_STALENESS_DAYS`).
+1. Útgefandi → seller name, kennitala (check-digit validated), VSK number, address.
+2. Confirm the chart of accounts. Confirming **requires a note** saying what was reviewed
+   and against what, and is stamped with who confirmed — the same rule as the payroll
+   year's `source_note`. It clears the `coa_confirmed_at` warning.
+3. A rate for every currency you post in, per document date. The dashboard warns per
+   currency actually in use (a USD supplier invoice with no USD rate is as loud as EUR).
 4. Payroll: enter the year's figures and **confirm** them, if you run payroll.
+
+To run a real VSK period through the books in parallel with the incumbent — the route to
+the first filing this module has ever been checked against — see `BOOKS-PARALLEL-RUN.md`.
+
+### E-invoicing (Peppol BIS Billing 3.0), outbound
+
+An issued invoice can be downloaded as a UBL 2.1 / EN 16931 document from the invoice
+screen (`GET /invoices/:id/ubl.xml`). Three things to know:
+
+- **It needs the address as parts.** Migration 095 snapshots `seller_street/city/postal_zone/
+  country` (from the books settings) and `customer_street/city/postal_zone` (from the order's
+  shipping address) onto every invoice at issue. An invoice issued before 095 — or after it
+  with the parts unset — is **refused by name** (`SELLER_ADDRESS_INCOMPLETE`,
+  `BUYER_ADDRESS_INCOMPLETE`); the printed address is never parsed into a statutory document.
+  `peppol_complete` in the settings is separate from `seller_complete` on purpose.
+- **11% is category S at 11, not "AA"; a zero-rated export is G with the reason.** The books
+  extract VAT per line; EN 16931 wants per-rate `round(taxable × rate)`. The difference
+  (a króna or two) is stated as `PayableRoundingAmount` (BT-114), so the document carries the
+  rule-conformant VAT and the payable the customer actually owes; more than 3 kr. is refused
+  as `VAT_ROUNDING_DRIFT`.
+- **Every emission is recorded** in `invoice_ubl_exports` — the exact bytes and their SHA-256,
+  append-only — with an `invoice.ubl_exported` audit row, so a receiver's verdict can be tied
+  to what was sent. The seller's VSK number is emitted as `IS` + digits (BR-CO-09); whether a
+  real BIS 3.0 receiver accepts that for a non-EU number is the open question, behind one
+  constant in `peppol/identifiers.js`.
+
+### The capture spine — intake queue and the trust ladder
+
+Migration 096 gives every fylgiskjal a **`source_kind`** — how much it can be trusted, a
+different axis from what it is: `peppol` > `embedded_xml` > `extracted` > `manual`. The
+ladder may drive how the entry form pre-fills and what the archive says about provenance.
+It may **never** drive whether a person is required; `tests/integration/booksIntake.test.js`
+has a test named after that.
+
+`books_intake` is a queue of **proposals** (`/admin/books/expenses` → "Í bið"). A row
+touches no account and moves no money. The only way out of it and into the ledger is
+`expenseService.createExpense()` with the accepting admin as `created_by` — the same call
+the manual form makes, in the same transaction, so the duplicate 409, the VAT verdict and
+the period lock behave identically. Accepting uses the figures the operator submitted,
+never the machine's `suggested` block. The database enforces the gate: an `accepted` row
+without an `expense_id` and a `decided_by`, a decided row returned to `pending`, or a
+repointed expense link are all refused by CHECK or trigger. There is deliberately **no
+confidence score** — a number is the seed of an auto-post threshold.
+
+v1 extracts nothing (an upload is the `manual` rung, whatever a client claims). When
+inbound Peppol lands, its parser is a second caller of `intakeService.receive()` with a
+real `suggested` block and `source_kind = 'peppol'`, and nothing else changes.
+`expenses.supplier_vat_number` (also 096) now keeps the number `assessVat()` decided on.
 
 ---
 
@@ -415,8 +511,8 @@ Collected from actually hitting them.
   that a column nothing reads is a column nobody notices is empty.
 - **Test suites share one append-only journal.** There is no DELETE to reset between them,
   so absolute balance assertions drift as tests are added. Assert **deltas**, or claim a
-  private year. Currently claimed: 2017 backfill, 2018 POS, 2019 reports, 2020 payroll,
-  2021–2025 VSK, 2026 the seed.
+  private year. Currently claimed: 2017 the replay benchmark, 2018 POS, 2019 reports,
+  2020 payroll, 2021–2025 VSK, 2026 the seed.
 - **`ledger_accounts.sort`, not `sort_order`.** `sort_order` exists only on `journal_lines`.
 - **`payroll_rates.tax_year` is capped at 2020–2100**, so a test year must be inside that
   and (if it records a cash payment) in the past.
@@ -430,9 +526,6 @@ Collected from actually hitting them.
 - **`git fetch` before pushing.** A concurrent session pushed eleven commits to this branch
   mid-work, including fixes to code this module owns.
 - **`reverseEntry` returns a wrapper**, `{ reversal, ... }` — not the entry.
-- **Migration 076's tail comment says "Deliberately none, and 072 seeded none either." — wrong.** 072 seeds
-  the 2026 `payroll_rates` row (the one `ACCOUNTANT-QUESTIONS.md` §3 describes). The
-  comment cannot be edited (applied migration); the docs are right, it is not.
 - **`products.active`, not `is_active`.**
 - **Inline `node -e` with Icelandic text, backticks or `$` gets mangled by bash.** Write the
   script to a file and run it.
