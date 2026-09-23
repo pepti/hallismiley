@@ -67,6 +67,16 @@ async function enable(enabled) {
 // ── POST /api/v1/change-requests ─────────────────────────────────────────────
 
 describe('POST /api/v1/change-requests — environment gate', () => {
+  // The 5 MB body is parsed only after the gate (routes/changeRequestRoutes.js).
+  // Until 2026-09-23 an app-level parser read it first, so an anonymous POST
+  // of malformed JSON answered 400 (parsed, then rejected) instead of the
+  // gate's 404.
+  test('anonymous body is refused by the gate before it is parsed', async () => {
+    const res = await request(app).post('/api/v1/change-requests')
+      .set('Content-Type', 'application/json').send('{"batch": [');
+    expect(res.status).toBe(404);
+  });
+
   test('404s in production while the switch is off, even for an admin', async () => {
     expect((await submit(null)).status).toBe(404);
     expect((await submit(userCookie)).status).toBe(404);

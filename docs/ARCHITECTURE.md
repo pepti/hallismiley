@@ -113,6 +113,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
 **Rules that must hold**
+- Emails are validated with `isEmail()` (length ≤ 254 BEFORE the regex; `EMAIL_RE`
+  alone backtracks quadratically on anonymous input) ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - Lucia v3 owns sessions; there is no JWT layer (invariant 3).
 - The 2FA gate is mirrored: server `mfaService.protectedRole` (admin or
   `accounts` holder) and client `auth.isMfaProtected()` must widen together;
@@ -164,7 +166,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
@@ -726,8 +728,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   cart line currently goes straight to Stripe (ENHANCEMENTS #25) ([ui-kit](HISTORY.md#ui-kit)).
 - Product-schema `brand` still names Rekstrarkerfið on every SKU — a known
   post-R1 note, not a rule.
+- The 4 MB product-import body is parsed inside `adminShopRoutes.js`, after
+  `requireAuth`, `requireView('products')`, the limiters and (apply) CSRF, with
+  `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
+  Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 
@@ -788,9 +794,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Logs scrub secrets and the `q` param; `app.js` scrubs request URLs in its
   own lines ([review-099](HISTORY.md#review-099)).
 - `checkMemory` runs once a minute from `server.js` (base-sync 2026-09-13).
+- `/metrics` and the `checks` detail of `/ready` share ONE access rule,
+  `internalsDenied()` in `server/app.js` (bearer `METRICS_TOKEN`, else
+  localhost in production). Anonymous `/ready` keeps `status`, `uptime` and
+  `timestamp` — `deploy.yml` reads `uptime` to prove the swap happened, so
+  never remove it from the public body. Both read `server/observability/readiness.js`;
+  Admin → Monitoring gets the full report from `GET /api/v1/admin/events/health`
+  (admin only, `no-store`) ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - The staff audit log is read on `/admin/monitoring` (domain 8 owns the writes).
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
 
 ## 14. Self-update
 
@@ -880,6 +893,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `themePrefs.getEffectiveEnv()` is the one client answer, re-evaluated on
   `authchange` ([test-chrome-admin](HISTORY.md#test-chrome-admin)).
 - Sits in the Þjónusta sidebar group as the support product ([admin-reshape](HISTORY.md#admin-reshape)).
+- The 5 MB submit body is parsed in `changeRequestRoutes.js` after the submit
+  limiter, the gate and CSRF, then sanitized; `app.js` skips its global parser
+  for this path ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - **The launcher owns the bottom-right corner while mounted**
   ([rk-feed](HISTORY.md#rk-feed-2026-09-23)): the widget sets
   `body.has-cr-widget` on mount / removes it on destroy, `test-env.css` sets
@@ -889,7 +905,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `contact.spec.js` proves the bar's buttons take the click with the widget
   mounted.
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [admin-reshape](HISTORY.md#admin-reshape) · [test-chrome-admin](HISTORY.md#test-chrome-admin) · [rk-feed](HISTORY.md#rk-feed-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
 
 ## 17. Content, settings, background
 
@@ -940,8 +956,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Brand assets carry the CORP (cross-origin resource policy) exemption
   [harvest-1](HISTORY.md#harvest-1). `avatarHint` must match the enforced 5 MB avatar limit [ui-kit](HISTORY.md#ui-kit).
 - Alert on volume, never block (domain 13).
+- `sanitizeBody` strips tags with the linear `stripTags()` — byte-identical to
+  `/<[^>]*>/g`, which was quadratic on runs of `<` (100 kb blocked the event
+  loop 2.3 s, before any limiter). Never reintroduce a backtracking regex on
+  request bodies; `/<[^<>]*>/` is NOT equivalent ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
+- Large bodies (import 4 MB, change requests 5 MB) are parsed inside their
+  routers after the gates, never by an app-level parser ahead of them ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [harvest-2](HISTORY.md#harvest-2)
+**History**: [base-sync](HISTORY.md#base-sync) · [harvest-2](HISTORY.md#harvest-2) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
 
 ## 19. Email
 

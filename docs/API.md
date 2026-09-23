@@ -291,15 +291,17 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
 | `/api/v1/events` | `eventRoutes.js` | public beacon, own limiter | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
 | `/api/v1/admin/mcp-tokens` | `mcpAdminRoutes.js` | admin | `docs/mcp.md` |
-| `/api/v1/admin/events` | `adminEventRoutes.js` | admin (`requireRole`) | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
+| `/api/v1/admin/events` | `adminEventRoutes.js` | admin (`requireRole`); `GET /health` = the full readiness report for Admin → Monitoring | [ARCHITECTURE §13](ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics) · [HISTORY](HISTORY.md#harvest-1) |
 | `/api/v1/ambience` | `ambienceRoutes.js` | public, always 200 (`{available:false}` on failure) | [ARCHITECTURE §4](ARCHITECTURE.md#4-themes-scenes-ambience) · [HISTORY](HISTORY.md#scene-engine) |
 | `/api/v1/news` | `newsRoutes.js` | public reads (hidden surface) | — |
 | `/api/v1/party` | `partyRoutes.js` | party module (hidden) | — |
 | `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface) | — |
 
 Root-level operational routes: `GET /health` (liveness, no DB), `GET /ready`
-(DB + breaker + memory, `503` when not ready), `GET /metrics`
-(`Authorization: Bearer <METRICS_TOKEN>`), `POST /csp-report`.
+(DB + breaker + memory, `503` when not ready — anyone gets `status`, `uptime`
+and `timestamp`; the `checks` detail only with the `/metrics` credential),
+`GET /metrics` (`Authorization: Bearer <METRICS_TOKEN>`; without a token
+configured, localhost only in production), `POST /csp-report`.
 
 Root-level discovery routes, all public and cached 10 minutes:
 `GET /sitemap.xml` (the advertised surface with `<lastmod>` from

@@ -43,9 +43,8 @@ const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register, dbPoolTotal, dbPoolIdle, dbPoolWaiting } = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
-const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
-const { healthCheckFailed } = require('./observability/alerts');
-const { readMemory } = require('./observability/memoryUsage');
+const { dbCircuitBreakerMiddleware } = require('./observability/circuitBreaker');
+const { runReadinessChecks, readinessBody } = require('./observability/readiness');
 const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
@@ -204,21 +203,27 @@ app.post('/api/v1/shop/webhook',
 // 404 unless INSTANCE_ROLE=public with SELLER_PUBLISH_SECRET set.
 app.use('/api/v1/seller-publish', require('./routes/sellerPublishRoutes'));
 
-// Change-request submissions may carry an inline base64 screenshot, so this
-// path gets a larger JSON limit. Mounted BEFORE the global 100 kb parser —
-// once body-parser sets req._body the global parser short-circuits for this
-// path. Note this parser also runs before the rate limiters and the route's
-// gate (middleware/changeRequestGate.js): a body on this path is parsed before
-// anything can refuse it, which is the price of the ordering trick above.
-app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
+// Change-request submissions may carry an inline base64 screenshot (5 MB).
+// Like the product import below, that body is parsed in its own router
+// (routes/changeRequestRoutes.js) AFTER the submit limiter, the admin gate and
+// CSRF — until 2026-09-23 an app-level 5 MB parser sat here, ahead of all of
+// them, so an anonymous body was parsed and sanitized before the gate 404'd it.
 
-// Product CSV import posts the whole catalogue as JSON rows, so this path gets a
-// larger JSON limit. Mounted BEFORE the global 100 kb parser (same pattern as
-// change-requests above); still admin-gated downstream by the shop routes.
-app.use('/api/v1/admin/shop/products/import', express.json({ limit: '4mb' }));
+// Product CSV import posts the whole catalogue as JSON rows (up to 4 MB). That
+// body is NOT parsed here: until 2026-09-23 a 4 MB parser sat at this point,
+// ahead of the rate limiters and the admin gate, so an anonymous caller got a
+// 4 MB body parsed and sanitized before anything could refuse it. The global
+// parser below now skips the import path, and adminShopRoutes.js parses it
+// (and runs sanitizeBody on it) only after requireAuth, requireView('products'),
+// both limiters and — for apply — CSRF. The match is case-insensitive like
+// Express routing, and ends at a slash or end of path, so only the import
+// routes themselves are skipped.
+// The two large-body paths the global parser leaves unread (see above).
+const LARGE_BODY_PATH = /^\/api\/v1\/(admin\/shop\/products\/import|change-requests)(\/|$)/i;
+const defaultJson = express.json({ limit: '100kb' });
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
-app.use(express.json({ limit: '100kb' }));
+app.use((req, res, next) => (LARGE_BODY_PATH.test(req.path) ? next() : defaultJson(req, res, next)));
 app.use(cookieParser());
 
 // ── A03 Injection: sanitize all incoming body strings ────────────────────────
@@ -417,98 +422,43 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ── Readiness probe — checks DB and system health before accepting traffic ─────
-app.get('/ready', async (req, res) => {
-  const { query: dbQuery, pool } = require('./config/database');
-
-  async function measureEventLoopLag() {
-    return new Promise(resolve => {
-      const start = process.hrtime.bigint();
-      setImmediate(() => resolve(Number(process.hrtime.bigint() - start) / 1e6));
-    });
-  }
-
-  const checks = {};
-  let overallOk = true;
-
-  // DB connectivity
-  try {
-    await Promise.race([
-      dbQuery('SELECT 1'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-    ]);
-    checks.database = { status: 'ok' };
-  } catch (err) {
-    checks.database = { status: 'error', message: err.message };
-    overallOk = false;
-    healthCheckFailed('database', { message: err.message });
-  }
-
-  // DB pool health
-  checks.dbPool = {
-    status:   pool.waitingCount > 5 ? 'degraded' : 'ok',
-    total:    pool.totalCount,
-    idle:     pool.idleCount,
-    waiting:  pool.waitingCount,
-  };
-  if (pool.waitingCount > 5) overallOk = false;
-
-  // Circuit breaker state
-  checks.circuitBreaker = {
-    status: dbCircuitBreaker.state === 'closed' ? 'ok' : 'degraded',
-    state:  dbCircuitBreaker.state,
-  };
-  if (dbCircuitBreaker.state === 'open') overallOk = false;
-
-  // Memory usage — reported for visibility; does not flip readiness. Reading
-  // comes from observability/memoryUsage.js, shared with the periodic alert so
-  // the two can never disagree again (they did: both used heapUsed/heapTotal,
-  // which V8 grows on demand — see the module header). Ported from
-  // icelandicstore #180.
-  const mem = readMemory();
-  checks.memory = {
-    status:      mem.heapRatio > 0.9 ? 'critical' : mem.heapRatio > 0.8 ? 'degraded' : 'ok',
-    heapUsedMb:  mem.heapUsedMb,
-    heapLimitMb: mem.heapLimitMb,
-    rssMb:       mem.rssMb,
-    ratio:       mem.ratioPct,
-  };
-
-  // Event loop lag — reported for visibility; does not flip readiness.
-  // Short-lived spikes (GC, test noise) shouldn't evict the pod from the LB.
-  const lagMs = await measureEventLoopLag();
-  checks.eventLoop = {
-    status: lagMs > 100 ? 'degraded' : 'ok',
-    lagMs:  Math.round(lagMs),
-  };
-
-  const status = overallOk ? 200 : 503;
-  res.status(status).json({
-    status:    overallOk ? 'ok' : 'degraded',
-    uptime:    Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-    checks,
-  });
-});
-
-// ── Prometheus metrics endpoint ───────────────────────────────────────────────
-app.get('/metrics', async (req, res) => {
-  // Auth: bearer token if METRICS_TOKEN is set, otherwise localhost only
+// Who may read process internals (/metrics, and the `checks` detail of /ready):
+// a bearer METRICS_TOKEN when one is configured, otherwise localhost only in
+// production, anyone in dev/test. Returns null when allowed, else the HTTP
+// status /metrics answers with. One rule for both endpoints, so /ready can
+// never disclose what /metrics refuses.
+function internalsDenied(req) {
   const metricsToken = process.env.METRICS_TOKEN;
   if (metricsToken) {
     // Constant-time: `!==` returns at the first differing byte, so response
     // time would tell a caller how much of a guessed token was right.
-    const authHeader = req.headers.authorization || '';
-    if (!safeEqual(authHeader, `Bearer ${metricsToken}`)) {
-      return res.status(401).json({ error: 'Unauthorized', code: 401 });
-    }
-  } else if (process.env.NODE_ENV === 'production') {
-    // In prod without a token configured, only allow localhost
-    const ip = req.ip || req.socket.remoteAddress;
-    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
-      return res.status(403).json({ error: 'Forbidden', code: 403 });
-    }
+    return safeEqual(req.headers.authorization || '', `Bearer ${metricsToken}`) ? null : 401;
   }
+  if (process.env.NODE_ENV === 'production') {
+    const ip = req.ip || req.socket.remoteAddress;
+    return (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') ? null : 403;
+  }
+  return null;
+}
+
+// ── Readiness probe — checks DB and system health before accepting traffic ─────
+// Anyone gets the verdict: the HTTP status (200/503), `status`, `uptime` and
+// `timestamp`. `uptime` stays public on purpose — deploy.yml reads it to prove
+// the answering process is younger than the container swap. The `checks`
+// detail (pool counts, breaker state, heap and RSS, event-loop lag) goes only
+// to a caller who may read /metrics (internalsDenied above): it told anonymous
+// callers how loaded and how close to its limits the instance was. Admins read
+// the full report at GET /api/v1/admin/events/health (Admin → Monitoring).
+// The checks themselves live in observability/readiness.js.
+app.get('/ready', async (req, res) => {
+  const report = await runReadinessChecks();
+  res.status(report.ok ? 200 : 503).json(readinessBody(report, !internalsDenied(req)));
+});
+
+// ── Prometheus metrics endpoint ───────────────────────────────────────────────
+app.get('/metrics', async (req, res) => {
+  const denied = internalsDenied(req);
+  if (denied) return res.status(denied).json({ error: denied === 401 ? 'Unauthorized' : 'Forbidden', code: denied });
 
   try {
     // prom-client gauges are pull-based: refresh the pool numbers at scrape
