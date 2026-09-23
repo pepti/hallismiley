@@ -10,7 +10,8 @@
 //   2. This session's notifications — the sessionStorage toast log, i.e. what
 //      THIS admin saw in THIS tab. Rendered by the same helper the toast-click
 //      modal uses. It is a "what did that message say?" surface, not an audit log.
-//   3. A live snapshot of the server readiness probe (/ready).
+//   3. A live snapshot of the server readiness checks
+//      (GET /api/v1/admin/events/health — the admin twin of /ready).
 
 import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
@@ -368,9 +369,10 @@ export class AdminMonitoringView {
 
   async _loadHealth() {
     try {
-      // /ready answers 503 with the SAME body when degraded — that body is
-      // exactly what we want to show, so don't gate on res.ok.
-      const res = await fetch('/ready', { credentials: 'include' });
+      // The admin twin of /ready (public /ready withholds the checks detail).
+      // It answers 503 with the SAME body when degraded — that body is exactly
+      // what we want to show, so don't gate on res.ok.
+      const res = await fetch('/api/v1/admin/events/health', { credentials: 'include' });
       this._health = await res.json();
       this._healthError = null;
     } catch (err) {

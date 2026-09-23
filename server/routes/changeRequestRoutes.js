@@ -3,7 +3,7 @@
 // Works for logged-out testers on the test stack; softAuth attaches the user
 // when a session cookie is present, and has to run BEFORE the gate because the
 // gate checks the role set. The 5 MB JSON limit for inline screenshots is
-// mounted in app.js, ahead of the global parser.
+// applied on the route below, after the limiter, the gate and CSRF.
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
 const router    = express.Router();
@@ -12,6 +12,7 @@ const ctrl = require('../controllers/changeRequestController');
 const { changeRequestGate } = require('../middleware/changeRequestGate');
 const { isTestStack }       = require('../config/appEnv');
 const { csrfProtect }    = require('../middleware/csrf');
+const { sanitizeBody }   = require('../middleware/sanitize');
 // The shared soft auth resolves req.user.roles; the gate decides on the role
 // SET, so a private copy that only attached the user row would 404 every admin
 // granted through Admin → Roles.
@@ -32,6 +33,10 @@ const submitLimiter = rateLimit({
   message: { error: 'Too many change requests, please try again later.', code: 429 },
 });
 
-router.post('/', submitLimiter, softAuth, changeRequestGate, csrfProtect, ctrl.createBatch);
+// The 5 MB body is parsed HERE, after the limiter, the gate and CSRF (app.js
+// skips its global parser for this path); sanitizeBody runs on it again because
+// the global pass saw an empty body.
+router.post('/', submitLimiter, softAuth, changeRequestGate, csrfProtect,
+  express.json({ limit: '5mb' }), sanitizeBody, ctrl.createBatch);
 
 module.exports = router;

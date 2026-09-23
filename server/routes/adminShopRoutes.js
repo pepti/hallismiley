@@ -6,6 +6,7 @@ const adminShop                = require('../controllers/adminShopController');
 const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
+const { sanitizeBody }         = require('../middleware/sanitize');
 const { createProductUpload }  = require('../middleware/upload');
 const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
@@ -22,9 +23,14 @@ router.use('/orders',      requireView('orders'));
 router.get('/products',           adminShop.listProducts);
 // CSV round-trip — literal paths before /products/:id so they aren't read as ids.
 // Preview is read-only (no CSRF); apply mutates (CSRF). Both inherit requireView.
+// The 4 MB body is parsed HERE, after requireAuth + requireView('products'),
+// the app-level limiters and (apply) the header-based CSRF check — app.js skips
+// its global parser for this path. sanitizeBody runs again because the global
+// one already ran on an empty body.
+const importBody = [express.json({ limit: '4mb' }), sanitizeBody];
 router.get('/products/export.csv',      adminShop.exportProducts);
-router.post('/products/import/preview', adminShop.previewProductImport);
-router.post('/products/import/apply',   csrfProtect, adminShop.applyProductImport);
+router.post('/products/import/preview', ...importBody, adminShop.previewProductImport);
+router.post('/products/import/apply',   csrfProtect, ...importBody, adminShop.applyProductImport);
 router.get('/products/:id',       adminShop.getProduct);
 router.post('/products',          csrfProtect, adminShop.createProduct);
 router.patch('/products/:id',     csrfProtect, adminShop.updateProduct);

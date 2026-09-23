@@ -76,6 +76,32 @@ describe('POST /products/import/preview', () => {
     expect((await request(app).post(PREVIEW).set('Cookie', adminCookie).send({})).status).toBe(400);
   });
 
+  // The 4 MB body is parsed only after the admin gate (adminShopRoutes.js).
+  // Before 2026-09-23 an app-level parser read it first, so an anonymous POST
+  // of malformed JSON answered 400 (parsed, then rejected) — the body was
+  // touched before anything checked who sent it. Now it is refused 401 unread.
+  // (A 5 MB anonymous body is refused too, but the server closes the socket
+  // mid-upload, which supertest reports as ECONNRESET — not a stable assert.)
+  test('anonymous caller is refused before the body is parsed', async () => {
+    const res = await request(app).post(PREVIEW).set('Content-Type', 'application/json').send('{"rows": [');
+    expect(res.status).toBe(401);
+    const apply = await request(app).post(APPLY).set('Content-Type', 'application/json').send('{"rows": [');
+    expect(apply.status).toBe(401);
+  });
+
+  test('an admin still gets the 4 MB limit (a 1 MB body is parsed, not 413)', async () => {
+    const rows = [{ sku: 'CSV-P1', stock: '5', note: 'a'.repeat(1024 * 1024) }];
+    const res = await request(app).post(PREVIEW).set('Cookie', adminCookie).send({ rows });
+    expect(res.status).toBe(200);
+  });
+
+  test('the import body is still sanitized', async () => {
+    const rows = [{ sku: '<script>alert(1)</script>CSV-P1', stock: '6' }];
+    const res = await request(app).post(PREVIEW).set('Cookie', adminCookie).send({ rows });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain('<script>');
+  });
+
   test('400 when too many rows', async () => {
     const rows = Array.from({ length: 5001 }, () => ({ sku: 'x' }));
     expect((await request(app).post(PREVIEW).set('Cookie', adminCookie).send({ rows })).status).toBe(400);
