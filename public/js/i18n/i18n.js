@@ -222,7 +222,8 @@ export function t(key, params) {
   let msg = _messages[key] ?? _fallback[key] ?? key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      msg = msg.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      // A replacer function, so `$&`, `$'` etc. in a value stay literal.
+      msg = msg.replace(new RegExp(`\\{${k}\\}`, 'g'), () => String(v));
     }
   }
   return msg;

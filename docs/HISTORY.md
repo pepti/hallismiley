@@ -52,6 +52,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 | 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
 | 2026-09-23 | [`/ready` details and the product-import body behind the gate](#ready-and-import-order-2026-09-23) | Two findings from rekstrarkerfid's 2026-09-19 review, fixed in the engine: anonymous `/ready` returns status/uptime/timestamp only (`checks` follow the `/metrics` rule, `internalsDenied()`; admins read `GET /api/v1/admin/events/health`); the 4 MB import and 5 MB change-request parsers moved into their routers behind the gates, `sanitizeBody` re-applied; the review found `sanitizeBody`'s tag regex quadratic (100 kb of `<` = 2.3 s, before any limiter) — replaced by a linear, byte-identical `stripTags()`; no migration |
+| 2026-09-23 | [SSR splices saved copy literally — replacer functions in `ssrMeta.js`](#ssr-replace-literal-2026-09-23) | Öryggisvörður LOW from rekstrarkerfid: `$&`/`` $` ``/`$'`/`$$` in site_content copy and in the request path (og:url, no login needed) were expanded by `String.replace`; 17 calls in `rewriteHead` + `injectCrawlerContent` now take `() =>`; regression tests through `<head>`, JSON-LD and the crawler mirror; the review found the same bug in both `t()` interpolations, fixed too; no migration |
 
 ---
 
@@ -1803,3 +1804,59 @@ Tests: `observability.test.js` pins the anonymous `/ready` body to
 (it was 400 — parsed before auth), that an admin still gets the 4 MB limit, and
 that the import body is still sanitized. Eight of the new tests fail on the
 old code. No migration.
+
+<a id="ssr-replace-literal-2026-09-23"></a>
+## 2026-09-23 — SSR splices saved copy literally: replacer functions in `ssrMeta.js`
+
+**Why.** Öryggisvörður (LOW, reproduced in rekstrarkerfid the same day):
+`injectCrawlerContent` passed the crawler mirror to `String.prototype.replace`
+as the replacement *string*, so the replacement patterns `$&`, `` $` ``, `$'`
+and `$$` in admin-saved copy were expanded. `` $` `` pasted the whole template
+prefix (`<head>`, theme-boot.js and all) into the body, `$$` collapsed to `$`,
+and inside a JSON-LD block an expansion carried its own `</script>` and broke
+the JSON. `rewriteHead` had the same shape in every tag it rewrites, and the
+review showed one of them needs no login: og:url is `${APP_URL}${req.path}`,
+so a GET to `/en/zz$'` spliced the rest of the template into it and `/en/zz$&`
+put the original tag inside the attribute. Not script execution in either
+case: what gets spliced is the site's own template, never text the requester
+chooses, and `esc()` still covers the requester's and the admin's bytes. But
+it corrupted what crawlers and AI search read, and a crafted URL got a broken
+page cached for five minutes under that URL.
+
+**What changed.** All 17 `html.replace` calls in `rewriteHead` (title,
+description, robots, app-env, the two verification tokens, og:*, `<html lang>`
+with the identity attributes, og:site_name, author, the scene preload, the
+`</head>` tail with the identity hand-off and the JSON-LD) and
+`injectCrawlerContent` take a replacer function (`` () => `…` ``); a function's
+return value is inserted as is. `replaceById` already did. The rule is in
+[ARCHITECTURE §3](ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo).
+The internal review found the same defect in `{param}` interpolation: `t()` in
+`server/i18n/index.js` and in `public/js/i18n/i18n.js` passed the value as a
+replacement string, so a name, a request-body field name or an identity string
+carrying `$'` was expanded. Both take a replacer function now (rule in
+[ARCHITECTURE §5](ARCHITECTURE.md#5-i18n)).
+
+**Tests.** `tests/integration/ssrMeta.test.js`, "replacement patterns in saved
+copy stay literal", saves `` A $& B $` C $' D $$ E `` into `halli_bio.meta_description`,
+`home_hero.heading` and a published news article, then asserts the escaped
+text comes out byte-for-byte in the description and og:description, the
+crawler H1, the news `<title>`, description and crawler article, and the
+Article JSON-LD (every block still parses, and the Organization block is
+there); the page keeps one doctype, head, theme-boot script, body and app root.
+All three fail on the old code. A fourth case requests `` /<lc>/zz-$'-$&-$$ ``
+and asserts og:url and the canonical carry the path literally (a backtick is
+percent-encoded by the client, so it is not in the path); putting back the old
+og:url call alone fails it. Paths and the rows' locale come from the seam
+(`pathFor`, `forcedLocaleFor`), and the home case skips where a product
+re-describes `/` (it builds its own home mirror). `t()` is pinned by a case in
+`tests/unit/i18nIdentity.test.js` and by `tests/unit/i18nInterpolation.client.test.js`;
+both fail on the old code.
+
+**Downstreams.** rekstrarkerfid's copy of `ssrMeta.js` has diverged on the
+lines this changes (`og:url`, `og:image`, and its `injectCrawlerContent`, which
+nests the mirror inside `#app` and is where the bug was reported), so its next
+engine-sync conflicts there. Resolve each conflict as a replacer function and
+keep the product's markup: do NOT take the old template-string side. Its
+`ssrMeta.test.js` is gated off (`public-site` is `forked`), so these tests do
+not guard its copy; its own crawler tests should get the same payload.
+No migration.

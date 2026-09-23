@@ -267,6 +267,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
   new clip), and `_initHeroVideo` follows a live OS-setting change both ways;
   `/halli` keeps the waterfall on purpose; `e2e/navigation.spec.js` pins the
   filename [homepage](HISTORY.md#homepage).
+- **Every `html.replace` in `ssrMeta.js` takes a replacer function**, never a
+  template string, when the replacement holds content, config or request text
+  ([ssr-replace-literal](HISTORY.md#ssr-replace-literal-2026-09-23)). In a
+  replacement string `$&`, `` $` ``, `$'` and `$$` are patterns: admin copy
+  carrying them pasted the whole `<head>` into the body or a `</script>` into
+  the JSON-LD. `esc()` does not help — `$` is not an HTML character.
+  `tests/integration/ssrMeta.test.js` ("replacement patterns") pins it through
+  the `<head>`, the JSON-LD and the crawler mirror.
 - **Identity comes from the seam, never a literal**
   ([identity-seam](HISTORY.md#identity-seam-2026-09-22)): brand name and legal
   name, the title suffix, `og:site_name`, `<meta author>`, the Organization +
@@ -426,6 +434,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `{legalName}`; `has(locale, key)` tells an absent optional string from text.
   `tests/unit/pageTitle.test.js` holds the client and server tables to the
   same text for every title key.
+- **`t()` inserts a `{param}` value literally** ([ssr-replace-literal](HISTORY.md#ssr-replace-literal-2026-09-23)):
+  both interpolations (`server/i18n/index.js`, `public/js/i18n/i18n.js`)
+  pass a replacer function, so `$&`, `$'` and `$$` in a name or a config
+  string are never expanded as replacement patterns.
 - **Tests assert the visitor default, not Icelandic** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `tests/lib/locale.js` (`PUBLIC_DEFAULT_LOCALE`, `tx()`, `tClient()`,
   `localePrefix()`; `e2e/lib/locale.js` re-exports it) is where an engine
