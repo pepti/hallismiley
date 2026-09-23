@@ -93,9 +93,12 @@ module.exports = defineConfig({
       // (server/auth/mfaPolicy.js). The shared `testadmin` signs in dozens of
       // times a minute across four workers, which TOTP's replay guard (one code
       // per 30-second step) cannot serve — so THAT account is exempt, by name,
-      // through a switch production ignores. Every other admin is under the
-      // real rule; e2e/admin-totp-enrolment.spec.js walks one through it.
-      ADMIN_TOTP_EXEMPT: 'testadmin',
+      // through a switch production ignores, and so are the two per-spec
+      // admins that drive the sidebar in edit mode (admin-nav-colors,
+      // admin-surface: an unenrolled admin never reaches /admin edit mode —
+      // 13 timeouts in CI on 2026-09-23). Every other admin is under the real
+      // rule; e2e/admin-totp-enrolment.spec.js walks `enroladmin` through it.
+      ADMIN_TOTP_EXEMPT: 'testadmin,e2ecolorsadmin,e2esurfaceadmin',
       // Exercise the encrypted-at-rest path. 32 bytes, base64, e2e-only.
       TOTP_ENC_KEY: 'ZTJlLW9ubHktdG90cC1rZXktMzItYnl0ZXMtbG9uZyE=',
     },
