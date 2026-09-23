@@ -31,6 +31,8 @@ superseded: {
 },
 ```
 
+**Superseding a table means superseding what alters it.** If a product supersedes the engine migration that CREATES a table (rekstrarkerfid supersedes `097_leads` because its own `092_leads` made that table first), it must also supersede every later engine migration that ALTERS it (`108_leads_notification`). On an existing database the ALTER would be a harmless no-op, but on a FRESH one the engine list runs before the product list, so the table does not exist yet and the ALTER fails (`relation "leads" does not exist` — found by rekstrarkerfid's fourth sync, 2026-09-23). `npm test` builds a fresh template, so it catches this; an engine migration that ALTERs a table some product owns should say so in its comment.
+
 `schema_migrations.resolved_from` keeps the reason (`<alias name>` or `superseded: <reason>`); it is NULL for an entry the runner executed. Aliases resolve only when one of the listed names is already applied — on a fresh database the engine entry simply runs. A legacy entry that has an engine equivalent must be REMOVED from `legacy` and listed under `aliases`, or a fresh database runs the DDL twice.
 
 ## The pre-flight
