@@ -61,6 +61,11 @@ COPY package.json ./
 # reads it at boot to pick the product migration array (D-021). Without it
 # the container cannot migrate, so the boot smoke test fails.
 COPY engine.json ./
+# config/client.json is this product's identity and module config (brand,
+# locale, themes, hero, nav, hidden routes, security.mfa). Without it the
+# container runs on the ENGINE's defaults — hallismiley.is served as "Orange
+# Smiley" for a while on 2026-09-23 because this line was missing.
+COPY config/ ./config/
 
 # ── Build identity ───────────────────────────────────────────────────────────
 # Stamp server/version.json into the image so the running container can answer
