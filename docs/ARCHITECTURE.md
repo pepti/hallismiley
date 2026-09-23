@@ -265,6 +265,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
   new clip), and `_initHeroVideo` follows a live OS-setting change both ways;
   `/halli` keeps the waterfall on purpose; `e2e/navigation.spec.js` pins the
   filename [homepage](HISTORY.md#homepage).
+- **Every `html.replace` in `ssrMeta.js` takes a replacer function**, never a
+  template string, when the replacement holds content, config or request text
+  ([ssr-replace-literal](HISTORY.md#ssr-replace-literal-2026-09-23)). In a
+  replacement string `$&`, `` $` ``, `$'` and `$$` are patterns: admin copy
+  carrying them pasted the whole `<head>` into the body or a `</script>` into
+  the JSON-LD. `esc()` does not help — `$` is not an HTML character.
+  `tests/integration/ssrMeta.test.js` ("replacement patterns") pins it through
+  the `<head>`, the JSON-LD and the crawler mirror.
 - **Identity comes from the seam, never a literal**
   ([identity-seam](HISTORY.md#identity-seam-2026-09-22)): brand name and legal
   name, the title suffix, `og:site_name`, `<meta author>`, the Organization +

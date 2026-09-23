@@ -791,17 +791,17 @@ function removeById(html, id) {
 
 function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, ogImage, jsonLd, robots, scenePreload }) {
   if (/<title\b/i.test(html)) {
-    html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title id="ssr-title">${esc(title)}</title>`);
+    html = html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, () => `<title id="ssr-title">${esc(title)}</title>`);
   }
   html = html.replace(
     /<meta\s+name="description"[^>]*>/i,
-    `<meta name="description" content="${esc(description)}" id="ssr-description" />`
+    () => `<meta name="description" content="${esc(description)}" id="ssr-description" />`
   );
   // Hidden-but-functional surfaces (config/publicSurface.js) are de-indexed;
   // everything else keeps the template's index,follow.
   html = html.replace(
     /<meta\s+name="robots"[^>]*>/i,
-    `<meta name="robots" content="${esc(robots || 'index, follow')}" id="ssr-robots" />`
+    () => `<meta name="robots" content="${esc(robots || 'index, follow')}" id="ssr-robots" />`
   );
   // App environment for the client (drives the in-app feedback widget + TEST
   // chrome). Stamped from config/appEnv.js — the same predicate the change-
@@ -812,7 +812,7 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   const appEnv = clientAppEnv();
   html = html.replace(
     /<meta\s+name="app-env"[^>]*>/i,
-    `<meta name="app-env" content="${esc(appEnv)}" id="ssr-app-env" />`
+    () => `<meta name="app-env" content="${esc(appEnv)}" id="ssr-app-env" />`
   );
   // Search-engine ownership verification — populated from env vars set in
   // Azure App Service after the respective Webmaster Tools / Search Console
@@ -823,34 +823,34 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   if (bingToken) {
     html = html.replace(
       /<meta\s+name="msvalidate\.01"[^>]*>/i,
-      `<meta name="msvalidate.01" content="${esc(bingToken)}" />`
+      () => `<meta name="msvalidate.01" content="${esc(bingToken)}" />`
     );
   }
   if (googleToken) {
     html = html.replace(
       /<meta\s+name="google-site-verification"[^>]*>/i,
-      `<meta name="google-site-verification" content="${esc(googleToken)}" />`
+      () => `<meta name="google-site-verification" content="${esc(googleToken)}" />`
     );
   }
   html = html.replace(
     /<meta\s+property="og:title"[^>]*>/i,
-    `<meta property="og:title" content="${esc(title)}" />`
+    () => `<meta property="og:title" content="${esc(title)}" />`
   );
   html = html.replace(
     /<meta\s+property="og:description"[^>]*>/i,
-    `<meta property="og:description" content="${esc(description)}" />`
+    () => `<meta property="og:description" content="${esc(description)}" />`
   );
   html = html.replace(
     /<meta\s+property="og:url"[^>]*>/i,
-    `<meta property="og:url" content="${esc(canonical)}" />`
+    () => `<meta property="og:url" content="${esc(canonical)}" />`
   );
   html = html.replace(
     /<meta\s+property="og:locale"[^>]*>/i,
-    `<meta property="og:locale" content="${esc(ogLocale)}" />`
+    () => `<meta property="og:locale" content="${esc(ogLocale)}" />`
   );
   html = html.replace(
     /<meta\s+property="og:image"[^>]*>/i,
-    `<meta property="og:image" content="${esc(ogImage)}" data-base-href="${OG_IMAGE_PATH}" />`
+    () => `<meta property="og:image" content="${esc(ogImage)}" data-base-href="${OG_IMAGE_PATH}" />`
   );
   html = replaceById(html, 'ssr-canonical', { rel: 'canonical', href: canonical });
   // Emit an alternate per locale the caller supplied; drop the placeholder tag
@@ -869,29 +869,29 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   // record as <script id="identity"> for public/js/utils/identity.js.
   html = html.replace(
     /<html\b[^>]*\blang="[^"]*"/i,
-    `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}`
+    () => `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}`
   );
   // The brand-bearing static tags: og:site_name is the brand, author the
   // registered company. Baked in index.html for the no-SSR case only.
   html = html.replace(
     /<meta\s+property="og:site_name"[^>]*>/i,
-    `<meta property="og:site_name" content="${esc(identity.brand.name)}" />`
+    () => `<meta property="og:site_name" content="${esc(identity.brand.name)}" />`
   );
   html = html.replace(
     /<meta\s+name="author"[^>]*>/i,
-    `<meta name="author" content="${esc(identity.brand.legalName)}" />`
+    () => `<meta name="author" content="${esc(identity.brand.legalName)}" />`
   );
 
   // Hero-image preload for scene routes — ahead of the main stylesheet so
   // the LCP fetch starts before CSS parse blocks anything.
   if (scenePreload) {
     html = html.replace(/<link rel="stylesheet" href="\/css\/main\.css"/i,
-      `${scenePreload}\n  <link rel="stylesheet" href="/css/main.css"`);
+      () => `${scenePreload}\n  <link rel="stylesheet" href="/css/main.css"`);
   }
   // Inject the identity hand-off and the per-route JSON-LD just before
   // </head>. The Organization is part of jsonLd on every page.
   const tail = [identityScriptTag(), jsonLd].filter(Boolean).join('\n  ');
-  html = html.replace(/<\/head>/i, `  ${tail}\n</head>`);
+  html = html.replace(/<\/head>/i, () => `  ${tail}\n</head>`);
   return html;
 }
 
@@ -903,7 +903,7 @@ function injectCrawlerContent(html, innerHtml) {
   const block = `<div id="crawler-content" hidden aria-hidden="true">${innerHtml}</div>`;
   return html.replace(
     /<div id="app"><\/div>/,
-    `<div id="app"></div>\n  ${block}`
+    () => `<div id="app"></div>\n  ${block}`
   );
 }
 

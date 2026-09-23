@@ -51,6 +51,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [rk feed — six engine defects rekstrarkerfid's syncs found (orange-smiley/rekstrarkerfid#45)](#rk-feed-2026-09-23) | Lead ids as strings end to end; migration 108 `notified_at`/`notify_error` + the "ekki sent" inbox mark; the change-request launcher and the contact editor's bar stack (`--cr-widget-clearance`); legal titles on one line at 320px; sitemap `<lastmod>` from `site_content` + `identity.routes[*].contentKeys`, `/llms.txt` for every product (harvested from rk); the alias rule worded as enforced |
 | 2026-09-23 | [Identity seam, third iteration — a product's own routes, the derived files, the last engine pins (D-021)](#identity-seam-3-2026-09-23) | `identity.routes` (title/description keys, `bare`, `noindex`, `locale`) merged over ssrMeta/pageTitle and read by the locale lock, robots, sitemap, manifest; `organization.description` as a key per locale, `organization.ogImage`, `theme.swatches`; the last engine-site pins gated (meta literal, Service catalogue, company click-throughs, foreign Features links); `identityDownstream` composes every title from the overlay, HTML-escaped, and walks a routes block; site-factory `engine-sync.js` regenerates `.engine-paths`/`.gitattributes` on conflict; no migration |
 | 2026-09-23 | [Two-factor enrolment optional by default — `security.mfa.enrolment`](#mfa-optional-2026-09-23) | Halli: "change mfa to optional"; `optional` (default) or `required` in `config/client.json`, env `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT`; `mfaPolicy.mustEnrol` false unless required; enrolled accounts still challenged; seller area rule 4 unchanged; mandatory-path tests set `required` for themselves, e2e server runs `required`; no migration |
+| 2026-09-23 | [SSR splices saved copy literally — replacer functions in `ssrMeta.js`](#ssr-replace-literal-2026-09-23) | Öryggisvörður LOW from rekstrarkerfid: `$&`/`` $` ``/`$'`/`$$` in site_content copy were expanded by `String.replace`; 17 calls in `rewriteHead` + `injectCrawlerContent` now take `() =>`; regression tests through `<head>`, JSON-LD and the crawler mirror; no migration |
 
 ---
 
@@ -1737,3 +1738,36 @@ under `optional`; kept for a suite that switches to `required`).
 `optional` unless its own `config/client.json` says `required` — Halli's
 instruction is estate-wide, so the sync does NOT set it. hallismiley,
 icelandicstore and LedgerLink get `optional` too. No migration.
+
+<a id="ssr-replace-literal-2026-09-23"></a>
+## 2026-09-23 — SSR splices saved copy literally: replacer functions in `ssrMeta.js`
+
+**Why.** Öryggisvörður (LOW, reproduced in rekstrarkerfid the same day):
+`injectCrawlerContent` passed the crawler mirror to `String.prototype.replace`
+as the replacement *string*, so the replacement patterns `$&`, `` $` ``, `$'`
+and `$$` in admin-saved copy were expanded. `` $` `` pasted the whole template
+prefix (`<head>`, theme-boot.js and all) into the body, `$$` collapsed to `$`,
+and inside a JSON-LD block an expansion carried its own `</script>` and broke
+the JSON. Not script execution: it needs an admin session, and `esc()` still
+covered the admin's own bytes. But it corrupted what crawlers and AI search
+read. `rewriteHead` had the same shape in every tag it rewrites.
+
+**What changed.** All 17 `html.replace` calls in `rewriteHead` (title,
+description, robots, app-env, the two verification tokens, og:*, `<html lang>`
+with the identity attributes, og:site_name, author, the scene preload, the
+`</head>` tail with the identity hand-off and the JSON-LD) and
+`injectCrawlerContent` take a replacer function (`() => \`…\``); a function's
+return value is inserted as is. `replaceById` already did. The rule is in
+[ARCHITECTURE §3](ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo).
+
+**Tests.** `tests/integration/ssrMeta.test.js`, "replacement patterns in saved
+copy stay literal", saves `` A $& B $` C $' D $$ E `` into `halli_bio.meta_description`,
+`home_hero.heading` and a published news article, then asserts the escaped
+text comes out byte-for-byte in the description and og:description, the
+crawler H1, the news `<title>`, description and crawler article, and the
+Article JSON-LD (every block still parses); the page keeps one doctype, head,
+theme-boot script, body and app root. All three fail on the old code.
+
+**Downstreams.** rekstrarkerfid, whose crawler mirror now carries a FAQPage
+JSON-LD block, picks the fix up at its next engine-sync; nothing to patch
+there. No migration.

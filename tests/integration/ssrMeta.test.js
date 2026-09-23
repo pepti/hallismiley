@@ -591,3 +591,99 @@ describe('business JSON-LD', () => {
     expect(res.text).not.toMatch(/"@type":"OfferCatalog"/);
   });
 });
+
+// ── Admin copy is spliced in literally (2026-09-23) ──────────────────────────
+// Every html.replace in ssrMeta takes a replacer FUNCTION, never a template
+// string: in a replacement string `$&`, `` $` ``, `$'` and `$$` are patterns,
+// so saved copy containing them pasted the template prefix (the whole <head>)
+// into the page, or a `</script>` into the JSON-LD. The copy below carries all
+// four and must come out byte-for-byte (after esc()), with one of everything.
+
+describe('SSR — replacement patterns in saved copy stay literal', () => {
+  const db = require('../../server/config/database');
+  const PAYLOAD = "A $& B $` C $' D $$ E";
+  const ESCAPED = "A $&amp; B $` C $' D $$ E";
+  const SLUG = 'test-ssr-dollar-patterns';
+  const saved = {};
+
+  // The page is still one page: the template's singletons appear once.
+  function expectOnePage(html) {
+    expect(html.match(/<!DOCTYPE html>/gi)).toHaveLength(1);
+    expect(html.match(/<head\b/gi)).toHaveLength(1);
+    expect(html.match(/<\/head>/gi)).toHaveLength(1);
+    expect(html.match(/<script src="\/js\/theme-boot\.js">/g)).toHaveLength(1);
+    expect(html.match(/<body\b/gi)).toHaveLength(1);
+    expect(html.match(/<div id="app">/g)).toHaveLength(1);
+  }
+
+  // Every JSON-LD block still parses — a `$'`/`` $` `` expansion inside one
+  // carries its own </script> and cuts it short.
+  function jsonLdBlocks(html) {
+    return (html.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) || [])
+      .map(b => JSON.parse(b.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '')));
+  }
+
+  async function upsertContent(key, patch) {
+    const { rows } = await db.query(
+      "SELECT value FROM site_content WHERE key = $1 AND locale = 'en'", [key]);
+    saved[key] = rows[0] ? rows[0].value : null;
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'en', $2::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value`,
+      [key, JSON.stringify({ ...(saved[key] || {}), ...patch })]
+    );
+  }
+
+  beforeAll(async () => {
+    await upsertContent('halli_bio', { meta_description: PAYLOAD });
+    await upsertContent('home_hero', { heading: PAYLOAD });
+    await db.query('DELETE FROM news_articles WHERE slug = $1', [SLUG]);
+    await db.query(
+      `INSERT INTO news_articles (title, slug, summary, body, published, published_at)
+       VALUES ($1, $2, $1, $3, TRUE, NOW())`,
+      [PAYLOAD, SLUG, `<p>${ESCAPED}</p>`]
+    );
+  });
+
+  afterAll(async () => {
+    await db.query('DELETE FROM news_articles WHERE slug = $1', [SLUG]);
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === null) {
+        await db.query("DELETE FROM site_content WHERE key = $1 AND locale = 'en'", [key]);
+      } else {
+        await db.query(
+          "UPDATE site_content SET value = $2::jsonb WHERE key = $1 AND locale = 'en'",
+          [key, JSON.stringify(value)]);
+      }
+    }
+  });
+
+  test('a site_content meta_description reaches the <head> tags literally', async () => {
+    const res = await request(app).get('/en/halli');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`<meta name="description" content="${ESCAPED}" id="ssr-description" />`);
+    expect(res.text).toContain(`<meta property="og:description" content="${ESCAPED}" />`);
+    expectOnePage(res.text);
+    jsonLdBlocks(res.text);
+  });
+
+  test('a site_content heading reaches the crawler mirror literally', async () => {
+    const res = await request(app).get('/en/');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`<div id="crawler-content" hidden aria-hidden="true"><h1>${ESCAPED}</h1>`);
+    expectOnePage(res.text);
+    jsonLdBlocks(res.text);
+  });
+
+  test('a news article carries the copy through <title>, description, JSON-LD and the crawler mirror', async () => {
+    const res = await request(app).get(`/en/news/${SLUG}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(new RegExp(`<title id="ssr-title">${escRe(ESCAPED)}`));
+    expect(res.text).toContain(`<meta name="description" content="${ESCAPED}" id="ssr-description" />`);
+    expect(res.text).toContain(`<article><h1>${ESCAPED}</h1><p><em>${ESCAPED}</em></p><p>${ESCAPED}</p></article>`);
+    expectOnePage(res.text);
+    const article = jsonLdBlocks(res.text).find(b => b['@type'] === 'Article');
+    expect(article.headline).toBe(PAYLOAD);
+    expect(article.description).toBe(PAYLOAD);
+  });
+});
