@@ -6,8 +6,9 @@
  * tests pin the rule itself rather than each consumer's copy of it.
  */
 
-const { forcedLocaleFor, isPartyPath, PARTY_FORCED_LOCALE } = require('../../server/config/i18n');
+const { forcedLocaleFor, isPartyPath, PARTY_FORCED_LOCALE, PUBLIC_DEFAULT_LOCALE } = require('../../server/config/i18n');
 const { resolveLocale } = require('../../server/middleware/locale');
+const { clientConfig } = require('../../server/config/clientConfig');
 
 describe('forcedLocaleFor', () => {
   test.each([
@@ -151,7 +152,9 @@ describe('resolveLocale — ordinary routes are untouched', () => {
     expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'de-DE' } }))).toBe('is');
   });
 
-  test('no signal at all falls back to PUBLIC_DEFAULT_LOCALE (is)', () => {
-    expect(resolveLocale(req('/projects'))).toBe('is');
+  test('no signal at all falls back to PUBLIC_DEFAULT_LOCALE (the product identity’s visitor default)', () => {
+    expect(resolveLocale(req('/projects'))).toBe(PUBLIC_DEFAULT_LOCALE);
+    // This instance is Orange Smiley: Icelandic (config/client.json identity.locale.publicDefault).
+    expect(PUBLIC_DEFAULT_LOCALE).toBe(clientConfig.identity.locale.publicDefault);
   });
 });

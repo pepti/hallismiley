@@ -6,7 +6,7 @@ import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
-import { THEMES, THEME_SWATCHES, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
+import { THEMES, swatchFor, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
 const pad = n => String(n).padStart(2, '0');
@@ -663,7 +663,7 @@ export class ProfileView {
 
     const buttons = [...grid.querySelectorAll('.profile-theme')];
     buttons.forEach((btn) => {
-      btn.style.setProperty('--swatch', THEME_SWATCHES[btn.dataset.themeId]);
+      btn.style.setProperty('--swatch', swatchFor(btn.dataset.themeId));
     });
 
     // Reflect a selection made anywhere (here or the floating switcher).

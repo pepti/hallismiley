@@ -11,9 +11,21 @@
 // its save and the reload (CI, 2026-09). Every test still starts AND ends on
 // Reset, so one test's `revealedItems` never leaks into the next.
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { seedAdminUser, signInViaApi } = require('./lib/accounts');
+// The hidden set is the product identity's (identity.surface.hiddenAdminViews
+// in config/client.json). This spec demonstrates the policy on the shop group
+// — Orange Smiley hides it; a downstream that is a shop lists nothing there
+// and the policy cases below skip, while the machinery stays exercised by the
+// role-grant case at the bottom.
+const { identity } = require('./lib/identity');
+const HIDDEN = identity.surface.hiddenAdminViews;
+const HIDES_SHOP = ['orders', 'products'].every((id) => HIDDEN.includes(id)) && HIDDEN.includes('pos');
 
 const SURFACE_ADMIN = { username: 'e2esurfaceadmin', email: 'surface-admin@e2e.test', password: 'SurfaceAdmin123' };
 
@@ -47,6 +59,8 @@ async function resetLayout(page) {
   await leaveEditMode(page);
 }
 
+const SHOP_ONLY = 'this product does not hide the shop group (identity.surface.hiddenAdminViews)';
+
 test.describe('admin nav — hidden-by-policy retail lines', () => {
   test.beforeAll(async () => { await seedAdminUser(SURFACE_ADMIN); });
 
@@ -62,6 +76,7 @@ test.describe('admin nav — hidden-by-policy retail lines', () => {
   });
 
   test('the everyday nav shows the business, not the shop', async ({ page }) => {
+    test.skip(!HIDES_SHOP, SHOP_ONLY);
     await expect(page.locator(ORDERS_LINK)).toHaveCount(0);
     await expect(page.locator('.admin-sidebar a[data-route="/admin/shop/products"]')).toHaveCount(0);
     await expect(page.locator('.admin-sidebar a[data-route="/admin/books/pos"]')).toHaveCount(0);
@@ -74,6 +89,7 @@ test.describe('admin nav — hidden-by-policy retail lines', () => {
   });
 
   test('an admin can reveal a hidden line in edit mode, it persists, and Reset re-hides it', async ({ page }) => {
+    test.skip(!HIDES_SHOP, SHOP_ONLY);
     await enterEditMode(page);
     const row = page.locator('[data-item-id="orders"]');
     await expect(row).toHaveClass(/admin-sidebar__item--hidden/);
@@ -94,6 +110,7 @@ test.describe('admin nav — hidden-by-policy retail lines', () => {
   });
 
   test('a hidden screen still renders at its URL and shows itself as the current page', async ({ page }) => {
+    test.skip(!HIDES_SHOP, SHOP_ONLY);
     await gotoAndSettle(page, '/admin/shop/orders');
     await expect(page.locator(`${ORDERS_LINK}[aria-current="page"]`)).toHaveCount(1);
     await expect(page.locator('.admin-sidebar__group-title', { hasText: /^Verslun$/ })).toHaveCount(1);

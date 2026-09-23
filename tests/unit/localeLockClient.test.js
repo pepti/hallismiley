@@ -122,17 +122,20 @@ describe('getPreferredLocale', () => {
     expect(i18n.getPreferredLocale()).toBe('en');
   });
 
-  test('no saved choice falls back to Icelandic', () => {
-    // PUBLIC_DEFAULT_LOCALE — the visitor-facing default mirrors the server.
+  test('no saved choice falls back to the visitor default', () => {
+    // PUBLIC_DEFAULT_LOCALE — the product's identity.locale.publicDefault; in
+    // the node environment utils/identity.js has no hand-off to read, so it is
+    // the engine default ('is'), the same value the server falls back to.
     browseTo('/projects', { languages: ['de-DE', 'fr'] });
-    expect(i18n.getPreferredLocale()).toBe('is');
+    expect(i18n.PUBLIC_DEFAULT_LOCALE).toBe('is');
+    expect(i18n.getPreferredLocale()).toBe(i18n.PUBLIC_DEFAULT_LOCALE);
   });
 
   // Mirrors the server rule in server/middleware/locale.js. If the client
   // trusted navigator.languages while the server ignored it, the page would
   // hydrate in a different language than the SSR <head> just advertised.
-  test('the browser language list never moves a visitor off Icelandic', () => {
+  test('the browser language list never moves a visitor off the default', () => {
     browseTo('/projects', { languages: ['en-US', 'en'] });
-    expect(i18n.getPreferredLocale()).toBe('is');
+    expect(i18n.getPreferredLocale()).toBe(i18n.PUBLIC_DEFAULT_LOCALE);
   });
 });

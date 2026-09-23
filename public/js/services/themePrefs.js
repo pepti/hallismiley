@@ -28,25 +28,30 @@
 // Anonymous visitors are unaffected: no session, no write, browser-local only.
 
 import { getUser, isAuthenticated, isAdmin, updateProfile, updateCachedUser } from './auth.js';
+import { getIdentity } from '../utils/identity.js';
 
-// Order is the picker's order: the default (Glóð) first, then the light, then
-// high contrast. 'classic' is BJART (light) since 2026-08-20 — the id outlived the
-// palette it was named for, and is kept because theme-boot.js encodes
-// "classic = no data-theme attribute". The set was cut from five to three on
-// 2026-09-02 (Halli): 'light' and 'mono' are gone from here and from
-// themes.css; a stale localStorage or account value for them normalises to
-// classic below (getTheme/setTheme both gate on THEMES), and migration 094
-// moved the stored accounts. The users.theme CHECK still admits the old ids
-// on purpose — it narrows in a later release (invariant 14).
-export const THEMES = ['ember', 'classic', 'midnight'];
+// The theme trio is the PRODUCT's — identity.theme in config/client.json,
+// handed to the page by ssrMeta (utils/identity.js parses it; theme-boot.js
+// reads the same values off <html data-*-theme> because it runs pre-paint).
+// The engine defaults are Orange Smiley's: picker order Glóð first, then the
+// light, then high contrast. 'classic' is BJART (light) since 2026-08-20 — the
+// id outlived the palette it was named for, and is kept because it is the
+// root theme ("no data-theme attribute"). The set was cut from five to three
+// on 2026-09-02 (Halli): a stale localStorage or account value for a retired
+// id normalises to the default below (getTheme/setTheme both gate on THEMES).
+// A product with more themes lists them in its picker AND gives each a token
+// set in themes.css; migration 106 dropped the users.theme CHECK so no engine
+// migration is needed for that.
+const IDENTITY_THEME = getIdentity().theme;
+export const THEMES = IDENTITY_THEME.picker.slice();
 // Two ideas that used to be one value. ROOT_THEME is the theme whose tokens
 // ARE :root — it carries no data-theme attribute (invariant 13; theme-boot.js
 // encodes the same rule). DEFAULT_THEME is what a visitor gets with nothing
 // stored: Glóð since 2026-09-02 (Halli). While the two coincided, picking the
 // default deleted the stored key; now every choice is stored explicitly, so
 // changing the default later never flips a choice someone actually made.
-const ROOT_THEME    = 'classic';
-const DEFAULT_THEME = 'ember';
+const ROOT_THEME    = IDENTITY_THEME.root;
+const DEFAULT_THEME = IDENTITY_THEME.default;
 const THEME_KEY = 'ws_theme';
 const TEST_KEY  = 'ws_test_override';
 const DEMO_KEY  = 'ws_demo_mode';
@@ -67,6 +72,14 @@ export const THEME_SWATCHES = {
   ember:    'linear-gradient(135deg, #E6CDA8 0%, #1A1410 70%)',
   midnight: 'linear-gradient(135deg, #FFD166 0%, #000000 60%)',
 };
+
+// The swatch for a picker id. A product theme the engine map does not know
+// (a downstream's own id from identity.theme.picker) gets a neutral fill
+// built from the live tokens rather than an invalid `undefined` — the picker
+// stays usable while the downstream adds its own entry.
+export function swatchFor(id) {
+  return THEME_SWATCHES[id] || 'linear-gradient(135deg, var(--gold) 0%, var(--bg-base) 70%)';
+}
 
 function read(key) {
   try { return localStorage.getItem(key); } catch { return null; }

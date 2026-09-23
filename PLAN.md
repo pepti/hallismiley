@@ -151,6 +151,16 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- Identity seam + feature gate ([identity-seam-2026-09-22](docs/HISTORY.md#identity-seam-2026-09-22)):
+  the hallismiley draft PR pepti/hallismiley#168 becomes mergeable once it sets
+  its `identity` block in `config/client.json` (the ready-to-paste example is in
+  the HISTORY entry) and lists the engine features it hides in
+  `features/local.json`; LedgerLink's and rekstrarkerfid's graft PRs likewise
+  (their 32 e2e failures were engine specs on hidden features — the gate skips
+  them once `local.json` says so). Still literal, by design: the seeded company
+  copy (product migrations), the PWA `manifest.json` name, the Product-schema
+  `brand`; a product with more themes than the engine adds its own
+  `THEME_SWATCHES` entries (unknown ids get a neutral swatch).
 - First upward harvest landed 2026-09-23 ([harvest-rk-totp-2026-09-23](docs/HISTORY.md#harvest-rk-totp-2026-09-23)):
   mandatory 2FA enrolment + TOTP secret sealed at rest (migration 107). Open:
   (a) **before the first deploy of 107, create `TOTP_ENC_KEY` in the instance's

@@ -63,7 +63,7 @@ Downstream overrides go in `features/local.json`.
 | `site-content` | Vefefni / Site content | 17 | engine | live | — | `005_site_content` | [site-content.md](site-content.md) |
 | `uploads-media` | Skráaupphal / Uploads and media | 18 | engine | live | — | — | [uploads-media.md](uploads-media.md) |
 | `email` | Tölvupóstur / Email | 19 | engine | live | — | — | [email.md](email.md) |
-| `client-config` | Stillingar tilviks / Instance config (module flags) | 20 | engine | live | — | — | [client-config.md](client-config.md) |
+| `client-config` | Stillingar tilviks / Instance config (module flags + identity) | 20 | engine | live | — | — | [client-config.md](client-config.md) |
 | `platform-core` | Kjarni / Platform core | 20 | engine | live | — | `001_initial_schema`, `043_strip_stale_railway_references` | [platform-core.md](platform-core.md) |
 | `rate-limits-security` | Öryggislag / Security layer | 20 | engine | live | — | — | [rate-limits-security.md](rate-limits-security.md) |
 | `testing-infra` | Prófunarumgjörð / Testing infrastructure | 20 | engine | live | — | — | [testing-infra.md](testing-infra.md) |
