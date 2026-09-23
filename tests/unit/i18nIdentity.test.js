@@ -92,6 +92,13 @@ describe('server i18n — implicit {siteName} / {legalName} / {siteHost}', () =>
     expect(t('en', 'meta.umOkkur.description', { legalName: 'Rekstrarkerfi ehf.' })).toMatch(/^Rekstrarkerfi ehf\. is an Icelandic/);
   });
 
+  test('a param value is inserted literally — `$` replacement patterns are not expanded', () => {
+    const { t } = fresh();
+    const v = "A $& B $` C $' D $$ E";
+    expect(t('en', 'email.order.subject', { orderNumber: v, siteName: 'S' })).toBe(`Your S order ${v}`);
+    expect(t('en', 'email.verify.subject', { siteName: v })).toBe(`Verify your ${v} account`);
+  });
+
   test('{siteHost} is the APP_URL host without a leading www.', () => {
     const { siteHost } = fresh();
     process.env.APP_URL = 'https://www.orangesmiley.is';

@@ -604,7 +604,13 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
   const PAYLOAD = "A $& B $` C $' D $$ E";
   const ESCAPED = "A $&amp; B $` C $' D $$ E";
   const SLUG = 'test-ssr-dollar-patterns';
-  const saved = {};
+  // Paths and the locale the rows are written in come from the seam, so the
+  // cases hold in a downstream that locks a route to one language.
+  const lcFor = (route) => forcedLocaleFor(route) || LC;
+  // A product that re-describes `/` (identity.routes) builds its own home
+  // mirror; the engine's is exercised only where the engine owns `/`.
+  const testEngineHome = ID.routes && ID.routes['/'] ? test.skip : test;
+  const saved = [];
 
   // The page is still one page: the template's singletons appear once.
   function expectOnePage(html) {
@@ -618,25 +624,30 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
 
   // Every JSON-LD block still parses — a `$'`/`` $` `` expansion inside one
   // carries its own </script> and cuts it short.
+  // At least the Organization block is always there, so an empty match means
+  // the tail itself was lost.
   function jsonLdBlocks(html) {
-    return (html.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) || [])
+    const blocks = (html.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) || [])
       .map(b => JSON.parse(b.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '')));
+    expect(blocks.some(b => b['@type'] === 'Organization')).toBe(true);
+    return blocks;
   }
 
-  async function upsertContent(key, patch) {
+  async function upsertContent(key, locale, patch) {
     const { rows } = await db.query(
-      "SELECT value FROM site_content WHERE key = $1 AND locale = 'en'", [key]);
-    saved[key] = rows[0] ? rows[0].value : null;
+      'SELECT value FROM site_content WHERE key = $1 AND locale = $2', [key, locale]);
+    const value = rows[0] ? rows[0].value : null;
+    saved.push({ key, locale, value });
     await db.query(
-      `INSERT INTO site_content (key, locale, value) VALUES ($1, 'en', $2::jsonb)
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, $2, $3::jsonb)
        ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value`,
-      [key, JSON.stringify({ ...(saved[key] || {}), ...patch })]
+      [key, locale, JSON.stringify({ ...(value || {}), ...patch })]
     );
   }
 
   beforeAll(async () => {
-    await upsertContent('halli_bio', { meta_description: PAYLOAD });
-    await upsertContent('home_hero', { heading: PAYLOAD });
+    await upsertContent('halli_bio', lcFor('/halli'), { meta_description: PAYLOAD });
+    await upsertContent('home_hero', lcFor('/'), { heading: PAYLOAD });
     await db.query('DELETE FROM news_articles WHERE slug = $1', [SLUG]);
     await db.query(
       `INSERT INTO news_articles (title, slug, summary, body, published, published_at)
@@ -647,19 +658,19 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
 
   afterAll(async () => {
     await db.query('DELETE FROM news_articles WHERE slug = $1', [SLUG]);
-    for (const [key, value] of Object.entries(saved)) {
+    for (const { key, locale, value } of saved.reverse()) {
       if (value === null) {
-        await db.query("DELETE FROM site_content WHERE key = $1 AND locale = 'en'", [key]);
+        await db.query('DELETE FROM site_content WHERE key = $1 AND locale = $2', [key, locale]);
       } else {
         await db.query(
-          "UPDATE site_content SET value = $2::jsonb WHERE key = $1 AND locale = 'en'",
-          [key, JSON.stringify(value)]);
+          'UPDATE site_content SET value = $3::jsonb WHERE key = $1 AND locale = $2',
+          [key, locale, JSON.stringify(value)]);
       }
     }
   });
 
   test('a site_content meta_description reaches the <head> tags literally', async () => {
-    const res = await request(app).get('/en/halli');
+    const res = await request(app).get(pathFor('/halli'));
     expect(res.status).toBe(200);
     expect(res.text).toContain(`<meta name="description" content="${ESCAPED}" id="ssr-description" />`);
     expect(res.text).toContain(`<meta property="og:description" content="${ESCAPED}" />`);
@@ -667,8 +678,8 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
     jsonLdBlocks(res.text);
   });
 
-  test('a site_content heading reaches the crawler mirror literally', async () => {
-    const res = await request(app).get('/en/');
+  testEngineHome('a site_content heading reaches the crawler mirror literally', async () => {
+    const res = await request(app).get(pathFor('/'));
     expect(res.status).toBe(200);
     expect(res.text).toContain(`<div id="crawler-content" hidden aria-hidden="true"><h1>${ESCAPED}</h1>`);
     expectOnePage(res.text);
@@ -676,7 +687,7 @@ describe('SSR — replacement patterns in saved copy stay literal', () => {
   });
 
   test('a news article carries the copy through <title>, description, JSON-LD and the crawler mirror', async () => {
-    const res = await request(app).get(`/en/news/${SLUG}`);
+    const res = await request(app).get(pathFor(`/news/${SLUG}`));
     expect(res.status).toBe(200);
     expect(res.text).toMatch(new RegExp(`<title id="ssr-title">${escRe(ESCAPED)}`));
     expect(res.text).toContain(`<meta name="description" content="${ESCAPED}" id="ssr-description" />`);

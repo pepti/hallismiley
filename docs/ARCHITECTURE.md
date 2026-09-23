@@ -432,6 +432,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `{legalName}`; `has(locale, key)` tells an absent optional string from text.
   `tests/unit/pageTitle.test.js` holds the client and server tables to the
   same text for every title key.
+- **`t()` inserts a `{param}` value literally** ([ssr-replace-literal](HISTORY.md#ssr-replace-literal-2026-09-23)):
+  both interpolations (`server/i18n/index.js`, `public/js/i18n/i18n.js`)
+  pass a replacer function, so `$&`, `$'` and `$$` in a name or a config
+  string are never expanded as replacement patterns.
 - **Tests assert the visitor default, not Icelandic** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `tests/lib/locale.js` (`PUBLIC_DEFAULT_LOCALE`, `tx()`, `tClient()`,
   `localePrefix()`; `e2e/lib/locale.js` re-exports it) is where an engine
