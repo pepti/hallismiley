@@ -35,7 +35,7 @@ import { ProfileView }        from './views/ProfileView.js';
 import { VerifyEmailView }    from './views/VerifyEmailView.js';
 import { ForgotPasswordView } from './views/ForgotPasswordView.js';
 import { ResetPasswordView }  from './views/ResetPasswordView.js';
-import { isAuthenticated, isAdmin, canEdit, canSeeView } from './services/auth.js';
+import { isAuthenticated, isAdmin, canEdit, canSeeView, mfaEnrolmentRequired } from './services/auth.js';
 import { PartyView }      from './views/PartyView.js';
 import { PartyAdminView } from './views/PartyAdminView.js';
 import { PartyMagicLoginView } from './views/PartyMagicLoginView.js';
@@ -296,6 +296,14 @@ export class Router {
     // choice). Runs before render so the control never flashes in and out.
     this.navBar.syncLocaleLock(raw);
 
+    // An admin who still owes two-step set-up holds no admin rights yet (the
+    // server withholds the role — auth/mfaPolicy.js), so an /admin URL — a
+    // bookmark, a reload — would land on the public fallback with no
+    // explanation. Send them to the panel that fixes it instead.
+    if ((path === '/admin' || path.startsWith('/admin/')) && mfaEnrolmentRequired()) {
+      navigateReplace('/' + getLocale() + '/profile');
+      return;
+    }
     // Guard admin routes
     if (path === '/admin' && !isAuthenticated()) {
       navigateReplace('/' + getLocale() + '/');

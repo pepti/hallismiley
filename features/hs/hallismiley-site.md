@@ -7,7 +7,7 @@ status: live
 flag: null
 paths:
   - .github/workflows/trivy.yml
-  - e2e/news-editor.spec.js
+  - server/config/product-migrations/hs.js
   - server/utils/canonicalHost.js
   - tests/unit/canonicalHost.test.js
   - tests/unit/booksRouteOrder.test.js
@@ -20,10 +20,10 @@ history: [engine-graft, docs-restructure-hs]
 
 The files that are hallismiley's own and not the engine's: the scheduled,
 non-blocking Trivy image scan (`trivy.yml` — the engine's CI runs Trivy inside
-`deploy.yml` instead), two regression tests written in the base after the
-engine forked (`news-editor.spec.js` for the fixed-position editor overlay,
-`booksRouteOrder.test.js` for the `docLimiter` position on
-`GET /documents/:id`), the party venue photos, and `canonicalHost.js` with its
+`deploy.yml` instead), a regression test written in the base after the
+engine forked (`booksRouteOrder.test.js` for the `docLimiter` position on
+`GET /documents/:id`; `news-editor.spec.js` went UP to the engine in
+identity-seam-2, 2026-09-23, with the `.view` fill-mode fix it caught), the party venue photos, and `canonicalHost.js` with its
 test. The engine resolves the canonical host inline in `server/app.js` from
 `APP_URL`, so the util is no longer required by the app; it stays until Halli
 decides its disposition (a hallismiley ENHANCEMENTS item, not a drive-by

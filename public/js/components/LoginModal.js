@@ -1,4 +1,5 @@
-import { login, loginTotp } from '../services/auth.js';
+import { login, loginTotp, mfaEnrolmentRequired } from '../services/auth.js';
+import { navigate } from '../navigate.js';
 import { decideTotpFailure } from './totpFailure.js';
 import { showToast } from './Toast.js';
 import { t, href }   from '../i18n/i18n.js';
@@ -134,7 +135,14 @@ export class LoginModal {
         return;
       }
       this.close();
-      showToast(t('auth.signIn'), 'success');
+      // An admin who still owes two-step set-up is signed in but holds no admin
+      // rights until it is done — take them straight to the panel and say why.
+      if (mfaEnrolmentRequired()) {
+        showToast(t('profile.twoStepRequired'), 'info');
+        navigate(href('/profile'));
+      } else {
+        showToast(t('auth.signIn'), 'success');
+      }
     } catch (err) {
       errEl.textContent = err.message;
     } finally {

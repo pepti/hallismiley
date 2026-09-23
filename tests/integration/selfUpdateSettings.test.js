@@ -38,6 +38,12 @@ beforeEach(async () => {
   await db.query('DELETE FROM app_settings WHERE key LIKE $1', ['selfupdate.%']);
 });
 
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('a managed instance ignores its own admin', () => {
   test('a stored mode cannot promote a managed instance', async () => {
     await Setting.set(KEYS.mode, 'auto');

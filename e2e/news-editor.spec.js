@@ -1,19 +1,26 @@
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { loginAsAdmin }  = require('./helpers');
 
-// Regression: the news editor overlay is position:fixed but lived inside
-// .view, whose fade-in animation filled forwards with a non-none transform —
-// which made .view the overlay's containing block. The overlay was then sized
-// to the page (scrolling with it) while the body was scroll-locked, so once
-// the editor grew past the page height (many queued media) its footer — the
-// Create Article button — could not be reached by scrolling.
+// Regression, back in the engine from hallismiley (identity-seam-2,
+// 2026-09-23): the news editor overlay is position:fixed but lives inside
+// .view, whose fade-in animation used to fill forwards with a non-none
+// transform (translateY(0)) — which made .view the overlay's containing
+// block. The overlay was then sized to the page and sat 56px down (the nav's
+// height) while the body was scroll-locked, so once the editor grew past the
+// page height (many queued media) its footer — the Create Article button —
+// could not be reached by scrolling. main.css drops the fill-mode; this pins
+// it. The route is hidden here (identity.surface.hiddenRoutes) but functional.
 test.describe('News editor overlay', () => {
 
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
 
-  test('scrolls to the footer with many queued media files', async ({ page }) => {
+  test('covers the viewport and scrolls to the footer with many queued media files', async ({ page }) => {
     await page.goto('/en/news');
     // Let the .view fade-in finish — while it runs, its transform is legitimately non-none.
     await page.locator('.view').evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));

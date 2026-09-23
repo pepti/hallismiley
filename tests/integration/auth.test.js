@@ -1,5 +1,8 @@
 const request = require('supertest');
 const app     = require('../../server/app');
+// API strings are asserted in the visitor-default locale (tests/lib/locale.js):
+// the exact translated text, wherever the product's identity puts the default.
+const { tx } = require('../lib/locale');
 const db      = require('../../server/config/database');
 const { cleanTables, createTestAdminUser } = require('../helpers');
 
@@ -41,7 +44,7 @@ describe('POST /auth/login', () => {
       .send({ username: process.env.ADMIN_USERNAME, password: 'wrongpassword' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Rangt notandanafn eða lykilorð');
+    expect(res.body.error).toBe(tx('errors.auth.invalidCredentials'));
   });
 
   test('wrong username returns 401 with generic message', async () => {
@@ -50,7 +53,7 @@ describe('POST /auth/login', () => {
       .send({ username: 'notadmin', password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Rangt notandanafn eða lykilorð');
+    expect(res.body.error).toBe(tx('errors.auth.invalidCredentials'));
   });
 
   test('missing password returns 400', async () => {
@@ -59,7 +62,7 @@ describe('POST /auth/login', () => {
       .send({ username: process.env.ADMIN_USERNAME });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/lykilorð/i);
+    expect(res.body.error).toBe(tx('errors.auth.usernamePasswordRequired'));
   });
 
   test('missing username returns 400', async () => {
@@ -92,7 +95,7 @@ describe('POST /auth/login', () => {
       .post('/auth/login')
       .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
     expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/hefur verið lokað/);
+    expect(res.body.error).toBe(tx('errors.auth.accountDisabled'));
   });
 
   // Tests covering the "email or username" + case-insensitive lookup added so
@@ -132,7 +135,7 @@ describe('POST /auth/login', () => {
       .send({ username: 'admin@test.com', password: 'wrongpassword' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Rangt notandanafn eða lykilorð');
+    expect(res.body.error).toBe(tx('errors.auth.invalidCredentials'));
   });
 
   test('login by email still enforces the lockout counter', async () => {
@@ -150,7 +153,7 @@ describe('POST /auth/login', () => {
       .send({ username: 'admin@test.com', password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/tímabundið læstur/);
+    expect(res.body.error).toBe(tx('errors.auth.accountLocked'));
   });
 });
 
@@ -169,7 +172,7 @@ describe('Account lockout', () => {
       .send({ username: process.env.ADMIN_USERNAME, password: 'bad' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/tímabundið læstur/);
+    expect(res.body.error).toBe(tx('errors.auth.accountLocked'));
   });
 
   test('correct password after lockout still returns locked', async () => {
@@ -184,7 +187,7 @@ describe('Account lockout', () => {
       .send({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/tímabundið læstur/);
+    expect(res.body.error).toBe(tx('errors.auth.accountLocked'));
   });
 });
 
@@ -308,7 +311,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/notandanafn/i);
+    expect(res.body.error).toBe(tx('errors.auth.usernameTaken'));
   });
 
   test('duplicate email returns 409', async () => {
@@ -318,7 +321,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/netfang/i);
+    expect(res.body.error).toBe(tx('errors.auth.emailRegistered'));
   });
 
   test('invalid email format returns 400', async () => {
@@ -328,7 +331,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/netfang/i);
+    expect(res.body.error).toBe(tx('validation.email.invalid'));
   });
 
   test('short username returns 400', async () => {
@@ -338,7 +341,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/notandanafn/i);
+    expect(res.body.error).toBe(tx('validation.username.invalid'));
   });
 
   test('username with special chars returns 400', async () => {
@@ -348,7 +351,7 @@ describe('POST /auth/signup', () => {
       password: 'password123',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/notandanafn/i);
+    expect(res.body.error).toBe(tx('validation.username.invalid'));
   });
 
   test('password too short returns 400', async () => {
@@ -358,7 +361,7 @@ describe('POST /auth/signup', () => {
       password: 'abc1234',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/lykilorð/i);
+    expect(res.body.error).toBe(tx('validation.password.minLength'));
   });
 
   test('password without a number returns 400', async () => {
@@ -368,7 +371,7 @@ describe('POST /auth/signup', () => {
       password: 'abcdefgh',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/tölustaf/);
+    expect(res.body.error).toBe(tx('validation.password.number'));
   });
 
   test('password without a letter returns 400', async () => {
@@ -378,7 +381,7 @@ describe('POST /auth/signup', () => {
       password: '12345678',
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/bókstaf/);
+    expect(res.body.error).toBe(tx('validation.password.letter'));
   });
 
   test('invalid avatar returns 400', async () => {
@@ -417,13 +420,13 @@ describe('POST /auth/verify-email', () => {
 
     const res = await request(app).post('/auth/verify-email').send({ token });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/staðfest/);
+    expect(res.body.message).toBe(tx('errors.auth.emailVerified'));
   });
 
   test('invalid token returns 400', async () => {
     const res = await request(app).post('/auth/verify-email').send({ token: 'badtoken' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/ógilt/i);
+    expect(res.body.error).toBe(tx('errors.auth.invalidVerifyToken'));
   });
 
   test('expired token returns 400', async () => {
@@ -436,7 +439,7 @@ describe('POST /auth/verify-email', () => {
     );
     const res = await request(app).post('/auth/verify-email').send({ token });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/útrunnið/);
+    expect(res.body.error).toBe(tx('errors.auth.verifyTokenExpired'));
   });
 
   test('missing token returns 400', async () => {
@@ -453,7 +456,7 @@ describe('POST /auth/forgot-password', () => {
       .post('/auth/forgot-password')
       .send({ email: 'admin@test.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/endurstilla lykilorð/);
+    expect(res.body.message).toBe(tx('errors.auth.forgotPasswordSent'));
   });
 
   test('returns 200 for unknown email (no enumeration)', async () => {
@@ -461,7 +464,7 @@ describe('POST /auth/forgot-password', () => {
       .post('/auth/forgot-password')
       .send({ email: 'nobody@nowhere.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/endurstilla lykilorð/);
+    expect(res.body.message).toBe(tx('errors.auth.forgotPasswordSent'));
   });
 
   test('missing email returns 400', async () => {
@@ -486,7 +489,7 @@ describe('POST /auth/reset-password', () => {
       .post('/auth/reset-password')
       .send({ token, password: 'newpassword1' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/lykilorð uppfært/i);
+    expect(res.body.message).toBe(tx('errors.auth.passwordUpdatedReLogin'));
   });
 
   test('invalid token returns 400', async () => {
@@ -508,7 +511,7 @@ describe('POST /auth/reset-password', () => {
       .post('/auth/reset-password')
       .send({ token, password: 'newpassword1' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/útrunnið/);
+    expect(res.body.error).toBe(tx('errors.auth.resetTokenExpired'));
   });
 
   test('weak new password returns 400', async () => {
@@ -628,7 +631,7 @@ describe('POST /auth/resend-verification', () => {
   test('missing email returns 400', async () => {
     const res = await request(app).post('/auth/resend-verification').send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/netfang/i);
+    expect(res.body.error).toBe(tx('errors.auth.emailRequired'));
   });
 
   test('nonexistent email returns 200 (no enumeration)', async () => {
@@ -636,7 +639,7 @@ describe('POST /auth/resend-verification', () => {
       .post('/auth/resend-verification')
       .send({ email: 'nobody@nowhere.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/bíður staðfestingar/);
+    expect(res.body.message).toBe(tx('errors.auth.resendVerificationSent'));
     expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
   });
 
@@ -646,7 +649,7 @@ describe('POST /auth/resend-verification', () => {
       .post('/auth/resend-verification')
       .send({ email: 'admin@test.com' });
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/bíður staðfestingar/);
+    expect(res.body.message).toBe(tx('errors.auth.resendVerificationSent'));
     expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
   });
 
@@ -666,7 +669,7 @@ describe('POST /auth/resend-verification', () => {
       .send({ email: 'pending@example.com' });
 
     expect(res.status).toBe(200);
-    expect(res.body.message).toMatch(/bíður staðfestingar/);
+    expect(res.body.message).toBe(tx('errors.auth.resendVerificationSent'));
     expect(emailService.sendVerificationEmail).toHaveBeenCalledTimes(1);
     expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
       'pending@example.com',

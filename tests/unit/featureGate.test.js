@@ -22,34 +22,48 @@ const { ROOT, tree } = require('../lib/sourceTree');
 const specs = [...tree].filter((p) => /^e2e\/[^/]+\.spec\.js$/.test(p));
 const suites = [...tree].filter((p) => /^tests\/(unit|integration)\/[^/]+\.test\.js$/.test(p));
 
-describe('in the engine nothing is gated', () => {
+// Which repo is this? The mapping rules below hold everywhere; the "nothing
+// is gated" rules are the ENGINE's own pin — a downstream's local.json is
+// never empty and the engine's product folder (features/os/) is foreign there.
+const { role } = JSON.parse(fs.readFileSync(path.join(ROOT, 'engine.json'), 'utf8'));
+const describeEngine = role === 'engine' ? describe : describe.skip;
+
+describe('every suite maps to a feature (in every repo)', () => {
+  const g = defaultGate();
+
+  test('every e2e spec belongs to a feature', () => {
+    expect(specs.length).toBeGreaterThan(10); // guard
+    expect(specs.filter((p) => g.featureFor(p) === null)).toEqual([]);
+  });
+
+  test('every jest suite belongs to a feature', () => {
+    expect(suites.length).toBeGreaterThan(50); // guard
+    expect(suites.filter((p) => g.featureFor(p) === null)).toEqual([]);
+  });
+
+  test('an unknown feature id never skips (a typo must not silence a suite)', () => {
+    expect(g.gate('no-such-feature')).toMatchObject({ skip: false, reason: null });
+  });
+});
+
+describeEngine('in the engine nothing is gated', () => {
   const g = defaultGate();
 
   test('features/local.json carries no overrides', () => {
     expect(g.local).toEqual({});
   });
 
-  test('every e2e spec belongs to a feature and runs', () => {
-    expect(specs.length).toBeGreaterThan(10); // guard
-    const unmapped = specs.filter((p) => g.featureFor(p) === null);
-    expect(unmapped).toEqual([]);
-    const gated = specs.filter((p) => g.gateForSpec(p).skip);
-    expect(gated).toEqual([]);
+  test('every e2e spec runs', () => {
+    expect(specs.filter((p) => g.gateForSpec(p).skip)).toEqual([]);
   });
 
-  test('every jest suite belongs to a feature and runs', () => {
-    expect(suites.length).toBeGreaterThan(50); // guard
-    expect(suites.filter((p) => g.featureFor(p) === null)).toEqual([]);
+  test('every jest suite runs', () => {
     expect(suites.filter((p) => g.gateForSpec(p).skip)).toEqual([]);
   });
 
   test('the product’s own features are not foreign', () => {
     expect(g.features.filter((f) => f.foreign)).toEqual([]);
     expect(g.gate('company-content').skip).toBe(false);
-  });
-
-  test('an unknown feature id never skips (a typo must not silence a suite)', () => {
-    expect(g.gate('no-such-feature')).toMatchObject({ skip: false, reason: null });
   });
 
   test('describeFor hands back the real describe when nothing is gated', () => {
@@ -116,6 +130,33 @@ describe('a downstream that hides public-site', () => {
       fs.writeFileSync(p, JSON.stringify({ 'public-site': { status } }));
       expect(createGate({ localPath: p }).gate('public-site')).toMatchObject({ skip: true, status });
     }
+  });
+});
+
+describe('a feature switched off by its module flag', () => {
+  const features = [
+    { id: 'self-update', owner: 'engine', folderOwner: 'engine', foreign: false, status: 'live', flag: 'modules.selfUpdate.enabled', paths: ['tests/integration/updateChecker.test.js'] },
+    { id: 'auth', owner: 'engine', folderOwner: 'engine', foreign: false, status: 'live', flag: null, paths: ['tests/integration/auth.test.js'] },
+  ];
+  const localPath = path.join(os.tmpdir(), 'feature-gate-does-not-exist.json');
+
+  test('skips as disabled when the resolved config says false, naming the flag', () => {
+    const g = createGate({ features, localPath, config: { modules: { selfUpdate: { enabled: false } } } });
+    expect(g.gate('self-update')).toMatchObject({ skip: true, status: 'disabled' });
+    expect(g.gate('self-update').reason).toContain('modules.selfUpdate.enabled = false');
+    expect(g.gateForSpec('tests/integration/updateChecker.test.js').skip).toBe(true);
+    expect(g.gate('auth').skip).toBe(false);
+  });
+
+  test('runs when the flag is true, or when the feature has no flag', () => {
+    const g = createGate({ features, localPath, config: { modules: { selfUpdate: { enabled: true } } } });
+    expect(g.gate('self-update').skip).toBe(false);
+    expect(g.gate('auth').skip).toBe(false);
+  });
+
+  test('the repo gate reads this instance’s client config for the real self-update flag', () => {
+    const { clientConfig } = require('../../server/config/clientConfig');
+    expect(defaultGate().gate('self-update').skip).toBe(clientConfig.modules.selfUpdate.enabled === false);
   });
 });
 

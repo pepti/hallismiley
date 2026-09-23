@@ -26,9 +26,21 @@ incidents that used to live in `CLAUDE.md` are in the same file, from
   Organization) lives in `config/client.json` `identity`; the theme and brand
   hooks are retired; `features/os/` suites skip through the feature gate
   ([engine-sync-2026-09-23](docs/HISTORY.md#engine-sync-2026-09-23)).
+- 2026-09-23 — engine sync to `57362dc` (identity seam v2 + the 2FA harvest):
+  the public IA (`identity.surface.nav` = the base's six links), the dark
+  theme set and the page meta (overlay `meta.*` keys) are config; the nav,
+  sitemap, manifest and robots present as this site; `news-editor.spec.js`
+  went up to the engine ([engine-sync-2-2026-09-23](docs/HISTORY.md#engine-sync-2-2026-09-23)).
 
 **Open — what the identity seam still lacks (engine changes, Halli decides)**
-Listed with the pinning test for each in
+Since the 57362dc sync the list is § "What the seam still lacks" in
+[engine-sync-2-2026-09-23](docs/HISTORY.md#engine-sync-2-2026-09-23):
+`identity.routes` for `/aron13ara`, the `identityDownstream.test.js` title
+literals (so `meta.projects.title` is not overlaid), the nav-only sitemap,
+Bjart-as-classic, `APP_URL` on the App Service, the per-repo `features-index`
+output; plus two test-side residuals for the engine (`i18nIdentity` meta pin
+ungated, `architectureIndex` counting foreign links). The first sync's list,
+kept for the record —
 [engine-sync-2026-09-23](docs/HISTORY.md#engine-sync-2026-09-23) § "What the
 seam still lacks": the public IA (`NavBar.js` links the company pages as
 literals; `ssrMeta.test.js`, `e2e/navigation.spec.js`, `e2e/business-routes.spec.js`
@@ -38,9 +50,11 @@ pin it — the red tests on the branch), the page parts/descriptions in
 Product-schema brand and the Organization `@type`; the engine suites that
 assume the Icelandic visitor default (auth/OAuth/contact/media/projects) and
 the engine-only gate/registry/identity tests; and `APP_URL` must be set on
-the App Service (the engine's fallback origin is orangesmiley.is). Jest on the
-branch: 92 failing cases, all in that list — the PR stays draft until the
-engine closes them.
+the App Service (the engine's fallback origin is orangesmiley.is). Items 1–4,
+6, 8 and 9 of that list are closed by identity-seam-2.
+- `e2e/aron13.spec.js` — the ×2 failure was the graft losing the base's
+  `main.css` `@import` of `aron13.css`; the view loads its stylesheet itself
+  since the 57362dc sync (product-owned fix, no engine hook).
 
 **Open — housekeeping**
 - `server/utils/canonicalHost.js` is no longer required by the app (the

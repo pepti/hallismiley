@@ -114,7 +114,18 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
     seam — `clientConfig.identity` server-side, `utils/identity.js` client-side,
     `e2e/lib/identity.js` in Playwright — so a downstream sets its block once
     and the engine's suites assert its values. A sync never conflicts on a
-    brand literal because the engine carries none.
+    brand literal because the engine carries none. Since identity-seam-2
+    (2026-09-23) the seam also owns the **public IA** (`identity.surface.nav`,
+    ordered `{ route, labelKey }` — the top nav, both footers and the sitemap
+    derive from it minus `hiddenRoutes`), the **page meta** (`meta.<key>.title`
+    / `.description` are i18n keys a product overrides in its
+    `product.<locale>.json`, on both sides), the manifest name and the
+    Product-schema brand; engine suites take their expected locale strings
+    from `tests/lib/locale.js` (the visitor default), and the engine-only pins
+    (committed `client.json` = defaults, empty `local.json`, empty overlays)
+    run only where `engine.json.role` is `engine`. **`APP_URL` is not in the
+    seam**: its code fallback is the engine's origin — set it on every
+    downstream's App Service (`docs/DEPLOYMENT.md` §5).
   - **Tests for a hidden feature skip; never delete an engine spec.** A
     feature the product hides, disables or forks is recorded in
     `features/local.json`; the feature gate (`tests/lib/featureGate.js`,

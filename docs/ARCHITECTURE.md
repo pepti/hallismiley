@@ -110,17 +110,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Controllers | `server/controllers/authController.js`, `googleAuthController.js`, `facebookAuthController.js`, `userController.js`, `adminController.js`, `adminRolesController.js` |
 | Models | `server/models/Role.js`, `server/models/UserRole.js` (users are written by the controllers directly) |
 | Services | `server/services/mfaService.js`, `server/services/tokenCleanup.js` |
-| Auth layer | `server/auth/lucia.js`, `middleware.js`, `roles.js`, `tokens.js`, `adminViews.js`, `requireView.js`, `google.js`, `facebook.js`, `oauthHelpers.js`; `server/utils/adminRole.js`, `server/utils/totp.js` |
+| Auth layer | `server/auth/lucia.js`, `middleware.js`, `roles.js`, `tokens.js`, `adminViews.js`, `requireView.js`, `mfaPolicy.js`, `google.js`, `facebook.js`, `oauthHelpers.js`; `server/utils/adminRole.js`, `server/utils/totp.js`, `server/utils/secretBox.js`; break-glass `server/scripts/reset-admin-totp.js` |
 | Middleware | `server/middleware/softAuth.js`, `server/middleware/csrf.js` |
 | Views | `public/js/views/SignupView.js`, `ProfileView.js`, `ForgotPasswordView.js`, `ResetPasswordView.js`, `VerifyEmailView.js`, `AdminUsersView.js`, `AdminRolesView.js` |
 | Components | `public/js/components/LoginModal.js`, `totpFailure.js` |
 | Client | `public/js/services/auth.js`, `sessionGuard.js`, `adminRoles.js`; `public/js/utils/passwordToggle.js`, `safeReturnTo.js`, `avatar.js` |
 | CSS | `public/css/user-system.css`, `admin-roles.css` |
-| Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `security.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js` |
-| e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js` |
-| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme) |
+| Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `security.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js` |
+| e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` |
+| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase) |
 | Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
-| Feature doc | `docs/API.md` (Authentication) |
+| Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
 **Rules that must hold**
 - Lucia v3 owns sessions; there is no JWT layer (invariant 3).
@@ -128,6 +128,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `accounts` holder) and client `auth.isMfaProtected()` must widen together;
   `tests/unit/mfaProtectedClient.test.js` pins them, and enrolment eligibility
   asks the same predicate the gate does ([ui-kit](HISTORY.md#ui-kit), [review-099](HISTORY.md#review-099)).
+- Enrolment is MANDATORY for every protected account, and the rule lives in
+  `auth/mfaPolicy.js` and nowhere else: `attachRoles` (the one session reader
+  every middleware shares) withholds `admin` from an unenrolled admin's role
+  set and `requireView` withholds the `accounts` view from an unenrolled
+  holder; guards never re-implement it, `forbiddenMessage` only makes the 403
+  say why. Session payloads carry the same downgrade plus
+  `mfa_enrolment_required`; the SPA's `mfaEnrolmentRequired()` is UX. An
+  account that owes enrolment is always enrolment-eligible. `ADMIN_TOTP_EXEMPT`
+  is ignored under `NODE_ENV=production`; the break-glass is
+  `server/scripts/reset-admin-totp.js` ([harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)).
+- The TOTP secret is sealed at rest (`utils/secretBox.js`, AES-256-GCM under
+  `TOTP_ENC_KEY`, user id as associated data) in the EXPAND phase of migration
+  107: both `totp_secret` and `totp_secret_enc` are written, the sealed copy is
+  read first with a plaintext fallback, a pre-107 account is sealed at its next
+  sign-in, and without the key nothing changes. Stop writing the plaintext in a
+  later release (N+1), drop it in N+2 — invariant 14
+  ([harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)).
 - Social login is OFF here (no OAuth app configured); OAuth accounts are refused
   admin; the role-SET path carries the 2FA/OAuth gates via `utils/adminRole.js`
   ([base-sync](HISTORY.md#base-sync), [harvest-1](HISTORY.md#harvest-1)).
@@ -147,7 +164,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
@@ -208,7 +225,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (robots, sitemap) |
+| Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (robots, sitemap) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
 | Controllers | `server/controllers/contactController.js` |
 | Services | `server/services/indexNow.js`, `server/services/outboundAllowlist.js` |
 | Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization); `server/utils/canonicalHost.js` (hallismiley's `APP_URL` → host resolver; the engine's `app.js` resolves inline — see Ownership notes) |
@@ -219,10 +236,28 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js`; `canonicalHost.test.js` (hallismiley) |
 | e2e | `e2e/business-routes.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017 |
-| Features | [public-site](../features/public-site.md), [hallismiley-site](../features/hs/hallismiley-site.md) (hs), [company-content](../features/os/company-content.md) (os — the engine's own product feature, inert here) |
+| Features | [public-site](../features/public-site.md), [hallismiley-site](../features/hs/hallismiley-site.md) (hs); the engine's own product feature `features/os/company-content.md` is foreign here (inert, not linked) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
 **Rules that must hold**
+- **The public IA is the product's** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
+  `/`, then `identity.surface.nav` (ordered `{ route, labelKey }` entries;
+  `/thjonusta`, `/um-okkur`, `/hafa-samband` here), then the legal pages —
+  each minus `identity.surface.hiddenRoutes` (hidden wins when a route is in
+  both). `publicSurface.js` derives `PUBLIC_NAV` / `LEGAL_ROUTES` server-side,
+  `utils/identity.js` `publicNav()` / `isHiddenRoute()` client-side, and the
+  NavBar, both footers (HomeView, ContactView), the sitemap and the
+  robots/noindex rule all read those — no route literal in an engine surface.
+  The home products card renders only while `/thjonusta` is public; the
+  footer mail icon is `identity.organization.email`. Everything else is
+  hidden, still served.
+- **hallismiley:** `identity.surface.nav` is the base's six-link nav
+  (`/projects`, `/shop`, `/news`, `/halli`, `/contact`, `/party`), `theme.dark`
+  the five colour themes, and the base's page meta lives in
+  `server/i18n/product.{en,is}.json` + the client overlay (`meta.*`). The one
+  hook on engine files is `/aron13ara` (route, `ROUTE_META`/`DEFAULT_META`
+  key rows, `pageTitle.js`, the IS-only lock) — until the engine's
+  `identity.routes`; see [engine-sync-2-2026-09-23](HISTORY.md#engine-sync-2-2026-09-23).
 - Public IA is `/`, `/thjonusta`, `/um-okkur`, `/hafa-samband`, `/personuvernd`;
   everything else is in `publicSurface.js` — hidden, still served.
 - **hallismiley (engine-graft):** the portfolio IA the site shipped before the
@@ -257,10 +292,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
   visitor-default locale all read `identity.*` — `server/config/identity.js`
   server-side (from `clientConfig`), `public/js/utils/identity.js` client-side
   (from the `<script id="identity">` ssrMeta injects). `ssrMeta.js` and
-  `pageTitle.js` hold page PARTS; the document title is part +
+  `pageTitle.js` hold page PARTS as i18n KEYS (`meta.<key>.title` /
+  `meta.<key>.description`, engine tables + `product.<locale>.json` overlay —
+  [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)); the document title is the translated part +
   `brand.titleSuffix`, or the part with `{brand}` substituted (home), or the
   part as written for `titleMode: 'bare'` (the portfolio surfaces keep "Halli
-  Smiley" on purpose). `loadTemplate()` drops the baked Organization from
+  Smiley" on purpose). A description names the company as `{legalName}`.
+  `/manifest.json` is served by `manifestRoutes.js` from the identity over the
+  static engine default; the Product-schema `brand` is `identity.brand.name`;
+  the Organization `@type` stays `Organization` for every product (schema.org
+  is fine with it for a personal site; a downstream does not fork it). `loadTemplate()` drops the baked Organization from
   `index.html` and the server emits it from the identity on every page, on the
   `${APP_URL}/#organization` id everything references.
 - `pageTitle.js` mirrors `ssrMeta.js`; the parity test parses the server file
@@ -296,7 +337,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/ambienceRoutes.js` → `/api/v1/ambience` |
 | Controllers | `server/controllers/ambienceController.js` |
 | Services | `server/services/icelandAmbience.js` |
-| Config | `server/config/themes.js`, `server/config/sceneManifest.json` |
+| Config | `server/config/themes.js`, `server/config/sceneManifest.json`, `server/config/sceneRoutes.js` (route → scene image, shared by ssrMeta's preload and `e2e/iceland-scene.spec.js`) |
 | Components | `public/js/components/ThemeSwitcher.js` |
 | Scenes | `public/js/scenes/SceneStage.js`, `AmbienceEngine.js`, `sceneDefs.js`, `sceneHeader.js`, `manifest.js`, `aurora.js`, `particles.js`, `sun.js`, `sound.js` |
 | Client | `public/js/theme-boot.js`, `public/js/services/themePrefs.js`, `ambiencePrefs.js`; `public/js/utils/chartTheme.js`, `motion.js` |
@@ -343,8 +384,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   visitor-facing page has one — bands via `mountSceneHeader`, the card pages
   (signup, forgot/reset password, verify email) a one-viewport backdrop via
   `mountSceneBackdrop`. Not on the homepage (video), the hidden surfaces or
-  admin. No place chip: the images are not real places. `ssrMeta.js`
-  `ROUTE_SCENE_IMAGES` follows every reassignment ([iceland-v2](HISTORY.md#iceland-v2)).
+  admin. No place chip: the images are not real places.
+  `server/config/sceneRoutes.js` `ROUTE_SCENE_IMAGES` (ssrMeta's preload and
+  `e2e/iceland-scene.spec.js` read it) follows every reassignment
+  ([iceland-v2](HISTORY.md#iceland-v2), [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)).
 - `/api/v1/ambience` proxies Open-Meteo with a 10-minute server cache and
   ALWAYS answers 200 (`{available:false}` on failure, static scenes); sun
   position is client-side; weather particles + WebGL aurora run on dark themes
@@ -371,6 +414,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | — |
 
 **Rules that must hold**
+- **The page meta is i18n** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)): `meta.<key>.title`
+  (both tables) and `meta.<key>.description` (server table) carry the text
+  `ssrMeta.js` / `pageTitle.js` used to hold as literals; a product overrides
+  them in `product.<locale>.json` on BOTH sides. `t()` also injects
+  `{legalName}`; `has(locale, key)` tells an absent optional string from text.
+  `tests/unit/pageTitle.test.js` holds the client and server tables to the
+  same text for every title key.
+- **Tests assert the visitor default, not Icelandic** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
+  `tests/lib/locale.js` (`PUBLIC_DEFAULT_LOCALE`, `tx()`, `tClient()`,
+  `localePrefix()`; `e2e/lib/locale.js` re-exports it) is where an engine
+  suite gets an expected API string or redirect target — the exact translated
+  string, never a literal and never weakened. Only the party route's `/is/`
+  stays literal (it is locale-locked).
 - IS is the visitor default here (`PUBLIC_DEFAULT_LOCALE`), and it comes from
   the identity seam — `identity.locale.publicDefault`, the env var still
   winning — on both sides (`server/config/i18n.js`; `public/js/i18n/i18n.js`
@@ -667,6 +723,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Scripts | `server/scripts/seed-news.js`, `update-portfolio-project.js`, `seed-arnarhraun.js`, `seed-stofan-bakhus.js`; `scripts/generate-avatars.js`, `scripts/gen-fb-icon.js` |
 | CSS | `public/css/news.css`, `party.css`, `gallery.css`, `project-edit.css`, `halli-bio.css`; `aron13.css` (hallismiley) |
 | Jest | `tests/integration/news.test.js`, `newsMedia.test.js`, `projects.test.js`, `party.test.js`, `content.partyRsvpForm.test.js`, `videos.test.js`; `tests/unit/partyRsvpStatus.test.js`, `partyNotifyRecipients.test.js`, `partyTimingBucket.test.js` |
+| e2e (news) | `e2e/news-editor.spec.js` — the editor overlay covers the viewport and scrolls to its footer (from hallismiley, [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)) |
+| e2e | `e2e/gallery.spec.js`, `project-edit.spec.js` |
 | e2e | `e2e/gallery.spec.js`, `project-edit.spec.js`; `news-editor.spec.js`, `aron13.spec.js` (hallismiley) |
 | Migrations | 004, 008, 010, 011, 013–016, 018, 019, 026, 027, 039, 040, 042, 044, 058–063, 066–071 |
 | Features | [bio](../features/bio.md), [news](../features/news.md), [party](../features/party.md), [projects](../features/projects.md), [aron13](../features/hs/aron13.md) (hs) |
@@ -894,9 +952,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js` |
+| App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
-| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`; `scripts/drop-test-dbs.js` |
+| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml`, `deploy.yml` (hallismiley's, product-owned: `workflow_run` on green CI on `main` + `workflow_dispatch` — NOT the engine's dispatch-only one), `promote.yml`, `trivy.yml` (hallismiley: scheduled, non-blocking image CVE scan); `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
@@ -904,6 +962,25 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
 
 **Rules that must hold**
+- **Engine-only pins are gated on `engine.json.role`** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
+  a test that states a fact about THIS repo (the committed `client.json`
+  equals the schema defaults, `features/local.json` is empty, the product
+  overlays are empty) runs only when `role === 'engine'`; a pin about the
+  ENGINE (the schema defaults, the email/meta text with those defaults)
+  compares `defaults()` or a temp `client.json`, never the resolved instance.
+  Another product's feature folder is foreign wherever it is, and an os
+  feature claims `product-migrations/os.js`, never the folder.
+- `identity.surface.nav` is a list of `{ route, labelKey }` records (schema
+  type `object[]`, JSON in the env layer); `defaults()` hands out fresh
+  records; the client merge takes a record list whole or not at all.
+- **The theme set validates `default ∈ picker` only** (identity-seam-2): the
+  root may sit outside the picker (a two-theme product keeps `:root` as an
+  unlisted base); `identity.theme.dark` names the ids that paint a dark page
+  and `themePrefs.js` `DARK_THEMES` reads it (an unknown id gets the neutral
+  token swatch). A feature whose registry `flag` resolves to `false` in the
+  client config is gated `disabled` by `tests/lib/featureGate.js`.
+  `/robots.txt` is served by `robotsRoutes.js` with the Disallow lines from
+  `hiddenRoutes` per locale; `public/robots.txt` is the engine default.
 - Jest: 4 workers, one database each (`orangesmiley_w<N>_test`, worker id
   BEFORE `_test`), one migrated template cloned per worker; never add an
   `afterAll pool.end()` ([harvest-2](HISTORY.md#harvest-2)). e2e uses an

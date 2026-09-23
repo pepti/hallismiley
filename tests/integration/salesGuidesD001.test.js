@@ -27,7 +27,10 @@ function oldGuide(g) {
   }
   return row;
 }
-const OLD = GUIDES.map(oldGuide);
+// Filled inside the gated describe (beforeAll), not at module load: on a
+// product where os_001 is not in the migration set, `m` is undefined and
+// reconstructing the old text here would throw before the gate could skip.
+const OLD = [];
 const oldOf = (slug) => OLD.find(g => g.slug === slug);
 const seedOf = (slug) => GUIDES.find(g => g.slug === slug);
 const text = (g) => [g.title, g.summary, g.body].join('\n');
@@ -52,6 +55,7 @@ const { describeForSpec } = require('../lib/featureGate');
 const describe = describeForSpec(__filename);
 
 describe('os_001 — sales guides on the D-001 price model and the demo instance', () => {
+  beforeAll(() => { OLD.push(...GUIDES.map(oldGuide)); });
   beforeEach(async () => { await db.query('DELETE FROM sales_guides WHERE slug = ANY($1)', [SLUGS]); });
   afterAll(async () => { await db.query('DELETE FROM sales_guides WHERE slug = ANY($1)', [SLUGS]); });
 

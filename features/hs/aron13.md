@@ -16,7 +16,7 @@ paths:
 migrations: []
 since: 2026-09-06
 origin: null
-history: [engine-graft]
+history: [engine-graft, engine-sync-2-2026-09-23]
 ---
 
 Aron's 13th-birthday puzzle page: three mini games in order (mining, crafting,
@@ -32,8 +32,14 @@ are product-owned here and its route is a residual hook on three engine files
 - `/aron13ara` is unlisted: no nav link, absent from the sitemap, Icelandic-only
   (`IS_ONLY_PAGES` in `server/config/i18n.js` + its mirror in
   `public/js/i18n/i18n.js` — a residual hook, the engine has no IS-only pages)
-  and noindexed through `HIDDEN_PUBLIC_ROUTES` in
-  `server/config/publicSurface.js`.
+  and noindexed through `identity.surface.hiddenRoutes` in `config/client.json`
+  (robots.txt disallows it per locale for the same reason).
+- The view loads its own stylesheet (`/css/aron13.css`, a `<link>` it appends
+  once and awaits): the base's `main.css` imported it and the engine's does
+  not, and the graft lost the import — the crafting cells measured 0×0 and
+  `e2e/aron13.spec.js` read that as "never stable" until
+  [engine-sync-2-2026-09-23](../../docs/HISTORY.md#engine-sync-2-2026-09-23).
+  Never re-add the import to `main.css` (an engine file).
 - The catch game exposes a finish hook only when the server stamps a
   non-production app-env; `e2e/aron13.spec.js` relies on it.
 - Engine context: [../../docs/ARCHITECTURE.md#12-news-projects-party-bio-hidden-portfolio](../../docs/ARCHITECTURE.md#12-news-projects-party-bio-hidden-portfolio).

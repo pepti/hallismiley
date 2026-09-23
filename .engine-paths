@@ -34,7 +34,6 @@ docs/product/**
 # From the `paths` of every feature whose owner is not `engine`
 .github/workflows/trivy.yml
 e2e/aron13.spec.js
-e2e/news-editor.spec.js
 public/assets/party/venue/**
 public/css/aron13.css
 public/js/views/Aron13View.js
@@ -42,6 +41,7 @@ public/js/views/aron13-font.js
 public/js/views/aron13-fx.js
 public/js/views/aron13-games/**
 public/js/views/aron13-sprites.js
+server/config/product-migrations/hs.js
 server/utils/canonicalHost.js
 tests/unit/booksRouteOrder.test.js
 tests/unit/canonicalHost.test.js

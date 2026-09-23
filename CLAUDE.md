@@ -9,12 +9,13 @@ engine (`engine.json`: product `hs`, role `personal`, upstream orangesmiley
 site-factory `engine-sync.js`; what is this site's own lives in product-owned
 paths (`.engine-paths`, generated from `features/hs/*.md`). **Who this site
 is lives in `config/client.json` `identity`** (brand, visitor locale `en`,
-theme trio `classic` + six ids, the waterfall hero, hidden company pages,
-Organization — the engine's D-021 seam, since the 2026-09-23 sync); brand
-strings the engine's locale tables carry are overlay keys in
-`public/js/i18n/product.<locale>.json`. The one residual hook on engine files
-is `/aron13ara`; what the seam still lacks is in
-`docs/HISTORY.md#engine-sync-2026-09-23`. `server/config/schema.js` is the
+theme trio `classic` + six ids (five dark), the waterfall hero, the six-link
+public nav, hidden company pages, Organization — the engine's D-021 seam,
+since the 2026-09-23 syncs); brand strings and the page meta the engine's
+locale tables carry are overlay keys in `public/js/i18n/product.<locale>.json`
+and `server/i18n/product.<locale>.json`. The one residual hook on engine
+files is `/aron13ara` (+ a few gated lines in six engine tests); what the seam still lacks
+is in `docs/HISTORY.md#engine-sync-2-2026-09-23`. `server/config/schema.js` is the
 engine's; hallismiley's old 080–085 numbering is mapped by the `aliases` in
 `server/config/product-migrations/hs.js`. **Merging `main` deploys**: never
 push an engine sync without green CI, never from a scratch clone.

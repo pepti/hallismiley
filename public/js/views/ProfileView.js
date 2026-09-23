@@ -1,4 +1,4 @@
-import { isAuthenticated, isMfaProtected, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
+import { isAuthenticated, isMfaProtected, mfaEnrolmentRequired, refreshSession, getUser, getProfile, updateProfile, uploadAvatar, changePassword, getSessions, revokeSession, revokeAllSessions, totpSetup, totpConfirm, totpDisable } from '../services/auth.js';
 import { showToast } from '../components/Toast.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDate, formatDateTime } from '../utils/format.js';
@@ -62,8 +62,13 @@ export class ProfileView {
       // with it; with no manifest entry it simply stays where it is.
       const header = wrap.querySelector('.profile-header');
       if (header && !this._disposed) this._scene = mountSceneHeader(el, 'profile', header);
-      if (isMfaProtected()) {
+      // An account that OWES enrolment has what made it protected withheld from
+      // its session (admin role, accounts view), so isMfaProtected() alone would
+      // hide the one panel it needs — mfaEnrolmentRequired() is the other half.
+      if (isMfaProtected() || mfaEnrolmentRequired()) {
         this._renderTotp(el);
+        // Sent here to set it up (LoginModal / router): put the panel in view.
+        if (mfaEnrolmentRequired()) el.querySelector('#totp-section')?.scrollIntoView({ block: 'center' });
       }
 
       // Admin-only: the landing-page background editor and, below it, the
@@ -120,6 +125,7 @@ export class ProfileView {
              </div>
            </form>`
         : `<p class="profile-hint">${t('profile.twoStepOff')}</p>
+           ${mfaEnrolmentRequired() ? `<p class="profile-hint totp-required" role="status" data-testid="totp-required"><strong>${t('profile.twoStepRequired')}</strong></p>` : ''}
            <p class="form-error" id="totp-error" aria-live="polite"></p>
            <div class="form-actions">
              <button type="button" class="btn btn--primary" id="totp-start" data-testid="totp-start">${t('profile.twoStepSetUp')}</button>
@@ -197,7 +203,12 @@ export class ProfileView {
           <div class="form-actions">
             <button type="button" class="btn btn--primary" id="totp-done">${t('profile.twoStepSavedThem')}</button>
           </div>`;
-        body.querySelector('#totp-done').addEventListener('click', repaint);
+        // Only now: refreshSession() fires authchange, the router re-renders this
+        // view, and the codes are gone for good. It also turns the account into
+        // the admin it is — the nav grows its admin entries.
+        body.querySelector('#totp-done').addEventListener('click', async () => {
+          try { await refreshSession(); } catch { repaint(); }
+        });
       } catch (err) { err2.textContent = err.message; }
     });
   }
@@ -320,8 +331,10 @@ export class ProfileView {
            (ENHANCEMENTS #17) — because offering it elsewhere would promise
            protection that never engages, and withholding it from a challenged
            account locks that account out. The predicate is
-           auth.isMfaProtected(), mirroring mfaService. Rendered from the session's totp_enabled flag. -->
-      ${isMfaProtected() ? `
+           auth.isMfaProtected(), mirroring mfaService — OR the account owes
+           enrolment (mfaEnrolmentRequired: the server withheld the very role or
+           view isMfaProtected would read). Rendered from the session's totp_enabled flag. -->
+      ${(isMfaProtected() || mfaEnrolmentRequired()) ? `
       <section class="profile-section" id="totp-section" data-testid="totp-section">
         <h2 class="profile-section__title">${t('profile.twoStepTitle')}</h2>
         <div id="totp-body"></div>

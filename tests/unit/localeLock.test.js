@@ -162,12 +162,13 @@ describe('resolveLocale — ordinary routes are untouched', () => {
     expect(resolveLocale(req('/projects', { user: { preferred_locale: 'en' } }))).toBe('en');
   });
 
-  // The whole point of the Icelandic default: an en-US browser is the norm in
-  // Iceland, so it must not be mistaken for "this visitor wants English".
-  test('Accept-Language never moves a visitor off Icelandic', () => {
-    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'is-IS,is;q=0.9' } }))).toBe('is');
-    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'de-DE' } }))).toBe('is');
+  // The whole point of the visitor default: an en-US browser is the norm in
+  // Iceland, so it must not be mistaken for "this visitor wants English" —
+  // whatever the product's default is, the header never moves a visitor off it.
+  test('Accept-Language never moves a visitor off the visitor default', () => {
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))).toBe(PUBLIC_DEFAULT_LOCALE);
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'is-IS,is;q=0.9' } }))).toBe(PUBLIC_DEFAULT_LOCALE);
+    expect(resolveLocale(req('/projects', { headers: { 'accept-language': 'de-DE' } }))).toBe(PUBLIC_DEFAULT_LOCALE);
   });
 
   test('no signal at all falls back to PUBLIC_DEFAULT_LOCALE (the product identity’s visitor default)', () => {

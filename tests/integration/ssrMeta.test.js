@@ -137,18 +137,23 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
   // "Hidden from nav/SSR/sitemap, still functional" — the routes render a
   // full page; they are simply de-indexed. See server/config/publicSurface.js.
+  // Both lists are the product's (identity.surface.*), never literals: the
+  // hidden routes are noindexed, home + the nav + the legal pages stay
+  // indexable — whatever a downstream puts in each.
   describe('hidden public surfaces', () => {
-    test.each(['/is/party', '/is/halli', '/is/news', '/is/shop', '/is/projects', '/is/contact'])(
-      '%s still renders, marked noindex',
-      async (path) => {
-        const res = await request(app).get(path);
-        expect(res.status).toBe(200);
-        expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
-        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
-      }
-    );
+    const { PUBLIC_NAV, LEGAL_ROUTES } = require('../../server/config/publicSurface');
+    // hallismiley (engine-sync-2): a locale-locked route (/party, /aron13ara)
+    // renders only under its locale — the visitor-default prefix 301s there.
+    const { forcedLocaleFor } = require('../../server/config/i18n');
+    const lcOf = (r) => forcedLocaleFor(r) || LC;
+    const hidden = ID.surface.hiddenRoutes.map((r) => `/${lcOf(r)}${r}`);
+    const indexable = ['/', ...PUBLIC_NAV.map((e) => e.route), ...LEGAL_ROUTES].map((r) => `/${lcOf(r)}${r === '/' ? '/' : r}`);
 
-    test.each(['/is/', '/is/thjonusta', '/is/um-okkur', '/is/hafa-samband', '/is/personuvernd'])(
+    test('the lists are non-trivial (guard)', () => {
+      expect(indexable.length).toBeGreaterThan(1);
+    });
+
+    test.each(indexable)(
       '%s stays indexable',
       async (path) => {
         const res = await request(app).get(path);
@@ -157,10 +162,23 @@ describe('SSR meta-injection — SPA catch-all', () => {
       }
     );
 
-    test('a hidden detail route is de-indexed too', async () => {
-      const res = await request(app).get('/is/news/some-article-slug');
-      expect(res.status).toBe(200);
-      expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+    // A product may hide nothing; `.each` refuses an empty list.
+    (hidden.length ? describe : describe.skip)('the hidden routes', () => {
+      test.each(hidden)(
+        '%s still renders, marked noindex',
+        async (path) => {
+          const res = await request(app).get(path);
+          expect(res.status).toBe(200);
+          expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
+          expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+        }
+      );
+
+      test('a hidden detail route is de-indexed too', async () => {
+        const res = await request(app).get(`/${LC}${ID.surface.hiddenRoutes[0]}/some-detail-slug`);
+        expect(res.status).toBe(200);
+        expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+      });
     });
   });
 
@@ -498,8 +516,12 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
 describe('business JSON-LD', () => {
   const ORG_ID = /"@id":\s*"https?:\/\/[^"]*\/#organization"/;
+  // hallismiley (engine-sync-2): the Service catalogue (the company's offering)
+  // is emitted only while /thjonusta is public (identity-seam-2).
+  const { isHiddenRoute } = require('../../server/config/publicSurface');
+  const testServices = isHiddenRoute('/thjonusta') ? test.skip : test;
 
-  test('the home page emits WebSite + Service, both bound to the Organization', async () => {
+  testServices('the home page emits WebSite + Service, both bound to the Organization', async () => {
     const res = await request(app).get('/is/');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/"@type":"WebSite"/);
@@ -515,13 +537,13 @@ describe('business JSON-LD', () => {
     expect(res.text).toContain(`"name":${JSON.stringify(ID.brand.legalName)}`);
   });
 
-  test('the services page carries the service catalogue', async () => {
+  testServices('the services page carries the service catalogue', async () => {
     const res = await request(app).get('/is/thjonusta');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/"@type":"OfferCatalog"/);
   });
 
-  test('the catalogue lists the company\'s services, with Rekstrarkerfið as one product in it', async () => {
+  testServices('the catalogue lists the company\'s services, with Rekstrarkerfið as one product in it', async () => {
     // Orange Smiley sells any software a small business needs, and the
     // product's tiers and prices live on its own site (Halli, 2026-09-13).
     const res = await request(app).get('/is/thjonusta');

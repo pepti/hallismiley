@@ -64,6 +64,12 @@ afterEach(() => {
   else process.env.SELF_UPDATE_TRIGGER_URL = savedTriggerUrl;
 });
 
+// Skipped as a whole where self-update is switched off (modules.selfUpdate
+// .enabled = false in the client config) or the feature is hidden on this
+// product — see tests/lib/featureGate.js. Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('applyUpdate — the happy path', () => {
   test('moves the row to applying and tells the platform which digest to pull', async () => {
     const update = await seedAvailable();

@@ -32,10 +32,20 @@ async function gotoAndSettle(page, path) {
 // only render in edit mode, so a tint on them could not be checked on the
 // live nav link. The second picker test still uses `products` as its other
 // trigger: edit mode renders every line.
-const ROW   = '[data-item-id="invoices"]';
-const TRIG  = '[data-tint-btn="invoices"]';
+// Which line is visible is the product's (identity.surface.hiddenAdminViews):
+// the first of these the product does not hide is the one tinted here.
+const { identity } = require('./lib/identity');
+const CANDIDATES = [
+  ['invoices', '/admin/books/invoices'],
+  ['payroll', '/admin/books/payroll'],
+  ['feedback', '/admin/feedback'],
+  ['general', '/admin/general'],
+];
+const [VIEW, ROUTE] = CANDIDATES.find(([id]) => !identity.surface.hiddenAdminViews.includes(id)) || CANDIDATES[0];
+const ROW   = `[data-item-id="${VIEW}"]`;
+const TRIG  = `[data-tint-btn="${VIEW}"]`;
 const POP   = '.admin-sidebar__tint-pop';
-const LINK  = '.admin-sidebar a[data-route="/admin/books/invoices"]';
+const LINK  = `.admin-sidebar a[data-route="${ROUTE}"]`;
 
 // Edit mode is a desktop affordance (the toggle is hidden under 640px).
 test.use({ viewport: { width: 1280, height: 900 } });

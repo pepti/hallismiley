@@ -2,6 +2,8 @@ const request = require('supertest');
 const path    = require('path');
 const fs      = require('fs');
 const app     = require('../../server/app');
+// API strings are asserted in the visitor-default locale (tests/lib/locale.js).
+const { tx } = require('../lib/locale');
 const db      = require('../../server/config/database');
 const {
   getTestSessionCookie,
@@ -124,7 +126,7 @@ describe('GET /api/v1/projects/:id/media', () => {
   test('returns 404 for a non-existent project id', async () => {
     const res = await request(app).get('/api/v1/projects/99999/media');
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/fannst ekki/i);
+    expect(res.body.error).toBe(tx('errors.project.projectNotFound'));
   });
 
   test('is a public endpoint — no auth required', async () => {

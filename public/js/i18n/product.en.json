@@ -4,9 +4,10 @@
   "themeSwitcher.theme.lava": "Lava",
   "themeSwitcher.theme.aurora": "Aurora",
   "themeSwitcher.theme.black-sand": "Black sand",
-  "nav.brandAriaLabel": "Halli Smiley home",
   "signup.checkEmail": "Welcome to Halli Smiley!",
   "projectDetail.brandPara1": "Every detail was approached with the same care applied across all work at Halli Smiley — whether hand-selecting timber grain for a cabinet face or architecting a database schema built to survive years of production traffic without a rewrite.",
   "projectDetail.brandPara2": "The result is a finished piece that balances function and aesthetic, built to outlast trends and hold up under real-world use.",
-  "footer.companyLine": "Halli Smiley · Building things with wood and code."
+  "footer.companyLine": "Halli Smiley · Building things with wood and code.",
+  "meta.home.title": "{brand} — Icelandic Carpenter & Computer Scientist",
+  "meta.aron13.title": "Til hamingju með 13 ára afmælið, Aron!"
 }

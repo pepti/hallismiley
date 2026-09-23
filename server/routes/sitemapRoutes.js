@@ -1,9 +1,9 @@
 'use strict';
 /*
- * Dynamic sitemap.xml — the PUBLIC BUSINESS surface only: the six business
- * routes plus every project (case study). Regenerated on each request from
- * DB state; projected sitemap size stays well under Google's 50,000-URL /
- * 50 MiB limit for the foreseeable future, so a single SELECT is plenty.
+ * Dynamic sitemap.xml — the PUBLIC surface only: home, the product's nav
+ * routes and the legal pages (STATIC_ROUTES below, derived from the identity
+ * seam). Regenerated on each request; projected sitemap size stays well under
+ * Google's 50,000-URL / 50 MiB limit for the foreseeable future.
  *
  * Hidden-but-functional surfaces (party, bio, news, shop, and the superseded
  * /projects · /contact · /privacy aliases — see server/config/publicSurface.js)
@@ -16,18 +16,20 @@
 
 const express = require('express');
 const { forcedLocaleFor } = require('../config/i18n');
+const { PUBLIC_NAV, LEGAL_ROUTES } = require('../config/publicSurface');
 
 const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
-// Static business pages — one entry per locale. The home page gets an extra
-// x-default entry because it's the locale-selection landing.
+// Static pages — one entry per locale. The list is the PRODUCT's public IA
+// (identity-seam-2, 2026-09-23): the home page (with an extra x-default entry,
+// it is the locale-selection landing), then the nav routes of
+// `identity.surface.nav` in nav order, then the engine's legal pages — each
+// list already minus `identity.surface.hiddenRoutes` (config/publicSurface.js).
+// Nothing here is a route literal, so a downstream's sitemap is its own nav.
 const STATIC_ROUTES = [
-  { path: '',                 priority: '1.0', changefreq: 'monthly', includeXDefault: true  },
-  { path: '/thjonusta',       priority: '0.9', changefreq: 'monthly'                         },
-  { path: '/um-okkur',        priority: '0.7', changefreq: 'monthly'                         },
-  { path: '/hafa-samband',    priority: '0.7', changefreq: 'monthly'                         },
-  { path: '/personuvernd',    priority: '0.3', changefreq: 'yearly'                          },
-  { path: '/terms',           priority: '0.3', changefreq: 'yearly'                          },
+  { path: '', priority: '1.0', changefreq: 'monthly', includeXDefault: true },
+  ...PUBLIC_NAV.map(e => ({ path: e.route, priority: '0.8', changefreq: 'monthly' })),
+  ...LEGAL_ROUTES.map(r => ({ path: r, priority: '0.3', changefreq: 'yearly' })),
 ];
 
 // XML escaping — URLs can contain &, <, > via slugs in principle even

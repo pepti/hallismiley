@@ -33,6 +33,8 @@ const adminCustomerNotesRoutes = require('./routes/adminCustomerNotesRoutes');
 const adminBookkeepingRoutes = require('./routes/adminBookkeepingRoutes');
 const systemRoutes = require('./routes/systemRoutes');
 const { router: sitemapRoutes } = require('./routes/sitemapRoutes');
+const { router: manifestRoutes } = require('./routes/manifestRoutes');
+const { router: robotsRoutes } = require('./routes/robotsRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const { sanitizeBody } = require('./middleware/sanitize');
@@ -44,6 +46,7 @@ const httpMetrics     = require('./observability/httpMetrics');
 const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
 const { healthCheckFailed } = require('./observability/alerts');
 const { readMemory } = require('./observability/memoryUsage');
+const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
 
@@ -493,8 +496,10 @@ app.get('/metrics', async (req, res) => {
   // Auth: bearer token if METRICS_TOKEN is set, otherwise localhost only
   const metricsToken = process.env.METRICS_TOKEN;
   if (metricsToken) {
+    // Constant-time: `!==` returns at the first differing byte, so response
+    // time would tell a caller how much of a guessed token was right.
     const authHeader = req.headers.authorization || '';
-    if (authHeader !== `Bearer ${metricsToken}`) {
+    if (!safeEqual(authHeader, `Bearer ${metricsToken}`)) {
       return res.status(401).json({ error: 'Unauthorized', code: 401 });
     }
   } else if (process.env.NODE_ENV === 'production') {
@@ -581,6 +586,14 @@ app.use('/assets/iceland',  express.static(path.join(__dirname, '../public/asset
 // Dynamic /sitemap.xml — must come BEFORE express.static so it shadows
 // any stale public/sitemap.xml file and reflects live DB state.
 app.use('/', sitemapRoutes);
+// /manifest.json named after the product (identity.brand) — before the
+// static mount for the same reason; public/manifest.json is the engine
+// default it fills in.
+app.use('/', manifestRoutes);
+// /robots.txt with the Disallow lines derived from identity.surface
+// .hiddenRoutes — before the static mount; public/robots.txt is the engine
+// default it replaces.
+app.use('/', robotsRoutes);
 
 // IndexNow key-file endpoint — Bing fetches `/<INDEXNOW_KEY>.txt` to verify
 // ownership before accepting our IndexNow API submissions. Serve it from an

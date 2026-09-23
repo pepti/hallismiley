@@ -237,7 +237,9 @@ describe('cited migrations are exactly the applied ones', () => {
 
 describe('every feature file is linked from its domain\'s Features row', () => {
   // "<domain>:<id>" pairs from the registry and from the `| Features |` rows.
-  const registry = new Set(loadFeatures(ROOT).map((f) => `${f.domain}:${f.id}`));
+  // Another product's folder (features/os/ in a downstream) is inert: its
+  // features are not this repo's to document, so ARCHITECTURE need not link them.
+  const registry = new Set(loadFeatures(ROOT).filter((f) => !f.foreign).map((f) => `${f.domain}:${f.id}`));
   const rows = new Set();
   let domain = null;
   for (const line of ARCH.split('\n')) {
