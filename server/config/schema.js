@@ -5366,6 +5366,25 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE leads ADD COLUMN IF NOT EXISTS notify_error TEXT`,
     ],
   },
+  {
+    // The two-step REMINDER's "don't show this again", per account
+    // (mfa-reminder-2026-09-23). Under security.mfa.enrolment = optional a
+    // protected account without TOTP (mfaService.shouldEnrol) sees a small
+    // notice atop the admin shell and the seller area; ticking "Ekki sýna
+    // þetta aftur" stamps this column through POST /auth/mfa-reminder/dismiss,
+    // so the choice follows the account to every device. NULL = not
+    // dismissed. No existing per-user store fitted: admin_nav_config (053) is
+    // the admin sidebar's layout blob, `theme` a single id.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // it. Downstreams take it as-is — the engine owns `users`, no product
+    // adds its own columns there, so no alias or product entry is needed.
+    // Reference copy: server/migrations/109_user_mfa_reminder.sql
+    name: '109_user_mfa_reminder',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_reminder_dismissed_at TIMESTAMPTZ`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -6,10 +6,15 @@
 //   2. requireAuth.
 //   3. requireSeller: the user's proven email is in the latest snapshot
 //      (auth/publishedSeller.js), else 404 — a non-seller learns nothing.
-//   4. Everything except GET /me also needs 2FA enrolled (totp_enabled). The
+//   4. Only when the instance REQUIRES enrolment (security.mfa.enrolment =
+//      required — auth/mfaPolicy.js enrolmentRequired(), read per request):
+//      everything except GET /me also needs 2FA enrolled (totp_enabled). The
 //      login path challenges published sellers (mfaService.protectedRole), so
 //      once enrolled every session here went through the second factor. /me
-//      answers without it so the SPA can send the seller to enrol.
+//      answers without it so the SPA can send the seller to enrol. Under
+//      `optional` (the default) a seller reads with a password and the SPA
+//      shows the dismissible two-step reminder instead
+//      (mfa-reminder-2026-09-23; until then this rule applied in both modes).
 //   5. Per section: the view ops granted (can_leads / can_accounts /
 //      can_commission), else 403. Rows are scoped to the seller's email in SQL;
 //      a foreign statement id is 404, never 403.
@@ -19,6 +24,7 @@ const db = require('../config/database');
 const { requireAuth } = require('../auth/middleware');
 const { isPublicInstance } = require('../config/instanceRole');
 const { findPublishedSeller } = require('../auth/publishedSeller');
+const { enrolmentRequired } = require('../auth/mfaPolicy');
 const { t } = require('../i18n');
 
 const router = express.Router();
@@ -58,14 +64,16 @@ router.get('/me', async (req, res, next) => {
         can_accounts: s.can_accounts,
         can_commission: s.can_commission,
       },
-      mfa_ready: req.user.totp_enabled === true,
+      // "The rest of the area answers this session": enrolled, or the
+      // instance does not require enrolment (rule 4).
+      mfa_ready: req.user.totp_enabled === true || !enrolmentRequired(),
       published_at: await lastPublishedAt(),
     });
   } catch (err) { return next(err); }
 });
 
 router.use((req, res, next) => {
-  if (req.user.totp_enabled !== true) {
+  if (enrolmentRequired() && req.user.totp_enabled !== true) {
     return res.status(403).json({ error: t(req.locale, 'errors.seller.mfaRequired'), code: 403 });
   }
   return next();

@@ -103,12 +103,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Auth layer | `server/auth/lucia.js`, `middleware.js`, `roles.js`, `tokens.js`, `adminViews.js`, `requireView.js`, `mfaPolicy.js`, `google.js`, `facebook.js`, `oauthHelpers.js`; `server/utils/adminRole.js`, `server/utils/totp.js`, `server/utils/secretBox.js`; break-glass `server/scripts/reset-admin-totp.js` |
 | Middleware | `server/middleware/softAuth.js`, `server/middleware/csrf.js` |
 | Views | `public/js/views/SignupView.js`, `ProfileView.js`, `ForgotPasswordView.js`, `ResetPasswordView.js`, `VerifyEmailView.js`, `AdminUsersView.js`, `AdminRolesView.js` |
-| Components | `public/js/components/LoginModal.js`, `totpFailure.js` |
+| Components | `public/js/components/LoginModal.js`, `totpFailure.js`, `mfaReminder.js` (the two-step reminder, mounted by `AdminSidebar.renderAdminShell` and `SellerAreaView`) |
 | Client | `public/js/services/auth.js`, `sessionGuard.js`, `adminRoles.js`; `public/js/utils/passwordToggle.js`, `safeReturnTo.js`, `avatar.js` |
-| CSS | `public/css/user-system.css`, `admin-roles.css` |
-| Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `security.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js` |
-| e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` |
-| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase) |
+| CSS | `public/css/user-system.css`, `admin-roles.css`, `mfa-reminder.css` |
+| Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js` |
+| e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` (on the second, `required` e2e server), `mfa-reminder.spec.js` |
+| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again") |
 | Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
@@ -127,9 +127,25 @@ company/                  gitignored: plans, decisions, logs, market-research st
   always false, while an account that HAS enrolled is challenged at every
   sign-in in both modes (the challenge is `mfaService`'s, untouched by the
   switch). The policy re-reads the env var per call so a suite can flip it; a
-  test of the mandatory path sets `required` for itself. The seller area's own
-  `totp_enabled` demand (`sellerRoutes.js` rule 4) does not follow the switch
-  ([mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)).
+  test of the mandatory path sets `required` for itself
+  ([mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23)). The seller
+  area's own `totp_enabled` demand (`sellerRoutes.js` rule 4) follows the
+  switch too — `required` only ([mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)).
+- Under `optional` a protected account without TOTP that has not dismissed it
+  gets the two-step REMINDER: `mfaPolicy.reminderCandidate` is the predicate
+  (never under `required`), `authController.roleFields` reads the enrolment
+  and `users.mfa_reminder_dismissed_at` (109) from the row and puts
+  `mfa_reminder` on every session payload; the SPA mounts
+  `components/mfaReminder.js` in the admin shell and the seller area, never
+  elsewhere. ✕ hides it for the page load; the checkbox saves at once through
+  `POST /auth/mfa-reminder/dismiss` (session, CSRF, own limiter, body ignored —
+  only the caller's row, idempotent). It is a preference, never a gate
+  ([mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)).
+- The e2e suite runs TWO servers on one database: the main one under the
+  `optional` default, a second on `E2E_PORT + 1` under `required` for
+  `admin-totp-enrolment.spec.js` (`test.use({ baseURL })`). The mode is per
+  instance; there is no per-request switch, and none may be added
+  ([mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)).
 - Under `required`, enrolment is mandatory for every protected account, and the rule lives in
   `auth/mfaPolicy.js` and nowhere else: `attachRoles` (the one session reader
   every middleware shares) withholds `admin` from an unenrolled admin's role
@@ -166,7 +182,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
@@ -1114,7 +1130,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/sellerPublishRoutes.js` → `/api/v1/seller-publish` (signed ingest; public role + secret, else 404) · `server/routes/sellerRoutes.js` → `/api/v1/seller` (GET only; public role, published seller, 2FA) |
+| Routes | `server/routes/sellerPublishRoutes.js` → `/api/v1/seller-publish` (signed ingest; public role + secret, else 404) · `server/routes/sellerRoutes.js` → `/api/v1/seller` (GET only; public role, published seller, 2FA under `security.mfa.enrolment = required`) |
 | Services | `server/services/sellerPublish/snapshot.js` (ops: build), `signature.js` (HMAC), `ingest.js` (public: `shape` + `apply`) |
 | Auth / config | `server/auth/publishedSeller.js`; `server/config/instanceRole.js` (`INSTANCE_ROLE` = `ops` default / `public`) |
 | Views | `public/js/views/SellerAreaView.js` (`/solusvaedi`) |
@@ -1151,13 +1167,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   account is enabled; a non-seller gets 404, a foreign statement 404, an
   ungranted section 403.
 - Published sellers are 2FA-protected: `seller_holder` joins
-  `mfaService.protectedRole`, enrolment is allowed, and every seller route
-  except `/me` needs `totp_enabled`. Client mirror: `isMfaProtected()`
-  includes `isSeller()`.
+  `mfaService.protectedRole`, enrolment is allowed, and an enrolled seller is
+  challenged at sign-in. Client mirror: `isMfaProtected()` includes
+  `isSeller()`.
+- Rule 4 follows `security.mfa.enrolment`: every seller route except `/me`
+  needs `totp_enabled` only under `required` (`mfaPolicy.enrolmentRequired()`,
+  per request); under the `optional` default a seller reads with a password,
+  `/me` says `mfa_ready: true` ("the rest of the area answers"), and
+  `SellerAreaView` shows the dismissible two-step reminder above the header
+  ([mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)).
 - Statement status is ONE function (`commissionStatements.statementStatus`)
   for the admin list and the snapshot.
 
-**History**: [seller-area](HISTORY.md#seller-area)
+**History**: [seller-area](HISTORY.md#seller-area) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)
 
 ---
 

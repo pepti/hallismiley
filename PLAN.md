@@ -118,8 +118,9 @@ chunk lands; add a HISTORY entry for the story.
   re-shape nav/dashboard labels ([admin-reshape](docs/HISTORY.md#admin-reshape)),
   leads and Markaður screens, the `/personuvernd` §3 + §6 rewrite (the site now
   stores enquiries — [leads](docs/HISTORY.md#leads)), the services page
-  ([services-page](docs/HISTORY.md#services-page)). He edits in place via the
-  inline editors.
+  ([services-page](docs/HISTORY.md#services-page)), the two-step reminder's
+  `mfaReminder.*` strings ([mfa-reminder-2026-09-23](docs/HISTORY.md#mfa-reminder-2026-09-23);
+  i18n files, not an inline editor). He edits in place via the inline editors.
 - `ENHANCEMENTS.md`: 26 proposals; #1, #2, #13, #16, #17, #18 done; #9, #10, #21
   partial; the rest need his sign-off before any implementation. #5 and #7 are
   roadmap items R4/R6.
@@ -213,14 +214,22 @@ chunk lands; add a HISTORY entry for the story.
   `security.mfa.enrolment` = `optional` | `required` in `config/client.json`
   (this instance: `optional`), so harvest item (a)'s "walked through
   enrolment at next sign-in" now happens only on an instance set to
-  `required`. Open: (a) the seller area still demands 2FA for everything but
-  `/me` (`sellerRoutes.js` rule 4) — Halli decides whether sellers follow the
-  switch too (one-line change in `docs/ADMIN-2FA.md`); (b) rekstrarkerfid
+  `required`. Open: (a) ~~the seller area still demands 2FA~~ — sellers follow
+  the switch since mfa-reminder-2026-09-23 (next bullet); (b) rekstrarkerfid
   chose mandatory enrolment itself but inherits `optional` on its next sync
   unless its own `config/client.json` says `required` — Halli's instruction
-  is estate-wide, so the sync must NOT add it; (c) the e2e server runs
-  `required` (the enrolment spec needs it), so the optional default is
-  covered by Jest only.
+  is estate-wide, so the sync must NOT add it; (c) ~~the e2e server runs
+  `required`~~ — two e2e servers since mfa-reminder-2026-09-23, both modes in
+  a browser.
+- Seller area follows the 2FA switch + a dismissible two-step reminder, same
+  day ([mfa-reminder-2026-09-23](docs/HISTORY.md#mfa-reminder-2026-09-23)):
+  `sellerRoutes.js` rule 4 only under `required`; under `optional` a
+  protected account without 2FA sees a notice atop the admin shell and the
+  seller area, ✕ for the page load, "Ekki sýna þetta aftur" saves per account
+  (migration 109, `POST /auth/mfa-reminder/dismiss`). **Awaiting Halli: the
+  `mfaReminder.*` copy is DRAFT** (IS + EN in the HISTORY entry). Not done:
+  no "show it again" switch (the Prófíll panel is always there); turning 2FA
+  off does not bring back a dismissed reminder.
 - rk feed landed 2026-09-23 ([rk-feed-2026-09-23](docs/HISTORY.md#rk-feed-2026-09-23)):
   orange-smiley/rekstrarkerfid#45 items 2/3/4/6/7/9 — lead ids as strings,
   migration 108 (`notified_at`/`notify_error` + the "ekki sent" mark), the

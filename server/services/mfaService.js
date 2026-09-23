@@ -105,7 +105,9 @@ function isProtected(user) {
  * `security.mfa.enrolment` says. Whether enrolment is ENFORCED is
  * auth/mfaPolicy.js's call, on every session read — only under `required`
  * (the default is `optional`, 2026-09-23); that file, not this function,
- * withholds anything (and knows the test exemption).
+ * withholds anything (and knows the test exemption). Under `optional` it is
+ * also who gets the dismissible two-step reminder (mfaPolicy.reminderCandidate,
+ * mfa-reminder-2026-09-23).
  */
 function shouldEnrol(user) {
   return protectedRole(user) && user.totp_enabled !== true;

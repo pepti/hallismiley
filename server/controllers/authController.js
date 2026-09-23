@@ -63,18 +63,37 @@ async function roleFields(user) {
   // latest ops snapshot lists. Drives the "Sölusvæði" menu item and the 2FA
   // panel; the server re-checks on every /api/v1/seller request.
   const seller = await isPublishedSeller(dbQuery, user.id);
-  const eff = mfaPolicy.effectiveRoles({
+  const flagged = {
     ...user,
     accounts_holder: mfaPolicy.viewsHoldProtected(views),
     seller_holder: seller,
-  }, held);
+  };
+  const eff = mfaPolicy.effectiveRoles(flagged, held);
   return {
     role:  eff.role,
     roles: eff.roles,
     views: mfaPolicy.withholdViews(await Role.getViewsForRoles(eff.roles), eff.enrolmentRequired),
     seller,
     mfa_enrolment_required: eff.enrolmentRequired,
+    mfa_reminder: await mfaReminderDue(flagged, held),
   };
+}
+
+/**
+ * The two-step reminder flag for a session payload (mfa-reminder-2026-09-23):
+ * true for an account mfaPolicy.reminderCandidate names (enrolment `optional`,
+ * protected role) that has neither enrolled nor ticked "don't show this
+ * again". Both facts are read from the row, not from `user`: the five callers
+ * of roleFields hand in five differently-selected user objects, and a stale
+ * totp_enabled would put the reminder in front of an enrolled account. The
+ * query runs only for a candidate, so ordinary accounts cost nothing.
+ */
+async function mfaReminderDue(user, held) {
+  if (!mfaPolicy.reminderCandidate({ ...user, totp_enabled: false }, held)) return false;
+  const { rows } = await dbQuery(
+    'SELECT totp_enabled, mfa_reminder_dismissed_at FROM users WHERE id = $1', [user.id]);
+  const row = rows[0];
+  return !!row && row.totp_enabled !== true && row.mfa_reminder_dismissed_at === null;
 }
 
 const authController = {
@@ -390,6 +409,23 @@ const authController = {
       await mfaService.disable(user.id);
       securityLogger.loginSuccess(req.ip, `${user.username} DISABLED 2FA`, user.id);
       return res.json({ enabled: false });
+    } catch (err) { next(err); }
+  },
+
+  // POST /auth/mfa-reminder/dismiss — "Ekki sýna þetta aftur" on the two-step
+  // reminder (mfa-reminder-2026-09-23). Always the signed-in account's own
+  // row: the body is ignored, so there is nothing to point at someone else.
+  // Idempotent — COALESCE keeps the first dismissal's time, a repeat is 200.
+  // A preference, not a security setting: it hides a recommendation and
+  // changes nothing about sign-in; the Prófíll panel still offers enrolment.
+  async mfaReminderDismiss(req, res, next) {
+    try {
+      await dbQuery(
+        `UPDATE users SET mfa_reminder_dismissed_at = COALESCE(mfa_reminder_dismissed_at, NOW())
+          WHERE id = $1`,
+        [req.user.id]
+      );
+      return res.json({ mfa_reminder: false });
     } catch (err) { next(err); }
   },
 

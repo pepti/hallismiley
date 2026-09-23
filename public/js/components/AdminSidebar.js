@@ -25,6 +25,7 @@ import { isAdmin, canSeeView, hasAllViews } from '../services/auth.js';
 import { getBuildInfo } from '../services/buildInfo.js';
 import { showToast } from './Toast.js';
 import { HIDDEN_ADMIN_VIEWS } from './adminSurface.js';
+import { renderMfaReminder } from './mfaReminder.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
 } from './adminNavLayout.js';
@@ -468,7 +469,13 @@ export function renderAdminShell({ activePath, content } = {}) {
     <div class="admin-shell__content"></div>
   `;
 
-  if (content) shell.querySelector('.admin-shell__content').appendChild(content);
+  // The two-step reminder (mfa-reminder-2026-09-23) sits above every admin
+  // screen's own content — this is the one shell they all share. null when
+  // the session does not ask for it.
+  const contentEl = shell.querySelector('.admin-shell__content');
+  const reminder = renderMfaReminder();
+  if (reminder) contentEl.appendChild(reminder);
+  if (content) contentEl.appendChild(content);
 
   const aside   = shell.querySelector('.admin-sidebar');
   const navEl   = shell.querySelector('.admin-sidebar__nav');

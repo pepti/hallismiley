@@ -14,6 +14,13 @@ const avatarPath = n => `/assets/avatars/avatar-${pad(n)}.svg`;
 const avatarPathByName = name => `/assets/avatars/${name}`;
 
 export class ProfileView {
+  // `?focus=2fa` — the two-step reminder's "set it up" link
+  // (components/mfaReminder.js) and the seller area's notice land here: the
+  // panel is scrolled into view and its heading focused.
+  constructor(qs) {
+    this._focus2fa = new URLSearchParams(qs || '').get('focus') === '2fa';
+  }
+
   // Called by the router when navigating away — drops the window-level
   // themechange listener bound in _bindTheme. _disposed matters because
   // _load() is deliberately not awaited by render(): leaving the page while
@@ -97,6 +104,15 @@ export class ProfileView {
           // Profile itself stays usable; the editors live at /admin/background too.
           // Intentionally silent — nothing here is load-bearing for the page.
         }
+      }
+
+      // `?focus=2fa`: last, because the admin editors above land ABOVE the
+      // 2FA panel after an await and would push it back out of view.
+      if (this._focus2fa && !this._disposed && !mfaEnrolmentRequired()) {
+        const section = el.querySelector('#totp-section');
+        const title = section?.querySelector('.profile-section__title');
+        section?.scrollIntoView({ block: 'center' });
+        if (title) { title.setAttribute('tabindex', '-1'); title.focus({ preventScroll: true }); }
       }
     } catch (err) {
       wrap.innerHTML = `<p class="profile-error">Failed to load profile: ${escHtml(err.message)}</p>`;
