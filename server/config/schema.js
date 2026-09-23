@@ -5325,6 +5325,28 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_theme_check`,
     ],
   },
+  {
+    // EXPAND step of encrypting the admin TOTP secret at rest
+    // (utils/secretBox.js, key TOTP_ENC_KEY). users.totp_secret is plain TEXT,
+    // so a database dump carries every admin's second factor.
+    //
+    // Born in rekstrarkerfid as 093_totp_secret_enc (2026-09-18), harvested
+    // 2026-09-23 under the engine's next number; rekstrarkerfid's product file
+    // aliases 107 → 093 so its databases record rather than re-run it
+    // (docs/MIGRATIONS.md). Same DDL, verbatim.
+    //
+    // Invariant 14: this release WRITES BOTH columns and reads the encrypted
+    // one with a fallback to the plaintext. The previous release's container —
+    // still serving during the swap, and the target of any rollback — reads
+    // totp_secret; writing only the new column would lock out every admin who
+    // enrolled after the release. Release N+1 stops writing totp_secret and
+    // NULLs it where totp_secret_enc is set; N+2 drops the column.
+    // Reference copy: server/migrations/107_totp_secret_enc.sql.
+    name: '107_totp_secret_enc',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

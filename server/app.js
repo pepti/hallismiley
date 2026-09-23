@@ -44,6 +44,7 @@ const httpMetrics     = require('./observability/httpMetrics');
 const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
 const { healthCheckFailed } = require('./observability/alerts');
 const { readMemory } = require('./observability/memoryUsage');
+const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
 
@@ -493,8 +494,10 @@ app.get('/metrics', async (req, res) => {
   // Auth: bearer token if METRICS_TOKEN is set, otherwise localhost only
   const metricsToken = process.env.METRICS_TOKEN;
   if (metricsToken) {
+    // Constant-time: `!==` returns at the first differing byte, so response
+    // time would tell a caller how much of a guessed token was right.
     const authHeader = req.headers.authorization || '';
-    if (authHeader !== `Bearer ${metricsToken}`) {
+    if (!safeEqual(authHeader, `Bearer ${metricsToken}`)) {
       return res.status(401).json({ error: 'Unauthorized', code: 401 });
     }
   } else if (process.env.NODE_ENV === 'production') {

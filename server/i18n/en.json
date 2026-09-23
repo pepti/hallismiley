@@ -184,6 +184,7 @@
   "errors.auth.mfaNotStarted": "Set-up has not been started for this account",
   "errors.auth.mfaAlreadyEnabled": "Two-factor sign-in is already switched on",
   "errors.seller.mfaRequired": "Switch on two-factor sign-in under My profile to open the seller area",
+  "errors.auth.mfaEnrolmentRequired": "This account needs two-factor sign-in before it can do that. Set it up under your profile to continue.",
   "errors.auth.forbidden": "You do not have permission to do that",
   "errors.user.noUpdatableFields": "No updatable fields provided",
   "errors.user.unsupportedLocale": "Unsupported locale",

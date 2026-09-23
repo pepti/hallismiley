@@ -4,6 +4,7 @@ const { lucia } = require('./lucia');
 const { resolveLocale } = require('../middleware/locale');
 const UserRole = require('../models/UserRole');
 const logger   = require('../logger');
+const { applyMfaPolicyToRequest } = require('./mfaPolicy');
 
 // Resolve the user's full role SET (cached, models/UserRole.js) and attach it
 // as req.user.roles — the authoritative set for permission decisions; users.role
@@ -14,6 +15,12 @@ const logger   = require('../logger');
 // transient user_roles failure — and log it, because for an admin granted only
 // through the role set that fallback is a silent demotion for this request,
 // indistinguishable downstream from a deliberate deny.
+//
+// Then the two-factor policy: a protected account that has not enrolled a
+// second factor is not that yet — `admin` is withheld from role + roles HERE,
+// so every guard and every inline role check downstream refuses without having
+// to know the rule (auth/mfaPolicy.js). Because every session reader goes
+// through attachRoles, this is the one place the rule is applied.
 async function attachRoles(req, user) {
   try {
     const roles = await UserRole.listForUser(user.id);
@@ -22,6 +29,7 @@ async function attachRoles(req, user) {
     logger.warn({ err: err.message, userId: user.id }, 'role set lookup failed; falling back to users.role for this request');
     req.user.roles = [user.role];
   }
+  await applyMfaPolicyToRequest(req);
 }
 
 async function requireAuth(req, res, next) {

@@ -1,0 +1,20 @@
+-- 107_totp_secret_enc — reference copy; the authoritative entry is in
+-- server/config/schema.js.
+--
+-- Born in rekstrarkerfid as 093_totp_secret_enc (2026-09-18) and harvested
+-- into the engine 2026-09-23 under the engine's next number; rekstrarkerfid's
+-- product file aliases 107 → 093 so its databases record it rather than run
+-- it again (docs/MIGRATIONS.md). The DDL is identical.
+--
+-- EXPAND step of moving the admin TOTP secret to encryption at rest
+-- (server/utils/secretBox.js, key TOTP_ENC_KEY). users.totp_secret is plain
+-- TEXT: a database dump carries every admin's second factor.
+--
+-- Release N   (this one): add the column. The app writes BOTH columns and reads
+--             the encrypted one with a fallback to the plaintext. Writing both
+--             is what keeps invariant 14: the previous release's container —
+--             still serving during the swap, and the target of any rollback —
+--             reads totp_secret and would lock out every admin enrolled since.
+-- Release N+1: stop writing totp_secret and NULL it where totp_secret_enc is set.
+-- Release N+2: drop totp_secret.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT;

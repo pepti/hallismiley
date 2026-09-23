@@ -31,6 +31,11 @@ export function isAuthenticated() { return !!_user; }
 export function getRoles()        { return _user?.roles || (_user?.role ? [_user.role] : []); }
 export function hasRole(role)     { return getRoles().includes(role); }
 export function isAdmin()         { return getRoles().includes('admin'); }
+// An admin account that has not set up two-step verification yet. The server
+// withholds the admin role from it (server/auth/mfaPolicy.js), so isAdmin() is
+// false and every admin call would 403 — this flag is how the SPA knows to walk
+// the person to the set-up panel instead of showing them a plain user's site.
+export function mfaEnrolmentRequired() { return !!_user?.mfa_enrolment_required; }
 // Editor = admin or moderator. Used to gate edit-mode UI for site content
 // (party page, news, projects) where moderators have full edit/delete rights.
 export function canEdit()         { return getRoles().some(r => r === 'admin' || r === 'moderator'); }
@@ -179,6 +184,16 @@ export async function logout() {
   // while the UI still showed the signed-in basket, so a qty change or remove
   // during that window wrote the ex-user's lines into the guest basket.
   _user = null;
+  _dispatch();
+}
+
+// Re-read the session and tell everyone. Used when the ROLE picture changes
+// under a live session: confirming two-step set-up turns the account into the
+// admin it is (roles, views), turning it off takes that away again.
+export async function refreshSession() {
+  const res  = await fetch('/auth/session', { credentials: 'include', cache: 'no-store' });
+  const data = await res.json();
+  _user = data.authenticated ? data.user : null;
   _dispatch();
 }
 
@@ -372,7 +387,11 @@ export async function totpConfirm(code) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not confirm');
-  updateCachedUser({ totp_enabled: true });
+  // SILENT: the router re-renders the current view on every authchange, and the
+  // view is about to show the recovery codes — which exist for this one moment
+  // and cannot be fetched again. The panel calls refreshSession() once the
+  // person says they have saved them.
+  updateCachedUser({ totp_enabled: true }, { silent: true });
   return data;
 }
 
@@ -384,7 +403,9 @@ export async function totpDisable(password) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not turn off');
-  updateCachedUser({ totp_enabled: false });
+  // Not just a flag: without two-step the server stops treating the account as
+  // an admin, so roles and views change with it.
+  await refreshSession();
   return data;
 }
 

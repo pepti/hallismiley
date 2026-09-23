@@ -3,6 +3,8 @@
 // Moderator: read, write, post          (no delete)
 // User:      read, post                 (view content + post comments/contact)
 
+const { t } = require('../i18n');
+
 // The role SET (req.user.roles, attached by auth/middleware.js attachRoles) is
 // the authoritative source for every permission decision; users.role is only
 // the denormalized primary, and an admin granted through Admin → Roles never
@@ -23,6 +25,16 @@ function hasRole(user, ...names) {
   return names.some(r => held.includes(r));
 }
 
+// The refusal itself comes from the role set — attachRoles already withheld
+// `admin` from an admin who has not enrolled a second factor (mfaPolicy.js).
+// This only makes the 403 say why, so the owner of the account is not left
+// guessing at a bare "Forbidden". Same {error, code} envelope.
+function forbiddenMessage(req) {
+  return req.user?.mfaEnrolmentRequired
+    ? t(req.locale, 'errors.auth.mfaEnrolmentRequired')
+    : 'Forbidden';
+}
+
 /**
  * Middleware factory — allows a user through if ANY of their roles is listed.
  * Must be used after requireAuth (which sets req.user + req.user.roles).
@@ -35,10 +47,10 @@ function requireRole(...roles) {
       return res.status(401).json({ error: 'Unauthorized', code: 401 });
     }
     if (!hasRole(req.user, ...roles)) {
-      return res.status(403).json({ error: 'Forbidden', code: 403 });
+      return res.status(403).json({ error: forbiddenMessage(req), code: 403 });
     }
     next();
   };
 }
 
-module.exports = { requireRole, heldRoles, hasRole };
+module.exports = { requireRole, heldRoles, hasRole, forbiddenMessage };

@@ -23,6 +23,10 @@ const { isPublishedSeller } = require('../auth/publishedSeller');
  */
 async function isEnrolmentEligible(user) {
   if (!user) return false;
+  // Above all, the account that OWES enrolment — attachRoles has already
+  // withheld `admin` from it (auth/mfaPolicy.js), and the lookups below would
+  // answer it anyway; this is the short way.
+  if (user.mfaEnrolmentRequired === true) return true;
   const enriched = {
     ...user,
     admin_anywhere: await userIsAdminAnywhere(dbQuery, user.id),
@@ -32,6 +36,7 @@ async function isEnrolmentEligible(user) {
   return mfaService.protectedRole(enriched);
 }
 const { t }               = require('../i18n');
+const mfaPolicy           = require('../auth/mfaPolicy');
 
 const scrypt = new Scrypt();
 
@@ -44,15 +49,31 @@ const RESET_TTL_MS  =      60 * 60 * 1000; // 1 hour
 // the full role SET (user_roles), and the UNION of admin views across that set.
 // Floors to the primary if the set is somehow empty, so the client always gets a
 // coherent role list.
-async function roleFields(userId, primaryRole) {
-  const roles = await UserRole.listForUser(userId);
-  const set   = roles.length ? roles : [primaryRole];
+//
+// `user` needs id, username, role and totp_enabled. A protected account that
+// still owes a second-factor enrolment is reported the way attachRoles will
+// make of its session (auth/mfaPolicy.js) — an admin WITHOUT `admin`, an
+// accounts holder without the `accounts` view — plus mfa_enrolment_required,
+// which is what sends the SPA to the enrolment panel. Telling the client
+// "admin" here would paint a dashboard whose every call 403s.
+async function roleFields(user) {
+  const held  = await UserRole.listForUser(user.id);
+  const views = await Role.getViewsForRoles(held.length ? held : [user.role]);
+  // Seller area (D-020): true only on the public instance, for a user the
+  // latest ops snapshot lists. Drives the "Sölusvæði" menu item and the 2FA
+  // panel; the server re-checks on every /api/v1/seller request.
+  const seller = await isPublishedSeller(dbQuery, user.id);
+  const eff = mfaPolicy.effectiveRoles({
+    ...user,
+    accounts_holder: mfaPolicy.viewsHoldProtected(views),
+    seller_holder: seller,
+  }, held);
   return {
-    role: primaryRole, roles: set, views: await Role.getViewsForRoles(set),
-    // Seller area (D-020): true only on the public instance, for a user the
-    // latest ops snapshot lists. Drives the "Sölusvæði" menu item and the 2FA
-    // panel; the server re-checks on every /api/v1/seller request.
-    seller: await isPublishedSeller(dbQuery, userId),
+    role:  eff.role,
+    roles: eff.roles,
+    views: mfaPolicy.withholdViews(await Role.getViewsForRoles(eff.roles), eff.enrolmentRequired),
+    seller,
+    mfa_enrolment_required: eff.enrolmentRequired,
   };
 }
 
@@ -183,7 +204,7 @@ const authController = {
           id:             user.id,
           username:       user.username,
           email:          user.email,
-          ...(await roleFields(user.id, user.role)),
+          ...(await roleFields(user)),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,
@@ -234,12 +255,15 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
-                email_verified, party_access, approval_status
+                email_verified, party_access, approval_status, totp_enabled
            FROM users
           WHERE id = $1`,
         [result.userId]
       );
       const user = rows[0];
+      // totp_enabled rides along for roleFields: without it the policy would
+      // read "not enrolled" off the account that just passed the second factor
+      // and withhold its role from the very session this call mints.
       // The account could have been disabled between the two steps.
       if (!user || user.disabled) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
@@ -265,13 +289,15 @@ const authController = {
           id:             user.id,
           username:       user.username,
           email:          user.email,
-          ...(await roleFields(user.id, user.role)),
+          ...(await roleFields(user)),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,
           email_verified: user.email_verified,
           party_access:   user.party_access,
           approval_status: user.approval_status,
+          // The profile's 2FA panel paints from this, like /auth/session.
+          totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
@@ -400,6 +426,15 @@ const authController = {
       if (user.approval_status === 'declined') {
         return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
       }
+      // A magic link is a permanent, reusable bearer credential that mints a
+      // session with NO second factor. For a guest that is the design; for an
+      // account holding `admin` it is the same walk-around the OAuth
+      // controllers already refuse (googleAuthController.js): the TOTP
+      // challenge lives on the password path only. Admins sign in there.
+      if (await userIsAdminAnywhere(dbQuery, user.id)) {
+        securityLogger.loginFailed(req.ip, `magic-link login refused for admin account ${user.username}`);
+        return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
+      }
 
       await dbQuery(
         `UPDATE users
@@ -426,7 +461,7 @@ const authController = {
           id:              user.id,
           username:        user.username,
           email:           user.email,
-          ...(await roleFields(user.id, user.role)),
+          ...(await roleFields(user)),
           avatar:          user.avatar,
           display_name:    user.display_name,
           phone:           user.phone,
@@ -513,7 +548,7 @@ const authController = {
           id:             newUser.id,
           username:       newUser.username,
           email:          newUser.email,
-          ...(await roleFields(newUser.id, newUser.role)),
+          ...(await roleFields(newUser)),
           avatar:         newUser.avatar,
           display_name:   newUser.display_name,
           phone:          newUser.phone,
@@ -678,7 +713,7 @@ const authController = {
           id:             user.id,
           username:       user.username,
           email:          user.email,
-          ...(await roleFields(user.id, user.role)),
+          ...(await roleFields(user)),
           avatar:         user.avatar,
           display_name:   user.display_name,
           phone:          user.phone,
