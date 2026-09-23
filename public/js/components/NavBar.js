@@ -1,5 +1,6 @@
 import { isAuthenticated, getUser, logout, updateProfile, hasAnyAdminView, isSeller } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { getIdentity } from '../utils/identity.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
 import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES, forcedLocaleFor } from '../i18n/i18n.js';
@@ -114,10 +115,11 @@ export class NavBar {
                so the company name carries the mark. The name stands on its own —
                the descriptor line under it was dropped the same day (Halli).
                Rekstrarkerfið is a product: it is named on the product surfaces
-               (/thjonusta, the home products section), not here. "Orange Smiley"
-               is hardcoded — a proper noun reads the same in both locales, same
-               as the home footer's logo line. -->
-          <div class="lol-nav__logo-text"><strong>Orange Smiley</strong></div>
+               (/thjonusta, the home products section), not here. The name is
+               identity.brand.name (config/client.json via utils/identity.js) —
+               a proper noun reads the same in both locales, same as the home
+               footer's logo line. -->
+          <div class="lol-nav__logo-text"><strong>${escHtml(getIdentity().brand.name)}</strong></div>
         </a>
       </div>
 

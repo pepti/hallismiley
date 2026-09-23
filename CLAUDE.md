@@ -41,6 +41,7 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 - **Runtime** — a product repo → its deployed instances by that product's OWN release channel (`promote.yml`, canary/stable, self-update), one channel set per product in its tenant. This repo is a product too (orangesmiley.is, later ops), so its channel is armed first; rekstrarkerfid's next.
 - Invariant: product repos derive from the engine; customer instances derive from a product's image; instances are never cloned from instances.
 - `engine.json` (role, product id, upstream, rev) + the feature wiki `features/` + two migration arrays (`docs/MIGRATIONS.md`) are what make a merge mechanical.
+- **Identity is product config, not a fork** (2026-09-22): brand + title suffix, visitor-default locale, theme trio + picker, hero clip, hidden public routes, hidden admin views and the Organization record live under `identity.*` in `config/client.json` (schema + this product's defaults in `server/config/clientConfig.js`; ssrMeta hands it to the page as `<html data-*-theme>` + `<script id="identity">`; the email strings take `{siteName}`/`{siteHost}` from it). Engine code and engine TESTS read the seam, never a brand literal. Suites of a feature a downstream hides skip via `features/local.json` + the feature gate (`docs/TESTING.md`); an engine spec is never deleted.
 
 | Repo | Role | id | Branch | Sync PR merged by | Merge deploys? |
 |---|---|---|---|---|---|

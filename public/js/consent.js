@@ -20,8 +20,16 @@
   var STORAGE_KEY = 'cookie_consent';
   var SUPPORTED_LOCALES = ['en', 'is'];
   // Visitor-facing default for the banner when no signal resolves a locale —
-  // mirrors PUBLIC_DEFAULT_LOCALE in public/js/i18n/i18n.js.
+  // the product's identity.locale.publicDefault, read off the same
+  // <script id="identity"> hand-off utils/identity.js parses (this is a
+  // classic script, so it reads the tag itself). 'is' is the engine default.
   var DEFAULT_LOCALE = 'is';
+  try {
+    var identityEl = document.getElementById('identity');
+    var identity = identityEl ? JSON.parse(identityEl.textContent) : null;
+    var publicDefault = identity && identity.locale && identity.locale.publicDefault;
+    if (SUPPORTED_LOCALES.indexOf(publicDefault) !== -1) DEFAULT_LOCALE = publicDefault;
+  } catch (_e) { /* a malformed tag reads as "no tag" */ }
 
   var STRINGS = {
     is: {

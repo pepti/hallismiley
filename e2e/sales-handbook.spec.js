@@ -7,6 +7,10 @@
 // Seeds its fixtures straight into the ISOLATED e2e database (e2e/lib/dbUrl):
 // a published guide and a sales user (role seeded by migration 090).
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { loginAsAdmin } = require('./helpers');

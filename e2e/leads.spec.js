@@ -4,6 +4,10 @@
 // the admin deletes it so re-runs start clean. The e2e server runs with
 // NODE_ENV=test, so the contact form's 5/hour limiter is off.
 const { test, expect } = require('@playwright/test');
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
+const { gateSpec } = require('./lib/featureGate');
+gateSpec(test, __filename);
 const { TEST_ADMIN } = require('./helpers');
 const { SALES_USER, seedSalesUser } = require('./lib/salesUser');
 const { signInViaApi } = require('./lib/accounts');

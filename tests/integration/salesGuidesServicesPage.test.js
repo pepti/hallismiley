@@ -21,6 +21,12 @@ async function insertGuide(slug, { summary = null, body, updatedBy = null }) {
 }
 const guide = async (slug) => (await db.query('SELECT summary, body FROM sales_guides WHERE slug = $1', [slug])).rows[0];
 
+// Skipped as a whole on a product that hides, disables or forks the feature
+// this suite belongs to, or when the feature is another product's
+// (features/local.json — see tests/lib/featureGate.js). Shadows the global.
+const { describeForSpec } = require('../lib/featureGate');
+const describe = describeForSpec(__filename);
+
 describe('migration 104 — sales guides no longer point at /thjonusta', () => {
   beforeEach(async () => {
     await db.query(`DELETE FROM sales_guides WHERE slug IN ('threpin-thrju', 'hvad-er-i-hverju-threpi')`);

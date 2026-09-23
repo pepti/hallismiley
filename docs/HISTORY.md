@@ -45,6 +45,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-22 | [Engine upstream — this repo becomes the parent of every repo (D-021)](#engine-upstream-2026-09-22) | Two layers (source by merge, runtime by product channel); `engine.json` + feature wiki; two-array migrations (091/092/104 → `os.js`, theme CHECK → 106); `engine-sync` / `engine-harvest` / `engine-drift`; icelandicstore is the current source of generic work |
 | 2026-09-22 | [Handbook on D-001 pricing and the demo instance (D-020 step 5)](#handbook-d001-2026-09-22) | 13 of 14 seeded guides rewritten: build fee + service contract + verkeiningar, demos on `demo.rekstrarkerfi.is`; first product migration `os_001`; test pins seed == migration; all DRÖG |
 | 2026-09-22 | [Leads transfer — enquiries from the other instances reach ops (D-020 step 4)](#leads-transfer-2026-09-22) | `leads:export` (submission fields only) / `leads:import` (one transaction, `ON CONFLICT DO NOTHING`, an ops row is never updated); by hand weekly, a timer once ops is on Azure; no migration |
+| 2026-09-22 | [Identity seam + feature gate (D-021)](#identity-seam-2026-09-22) | `identity.*` in `config/client.json` owns brand, locale, theme trio, hero, hidden surfaces, Organization; ssrMeta hands it to the page; email strings take `{siteName}`/`{siteHost}`; engine tests read the seam; `features/local.json` + the feature gate skip a hidden feature's suites; no migration |
 
 ---
 
@@ -1145,3 +1146,97 @@ NULL UNIQUE` is the idempotency key it always was.
   publication is one way ops → public by design, and a public → ops door
   would be the reverse), and a timer — that comes with ops on Azure (PLAN →
   Status). `source` stays a label, not an FK; the inbox shows it as text.
+
+---
+
+<a id="identity-seam-2026-09-22"></a>
+## 2026-09-22 — Identity seam + feature gate: a downstream owns who it is in one file (D-021)
+
+**Why.** The hallismiley graft kept the engine's identity: engine-owned
+tests pinned Orange Smiley literals (the nav lockup, the SSR titles and
+JSON-LD names, the `hero-dc7df-v2` clip, visitor default `is`, theme default
+`ember` with its picker, `HIDDEN_ADMIN_VIEWS`, the baked `#organization`,
+`email.verify.subject`), so merged as-is Halli's personal site would have
+presented as the company site. LedgerLink and rekstrarkerfid carried the same
+literals as "residual hooks" that re-conflicted on every sync, and
+LedgerLink's graft CI showed 32 e2e failures — engine specs asserting the
+engine's public IA on a product that hides it, plus jest suites the graft had
+to `describe.skip` by hand. The engine was a fork by default.
+
+**The identity seam.** `identity.*` joins `modules.*` in the existing
+per-instance config (`server/config/clientConfig.js`: schema defaults <
+`config/client.json` < `CLIENT_CONFIG_IDENTITY_*` env; nothing new was
+invented). `brand` (name, legalName, alternateNames, titleSuffix), `locale`
+(publicDefault), `theme` (default, root, picker — validated as a trio, a picker
+without its default or root is rejected whole), `hero` (clip, poster),
+`surface` (hiddenRoutes, hiddenAdminViews), `organization` (email,
+description, logo, image, address, areaServed, knowsAbout, sameAs). The
+defaults ARE Orange Smiley's values, pinned once in
+`tests/unit/identityConfig.test.js`, so an engine with no block behaves as
+before. A leaf is now a node with both `type` and `default` — checking
+`default` alone read `identity.theme` (which has a child called `default`) as a
+leaf. Readers, server: `server/config/identity.js` (the resolved record +
+pure head helpers), `ssrMeta.js` (page-part titles composed by `composeTitle`;
+`og:site_name`, `<meta author>`; the WebSite and a server-built Organization
+JSON-LD on every page — `loadTemplate()` strips the baked block from
+`index.html`), `config/i18n.js`, `publicSurface.js`, `themes.js`, and
+`server/i18n/index.js`, whose `t()` injects `{siteName}` / `{siteHost}`
+(APP_URL's host without `www.`) so the email tables carry no brand
+(`i18nIdentity.test.js`: the default renders exactly the old text). Hand-off:
+ssrMeta writes `<html data-default-theme data-theme-picker data-root-theme>`
+for the pre-paint `theme-boot.js` and `<script id="identity">` (with `</`
+escaped) for `public/js/utils/identity.js`, which parses it once with the
+same defaults as fallback; `themePrefs.js`, `i18n.js`, `consent.js`,
+`adminSurface.js`, `NavBar.js`, `HomeView.js` and `pageTitle.js` read it.
+`pageTitle.js` now holds page parts + `titleMode`, and the parity test parses
+both from `ssrMeta.js` and holds the two `composeTitle`s equal.
+
+**Tests read the seam.** `ssrMeta.test.js`, `users.test.js`,
+`i18n.test.js`, `localeLock*.test.js`, `themePrefsAccount.client.test.js`,
+`admin-surface-parity.test.js` (engine defaults AND the resolved list ⊂
+`ADMIN_VIEW_IDS`) and the e2e specs `navigation`, `admin-surface`,
+`business-routes` assert against `identity.*` (`e2e/lib/identity.js`
+resolves it in-process and reads what the server served). Every existing
+test keeps what it protected; only where the expected value comes from
+changed. `tests/integration/identityDownstream.test.js` requires the app
+fresh with a temp `client.json` (brand "Halli Smiley", default `en`, theme
+`glacier` in a picker of six, waterfall clip, empty hidden lists) and proves
+the served page presents as that product.
+
+**The feature gate.** `features/local.json` already recorded which engine
+features a downstream hides/disables/forks; now the tests read it.
+`tests/lib/featureGate.js` maps a suite to its feature through the registry's
+`paths` and answers `gate(id)` / `gateForSpec(file)`; a feature that is
+`hidden`, `disabled` or `forked` there, or belongs to another product
+(`features/<other>/`, inert), skips with the note; an unknown id never skips.
+Every engine e2e spec opens with `gateSpec(test, __filename)`
+(`e2e/lib/featureGate.js`); `salesGuidesServicesPage`, `salesGuidesD001`
+(os-owned) and `sellerArea` (`seller-publication`) shadow `describe` with
+`describeForSpec(__filename)`. In the engine `local.json` is empty and nothing
+skips — `featureGate.test.js` pins it and exercises a temp file hiding
+`public-site`. Rule (ENGINE-SYNC §6, TESTING.md): tests for a hidden feature
+skip; an engine spec is never deleted or hand-edited downstream.
+
+**What a downstream puts in `config/client.json`** (hallismiley, ready to
+paste):
+
+```json
+"identity": {
+  "brand": { "name": "Halli Smiley", "legalName": "Halli Smiley",
+             "alternateNames": ["hallismiley", "Halli"], "titleSuffix": " — Halli Smiley" },
+  "locale": { "publicDefault": "en" },
+  "theme": { "default": "glacier", "root": "classic",
+             "picker": ["glacier", "classic", "midnight", "ember", "lava", "moss"] },
+  "hero": { "clip": "/assets/videos/waterfall.mp4", "poster": "/assets/videos/waterfall-poster.jpg" },
+  "surface": { "hiddenRoutes": [], "hiddenAdminViews": [] },
+  "organization": { "email": "halli@hallismiley.is", "description": "…", "addressLocality": "Hafnarfjörður", "sameAs": [] }
+}
+```
+
+Its `themes.css` must carry a token set per picker id, `product.<locale>.json`
+its own `nav.brandAriaLabel` / `themeSwitcher.theme.<id>` names, and its
+`features/local.json` whichever engine features it hides. Not in the seam, on
+purpose: the seeded company COPY (`site_content`, the home hero and skills
+rows, `SERVICE_OFFERINGS`) — that is product content, replaced by product
+migrations; the PWA `manifest.json` name; the Product-schema `brand`.
+No migration.
