@@ -53,6 +53,14 @@
       "enrolment": "optional"
     }
   },
+  "mcp": {
+    "write": {
+      "$comment": "The MCP catalogue write tools (create_product, update_product, set_stock — harvest-ice-c-2026-09-24). Each is OFF until set true here or by CLIENT_CONFIG_MCP_WRITE_<NAME>; they also need MCP_ALLOWED_SCOPES to include write and the shop module on. orangesmiley.is keeps them all off (Halli 2026-09-24).",
+      "productCreate": false,
+      "productUpdate": false,
+      "stock": false
+    }
+  },
   "modules": {
     "$comment": "Which modules this instance HAS (R4, 2026-09-24; catalogue: server/config/moduleCatalog.js). preset = all | vefur | verslun | rekstur — a Rekstrarkerfið tier, or every module. A switch set here (\"shop\": { \"enabled\": false }) or by CLIENT_CONFIG_MODULES_<ID>_ENABLED beats the preset. OFF = absent: the module's APIs and uploads 404 before auth, its pages 404 with noindex, its admin views leave the sidebar and the role editor; no data is touched. orangesmiley.is keeps `all` — its shop, news, party and bio are HIDDEN (identity.surface.hiddenRoutes: still working at their URLs, Halli's rule), not switched off.",
     "preset": "all",

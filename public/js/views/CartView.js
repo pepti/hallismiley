@@ -1,5 +1,6 @@
 // CartView — review/edit the cart before checkout. Route: #/cart
 import * as cart from '../services/cart.js';
+import { indexAvailability, shortfallOf } from '../utils/availability.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { t, href } from '../i18n/i18n.js';
 
@@ -32,6 +33,15 @@ export class CartView {
     this._currencySelector = new CurrencySelector({ onChange: () => this._paintBody() });
     this._view.querySelector('#shop-cart-currency').appendChild(this._currencySelector.render());
 
+    // Live availability for the stale-basket check (utils/availability.js): a
+    // line added while stock was there may have sold out since. Best-effort —
+    // the checkout and the webhook are the gates; this is the UX in front.
+    this._avail = null;
+    try {
+      const res = await fetch('/api/v1/shop/products', { credentials: 'include' });
+      if (res.ok) this._avail = indexAvailability((await res.json()).products || []);
+    } catch { /* no availability → no warnings */ }
+
     this._paintBody();
     this._unsub = cart.subscribe(() => this._paintBody());
     return this._view;
@@ -50,12 +60,15 @@ export class CartView {
       return;
     }
 
+    let shortCount = 0;
     const rowsHtml = items.map((it, idx) => {
       const price = cur === 'ISK' ? it.priceIsk : it.priceEur;
       const line  = price * it.qty;
       const key   = cart.lineKeyOf(it);
+      const short = this._avail ? shortfallOf(it, this._avail) : null;
+      if (short) shortCount += 1;
       return `
-        <tr class="shop-cart__row" data-idx="${idx}">
+        <tr class="shop-cart__row${short ? ' shop-cart__row--short' : ''}" data-idx="${idx}">
           <td class="shop-cart__cell shop-cart__cell--product">
             ${it.imageUrl
               ? `<img class="shop-cart__thumb" src="${_esc(it.imageUrl)}" alt=""/>`
@@ -63,11 +76,12 @@ export class CartView {
             <div>
               <a href="${href('/shop/' + encodeURIComponent(it.slug))}" class="shop-cart__name">${_esc(it.name)}</a>
               ${it.variantLabel ? `<p class="shop-cart__variant">${_esc(it.variantLabel)}</p>` : ''}
+              ${short ? `<p class="shop-cart__short" data-testid="cart-short">${short.out ? t('cart.outOfStockLine') : t('cart.shortLine', { n: short.available })}</p>` : ''}
               <p class="shop-cart__unit">${cart.formatMoney(price, cur)} ${t('cart.each')}</p>
             </div>
           </td>
           <td class="shop-cart__cell">
-            <input type="number" class="shop-cart__qty" min="0" value="${it.qty}"
+            <input type="number" class="shop-cart__qty" min="0"${short && !short.out ? ` max="${short.available}"` : ''} value="${it.qty}"
                    data-key="${_esc(key)}" aria-label="${t('cart.qtyFor')} ${_esc(it.name)}"/>
           </td>
           <td class="shop-cart__cell shop-cart__cell--line">${cart.formatMoney(line, cur)}</td>
@@ -95,9 +109,12 @@ export class CartView {
           <span>${cart.formatMoney(subtotal, cur)}</span>
         </div>
         <p class="shop-cart__vat-note">${t('orders.vatNote')}</p>
+        ${shortCount ? `<p class="shop-cart__notice shop-cart__notice--warn" role="alert" data-testid="cart-stock-notice">${t('cart.stockNotice')}</p>` : ''}
         <div class="shop-cart__actions">
           <a href="${href('/shop')}" class="shop-cart__continue">← ${t('cart.continueShopping')}</a>
-          <a href="${href('/checkout')}" class="shop-cart__checkout" data-testid="cart-checkout">${t('cart.checkout')}</a>
+          ${shortCount
+            ? `<button type="button" class="shop-cart__checkout" disabled data-testid="cart-checkout">${t('cart.checkoutBlocked')}</button>`
+            : `<a href="${href('/checkout')}" class="shop-cart__checkout" data-testid="cart-checkout">${t('cart.checkout')}</a>`}
         </div>
       </div>
     `;

@@ -70,3 +70,26 @@ test('the routers\' own narrower guards still apply behind it', async () => {
   expect((await request(app).get('/api/v1/admin/users').set('Cookie', cookies.moderator)).status).toBe(403);
   expect((await request(app).get('/api/v1/admin/users').set('Cookie', cookies.admin)).status).toBe(200);
 });
+
+// The till's scan box (ScanInput on /admin/pos, harvest-ice-c) calls
+// /api/v1/admin/bookkeeping/pos/lookup. Someone on the till holds only the
+// `pos` view — no admin, no moderator — so the outer door must let them
+// through to the router's own requireView('pos'), and the lookup itself must
+// answer (404 for a code nothing carries), not 403.
+test('a till-only role (the pos view alone) reaches the POS code lookup', async () => {
+  await db.query(
+    `INSERT INTO roles (name, view_access) VALUES ('outer-till', '["pos"]'::jsonb)
+     ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`);
+  await db.query(
+    `INSERT INTO users (id, email, username, role, approval_status, email_verified)
+     VALUES ('outer-guard-till', 'outer-till@test.com', 'outertill', 'outer-till', 'approved', TRUE)
+     ON CONFLICT (id) DO NOTHING`);
+  const till = await getTestSessionCookie('outer-guard-till');
+  const url = '/api/v1/admin/bookkeeping/pos/lookup?code=NO-SUCH-CODE-OUTER';
+  const res = await request(app).get(url).set('Cookie', till);
+  expect(res.status).toBe(404);
+  expect(res.body).toEqual(expect.objectContaining({ code: 404 }));
+  expect((await request(app).get(url).set('Cookie', cookies.user)).status).toBe(403);
+  // ...and nothing wider than the till.
+  expect((await request(app).get('/api/v1/admin/users').set('Cookie', till)).status).toBe(403);
+});

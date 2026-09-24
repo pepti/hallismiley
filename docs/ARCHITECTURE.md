@@ -736,7 +736,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Services | `server/services/bookkeeping/invoiceService.js`, `expenseService.js`, `ledgerService.js`, `vatService.js`, `payrollService.js`, `posService.js`, `intakeService.js`, `intakeShape.js`, `documentService.js`, `reconciliationService.js`, `reportService.js`, `replay.js`, `replayCase.js`, `auditLog.js`; `server/services/bookkeeping/peppol/index.js`, `ublInvoice.js`, `party.js`, `identifiers.js`, `vatCategory.js`, `xml.js`, `conformance.js`; `server/services/bookkeepingPdf.js`, `pdfService.js` |
 | Middleware / utils | `server/middleware/booksLimiters.js`; `server/utils/vat.js`, `vatPeriod.js`, `booksDate.js`, `fx.js`, `csv.js` |
 | Views | `public/js/views/AdminBooksView.js`, `AdminBooksSettingsView.js`, `AdminInvoicesView.js`, `AdminInvoiceDetailView.js`, `AdminExpensesView.js`, `AdminARView.js`, `AdminVatView.js`, `AdminBankView.js`, `AdminLedgerView.js`, `AdminPayrollView.js`, `AdminPosView.js`, `booksShared.js` |
-| Client | `public/js/services/adminBookkeeping.js`; `public/js/utils/money.js` |
+| Client | `public/js/services/adminBookkeeping.js`; `public/js/utils/money.js`; `public/js/components/ScanInput.js` (the till's USB barcode scanner, harvested from icelandicstore) + `public/css/scan.css` |
 | Scripts | `server/scripts/books-replay.js`, `books-archive-export.js`, `books-backfill-orders.js`, `books-fetch-fx.js`, `seed-books-demo.js` |
 | CSS | `public/css/admin-bookkeeping.css` |
 | Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`; `tests/unit/booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js` |
@@ -775,8 +775,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - 6600 atvinnubifreiðar deductible, 6610 fólksbifreiðar blocked (103).
 - Owed: an "issue invoice from order" button (`issueInvoiceForOrder` has no
   caller — blocker for 2026-P5) and Peppol inbound.
+- The till scans (`components/ScanInput.js`, `GET /pos/lookup`, variant first,
+  one unit per scan; sounds a per-device switch). A till sale still does NOT
+  move stock — the engine's POS never did; that is a separate decision
+  ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)).
 
-**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · `PLAN.md` Status (own books programme)
+**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · `PLAN.md` Status (own books programme)
 
 ## 10. Sales handbook — Handbók sölufólks
 
@@ -819,25 +823,75 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` |
 | Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js` |
-| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js` |
-| Services | `server/services/stripeService.js`, `discountEngine.js`; `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js` |
+| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order) |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/productCsv.js` |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js` |
-| e2e | `e2e/admin-product-group.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074 |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`) |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
-| Feature doc | — (retail is hidden here; ENHANCEMENTS #22–#26 hold the ice harvest backlog) |
+| Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
 **Rules that must hold**
 - Hidden, never deleted: `/shop` in `publicSurface.js`, every admin line in
   `HIDDEN_ADMIN_VIEWS`; routes live, Stripe inert without keys.
-- `stock <= 0` is sold out (negative counts as sold out) ([harvest-2](HISTORY.md#harvest-2)).
-- Checkout `required` must be re-applied after `syncShipping()`; a sold-out
-  cart line currently goes straight to Stripe (ENHANCEMENTS #25) ([ui-kit](HISTORY.md#ui-kit)).
+- **Three numbers, one writer** ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)):
+  `stock` is On hand; Committed is DERIVED from PAID orders whose stock has
+  not moved (`orders.stock_deducted_at IS NULL`; pending, cancelled, failed and
+  refunded commit nothing; bookable services at product level never count);
+  Available = On hand − Committed. On hand moves ONCE per order, at
+  fulfilment, in `Order.setOrderStatuses` (un-fulfil restores); the Stripe
+  webhook never decrements — it re-checks Available under the row locks and
+  refunds a payment that would oversell. The engine keeps `CHECK (stock >= 0)`:
+  a fulfilment the shelf cannot cover is a 409 `INSUFFICIENT_STOCK`, never a
+  negative count. Every change of on hand goes through `models/Inventory.js`
+  (`applyLines` / `setAbsolute` / `recordOpening`) and leaves an
+  `inventory_adjustments` row with the actor, the reason and the order — the
+  product editor, the variant grid, the import, MCP `set_stock`, fulfilment.
+  `stock` is not a plain column in `Product.update` / `ProductVariant.update`.
+- **Lock order**: orders row → parent products (FOR KEY SHARE) → variants →
+  products, each sorted by id (`applyLines`, `lockReferences` before order
+  line inserts, `lockForWrite` before bulk writes); a status-less 40P01 becomes
+  a retryable 409 `{ reason: 'BUSY' }` in `errorHandler.js` ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)).
+- **The public catalogue sends `available` only**, never on hand or committed;
+  `available <= 0` is sold out. The cart and the checkout flag a line
+  Available cannot cover and block checkout (`utils/availability.js`); the
+  checkout API answers 409 for it (ENHANCEMENTS #25).
+- Checkout `required` must be re-applied after `syncShipping()` ([ui-kit](HISTORY.md#ui-kit)).
+- The shop search box toggles its buttons with `[hidden]` and never repaints
+  under the typist (`ShopFilters._syncSearchControls`).
+- Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
+  status and bin only — never name, price or stock.
+- **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
+  (multipart, memory-only, 10 MB, CSRF) reads the export's own CSV (csv-parse —
+  a quoted line break survives), a supplier .xlsx (exceljs) or a generated PDF
+  (pdf-parse; labels such as "Your material number" win over column guessing)
+  against `PRODUCT_CSV_COLUMNS` + the supplier synonyms in `headerMap.js`, and
+  hands the rows to the unchanged preview → apply. The browser parses nothing
+  (`utils/productCsv.js` is gone). pdf.js's worker is preloaded synchronously
+  (`parsePdf.ensurePdfWorker`) so a parse cannot fail on pdf.js's memoised
+  dynamic import.
+- **Match keys**: SKU (variant-first), then Barcode — products' own and, since
+  113, a variant's own. A barcode on two catalogue rows (`ambiguousBarcode`), a
+  SKU or barcode twice in one file (`duplicateSku` / `duplicateBarcode`) are
+  refused, never guessed; the index is deliberately NOT unique. An ORDER
+  quantity (Magn, Qty, Order Quantity …) is never read as stock — it is
+  reported as skipped; only a real Stock/Birgðir column writes stock, and that
+  write is audited (reason `import`).
+- **Creating from a file needs `create: true`** and only ever creates a product
+  WITH variants: rows with a Variant cell group by Slug, else name, into one
+  Draft product (Active only when every row says so), created whole or not at
+  all in one transaction (`Product.createWithVariants`, opening stock audited);
+  every variant row needs both prices; an existing name/slug or a taken barcode
+  refuses the group. A row without a Variant cell that matches nothing stays
+  unmatched.
+- **The orders list exports a real .xlsx** (`GET /orders/export.xlsx`, same
+  filter as the list, typed cells, frozen auto-filtered header); past
+  `orderExport.limits.maxRows` it is a 413, never truncated.
 - Product-schema `brand` still names Rekstrarkerfið on every SKU — a known
   post-R1 note, not a rule.
 - The 4 MB product-import body is parsed inside `adminShopRoutes.js`, after
@@ -845,7 +899,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 
@@ -994,10 +1048,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/mcpRoutes.js` → `/api/v1/mcp` (`MCP_ENABLED` + bearer) · `mcpAdminRoutes.js` → `/api/v1/admin/mcp-tokens` (admin) · `mcpOAuthRoutes.js` → `/.well-known/oauth-*`, `/oauth/{register,authorize,token,revoke}`, `/api/v1/oauth/requests/:id` (consent, admin) |
 | Controllers | `server/controllers/mcpAdminController.js`, `mcpOAuthController.js` |
 | Models | `server/models/McpToken.js`, `McpOAuth.js` (clients + authorization requests/codes) |
-| Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `oauth.js` (the OAuth protocol rules), `owner.js` (the owner re-check), `server/mcp/tools/system.js` |
+| Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `oauth.js` (the OAuth protocol rules), `owner.js` (the owner re-check), `server/mcp/tools/system.js`, `manage.js`, `products.js` (catalogue writes) |
 | Views | `public/js/views/AdminMcpSettingsView.js`, `ConnectClaudeView.js` (`/tengja/:id`, the consent page) |
 | Client | `public/js/services/adminMcp.js` |
-| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`; `tests/unit/mcpOAuth.test.js` · e2e `e2e/mcp-oauth.spec.js` |
+| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`, `mcpWriteTools.test.js`, `mcpCatalogTools.test.js`; `tests/unit/mcpOAuth.test.js` · e2e `e2e/mcp-oauth.spec.js` |
 | Migrations | 088, 110 |
 | Features | [mcp-connector](../features/mcp-connector.md) |
 | Feature doc | `docs/mcp.md` |
@@ -1031,11 +1085,18 @@ company/                  gitignored: plans, decisions, logs, market-research st
   their services at load, never inside a handler (the tools must bind to the
   app that registered them). Handlers get `{ token }` and audit the write to
   its owner.
+- **Catalogue write tools are switched per instance, all OFF** ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)):
+  `create_product` / `update_product` / `set_stock` each name a `writeFlag`
+  (`mcp.write.productCreate` / `productUpdate` / `stock` in `config/client.json`,
+  env `CLIENT_CONFIG_MCP_WRITE_*`, re-read per call) and the `shop` module —
+  a third gate after the scope double-gate. A created product is always a
+  Draft; `update_product` never takes stock; `set_stock` goes through the
+  audited writer with the token owner as the actor.
 - **A token is only as good as its owner**: `mcpAuth` and the token endpoint
   re-resolve the owner on every call (`server/mcp/owner.js` — role set, then
   the 2FA policy); not an admin, or disabled → 401.
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)
 
 ## 16. Change requests — Breytingarbeiðnir
 
@@ -1109,9 +1170,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Mounts | static `/assets/{news,party,projects,avatars,products,content,change-requests,brand,iceland}` in `server/app.js`; `UPLOAD_ROOT` boot guard |
 | Middleware | `server/middleware/upload.js`, `verifyImageBytes.js`, `sanitize.js`, `validate.js`; `server/utils/imageType.js`, `staticAsset.js` |
-| Services | `server/services/uploadVolumeAlert.js` |
+| Services | `server/services/uploadVolumeAlert.js`, `productImages.js` (normalise on upload, lazy `.thumb.webp`) |
 | Config | `server/config/paths.js` |
-| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
+| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`, `productImages.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
 | Migrations | 004, 016, 051 |
 | Features | [uploads-media](../features/uploads-media.md) |
 | Feature doc | `SECURE_SDLC.md` |
@@ -1126,6 +1187,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Brand assets carry the CORP (cross-origin resource policy) exemption
   [harvest-1](HISTORY.md#harvest-1). `avatarHint` must match the enforced 5 MB avatar limit [ui-kit](HISTORY.md#ui-kit).
 - Alert on volume, never block (domain 13).
+- **Product images are normalised on upload** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): EXIF auto-orient, long
+  edge ≤ 2000 px, metadata stripped, same format; bytes sharp cannot decode are
+  a localised 400 with nothing kept. Rewrite from a BUFFER, never a temp file
+  renamed over the source (the Azure Files mount refuses a rename over a file
+  libvips still holds), and no `mozjpeg` encoder option (musl libvips on alpine
+  rejects it). `<original>.thumb.webp` (192 px) is made on the first request by
+  the handler mounted after the products static, and served statically after;
+  a derivative is never a source; deleting an image deletes its thumbnail.
+  `sharp` is a runtime dependency since this.
 - `sanitizeBody` strips tags with the linear `stripTags()` — byte-identical to
   `/<[^>]*>/g`, which was quadratic on runs of `<` (100 kb blocked the event
   loop 2.3 s, before any limiter). Never reintroduce a backtracking regex on
@@ -1173,7 +1243,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
-| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`; `tests/integration/migrateRunner.test.js` |
+| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
 | Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |

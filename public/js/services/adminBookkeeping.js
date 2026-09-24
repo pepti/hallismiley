@@ -312,6 +312,8 @@ export const payrollCsvUrl = () => `${BASE}/payroll/export.csv`;
 // ── Counter sales ────────────────────────────────────────────────────────────
 
 export const fetchPosCatalogue = (q) => get('/pos/catalogue', q ? { q } : {});
+// A scanned SKU / barcode → { item } (404 = no sellable line for that code).
+export const lookupPosCode = (code) => get('/pos/lookup', { code });
 export const fetchPosDay = (params) => get('/pos/day', params);
 export const fetchPosReceipts = (params) => get('/pos/receipts', params);
 export const ringUpSale = (body) => send('POST', '/pos/sales', body);

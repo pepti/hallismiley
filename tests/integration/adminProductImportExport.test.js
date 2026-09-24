@@ -58,11 +58,21 @@ describe('POST /products/import/preview', () => {
       { sku: 'CSV-P1', stock: '99' },        // update (5 → 99)
       { sku: 'CSV-V1', stock: '3' },         // nochange (already 3)
       { sku: 'NOPE',   stock: '1' },         // unmatched
-      { sku: 'CSV-P1', price_isk: 'abc' },   // error (invalid value)
+      { name: 'no code at all', stock: '1' }, // error (no SKU or barcode). A SKU twice in one
+                                              // file is refused since ice #249 — next test.
     ];
     const res = await request(app).post(PREVIEW).set('Cookie', adminCookie).send({ rows });
     expect(res.status).toBe(200);
     expect(res.body.counts).toMatchObject({ update: 1, nochange: 1, unmatched: 1, error: 1 });
+  });
+
+  test('an invalid value, and the same SKU twice in one file (both refused, never guessed)', async () => {
+    const bad = await request(app).post(PREVIEW).set('Cookie', adminCookie)
+      .send({ rows: [{ sku: 'CSV-P1', price_isk: 'abc' }] });
+    expect(bad.body.rows[0]).toMatchObject({ status: 'error', reason: 'invalidValue', errorField: 'price_isk' });
+    const twice = await request(app).post(PREVIEW).set('Cookie', adminCookie)
+      .send({ rows: [{ sku: 'CSV-P1', stock: '1' }, { sku: 'CSV-P1', stock: '2' }] });
+    expect(twice.body.rows.map(r => r.reason)).toEqual(['duplicateSku', 'duplicateSku']);
   });
 
   test('treats price 0 as invalid (DB CHECK price > 0)', async () => {

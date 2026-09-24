@@ -194,6 +194,7 @@ router.post('/payroll/runs/:id/pay', requireRole('admin'), csrfProtect, books.pa
 // write: it issues a statutory sales document and posts to the books.
 router.get('/pos/export.csv', docLimiter, requireView('pos'), books.exportPosCsv);
 router.get('/pos/catalogue', requireView('pos'), books.getPosCatalogue);
+router.get('/pos/lookup', requireView('pos'), books.lookupPosCode);
 router.get('/pos/day', requireView('pos'), books.getPosDay);
 router.get('/pos/receipts', requireView('pos'), books.listPosReceipts);
 router.post('/pos/sales', requireRole('admin'), csrfProtect, books.createPosSale);

@@ -222,28 +222,40 @@ The 2026-09-07 survey compared this repo against `icelandicstore@origin/main` (`
 
 The survey's headline is that **the harvest is not one-directional**. This repo's bookkeeping module is ~14,800 lines and is a system of record — immutability triggers citing Reglugerð 505/2013, period locking, a 39-action audit log, Peppol/UBL, the replay harness — against icelandicstore's ~2,500-line reporting veneer, where every Books screen carries a banner saying the figures are not the official books and `createExpense` is wired only to the seed script. On books, **this repo is upstream**. Where icelandicstore leads is the shop floor. Those are #22–#25. The reverse queue is at the end.
 
-### 22. Barcode scanning at the till and on the floor
+### 22. ✅ DONE 2026-09-24 (till) — Barcode scanning at the till and on the floor
+
+**Status.** Approved by Halli with the 2026-09-24 ice harvest (chunk C, his defaults) and landed: `components/ScanInput.js` (ice's file, unchanged) mounted on `AdminPosView` with `GET /api/v1/admin/bookkeeping/pos/lookup` (variant first). The sounds are a per-device switch on the till, not the `scan_sounds`/`scan_volume` settings pair; the pick / receive / inventory-check screens stay ice-only. [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24).
+
 
 **What.** Port `ScanInput.js` (226 lines): a USB keyboard-wedge detector with an auto-focused field firing on Enter *plus* a document-level capture listener for scanners that send no Enter suffix, burst timings (35 ms gap, 60 ms idle flush, minimum length 3), a duplicate-read cooldown, six distinct WebAudio feedback tones synthesised with no asset (ok / error / wrong item / line done / all done / over-scan, told apart by tone count and pitch direction), vibrate patterns, and a reduced-motion-aware flash. It bails whenever an editable element has focus, so it never swallows typing.
 **Why.** `AdminPosView` here is tap-and-search only — no `keydown`, no `.focus()`, no scan path — while its own header comment at line 15 already says "after every scan". That is the difference between ringing up a queue and clicking through one. icelandicstore mounts it in five views and re-focuses after every line added and every completed sale.
 **Effort.** M. **Risk.** Low — additive, one component plus a mount per view. The audio needs a settings pair (`scan_sounds`, `scan_volume`) so a shop floor can turn it off.
 **Recommendation.** Highest-value single item in the backlog, and the cheapest of the four.
 
-### 23. Audited stock adjustments
+### 23. ✅ DONE 2026-09-24 — Audited stock adjustments
+
+**Status.** Approved by Halli with the 2026-09-24 ice harvest and landed as ice's three-number model: migration 112 `inventory_adjustments` + `orders.stock_deducted_at`, `models/Inventory.js` the one writer (product editor, variant grid, import, MCP, fulfilment), a reason list, `GET /products/:id/adjustments` and a Stock history panel. The engine keeps `stock >= 0` (no overselling). [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24).
+
 
 **What.** An `inventory_adjustments` table, a reason enum mirrored client↔server and re-validated on write, a history endpoint, and batch corrections applied under row lock — one audit row per line.
 **Why.** Stock is written **directly** here, and `adminShopController.js:54-56` says so in a comment: "no inventory-adjustments audit table, so there's nothing to stay consistent with (revisit if an audited stock-adjust feature is ever ported)." This is that revisit. For an ERP sold to Icelandic SMBs, "who changed this count, when, and why" is not optional.
 **Effort.** M — needs a migration. **Risk.** Low. Expand-only, so invariant 14 is satisfied by construction.
 **Recommendation.** Do it with, or just after, #22 — a scanner that corrects stock wants the audit trail underneath it.
 
-### 24. Import wizards with a dry-run stage
+### 24. ◐ PARTLY DONE 2026-09-24 — Import wizards with a dry-run stage
+
+**Status.** The products half landed with the 2026-09-24 ice harvest (chunk D): the product import reads CSV, .xlsx and PDF on the server (`services/productImport`, `exceljs` + `pdf-parse`), matches on SKU then barcode, never reads an order quantity as stock, and can create a product with its variants from grouped rows — the dry run is the existing preview. Still open: the customer importer's column mapping, goods receipt and the invoice merger (Ísprjón-specific). [HISTORY](docs/HISTORY.md#harvest-ice-d-2026-09-24).
+
 
 **What.** icelandicstore's four-stage customer importer (ingest → map columns → preview → confirm), the invoice merger with fuzzy catalogue matching, the goods-receipt receive/reconcile flow, and `utils/parseSalesReport.js` — delimiter detection, quote-aware splitting, header-row detection that disqualifies numeric and banner rows, and bilingual field hints.
 **Why.** The product import here is CSV-only, parsed in the browser, 9 columns, and update-never-create. Every customer migration starts with someone else's spreadsheet.
 **Effort.** L. **Risk.** Medium — server-side file parsing pulls in dependencies (ExcelJS is already present; `pdf-parse` is not) and a row-cap/preview discipline.
 **Recommendation.** Scope to the customer importer first; the merger is Ísprjón-specific.
 
-### 25. Storefront quality of life
+### 25. ◐ PARTLY DONE 2026-09-24 — Storefront quality of life
+
+**Status.** The bug-shaped half is approved and landed with the 2026-09-24 ice harvest: the shortfall guard (`utils/availability.js` in the cart and the checkout, a 409 from the checkout API, the webhook re-check) and the shop search box that dropped letters (ice #350). Still open, for a later decision: reorder from order history, order-history depth, quantity steppers, kennitala at checkout, pay-by-invoice. [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24).
+
 
 **What.** The stale-basket / shortfall guard (`utils/availability.js`) that blocks checkout on a sold-out line, reorder from order history, order-history depth (expandable line items, delivery-note and invoice PDFs, CSV), quantity steppers with pack/MOQ snapping, kennitala at checkout with admin-configurable requiredness, and the pay-by-invoice path.
 **Why.** One of these is bug-shaped rather than nice-to-have: **a cart line that sells out here goes straight to Stripe.** icelandicstore warns per line, caps the quantity, and disables the checkout button.

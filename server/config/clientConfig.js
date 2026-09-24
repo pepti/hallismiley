@@ -225,6 +225,25 @@ const SCHEMA = {
       enrolment: { type: 'string', default: 'optional', enum: ['optional', 'required'] },
     },
   },
+  mcp: {
+    // The MCP catalogue write tools (harvest-ice-c-2026-09-24; icelandicstore
+    // #248/#250/#361). Each kind of write is its own switch and every switch
+    // is OFF unless this file or its env var says true — so a stack whose
+    // MCP_ALLOWED_SCOPES ceiling includes 'write' still offers none of them
+    // until one is turned on here, deliberately, per instance (Halli
+    // 2026-09-24). They also need the shop module (modules.shop.enabled).
+    //   productCreate → create_product (always a DRAFT: active = false)
+    //   productUpdate → update_product (never stock — that is set_stock's)
+    //   stock         → set_stock (audited in inventory_adjustments, actor =
+    //                   the token's owner)
+    // Read per call by server/mcp/registry.js, so flipping the env var bites
+    // without a restart. Env: CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE etc.
+    write: {
+      productCreate: { type: 'boolean', default: false },
+      productUpdate: { type: 'boolean', default: false },
+      stock:         { type: 'boolean', default: false },
+    },
+  },
   modules: {
     // Which modules this instance HAS (R4, ENHANCEMENTS #5). A preset is a
     // Rekstrarkerfið tier — vefur (the core + news) · verslun (+ shop, till) ·

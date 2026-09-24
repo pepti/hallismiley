@@ -37,7 +37,7 @@ function makeProduct(over = {}) {
     description: '',
     price_isk: 1000,
     price_eur: 700,
-    stock: 1,
+    available: 1,   // the one inventory number the public API sends (models/Inventory.js)
     active: true,
     created_at: '2026-01-01T00:00:00Z',
     category: 'product',

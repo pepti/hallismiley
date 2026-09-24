@@ -547,6 +547,10 @@ app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    u
 app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
+// `<original>.thumb.webp` is generated on first request and written next to the
+// original, so the static above serves it from the second request on
+// (services/productImages.js, harvest-ice-d-2026-09-24).
+app.use('/assets/products', require('./services/productImages').thumbnailHandler);
 app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  uploadStaticOpts));
 // Change-request screenshots: persistScreenshot (changeRequestController.js)
 // writes under UPLOAD_ROOT/change-requests and links /assets/change-requests/…

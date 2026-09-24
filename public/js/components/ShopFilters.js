@@ -157,7 +157,7 @@ export function applyFilters(products, state, currency) {
   }
 
   if (state.inStockOnly) {
-    out = out.filter(p => Number(p.stock) > 0);
+    out = out.filter(p => Number(p.available) > 0);
   }
 
   // Sort
@@ -217,14 +217,20 @@ export class ShopFilters {
   getState() { return { ...this._state }; }
 
   setState(patch) {
+    // A pending search debounce would re-apply the old text 120ms after a clear;
+    // for any other patch, commit the typed text first so the repaint (which
+    // renders state.q) cannot show a stale search box (ice #350).
+    if ('q' in patch) this._cancelSearchDebounce();
+    else this._flushSearchDebounce();
     this._state = { ...this._state, ...patch };
-    this._paint();
+    this._paint({ keepTyped: !('q' in patch) });
     this._onChange(this.getState());
   }
 
   resetState() {
+    this._cancelSearchDebounce();
     this._state = { ...DEFAULT_STATE };
-    this._paint();
+    this._paint({ keepTyped: false });
     this._onChange(this.getState());
   }
 
@@ -260,7 +266,39 @@ export class ShopFilters {
     return false;
   }
 
-  _paint() {
+  _cancelSearchDebounce() {
+    clearTimeout(this._searchDebounce);
+    this._searchDebounce = null;
+  }
+
+  // Typed-but-not-yet-committed text → state, without notifying (the caller
+  // is about to repaint + notify anyway).
+  _flushSearchDebounce() {
+    if (!this._searchDebounce) return;
+    this._cancelSearchDebounce();
+    const q = this._el && this._el.querySelector('#shop-filters-q');
+    if (q) this._state.q = q.value;
+  }
+
+  _panelResetVisible() {
+    const s = this._state;
+    return this._activeFilterCount() > 0 || !!s.q || s.sort !== 'featured';
+  }
+
+  // Show/hide the controls that depend on the search text WITHOUT repainting —
+  // a repaint replaces the input being typed in, and every keystroke after the
+  // first debounce was lost ("only the first two letters show", ice #350).
+  _syncSearchControls() {
+    const root = this._el;
+    if (!root) return;
+    const set = (sel, show) => { const b = root.querySelector(sel); if (b) b.hidden = !show; };
+    set('#shop-filters-clear-q', !!this._state.q);
+    set('#shop-filters-reset', this._panelResetVisible());
+  }
+
+  // keepTyped=false: the caller just SET q (clear / reset) — state wins over
+  // whatever is in the focused input.
+  _paint({ keepTyped = true } = {}) {
     if (!this._el) return;
     const s   = this._state;
     const cur = cart.getCurrency();
@@ -285,6 +323,13 @@ export class ShopFilters {
     const showStock       = this._shows('stock',       () => false);
     const showPrice       = this._shows('price',       () => false);
 
+    // innerHTML replaces the search input. If the visitor is typing in it (a
+    // cart change or setProducts can repaint mid-word), carry the live text,
+    // focus and caret over — otherwise the rest of the word lands on <body>.
+    const prevQ = this._el.querySelector('#shop-filters-q');
+    const typing = prevQ && document.activeElement === prevQ
+      ? { value: prevQ.value, start: prevQ.selectionStart, end: prevQ.selectionEnd }
+      : null;
     this._el.innerHTML = `
       <div class="shop-filters__top">
         <div class="shop-filters__search">
@@ -296,8 +341,8 @@ export class ShopFilters {
           <input type="search" id="shop-filters-q" class="shop-filters__input"
                  placeholder="${t('filters.searchPlaceholder')}" value="${_esc(s.q)}"
                  autocomplete="off" data-testid="shop-search"/>
-          ${s.q ? `<button type="button" class="shop-filters__clear-search" id="shop-filters-clear-q"
-                    aria-label="${t('shop.filtersClearSearchAria')}">✕</button>` : ''}
+          <button type="button" class="shop-filters__clear-search" id="shop-filters-clear-q"
+                  aria-label="${t('shop.filtersClearSearchAria')}" ${s.q ? '' : 'hidden'}>✕</button>
         </div>
         <label class="shop-filters__sort">
           <span class="shop-filters__sort-label">${t('filters.sort')}</span>
@@ -394,14 +439,24 @@ export class ShopFilters {
           <span>${t('filters.inStockOnly')}</span>
         </label>` : ''}
 
-        ${this._activeFilterCount() > 0 || s.q || s.sort !== 'featured'
-          ? `<button type="button" class="shop-filters__reset" id="shop-filters-reset"
-                     data-testid="shop-filters-reset">${t('filters.clearAll')}</button>`
-          : ''}
+        <button type="button" class="shop-filters__reset" id="shop-filters-reset"
+                data-testid="shop-filters-reset"
+                ${this._panelResetVisible() ? '' : 'hidden'}>${t('filters.clearAll')}</button>
       </div>
     `;
 
     this._bind();
+
+    if (typing) {
+      const q = this._el.querySelector('#shop-filters-q');
+      if (q) {
+        q.focus();
+        if (keepTyped) {
+          q.value = typing.value;
+          try { q.setSelectionRange(typing.start, typing.end); } catch { /* caret is best-effort */ }
+        }
+      }
+    }
   }
 
   _bind() {
@@ -413,11 +468,12 @@ export class ShopFilters {
       const v = e.target.value;
       clearTimeout(this._searchDebounce);
       this._searchDebounce = setTimeout(() => {
+        this._searchDebounce = null;
         this._state.q = v;
         this._onChange(this.getState());
-        // Re-render minimally — add/remove the clear button
-        const hadBtn = !!root.querySelector('#shop-filters-clear-q');
-        if ((!!v) !== hadBtn) this._paint();
+        // Toggle the clear/reset buttons in place — a repaint here replaced the
+        // input being typed in and dropped every later letter (ice #350).
+        this._syncSearchControls();
       }, 120);
     });
 

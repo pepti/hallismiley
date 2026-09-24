@@ -5466,6 +5466,99 @@ END; $$ LANGUAGE plpgsql`,
          CHECK (cookie_consent IN ('accepted', 'declined'))`,
     ],
   },
+  {
+    // On hand / Committed / Available, with every stock movement audited
+    // (harvest-ice-c-2026-09-24; ENHANCEMENTS #23). Harvested from
+    // icelandicstore, whose databases already hold the same DDL under FOUR
+    // names — ice 073_inventory_watch (the table), 075_inventory_adjustment_variant
+    // (product_variant_id), 101_inventory_three_numbers (order_id, the orders
+    // stamp, the order_items index) and 121_inventory_adjustment_token
+    // (client_token). Every statement is IF NOT EXISTS, so on an ice database
+    // this entry is a no-op; ice's product file lists those four as the aliases
+    // of this one at graft time (docs/MIGRATIONS.md).
+    //
+    //   inventory_adjustments — append-only: one row per stock movement, with
+    //     the actor, the reason and (for fulfil/unfulfil) the order. The ONE
+    //     writer is models/Inventory.js applyLines.
+    //   orders.stock_deducted_at — stamped in the same transaction that moves
+    //     on hand at fulfilment; NULL = the order still commits stock.
+    //
+    // NOT taken from ice: dropping the stock >= 0 CHECKs (the engine keeps
+    // them — no overselling, Halli 2026-09-24), products.made_to_order, the
+    // build_id column (ice's BOM builds) and the consignment exclusion.
+    //
+    // Backfill: in the release before this one the Stripe webhook decremented
+    // on hand AT PAYMENT, so every order that was ever paid has already had its
+    // stock taken, and a fulfilled one has left the building. Both are stamped
+    // settled, so neither is counted as committed nor deducted a second time
+    // when it is fulfilled. An unpaid, unfulfilled order took no stock and
+    // stays NULL (a pending order never commits — Inventory.OPEN_ORDER_SQL).
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the table or the column. One swap-window caveat, recorded in HISTORY: an
+    // order the OLD container marks paid after this backfill ran is decremented
+    // at payment by the old code and would be deducted again at fulfilment by
+    // the new — only a Stripe payment landing inside the few minutes of a swap.
+    // Reference copy: server/migrations/112_inventory_adjustments.sql
+    name: '112_inventory_adjustments',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS inventory_adjustments (
+         id                 TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         product_id         TEXT        NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+         previous_stock     INTEGER     NOT NULL,
+         new_stock          INTEGER     NOT NULL,
+         delta              INTEGER     NOT NULL,
+         reason             TEXT        NOT NULL DEFAULT 'correction',
+         note               TEXT,
+         user_id            TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS product_variant_id TEXT REFERENCES product_variants(id) ON DELETE CASCADE`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS order_id TEXT REFERENCES orders(id) ON DELETE SET NULL`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS client_token TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_product ON inventory_adjustments (product_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_variant ON inventory_adjustments (product_variant_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_order ON inventory_adjustments (order_id) WHERE order_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_inventory_adjustments_client_token
+         ON inventory_adjustments (client_token) WHERE client_token IS NOT NULL`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_deducted_at TIMESTAMPTZ`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_stock_open ON orders (id) WHERE stock_deducted_at IS NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id)`,
+      `UPDATE orders
+          SET stock_deducted_at = COALESCE(fulfilled_at, paid_at, created_at)
+        WHERE stock_deducted_at IS NULL
+          AND (paid_at IS NOT NULL OR fulfillment_status IN ('fulfilled', 'delivered'))`,
+    ],
+  },
+  {
+    // A barcode per variant, and the lookups the product import matches on
+    // (harvest-ice-d-2026-09-24). A supplier's spreadsheet or order PDF carries
+    // OUR barcode (GTIN/EAN) and THEIR article number, never our SKU, so the
+    // import falls back to barcode when the SKU matches nothing — and a size or
+    // colour has its own GTIN, so the variant needs the column (products has had
+    // one since 048). Harvested from icelandicstore, whose databases hold the
+    // same DDL: product_variants.barcode came with ice's catalogue columns and
+    // the two indexes are ice 102_barcode_lookup_index. Every statement is
+    // IF NOT EXISTS, so on ice this entry is a no-op; ice's product file lists
+    // 102 as its alias at graft time.
+    //
+    // Deliberately NOT unique: the same barcode legitimately sits on two rows
+    // while a catalogue is being cleaned up, and a unique index would refuse
+    // the save. The import resolves the ambiguity instead — a barcode found on
+    // more than one row is refused ('ambiguous_barcode'), never guessed.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column; its variant SELECTs name their columns.
+    // Reference copy: server/migrations/113_variant_barcode.sql
+    name: '113_variant_barcode',
+    statements: [
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS barcode TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_products_barcode
+         ON products (barcode) WHERE barcode IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_barcode
+         ON product_variants (barcode) WHERE barcode IS NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

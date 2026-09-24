@@ -7,7 +7,7 @@ const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
 const { sanitizeBody }         = require('../middleware/sanitize');
-const { createProductUpload }  = require('../middleware/upload');
+const { createProductUpload, createProductImportUpload } = require('../middleware/upload');
 const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 // Admin shop routes require auth; per-view access is gated by path below, so a
@@ -29,9 +29,26 @@ router.get('/products',           adminShop.listProducts);
 // one already ran on an empty body.
 const importBody = [express.json({ limit: '4mb' }), sanitizeBody];
 router.get('/products/export.csv',      adminShop.exportProducts);
+// /import/parse-file takes ONE uploaded .csv/.xlsx/.pdf as multipart (memory
+// only, 10 MB) and returns rows for preview/apply — the one reader for every
+// product file (harvest-ice-d-2026-09-24). CSRF: it only parses, but it is a
+// POST with a body, so it carries the same header check as apply.
+const productImportUpload = (req, res, next) => {
+  createProductImportUpload().single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      const tooBig = err.code === 'LIMIT_FILE_SIZE';
+      return res.status(tooBig ? 413 : 400).json({ error: `Upload error: ${err.message}`, code: tooBig ? 413 : 400 });
+    }
+    if (err) return res.status(400).json({ error: err.message, code: 400 });
+    next();
+  });
+};
+router.post('/products/import/parse-file', csrfProtect, productImportUpload, adminShop.parseProductImportFile);
 router.post('/products/import/preview', ...importBody, adminShop.previewProductImport);
 router.post('/products/import/apply',   csrfProtect, ...importBody, adminShop.applyProductImport);
+router.post('/products/bulk',           csrfProtect, adminShop.bulkUpdateProducts);
 router.get('/products/:id',       adminShop.getProduct);
+router.get('/products/:id/adjustments', adminShop.productAdjustments);
 router.post('/products',          csrfProtect, adminShop.createProduct);
 router.patch('/products/:id',     csrfProtect, adminShop.updateProduct);
 router.delete('/products/:id',    csrfProtect, adminShop.deactivateProduct);
@@ -77,6 +94,7 @@ router.get('/reports',            adminShop.salesReport);
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);
+router.get('/orders/export.xlsx', adminShop.exportOrders);
 // Literal route before /orders/:id so "bulk" isn't captured as an order id.
 router.get('/orders/bulk/delivery-notes.pdf', adminShop.getBulkDeliveryNotes);
 router.get('/orders/:id',         adminShop.getOrder);

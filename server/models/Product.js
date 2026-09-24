@@ -1,6 +1,7 @@
 // Repository pattern for products — all SQL lives here.
 // Parameterised queries throughout (A03: prevents SQL injection).
 const db = require('../config/database');
+const Inventory = require('./Inventory');
 
 // Admin-facing column list: surfaces both locales' raw fields so the CMS
 // editor can render EN + IS inputs side-by-side.
@@ -83,9 +84,9 @@ class Product {
   // stock/bin). Returns a lean camelCase shape (display-ready) or null on no
   // match. Stock/bin are read server-side; never trust a client snapshot. Ported
   // from the sibling icelandicstore Product.resolveByCode, trimmed of the
-  // pack_qty/cost_isk columns HalliProjects' schema doesn't have. Note: variants
-  // here carry sku + bin but NO barcode of their own, so barcode is the parent
-  // product's and a scanned barcode resolves at step 2.
+  // pack_qty/cost_isk columns HalliProjects' schema doesn't have. A variant's
+  // own barcode (migration 113) matches at step 1 like its sku; the parent's
+  // barcode is the fallback for variants without one.
   static async resolveByCode(code) {
     const c = String(code == null ? '' : code).trim();
     if (!c) return null;
@@ -95,14 +96,15 @@ class Product {
       `SELECT v.id AS variant_id, v.product_id, p.name, p.slug,
               COALESCE(v.sku, p.sku)             AS sku,
               COALESCE(v.bin, p.bin)             AS bin,
-              p.barcode                          AS barcode,
+              COALESCE(v.barcode, p.barcode)     AS barcode,
               COALESCE(v.price_isk, p.price_isk) AS price_isk,
               COALESCE(v.price_eur, p.price_eur) AS price_eur,
               v.stock, v.attributes,
               (p.active AND v.active) AS active
          FROM product_variants v
          JOIN products p ON p.id = v.product_id
-        WHERE v.sku = $1
+        WHERE v.sku = $1 OR v.barcode = $1
+        ORDER BY (v.sku = $1) DESC
         LIMIT 1`,
       [c]
     );
@@ -143,7 +145,11 @@ class Product {
 
   // ── WRITE ─────────────────────────────────────────────────────────────────
 
-  static async create(data) {
+  // Opening stock is written straight into the INSERT (the creation IS the
+  // event) and recorded as an 'opening' inventory_adjustments row in the same
+  // transaction, so every unit on the shelf has an audit row. `userId` names
+  // the actor.
+  static async create(data, { userId = null } = {}) {
     const {
       slug, name, description = '',
       name_is = null, description_is = null,
@@ -163,7 +169,11 @@ class Product {
       // historical invoice.
       vat_rate = 24,
     } = data;
-    const { rows } = await db.query(
+    const client = await db.pool.connect();
+    let rows;
+    try {
+      await client.query('BEGIN');
+      ({ rows } = await client.query(
       `INSERT INTO products (slug, name, description, name_is, description_is,
                              price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
                              category, subcategory, duration_minutes, delivery_format, is_bookable,
@@ -192,13 +202,28 @@ class Product {
         Boolean(active),
         [0, 11, 24].includes(Number(vat_rate)) ? Number(vat_rate) : 24,
       ]
-    );
+      ));
+      await Inventory.recordOpening(client, { productId: rows[0].id, stock: rows[0].stock, userId });
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
     return rows[0];
   }
 
-  static async update(id, data) {
-    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'bin', 'active', 'vat_rate'];
-    const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres', 'duration_minutes']);
+  // `stock` is accepted but is NOT a plain column here (harvested from
+  // icelandicstore #243/#275): a change moves through Inventory.setAbsolute
+  // under the row lock, in the same transaction as the field update, so it is
+  // serialised against fulfilment and leaves an inventory_adjustments row naming
+  // who moved it and why. `stockReason` / `stockNote` come from the admin form
+  // (Inventory.ADJUSTMENT_REASONS; default 'correction').
+  static async update(id, data, { userId = null, stockReason = 'correction', stockNote = null } = {}) {
+    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'bin', 'active', 'vat_rate'];
+    // No 'stock' here: it is not in `allowed`, so the loop below never sees it.
+    const numeric = new Set(['price_isk', 'price_eur', 'weight_grams', 'capacity_litres', 'duration_minutes']);
     const bool    = new Set(['active', 'is_bookable']);
     const jsonField = new Set(['variant_axes']);
 
@@ -245,32 +270,93 @@ class Product {
       }
     }
 
-    if (sets.length === 0) return Product.findById(id);
+    const wantsStock = data.stock !== undefined && data.stock !== null && data.stock !== '';
 
-    params.push(String(id));
-    const { rows } = await db.query(
-      `UPDATE products SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING ${COLUMNS}`,
-      params
-    );
-    return rows[0] || null;
+    if (!wantsStock) {
+      if (sets.length === 0) return Product.findById(id);
+      params.push(String(id));
+      const { rows } = await db.query(
+        `UPDATE products SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING ${COLUMNS}`,
+        params
+      );
+      return rows[0] || null;
+    }
+
+    const target = Number(data.stock);
+    if (!Number.isInteger(target) || target < 0) {
+      const err = new Error('stock must be a whole number of 0 or more');
+      err.status = 400;
+      throw err;
+    }
+
+    // Audited path: the field update and the stock move land in one transaction.
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Lock and read under the lock, so the delta is against the value about
+      // to be overwritten (applyLines re-locks the same row, which is free).
+      const { rows: cur } = await client.query(
+        'SELECT stock FROM products WHERE id = $1 FOR UPDATE', [String(id)]
+      );
+      if (!cur[0]) { await client.query('ROLLBACK'); return null; }
+      if (sets.length) {
+        params.push(String(id));
+        await client.query(`UPDATE products SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      }
+      await Inventory.setAbsolute(client, {
+        productId: String(id), previous: cur[0].stock, target,
+        reason: stockReason || 'correction', note: stockNote, userId,
+      });
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
+    return Product.findById(id);
+  }
+
+  // Bulk edit (admin list, multi-select → Edit…): the same scalar fields on many
+  // products in ONE statement. `fields` is whitelisted and validated by the
+  // controller (BULK_EDIT_FIELDS); stock is never among them. The rows are
+  // locked first in the stock lock order (Inventory.lockForWrite), so a
+  // multi-row UPDATE in scan order cannot cycle with a fulfilment's sorted
+  // locks (ice #380). Returns the affected ids.
+  static async bulkEdit(ids, fields) {
+    if (!ids || ids.length === 0) return [];
+    const cols = ['category', 'subcategory', 'vat_rate', 'active', 'bin'];
+    const sets = [];
+    const params = [];
+    for (const col of cols) {
+      if (fields[col] === undefined) continue;
+      let v = fields[col];
+      if ((col === 'bin' || col === 'subcategory') && typeof v === 'string' && v.trim() === '') v = null;
+      params.push(v);
+      sets.push(`${col} = $${params.length}`);
+    }
+    if (!sets.length) return [];
+    params.push(ids.map(String));
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await Inventory.lockForWrite(client, { productIds: ids });
+      const { rows } = await client.query(
+        `UPDATE products SET ${sets.join(', ')} WHERE id = ANY($${params.length}::text[]) RETURNING id`,
+        params
+      );
+      await client.query('COMMIT');
+      return rows.map(r => r.id);
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   static async deactivate(id) {
     return Product.update(id, { active: false });
-  }
-
-  // Atomic stock decrement — returns new stock on success, null if insufficient.
-  // Must be called from within the caller's transaction (`client` is a
-  // pool-acquired client after BEGIN). The WHERE stock >= $qty guard ensures
-  // we never oversell under concurrent webhook processing.
-  static async decrementStockAtomic(client, productId, qty) {
-    const { rows } = await client.query(
-      `UPDATE products SET stock = stock - $1
-        WHERE id = $2 AND stock >= $1
-        RETURNING stock`,
-      [Number(qty), String(productId)]
-    );
-    return rows[0]?.stock ?? null;
   }
 
   // ── IMAGES ────────────────────────────────────────────────────────────────
@@ -349,7 +435,8 @@ class Product {
   // back through findForImport without flattening inheritance.
   static async listForExport() {
     const { rows } = await db.query(
-      `SELECT p.id AS product_id, p.slug, p.name, p.sku AS product_sku, p.barcode,
+      `SELECT p.id AS product_id, p.slug, p.name, p.sku AS product_sku,
+              COALESCE(v.barcode, p.barcode) AS barcode, p.variant_axes,
               p.bin AS product_bin, p.price_isk AS product_price_isk,
               p.price_eur AS product_price_eur, p.stock AS product_stock,
               p.active AS product_active,
@@ -390,6 +477,116 @@ class Product {
       bySku.set(r.sku, { kind: 'variant', variantId: r.variant_id, productId: r.product_id, current: r });
     }
     return bySku;
+  }
+
+  // Resolve a batch of BARCODES for import — the FALLBACK match key when a row's
+  // SKU matches nothing (a supplier's sheet carries our GTIN and their article
+  // number; harvested from icelandicstore #249). A barcode on more than one row
+  // (products and variants together) is returned as { ambiguous: true } and the
+  // import refuses it, never guesses. A variant product's own barcode is not a
+  // match target (its sellable rows are the variants).
+  static async findForImportByBarcode(barcodes) {
+    const list = [...new Set((barcodes || []).map(s => String(s)).filter(Boolean))];
+    const byCode = new Map();
+    if (!list.length) return byCode;
+    const { rows: prows } = await db.query(
+      `SELECT id AS product_id, sku, barcode, bin, price_isk, price_eur, stock, active
+         FROM products
+        WHERE barcode = ANY($1::text[]) AND variant_axes = '[]'::jsonb`,
+      [list]
+    );
+    const { rows: vrows } = await db.query(
+      `SELECT id AS variant_id, product_id, sku, barcode, bin, price_isk, price_eur, stock, active
+         FROM product_variants WHERE barcode = ANY($1::text[])`,
+      [list]
+    );
+    const hits = new Map();
+    for (const r of prows) {
+      (hits.get(r.barcode) || hits.set(r.barcode, []).get(r.barcode))
+        .push({ kind: 'product', productId: r.product_id, current: r });
+    }
+    for (const r of vrows) {
+      (hits.get(r.barcode) || hits.set(r.barcode, []).get(r.barcode))
+        .push({ kind: 'variant', variantId: r.variant_id, productId: r.product_id, current: r });
+    }
+    for (const [code, entries] of hits) byCode.set(code, entries.length === 1 ? entries[0] : { ambiguous: true });
+    return byCode;
+  }
+
+  // Create-from-import checks: which of these slugs / lower-cased names already
+  // name a product, and which of these barcodes are already on a row.
+  static async findExistingForGroups({ slugs = [], names = [] } = {}) {
+    const { rows } = await db.query(
+      `SELECT slug, lower(name) AS lname FROM products
+        WHERE slug = ANY($1::text[]) OR lower(name) = ANY($2::text[])`,
+      [slugs.map(String), names.map(n => String(n).toLowerCase())]
+    );
+    return { slugs: new Set(rows.map(r => r.slug)), names: new Set(rows.map(r => r.lname)) };
+  }
+
+  static async findBarcodesInUse(barcodes) {
+    const list = [...new Set((barcodes || []).map(String).filter(Boolean))];
+    if (!list.length) return [];
+    const { rows } = await db.query(
+      `SELECT barcode FROM products WHERE barcode = ANY($1::text[])
+       UNION SELECT barcode FROM product_variants WHERE barcode = ANY($1::text[])`,
+      [list]
+    );
+    return rows.map(r => r.barcode);
+  }
+
+  // Every slug starting with `base` — so a generated slug can take the next free
+  // suffix without one round-trip per candidate.
+  static async slugsLike(base) {
+    const { rows } = await db.query(
+      `SELECT slug FROM products WHERE slug = $1 OR slug LIKE $2`,
+      [String(base), `${String(base).replace(/[\\%_]/g, '\\$&')}-%`]
+    );
+    return rows.map(r => r.slug);
+  }
+
+  // One new product with its variants, created WHOLE or not at all (the
+  // variant-creating import, ice #302): the product row, every variant with its
+  // opening stock audited ('opening', note 'import'), in one transaction, with
+  // the variants' foreign keys taken after the parent exists. A variant price
+  // equal to the parent's is stored as NULL (inherits), the way the admin
+  // grid stores it. Returns { product, variants }.
+  static async createWithVariants(parent, variants, { userId = null } = {}) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows: prow } = await client.query(
+        `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, category,
+                               variant_axes, active, vat_rate)
+         VALUES ($1, $2, '', $3, $4, 0, 'product', $5::jsonb, $6, 24)
+         RETURNING ${COLUMNS}`,
+        [String(parent.slug), String(parent.name), Number(parent.price_isk), Number(parent.price_eur),
+         JSON.stringify(parent.axes || []), Boolean(parent.active)]
+      );
+      const product = prow[0];
+      const created = [];
+      for (const v of variants) {
+        const own = (field) => (v[field] == null || Number(v[field]) === Number(product[field]) ? null : Number(v[field]));
+        const { rows: vrow } = await client.query(
+          `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, bin, barcode, active)
+           VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)
+           RETURNING id, product_id, sku, stock`,
+          [product.id, String(v.sku), JSON.stringify(v.attributes), own('price_isk'), own('price_eur'),
+           Math.max(0, Math.trunc(Number(v.stock) || 0)), v.bin || null, v.barcode || null, v.active !== false]
+        );
+        await Inventory.recordOpening(client, {
+          productId: product.id, variantId: vrow[0].id, stock: vrow[0].stock, userId, note: 'import',
+        });
+        created.push(vrow[0]);
+      }
+      await client.query('COMMIT');
+      return { product, variants: created };
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 }
 

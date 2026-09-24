@@ -14,6 +14,7 @@ paths:
   - public/js/views/ConnectClaudeView.js
   - tests/integration/mcpOAuth.test.js
   - tests/integration/mcpWriteTools.test.js
+  - tests/integration/mcpCatalogTools.test.js
   - tests/unit/mcpOAuth.test.js
   - e2e/mcp-oauth.spec.js
   - server/controllers/mcpAdminController.js
@@ -26,7 +27,7 @@ paths:
 migrations: [088_mcp_tokens, 110_mcp_oauth]
 since: 2026-08-22
 origin: null
-history: [harvest-1, leads, mcp-oauth-2026-09-24, mcp-write-tools-2026-09-24, harvest-ice-a-2026-09-24]
+history: [harvest-1, leads, mcp-oauth-2026-09-24, mcp-write-tools-2026-09-24, harvest-ice-a-2026-09-24, harvest-ice-c-2026-09-24]
 ---
 
 The MCP endpoint (`/api/v1/mcp`, bearer tokens from 088) through which an AI client reads instance state and, later, files feature requests; token management at `/admin/mcp`. Ships dark behind `MCP_ENABLED`.

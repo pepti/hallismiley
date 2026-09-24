@@ -188,4 +188,37 @@ function mediaTypeForMime(mime) {
   return ALLOWED_VIDEO_TYPES.includes(mime) ? 'video' : 'image';
 }
 
-module.exports = { createProjectUpload, createNewsUpload, createProductUpload, createBackgroundUpload, mediaTypeForMime, MIME_TO_EXT, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE };
+const MAX_PRODUCT_IMPORT_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_PRODUCT_IMPORT_TYPES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel',                                          // .xls
+  'text/csv',
+  'application/csv',
+  'text/plain',
+  'application/pdf',
+  'application/octet-stream', // mail-client fallback — gated by extension below
+];
+
+/**
+ * In-memory multer for the products-import file (harvested from icelandicstore
+ * #249 — harvest-ice-d-2026-09-24). Accepts the CSV the products page exports,
+ * a supplier .xlsx and a PDF order or price list; 10 MB. Parsed immediately and
+ * never persisted, so memoryStorage is the right fit. A loose octet-stream MIME
+ * is accepted ONLY when the filename says xlsx/xls/csv/pdf — and the parser
+ * identifies the container itself, so neither the name nor the MIME is
+ * load-bearing. Caller uses `.single('file')`.
+ */
+function createProductImportUpload() {
+  const fileFilter = (req, file, cb) => {
+    const name   = String(file.originalname || '').toLowerCase();
+    const extOk  = /\.(xlsx|xls|csv|txt|pdf)$/.test(name);
+    const typeOk = ALLOWED_PRODUCT_IMPORT_TYPES.includes(file.mimetype);
+    if ((typeOk && (file.mimetype !== 'application/octet-stream' || extOk)) || extOk) return cb(null, true);
+    const err = new Error('Only CSV, Excel (xlsx) and PDF files can be imported');
+    err.code = 'INVALID_TYPE';
+    cb(err);
+  };
+  return multer({ storage: multer.memoryStorage(), fileFilter, limits: { fileSize: MAX_PRODUCT_IMPORT_SIZE, files: 1 } });
+}
+
+module.exports = { createProjectUpload, createNewsUpload, createProductUpload, createBackgroundUpload, createProductImportUpload, mediaTypeForMime, MIME_TO_EXT, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_PRODUCT_IMPORT_SIZE };

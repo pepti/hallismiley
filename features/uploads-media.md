@@ -7,6 +7,7 @@ status: live
 flag: null
 paths:
   - server/middleware/upload.js
+  - server/services/productImages.js
   - server/middleware/verifyImageBytes.js
   - server/middleware/sanitize.js
   - server/middleware/validate.js
@@ -14,6 +15,7 @@ paths:
   - server/config/paths.js
   - server/services/uploadVolumeAlert.js
   - tests/integration/media.test.js
+  - tests/integration/productImages.test.js
   - tests/integration/uploadImageBytes.test.js
   - tests/integration/uploadVolumeAlert.test.js
   - tests/unit/uploadPaths.test.js
@@ -25,7 +27,7 @@ paths:
 migrations: []
 since: 2026-08-09
 origin: null
-history: [base-sync, harvest-2, harvest-1]
+history: [base-sync, harvest-2, harvest-1, harvest-ice-d-2026-09-24]
 ---
 
 Multer upload middleware with allowlisted paths under `UPLOAD_ROOT`, magic-byte verification behind every image upload, the request sanitiser and validator middleware, and the upload-volume alert (detect, never block).

@@ -1,13 +1,12 @@
 // AdminOrdersView — admin order list with search, payment/fulfillment filter,
 // independent status badges, and order tags. Each row opens the detail view
 // (/admin/shop/orders/:id) where statuses + tags are edited. Route: /admin/shop/orders
-import { fetchOrders, paymentBadge, fulfillmentBadge, bulkDeliveryNotesUrl } from '../services/adminOrders.js';
+import { fetchOrders, paymentBadge, fulfillmentBadge, bulkDeliveryNotesUrl, downloadOrdersXlsx } from '../services/adminOrders.js';
 import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
 import { attachStickyHScroll } from '../utils/stickyHScroll.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
-import { downloadCsv } from '../utils/downloadCsv.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -20,15 +19,6 @@ function _formatDate(iso) {
   return new Date(iso).toLocaleString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
-}
-
-// Plain-text status label: looks up "<prefix><value>" and falls back to the raw
-// value when no translation exists (t() returns the key on a miss).
-function _statusLabel(prefix, v, fallback) {
-  const val = String(v || fallback);
-  const key = prefix + val;
-  const label = t(key);
-  return label === key ? val : label;
 }
 
 export class AdminOrdersView {
@@ -51,7 +41,7 @@ export class AdminOrdersView {
               <option value="ful:unfulfilled">${t('orderFulfillment.unfulfilled')}</option>
               <option value="ful:fulfilled">${t('orderFulfillment.fulfilled')}</option>
             </select>
-            <button type="button" id="admin-orders-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
+            <button type="button" id="admin-orders-export" class="admin-shop__primary-btn">${t('adminOrders.exportExcel')}</button>
           </div>
         </header>
         <div id="admin-orders-body"><p>${t('form.loading')}</p></div>
@@ -67,7 +57,7 @@ export class AdminOrdersView {
       const v = e.target.value;
       this._searchDebounce = setTimeout(() => { this._q = v; this._load(); }, 250);
     });
-    this._view.querySelector('#admin-orders-export').addEventListener('click', () => this._exportCsv());
+    this._view.querySelector('#admin-orders-export').addEventListener('click', () => this._exportXlsx());
     await this._load();
     return renderAdminShell({ activePath: '/admin/shop/orders', content: this._view });
   }
@@ -167,30 +157,16 @@ export class AdminOrdersView {
     if (count) count.textContent = t('adminOrders.bulkSelected', { n });
   }
 
-  // ── CSV export ──────────────────────────────────────────────────────────────
-  // Exports the orders currently loaded for the active search + filter. The
-  // /orders endpoint caps the list at 200 rows, so very large result sets are
-  // truncated to that ceiling (the search/filter narrows it in practice).
-  _exportCsv() {
+  // ── Excel export ────────────────────────────────────────────────────────────
+  // Every order matching the active search + filter — not just the loaded page —
+  // as a real .xlsx built on the server with typed number/date cells (harvested
+  // from icelandicstore #325). It replaces a comma CSV that Icelandic-locale
+  // Excel opened as one column of text.
+  async _exportXlsx() {
     const btn = this._view.querySelector('#admin-orders-export');
     if (btn) btn.disabled = true;
     try {
-      const header = [
-        t('orders.order'), t('orders.date'), t('adminOrders.customer'), t('orders.total'),
-        t('adminOrders.payment'), t('adminOrders.fulfillment'), t('adminOrders.items'), t('adminOrders.tags'),
-      ];
-      const rows = this._orders.map(o => [
-        o.order_number,
-        _formatDate(o.created_at),
-        o.user_email || o.guest_email || o.guest_name || '',
-        Number(o.total) || 0,
-        _statusLabel('orderPayment.', o.payment_status, 'pending'),
-        _statusLabel('orderFulfillment.', o.fulfillment_status, 'unfulfilled'),
-        Number(o.item_count) || 0,
-        Array.isArray(o.tags) ? o.tags.join('; ') : '',
-      ]);
-      const today = new Date().toISOString().slice(0, 10);
-      downloadCsv(`orders-${today}.csv`, header, rows);
+      await downloadOrdersXlsx(this._filterParams());
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
