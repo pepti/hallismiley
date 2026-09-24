@@ -1,0 +1,163 @@
+# Docs-only shim for the three CI check names (icelandicstore #347, ported to
+# the engine in harvest-ice-f-2026-09-24).
+#
+# ENGINE DIFFERENCE — READ FIRST. In icelandicstore a docs-only PR tests
+# nothing. Here the docs ARE tested: tests/unit/architectureIndex.test.js and
+# featureRegistry.test.js read docs/ARCHITECTURE.md, docs/HISTORY.md,
+# docs/API.md, PLAN.md, CLAUDE.md and features/*.md, and CHANGELOG.md feeds the
+# release manifest. So the "Lint + Integration tests" entry below is not a bare
+# echo: it runs the unit tier (no database) and the manifest build. E2E and the
+# Docker build have nothing to prove for prose and report green. ci.yml's
+# PUSH trigger has no paths filter, so the merge itself still runs everything.
+#
+# WHY THIS EXISTS
+# A repo of the estate that sets branch protection requires these contexts,
+# matched by job NAME: "Lint + Integration tests", "E2E tests (Playwright)",
+# "Docker build + boot smoke test" (`gh api repos/<owner>/<repo>/branches/<b>/protection`). ci.yml ignores
+# docs-only changes (`paths-ignore`), so on a docs-only PR none of those jobs
+# ever starts — and a required check that never reports stays "Expected" for
+# ever. The PR is permanently BLOCKED and `gh pr merge` answers "the base branch
+# policy prohibits the merge" (hit for real on PR #345, 2026-09-18, which needed
+# `--admin`). This workflow reports those three names as green for a PR whose
+# EVERY changed file is documentation — exactly the PRs ci.yml skips.
+#
+# It is deliberately NOT called "CI": anything that keys on the workflow named
+# "CI" (a deploy trigger, a gate reading ci.yml runs) must never mistake this
+# file for it. It has no `push` trigger; the push to master runs ci.yml whole.
+#
+# THE MIXED-PR TRAP (why there is a detector and a matrix)
+# `paths:` fires when ANY changed file matches, not when ALL do — so this
+# workflow also starts on a PR that touches docs AND code, which here is nearly
+# most PRs (they update HISTORY.md / PLAN.md with the code). Three plain jobs carrying the
+# required names would then sit beside the real jobs under the same names, and a
+# fast green shim next to a slow or red real job is a false green waiting to
+# happen. Gating plain jobs with `if:` does not help either: a SKIPPED job still
+# publishes a check run under its name, and branch protection counts "skipped"
+# as passing.
+#
+# So the required names exist only as DATA, in a matrix, and the job that would
+# carry them is skipped unless the detector says docs-only. GitHub evaluates a
+# job's `if:` BEFORE it expands `strategy.matrix`, so on a mixed PR the skipped
+# job is a single check run named with the unexpanded expression — never one of
+# the required names. On a mixed PR this workflow therefore publishes nothing
+# that branch protection looks at; the real ci.yml jobs alone decide.
+#
+# KEEP IN SYNC — the docs list lives in THREE places that must agree:
+#   ci.yml `pull_request.paths-ignore` (push has none, on purpose),
+#   `paths:` below, and the `case` pattern in the detector;
+# and the three matrix names must equal the ci.yml job names character for
+# character. tests/unit/ciSkippedShim.test.js fails the build on drift.
+name: CI skipped (docs-only shim)
+
+on:
+  pull_request:
+    branches: [master, main]
+    # IDENTICAL to ci.yml's paths-ignore list (see KEEP IN SYNC above).
+    paths: ['**.md', 'docs/**', 'LICENSE']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-skipped-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Docs-only detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read   # list the PR's changed files
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      # No checkout: the changed-file list comes from the API, so this job is a
+      # few seconds of runner time on the (common) mixed PR.
+      - name: Is every changed file documentation?
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO:     ${{ github.repository }}
+          PR:       ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Every exit from this step that is not a proven "all docs" answers
+          # false: the shim then publishes nothing and the PR is judged by the
+          # real CI (or stays blocked) — it can never be waved through.
+          verdict() { echo "docs_only=$1" >> "$GITHUB_OUTPUT"; echo "docs_only=$1 — $2"; exit 0; }
+
+          meta="$(gh api "repos/$REPO/pulls/$PR" -q '[.head.sha, (.changed_files|tostring)] | join(" ")')"
+          api_sha="${meta% *}"
+          expected="${meta#* }"
+          # The files endpoint describes the PR's CURRENT head. If a newer push
+          # landed since this run was queued, that list is not this commit's.
+          [ "$api_sha" = "$HEAD_SHA" ] || verdict false "PR head moved ($api_sha) since this run's commit ($HEAD_SHA)"
+
+          # previous_filename too: a code file renamed to *.md is not docs-only.
+          list="$(gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
+                    -q '.[] | [.filename, (.previous_filename // "")] | @tsv')"
+          got="$(printf '%s\n' "$list" | grep -c . || true)"
+          # The endpoint caps at 3000 files; a short or empty list proves nothing.
+          { [ "$got" -gt 0 ] && [ "$got" = "$expected" ]; } \
+            || verdict false "listed $got of $expected changed files"
+
+          code=""
+          while IFS=$'\t' read -r name prev; do
+            for f in "$name" "$prev"; do
+              [ -n "$f" ] || continue
+              case "$f" in
+                # The ci.yml paths-ignore list, as shell globs (`*` spans `/`).
+                *.md|docs/*|LICENSE) ;;
+                *) code=1; echo "not documentation: $f" ;;
+              esac
+            done
+          done <<< "$list"
+
+          [ -z "$code" ] || verdict false "mixed PR, the real CI jobs decide"
+          verdict true "all $got changed files match ci.yml's paths-ignore, so CI will not run"
+
+  shim:
+    # The required names appear ONLY here, as matrix data — see THE MIXED-PR
+    # TRAP above for why they are not three plain jobs.
+    name: ${{ matrix.check }}
+    needs: detect
+    if: needs.detect.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        check:
+          - 'Lint + Integration tests'
+          - 'E2E tests (Playwright)'
+          - 'Docker build + boot smoke test'
+    steps:
+      - name: Report the skipped suite
+        env:
+          CHECK: ${{ matrix.check }}
+        run: echo "'$CHECK' — every file in this PR is documentation, which ci.yml ignores on pull requests."
+
+      # The engine's docs are tested content (see ENGINE DIFFERENCE above): the
+      # unit tier holds the docs parity tests and needs no database.
+      - name: Checkout
+        if: matrix.check == 'Lint + Integration tests'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        if: matrix.check == 'Lint + Integration tests'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Docs parity (unit tier) + release manifest
+        if: matrix.check == 'Lint + Integration tests'
+        run: |
+          npm ci --prefer-offline --no-audit --fund=false
+          npm run test:unit
+          node scripts/build-manifest.js \
+            --channel=stable \
+            --digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --out=/tmp/manifest-dryrun.json
+          node scripts/check-manifest.js /tmp/manifest-dryrun.json

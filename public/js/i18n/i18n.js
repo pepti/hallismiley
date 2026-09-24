@@ -6,6 +6,7 @@
 //   t('shop.inStock', {n: 3}) // → "3 in stock"
 
 import { getIdentity, routeLockFor } from '../utils/identity.js';
+import { jsUrl } from '../utils/assetBase.js';
 
 export const SUPPORTED_LOCALES = ['en', 'is'];
 // DEFAULT_LOCALE is the MESSAGE-FALLBACK dimension (which JSON backfills a
@@ -139,10 +140,21 @@ export function persistLocaleChoice(locale) {
  *  arrives by merge; `product.<locale>.json` is product-owned (D-021) and its
  *  keys win, so a product never edits the engine file and a sync never
  *  conflicts on locale keys. A missing overlay is an empty table. */
+//
+// Both are resolved against this release's /js/ tree (utils/assetBase.js), so
+// under a release-stamped prefix (/js/_<tag>/i18n/is.json) a release's strings
+// can never pair with another release's code, and they are cached with it
+// (server/middleware/versionedStatic.js; icelandicstore #425,
+// harvest-ice-e-2026-09-24). A 404 of the ENGINE table is usually a tab from
+// an older release switching language after a new one went live: it throws,
+// and loadLocale hands it to the build guard.
 async function fetchTable(locale) {
   const [base, overlay] = await Promise.all([
-    fetch(`/js/i18n/${locale}.json`).then(r => r.json()),
-    fetch(`/js/i18n/product.${locale}.json`)
+    fetch(jsUrl(`i18n/${locale}.json`)).then((r) => {
+      if (!r.ok) throw new Error(`locale ${locale}: HTTP ${r.status}`);
+      return r.json();
+    }),
+    fetch(jsUrl(`i18n/product.${locale}.json`))
       .then(r => (r.ok ? r.json() : {}))
       .catch(() => ({})),
   ]);
@@ -161,9 +173,17 @@ export async function loadLocale(locale) {
     ]);
     _messages = msgs;
     _fallback = fallback ?? msgs;
-  } catch {
-    _messages = {};
-    _fallback = {};
+  } catch (error) {
+    // Keep what this page already shows rather than rendering raw keys, and let
+    // the build guard decide whether a new release explains it (reload) or the
+    // network does (services/buildGuard.js recoverFromAssetFailure).
+    try {
+      if (typeof CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('app:asset-load-failed', { detail: { error } }));
+      } else if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent({ type: 'app:asset-load-failed', detail: { error } });
+      }
+    } catch { /* no DOM */ }
   }
 
   _locale = locale;
@@ -227,6 +247,35 @@ export function t(key, params) {
     }
   }
   return msg;
+}
+
+/**
+ * Does `n` take the SINGULAR form in `locale`? (icelandicstore #399)
+ *
+ * Icelandic agrees with the last digit, not the whole number: 1, 21, 101 and
+ * 1001 are singular ("21 pöntun"), but 11, 111 and 211 are plural ("11
+ * pantanir") because the teens are their own words. English is the plain
+ * `n === 1`. Anything that is not a finite integer (decimals, NaN) is plural
+ * in both — "1,5 lítrar", "0.5 items".
+ */
+export function isSingular(n, locale = _locale) {
+  const v = Number(n);
+  if (!Number.isInteger(v)) return false;
+  if (locale === 'is') {
+    const a = Math.abs(v);
+    return a % 10 === 1 && a % 100 !== 11;
+  }
+  return v === 1;
+}
+
+/**
+ * Counted string: `plural(n, 'x.one', 'x.many', params)` picks the key by the
+ * active locale's plural rule and interpolates `{n}` (plus any params).
+ * Both keys must exist in both locale files, with the count as `{n}`
+ * (scripts/check-i18n-keys.js reads both literals).
+ */
+export function plural(n, oneKey, manyKey, params = {}) {
+  return t(isSingular(n) ? oneKey : manyKey, { n, ...params });
 }
 
 // ── Locale switcher ───────────────────────────────────────────────────────────

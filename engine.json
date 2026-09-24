@@ -57,6 +57,77 @@
         "rk tierSummaries pricing block in /llms.txt (product content, no engine slot yet)",
         "rk LASTMOD_KEYS route table (→ identity.routes[*].contentKeys)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-24",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@4694289",
+      "commits": [
+        "e9ff76d",
+        "b3bb35d",
+        "2efe4f4 (code line)",
+        "3ccee89",
+        "eee1963",
+        "e1e9b2b",
+        "bff5703",
+        "6a35ec4 (static test)",
+        "2b7db9f (migrate ms line)"
+      ],
+      "branch": "harvest/ice-2026-09-24-fe",
+      "chunk": "F",
+      "features": [
+        "monitoring",
+        "self-update",
+        "testing-infra",
+        "platform-core"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "ice prod-logging-watch.yml + scripts/azure/enable-logging.sh (ice infra; provisioning goes through the azure-ops skill)",
+        "Regla/Graph/visionCore trackedFetch sites (ice-only callers)",
+        "promote-prod.yml slot-swap gate -> engine deploy.yml post-deploy check + promote.yml stable gate on vars.CANARY_URLS",
+        "main-gate + deploy.yml sanity job (ice deploys TEST on green main; the engine deploys by dispatch)",
+        "docs/history.d fragments (459dba6) - a CLAUDE.md rule change, waits for Halli (plan Q6)",
+        "migrationIdempotent live re-runs of ice 111/112/115 (ice migrations); static rule kept, 070/074 grandfathered"
+      ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-24",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@4694289",
+      "commits": [
+        "859be10",
+        "96a9cb2",
+        "dfd7a0f",
+        "4694289",
+        "6f5b37e (plural, 404s, favicon)",
+        "219d33e (format.js half)",
+        "8e977ae (format.js half)"
+      ],
+      "branch": "harvest/ice-2026-09-24-fe",
+      "chunk": "E",
+      "features": [
+        "platform-core",
+        "public-site",
+        "i18n",
+        "admin-ui-kit"
+      ],
+      "migrations": {},
+      "supersedes": [
+        "rk 1b7aeff (JS/CSS/JSON revalidate in production) — take the engine side of the express.static block on rk's next sync"
+      ],
+      "trimmed": [
+        "ice AccessGateView/storefront gate, workshop/kiosk router branches (ice-only)",
+        "ErrorDialog (lane 1 chunk B) — a failed view load toasts until it lands",
+        "SSR skip-link localisation (the engine already localises it client-side)",
+        "IS postcode/phone validation twins, amber pills, Pressan/invoice-unit/product-page items of #399"
+      ]
     }
   ]
 }

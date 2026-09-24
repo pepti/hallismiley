@@ -15,6 +15,12 @@ paths:
   - server/scripts/migrate.js
   - server/migrations/**
   - server/middleware/errorHandler.js
+  - server/middleware/versionedStatic.js
+  - server/utils/staticCacheControl.js
+  - public/js/services/buildGuard.js
+  - public/js/utils/buildCheck.js
+  - public/js/utils/assetBase.js
+  - public/js/components/UpdateBanner.js
   - server/scripts/bootstrap.js
   - server/scripts/setup-admin.js
   - server/scripts/seed.js
@@ -22,11 +28,20 @@ paths:
   - server/scripts/capture-site-screenshots.js
   - tests/unit/schema-integrity.test.js
   - tests/unit/migrationSet.test.js
+  - tests/unit/migrationIdempotent.test.js
+  - tests/integration/buildHeader.test.js
+  - tests/integration/versionedShell.test.js
+  - tests/unit/versionedStatic.test.js
+  - tests/unit/staticCacheControl.test.js
+  - tests/unit/buildCheck.client.test.js
+  - tests/unit/noAbsoluteJsUrls.test.js
+  - e2e/build-reload.spec.js
   - tests/unit/database.test.js
   - tests/unit/appEnv.test.js
   - tests/integration/migrateRunner.test.js
   - Dockerfile
   - .github/workflows/ci.yml
+  - .github/workflows/ci-skipped.yml
   - package.json
   - package-lock.json
   - eslint.config.js
@@ -34,7 +49,7 @@ paths:
 migrations: [001_initial_schema, 043_strip_stale_railway_references]
 since: 2026-08-09
 origin: null
-history: [build-status, base-sync, harvest-2, go-live]
+history: [build-status, base-sync, harvest-2, go-live, harvest-ice-f-2026-09-24, harvest-ice-e-2026-09-24]
 ---
 
 The Express 5 app and boot sequence, the pg pool, the migration runner and the engine migration list (`schema.js`; product migrations are composed in by `migrationSet.js` from `product-migrations/<product>.js`), the central error middleware, the bootstrap/seed scripts, and CI. Everything here is cross-cutting by definition — a file with an obvious owner belongs in that feature instead.

@@ -42,6 +42,11 @@ const {
 const { isDeindexedRoute } = require('../config/publicSurface');
 // The module switches' hand-off (R4) — rides next to the identity one.
 const { modulesScriptTag, isDisabledRoute } = require('../config/modules');
+// Release identity + release-stamped asset URLs + the SPA route list
+// (icelandicstore #332/#399/#425, harvest-ice-e-2026-09-24).
+const { buildTag } = require('../config/version');
+const { assetPrefix } = require('./versionedStatic');
+const { matchesSpaRoute } = require('../utils/spaRoutes');
 // The page parts and descriptions are i18n keys (`meta.<key>.*`) resolved
 // through the engine table + the product overlay — identity-seam-2.
 const { t, has: hasText } = require('../i18n');
@@ -75,12 +80,25 @@ const OG_IMAGE_PATH  = identity.organization.ogImage;
 // index.html to change its company record.
 const BAKED_ORIGIN = 'https://www.orangesmiley.is';
 const BAKED_ORG_RE = /[ \t]*<script type="application\/ld\+json">(?:(?!<\/script>)[\s\S])*"@type":\s*"Organization"(?:(?!<\/script>)[\s\S])*<\/script>\n?/;
+// The shell's own code and stylesheets move under this release's prefix —
+// /js/main.js → /js/_<tag>/main.js — so the whole module graph (imports are
+// relative) and the @import chain resolve to URLs only this release serves,
+// cached for a year (middleware/versionedStatic.js). No prefix without a real
+// release (local checkout, Jest, e2e): the tags are then left exactly as
+// written. theme-boot.js is the exception: it recovers a stamped file that
+// fails to load, so it must exist on any instance (see the note at its top).
+function stampAssetUrls(html, prefix = assetPrefix()) {
+  if (!prefix) return html;
+  return html.replace(/\b(src|href)="\/(js|css)\/(?!theme-boot\.js")/g, (_, attr, dir) => `${attr}="/${dir}/${prefix}/`);
+}
+
+// buildTag is frozen at boot, so the asset stamp is applied once here.
 let _template = null;
 function loadTemplate() {
   if (_template) return _template;
-  _template = fs.readFileSync(INDEX_PATH, 'utf8')
+  _template = stampAssetUrls(fs.readFileSync(INDEX_PATH, 'utf8')
     .split(BAKED_ORIGIN).join(APP_URL)
-    .replace(BAKED_ORG_RE, '');
+    .replace(BAKED_ORG_RE, ''));
   return _template;
 }
 if (process.env.NODE_ENV !== 'production') {
@@ -314,51 +332,67 @@ async function fetchContentFull(contentKey, locale) {
   }
 }
 
+// Sentinel: the detail lookup FAILED (pool timeout, failover, a container
+// warming up) — as opposed to answering "no such row". The two must not look
+// alike: a miss is a 404, but a failed lookup says nothing about the page, and
+// a 404 there would tell crawlers every live article/product/project is gone
+// (icelandicstore #399 review).
+const LOOKUP_FAILED = Symbol('lookupFailed');
+
+// → the row, null (no such live row), or LOOKUP_FAILED.
 async function fetchDetailRow(detail) {
   try {
-    if (detail.type === 'news') {
-      const { rows } = await db.query(
-        `SELECT id, slug, title, title_is, summary, summary_is,
-                body, body_is, cover_image, cover_image_is,
-                published_at, updated_at
-           FROM news_articles
-          WHERE slug = $1 AND published = TRUE
-          LIMIT 1`,
-        [detail.param]
-      );
-      return rows[0] || null;
-    }
-    if (detail.type === 'product') {
-      const { rows } = await db.query(
-        `SELECT p.id, p.slug, p.name, p.name_is, p.description, p.description_is,
-                p.price_isk, p.price_eur, p.stock, p.active, p.updated_at,
-                (SELECT url FROM product_images
-                  WHERE product_id = p.id
-               ORDER BY position ASC, created_at ASC
-                  LIMIT 1) AS image_url
-           FROM products p
-          WHERE p.slug = $1 AND p.active = TRUE
-          LIMIT 1`,
-        [detail.param]
-      );
-      return rows[0] || null;
-    }
-    if (detail.type === 'project') {
-      const id = Number(detail.param);
-      if (!Number.isFinite(id)) return null;
-      // Select title_is / description_is alongside the primary columns so
-      // the caller can pick the locale-appropriate value when rendering
-      // <title> + og:description for Icelandic crawlers.
-      const { rows } = await db.query(
-        `SELECT id, title, title_is, description, description_is,
-                category, year, image_url, featured, created_at, updated_at
-           FROM projects WHERE id = $1 LIMIT 1`,
-        [id]
-      );
-      return rows[0] || null;
-    }
+    return await lookups.detail(detail);
   } catch {
-    return null;
+    return LOOKUP_FAILED;
+  }
+}
+
+// The detail queries, on an object so a test can swap in a failing lookup
+// without mocking pg (tests/integration/spaStatus.test.js).
+const lookups = { detail: queryDetailRow };
+
+async function queryDetailRow(detail) {
+  if (detail.type === 'news') {
+    const { rows } = await db.query(
+      `SELECT id, slug, title, title_is, summary, summary_is,
+              body, body_is, cover_image, cover_image_is,
+              published_at, updated_at
+         FROM news_articles
+        WHERE slug = $1 AND published = TRUE
+        LIMIT 1`,
+      [detail.param]
+    );
+    return rows[0] || null;
+  }
+  if (detail.type === 'product') {
+    const { rows } = await db.query(
+      `SELECT p.id, p.slug, p.name, p.name_is, p.description, p.description_is,
+              p.price_isk, p.price_eur, p.stock, p.active, p.updated_at,
+              (SELECT url FROM product_images
+                WHERE product_id = p.id
+             ORDER BY position ASC, created_at ASC
+                LIMIT 1) AS image_url
+         FROM products p
+        WHERE p.slug = $1 AND p.active = TRUE
+        LIMIT 1`,
+      [detail.param]
+    );
+    return rows[0] || null;
+  }
+  if (detail.type === 'project') {
+    const id = Number(detail.param);
+    if (!Number.isFinite(id)) return null;
+    // Select title_is / description_is alongside the primary columns so
+    // the caller can pick the locale-appropriate value when rendering
+    // <title> + og:description for Icelandic crawlers.
+    const { rows } = await db.query(
+      `SELECT id, title, title_is, description, description_is,
+              category, year, image_url, featured, created_at, updated_at
+         FROM projects WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return rows[0] || null;
   }
   return null;
 }
@@ -816,6 +850,13 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     /<meta\s+name="app-env"[^>]*>/i,
     () => `<meta name="app-env" content="${esc(appEnv)}" id="ssr-app-env" />`
   );
+  // The release this shell belongs to — the baseline services/buildGuard.js
+  // compares every response's X-App-Build against. The public tag, never the
+  // commit (server/config/version.js).
+  html = html.replace(
+    /<meta\s+name="app-build"[^>]*>/i,
+    () => `<meta name="app-build" content="${esc(buildTag)}" id="ssr-app-build" />`
+  );
   // Search-engine ownership verification — populated from env vars set in
   // Azure App Service after the respective Webmaster Tools / Search Console
   // accounts issue the token. Unset env vars leave the empty placeholder
@@ -935,10 +976,12 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   let title, description, ogImage;
   let schemas = [];
   let detailRow = null;
+  let lookupFailed = false;
 
   if (detail) {
     // ── Detail page (news article / product / project) ─────────────────
     detailRow = await fetchDetailRow(detail);
+    if (detailRow === LOOKUP_FAILED) { lookupFailed = true; detailRow = null; }
     if (!detailRow) {
       // Not found — fall back to section defaults so the SPA can render
       // its own 404 and we still serve *something* sensible to crawlers.
@@ -1083,18 +1126,39 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     }
   }
 
+  // A real 404 status (icelandicstore #399): a path no SPA route matches, or a
+  // detail URL (article, product, project) with no live row. Same shell, so the
+  // router still renders NotFoundView; only crawlers and monitors see the
+  // difference — a soft 404 (200 + "not found" page) gets indexed and hides
+  // dead links. A FAILED lookup keeps 200 (never cached) rather than claiming
+  // the page does not exist. A switched-off module's route was already set to
+  // 404 by app.js. The route list is public/js/routePatterns.json (kept equal
+  // to router.js by tests/unit/routePatterns.test.js); a product's own routes
+  // are in ROUTE_META via identity.routes.
+  const missedDetail = Boolean(detail && !detailRow);
+  const unknownRoute = !disabledRoute && !detail && !staticMeta && !matchesSpaRoute(route);
+  const notFound = (missedDetail && !lookupFailed) || unknownRoute;
+  if (notFound) res.status(404);
+
   let html = rewriteHead(loadTemplate(), {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
     // Hidden surfaces (by prefix) and the product's own noindex routes
     // (identity.routes[*].noindex) are de-indexed; everything else is indexable.
-    robots: isDeindexedRoute(route) ? 'noindex, nofollow' : 'index, follow',
+    robots: (notFound || isDeindexedRoute(route)) ? 'noindex, nofollow' : 'index, follow',
     scenePreload: scenePreloadTag(route),
   });
   html = injectCrawlerContent(html, crawlerHtml);
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+  // The shell revalidates on every load (ETag → a cheap 304). It used to be
+  // `public, max-age=300`, but the shell now carries <meta name="app-build">: a
+  // cached copy names the PREVIOUS release, so a page that reloaded because a
+  // deploy happened would boot from that stale shell, see the mismatch again
+  // and reload again, for up to five minutes (services/buildGuard.js). A
+  // detail URL that found no row is never cached: the row may be published a
+  // minute later (icelandicstore #332).
+  res.setHeader('Cache-Control', missedDetail ? 'no-store' : 'public, no-cache');
   res.setHeader('Vary', 'Accept-Language, Cookie');
   res.send(html);
 };
@@ -1103,6 +1167,10 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
 // title + description of a static route in a locale, from the same tables a
 // page load reads — so the crawler summary and the <title> can never say two
 // different things. Null for a route the tables do not know.
+// Test seam: swap lookups.detail for a failing function (no pg mock).
+module.exports.lookups = lookups;
+module.exports.stampAssetUrls = stampAssetUrls;
+
 module.exports.metaForRoute = function metaForRoute(locale, route) {
   const entry = ROUTE_META[route];
   return entry ? metaFor(locale, entry.key) : null;

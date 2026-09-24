@@ -24,6 +24,7 @@
  *                              //   if translation is going to happen.
  */
 
+const { fetchNamed } = require('../observability/trackedFetch');
 const logger = require('../logger');
 
 // Keys that must NEVER be translated when walking a site_content jsonb.
@@ -68,7 +69,9 @@ function getClient() {
 
   const AnthropicMod = require('@anthropic-ai/sdk');
   const Ctor = AnthropicMod.default || AnthropicMod.Anthropic || AnthropicMod;
-  cachedClient = new Ctor({ apiKey: key });
+  // fetch: the SDK's undici client is invisible to App Insights; the tracked
+  // wrapper records each model call as an HTTP dependency (dark without AI).
+  cachedClient = new Ctor({ apiKey: key, fetch: fetchNamed('Anthropic messages (translate)') });
   cachedKey = key;
   return cachedClient;
 }

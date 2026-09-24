@@ -17,6 +17,8 @@ paths:
   - public/js/utils/localPref.js
   - public/js/utils/debounce.js
   - public/js/utils/format.js
+  - tests/unit/formatMoney.client.test.js
+  - tests/unit/formatDate.client.test.js
   - public/js/utils/pageTitle.js
   - public/js/utils/downloadCsv.js
   - public/js/utils/csv.js
@@ -36,7 +38,7 @@ paths:
 migrations: []
 since: 2026-09-08
 origin: null
-history: [ui-kit, review-099]
+history: [ui-kit, review-099, harvest-ice-e-2026-09-24]
 ---
 
 The shared admin list kit (ENHANCEMENTS #21): `adminTable` (sortable headers, row rendering), `adminPager`, `FilterBar`, `listState` (URL-synced filters), toasts and the CSV writer, plus the base CSS layers every screen builds on. Kit modules are pure string functions plus one `bind*()` with a delegated listener, so they are node-testable without jsdom.

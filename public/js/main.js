@@ -5,6 +5,7 @@ import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
 import { installSessionGuard } from './services/sessionGuard.js';
+import { installBuildGuard } from './services/buildGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
 import { syncBodyClass as syncAmbienceClass } from './services/ambiencePrefs.js';
@@ -16,6 +17,9 @@ import {
 // including the one tryRestoreSession() may issue — is covered.
 installRateLimitGuard();
 installSessionGuard();
+// Notice a deploy while this tab is open and reload onto the new release at the
+// next navigation or refocus (services/buildGuard.js; icelandicstore #332).
+installBuildGuard();
 
 // ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();

@@ -152,6 +152,37 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- icelandicstore harvest, chunk F landed 2026-09-24 ([harvest-ice-f-2026-09-24](docs/HISTORY.md#harvest-ice-f-2026-09-24)):
+  App Insights telemetry (dark), every 5xx in `event_logs`, `X-App-Build`
+  checked by `deploy.yml` and a stable promote, Jest in three CI shards, the
+  docs-only PR shim, the re-runnable-constraint test. Open: (a) **Halli**:
+  whether `APPLICATIONINSIGHTS_CONNECTION_STRING` is already set on the
+  orangesmiley.is web app (`orangesmiley-prod-ai` exists since 2026-09-22) —
+  if it is, the first deploy of this code starts sending traces and
+  dependencies; if not, set it to turn telemetry on; (b) set
+  `vars.CANARY_URLS` once a canary instance exists, or stable promotes keep
+  warning "soak not verified"; (c) `deploy.yml`/`promote.yml` are
+  product-owned: rekstrarkerfid, LedgerLink and hallismiley copy the
+  X-App-Build steps into their own workflows by hand; (d) the per-PR history
+  fragments (ice `459dba6`) wait for Halli's nod (harvest plan Q6) — they
+  change the "Recording a chunk" rule; (e) the 4 moderate
+  `@opentelemetry/core` advisories under `applicationinsights` 2.9.8 — the
+  fix is the 3.x SDK major, its own item; (f) the Resend SDK's own fetch is
+  not a tracked dependency.
+- icelandicstore harvest, chunk E landed 2026-09-24 ([harvest-ice-e-2026-09-24](docs/HISTORY.md#harvest-ice-e-2026-09-24)):
+  open tabs reload onto a new release, code under release-stamped URLs
+  (cached a year), views loaded when visited (boot graph 158 → 39 modules),
+  `plural()`, real 404s, Icelandic money/dates by hand. Open: (a) **Halli**:
+  the five new strings are DRAFT (`updateBanner.*`, `errors.pageLoadFailed`,
+  two Monitoring kinds — IS/EN in the HISTORY entry); (b) rekstrarkerfid's
+  next sync: take the engine side of the `express.static` block (supersedes
+  its `1b7aeff`) and move its own views into the router's `VIEWS` table;
+  every downstream that adds a router route adds it to
+  `public/js/routePatterns.json` or `identity.routes` too, or a hard load of
+  it answers 404; (c) not ported from ice #399: IS postcode/phone validation
+  twins (touches `validate.js` and the contact contract — a proposal);
+  (d) `formatRelative` still asks `Intl.RelativeTimeFormat` for Icelandic (the
+  same missing-ICU gap).
 - Identity seam + feature gate ([identity-seam-2026-09-22](docs/HISTORY.md#identity-seam-2026-09-22)):
   the hallismiley draft PR pepti/hallismiley#168 becomes mergeable once it sets
   its `identity` block in `config/client.json` (the ready-to-paste example is in

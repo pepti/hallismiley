@@ -78,7 +78,11 @@ function eventRowsHtml(events) {
         (e.context && e.context.where) || '',
       ].filter(Boolean);
       const where = parts.join(' · ');
-      return `<li class="toast-log__item toast-log__item--${e.level === 'error' ? 'error' : 'info'} mon-event">`
+      // error / warn / info each get their own left border (warn = a 503 the
+      // server answered itself: feature not configured, breaker open — the
+      // eventLogOn5xx rows, icelandicstore #254).
+      const levelClass = e.level === 'error' ? 'error' : e.level === 'warn' ? 'warn' : 'info';
+      return `<li class="toast-log__item toast-log__item--${levelClass} mon-event">`
         + `<span class="toast-log__time">${escHtml(stamp)}</span>`
         + `<span class="toast-log__user${e.username ? '' : ' is-anon'}">${escHtml(who)}</span>`
         + `<span class="toast-log__badge">${escHtml(t('adminMonitoring.source.' + e.source))}</span>`
