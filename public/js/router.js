@@ -378,9 +378,13 @@ export class Router {
       navigateReplace('/' + getLocale() + '/profile');
       return;
     }
-    // Guard admin routes
-    if (path === '/admin' && !isAuthenticated()) {
-      navigateReplace('/' + getLocale() + '/');
+    // Guard admin routes: a signed-out /admin or /admin/* URL is staff at the
+    // door (a bookmark, a reload after the session ended), so it goes to
+    // /login, which opens the login modal, like /profile and /orders. Where
+    // the nav hides "Innskrá" (identity.surface.navSignIn off — the shop
+    // window) the home page would offer no way in at all.
+    if ((path === '/admin' || path.startsWith('/admin/')) && !isAuthenticated()) {
+      navigateReplace('/' + getLocale() + '/login');
       return;
     }
     // Per-view admin guards (the server enforces these too; this is just the

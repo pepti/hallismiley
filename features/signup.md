@@ -20,6 +20,6 @@ Anyone may create an account: the `/signup` page, `POST /auth/signup`, the usern
 
 **Rules**
 - Signup, email verification and the login itself stay in [auth-sessions](auth-sessions.md); this feature is only the door for NEW accounts.
-- The nav's "Innskrá" is a separate switch (`identity.surface.navSignIn`); `/login` opens the login modal either way.
+- The nav's "Innskrá" is a separate switch (`identity.surface.navSignIn`); `/login` opens the login modal either way, and a signed-out `/admin` or `/admin/*` URL goes to `/login`.
 - `signupSwitch.test.js` and `e2e/signup-closed.spec.js` test the OFF state and never call the feature gate (they must run where signup is off); `signup-flow.spec.js` tests the ON state and is gated.
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).
