@@ -6,6 +6,7 @@
 // the whole session as one batch to POST /api/v1/change-requests.
 import { t, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { showToast } from './Toast.js';
+import { jsUrl } from '../utils/assetBase.js';
 import { getCSRFToken, getUser, isAdmin } from '../services/auth.js';
 import { setDemoMode } from '../services/themePrefs.js';
 
@@ -145,7 +146,8 @@ function loadHtml2canvas() {
   if (_h2cPromise) return _h2cPromise;
   _h2cPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = '/js/vendor/html2canvas.min.js';
+    // Under this release's /js/ tree, so it follows the release-stamped prefix.
+    s.src = jsUrl('vendor/html2canvas.min.js');
     s.onload = () => (window.html2canvas ? resolve(window.html2canvas) : reject(new Error('html2canvas missing')));
     s.onerror = () => reject(new Error('html2canvas failed to load'));
     document.head.appendChild(s);

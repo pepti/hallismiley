@@ -18,6 +18,7 @@
 // is deliberate: different threat, different rule.
 
 const { buildInfo } = require('../config/version');
+const { fetchNamed } = require('../observability/trackedFetch');
 const { getSelfUpdateSettings, canApply, isAuto } = require('./selfUpdateSettings');
 const SystemUpdate = require('../models/SystemUpdate');
 const baseLogger = require('../logger');
@@ -65,7 +66,7 @@ async function runningImageDigest() {
 }
 
 /** POST the deployment trigger. Throws when it is not configured or fails. */
-async function fireTrigger(payload, { fetchImpl = globalThis.fetch, log = baseLogger } = {}) {
+async function fireTrigger(payload, { fetchImpl = fetchNamed('Update trigger'), log = baseLogger } = {}) {
   const raw = (process.env.SELF_UPDATE_TRIGGER_URL || '').trim();
   if (!raw) {
     throw new TriggerNotConfiguredError(
@@ -107,7 +108,7 @@ async function fireTrigger(payload, { fetchImpl = globalThis.fetch, log = baseLo
  * @returns {Promise<object>} the updated row
  */
 async function applyUpdate(updateId, {
-  settings = null, actor = null, fetchImpl = globalThis.fetch, log = baseLogger, reason = 'manual',
+  settings = null, actor = null, fetchImpl = fetchNamed('Update trigger'), log = baseLogger, reason = 'manual',
 } = {}) {
   const cfg = settings || await getSelfUpdateSettings();
   if (!canApply(cfg.mode)) {
@@ -175,7 +176,7 @@ async function applyUpdate(updateId, {
  * @returns {Promise<{triggered:boolean, command:string, previousDigest:string|null, update:object}>}
  */
 async function rollbackUpdate(updateId, {
-  settings = null, actor = null, fetchImpl = globalThis.fetch, log = baseLogger,
+  settings = null, actor = null, fetchImpl = fetchNamed('Update trigger'), log = baseLogger,
 } = {}) {
   const cfg = settings || await getSelfUpdateSettings();
   if (!canApply(cfg.mode)) {
@@ -275,7 +276,7 @@ async function verifyPendingUpdate({ build = buildInfo, now = new Date(), graceM
  * checker tick, so "the window opened" is observed by the same loop that
  * discovered the update — no second scheduler.
  */
-async function runDueScheduled({ settings = null, now = new Date(), fetchImpl = globalThis.fetch, log = baseLogger } = {}) {
+async function runDueScheduled({ settings = null, now = new Date(), fetchImpl = fetchNamed('Update trigger'), log = baseLogger } = {}) {
   const cfg = settings || await getSelfUpdateSettings();
   if (!isAuto(cfg.mode)) return { fired: [] };
 

@@ -35,6 +35,9 @@
   <!-- App environment (test|production) — stamped per-request by ssrMeta;
        the in-app feedback widget + TEST chrome appear only when this is "test". -->
   <meta name="app-env" content="production" id="ssr-app-env" />
+  <!-- Release this shell was served by; filled in by server/middleware/ssrMeta.js
+       (the baseline public/js/services/buildGuard.js compares X-App-Build with) -->
+  <meta name="app-build" content="dev" id="ssr-app-build" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />

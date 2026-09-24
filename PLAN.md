@@ -161,10 +161,11 @@ chunk lands; add a HISTORY entry for the story.
   `adminCustomers.*`, `errors.admin.*` and `email.lead.provenance` strings are
   DRAFT** (Halli); (b) turning Claude on for an instance needs the Anthropic
   console setup in `docs/DEPLOYMENT.md` § Anthropic authentication (per-tenant
-  ids, Halli's hand); (c) lanes 2 and 3 share `server/app.js` and
-  `emailService.js` with this branch — whoever merges second rebases; when
-  chunk F lands, `anthropicAuth.js` drops its global-fetch fallback for
-  `trackedFetch`; (d) icelandicstore's graft: its `4e8eb79` outer door
+  ids, Halli's hand); (c) lane 2 shares `server/app.js` and `emailService.js`
+  with this branch — whoever merges second rebases (lane 3 is merged in:
+  `emailService` logs through pino, `anthropicAuth.js` dropped its
+  global-fetch fallback for `trackedFetch`, the translator's client passes
+  the tracked `fetch` alongside the auth options); (d) icelandicstore's graft: its `4e8eb79` outer door
   (`requireRole('admin','moderator')`) is superseded by the engine's
   `requireStaff` — take the engine side.
 - Chunk B landed on the same branch
@@ -172,16 +173,49 @@ chunk lands; add a HISTORY entry for the story.
   `111_user_ui_prefs` (page width, Mjúk hreyfing, side-column width, cookie
   choice on the account), the centred error dialog, the sticky sideways
   scrollbar, the undefined-token test (21 engine references fixed), the focus
-  ring. Open: (a) **migration number** — lane 2 (inventory audit, variant
-  barcode) may also have taken 111; whoever merges second renumbers, and
+  ring. Open: (a) **migration number** — master (lane 3, MCP OAuth) ends at
+  110, so 111 follows it; lane 2 (inventory audit, variant barcode) may also
+  have taken 111 — whoever merges second renumbers, and
   ice's product file then lists `'<engine name>': ['125_user_page_widths',
   '127_user_page_width_motion', '128_user_cookie_consent',
   '135_user_aside_widths']` under `aliases`; (b) copy DRAFT (`admin.pageWidth.*`,
   `admin.asideWidth.*`, `toast.errorTitle`/`ok`, `privacy.changeCookieChoice`);
   (c) the privacy text still tells visitors to withdraw by clearing cookies —
   Halli's legal copy, the new button now does it; (d) the error dialog changes
-  every error toast at once — watch the first downstream sync.
-
+  every error toast at once — watch the first downstream sync (chunk E's
+  "page failed to load" message, shown when a lazily loaded view's file is
+  missing on the current release, now opens the dialog too).
+- icelandicstore harvest, chunk F landed 2026-09-24 ([harvest-ice-f-2026-09-24](docs/HISTORY.md#harvest-ice-f-2026-09-24)):
+  App Insights telemetry (dark), every 5xx in `event_logs`, `X-App-Build`
+  checked by `deploy.yml` and a stable promote, Jest in three CI shards, the
+  docs-only PR shim, the re-runnable-constraint test. Open: (a) **Halli**:
+  whether `APPLICATIONINSIGHTS_CONNECTION_STRING` is already set on the
+  orangesmiley.is web app (`orangesmiley-prod-ai` exists since 2026-09-22) —
+  if it is, the first deploy of this code starts sending traces and
+  dependencies; if not, set it to turn telemetry on; (b) set
+  `vars.CANARY_URLS` once a canary instance exists, or stable promotes keep
+  warning "soak not verified"; (c) `deploy.yml`/`promote.yml` are
+  product-owned: rekstrarkerfid, LedgerLink and hallismiley copy the
+  X-App-Build steps into their own workflows by hand; (d) the per-PR history
+  fragments (ice `459dba6`) wait for Halli's nod (harvest plan Q6) — they
+  change the "Recording a chunk" rule; (e) the 4 moderate
+  `@opentelemetry/core` advisories under `applicationinsights` 2.9.8 — the
+  fix is the 3.x SDK major, its own item; (f) the Resend SDK's own fetch is
+  not a tracked dependency.
+- icelandicstore harvest, chunk E landed 2026-09-24 ([harvest-ice-e-2026-09-24](docs/HISTORY.md#harvest-ice-e-2026-09-24)):
+  open tabs reload onto a new release, code under release-stamped URLs
+  (cached a year), views loaded when visited (boot graph 158 → 39 modules),
+  `plural()`, real 404s, Icelandic money/dates by hand. Open: (a) **Halli**:
+  the five new strings are DRAFT (`updateBanner.*`, `errors.pageLoadFailed`,
+  two Monitoring kinds — IS/EN in the HISTORY entry); (b) rekstrarkerfid's
+  next sync: take the engine side of the `express.static` block (supersedes
+  its `1b7aeff`) and move its own views into the router's `VIEWS` table;
+  every downstream that adds a router route adds it to
+  `public/js/routePatterns.json` or `identity.routes` too, or a hard load of
+  it answers 404; (c) not ported from ice #399: IS postcode/phone validation
+  twins (touches `validate.js` and the contact contract — a proposal);
+  (d) `formatRelative` still asks `Intl.RelativeTimeFormat` for Icelandic (the
+  same missing-ICU gap).
 - Identity seam + feature gate ([identity-seam-2026-09-22](docs/HISTORY.md#identity-seam-2026-09-22)):
   the hallismiley draft PR pepti/hallismiley#168 becomes mergeable once it sets
   its `identity` block in `config/client.json` (the ready-to-paste example is in
@@ -321,6 +355,11 @@ chunk lands; add a HISTORY entry for the story.
   (`connect.*`, `mcp.oauth*`) is DRAFT; (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
+- Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
+  the engine half of rekstrarkerfid's R2b step 1. Open: rekstrarkerfid's next
+  engine sync, then its own PR (config: signup off + `navSignIn` false; the
+  DRÖG footer line "Ertu í viðskiptum? Skráðu þig inn á þínu kerfi"); the
+  deploy is Halli's go; `auth.errors.signupClosed` copy is DRAFT.
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

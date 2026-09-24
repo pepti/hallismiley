@@ -1,10 +1,10 @@
 // Email service using Resend API.
-// Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
+// Falls back to a no-op with a logged notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
 const { t }      = require('../i18n');
-// New senders log through pino (stack invariant). The older senders in this
-// file still use console.log — converting all of them is proposed separately
-// rather than folded into an unrelated change.
+// Every sender logs through pino (stack invariant 6; the last console.* calls
+// here were converted in harvest-ice-f-2026-09-24, and ESLint's no-console now
+// holds the line for all of server/).
 const logger     = require('../logger');
 
 const APP_URL   = process.env.APP_URL || 'https://www.orangesmiley.is';
@@ -207,7 +207,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
-  console.log(`[EmailService] Verification email sent: id=${data.id}`);
+  logger.info({ id: data.id }, '[EmailService] Verification email sent');
   return data.id;
 }
 
@@ -254,7 +254,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
-  console.log(`[EmailService] Password reset email sent: id=${data.id}`);
+  logger.info({ id: data.id }, '[EmailService] Password reset email sent');
   // Return the id, like sendWelcomeInviteEmail does (ice #258): this used to
   // return undefined on BOTH paths, so a caller could not tell a real send from
   // a muted one and answered "is a transport configured" instead.
@@ -322,7 +322,7 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
-  console.log(`[EmailService] Welcome invite sent: id=${data.id}`);
+  logger.info({ id: data.id }, '[EmailService] Welcome invite sent');
   return data?.id;
 }
 
@@ -352,7 +352,7 @@ function escapeHtml(str) {
 async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems = false } = {}) {
   const to = order.guest_email || order.user_email;
   if (!to) {
-    console.warn(`[EmailService] No recipient for order ${order.order_number} receipt`);
+    logger.warn({ orderNumber: order.order_number }, '[EmailService] No recipient for order receipt');
     return;
   }
 
@@ -446,7 +446,7 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Order receipt sent: order=${order.order_number} id=${data.id}`);
+  logger.info({ orderNumber: order.order_number, id: data.id }, '[EmailService] Order receipt sent');
 }
 
 // ── Booking notification to admins (shop redesign step 5) ───────────────────
@@ -521,7 +521,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
     from: FROM, to: adminEmails, subject, html,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Booking notification sent: order=${order.order_number} items=${bookableItems.length} recipients=${adminEmails.length} id=${data.id}`);
+  logger.info({ orderNumber: order.order_number, items: bookableItems.length, recipients: adminEmails.length, id: data.id }, '[EmailService] Booking notification sent');
 }
 
 // ── RSVP notification to admins ───────────────────────────────────────────────
@@ -595,7 +595,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     from: FROM, to: adminEmails, subject, html,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] RSVP notification sent: user=${user.id} isUpdate=${isUpdate} recipients=${adminEmails.length} id=${data.id}`);
+  logger.info({ userId: user.id, isUpdate, recipients: adminEmails.length, id: data.id }, '[EmailService] RSVP notification sent');
 }
 
 // ── RSVP confirmation to the guest ────────────────────────────────────────────
@@ -682,7 +682,7 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] RSVP confirmation sent: user=${user.id} isUpdate=${isUpdate} id=${data.id}`);
+  logger.info({ userId: user.id, isUpdate, id: data.id }, '[EmailService] RSVP confirmation sent');
 }
 
 // ── Party announcement to going/maybe guests ──────────────────────────────────
@@ -784,10 +784,10 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
       const msg = r.status === 'rejected' ? r.reason?.message : r.value?.error?.message;
       // Log the index, not the address — index is enough to correlate with
       // the recipient list at the call site without leaking PII into logs.
-      console.error(`[EmailService] Party announcement send failed (idx=${i}): ${msg}`);
+      logger.error({ idx: i, reason: msg }, '[EmailService] Party announcement send failed');
     }
   });
-  console.log(`[EmailService] Party announcement: sent=${sent} failed=${failed} total=${recipients.length}`);
+  logger.info({ sent, failed, total: recipients.length }, '[EmailService] Party announcement');
   return { sent, failed };
 }
 
@@ -846,7 +846,7 @@ async function sendPartyRequestNotification({ request, adminEmails, approveUrl, 
 
   const { data, error } = await deliver({ from: FROM, to: adminEmails, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party request notification sent: recipients=${adminEmails.length} id=${data.id}`);
+  logger.info({ recipients: adminEmails.length, id: data.id }, '[EmailService] Party request notification sent');
 }
 
 // ── Party invite (magic link) to the guest ────────────────────────────────────
@@ -892,7 +892,7 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party invite email sent: id=${data.id}`);
+  logger.info({ id: data.id }, '[EmailService] Party invite email sent');
 }
 
 // ── Party welcome / info email to the guest ───────────────────────────────────
@@ -1068,7 +1068,7 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
+  logger.info({ userId: user.id, id: data.id }, '[EmailService] Party welcome email sent');
 }
 
 // ── Lead notification to the company inbox ───────────────────────────────────

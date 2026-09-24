@@ -12,6 +12,7 @@ paths:
   - server/models/EventLog.js
   - server/services/eventLogCleanup.js
   - server/observability/**
+  - server/middleware/eventLogOn5xx.js
   - server/logger.js
   - public/js/views/AdminMonitoringView.js
   - public/js/services/adminEvents.js
@@ -22,11 +23,13 @@ paths:
   - tests/integration/observability.test.js
   - tests/unit/httpMetrics.test.js
   - tests/unit/loggerScrub.test.js
+  - tests/unit/aiLogStream.test.js
+  - tests/unit/trackedFetch.test.js
   - e2e/admin-monitoring.spec.js
 migrations: [087_event_logs]
 since: 2026-08-22
 origin: null
-history: [harvest-1, harvest-2, review-099]
+history: [harvest-1, harvest-2, review-099, harvest-ice-f-2026-09-24]
 ---
 
 Event logs (087) with the public error beacon, the `/health`, `/ready` and Prometheus `/metrics` endpoints, the DB circuit breaker, memory watch and error-rate alerts in `server/observability`, pino logging with secret scrubbing, and the `/admin/monitoring` screen (which also reads the staff audit log).

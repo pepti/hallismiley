@@ -18,6 +18,8 @@ paths:
   - public/index.html
   - public/css/main.css
   - public/js/router.js
+  - public/js/routePatterns.json
+  - server/utils/spaRoutes.js
   - public/js/navigate.js
   - public/js/main.js
   - public/js/views/HomeView.js
@@ -42,6 +44,10 @@ paths:
   - tests/integration/sitemap.test.js
   - tests/integration/llms.test.js
   - tests/integration/ssrMeta.test.js
+  - tests/integration/spaStatus.test.js
+  - tests/unit/routePatterns.test.js
+  - tests/unit/routerLazyViews.test.js
+  - e2e/lazy-views.spec.js
   - tests/unit/slug.test.js
   - tests/unit/slug.client.test.js
   - e2e/business-routes.spec.js
@@ -52,7 +58,7 @@ paths:
 migrations: [017_home_stats_content]
 since: 2026-08-09
 origin: null
-history: [homepage, r1, services-page, ui-kit, go-live, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, rk-feed-2026-09-23, ssr-replace-literal-2026-09-23]
+history: [homepage, r1, services-page, ui-kit, go-live, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, rk-feed-2026-09-23, ssr-replace-literal-2026-09-23, harvest-ice-e-2026-09-24]
 ---
 
 The SPA shell and the visitor pages: home (video hero), `/thjonusta`, `/um-okkur`, `/hafa-samband` (the contact form that becomes a lead), `/personuvernd`, terms and 404; the router with View Transitions; SSR meta + JSON-LD (`ssrMeta.js`), robots + sitemap, IndexNow pings and the hidden-route policy (`publicSurface.js`). The company copy itself is the product's (`os/company-content`); the engine ships the structure and the JS fallbacks. `HomeView._tiers()/_steps()` are dormant with their i18n.

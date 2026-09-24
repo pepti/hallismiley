@@ -1,5 +1,6 @@
 // PostgreSQL connection pool
 // Uses a single pool shared across the app — pg manages idle/max connections automatically
+const logger = require('../logger');
 const { Pool } = require('pg');
 const { dbQueryDuration } = require('../observability/metrics');
 const { dbCircuitBreaker } = require('../observability/circuitBreaker');
@@ -64,7 +65,7 @@ const pool = new Pool({
 
 // Fail fast on startup if DB is unreachable
 pool.on('error', (err) => {
-  console.error('Unexpected PostgreSQL pool error:', err.message);
+  logger.error({ err }, 'Unexpected PostgreSQL pool error');
 });
 
 // Thin wrapper — callers use query() and never touch the pool directly.

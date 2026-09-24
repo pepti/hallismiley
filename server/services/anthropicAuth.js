@@ -30,16 +30,9 @@
 // would hand the production slot the staging slot's rule.
 
 const logger = require('../logger');
-// Engine port (2026-09-24): observability/trackedFetch.js (App Insights
-// dependency tracking) arrives with the monitoring harvest (ice chunk F). Until
-// it does, a named fetch is plain global fetch, resolved at call time so tests
-// that replace global.fetch see every call. Whichever lands second drops this.
-let fetchNamed;
-try {
-  ({ fetchNamed } = require('../observability/trackedFetch'));
-} catch {
-  fetchNamed = () => (url, init) => fetch(url, init);
-}
+// App Insights dependency tracking for every token fetch (harvest-ice-f-2026-09-24;
+// the global-fetch fallback this port carried until F landed is gone).
+const { fetchNamed } = require('../observability/trackedFetch');
 
 const MI_API_VERSION = '2019-08-01';
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';

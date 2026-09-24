@@ -86,7 +86,7 @@ export class AdminSalesView {
 
   async _renderChart(byDay) {
     let Chart;
-    try { if (!window.Chart) await import('/js/vendor/chart.umd.js'); Chart = window.Chart; } catch { return; }
+    try { if (!window.Chart) await import('../vendor/chart.umd.js'); Chart = window.Chart; } catch { return; }
     if (!Chart || this._destroyed) return;
     const canvas = this._el.querySelector('#sales-chart');
     if (!canvas) return;

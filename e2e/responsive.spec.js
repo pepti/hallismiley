@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const { gate } = require('./lib/featureGate');
+const { identity } = require('./lib/identity');
 // Skipped as a whole on a product that hides, disables or forks the feature
 // this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
 const { gateSpec } = require('./lib/featureGate');
@@ -50,6 +52,7 @@ test.describe('Responsive layout — 375px mobile', () => {
   });
 
   test('signup page loads and is usable at 375px', async ({ page }) => {
+    test.skip(gate('signup').skip, 'public signup is switched off on this product (the signup module)');
     await page.goto('/#/signup');
     await expect(page.locator('#signup-email')).toBeVisible();
     await expect(page.locator('#signup-btn')).toBeVisible();
@@ -80,11 +83,12 @@ test.describe('Responsive layout — 375px mobile', () => {
       const extras = page.locator('.lol-nav__mobile-extras');
       await expect(extras).toBeVisible();
       await expect(extras.locator('.lol-nav__lang')).toBeVisible();
-      await expect(page.locator('[data-testid="nav-signin-drawer"]')).toBeVisible();
-      await expect(page.locator('[data-testid="nav-signup-drawer"]')).toBeVisible();
+      await expect(page.locator('[data-testid="nav-signin-drawer"]')).toHaveCount(identity.surface.navSignIn !== false ? 1 : 0);
+      await expect(page.locator('[data-testid="nav-signup-drawer"]')).toHaveCount(gate('signup').skip ? 0 : 1);
     });
 
     test('sign-in button inside the drawer opens the login modal', async ({ page }) => {
+      test.skip(identity.surface.navSignIn === false, 'this product hides the nav sign-in (identity.surface.navSignIn)');
       await page.goto('/');
       await page.locator('#nav-hamburger').click();
       await page.locator('[data-testid="nav-signin-drawer"]').click();

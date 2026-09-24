@@ -110,8 +110,8 @@ describe('presets', () => {
   test('the tiers nest: vefur ⊂ verslun ⊂ rekstur ⊂ all', () => {
     const on = (p) => MODULE_IDS.filter((id) => presetIncludes(p, id));
     expect(on('vefur')).toEqual(['news']);
-    expect(on('verslun')).toEqual(['shop', 'pos', 'news']);
-    expect(on('rekstur')).toEqual(['shop', 'pos', 'books', 'news']);
+    expect(on('verslun')).toEqual(['shop', 'pos', 'news', 'signup']);
+    expect(on('rekstur')).toEqual(['shop', 'pos', 'books', 'news', 'signup']);
     expect(on('all')).toEqual(MODULE_IDS);
     expect(PRESETS).toEqual(['all', ...TIERS]);
   });
@@ -126,7 +126,7 @@ describe('presets', () => {
   test('a preset switches on exactly its tier', () => {
     const { config } = resolved({ modules: { preset: 'verslun' } });
     const on = MODULE_IDS.filter((id) => config.modules[id].enabled);
-    expect(on).toEqual(['shop', 'pos', 'news']);
+    expect(on).toEqual(['shop', 'pos', 'news', 'signup']);
   });
 
   test('an explicit switch beats the preset, from the file and from the env', () => {
@@ -134,7 +134,7 @@ describe('presets', () => {
       { modules: { preset: 'rekstur', books: { enabled: false }, news: { enabled: true } } },
       { CLIENT_CONFIG_MODULES_POS_ENABLED: 'false', CLIENT_CONFIG_MODULES_SALES_OPS_ENABLED: 'true' },
     );
-    expect(MODULE_IDS.filter((id) => config.modules[id].enabled)).toEqual(['shop', 'news', 'salesOps']);
+    expect(MODULE_IDS.filter((id) => config.modules[id].enabled)).toEqual(['shop', 'news', 'salesOps', 'signup']);
   });
 
   test('an env preset re-derives the switches the file left alone', () => {

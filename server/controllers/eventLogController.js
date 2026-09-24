@@ -16,7 +16,12 @@ const LEVELS = ['error', 'warn', 'info'];
 
 // What produced the client row. 'toast' = a failure the app showed the user;
 // the other two are failures nobody showed, caught by the global handlers.
-const KINDS = ['toast', 'uncaught', 'unhandledrejection'];
+// 'stale_release': an open tab still ran an old release after the build guard
+// reloaded it; 'asset_load': a file of the page's own release (a lazily
+// loaded view, a locale table) failed to load while the page IS the current
+// release — the network, not a deploy (public/js/services/buildGuard.js;
+// icelandicstore #333/#426). Deploy signals, not crashes.
+const KINDS = ['toast', 'uncaught', 'unhandledrejection', 'stale_release', 'asset_load'];
 
 // Client context is picked field by field with per-field caps, never spread
 // wholesale into the JSONB column — the body is attacker-controlled.

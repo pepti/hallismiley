@@ -2,16 +2,21 @@
 // Log full details server-side; return only a generic message to the client
 
 const EventLog = require('../models/EventLog');
+const logger   = require('../logger');
 
 const SAFE_STATUSES = new Set([400, 401, 403, 404, 409, 422, 429]);
 
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const status = err.status || 500;
 
-  // Always log the full error server-side — include request ID for log correlation
+  // Always log the full error server-side through pino (never console — the
+  // App Insights forwarder and the diagnostic-setting stream only see pino's
+  // JSON lines; invariant 6). requestId correlates with the response header
+  // and the event_logs row below.
   const reqId = req.requestId || '-';
-  console.error(`[${new Date().toISOString()}] [${reqId}] ${req.method} ${req.originalUrl} → ${status}`);
-  console.error(err.stack || err.message);
+  const logFields = { err, requestId: reqId, method: req.method, url: logger.scrubUrl(req.originalUrl), status };
+  if (status >= 500) logger.error(logFields, 'Unhandled request error');
+  else logger.warn(logFields, 'Request failed');
 
   // Persist 5xx to the event log so Admin → Monitoring can answer "what broke,
   // for whom" after the fact. Deliberately 5xx only: 4xx are routine client
@@ -19,6 +24,8 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
   // failures. Fire-and-forget — EventLog.record swallows its own errors, and the
   // response must not wait on a write that exists only for diagnostics.
   if (status >= 500) {
+    // Tell the response-finish hook (eventLogOn5xx) this one is already stored.
+    if (res.locals) res.locals.eventLogRecorded = true;
     EventLog.record({
       source:    'server',
       level:     'error',

@@ -26,6 +26,7 @@
  *                              //   if translation is going to happen.
  */
 
+const { fetchNamed } = require('../observability/trackedFetch');
 const logger = require('../logger');
 const anthropicAuth = require('./anthropicAuth');
 
@@ -73,7 +74,9 @@ function getClient() {
   const auth = anthropicAuth.clientAuthOptions({ name: 'Anthropic (translate)' });
   const AnthropicMod = require('@anthropic-ai/sdk');
   const Ctor = AnthropicMod.default || AnthropicMod.Anthropic || AnthropicMod;
-  cachedClient = new Ctor({ ...auth });
+  // fetch: the SDK's undici client is invisible to App Insights; the tracked
+  // wrapper records each model call as an HTTP dependency (dark without AI).
+  cachedClient = new Ctor({ ...auth, fetch: fetchNamed('Anthropic messages (translate)') });
   cachedKey = key;
   return cachedClient;
 }

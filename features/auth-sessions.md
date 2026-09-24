@@ -13,7 +13,6 @@ paths:
   - server/auth/tokens.js
   - server/services/tokenCleanup.js
   - server/middleware/softAuth.js
-  - public/js/views/SignupView.js
   - public/js/views/ProfileView.js
   - public/js/views/ForgotPasswordView.js
   - public/js/views/ResetPasswordView.js
@@ -28,7 +27,6 @@ paths:
   - tests/integration/auth.test.js
   - tests/unit/safeReturnTo.client.test.js
   - e2e/auth.spec.js
-  - e2e/signup-flow.spec.js
   - e2e/profile.spec.js
 migrations: [002_auth_users, 012_backfill_auth_columns, 041_users_username_lower_unique]
 since: 2026-08-09

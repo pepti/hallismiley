@@ -176,7 +176,7 @@ export class AdminAnalyticsView {
   async _loadChart() {
     if (!window.Chart) {
       // Vendored UMD build, served same-origin (CSP script-src 'self').
-      await import('/js/vendor/chart.umd.js');
+      await import('../vendor/chart.umd.js');
     }
     return window.Chart || null;
   }

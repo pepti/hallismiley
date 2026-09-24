@@ -88,8 +88,9 @@ describe('discovery', () => {
   test('an unauthenticated MCP call points at the metadata (RFC 9728)', async () => {
     const res = await request(app).post('/api/v1/mcp').send({ jsonrpc: '2.0', id: 1, method: 'ping' });
     expect(res.status).toBe(401);
+    const { mcpRealm } = require('../../server/middleware/mcpAuth');
     expect(res.headers['www-authenticate'])
-      .toBe(`Bearer realm="orangesmiley-mcp", resource_metadata="${issuer()}/.well-known/oauth-protected-resource"`);
+      .toBe(`Bearer realm="${mcpRealm()}", resource_metadata="${issuer()}/.well-known/oauth-protected-resource"`);
   });
 
   test('the whole flow is dark with MCP_ENABLED off', async () => {

@@ -185,7 +185,9 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
       test('a hidden detail route is de-indexed too', async () => {
         const res = await request(app).get(`${pathFor(ID.surface.hiddenRoutes[0])}/some-detail-slug`);
-        expect(res.status).toBe(200);
+        // No such row / no such route: a real 404 since harvest-ice-e-2026-09-24
+        // (spaStatus.test.js) — the shell and the noindex are unchanged.
+        expect([200, 404]).toContain(res.status);
         expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
       });
     });
@@ -217,9 +219,11 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.text).toMatch(/rel="alternate" hreflang="x-default"/);
   });
 
-  test('unknown SPA route still serves the shell with generic meta (404 handled client-side)', async () => {
+  test('unknown SPA route still serves the shell with generic meta, with a real 404 status', async () => {
     const res = await request(app).get('/en/does-not-exist');
-    expect(res.status).toBe(200);
+    // 404 since harvest-ice-e-2026-09-24 (icelandicstore #399) — the body is
+    // still the shell, so the SPA renders NotFoundView (spaStatus.test.js).
+    expect(res.status).toBe(404);
     expect(res.text).toMatch(/<html lang="en"/);
     // Falls back to the home-tier meta — we just need a valid title.
     expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
@@ -276,20 +280,26 @@ describe('SSR meta-injection — SPA catch-all', () => {
   });
 
   // Tightness: the prefix must be the WHOLE first segment and must sit at the
-  // root. Anything else is an ordinary SPA route and still gets the shell —
-  // if one of these ever 404s as JSON, the exemption has grown too wide.
+  // root. Anything else is an ordinary path and still gets the shell (a 404
+  // status since harvest-ice-e — no SPA route matches these) — if one of these
+  // ever answers JSON, the exemption has grown too wide.
   test.each(['/assetsguide/intro', '/is/assets/yfirlit', '/is/css-tips'])(
     '%s is not treated as a static-asset path',
     async (path) => {
       const res = await request(app).get(path).set('Accept', 'text/html');
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(404);
       expect(res.headers['content-type']).toMatch(/text\/html/);
+      expect(res.text).toMatch(/<div id="app"><\/div>/);
     }
   );
 
+  // `public, no-cache` since harvest-ice-e-2026-09-24: the shell names its
+  // release (<meta name="app-build">), and a cached copy of the previous one
+  // made a reloaded tab see the mismatch again (icelandicstore #332). Edge
+  // caches still store it and revalidate by ETag.
   test('response carries cache headers for CDN/edge caching', async () => {
     const res = await request(app).get('/en/');
-    expect(res.headers['cache-control']).toMatch(/public.*max-age=300.*stale-while-revalidate/);
+    expect(res.headers['cache-control']).toBe('public, no-cache');
     expect(res.headers['vary']).toMatch(/Accept-Language/);
   });
 
@@ -312,13 +322,13 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
   test('detail routes for missing news articles fall back to generic head without crashing', async () => {
     const res = await request(app).get('/en/news/this-slug-definitely-does-not-exist');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);   // a real 404 since harvest-ice-e-2026-09-24
     expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
   });
 
   test('unknown product slug gracefully falls back to the shop defaults', async () => {
     const res = await request(app).get('/is/shop/not-a-real-product');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);   // a real 404 since harvest-ice-e-2026-09-24
     expect(res.text).toMatch(/<html lang="is"/);
   });
 
