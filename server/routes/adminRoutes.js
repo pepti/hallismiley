@@ -13,6 +13,10 @@ router.use(requireAuth);
 
 router.get('/users',                    requireView('users'),              adminController.listUsers);
 router.patch('/users/:id/role',         requireRole('admin'), csrfProtect, adminController.changeRole);
+// Clears another user's two-step verification — the way back in for someone who
+// lost their phone AND their recovery codes (ice #396). Never your own: that goes
+// through /auth/totp/disable, which asks for the password again.
+router.post('/users/:id/totp/reset',    requireRole('admin'), csrfProtect, adminController.resetTotp);
 router.patch('/users/:id/disable',      requireRole('admin'), csrfProtect, adminController.disableUser);
 router.patch('/users/:id/party-access', requireRole('admin'), csrfProtect, adminController.setPartyAccess);
 router.patch('/users/:id/approve',      requireRole('admin'), csrfProtect, adminController.approveUser);

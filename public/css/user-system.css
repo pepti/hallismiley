@@ -492,6 +492,17 @@
   font-size: 0.68rem; font-family: var(--font-mono);
   color: var(--text-muted);
 }
+/* Two-step verification is on (users.totp_enabled) — the Reset 2FA action
+   sits in the actions column (ice #396). Tokens only (invariant 15). */
+.users-2sa-badge {
+  display: inline-block; margin-left: 6px;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+  color: var(--success); background: var(--success-dim);
+}
+.users-totp-modal { max-width: 420px; display: flex; flex-direction: column; gap: var(--sp-3); }
+.users-totp-modal__actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-2); }
 
 /* Role select inline */
 .form-input--sm {

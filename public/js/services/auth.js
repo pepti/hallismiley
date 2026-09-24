@@ -522,6 +522,26 @@ export async function adminApproveUser(userId, action = 'approve') {
   return data;
 }
 
+/** Turn another user's two-step verification off (admin; never your own).
+ *  A staff target needs the acting admin's own password: without it the
+ *  server answers 400 with reason 'password_required' (ice #396). */
+export async function adminResetTotp(userId, password) {
+  const headers = await _csrfHeaders();
+  const res = await fetch(`/api/v1/admin/users/${userId}/totp/reset`, {
+    method:      'POST',
+    credentials: 'include',
+    headers,
+    body:        JSON.stringify(password ? { password } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Request failed');
+    err.reason = data.reason || null;
+    throw err;
+  }
+  return data;
+}
+
 export async function adminDeleteUser(userId) {
   const headers = await _csrfHeaders();
   const res = await fetch(`/api/v1/admin/users/${userId}`, {

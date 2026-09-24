@@ -398,10 +398,7 @@ const authController = {
         return res.status(400).json({ error: t(req.locale, 'errors.auth.usernamePasswordRequired'), code: 400 });
       }
 
-      const { rows } = await dbQuery('SELECT password_hash FROM users WHERE id = $1', [user.id]);
-      let validPass = false;
-      try { validPass = await scrypt.verify(rows[0]?.password_hash || '', password); } catch { validPass = false; }
-      if (!validPass) {
+      if (!(await mfaService.verifyPassword(user.id, password))) {
         securityLogger.loginFailed(req.ip, `${user.username} failed password check disabling 2FA`);
         return res.status(401).json({ error: t(req.locale, 'errors.auth.invalidCredentials'), code: 401 });
       }

@@ -8,6 +8,25 @@ const UserRole           = require('../models/UserRole');
 const { declineGuest, sendWelcome } = require('../services/partyApproval');
 // Disabling/enabling an account is a staff action (migration 098); best-effort.
 const staffAudit         = require('../services/staffAudit');
+const securityLogger     = require('../observability/securityLogger');
+const mfaService         = require('../services/mfaService');
+
+// Does this account hold staff standing — admin or moderator, or any role that
+// grants an admin view (a seller, a contractor, a custom role)? A 2FA reset on
+// such an account asks for the ACTING admin's own password (ice #396; ice keys
+// it on admin/moderator — the engine's dynamic roles make any view holder staff).
+async function isStaffAccount(userId) {
+  const { rows } = await dbQuery(
+    `SELECT 1
+       FROM roles r
+      WHERE (r.name = (SELECT role FROM users WHERE id = $1)
+             OR r.name IN (SELECT role_name FROM user_roles WHERE user_id = $1))
+        AND (r.name IN ('admin', 'moderator') OR jsonb_array_length(r.view_access) > 0)
+      LIMIT 1`,
+    [userId]
+  );
+  return rows.length > 0;
+}
 
 const adminController = {
   // GET /api/v1/admin/users?limit=20&offset=0&sort=username&order=asc&q=foo
@@ -42,7 +61,8 @@ const adminController = {
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
-                party_access, approval_status, requested_at, created_at, last_login_at
+                party_access, approval_status, requested_at, created_at, last_login_at,
+                totp_enabled
          FROM users
          ${whereSql}
          ORDER BY ${sortCol} ${dir}, id DESC
@@ -196,6 +216,61 @@ const adminController = {
         party_access:    user.party_access,
         approval_status: user.approval_status,
       });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/users/:id/totp/reset  { password? }
+  // Turn another user's two-step verification off: secret, recovery codes and
+  // the replay marker all go (mfaService.disable, the same teardown the owner's
+  // own turn-off uses). Their password is untouched, so they sign in with it
+  // alone and can set 2FA up again from their profile. The way back in for
+  // someone who lost their phone AND their recovery codes (ice #396).
+  //
+  // Refused for your own account: the self-service turn-off re-checks the
+  // password so a walk-up attacker at an unlocked, signed-in laptop cannot strip
+  // the second factor, and this route would skip that check.
+  //
+  // Staff targets (isStaffAccount) also need the ACTING admin's own password in
+  // the body — the same re-check (mfaService.verifyPassword). Otherwise a walk-up
+  // attacker at one admin's laptop could strip another staff account's second
+  // factor. A plain customer account needs none.
+  //
+  // Every session the target holds is ended, as disabling does. Idempotent:
+  // resetting an account with no 2FA answers { enabled: false } too, and still
+  // clears a half-finished enrolment's secret.
+  async resetTotp(req, res, next) {
+    try {
+      const { id } = req.params;
+      if (id === req.user.id) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotResetOwnTotp'), code: 400 });
+      }
+      const { rows } = await dbQuery('SELECT id, username, role, totp_enabled FROM users WHERE id = $1', [id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+
+      const target = rows[0];
+      if (await isStaffAccount(id)) {
+        const password = req.body?.password;
+        if (!password) {
+          // `reason` lets the Users page ask for the password and retry.
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.totpResetPasswordRequired'), code: 400, reason: 'password_required' });
+        }
+        if (!(await mfaService.verifyPassword(req.user.id, password))) {
+          securityLogger.loginFailed(req.ip, `${req.user.username} failed password check resetting 2FA for ${id}`);
+          return res.status(403).json({ error: t(req.locale, 'errors.admin.totpResetPasswordWrong'), code: 403 });
+        }
+      }
+
+      await mfaService.disable(id);
+      await lucia.invalidateUserSessions(id);
+      securityLogger.adminAction(req.user.id, 'totp_reset', id,
+        { wasEnabled: target.totp_enabled, targetRole: target.role, ip: req.ip });
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.totp_reset',
+        entityType: 'user', entityId: id, summary: { username: target.username },
+      });
+      return res.json({ enabled: false });
     } catch (err) { next(err); }
   },
 
