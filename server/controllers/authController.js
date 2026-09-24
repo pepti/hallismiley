@@ -118,6 +118,7 @@ const authController = {
                 failed_login_attempts, locked_until,
                 disabled, disabled_reason,
                 avatar, display_name, phone, totp_enabled, theme,
+                page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status
          FROM users
          WHERE LOWER(username) = LOWER($1)
@@ -236,6 +237,12 @@ const authController = {
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
+          // Per-account admin layout + cookie choice (migration 111): adopted like
+          // the theme, so they follow the login to another browser.
+          page_widths:       user.page_widths || {},
+          page_width_motion: user.page_width_motion !== false,
+          aside_widths:      user.aside_widths || {},
+          cookie_consent:    user.cookie_consent || null,
         },
       });
     } catch (err) { next(err); }
@@ -277,6 +284,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
+                page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status, totp_enabled
            FROM users
           WHERE id = $1`,
@@ -323,6 +331,12 @@ const authController = {
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
+          // Per-account admin layout + cookie choice (migration 111): adopted like
+          // the theme, so they follow the login to another browser.
+          page_widths:       user.page_widths || {},
+          page_width_motion: user.page_width_motion !== false,
+          aside_widths:      user.aside_widths || {},
+          cookie_consent:    user.cookie_consent || null,
         },
       });
     } catch (err) { next(err); }
@@ -765,6 +779,12 @@ const authController = {
           totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — adopted during session restore, before first render.
           theme:          user.theme || null,
+          // Per-account admin layout + cookie choice (migration 111): adopted like
+          // the theme, so they follow the login to another browser.
+          page_widths:       user.page_widths || {},
+          page_width_motion: user.page_width_motion !== false,
+          aside_widths:      user.aside_widths || {},
+          cookie_consent:    user.cookie_consent || null,
         },
       });
     } catch (err) { next(err); }

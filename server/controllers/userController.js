@@ -8,9 +8,70 @@ const { t }              = require('../i18n');
 
 const scrypt = new Scrypt();
 
-const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, preferred_locale, theme, created_at';
+const PROFILE_FIELDS = 'id, username, email, role, avatar, display_name, phone, email_verified, preferred_locale, theme, page_widths, page_width_motion, aside_widths, cookie_consent, created_at';
 const { SUPPORTED_LOCALES } = require('../config/i18n');
 const { THEMES }            = require('../config/themes');
+
+// Page widths (setPageWidth; harvested from icelandicstore, migration 111).
+// Keep the value list in step with public/js/services/pageWidth.js WIDTHS.
+const PAGE_WIDTHS         = ['normal', 'wide', 'full'];
+const PAGE_WIDTH_KEY_RE   = /^\/admin(\/[a-z0-9:-]+)*$/;
+const PAGE_WIDTH_KEY_MAX  = 120;
+const PAGE_WIDTH_MAX_KEYS = 100;
+// The all-admin-pages width (Síðubreidd → Nota á allar síður). Not a path, so it
+// can never collide with a page key. Keep in step with pageWidth.js ALL_KEY.
+const PAGE_WIDTH_ALL_KEY  = '*';
+// Right-column widths on the admin detail pages (setAsideWidth). Keep in step
+// with public/js/services/pageWidth.js ASIDE_WIDTHS. Same keys, same '*'.
+const ASIDE_WIDTHS        = ['narrow', 'medium', 'wide'];
+
+// PUT handler for a per-page width map on users (`column` is a trusted
+// constant, never request input). `path` is the SPA's page key
+// (public/js/services/pageWidth.js pageWidthKey — locale stripped, id segments
+// folded to ':id'); `width` null resets that page to its own default. One
+// atomic UPDATE, so two quick picks cannot lose each other's keys the way a
+// read-modify-write of the whole map would.
+//
+// `path` '*' is the all-pages width. Saving it REPLACES the map, so a page
+// that had its own choice follows the new width too; a later per-page pick
+// still overrides it. null clears only '*', and every page goes back to its
+// own default.
+function widthMapSetter(column, values, invalidWidthKey) {
+  return async function setWidth(req, res, next) {
+    try {
+      const { path: key, width } = req.body || {};
+      const isAll = key === PAGE_WIDTH_ALL_KEY;
+      if (!isAll && (typeof key !== 'string' || key.length > PAGE_WIDTH_KEY_MAX || !PAGE_WIDTH_KEY_RE.test(key))) {
+        return res.status(400).json({ error: t(req.locale, 'errors.user.invalidPageWidthPath'), code: 400 });
+      }
+      if (width !== null && !values.includes(width)) {
+        return res.status(400).json({ error: t(req.locale, invalidWidthKey), code: 400 });
+      }
+
+      const { rows } = (isAll && width !== null)
+        ? await dbQuery(
+          `UPDATE users SET ${column} = jsonb_build_object($2::text, $3::text) WHERE id = $1 RETURNING ${column}`,
+          [req.user.id, key, width])
+        : width === null
+        ? await dbQuery(
+          `UPDATE users SET ${column} = ${column} - $2 WHERE id = $1 RETURNING ${column}`,
+          [req.user.id, key])
+        // A new key is refused once the map is full; overwriting an existing key
+        // always succeeds. rowCount 0 then means "full", not "no such user".
+        : await dbQuery(
+          `UPDATE users SET ${column} = ${column} || jsonb_build_object($2::text, $3::text)
+            WHERE id = $1
+              AND (${column} ? $2 OR (SELECT count(*) FROM jsonb_object_keys(${column})) < $4)
+            RETURNING ${column}`,
+          [req.user.id, key, width, PAGE_WIDTH_MAX_KEYS]);
+
+      if (!rows.length) {
+        return res.status(400).json({ error: t(req.locale, 'errors.user.tooManyPageWidths'), code: 400 });
+      }
+      return res.json({ [column]: rows[0][column] });
+    } catch (err) { next(err); }
+  };
+}
 
 // Only delete a file that matches the user-upload pattern AND belongs to the
 // caller — never the baked SVGs, and never another user's upload (the avatars
@@ -23,6 +84,48 @@ function _tryUnlinkAvatar(filename, userId) {
 }
 
 const userController = {
+  // PUT /api/v1/users/me/page-width  { path, width }
+  // Per-user, per-page admin width (sidebar width icon → Síðubreidd); the
+  // contract is widthMapSetter above.
+  setPageWidth: widthMapSetter('page_widths', PAGE_WIDTHS, 'errors.user.invalidPageWidth'),
+
+  // PUT /api/v1/users/me/aside-width  { path, width }
+  // The right-hand column on the admin detail pages (components/AsideWidthControl.js):
+  // 'narrow' | 'medium' | 'wide'. Same contract as setPageWidth, own column.
+  setAsideWidth: widthMapSetter('aside_widths', ASIDE_WIDTHS, 'errors.user.invalidAsideWidth'),
+
+  // PUT /api/v1/users/me/page-width-motion  { on }
+  // Whether the admin shell slides to a new width (Mjúk hreyfing). A boolean,
+  // nothing else; its own column, so the all-pages width (which replaces
+  // page_widths) can never reset it.
+  async setPageWidthMotion(req, res, next) {
+    try {
+      const { on } = req.body || {};
+      if (typeof on !== 'boolean') {
+        return res.status(400).json({ error: t(req.locale, 'errors.user.invalidPageWidthMotion'), code: 400 });
+      }
+      const { rows } = await dbQuery(
+        'UPDATE users SET page_width_motion = $2 WHERE id = $1 RETURNING page_width_motion',
+        [req.user.id, on]);
+      return res.json({ page_width_motion: rows[0].page_width_motion });
+    } catch (err) { next(err); }
+  },
+
+  // PUT /api/v1/users/me/cookie-consent  { value }
+  // The analytics-cookie choice, saved on the account so the banner does not ask
+  // a signed-in user again in another browser. 'accepted' | 'declined'.
+  async setCookieConsent(req, res, next) {
+    try {
+      const { value } = req.body || {};
+      if (value !== 'accepted' && value !== 'declined') {
+        return res.status(400).json({ error: t(req.locale, 'errors.user.invalidCookieConsent'), code: 400 });
+      }
+      const { rows } = await dbQuery(
+        'UPDATE users SET cookie_consent = $2 WHERE id = $1 RETURNING cookie_consent',
+        [req.user.id, value]);
+      return res.json({ cookie_consent: rows[0].cookie_consent });
+    } catch (err) { next(err); }
+  },
   // GET /api/v1/users/me
   async getMe(req, res, next) {
     try {

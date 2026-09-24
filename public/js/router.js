@@ -1,5 +1,6 @@
 import { motionAllowed } from './utils/motion.js';
 import { titleForRoute } from './utils/pageTitle.js';
+import { setPageRoute }       from './services/pageWidth.js';
 import { HomeView }           from './views/HomeView.js';
 import { ProjectsView }       from './views/ProjectsView.js';
 import { ProjectDetailView }  from './views/ProjectDetailView.js';
@@ -370,6 +371,8 @@ export class Router {
     }
 
     const { factory, params, pattern } = matchRoute(path);
+    // The admin page-width key is the matched pattern (services/pageWidth.js).
+    setPageRoute(pattern);
     const view = factory(params, qs);
     const el   = await view.render();
 
