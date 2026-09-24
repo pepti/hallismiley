@@ -111,6 +111,10 @@ async function start() {
     startEventLogCleanup(); // daily event_logs prune (EVENT_LOG_RETENTION_DAYS)
     startLeadsCleanup();    // daily leads prune (LEAD_RETENTION_DAYS — the /personuvernd promise)
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
+    // Which Anthropic auth mode is live, proven end to end when it is workload
+    // identity (managed identity → token exchange → one cheap API call; ice
+    // #326). Fire and forget: it never blocks or fails startup.
+    require('./services/anthropicAuth').selfCheck().catch(() => {});
   });
 
   // Start periodic cleanup of expired sessions (runs every 24h)

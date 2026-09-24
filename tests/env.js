@@ -30,6 +30,11 @@ process.env.CSRF_SECRET     = 'test-csrf-secret-not-used-in-test-mode';
 // the feature mock `server/services/translator` directly.
 process.env.TRANSLATE_ENABLED = 'false';
 process.env.ANTHROPIC_API_KEY = '';
+// Nor workload identity (services/anthropicAuth.js): a stray .env with the
+// federation settings must not switch it on. The auth suites set their own.
+process.env.ANTHROPIC_FEDERATION_RULE_ID = '';
+process.env.ANTHROPIC_ORGANIZATION_ID = '';
+process.env.ANTHROPIC_WIF_AUDIENCE = '';
 // Two-factor enrolment is OPTIONAL by default (security.mfa.enrolment,
 // mfa-optional-2026-09-23), so no suite needs this any more. It stays as a
 // belt-and-braces for a suite that switches an instance to `required`
