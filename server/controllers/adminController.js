@@ -10,6 +10,22 @@ const { declineGuest, sendWelcome } = require('../services/partyApproval');
 const staffAudit         = require('../services/staffAudit');
 const securityLogger     = require('../observability/securityLogger');
 const mfaService         = require('../services/mfaService');
+const McpToken           = require('../models/McpToken');
+
+// Only an admin may hold an MCP token (mcpAdminRoutes mints them; mcp/owner.js
+// refuses a non-admin owner on every call). When an account stops being an
+// admin, or is disabled, its rows are revoked too so Admin → MCP tells the
+// truth (ice #418). Best-effort after the change has committed.
+async function revokeMcpTokens(req, userId, reason) {
+  try {
+    const revoked = await McpToken.revokeAllForUser(userId);
+    if (revoked) securityLogger.adminAction(req.user.id, 'mcp_tokens_revoked', userId, { count: revoked, reason });
+    return revoked;
+  } catch (err) {
+    securityLogger.alert('warning', 'MCP token revocation failed', { userId, reason, err: err.message });
+    return 0;
+  }
+}
 
 // Does this account hold staff standing — admin or moderator, or any role that
 // grants an admin view (a seller, a contractor, a custom role)? A 2FA reset on
@@ -141,6 +157,7 @@ const adminController = {
         await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
         await client.query('COMMIT');
         UserRole.invalidateUser(id); // clear the cached set after the commit
+        if (role !== 'admin') await revokeMcpTokens(req, id, 'role_change');
         return res.json(rows[0]);
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
@@ -304,9 +321,11 @@ const adminController = {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
 
-      // If disabling, invalidate all their active sessions immediately
+      // If disabling, invalidate all their active sessions — and their MCP
+      // tokens, the other credential an admin can hold — immediately.
       if (disabled) {
         await lucia.invalidateUserSessions(id);
+        await revokeMcpTokens(req, id, 'disabled');
       }
       await staffAudit.recordSafe({
         ...staffAudit.actorOf(req), action: disabled ? 'user.disabled' : 'user.enabled',

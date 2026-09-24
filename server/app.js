@@ -602,6 +602,12 @@ app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/change-requests', changeRequestRoutes);
 app.use('/api/v1/system',     systemRoutes);
+// One outer door for the whole back office (ice #418). Every admin router below
+// still guards itself (and most are narrower); this only guarantees that a
+// router which forgets its own guard is still closed to plain customer
+// accounts. After moduleGate (a switched-off module stays a 404 before auth)
+// and before every /api/v1/admin mount, including the two further down.
+app.use('/api/v1/admin', require('./auth/middleware').requireAuth, require('./auth/requireView').requireStaff);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all

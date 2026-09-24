@@ -158,6 +158,19 @@ class McpToken {
     return rowCount;
   }
 
+  // Revoke every live token a user owns — when they stop being an admin or are
+  // disabled (ice #418). server/mcp/owner.js already refuses such an owner on
+  // every call; revoking the rows as well keeps Admin → MCP from listing them
+  // as live. Returns how many were revoked.
+  static async revokeAllForUser(userId) {
+    const { rowCount } = await db.query(
+      `UPDATE mcp_tokens SET revoked_at = NOW()
+        WHERE user_id = $1 AND revoked_at IS NULL`,
+      [String(userId)]
+    );
+    return rowCount;
+  }
+
   // Fire-and-forget freshness marker; never let it fail a request.
   static async touchLastUsed(id) {
     try {

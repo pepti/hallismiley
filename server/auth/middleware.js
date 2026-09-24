@@ -33,6 +33,10 @@ async function attachRoles(req, user) {
 }
 
 async function requireAuth(req, res, next) {
+  // Already validated earlier in THIS request (the outer /api/v1/admin door in
+  // app.js runs it before each admin router's own requireAuth): the session,
+  // disabled and role checks have all been made, so don't make them twice.
+  if (req._authValidated) return next();
   const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
 
   if (!sessionId) {
@@ -65,6 +69,7 @@ async function requireAuth(req, res, next) {
   req.session = session;
 
   await attachRoles(req, user);
+  req._authValidated = true;
 
   // The global locale middleware ran before auth (req.user was undefined), so
   // the user's saved preferred_locale couldn't participate in resolution.
