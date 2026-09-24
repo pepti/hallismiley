@@ -76,3 +76,28 @@
   font-weight: 600;
   color: var(--text-secondary);
 }
+
+/* ── Inventory: Available headline, on hand · committed underneath (models/Inventory.js) ── */
+.prod-inv { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-primary); }
+.prod-inv__detail { display: block; font-size: 0.8em; font-weight: 400; color: var(--text-muted); }
+
+/* Stock audit trail in the detail panel. */
+.prod-history { margin: 0 0 var(--sp-3); }
+.prod-history__delta { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prod-history__delta--neg { color: var(--error); }
+
+/* ── Bulk select + bar + Edit… modal (harvested from icelandicstore #247) ──── */
+.prod-select { width: 32px; text-align: center; }
+.prod-bulkbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  margin: 0 0 var(--sp-3); padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.prod-bulkbar[hidden] { display: none; }
+.prod-bulkbar__count { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.prod-bulkbar__actions { display: flex; gap: var(--sp-2); margin-left: auto; flex-wrap: wrap; }
+.prod-bulkedit__card { width: min(640px, 100%); }
+.prod-bulkedit__form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3) var(--sp-4); margin: var(--sp-4) 0; }
+.prod-bulkedit__form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+.prod-bulkedit__footer { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+@media (max-width: 640px) { .prod-bulkedit__form { grid-template-columns: 1fr; } }

@@ -92,6 +92,20 @@ none of these exist there until Halli says so per stack).
 
 `environment_info` reports `modules: { preset, enabled, contract, switched_off }`.
 
+## Catalogue write tools (harvest-ice-c-2026-09-24)
+
+Harvested from icelandicstore (#248/#250/#361), `server/mcp/tools/products.js`.
+Scope `write` AND each behind its OWN switch in `config/client.json`, all OFF
+by default (`mcp.write.productCreate` / `productUpdate` / `stock`, env
+`CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE` etc., re-read per call), AND the shop
+module on. orangesmiley.is keeps all three off.
+
+| Tool | Switch | Does | Refuses |
+|---|---|---|---|
+| `create_product` | `productCreate` | creates a product — ALWAYS a Draft (`active: false`) — slug from the name unless given; opening stock recorded as an `opening` adjustment | no name or price; a bad or taken slug |
+| `update_product` | `productUpdate` | changes the fields given on a product found by id or product-level SKU/barcode | stock (that is `set_stock`); unknown fields |
+| `set_stock` | `stock` | sets on hand of a product or variant (a SKU/barcode resolves variant first) through the audited writer: reason, `MCP: <note>` and the token owner on the `inventory_adjustments` row | a negative count; a variant product by id |
+
 ## OAuth 2.1 (R5a)
 
 `server/mcp/oauth.js` holds the rules, `controllers/mcpOAuthController.js`

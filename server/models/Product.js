@@ -1,6 +1,7 @@
 // Repository pattern for products — all SQL lives here.
 // Parameterised queries throughout (A03: prevents SQL injection).
 const db = require('../config/database');
+const Inventory = require('./Inventory');
 
 // Admin-facing column list: surfaces both locales' raw fields so the CMS
 // editor can render EN + IS inputs side-by-side.
@@ -143,7 +144,11 @@ class Product {
 
   // ── WRITE ─────────────────────────────────────────────────────────────────
 
-  static async create(data) {
+  // Opening stock is written straight into the INSERT (the creation IS the
+  // event) and recorded as an 'opening' inventory_adjustments row in the same
+  // transaction, so every unit on the shelf has an audit row. `userId` names
+  // the actor.
+  static async create(data, { userId = null } = {}) {
     const {
       slug, name, description = '',
       name_is = null, description_is = null,
@@ -163,7 +168,11 @@ class Product {
       // historical invoice.
       vat_rate = 24,
     } = data;
-    const { rows } = await db.query(
+    const client = await db.pool.connect();
+    let rows;
+    try {
+      await client.query('BEGIN');
+      ({ rows } = await client.query(
       `INSERT INTO products (slug, name, description, name_is, description_is,
                              price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
                              category, subcategory, duration_minutes, delivery_format, is_bookable,
@@ -192,13 +201,28 @@ class Product {
         Boolean(active),
         [0, 11, 24].includes(Number(vat_rate)) ? Number(vat_rate) : 24,
       ]
-    );
+      ));
+      await Inventory.recordOpening(client, { productId: rows[0].id, stock: rows[0].stock, userId });
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
     return rows[0];
   }
 
-  static async update(id, data) {
-    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'stock', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'bin', 'active', 'vat_rate'];
-    const numeric = new Set(['price_isk', 'price_eur', 'stock', 'weight_grams', 'capacity_litres', 'duration_minutes']);
+  // `stock` is accepted but is NOT a plain column here (harvested from
+  // icelandicstore #243/#275): a change moves through Inventory.setAbsolute
+  // under the row lock, in the same transaction as the field update, so it is
+  // serialised against fulfilment and leaves an inventory_adjustments row naming
+  // who moved it and why. `stockReason` / `stockNote` come from the admin form
+  // (Inventory.ADJUSTMENT_REASONS; default 'correction').
+  static async update(id, data, { userId = null, stockReason = 'correction', stockNote = null } = {}) {
+    const allowed = ['slug', 'name', 'description', 'name_is', 'description_is', 'price_isk', 'price_eur', 'weight_grams', 'shape', 'capacity_litres', 'category', 'subcategory', 'duration_minutes', 'delivery_format', 'is_bookable', 'variant_axes', 'sku', 'barcode', 'bin', 'active', 'vat_rate'];
+    // No 'stock' here: it is not in `allowed`, so the loop below never sees it.
+    const numeric = new Set(['price_isk', 'price_eur', 'weight_grams', 'capacity_litres', 'duration_minutes']);
     const bool    = new Set(['active', 'is_bookable']);
     const jsonField = new Set(['variant_axes']);
 
@@ -245,32 +269,93 @@ class Product {
       }
     }
 
-    if (sets.length === 0) return Product.findById(id);
+    const wantsStock = data.stock !== undefined && data.stock !== null && data.stock !== '';
 
-    params.push(String(id));
-    const { rows } = await db.query(
-      `UPDATE products SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING ${COLUMNS}`,
-      params
-    );
-    return rows[0] || null;
+    if (!wantsStock) {
+      if (sets.length === 0) return Product.findById(id);
+      params.push(String(id));
+      const { rows } = await db.query(
+        `UPDATE products SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING ${COLUMNS}`,
+        params
+      );
+      return rows[0] || null;
+    }
+
+    const target = Number(data.stock);
+    if (!Number.isInteger(target) || target < 0) {
+      const err = new Error('stock must be a whole number of 0 or more');
+      err.status = 400;
+      throw err;
+    }
+
+    // Audited path: the field update and the stock move land in one transaction.
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Lock and read under the lock, so the delta is against the value about
+      // to be overwritten (applyLines re-locks the same row, which is free).
+      const { rows: cur } = await client.query(
+        'SELECT stock FROM products WHERE id = $1 FOR UPDATE', [String(id)]
+      );
+      if (!cur[0]) { await client.query('ROLLBACK'); return null; }
+      if (sets.length) {
+        params.push(String(id));
+        await client.query(`UPDATE products SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      }
+      await Inventory.setAbsolute(client, {
+        productId: String(id), previous: cur[0].stock, target,
+        reason: stockReason || 'correction', note: stockNote, userId,
+      });
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
+    return Product.findById(id);
+  }
+
+  // Bulk edit (admin list, multi-select → Edit…): the same scalar fields on many
+  // products in ONE statement. `fields` is whitelisted and validated by the
+  // controller (BULK_EDIT_FIELDS); stock is never among them. The rows are
+  // locked first in the stock lock order (Inventory.lockForWrite), so a
+  // multi-row UPDATE in scan order cannot cycle with a fulfilment's sorted
+  // locks (ice #380). Returns the affected ids.
+  static async bulkEdit(ids, fields) {
+    if (!ids || ids.length === 0) return [];
+    const cols = ['category', 'subcategory', 'vat_rate', 'active', 'bin'];
+    const sets = [];
+    const params = [];
+    for (const col of cols) {
+      if (fields[col] === undefined) continue;
+      let v = fields[col];
+      if ((col === 'bin' || col === 'subcategory') && typeof v === 'string' && v.trim() === '') v = null;
+      params.push(v);
+      sets.push(`${col} = $${params.length}`);
+    }
+    if (!sets.length) return [];
+    params.push(ids.map(String));
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await Inventory.lockForWrite(client, { productIds: ids });
+      const { rows } = await client.query(
+        `UPDATE products SET ${sets.join(', ')} WHERE id = ANY($${params.length}::text[]) RETURNING id`,
+        params
+      );
+      await client.query('COMMIT');
+      return rows.map(r => r.id);
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   static async deactivate(id) {
     return Product.update(id, { active: false });
-  }
-
-  // Atomic stock decrement — returns new stock on success, null if insufficient.
-  // Must be called from within the caller's transaction (`client` is a
-  // pool-acquired client after BEGIN). The WHERE stock >= $qty guard ensures
-  // we never oversell under concurrent webhook processing.
-  static async decrementStockAtomic(client, productId, qty) {
-    const { rows } = await client.query(
-      `UPDATE products SET stock = stock - $1
-        WHERE id = $2 AND stock >= $1
-        RETURNING stock`,
-      [Number(qty), String(productId)]
-    );
-    return rows[0]?.stock ?? null;
   }
 
   // ── IMAGES ────────────────────────────────────────────────────────────────

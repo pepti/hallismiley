@@ -1,6 +1,7 @@
 // CheckoutView — guest email + shipping form, then redirects to Stripe Checkout.
 // Route: #/checkout
 import * as cart from '../services/cart.js';
+import { indexAvailability, shortfallOf } from '../utils/availability.js';
 import { getUser } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { t, href } from '../i18n/i18n.js';
@@ -48,6 +49,18 @@ export class CheckoutView {
       }
     } catch { /* keep defaults */ }
 
+    // Lines the live catalogue can no longer cover (utils/availability.js) —
+    // the cart page flags them too; here they block submit, the last gate
+    // before Stripe (the server would answer 409 anyway).
+    this._stockShort = [];
+    try {
+      const res = await fetch('/api/v1/shop/products', { credentials: 'include' });
+      if (res.ok) {
+        const index = indexAvailability((await res.json()).products || []);
+        this._stockShort = items.filter(it => shortfallOf(it, index));
+      }
+    } catch { /* no availability → no gate */ }
+
     this._paint();
     return this._view;
   }
@@ -74,6 +87,7 @@ export class CheckoutView {
       <div class="shop-checkout__inner">
         <a href="${href('/cart')}" class="shop-checkout__back">← ${t('checkout.backToCart')}</a>
         <h1 class="shop-checkout__title">${t('checkout.title')}</h1>
+        ${this._stockShort.length ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-stock-notice">${_esc(t('checkout.stockNotice'))} ${this._stockShort.map(it => _esc(it.variantLabel ? `${it.name} — ${it.variantLabel}` : it.name)).join(', ')}. <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
 
         <div class="shop-checkout__grid">
           <form class="shop-checkout__form" id="shop-checkout-form" novalidate>
@@ -200,6 +214,7 @@ export class CheckoutView {
       if (e.target.name === 'shipping_method') syncShipping();
     });
     syncShipping();
+    if (this._stockShort.length) submitBtn.disabled = true;
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -211,6 +226,7 @@ export class CheckoutView {
       // focuses the first offender. Runs BEFORE the button is disabled, so a
       // rejected submit leaves the form usable.
       if (!form.reportValidity()) return;
+      if (this._stockShort.length) return;
 
       submitBtn.disabled = true;
       submitBtn.textContent = t('checkout.redirecting');

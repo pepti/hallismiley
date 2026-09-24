@@ -1,5 +1,6 @@
 // Admin products API client — CSV catalogue export + import round-trip.
 import { getCSRFToken } from './auth.js';
+import { getCsrfHeaders } from '../utils/api.js';
 
 // Direct download URL (the response carries Content-Disposition: attachment).
 export function adminExportProductsUrl() {
@@ -31,4 +32,25 @@ export async function adminApplyProductImport(rows) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Import failed');
   return data;
+}
+
+// POST /products/bulk — action 'activate' | 'deactivate' | 'edit' (with
+// `fields`: category, subcategory, vat_rate, active, bin — blank = leave as is).
+export async function adminBulkProducts(ids, action, fields = undefined) {
+  const headers = await getCsrfHeaders();
+  const res = await fetch('/api/v1/admin/shop/products/bulk', {
+    method: 'POST', credentials: 'include', headers,
+    body: JSON.stringify(fields ? { ids, action, fields } : { ids, action }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Bulk action failed');
+  return data; // { updated }
+}
+
+// GET /products/:id/adjustments — the product's stock audit trail, newest first.
+export async function adminProductAdjustments(id, { limit = 50 } = {}) {
+  const res = await fetch(`/api/v1/admin/shop/products/${encodeURIComponent(id)}/adjustments?limit=${limit}`, { credentials: 'include' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to load stock history');
+  return data; // { adjustments }
 }

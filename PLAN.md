@@ -121,7 +121,7 @@ chunk lands; add a HISTORY entry for the story.
   ([services-page](docs/HISTORY.md#services-page)), the two-step reminder's
   `mfaReminder.*` strings ([mfa-reminder-2026-09-23](docs/HISTORY.md#mfa-reminder-2026-09-23);
   i18n files, not an inline editor). He edits in place via the inline editors.
-- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #5, #13, #16, #17, #18 done; #9, #10, #21
+- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #5, #13, #16, #17, #18, #22 (till), #23 done; #9, #10, #21, #25
   partial; the rest need his sign-off before any implementation. #7 is
   roadmap item R6.
 - Publish the 14 seeded sales guides ([sales-staff](docs/HISTORY.md#sales-staff));
@@ -300,8 +300,26 @@ chunk lands; add a HISTORY entry for the story.
   `<dialog>`, abort-on-dismiss, 15 s write timeout, backdrop dismissal keyed
   off `mousedown` so a text-drag does not discard input), auth/identity pieces
   and the money de-fork
-  ([ui-kit](docs/HISTORY.md#ui-kit)). A sold-out cart line still goes straight
-  to Stripe (ENHANCEMENTS #25).
+  ([ui-kit](docs/HISTORY.md#ui-kit)). ~~A sold-out cart line still goes straight
+  to Stripe (ENHANCEMENTS #25)~~ — fixed by harvest-ice-c-2026-09-24 (next bullet).
+- Ice harvest lane 2, chunk C landed 2026-09-24 on `harvest/ice-2026-09-24-cd`
+  ([harvest-ice-c-2026-09-24](docs/HISTORY.md#harvest-ice-c-2026-09-24)):
+  On hand / Committed / Available + the audited writer (migration 112), the
+  sold-out basket guard, the search-box fix, bulk product edit, the till
+  scanner, MCP catalogue tools (all switched off). Open: (a) **migration 112
+  takes the number after lane 1's 111**; whichever lane merges second renumbers
+  if they collide, and ice's product file aliases 112 to its 073/075/101/121 at
+  graft time; (b) a till sale still moves no stock (the engine's POS never
+  did) — Halli's call whether the till should deduct (reason `pos`) and what
+  it does when the shelf count is wrong; (c) an order paid by the OLD
+  container during the 112 swap window would be deducted twice at fulfilment
+  (Stripe payment inside the swap minutes only; no shop is live on the
+  engine's own instance); (d) the stock-reason list and the new admin
+  strings are DRAFT; (e) not taken: sales-report periods (ice #414 — M, needs
+  VAT per order derived from lines; a later chunk), ice's `scan_sounds` /
+  `scan_volume` settings (a per-device switch instead), the pick / receive /
+  inventory-check screens (ice-only), line discount and sequential order
+  numbers (Halli's defaults).
 - Post-R1 notes: a public `/frettir` home for the news list; an `/skilmalar`
   slug for `/terms`; Product-schema `brand` on the hidden shop still says
   Rekstrarkerfið.

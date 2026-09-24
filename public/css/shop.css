@@ -272,6 +272,10 @@
   width: 24px; height: 24px;
 }
 .shop-filters__clear-search:hover { color: var(--text-primary); }
+/* The clear/reset buttons are always in the DOM and toggled with [hidden] (a
+   repaint would replace the search input mid-word) — keep a display rule from
+   ever beating the UA's [hidden]. */
+.shop-filters [hidden] { display: none; }
 .shop-filters__sort {
   display: flex;
   align-items: center;
@@ -762,6 +766,14 @@
   font-size: 14px;
 }
 .shop-cart__checkout:hover { filter: brightness(1.15); }
+/* Availability gate (utils/availability.js): a stored line the catalogue can no longer cover. */
+.shop-cart__notice { margin: 12px 0; padding: 10px 14px; border-left: 3px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; }
+.shop-cart__notice--warn { border-left-color: var(--warning); }
+.shop-cart__row--short td { background: var(--warning-dim); }
+.shop-cart__short { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.shop-cart__checkout:disabled, .shop-cart__checkout[disabled] { opacity: 0.6; cursor: not-allowed; filter: none; }
+.shop-checkout__notice { margin: 0 0 20px; padding: 10px 14px; border-left: 3px solid var(--error); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; }
+.shop-checkout__notice--warn { border-left-color: var(--warning); }
 
 /* ── Checkout ────────────────────────────────────────────────────────────── */
 .shop-checkout__inner {

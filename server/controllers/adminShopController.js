@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const Inventory = require('../models/Inventory');
 const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
@@ -50,9 +51,10 @@ function validateSlug(slug) {
 // importable; Name/Variant/Barcode are export-only context (never written).
 const PRODUCT_CSV_HEADER = ['SKU', 'Name', 'Variant', 'Barcode', 'BIN', 'Price ISK', 'Price EUR', 'Stock', 'Active'];
 // Fields a CSV row may change — the same set for products and variants (both
-// models' update() accept all of these). Stock is written DIRECTLY: HalliProjects
-// has no inventory-adjustments audit table, so there's nothing to stay consistent
-// with (revisit if an audited stock-adjust feature is ever ported).
+// models' update() accept all of these). A stock change is NOT a plain write:
+// the models move it through Inventory.setAbsolute, so each imported figure
+// lands in inventory_adjustments with reason 'import' and the admin who ran it
+// (harvest-ice-c-2026-09-24).
 const PRODUCT_IMPORT_FIELDS = ['bin', 'price_isk', 'price_eur', 'stock', 'active'];
 const MAX_IMPORT_ROWS = 5000;
 
@@ -160,6 +162,60 @@ function validateSectionFields(body) {
   return null;
 }
 
+// Fields the bulk Edit… action may set on many products at once (harvested from
+// icelandicstore #247, cut to the engine's columns). Deliberately no
+// name/slug/price/stock: those are per-product by nature, and stock has its own
+// audited path.
+const BULK_EDIT_FIELDS = ['category', 'subcategory', 'vat_rate', 'active', 'bin'];
+const BIN_MAX_LEN = 40;
+
+// The acting admin, for the audit rows.
+function actorId(req) { return (req.user && req.user.id) || null; }
+
+// A stock figure from an admin body: absent → undefined (leave it), else a
+// whole number ≥ 0 or a localised 400 via the returned error string.
+function stockError(req, body) {
+  if (!body || body.stock === undefined || body.stock === null || body.stock === '') return null;
+  const n = Number(body.stock);
+  if (!Number.isInteger(n) || n < 0) return t(req.locale, 'errors.inventory.stockInvalid');
+  if (body.stock_reason !== undefined && body.stock_reason !== null && body.stock_reason !== ''
+      && !Inventory.ADJUSTMENT_REASONS.includes(body.stock_reason)) {
+    return t(req.locale, 'errors.inventory.reasonInvalid');
+  }
+  if (body.stock_note != null && (typeof body.stock_note !== 'string' || body.stock_note.length > 500)) {
+    return t(req.locale, 'errors.inventory.reasonInvalid');
+  }
+  return null;
+}
+
+// The reason + note the admin gave for a stock change (validated by stockError).
+function stockOpts(req, body) {
+  return {
+    userId: actorId(req),
+    stockReason: (body && body.stock_reason) || 'correction',
+    stockNote: (body && typeof body.stock_note === 'string' && body.stock_note.trim()) ? body.stock_note.trim() : null,
+  };
+}
+
+// INSUFFICIENT_STOCK (models/Inventory.js) → a localised 409 naming the line.
+async function insufficientStockResponse(req, res, err) {
+  let name = '';
+  try {
+    if (err.variantId) {
+      const v = await ProductVariant.findById(err.variantId);
+      const p = v ? await Product.findById(v.product_id) : null;
+      name = p ? `${p.name} (${v.sku})` : '';
+    } else if (err.productId) {
+      const p = await Product.findById(err.productId);
+      name = p ? p.name : '';
+    }
+  } catch { /* name is decoration */ }
+  return res.status(409).json({
+    error: t(req.locale, 'errors.inventory.insufficientStock', { name, onHand: err.onHand, wanted: err.wanted }),
+    code: 409, reason: 'INSUFFICIENT_STOCK',
+  });
+}
+
 const adminShopController = {
   // ── Products ──────────────────────────────────────────────────────────────
 
@@ -188,6 +244,8 @@ const adminShopController = {
         images:   imagesByProduct.get(p.id)   || [],
         variants: variantsByProduct.get(p.id) || [],
       }));
+      // on_hand / committed / available on each product and variant.
+      await Inventory.decorate(withAll);
       return res.json({ products: withAll });
     } catch (err) { next(err); }
   },
@@ -201,7 +259,9 @@ const adminShopController = {
         ProductVariant.listForProduct(product.id, { activeOnly: false }),
         Collection.listForProduct(product.id),
       ]);
-      return res.json({ product: { ...product, images, variants, collections } });
+      // on_hand / committed / available on the product and each variant.
+      const full = await Inventory.decorate({ ...product, images, variants, collections });
+      return res.json({ product: full });
     } catch (err) { next(err); }
   },
 
@@ -249,6 +309,8 @@ const adminShopController = {
       }
       const sectionErr = validateSectionFields(req.body);
       if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
+      const stockErr = stockError(req, req.body);
+      if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
       const product = await Product.create({
         slug, name,
         description:    description || '',
@@ -271,7 +333,7 @@ const adminShopController = {
         delivery_format:  delivery_format || null,
         is_bookable:      Boolean(is_bookable),
         active: active !== false,
-      });
+      }, { userId: actorId(req) });
       if (product.active) submitLocalized(`/shop/${product.slug}`);
       return res.status(201).json({ product });
     } catch (err) {
@@ -297,12 +359,14 @@ const adminShopController = {
       }
       const sectionErr = validateSectionFields(req.body);
       if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
+      const stockErr = stockError(req, req.body);
+      if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
       // Look up current product so auto-translate won't overwrite manual IS
       // edits when the payload only changes EN fields.
       const existingRow = await Product.findById(req.params.id);
       await autoTranslateFields(req.body, PRODUCT_TRANSLATE_PAIRS, { existingRow });
 
-      const product = await Product.update(req.params.id, req.body);
+      const product = await Product.update(req.params.id, req.body, stockOpts(req, req.body));
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       // Optional collection membership: a `collection_ids` array replaces the
       // product's collections in one PATCH (the editor sends it on save).
@@ -333,6 +397,69 @@ const adminShopController = {
       // Ping IndexNow so Bing re-fetches and drops the now-inactive product.
       submitLocalized(`/shop/${product.slug}`);
       return res.json({ product });
+    } catch (err) { next(err); }
+  },
+
+  // GET /products/:id/adjustments — the stock audit trail of one product (its
+  // variants included), newest first: who moved how much, why, which order.
+  async productAdjustments(req, res, next) {
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      const adjustments = await Inventory.history(product.id, { limit: req.query.limit });
+      return res.json({ adjustments });
+    } catch (err) { next(err); }
+  },
+
+  // POST /products/bulk  { ids:[], action:'activate'|'deactivate' }
+  //                      { ids:[], action:'edit', fields:{ … } }
+  // Bulk actions from the products list (harvested from icelandicstore #247).
+  // 'edit' applies the BULK_EDIT_FIELDS subset to every selected product, each
+  // value checked by the same rules the product form's save uses.
+  async bulkUpdateProducts(req, res, next) {
+    try {
+      const { ids, action, fields } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0 || ids.length > 100
+          || ids.some(x => typeof x !== 'string' || !x || x.length > 64)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkProductIdsInvalid'), code: 400 });
+      }
+      if (!['activate', 'deactivate', 'edit'].includes(action)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkActionInvalid'), code: 400 });
+      }
+      let patch;
+      if (action === 'edit') {
+        if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkFieldsInvalid'), code: 400 });
+        }
+        patch = {};
+        for (const [k, v] of Object.entries(fields)) {
+          if (!BULK_EDIT_FIELDS.includes(k)) {
+            return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkFieldsInvalid'), code: 400 });
+          }
+          if (v === undefined || v === null || v === '') continue;
+          patch[k] = v;
+        }
+        if (!Object.keys(patch).length) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkFieldsInvalid'), code: 400 });
+        }
+        const sectionErr = validateSectionFields(patch);
+        if (sectionErr) return res.status(400).json({ error: sectionErr, code: 400 });
+        if (patch.vat_rate !== undefined && ![0, 11, 24].includes(Number(patch.vat_rate))) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkFieldsInvalid'), code: 400 });
+        }
+        if (patch.active !== undefined && typeof patch.active !== 'boolean') {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkFieldsInvalid'), code: 400 });
+        }
+        if (patch.bin !== undefined && (typeof patch.bin !== 'string' || patch.bin.trim().length > BIN_MAX_LEN)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkFieldsInvalid'), code: 400 });
+        }
+        if (patch.vat_rate !== undefined) patch.vat_rate = Number(patch.vat_rate);
+        if (typeof patch.bin === 'string') patch.bin = patch.bin.trim();
+      } else {
+        patch = { active: action === 'activate' };
+      }
+      const updated = await Product.bulkEdit(ids, patch);
+      return res.json({ updated: updated.length });
     } catch (err) { next(err); }
   },
 
@@ -425,6 +552,8 @@ const adminShopController = {
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
 
       const { sku, attributes, price_isk, price_eur, stock, active } = req.body || {};
+      const stockErr = stockError(req, req.body);
+      if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
       if (!sku || typeof sku !== 'string' || sku.length > 100) {
         return res.status(400).json({ error: 'sku is required (max 100 chars)', code: 400 });
       }
@@ -439,7 +568,7 @@ const adminShopController = {
         price_eur: price_eur != null ? Number(price_eur) : null,
         stock: Number(stock) || 0,
         active: active !== false,
-      });
+      }, { userId: actorId(req) });
       return res.status(201).json({ variant });
     } catch (err) {
       if (err.code === '23505') {
@@ -454,7 +583,16 @@ const adminShopController = {
 
   async updateVariant(req, res, next) {
     try {
-      const variant = await ProductVariant.update(req.params.variantId, req.body || {});
+      const stockErr = stockError(req, req.body);
+      if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
+      // A variant of ANOTHER product is not this route's to edit.
+      const owned = await ProductVariant.findById(req.params.variantId);
+      if (!owned || String(owned.product_id) !== String(req.params.id)) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
+      }
+      // stockOpts: a stock cell edit lands in inventory_adjustments naming who
+      // moved it (the variant grid PATCHes one field at a time — ice #275).
+      const variant = await ProductVariant.update(req.params.variantId, req.body || {}, stockOpts(req, req.body));
       if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       return res.json({ variant });
     } catch (err) {
@@ -486,10 +624,13 @@ const adminShopController = {
       if (!payment_status && !fulfillment_status) {
         return res.status(400).json({ error: 'payment_status or fulfillment_status required', code: 400 });
       }
-      const order = await Order.setOrderStatuses(req.params.id, { payment_status, fulfillment_status });
+      // Fulfilment moves on hand here (Order.setOrderStatuses → Inventory), with
+      // the acting admin on the audit rows.
+      const order = await Order.setOrderStatuses(req.params.id, { payment_status, fulfillment_status }, { userId: actorId(req) });
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       return res.json({ order });
     } catch (err) {
+      if (err.code === 'INSUFFICIENT_STOCK') return insufficientStockResponse(req, res, err);
       if (String(err.message || '').startsWith('Invalid ')) {
         return res.status(400).json({ error: err.message, code: 400 });
       }
@@ -591,7 +732,7 @@ const adminShopController = {
   },
 
   // POST /api/v1/admin/shop/products/import/apply → apply updates, existing rows
-  // only (never create/delete). Stock is written directly (no audit table here).
+  // only (never create/delete). Stock moves are audited (reason 'import').
   async applyProductImport(req, res, next) {
     try {
       const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
@@ -602,8 +743,9 @@ const adminShopController = {
       for (const c of classified) {
         if (c.status !== 'update') { skipped += 1; continue; }
         try {
-          if (c.kind === 'variant') await ProductVariant.update(c.target.variantId, c.changes);
-          else await Product.update(c.target.productId, c.changes);
+          const opts = { userId: actorId(req), stockReason: 'import' };
+          if (c.kind === 'variant') await ProductVariant.update(c.target.variantId, c.changes, opts);
+          else await Product.update(c.target.productId, c.changes, opts);
           updated += 1;
         } catch (err) {
           failed += 1;

@@ -57,6 +57,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
+| 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 
 ---
 
@@ -2406,3 +2407,166 @@ Full runs before these fixes: Jest 3593 passed, with one expected failure (R4's 
 **Copy.** `adminGeneral.modules*`, `adminGeneral.module.*` and
 `adminGeneral.preset.*` were written in Icelandic, mirrored in English, and are
 DRAFT. There is no migration.
+
+<a id="harvest-ice-c-2026-09-24"></a>
+## 2026-09-24 — Ice harvest, chunk C: inventory and the shop floor (lane 2)
+
+Lane 2 of the 2026-09-24 upward harvest from icelandicstore (`main` @
+`4694289`, read from the clone `C:\ice-harvest`, never written). The survey is
+`company/ice-harvest-2026-09-24.md` §2 chunk C. Halli's defaults were taken as
+the sign-off: this chunk is the approval of ENHANCEMENTS #22 (scanning), #23
+(audited stock) and the bug-shaped half of #25 (the sold-out basket); the
+engine keeps `stock >= 0` (no overselling); no sequential order numbers; no
+line discount; the MCP catalogue tools behind switches, all off. There is no
+shared history with ice, so every commit was ported by reading it and applying
+it by hand onto the ENGINE's `products` / `product_variants` / `orders` /
+`order_items` shapes, keeping ice's file names where a file is new
+(`models/Inventory.js`, `utils/availability.js`, `components/ScanInput.js`
+unchanged, `mcp/tools/products.js`) so the future graft merges identical files.
+
+**On hand / Committed / Available** (ice `418c46f` #243, `f8a6252` #275, the
+stock-audit part of `5ac1402`). `stock` stays On hand. Committed is DERIVED
+from the lines of PAID orders whose stock has not moved
+(`orders.stock_deducted_at IS NULL`); Available = On hand − Committed. Where
+the engine differs from ice, on purpose:
+- **A pending order commits nothing.** Ice commits an order the moment it is
+  placed (its orders are wholesale, invoiced). The engine's orders are Stripe
+  checkouts: a pending row is an open payment session that may never be paid,
+  and there is no expiry sweep, so committing it would lock stock forever.
+  Committed starts when the payment lands.
+- **No overselling.** Ice dropped both `stock >= 0` CHECKs so an oversold item
+  reads −2. The engine keeps them. `Inventory.applyLines` refuses a decrement
+  below zero with a typed `INSUFFICIENT_STOCK` (a localised 409 naming the
+  line), so a fulfilment the shelf cannot cover changes nothing and the admin
+  corrects the count first.
+- **The webhook commits, it does not decrement.** Ice removed the webhook's
+  `decrementStockAtomic`. Here the webhook still guards the race the old
+  decrement guarded: under the row locks (the orders row by the UPDATE, then
+  `Inventory.lockForWrite`) it checks the order's lines against Available,
+  excluding itself, and a payment Available cannot cover takes the old "stock
+  race lost" branch — roll back, mark failed, refund.
+- **Bookable services** (a product-level line of an `is_bookable` product)
+  never count and never move, as the webhook always skipped them.
+- **No consignment exclusion, no POS backfill, no `made_to_order`, no
+  `build_id`** — all ice-only.
+
+On hand moves ONCE per order, in the now-transactional
+`Order.setOrderStatuses` (orders row FOR UPDATE, then the lines through
+`Inventory.moveForOrder`): into fulfilled/delivered deducts and stamps; back to
+unfulfilled/partial restores and clears. The acting admin is on every row.
+Every other stock write goes through the same writer too: `Product.update` and
+`ProductVariant.update` no longer take `stock` as a plain column — a change
+moves through `Inventory.setAbsolute` under the row lock, in the same
+transaction as the field update (ice #275's fix, including the variant grid
+that PATCHes one cell at a time). The CSV import writes with reason `import`.
+Opening stock on a new product or variant is recorded as an `opening` row (ice
+writes none; "every stock change audited" was the brief). The product editor
+offers a reason (correction, recount, received, damaged, returned, theft or
+loss, other) and a note; the detail panel shows Available, On hand and
+Committed and a Stock history (`GET /products/:id/adjustments`). The dead
+`ProductVariant.upsertByAttrs` (an unaudited `stock = EXCLUDED.stock`) went,
+as in ice; unlike ice it had a caller, `seed-shop.js`, which now writes its own
+SQL and sets stock on the first insert only.
+
+The public catalogue now sends `available` only — `stock`, `on_hand` and
+`committed` are stripped for every viewer (the raw on-hand count used to reach
+anonymous visitors). `ProductCard`, `ProductView`, the in-stock filter and the
+Product JSON-LD availability read it.
+
+**Migration 112 `inventory_adjustments`** — the table with ice's full shape
+(073 + 075 `product_variant_id` + 101 `order_id` + 121 `client_token`),
+`orders.stock_deducted_at`, the partial index for the committed rollup,
+`idx_order_items_product`. Every statement is IF NOT EXISTS, so on ice's
+databases it is a no-op; ice's product file lists `073/075/101/121` as its
+aliases at graft time. Backfill: the previous release decremented at payment,
+so every paid or fulfilled order is stamped settled. Additive (invariant 14);
+one caveat recorded in PLAN — an order the OLD container marks paid inside the
+swap window is decremented by the old code and would be deducted again at
+fulfilment. It takes number 112 because lane 1 holds 111 for its `users`
+preferences migration; whichever lane merges second renumbers on a clash.
+
+**Lock order and 40P01** (ice `f5311bf` #380, `17d44fe` #378 lock half,
+`3916bf5` #387). One sequence everywhere: the orders row → parent products FOR
+KEY SHARE → variants → products, each sorted. `applyLines` sorts within the
+call and share-locks parents only (share-then-upgrade is how two fulfilments of
+one product deadlocked in ice); `Order.createWithItems` calls
+`Inventory.lockReferences` before its line inserts (their foreign keys would
+otherwise share-lock in cart order); `Product.bulkEdit` calls
+`lockForWrite`. `errorHandler.js` maps a status-less 40P01 to a retryable 409
+`{ reason: 'BUSY', retryable: true }`, localised, kept out of the event log.
+The engine's POS moves no stock, so ice's in-place POS retry does not apply.
+
+**The sold-out basket guard** (ice `4eccc0a` #244, ENHANCEMENTS #25 — the live
+engine bug: a sold-out cart line went straight to Stripe). `utils/availability.js`
+(ice's, cut to the engine: no `made_to_order`, services unlimited, the
+engine's 50-per-line cap) is shared by the cart (re-reads the catalogue, marks
+a short line, caps its box, swaps the checkout link for a disabled button) and
+the checkout (the last gate: a warning listing the lines, submit disabled).
+The server backs it: `POST /shop/checkout` answers 409 `NOT_ENOUGH_STOCK` for a
+line Available cannot cover (it used to compare on hand). Ice's quick-order
+grid, paste and reorder paths do not exist in the engine.
+
+**The search box that dropped letters** (ice `2086c9d` #350). The engine's
+`ShopFilters.js` had the identical bug: the debounced handler repainted the
+filter bar once the clear button had to appear, replacing the input being
+typed in. The buttons are now always rendered and toggled with `[hidden]`;
+`_paint()` carries value, focus and caret across any other repaint; a clear
+cancels a pending debounce.
+
+**Bulk product edit** (ice `2ac3ce2` #247). The engine's product list had no
+selection; it now has row checkboxes, a bulk bar (Set as active / inactive /
+Edit… / Clear) and `POST /products/bulk` (`activate` · `deactivate` · `edit`).
+The edit field set is the engine's: type, subcategory, VAT rate, status, bin
+(ice's vendor / product category / pack qty / tags are ice-only columns), each
+validated like the product form; never name, price or stock.
+
+**The till scanner** (ice `02376c7`, tones from `6bc42a3` #246).
+`components/ScanInput.js` is ice's file unchanged. First mount:
+`AdminPosView`, with `GET /api/v1/admin/bookkeeping/pos/lookup?code=` (the
+`pos` view; `Product.resolveByCode`, variant first; only what the till's
+catalogue would sell — active, priced, with a VAT rate). One scan adds one
+unit; a variant rings up at its own price under the parent product. Instead of
+ice's `scan_sounds` / `scan_volume` general settings, the till has a
+per-device sound switch (`localPref`) — a till's noise level belongs to the
+device. `public/css/scan.css` is tokens only (ice's flash used rgba literals).
+
+**MCP catalogue tools** (ice `a380e0d` #248, `7ce6acf` #250, `9139828` #361).
+`create_product` (always a Draft), `update_product` (never stock), `set_stock`
+(through the audited writer, reason + `MCP: <note>`, the token owner as the
+actor). Ice's env-var capability flags became `mcp.write.productCreate` /
+`productUpdate` / `stock` in `config/client.json` — schema default false, env
+`CLIENT_CONFIG_MCP_WRITE_*` re-read per call — a third gate in
+`registry.permitted()` after the scope double-gate, plus the shop module.
+`set_bin` and the `mcp` tag are ice-only.
+
+**Left out, and why.** Sales-report periods (ice `ad022b2` #414 — optional in
+the brief, M-sized, needs net-of-VAT per order derived from lines; a later
+chunk). Ice's Inventory Watch, pick, receive and inventory-check screens
+(ice-only surfaces). The line discount and sequential order numbers (Halli's
+defaults). A till sale moving stock (the engine's POS never did; a decision
+for Halli, in PLAN).
+
+**Tests.** `tests/integration/inventoryThreeNumbers.test.js` (new, 19): the
+opening row; an admin edit with actor, reason and note; two edits delta from
+the new figure; bad stock / reason → 400 and nothing moves; the variant grid
+PATCH audited under its parent; a variant PATCH through another product → 404;
+the stock history; a paid order commits, a pending one does not, the public
+API sends `available` only (list and detail, variants per variant);
+`availabilityShortfalls` and services; fulfil deducts once, a second fulfil
+moves nothing, un-fulfil restores, all audited with the order; a fulfilment the
+shelf cannot cover → 409 and nothing changes; the webhook commits without
+decrementing and refuses a payment that would oversell (signed events through
+`/api/v1/shop/webhook`); the 112 backfill statement; five rounds of two
+fulfilments with opposite cart orders racing an order insert (no 40P01); bulk
+edit and its refusals. `tests/integration/mcpCatalogTools.test.js` (new, 8):
+all three off by default, each switch opens exactly its tool, a read-only
+ceiling offers nothing, the shop module off hides them, and each tool's
+behaviour. `tests/unit/availability.client.test.js` and
+`errorHandlerDeadlock.test.js` (new). `shopFilters.test.js`'s fixture reads
+`available`; `adminProductImportExport.test.js` unchanged and green.
+Runs: lint and `check:i18n` clean; `test:unit` 82 suites, 1621 passed; full Jest 167 suites, 3632 passed, 1 skipped, 3 failed — all three `canceling statement due to statement timeout` in `cleanTables` while the other two harvest lanes were rebuilding their test databases on the same Postgres (`selfUpdateDisabled`, `staffAudit`, `uploadVolumeAlert`, none touching this chunk); the three re-run alone: 14 passed.
+
+**Copy.** The new `adminProducts.*` (inventory numbers, reasons, history, bulk),
+`cart.*` / `checkout.*` stock notices, `scan.*` and the server
+`errors.inventory.*` / `errors.pos.*` / `errors.busyRetry` strings are Icelandic
+first (the cart ones are ice's), mirrored in English, and DRAFT.

@@ -29,6 +29,7 @@
 const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
+const Inventory = require('../models/Inventory');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 const { isHiddenRoute } = require('../config/publicSurface');
 const { clientAppEnv }  = require('../config/appEnv');
@@ -331,7 +332,17 @@ async function fetchDetailRow(detail) {
     if (detail.type === 'product') {
       const { rows } = await db.query(
         `SELECT p.id, p.slug, p.name, p.name_is, p.description, p.description_is,
-                p.price_isk, p.price_eur, p.stock, p.active, p.updated_at,
+                p.price_isk, p.price_eur, p.active, p.updated_at,
+                -- Available, not on hand (models/Inventory.js): what paid orders
+                -- already hold is not InStock for the next visitor.
+                (CASE WHEN p.variant_axes <> '[]'::jsonb
+                      THEN (SELECT COALESCE(SUM(stock), 0)::int FROM product_variants
+                             WHERE product_id = p.id AND active = TRUE)
+                      ELSE p.stock END)
+                - COALESCE((SELECT SUM(oi.quantity)::int
+                              FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                             WHERE oi.product_id = p.id AND ${Inventory.OPEN_ORDER_SQL}
+                               AND NOT (p.is_bookable AND oi.product_variant_id IS NULL)), 0) AS available,
                 (SELECT url FROM product_images
                   WHERE product_id = p.id
                ORDER BY position ASC, created_at ASC
@@ -470,7 +481,7 @@ function articleSchema(row, locale, canonical) {
 function productSchema(row, locale, canonical) {
   const name = pickLocale(row, 'name', 'name_is', locale);
   const desc = pickLocale(row, 'description', 'description_is', locale);
-  const availability = (row.stock > 0)
+  const availability = (row.available > 0)
     ? 'https://schema.org/InStock'
     : 'https://schema.org/OutOfStock';
   return {

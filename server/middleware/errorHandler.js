@@ -2,11 +2,18 @@
 // Log full details server-side; return only a generic message to the client
 
 const EventLog = require('../models/EventLog');
+const { t }    = require('../i18n');
 
 const SAFE_STATUSES = new Set([400, 401, 403, 404, 409, 422, 429]);
 
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
-  const status = err.status || 500;
+  // Postgres picked this request's transaction as a deadlock victim (40P01). It
+  // was rolled back whole — nothing happened — so the honest answer is "busy,
+  // send it again": a retryable 409, not a 500 in the event log. The stock lock
+  // order (models/Inventory.js) is designed so this cannot happen; this is the
+  // backstop for a cycle nobody has found yet (harvested from icelandicstore #380).
+  const deadlock = !err.status && err.code === '40P01';
+  const status = deadlock ? 409 : (err.status || 500);
 
   // Always log the full error server-side — include request ID for log correlation
   const reqId = req.requestId || '-';
@@ -41,6 +48,11 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     ? (err.message || 'Request failed')
     : 'Internal Server Error';
 
+  if (deadlock) {
+    return res.status(409).json({
+      error: t(req.locale, 'errors.busyRetry'), code: 409, reason: 'BUSY', retryable: true,
+    });
+  }
   res.status(status).json({ error: clientMessage, code: status });
 }
 

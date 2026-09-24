@@ -20,7 +20,7 @@ paths:
 migrations: [054_order_payment_fulfillment_tags]
 since: 2026-08-09
 origin: null
-history: [ui-kit]
+history: [ui-kit, harvest-ice-c-2026-09-24]
 ---
 
 Orders after checkout: the admin list with payment/fulfilment/tags (054) and bulk actions, the order detail, the sales overview, and the customer's own order history. Order invoices are issued by `invoices`.

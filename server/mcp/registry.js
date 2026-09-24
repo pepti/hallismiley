@@ -15,8 +15,15 @@ const system    = require('./tools/system');
 // feature requests. Scope 'write', so the environment ceiling decides whether
 // a stack offers them at all (production: MCP_ALLOWED_SCOPES unset = read).
 const manage    = require('./tools/manage');
+// Catalogue write tools (harvest-ice-c-2026-09-24, from icelandicstore):
+// create_product / update_product / set_stock. Scope 'write' AND each behind
+// its own mcp.write.* switch in config/client.json, all OFF by default, AND
+// the shop module — the third gate below.
+const products  = require('./tools/products');
+const { clientConfig, envNameFor } = require('../config/clientConfig');
+const { isModuleEnabled } = require('../config/modules');
 
-const TOOLS = [...system, ...manage];
+const TOOLS = [...system, ...manage, ...products];
 
 // The environment's scope ceiling. Unset → read-only: PROD is safe by default
 // and turning writes on is a deliberate per-stack act (REGLA_WS_ALLOW_LIVE
@@ -26,10 +33,25 @@ function allowedScopes() {
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+// Third gate, for a tool that names a write switch (writeFlag, a key of
+// mcp.write in config/client.json): the switch must be on. The env var is
+// re-read per call like the ceiling, so turning one off bites immediately;
+// otherwise the resolved config decides. A tool may also name the module it
+// belongs to — a switched-off module's tools are absent.
+function writeFlagOn(flag) {
+  const raw = process.env[envNameFor(['mcp', 'write', flag])];
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return Boolean(clientConfig.mcp && clientConfig.mcp.write && clientConfig.mcp.write[flag]);
+}
+
 function permitted(tool, tokenScopes) {
   const ceiling = allowedScopes();
   const scope = tool.scope || 'read';
-  return ceiling.includes(scope) && (tokenScopes || []).includes(scope);
+  if (!ceiling.includes(scope) || !(tokenScopes || []).includes(scope)) return false;
+  if (tool.writeFlag && !writeFlagOn(tool.writeFlag)) return false;
+  if (tool.module && !isModuleEnabled(tool.module)) return false;
+  return true;
 }
 
 // Tools the presented token may call in this environment (drives tools/list —
@@ -67,4 +89,4 @@ function validateArgs(tool, args) {
   return null;
 }
 
-module.exports = { listTools, getTool, validateArgs, permitted, allowedScopes };
+module.exports = { listTools, getTool, validateArgs, permitted, allowedScopes, writeFlagOn };

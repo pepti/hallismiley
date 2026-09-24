@@ -57,6 +57,52 @@
         "rk tierSummaries pricing block in /llms.txt (product content, no engine slot yet)",
         "rk LASTMOD_KEYS route table (→ identity.routes[*].contentKeys)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-24",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@4694289",
+      "commits": [
+        "418c46f (#243 On hand / Committed / Available)",
+        "f8a6252 (#275 variant stock audited)",
+        "5ac1402 (stock-audit part only)",
+        "f5311bf (#380 lock order, 40P01 → 409)",
+        "17d44fe (#378 lock half)",
+        "3916bf5 (#387 lock-order test)",
+        "4eccc0a (#244 sold-out basket guard)",
+        "2086c9d (#350 search box)",
+        "2ac3ce2 (#247 bulk edit)",
+        "02376c7 (ScanInput)",
+        "6bc42a3 (#246 ScanInput tones only)",
+        "a380e0d (#248 MCP product tools)",
+        "7ce6acf (#250 create_product is a Draft)",
+        "9139828 (#361 write flags → config/client.json switches)"
+      ],
+      "branch": "harvest/ice-2026-09-24-cd",
+      "chunk": "C",
+      "features": [
+        "shop-catalog",
+        "cart-checkout",
+        "orders",
+        "pos",
+        "mcp-connector",
+        "platform-core"
+      ],
+      "migrations": {
+        "112_inventory_adjustments": "ice 073_inventory_watch + 075_inventory_adjustment_variant + 101_inventory_three_numbers + 121_inventory_adjustment_token (aliases in ice.js at graft; IF NOT EXISTS)"
+      },
+      "trimmed": [
+        "stock >= 0 CHECK drop (engine keeps it — no overselling)",
+        "made_to_order / consignment / POS backfill / build_id",
+        "pending orders commit nothing (engine orders are Stripe sessions)",
+        "ice quick-order grid, paste, reorder, pick/receive/inventory-check screens",
+        "scan_sounds/scan_volume settings (per-device switch instead)",
+        "set_bin, mcp tag, vendor/product_category/pack_qty/tags bulk fields",
+        "ad022b2 sales-report periods (optional, deferred)"
+      ]
     }
   ]
 }
