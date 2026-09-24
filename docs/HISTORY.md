@@ -2290,6 +2290,8 @@ run `UPDATE mcp_tokens SET revoked_at = NOW() WHERE kind IN ('access',
 **Copy.** `connect.*` and `mcp.oauthLabel/oauthHelp/kindOAuth` were written
 natively in Icelandic, mirrored in English, and are DRAFT pending Halli.
 
+**Found by rekstrarkerfid's sync, the same day.** Two engine tests pinned engine facts. `mcpOAuth.test.js` expected the realm literal `orangesmiley-mcp`, and the realm itself was an engine literal that rekstrarkerfid had forked to `rekstrarkerfi-mcp`. The realm is now the brand from the identity, lowercased to its ASCII letters and digits (`mcpAuth.mcpRealm()`): `orangesmiley-mcp` here and `rekstrarkerfi-mcp` there, so the fork is gone. The R5b concurrency tests switched `party`/`news`/`bio`, which a product may leave out of its contract; they now take two modules from this instance's contract.
+
 **Downstreams.** The flow arrives by merge with migration 110, which needs no
 alias. It is dark wherever `MCP_ENABLED` is unset. Each downstream's `APP_URL`
 must be set, because it is the issuer.
