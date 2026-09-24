@@ -542,6 +542,17 @@ export async function adminResetTotp(userId, password) {
   return data;
 }
 
+/** Replace a mailbox-less login's password; answers { username, password } once. */
+export async function adminNewPassword(userId) {
+  const headers = await _csrfHeaders();
+  const res = await fetch(`/api/v1/admin/users/${userId}/new-password`, {
+    method: 'POST', credentials: 'include', headers,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 export async function adminDeleteUser(userId) {
   const headers = await _csrfHeaders();
   const res = await fetch(`/api/v1/admin/users/${userId}`, {

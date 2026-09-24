@@ -37,6 +37,9 @@ async function isEnrolmentEligible(user) {
 }
 const { t }               = require('../i18n');
 const mfaPolicy           = require('../auth/mfaPolicy');
+// A name-only login's reserved <username>@noemail.invalid (ice #397) is never a
+// reset or verification target: guessable from the username, deliverable nowhere.
+const { realEmailSql }    = require('../utils/placeholderEmail');
 
 const scrypt = new Scrypt();
 
@@ -638,7 +641,8 @@ const authController = {
       }
 
       const { rows } = await dbQuery(
-        'SELECT id, preferred_locale FROM users WHERE email = $1 AND disabled = FALSE',
+        `SELECT id, preferred_locale FROM users
+          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
         [email.toLowerCase()]
       );
 
@@ -789,7 +793,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, email_verified, email_verify_token, email_verify_expires
-         FROM users WHERE email = $1 AND disabled = FALSE`,
+         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
         [email.toLowerCase()]
       );
 

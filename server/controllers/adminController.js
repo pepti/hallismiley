@@ -11,6 +11,12 @@ const staffAudit         = require('../services/staffAudit');
 const securityLogger     = require('../observability/securityLogger');
 const mfaService         = require('../services/mfaService');
 const McpToken           = require('../models/McpToken');
+const { Scrypt }         = require('oslo/password');
+const { generatePassword } = require('../utils/generatePassword');
+// A name-only login's reserved <username>@noemail.invalid is never shown or
+// searched as an address (ice #397): the list reads it as NULL + no_email.
+const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
+const EMAIL_SHOWN = realEmailExpr('email');
 
 // Only an admin may hold an MCP token (mcpAdminRoutes mints them; mcp/owner.js
 // refuses a non-admin owner on every call). When an account stops being an
@@ -70,12 +76,13 @@ const adminController = {
       // the filtered set.
       const q = String(req.query.q || '').trim(); // String() guards array params (?q=a&q=b)
       const whereSql = q
-        ? 'WHERE (username ILIKE $1 OR email ILIKE $1 OR display_name ILIKE $1)'
+        ? `WHERE (username ILIKE $1 OR ${EMAIL_SHOWN} ILIKE $1 OR display_name ILIKE $1)`
         : '';
       const term = q ? [`%${q}%`] : []; // $1 when present
 
       const { rows } = await dbQuery(
-        `SELECT id, username, email, role, avatar, display_name,
+        `SELECT id, username, ${EMAIL_SHOWN} AS email, NOT (${realEmailSql('email')}) AS no_email,
+                role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, approval_status, requested_at, created_at, last_login_at,
                 totp_enabled
@@ -288,6 +295,47 @@ const adminController = {
         entityType: 'user', entityId: id, summary: { username: target.username },
       });
       return res.json({ enabled: false });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/users/:id/new-password — replace a MAILBOX-LESS login's
+  // password (ice #382/#397): the only way back in when the one shown at create
+  // time is lost, since there is nowhere to send a reset link. Answers with the
+  // new password ONCE (no-store); it is never logged or stored in the clear.
+  //
+  // The ADDRESS decides, not the role: only a login created without a mailbox
+  // (a reserved placeholder address, which the admin UI can never set) qualifies
+  // — otherwise an admin could mint a password for a colleague's real account,
+  // read it off the screen and impersonate them. And never a staff account
+  // (isStaffAccount): staff always set their own password.
+  async newPassword(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { rows } = await dbQuery('SELECT id, username, role, email FROM users WHERE id = $1', [id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      if (!isPlaceholderEmail(rows[0].email) || await isStaffAccount(id)) {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.hasMailbox'), code: 409 });
+      }
+      const password = generatePassword();
+      await dbQuery(
+        `UPDATE users
+            SET password_hash = $1,
+                password_reset_token = NULL, password_reset_expires = NULL,
+                failed_login_attempts = 0, locked_until = NULL
+          WHERE id = $2`,
+        [await new Scrypt().hash(password), id]
+      );
+      await lucia.invalidateUserSessions(id);
+      // Who replaced a credential, and when — never the password itself.
+      securityLogger.adminAction(req.user.id, 'name_only_password_rotated', id, { role: rows[0].role });
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.password_replaced',
+        entityType: 'user', entityId: id, summary: { username: rows[0].username },
+      });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ username: rows[0].username, password });
     } catch (err) { next(err); }
   },
 

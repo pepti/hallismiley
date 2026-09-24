@@ -1,4 +1,5 @@
-import { isAuthenticated, isAdmin, getUser, adminGetUsers, adminUpdateUser, adminDeleteUser, adminApproveUser, adminResetTotp } from '../services/auth.js';
+import { isAuthenticated, isAdmin, getUser, adminGetUsers, adminUpdateUser, adminDeleteUser, adminApproveUser, adminResetTotp, adminNewPassword } from '../services/auth.js';
+import { credentialsPanelHtml, wireCredentialsPanel } from '../components/OneTimeCredentials.js';
 import { showToast }     from '../components/Toast.js';
 import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
@@ -164,7 +165,7 @@ export class AdminUsersView {
                 <span class="user-username">${escHtml(u.username)}</span>
                 ${u.display_name ? `<span class="user-displayname">${escHtml(u.display_name)}</span>` : ''}
               </td>
-              <td class="user-email">${escHtml(u.email)}</td>
+              <td class="user-email">${u.no_email ? `<span class="users-no-email">${t('adminUsers.noEmail')}</span>` : escHtml(u.email)}</td>
               <td>
                 <select class="form-input form-input--sm role-select" data-user-id="${escHtml(String(u.id))}" data-action="role">
                   ${this._roleOptions(u.role)}
@@ -207,6 +208,11 @@ export class AdminUsersView {
                 <button class="btn btn--sm btn--ghost approve-user-btn"
                         data-user-id="${escHtml(String(u.id))}" data-approve-action="decline"
                         title="${t('adminUsers.decline')}">${t('adminUsers.decline')}</button>` : ''}
+                ${u.no_email && u.role === 'user' ? `
+                <button class="btn btn--sm btn--outline new-password-btn"
+                        data-user-id="${escHtml(String(u.id))}"
+                        data-username="${escHtml(u.username)}"
+                        title="${t('adminUsers.newPasswordHint')}">${t('adminUsers.newPassword')}</button>` : ''}
                 ${u.totp_enabled && String(u.id) !== String(getUser()?.id) ? `
                 <button class="btn btn--sm btn--outline reset-totp-btn"
                         data-user-id="${escHtml(String(u.id))}"
@@ -242,6 +248,10 @@ export class AdminUsersView {
 
     wrap.querySelectorAll('.approve-user-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onApproveUser(btn));
+    });
+
+    wrap.querySelectorAll('.new-password-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onNewPassword(btn));
     });
 
     wrap.querySelectorAll('.reset-totp-btn').forEach(btn => {
@@ -349,6 +359,31 @@ export class AdminUsersView {
       }
       showToast(t('adminUsers.twoStepResetDone', { name: username }), 'success');
       await this._load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // A login with no mailbox lost its password: mint a new one and show it
+  // ONCE (ice #382/#397). The old one stops working and its sessions end.
+  async _onNewPassword(btn) {
+    const username = btn.dataset.username;
+    if (!confirm(t('adminUsers.newPasswordConfirm', { name: username }))) return;
+    btn.disabled = true;
+    try {
+      const res = await adminNewPassword(btn.dataset.userId);
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay open';
+      overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${credentialsPanelHtml({
+        username: res.username, password: res.password, idPrefix: 'users-otc',
+        actionsHtml: `<button type="button" class="btn btn--primary" data-otc-done>${t('adminUsers.passwordDone')}</button>`,
+      })}</div>`;
+      document.body.appendChild(overlay);
+      wireCredentialsPanel(overlay);
+      overlay.querySelector('[data-otc-done]').addEventListener('click', () => overlay.remove());
+      overlay.querySelector('[data-otc]')?.focus();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
