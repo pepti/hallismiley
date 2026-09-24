@@ -279,8 +279,12 @@ chunk lands; add a HISTORY entry for the story.
   prefixes (`/auth/party-magic-login`, admin `users/:id/party-*`) and MCP
   `environment_info`'s counts ignore the switches (low).
 - MCP OAuth landed 2026-09-24 ([mcp-oauth-2026-09-24](docs/HISTORY.md#mcp-oauth-2026-09-24)):
-  roadmap R5a. Open: (a) R5b — write tools (update channel/window, module
-  switch) and the feature-request tool; (b) connecting claude.ai for real
+  roadmap R5a; R5b (write tools) landed the same day
+  ([mcp-write-tools-2026-09-24](docs/HISTORY.md#mcp-write-tools-2026-09-24)). Open: (a) turning `write` on
+  for a stack (`MCP_ALLOWED_SCOPES=read,write`) is Halli's call per stack; a
+  module switch on a scaled-out deployment reaches the other instances at
+  their next boot; the `adminGeneral.module*` / `adminGeneral.preset.*` copy is
+  DRAFT; (b) connecting claude.ai for real
   needs a deployed instance with `MCP_ENABLED=true` (production has it unset —
   Halli's call per stack); (c) downstreams inherit the flow by merge (their
   `APP_URL` must be set — it is the issuer); (d) the consent copy

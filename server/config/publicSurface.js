@@ -67,12 +67,22 @@ function isDeindexedRoute(pathname) {
 // and noindexed at once; the hidden list wins, because "hidden" is the
 // stronger statement. public/js/utils/identity.js `publicNav()` is the
 // client twin; the sitemap (routes/sitemapRoutes.js) is built from this.
-const PUBLIC_NAV = identity.surface.nav
-  .filter(e => !isHiddenRoute(e.route))
-  .map(e => ({ route: e.route, labelKey: e.labelKey }));
+//
+// A FUNCTION since R5b (2026-09-24): an admin may switch a module off at run
+// time (config/modules.js setModuleSwitch), so the list is read per call. The
+// PUBLIC_NAV / LEGAL_ROUTES names below stay as getters for existing readers.
+function publicNav() {
+  return identity.surface.nav
+    .filter(e => !isHiddenRoute(e.route))
+    .map(e => ({ route: e.route, labelKey: e.labelKey }));
+}
 
 // The engine's legal pages: linked from the footer's legal row, in the
 // sitemap, never in the top nav. A product that hides one hides it here too.
-const LEGAL_ROUTES = ['/personuvernd', '/terms'].filter(r => !isHiddenRoute(r));
+function legalRoutes() {
+  return ['/personuvernd', '/terms'].filter(r => !isHiddenRoute(r));
+}
 
-module.exports = { HIDDEN_PUBLIC_ROUTES, NOINDEX_ROUTES, PUBLIC_NAV, LEGAL_ROUTES, isHiddenRoute, isDeindexedRoute };
+module.exports = { HIDDEN_PUBLIC_ROUTES, NOINDEX_ROUTES, publicNav, legalRoutes, isHiddenRoute, isDeindexedRoute };
+Object.defineProperty(module.exports, 'PUBLIC_NAV', { enumerable: true, get: publicNav });
+Object.defineProperty(module.exports, 'LEGAL_ROUTES', { enumerable: true, get: legalRoutes });

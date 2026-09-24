@@ -84,6 +84,15 @@ async function start() {
   // pay 5–7 extra SELECTs before listen().
   await migrate();
 
+  // The admin's module switches (R5b) — layer 2 over the contract, from
+  // app_settings, so it can only be read once the migrations have run. A
+  // failure keeps the contract as resolved: every contracted module on.
+  await require('./config/modules').loadAdminSwitches()
+    .then((summary) => {
+      if (summary.switched_off.length) logger.info({ modules: summary }, '[server] modules switched off by an admin');
+    })
+    .catch((err) => logger.error({ err }, '[server] could not load the admin module switches — keeping the contract'));
+
   // Did the update we triggered before the last restart actually land? This
   // runs AFTER migrations and BEFORE listen, on purpose: migrations are the
   // riskiest part of a release, and a verdict recorded before they ran would be

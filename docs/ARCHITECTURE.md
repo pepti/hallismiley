@@ -906,11 +906,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   at `/`. The machine endpoints read no cookies (why they omit CSRF) and
   answer RFC 6749 error bodies (a documented envelope exemption, like the
   JSON-RPC one).
+- **Write tools go through the admin screen's own services** ([mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24)):
+  `set_update_settings` → `selfUpdateSettings.applyAdminSettings` (the ONE
+  write path — `PATCH /api/v1/system/settings` calls it too), `set_module` →
+  `setModuleSwitch`, `file_feature_request` → `ChangeRequest`. Scope `write`:
+  a stack on the default read-only ceiling does not list them. Tools require
+  their services at load, never inside a handler (the tools must bind to the
+  app that registered them). Handlers get `{ token }` and audit the write to
+  its owner.
 - **A token is only as good as its owner**: `mcpAuth` and the token endpoint
   re-resolve the owner on every call (`server/mcp/owner.js` — role set, then
   the 2FA policy); not an admin, or disabled → 401.
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24)
 
 ## 16. Change requests — Breytingarbeiðnir
 
@@ -1037,7 +1045,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | | |
 |---|---|
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
-| Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` |
+| Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`; `tests/integration/migrateRunner.test.js` |
@@ -1059,6 +1067,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
   role editor and `canSeeView()`. Longest prefix owns a path. Hidden
   (`identity.surface.hiddenRoutes`) is the other idea: still working at its
   URL — this instance hides its portfolio and keeps `preset: "all"`.
+- **The contract is the ceiling for the admin's switches** ([mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24)):
+  layer 2 (`app_settings` `modules.admin_off`) can only switch a contracted
+  module off and back on — `setModuleSwitch` refuses turning on anything the
+  file/env leave out (that would hand out an unbought tier), and a stored list
+  naming such a module is ignored at load. Every reader asks per call
+  (`isDisabledRoute`, `disabledAdminViews()`, `publicNav()`, the sitemap), so
+  a switch applies at once in-process; layer 2 loads at boot after the
+  migrations, so another instance of a scaled-out deployment follows at its
+  next boot.
 - **Engine-only pins are gated on `engine.json.role`** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   a test that states a fact about THIS repo (the committed `client.json`
   equals the schema defaults, `features/local.json` is empty, the product

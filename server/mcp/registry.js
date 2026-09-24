@@ -11,8 +11,12 @@
 // but a read-only leads tool is a separate Halli sign-off. More tool
 // modules slot in here exactly like icelandicstore's orders/inventory/etc.
 const system    = require('./tools/system');
+// R5b (2026-09-24): the write tools — update settings, module switches,
+// feature requests. Scope 'write', so the environment ceiling decides whether
+// a stack offers them at all (production: MCP_ALLOWED_SCOPES unset = read).
+const manage    = require('./tools/manage');
 
-const TOOLS = [...system];
+const TOOLS = [...system, ...manage];
 
 // The environment's scope ceiling. Unset → read-only: PROD is safe by default
 // and turning writes on is a deliberate per-stack act (REGLA_WS_ALLOW_LIVE

@@ -78,6 +78,20 @@ deliberately NOT queryable yet — that needs its own sign-off (ENHANCEMENTS
 icelandicstore connector this was ported from ships fourteen commerce and
 finance tools besides `environment_info`; none of them exist here.
 
+## Write tools (R5b)
+
+Scope `write` — listed only for a token with `write` on a stack whose
+`MCP_ALLOWED_SCOPES` includes `write` (production: unset = read-only, so
+none of these exist there until Halli says so per stack).
+
+| Tool | Does | Refuses |
+|---|---|---|
+| `set_update_settings` | mode (auto/manual), channel (stable/canary), maintenance window (fields merged into the current one) — through the same `applyAdminSettings` as `/admin/updates` | a `managed` instance; bad days/hours/zone; a zero-length window; nothing to change |
+| `set_module` | switches a contracted module off, or back on, at once (`/admin/general` shows the same switches) | a module outside the contract; an unknown id |
+| `file_feature_request` | files a request into `/admin/feedback` (title + description, optional page), attributed to the token's owner | empty/too-long text (4000 chars in all) |
+
+`environment_info` reports `modules: { preset, enabled, contract, switched_off }`.
+
 ## OAuth 2.1 (R5a)
 
 `server/mcp/oauth.js` holds the rules, `controllers/mcpOAuthController.js`
