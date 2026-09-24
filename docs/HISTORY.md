@@ -57,6 +57,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
+| 2026-09-24 | [Harvest from icelandicstore, chunk A — security, auth, users](#harvest-ice-a-2026-09-24) | ice `4694289`, lane 1: admin resets another user's 2FA (staff target → the acting admin's password; any view holder is staff); one outer door `requireStaff` on `/api/v1/admin`; MCP tokens revoked on demote/disable; "invite sent" means sent (`utils/inviteSend.js`, `invited_at` shown); logins without email (`@noemail.invalid`, one-time password, `new-password`); contact send budget; Claude over the Azure managed identity (dark); no migration |
 
 ---
 
@@ -2406,3 +2407,122 @@ Full runs before these fixes: Jest 3593 passed, with one expected failure (R4's 
 **Copy.** `adminGeneral.modules*`, `adminGeneral.module.*` and
 `adminGeneral.preset.*` were written in Icelandic, mirrored in English, and are
 DRAFT. There is no migration.
+
+<a id="harvest-ice-a-2026-09-24"></a>
+## 2026-09-24 — Harvest from icelandicstore, chunk A: security, auth, users
+
+Lane 1 of the three-lane upward harvest from icelandicstore `main` @ `4694289`
+(survey: gitignored `company/ice-harvest-2026-09-24.md`, chunk A). Ported by
+reading ice's commits and applying them to engine files, keeping ice's file and
+function names where the engine had no equivalent, so the eventual graft sees
+identical files. Every ice-derived commit carries `Feature:` and
+`Harvested-from: icelandicstore@<sha>` trailers. No migration.
+
+**What came up**
+
+- **An admin resets another user's two-step verification** (ice `03449a3`
+  #396, feature `admin-2fa`). `POST /api/v1/admin/users/:id/totp/reset`
+  (admin + CSRF, never your own account) runs `mfaService.disable` and ends
+  every session the target holds. A STAFF target needs the acting admin's own
+  password, checked by the new `mfaService.verifyPassword`, which the
+  self-service turn-off (`/auth/totp/disable`) now shares. Engine
+  adaptation: "staff" is admin, moderator or ANY role granting an admin view
+  (ice keys it on admin/moderator; the engine's dynamic roles make a seller or
+  a contractor staff too). The server asks for the password with
+  `reason: 'password_required'`, so the Users page prompts only when needed.
+  The Users list reads the real `totp_enabled` (a 2FA badge) and carries the
+  **Reset 2FA** action; `totp_reset` goes to the security log and
+  `staff_audit_log`. Enrolment stays optional by default (Halli); the reset is
+  the way back for an enrolled account that lost both the phone and the
+  recovery codes, short of the break-glass script.
+- **One outer door on `/api/v1/admin`** (ice `4e8eb79` #418, generic half,
+  `rate-limits-security`). `app.use('/api/v1/admin', requireAuth,
+  requireStaff)` ahead of every admin router, after `moduleGate` (a
+  switched-off module stays a 404 before auth). Ice's door is
+  `requireRole('admin', 'moderator')`; in the engine that would lock sellers
+  and custom roles out of the views they hold, so `requireStaff`
+  (`auth/requireView.js`) admits admin, moderator, or any role whose resolved,
+  MFA-withheld view set is non-empty — the same memoised set `requireView`
+  reads. `requireAuth` skips re-validation when the door already ran it
+  (`req._authValidated`). Checked first: no customer-facing route sits under
+  the prefix (seller area `/api/v1/seller`, MCP consent `/api/v1/oauth`,
+  profile `/api/v1/users`).
+- **MCP tokens die with their owner's admin role** (same ice commit,
+  `mcp-connector`). Demoting an admin (`PATCH role`), disabling one, or
+  removing them from the admin role in Admin → Roles revokes their live tokens
+  (`McpToken.revokeAllForUser`). The per-call owner re-check was already in the
+  engine (R5a `mcp/owner.js`).
+- **"Invite sent" means sent** (ice `8ff8344` #258, `email`). The engine had
+  the same defect: `sendPasswordResetEmail` returned undefined on both its
+  success and its muted path. The senders now return the provider id or
+  `false`; `emailService.isRedirecting()` reports an `EMAIL_ALLOWLIST`
+  rewrite; `utils/inviteSend.js` (ice's file) is the one reporting contract.
+  Admin → Customers "add" now sends the WELCOME invite (the bulk run's
+  template and saved copy, never the reset mail) through `sendWelcomeInvite`,
+  stamps `invited_at` only on a confirmed, un-redirected send, and shows it
+  ("Invite sent <date>" in the status column). A failed or redirected send
+  keeps the modal open with a red line, the reason and a copyable
+  set-password link.
+- **Logins without email** (ice `57faf5f` #382 + `4e3aca2` #397,
+  `users-admin`; Halli's default: allowed). The Customers "add" form has a
+  **No email** choice: the name becomes the one required field, the server
+  derives a username (`utils/username.js`, Icelandic letters transliterated:
+  "Þórður Ólafsson" → `thordurolafsson`), generates a ~98-bit dashed password
+  (`utils/generatePassword.js`), stores a reserved
+  `<username>@noemail.invalid` (`utils/placeholderEmail.js`, RFC 2606;
+  `users.email` stays NOT NULL, so no migration), approves the login at once
+  and answers the password ONCE (`no-store`), shown by
+  `components/OneTimeCredentials.js`. The placeholder is kept out of every
+  mail path (`deliver()` drops it before the allowlist rewrite, so staging
+  behaves like production), forgot-password and resend-verification, the
+  bulk invite candidates, the Users and Customers lists and their search, and
+  the profile page. `POST /admin/users/:id/new-password` replaces a lost one
+  for a mailbox-less, non-staff login only: the ADDRESS decides, never the
+  role, so an admin cannot mint a password for a colleague's real account.
+  Engine adaptation: ice's trigger is its workshop role and company members;
+  here it is the Customers form. `OneTimeCredentials` keeps ice's API over the
+  engine's own markup (`.otc`, tokens only). `placeholderEmail.js` is ice's
+  file verbatim, including ice's device domain `@pressan.invalid`, so an ice
+  database's tablet rows stay "no email" after the graft.
+- **Contact send budget** (ice `1787702` #295, generic half, `leads`).
+  `services/contactBudget.js` (ice's file): 30 sends/hour, 200/day, env
+  `CONTACT_HOURLY_BUDGET` / `CONTACT_DAILY_BUDGET`, in memory per process.
+  Over budget the visitor still gets a 200 and the lead is stored; no mail
+  goes out, the row's `notify_error` says "over send budget" and Admin →
+  Monitoring gets a warn row without PII. The lead mail opens with a
+  provenance line (anonymous form, unverified sender, untrusted links).
+- **Claude over the Azure managed identity** (ice `62ac373` #326 +
+  `7ebf8d0`, `platform-core` / `site-content`; Halli's default: off unless
+  configured). `services/anthropicAuth.js` (ice's file): workload identity
+  federation when the three federation settings and App Service's identity
+  endpoint are present, `ANTHROPIC_API_KEY` otherwise, nothing = Claude off;
+  bounded token fetches; a boot self-check logs which mode is live.
+  `translator.js` builds its client from it. `observability/trackedFetch.js`
+  arrives with chunk F (lane 3), so `anthropicAuth` falls back to global
+  `fetch` until then. Setup and the two load-bearing issuer settings are in
+  `docs/DEPLOYMENT.md` § Anthropic authentication.
+
+**Left out, and why**
+
+- Ice's workshop role, company/store members, `CompanyWizard`, the Regla and
+  order-export placeholder hunks, the `memberFields` helper: customer-specific.
+- `forwardedFor.js` (engine `7c12cea`) and ice's "owner cannot see a lost
+  enquiry" half of #295 (every enquiry is a stored lead with its notification
+  outcome, migration 108): already in the engine.
+- `visionCore.js` wiring and `scripts/azure/provision.sh` changes of #326:
+  ice-only.
+- Also checked, per the survey: ice `5314314` (#54 SDL fixes: OAuth auto-link
+  on a verified email, CSV formula guard, `frame-ancestors`) and `7ec74c3`
+  (#180, a mute mail transport fails loudly) are both already in the engine.
+
+**Tests.** `adminTotp.test.js` (+17: staff/customer/custom-role targets, the
+password gate, sessions ended, CSRF, self, 404, callers), new
+`adminOuterGuard.test.js`, `mcp.test.js` (+3: demote, disable, role removal
+revoke the rows), new `inviteFeedback.test.js` (engine shape: the create path),
+new `adminNameOnlyLogin.test.js`, `contact.test.js` (+1: over budget), unit
+`emailNameOnlyRecipient`, `nameOnlyHelpers`, `generatePassword`,
+`contactBudget`, `anthropicAuth`, `anthropicWifWiring` (translator only).
+
+**Copy.** New `adminUsers.*`, `adminCustomers.*`, `errors.admin.*` and
+`email.lead.provenance` strings were written in Icelandic first and mirrored in
+English; all DRAFT.

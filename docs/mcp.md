@@ -36,7 +36,10 @@ behind the normal TOTP-protected login (migration `088_mcp_tokens`). The
 plaintext (`mcp_…`) is shown exactly once; the instance keeps a sha256 hash.
 Because a token bypasses TOTP by design, it expires (90 days default), can be
 revoked with one click, and shows its `last used` time on the page.
-Revocation is immediate.
+Revocation is immediate. Demoting an admin, disabling one, or removing them
+from the admin role revokes every live token they own as well
+(`McpToken.revokeAllForUser`; harvested from icelandicstore #418, 2026-09-24),
+on top of the per-call owner check that already refused them.
 
 ## Connecting each client
 

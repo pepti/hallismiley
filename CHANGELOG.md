@@ -21,6 +21,15 @@ No instance of this repo has been deployed; every entry below is on `master`.
 
 ### 2026-09-24
 
+- Harvest from icelandicstore, chunk A (security, auth, users): an admin can
+  reset another user's two-step verification (a staff account needs the
+  acting admin's own password); one outer door on `/api/v1/admin` for staff
+  only; MCP tokens are revoked when their owner stops being an admin; "invite
+  sent" now means the mail reached the customer (otherwise the admin gets the
+  link), with the date shown; customer logins without email (a username and a
+  one-time password, replaceable by an admin); a send budget on contact-form
+  notifications; Claude can authenticate with the Azure managed identity
+  (off unless configured).
 - MCP write tools (roadmap R5b): Claude can change the update channel, mode
   and maintenance window, switch a module off and back on (within the
   instance's contract), and file a feature request into the change-request

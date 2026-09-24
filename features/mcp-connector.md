@@ -26,10 +26,12 @@ paths:
 migrations: [088_mcp_tokens, 110_mcp_oauth]
 since: 2026-08-22
 origin: null
-history: [harvest-1, leads, mcp-oauth-2026-09-24, mcp-write-tools-2026-09-24]
+history: [harvest-1, leads, mcp-oauth-2026-09-24, mcp-write-tools-2026-09-24, harvest-ice-a-2026-09-24]
 ---
 
 The MCP endpoint (`/api/v1/mcp`, bearer tokens from 088) through which an AI client reads instance state and, later, files feature requests; token management at `/admin/mcp`. Ships dark behind `MCP_ENABLED`.
+
+Demoting, disabling or removing an admin from the admin role revokes their live tokens too (`McpToken.revokeAllForUser`, icelandicstore #418, 2026-09-24).
 
 **Rules**
 - MCP arguments pass through `sanitizeBody` and the global IP limit on purpose; the router mounts AFTER the generic admin router.

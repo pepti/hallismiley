@@ -57,6 +57,45 @@
         "rk tierSummaries pricing block in /llms.txt (product content, no engine slot yet)",
         "rk LASTMOD_KEYS route table (→ identity.routes[*].contentKeys)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-24",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@469428987587b7bf936a0e73e212fba344847060",
+      "chunk": "A (security, auth, users)",
+      "commits": [
+        "03449a39a7965e41c095001c9fdddf3d72f2f255 (#396 admin resets another user's 2FA)",
+        "4e8eb7908a265dd83983994d8fcf58903c6a0f15 (#418 generic half: outer door on /api/v1/admin, MCP tokens revoked with the admin role)",
+        "8ff8344fda3cb3dfd61503804f72693985fb42f7 (#258 invite sent means sent)",
+        "57faf5f6f26f3711460667e66eb8e5ba3ca7eea0 (#382 login with no email: generatePassword, new-password)",
+        "4e3aca2592fba97a15779ab5a449e491736ab0f4 (#397 name-only login: placeholderEmail, username, OneTimeCredentials)",
+        "17877025ac7f813fcba7267aba4e2425ea48507e (#295 generic half: contact send budget, provenance banner)",
+        "62ac3732d9289c507e2cbbe8d9f4a0e6d19db421 (#326 anthropicAuth, workload identity)",
+        "7ebf8d01478890598dcee93103bfe3dc4f9604d8 (#330 docs: issuer settings)"
+      ],
+      "branch": "harvest/ice-2026-09-24-ab",
+      "features": [
+        "admin-2fa",
+        "rate-limits-security",
+        "mcp-connector",
+        "users-admin",
+        "email",
+        "leads",
+        "platform-core",
+        "site-content"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "ice workshop role, company/store members, CompanyWizard, memberFields (customer-specific)",
+        "ice outer door requireRole('admin','moderator') -> engine requireStaff (any admin-view holder)",
+        "ice Regla / orderExport placeholder hunks (ice-only)",
+        "ice visionCore wiring and scripts/azure/provision.sh (ice-only)",
+        "ice forwardedFor.js and the lost-enquiry half of #295 (already in the engine)",
+        "trackedFetch dependency tracking in anthropicAuth (arrives with chunk F; global fetch fallback until then)"
+      ]
     }
   ]
 }

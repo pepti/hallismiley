@@ -152,6 +152,22 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
+  `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
+  ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
+  2FA reset, the `/api/v1/admin` outer door, MCP tokens revoked with the admin
+  role, invite receipts, logins without email, the contact send budget, Claude
+  over the managed identity (dark). Open: (a) **the new `adminUsers.*`,
+  `adminCustomers.*`, `errors.admin.*` and `email.lead.provenance` strings are
+  DRAFT** (Halli); (b) turning Claude on for an instance needs the Anthropic
+  console setup in `docs/DEPLOYMENT.md` § Anthropic authentication (per-tenant
+  ids, Halli's hand); (c) lanes 2 and 3 share `server/app.js` and
+  `emailService.js` with this branch — whoever merges second rebases; when
+  chunk F lands, `anthropicAuth.js` drops its global-fetch fallback for
+  `trackedFetch`; (d) icelandicstore's graft: its `4e8eb79` outer door
+  (`requireRole('admin','moderator')`) is superseded by the engine's
+  `requireStaff` — take the engine side.
+
 - Identity seam + feature gate ([identity-seam-2026-09-22](docs/HISTORY.md#identity-seam-2026-09-22)):
   the hallismiley draft PR pepti/hallismiley#168 becomes mergeable once it sets
   its `identity` block in `config/client.json` (the ready-to-paste example is in
