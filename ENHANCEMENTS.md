@@ -54,13 +54,15 @@ Original proposal kept below for the record.
 
 ## (b) Architectural — cheap now, expensive later
 
-### 5. `client.config` module-flag system
+### 5. ✅ DONE 2026-09-24 — `client.config` module-flag system
 **What.** Promote `server/config/publicSurface.js` (built in job 2D) into a single instance-configuration module that declares which modules an instance exposes — `marketing`, `store`, `erp`, `portal` — and have nav, routes, SSR meta, sitemap and the admin nav all read from it. Party/news/bio become the first flagged-off modules instead of a hand-maintained path list.
 **Why.** This is *the* enabler for the one-engine-many-instances model (plan §4). Today "which surfaces does this instance show" is spread across `NavBar.js`, `router.js`, `ssrMeta.js`, `sitemapRoutes.js` and `publicSurface.js`; every new instance re-solves it by hand. Job 2D already proved the seam works — it just needs to be the only seam.
 **Effort.** M–L. **Risk.** Medium — touches routing and nav, so it needs the e2e suite green before and after.
 **Recommendation.** **Do now, while there is exactly one instance to migrate.** The cost scales with the number of deployed instances.
 
 > STATUS 2026-08-22: strategic weight raised — this is roadmap item **R4** under the one-product-for-all strategy (`company/REKSTRARKERFI-PLAN.md` §7): tiers AND per-customer custom features are flag sets on this seam. Still awaiting Halli's implementation sign-off.
+
+> STATUS 2026-09-24: **IMPLEMENTED** (Halli picked R4 when asked which roadmap items to build). Shipped as `modules.preset` + `modules.<id>.enabled` over a catalogue (`server/config/moduleCatalog.js`) rather than the `marketing/store/erp/portal` split sketched above: the modules are shop, pos, books, news, projects, party, bio, salesOps; the tiers vefur/verslun/rekstur are presets. Off = absent (404 before auth), a different idea from `publicSurface.js`'s hidden-but-functional — so party/news/bio on THIS instance stay hidden, not off (Halli's rule). Per-customer custom modules join the catalogue as they are built. [HISTORY](docs/HISTORY.md#module-flags-2026-09-24).
 
 ### 6. Route-level code splitting
 **What.** `public/js/router.js` statically imports all 65 view modules (2026-09-11 count; 58 when filed), so every visitor downloads and parses the whole module graph — measured at 107 JS modules in August 2026, more now (~70 KB of it the two Party views alone) — before the home page can render. Convert the route table to dynamic `import()` — native ESM, no bundler, so stack invariant #1 holds.

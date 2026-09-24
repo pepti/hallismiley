@@ -4,7 +4,7 @@ name: {is: Launakerfi, en: Payroll}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/services/bookkeeping/payrollService.js
   - public/js/views/AdminPayrollView.js

@@ -6,6 +6,13 @@ const Role = require('../models/Role');
 const UserRole = require('../models/UserRole');
 const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
+const { DISABLED_ADMIN_VIEWS } = require('../config/modules');
+
+// The checkboxes the role editor offers: every grantable view of a module
+// this instance HAS (R4). Validation below still accepts the full list, so a
+// role that holds a view of a switched-off module saves unchanged — the grant
+// sleeps until the module is switched back on.
+const OFFERED_VIEW_IDS = GRANTABLE_VIEW_IDS.filter(id => !DISABLED_ADMIN_VIEWS.includes(id));
 const { t } = require('../i18n');
 // Role grants/revocations are staff actions (migration 098 staff_audit_log).
 // Best-effort here: these handlers are not one transaction with the grant.
@@ -28,7 +35,7 @@ const adminRolesController = {
   async list(req, res, next) {
     try {
       const roles = await Role.findAll();
-      return res.json({ roles, grantableViews: GRANTABLE_VIEW_IDS });
+      return res.json({ roles, grantableViews: OFFERED_VIEW_IDS });
     } catch (err) { next(err); }
   },
 

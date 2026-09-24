@@ -4,7 +4,7 @@ name: {is: "Persónuleg kynning", en: "Personal bio (/halli)"}
 domain: 12
 owner: engine
 status: hidden
-flag: null
+flag: modules.bio.enabled
 paths:
   - public/js/views/HalliView.js
   - public/css/halli-bio.css

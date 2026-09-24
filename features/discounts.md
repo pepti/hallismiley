@@ -4,7 +4,7 @@ name: {is: "Afslættir", en: Discounts}
 domain: 11
 owner: engine
 status: hidden
-flag: null
+flag: modules.shop.enabled
 paths:
   - server/routes/adminDiscountRoutes.js
   - server/controllers/adminDiscountController.js

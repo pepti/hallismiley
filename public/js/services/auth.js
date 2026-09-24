@@ -2,6 +2,10 @@
 // The auth_session cookie is httpOnly (set/cleared by the server only).
 // No tokens are stored in the browser — session state lives in the DB.
 
+import { DISABLED_ADMIN_VIEWS } from '../utils/modules.js';
+
+const DISABLED_VIEWS = new Set(DISABLED_ADMIN_VIEWS);
+
 let _user = null; // cached user info from last successful session check
 let _csrfToken = null;
 
@@ -52,7 +56,12 @@ export function canEdit()         { return getRoles().some(r => r === 'admin' ||
 // The session payload carries the resolved admin-view id list ('*' = all).
 // These gate the admin sidebar + router for UX; the server enforces them too.
 export function getViews()        { return _user?.views || []; }
-export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
+// A view of a module this instance does not have (R4, utils/modules.js) is
+// seen by nobody, admin included: the server 404s its API before auth.
+export function canSeeView(id)    {
+  if (DISABLED_VIEWS.has(id)) return false;
+  const v = getViews(); return v.includes('*') || v.includes(id);
+}
 export function hasAnyAdminView() { return getViews().length > 0; }
 // Holds every view (the admin role resolves to ['*']). The sidebar's
 // hidden-by-policy set (components/adminSurface.js) applies only to these

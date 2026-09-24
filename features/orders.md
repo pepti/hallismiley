@@ -4,7 +4,7 @@ name: {is: Pantanir, en: Orders}
 domain: 11
 owner: engine
 status: hidden
-flag: null
+flag: modules.shop.enabled
 paths:
   - server/models/Order.js
   - server/utils/qr.js

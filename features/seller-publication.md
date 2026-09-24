@@ -4,7 +4,7 @@ name: {is: "Sölusvæði (birt frá rekstri)", en: "Seller area (published from 
 domain: 21
 owner: engine
 status: live
-flag: null
+flag: modules.salesOps.enabled
 paths:
   - server/routes/sellerPublishRoutes.js
   - server/routes/sellerRoutes.js

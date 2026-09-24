@@ -31,6 +31,9 @@ const tools = [
         counts: rows[0],
         server_time: new Date().toISOString(),
         access: (process.env.MCP_ALLOWED_SCOPES || 'read'),
+        // Which modules this instance has (R4): the preset and the enabled
+        // set — what a module-flag write tool (R5) would act on.
+        modules: require('../../config/modules').moduleSummary(),
       };
     },
   },

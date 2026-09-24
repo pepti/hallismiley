@@ -72,6 +72,7 @@ import {
   loadLocale, getLocale, getPreferredLocale, forcedLocaleFor,
 } from './i18n/i18n.js';
 import { navigate, navigateReplace } from './navigate.js';
+import { isDisabledRoute } from './utils/modules.js';
 import { trackPageView } from './services/usage.js';
 
 // More specific patterns must come before generic ones
@@ -195,6 +196,10 @@ function migrateLegacyHash() {
 }
 
 function matchRoute(path) {
+  // A page of a module this instance does not have (R4, utils/modules.js):
+  // not found, like a URL that never existed. The server already answered
+  // this path 404 on a cold load; this covers in-SPA navigation.
+  if (isDisabledRoute(path)) return { factory: () => new NotFoundView(), params: {}, pattern: null };
   const pathParts = path.split('/');
   for (const route of ROUTES) {
     const patternParts = route.pattern.split('/');
@@ -404,7 +409,9 @@ export class Router {
     // `documentTitle`; everything else is routed by pattern.
     document.title = (typeof view.documentTitle === 'string' && view.documentTitle)
       ? view.documentTitle
-      : titleForRoute(pattern || path, getLocale());
+      // A disabled module's route titles like any unknown path (R4) — the
+      // brand, not the switched-off page's own name.
+      : titleForRoute(pattern || (isDisabledRoute(path) ? '' : path), getLocale());
 
     // Anonymous page-view beacon. Placed after the commit point (past the
     // stale-nav guard and the locale/admin redirects) so it fires exactly once

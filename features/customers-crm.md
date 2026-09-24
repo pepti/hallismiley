@@ -4,7 +4,7 @@ name: {is: "Viðskiptavinir og minnispunktar", en: "Customers and notes"}
 domain: 8
 owner: engine
 status: live
-flag: null
+flag: modules.shop.enabled
 paths:
   - server/routes/adminCustomerRoutes.js
   - server/routes/adminCustomerNotesRoutes.js

@@ -186,6 +186,16 @@ app.use(cors({
 // ── A03 Injection: HTTP Parameter Pollution protection ────────────────────────
 app.use(hpp());
 
+// ── Module switches (R4) — a module this instance does not HAVE is absent:
+// its API and upload prefixes answer 404 here, before the raw-body routes
+// below (the Stripe webhook is the shop's, the seller-publish ingest is
+// salesOps'), before body parsing, the limiters, CSRF and auth. Enabled
+// modules pass straight through. What each module owns:
+// server/config/moduleCatalog.js; the switches: `modules.*` in
+// config/client.json.
+const { moduleGate, isDisabledRoute } = require('./config/modules');
+app.use(moduleGate);
+
 // ── Stripe webhook — MUST be registered BEFORE express.json() so the raw
 // body bytes are available for HMAC signature verification. Stripe's
 // constructEvent is byte-exact; a JSON re-serialisation would break it.
@@ -702,6 +712,12 @@ app.get('/{*splat}', (req, res, next) => {
   if (parts.length === 1 && SUPPORTED_LOCALES.includes(parts[0]) && !req.path.endsWith('/')) {
     return res.redirect(301, `/${parts[0]}/${req.url.slice(parts[0].length + 1)}`);
   }
+  // A page of a module this instance does not have (R4): the shell still
+  // renders — the SPA shows its not-found view — but with a real 404 status,
+  // and ssrMeta marks it noindex (publicSurface treats a disabled route as
+  // hidden). ssrMeta sends without touching the status.
+  const bare = SUPPORTED_LOCALES.includes(parts[0]) ? '/' + parts.slice(1).join('/') : req.path;
+  if (isDisabledRoute(bare)) res.status(404);
   return ssrMetaMiddleware(req, res, next);
 });
 

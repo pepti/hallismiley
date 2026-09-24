@@ -21,14 +21,20 @@
 // that wants its shop or its news back lists fewer routes there; it never
 // edits this file. This module was the hand-rolled ancestor of that seam.
 const { identity, productRoutes } = require('./identity');
+const { isDisabledRoute } = require('./modules');
 const HIDDEN_PUBLIC_ROUTES = identity.surface.hiddenRoutes.slice();
 
 // Prefix-aware: '/news' hides '/news/some-slug' too. Locale prefixes are the
 // caller's concern — pass the locale-stripped path (ssrMeta's `rest`, the
 // sitemap's bare routes).
+//
+// A route of a module this instance does not HAVE (R4, config/modules.js) is
+// hidden a fortiori — off nav, footers, sitemap and the index — and on top of
+// that it 404s (app.js). HIDDEN_PUBLIC_ROUTES stays the product's own list:
+// robots.txt names only those, so it never advertises a module that is off.
 function isHiddenRoute(pathname) {
   if (!pathname) return false;
-  return HIDDEN_PUBLIC_ROUTES.some(
+  return isDisabledRoute(pathname) || HIDDEN_PUBLIC_ROUTES.some(
     base => pathname === base || pathname.startsWith(base + '/')
   );
 }

@@ -32,8 +32,19 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { MODULE_IDS, PRESETS, presetIncludes } = require('./moduleCatalog');
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+// One `{ enabled }` section per switchable module (server/config/
+// moduleCatalog.js — the catalogue owns the list; R4, 2026-09-24). The leaf
+// default is `true`, but the resolved value is the PRESET's answer unless the
+// file or the env sets the leaf itself (resolveConfig, cross-field checks).
+function moduleSwitchSections() {
+  const out = {};
+  for (const id of MODULE_IDS) out[id] = { enabled: { type: 'boolean', default: true } };
+  return out;
+}
 
 // Schema = defaults + validation, in one tree. A node is a leaf iff it has an
 // own `type` AND `default`; anything else is a nested section. Adding a module
@@ -210,6 +221,15 @@ const SCHEMA = {
     },
   },
   modules: {
+    // Which modules this instance HAS (R4, ENHANCEMENTS #5). A preset is a
+    // Rekstrarkerfið tier — vefur (the core + news) · verslun (+ shop, till) ·
+    // rekstur (+ bókhald) — or `all`, the engine default: every module, which
+    // is how every instance behaved before the switches existed. Each module
+    // below may still be set on its own (`"shop": { "enabled": false }`, or
+    // CLIENT_CONFIG_MODULES_SHOP_ENABLED); an explicit setting beats the
+    // preset. What each module owns: server/config/moduleCatalog.js.
+    preset: { type: 'string', default: 'all', enum: PRESETS },
+    ...moduleSwitchSections(),
     selfUpdate: {
       // Is the module present on this instance at all? Off means: no checker,
       // no admin screen, and the API answers 404 rather than 403 — a module
@@ -609,6 +629,10 @@ function resolveConfig({ fileConfig = {}, env = process.env, schema = SCHEMA } =
     }
   });
 
+  // Leaves the file or the env set to an accepted value — the module
+  // switches a preset must leave alone.
+  const explicit = new Set();
+
   const apply = (source, dotted, rawValue) => {
     const entry = leaves.get(dotted);
     const { leaf, segments } = entry;
@@ -623,6 +647,7 @@ function resolveConfig({ fileConfig = {}, env = process.env, schema = SCHEMA } =
       return;
     }
     setIn(config, segments, coerced.value);
+    explicit.add(dotted);
   };
 
   // ── Layer 2: the file ──────────────────────────────────────────────────────
@@ -660,6 +685,19 @@ function resolveConfig({ fileConfig = {}, env = process.env, schema = SCHEMA } =
   }
 
   // ── Cross-field checks ─────────────────────────────────────────────────────
+
+  // The preset answers every module switch nobody set explicitly. Applied
+  // after BOTH layers, so `preset: "vefur"` in the file plus
+  // CLIENT_CONFIG_MODULES_BOOKS_ENABLED=true in the env is Vefur + bókhald,
+  // and an env preset re-derives the switches the file left alone.
+  const modules = config.modules;
+  if (modules && typeof modules.preset === 'string') {
+    for (const id of MODULE_IDS) {
+      if (!isPlainObject(modules[id]) || explicit.has(`modules.${id}.enabled`)) continue;
+      modules[id].enabled = presetIncludes(modules.preset, id);
+    }
+  }
+
   const window = config.modules.selfUpdate.maintenanceWindow;
   if (window.fromHour === window.toHour) {
     warnings.push(

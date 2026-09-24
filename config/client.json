@@ -53,6 +53,8 @@
     }
   },
   "modules": {
+    "$comment": "Which modules this instance HAS (R4, 2026-09-24; catalogue: server/config/moduleCatalog.js). preset = all | vefur | verslun | rekstur — a Rekstrarkerfið tier, or every module. A switch set here (\"shop\": { \"enabled\": false }) or by CLIENT_CONFIG_MODULES_<ID>_ENABLED beats the preset. OFF = absent: the module's APIs and uploads 404 before auth, its pages 404 with noindex, its admin views leave the sidebar and the role editor; no data is touched. orangesmiley.is keeps `all` — its shop, news, party and bio are HIDDEN (identity.surface.hiddenRoutes: still working at their URLs, Halli's rule), not switched off.",
+    "preset": "all",
     "selfUpdate": {
       "enabled": true,
       "mode": "managed",

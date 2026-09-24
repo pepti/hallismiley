@@ -4,7 +4,7 @@ name: {is: "Vörulisti", en: "Shop catalog"}
 domain: 11
 owner: engine
 status: hidden
-flag: null
+flag: modules.shop.enabled
 paths:
   - server/routes/adminShopRoutes.js
   - server/controllers/adminShopController.js

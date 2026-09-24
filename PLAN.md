@@ -121,9 +121,9 @@ chunk lands; add a HISTORY entry for the story.
   ([services-page](docs/HISTORY.md#services-page)), the two-step reminder's
   `mfaReminder.*` strings ([mfa-reminder-2026-09-23](docs/HISTORY.md#mfa-reminder-2026-09-23);
   i18n files, not an inline editor). He edits in place via the inline editors.
-- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #13, #16, #17, #18 done; #9, #10, #21
-  partial; the rest need his sign-off before any implementation. #5 and #7 are
-  roadmap items R4/R6.
+- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #5, #13, #16, #17, #18 done; #9, #10, #21
+  partial; the rest need his sign-off before any implementation. #7 is
+  roadmap item R6.
 - Publish the 14 seeded sales guides ([sales-staff](docs/HISTORY.md#sales-staff));
   decide whether `solufolk` gets the `markadur` view (hand-grant in `/admin/roles`,
   then flip `e2e/markadur.spec.js`).
@@ -265,6 +265,19 @@ chunk lands; add a HISTORY entry for the story.
   accounts they OWN — `allaccounts` does not widen the public copy, by design
   until Halli says otherwise. The `/solusvaedi` copy is DRAFT.
 
+- Module switches landed 2026-09-24 ([module-flags-2026-09-24](docs/HISTORY.md#module-flags-2026-09-24)):
+  roadmap R4 done in the engine. Open: (a) each downstream sets its own
+  `modules` block on its next sync (rekstrarkerfid's demo/customer instances
+  a tier; hallismiley `salesOps`/`books` off; LedgerLink most of the set) —
+  nothing changes there until it does; (b) no Playwright spec runs a server
+  with a module off (the Jest integration + a browser check cover it; a second
+  e2e server like the `required` 2FA one would); (c) the session payload still
+  carries `'*'` for an admin — `canSeeView()` filters client-side, the server
+  404s the APIs; (d) R5 can now add a module-flag write tool (a switch is
+  resolved at boot, so a write means config + restart, or a DB-backed layer
+  over the file — a design choice for R5); (e) party endpoints outside its
+  prefixes (`/auth/party-magic-login`, admin `users/:id/party-*`) and MCP
+  `environment_info`'s counts ignore the switches (low).
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —
