@@ -280,52 +280,7 @@ jobs:
                   echo "/ready OK after ~$((i*5))s from the shipped build (X-App-Build $got)"
                   cat /tmp/ready.json; exit 0
                 fi
-              elif printf '%s' "$uptime" | grep -Eq '^[0-9]+
-
-  # ── Failsafe: email when a dispatched deploy errored ─────────────────────────
-  # No-ops cleanly unless vars.ALERT_EMAIL_TO/FROM and secrets.RESEND_API_KEY
-  # are all set.
-  alert-deploy-failed:
-    name: Alert — Azure deploy failed
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [deploy]
-    # always() is load-bearing: without a status function the implicit
-    # success() gate on `needs` skips this job exactly when it should run
-    # (base, 2026-08-07).
-    if: ${{ always() && needs.deploy.result == 'failure' }}
-    steps:
-      - name: Email deploy-failed alert (Resend)
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
-          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
-          DEPLOY_SHA: ${{ inputs.sha || github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          if [ -z "$RESEND_API_KEY" ] || [ -z "$ALERT_EMAIL_TO" ] || [ -z "$ALERT_EMAIL_FROM" ]; then
-            echo "Alert email not configured (RESEND_API_KEY / ALERT_EMAIL_TO / ALERT_EMAIL_FROM) — skipping."; exit 0
-          fi
-          SHORT_SHA="${DEPLOY_SHA:0:9}"
-          jq -n \
-            --arg from "Orange Smiley Deploy <$ALERT_EMAIL_FROM>" \
-            --arg to "$ALERT_EMAIL_TO" \
-            --arg sha "$SHORT_SHA" \
-            --arg url "$RUN_URL" \
-            '{
-               from: $from,
-               to: [$to],
-               subject: "⚠️ orangesmiley.is — Azure deploy FAILED",
-               html: ("<h2>⚠️ Azure deploy failed</h2>"
-                 + "<p>The dispatched deploy (commit <code>" + $sha + "</code>) errored, so the code is <strong>not live</strong> on Azure.</p>"
-                 + "<p><a href=\"" + $url + "\">View the deploy run →</a></p>")
-             }' \
-            | curl -sS --fail-with-body -X POST https://api.resend.com/emails \
-                -H "Authorization: Bearer $RESEND_API_KEY" \
-                -H "Content-Type: application/json" \
-                -d @-
-          echo "Deploy-failed alert emailed."
- && [ "$uptime" -le "$age" ]; then
+              elif printf '%s' "$uptime" | grep -Eq '^[0-9]+$' && [ "$uptime" -le "$age" ]; then
                 echo "/ready OK after ~$((i*5))s (no build tag to compare; process uptime ${uptime}s, swap began ${age}s ago)"
                 cat /tmp/ready.json; exit 0
               fi
