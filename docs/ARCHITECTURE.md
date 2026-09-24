@@ -1243,7 +1243,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
-| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`; `tests/integration/migrateRunner.test.js` |
+| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
 | Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
@@ -1348,6 +1348,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   and runs the unit tier, because the engine's docs are tested content.
   The docs list must equal ci.yml's `pull_request.paths-ignore` and the
   detector's `case` (`ciSkippedShim.test.js`).
+- Every workflow under `.github/workflows` must parse as YAML with a name, a trigger and jobs whose steps each run or use something (`workflowsParse.test.js`). GitHub only reports a broken workflow when it is triggered — for the dispatch-only `deploy.yml`, at the moment of shipping. Never edit a file with `String.prototype.replace` and a STRING replacement: `$'`, `$&`, `$`` and `$1` in shell text are replacement patterns (the 2026-09-24 `deploy.yml` splice). Pass a function, or splice by index.
 - **A new `ADD CONSTRAINT` is re-runnable** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)): inside a
   `pg_constraint`/`information_schema` existence check, or after a `DROP
   CONSTRAINT IF EXISTS` of the same name — `migrationIdempotent.test.js` reads

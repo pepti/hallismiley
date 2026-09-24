@@ -25,6 +25,7 @@ paths:
   - scripts/features-index.js
   - scripts/merge-coverage.js
   - tests/unit/ciSkippedShim.test.js
+  - tests/unit/workflowsParse.test.js
   - jest.config.js
   - jest.unit.config.js
   - playwright.config.js
