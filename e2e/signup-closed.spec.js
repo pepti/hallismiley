@@ -28,6 +28,15 @@ test('no sign-in or sign-up in the nav; /login opens the modal and signs staff i
   await expect(page.locator('[data-testid="nav-user-btn"]')).toBeVisible({ timeout: 10_000 });
 });
 
+test('a signed-out /admin or /admin/* URL is the staff door: the login modal opens', async ({ page }) => {
+  for (const url of ['/is/admin', '/is/admin/users']) {
+    await page.goto(url);
+    await expect(page).toHaveURL(/\/is\/login$|\/is\/$/);
+    await expect(page.locator('.login-modal-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#login-signup-link')).toHaveCount(0);
+  }
+});
+
 test('/signup is not found, and the signup API is absent', async ({ page, request }) => {
   const res = await page.goto('/is/signup');
   expect(res && res.status()).toBe(404);
