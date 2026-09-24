@@ -683,3 +683,31 @@
   font-family: var(--font-mono);
   letter-spacing: 0.08em;
 }
+
+/* ── MCP consent page (/tengja/:id, R5a) ─────────────────────────────────
+   Tokens only (invariant 15): the card sits on the account scene on every
+   theme. The redirect host is the fact an admin must read — it gets the
+   strongest ink on the card. */
+.connect-card { text-align: left; }
+.connect-card .auth-card__eyebrow,
+.connect-card .auth-card__title { text-align: center; }
+.connect-card__facts {
+  display: grid; grid-template-columns: max-content 1fr;
+  gap: var(--sp-2) var(--sp-4); margin: 0 0 var(--sp-4);
+  font-size: 0.9rem;
+}
+.connect-card__facts dt { color: var(--text-muted); }
+.connect-card__facts dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+.connect-card__facts dd strong { color: var(--accent-ink); }
+.connect-card__check {
+  display: flex; gap: var(--sp-2); align-items: center;
+  font-size: 0.9rem; color: var(--text-secondary); margin-bottom: var(--sp-3);
+}
+.connect-card__note { font-size: 0.85rem; color: var(--text-muted); margin-bottom: var(--sp-3); }
+.connect-card__warning {
+  font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary);
+  border-left: 3px solid var(--warning); background: var(--warning-dim);
+  padding: var(--sp-3); margin-bottom: var(--sp-4);
+}
+.connect-card__actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+.connect-card__status { margin: var(--sp-3) 0 0; }

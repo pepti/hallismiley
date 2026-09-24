@@ -278,6 +278,15 @@ chunk lands; add a HISTORY entry for the story.
   over the file — a design choice for R5); (e) party endpoints outside its
   prefixes (`/auth/party-magic-login`, admin `users/:id/party-*`) and MCP
   `environment_info`'s counts ignore the switches (low).
+- MCP OAuth landed 2026-09-24 ([mcp-oauth-2026-09-24](docs/HISTORY.md#mcp-oauth-2026-09-24)):
+  roadmap R5a. Open: (a) R5b — write tools (update channel/window, module
+  switch) and the feature-request tool; (b) connecting claude.ai for real
+  needs a deployed instance with `MCP_ENABLED=true` (production has it unset —
+  Halli's call per stack); (c) downstreams inherit the flow by merge (their
+  `APP_URL` must be set — it is the issuer); (d) the consent copy
+  (`connect.*`, `mcp.oauth*`) is DRAFT; (e) no CORS on the OAuth endpoints —
+  claude.ai calls them server-side; a browser-based client (MCP Inspector)
+  would need it.
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

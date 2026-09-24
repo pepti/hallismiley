@@ -67,6 +67,7 @@ import { AdminPayrollView }      from './views/AdminPayrollView.js';
 import { AdminPosView }          from './views/AdminPosView.js';
 import { AdminCustomersView }    from './views/AdminCustomersView.js';
 import { AdminHandbookView }     from './views/AdminHandbookView.js';
+import { ConnectClaudeView }     from './views/ConnectClaudeView.js';
 import {
   SUPPORTED_LOCALES,
   loadLocale, getLocale, getPreferredLocale, forcedLocaleFor,
@@ -132,6 +133,10 @@ const ROUTES = [
   // The portfolio projects board — unlisted, same gate the old dashboard had.
   { pattern: '/admin/projects',  factory: ()  => (isAuthenticated() && (canSeeView('dashboard') || canEdit())) ? new AdminProjectsView() : new HomeView() },
   { pattern: '/admin',           factory: ()  => isAuthenticated() ? new AdminView() : new HomeView() },
+  // OAuth consent for the MCP connector (R5a): /oauth/authorize lands here.
+  // The view handles signed-out and non-admin visitors itself; the server
+  // gates the API behind it.
+  { pattern: '/tengja/:id',      factory: (p) => new ConnectClaudeView(p.id) },
   { pattern: '/signup',          factory: ()  => new SignupView() },
   { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
   { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },

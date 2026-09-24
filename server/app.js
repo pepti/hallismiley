@@ -635,6 +635,10 @@ app.use('/api/v1/seller',     require('./routes/sellerRoutes'));
 // 2026-09-11, docs/mcp.md). Moving it above those two is a decision, not a
 // tidy-up: it would exempt MCP from two global protections (invariant 7).
 app.use('/api/v1/mcp', require('./routes/mcpRoutes'));
+// OAuth 2.1 for the connector (R5a): /.well-known discovery, /oauth/* and the
+// admin consent API. Mounted at '/' because the paths are fixed by the specs;
+// every route carries its own MCP_ENABLED gate (routes/mcpOAuthRoutes.js).
+app.use(require('./routes/mcpOAuthRoutes'));
 app.use('/api/v1/events',     require('./routes/eventRoutes'));
 app.use('/api/v1/admin/mcp-tokens', require('./routes/mcpAdminRoutes')); // before the /api/v1/admin catch-all
 app.use('/api/v1/admin/events', require('./routes/adminEventRoutes')); // must come before /api/v1/admin catch-all

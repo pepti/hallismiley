@@ -56,7 +56,7 @@ Downstream overrides go in `features/local.json`.
 | `analytics` | Vefmælingar / Analytics | 13 | engine | live | — | `046_analytics` | [analytics.md](analytics.md) |
 | `monitoring` | Vöktun / Monitoring | 13 | engine | live | — | `087_event_logs` | [monitoring.md](monitoring.md) |
 | `self-update` | Sjálfvirk uppfærsla / Self-update | 14 | engine | live | `modules.selfUpdate.enabled` | `081_system_updates` | [self-update.md](self-update.md) |
-| `mcp-connector` | MCP-tengill / MCP connector | 15 | engine | live | — | `088_mcp_tokens` | [mcp-connector.md](mcp-connector.md) |
+| `mcp-connector` | MCP-tengill / MCP connector | 15 | engine | live | — | `088_mcp_tokens`, `110_mcp_oauth` | [mcp-connector.md](mcp-connector.md) |
 | `change-requests` | Breytingarbeiðnir / Change requests | 16 | engine | live | — | `052_change_requests` | [change-requests.md](change-requests.md) |
 | `app-settings` | Almennar stillingar / General settings | 17 | engine | live | — | `047_app_settings` | [app-settings.md](app-settings.md) |
 | `landing-background` | Bakgrunnur forsíðu / Landing background | 17 | engine | hidden | — | `051_background_media`, `080_background_sections`, `085_landing_background_gradient`, `086_landing_background_scene`, `089_landing_background_video` | [landing-background.md](landing-background.md) |

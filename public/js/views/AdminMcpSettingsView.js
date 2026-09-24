@@ -64,6 +64,7 @@ export class AdminMcpSettingsView {
 
       ${this._card(t('mcp.connectionCard'), envLabel, `
         ${this._row(t('mcp.endpoint'), t('mcp.endpointHelp'), `<code class="mcp-code">${escHtml(this._endpointUrl())}</code>`)}
+        ${this._row(t('mcp.oauthLabel'), t('mcp.oauthHelp'), `<code class="mcp-code">${escHtml(this._endpointUrl())}</code>`)}
         ${this._row(t('mcp.access'), t('mcp.accessHelp'), `<span class="gs-readonly">${canWrite ? t('mcp.accessReadWrite') : t('mcp.accessReadOnly')}</span>`)}
       `)}
 
@@ -118,7 +119,7 @@ export class AdminMcpSettingsView {
         </tr></thead>
         <tbody>${rows.map((r) => `
           <tr class="${r.revoked_at ? 'pick-row--done' : ''}">
-            <td>${escHtml(r.name)}</td>
+            <td>${escHtml(r.name)}${r.kind === 'refresh' ? ` <span class="admin-chip" data-testid="mcp-oauth-tag">${t('mcp.kindOAuth')}</span>` : ''}</td>
             <td class="imp-mono">${escHtml(r.token_prefix)}…</td>
             <td>${escHtml((r.scopes || []).join(', '))}</td>
             <td>${fmt(r.expires_at)}</td>

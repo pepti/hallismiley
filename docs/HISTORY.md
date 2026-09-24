@@ -55,6 +55,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [SSR splices saved copy literally — replacer functions in `ssrMeta.js`](#ssr-replace-literal-2026-09-23) | Öryggisvörður LOW from rekstrarkerfid: `$&`/`` $` ``/`$'`/`$$` in site_content copy and in the request path (og:url, no login needed) were expanded by `String.replace`; 17 calls in `rewriteHead` + `injectCrawlerContent` now take `() =>`; regression tests through `<head>`, JSON-LD and the crawler mirror; the review found the same bug in both `t()` interpolations, fixed too; no migration |
 | 2026-09-23 | [The seller area follows the 2FA switch; a dismissible two-step reminder](#mfa-reminder-2026-09-23) | Halli: sellers optional too, "but put a reminder somewhere, and a checkmark not to see the reminder again"; `sellerRoutes.js` rule 4 only under `required`; `mfa_reminder` on the session (`mfaPolicy.reminderCandidate`, never under `required`); migration 109 `users.mfa_reminder_dismissed_at` + `POST /auth/mfa-reminder/dismiss`; notice atop the admin shell and the seller area, ✕ per page load, the checkbox saves at once; e2e runs a second server under `required` for the enrolment spec; copy DRAFT |
 | 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
+| 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 
 ---
 
@@ -2119,3 +2120,174 @@ default is `all`). Where the switches likely land:
 
 A downstream that recorded a feature as `hidden` or `disabled` in
 `features/local.json` keeps that entry; the gate reads both.
+
+<a id="mcp-oauth-2026-09-24"></a>
+## 2026-09-24 — MCP phase 2a: OAuth 2.1 for the connector (R5a)
+
+Halli said "continue" after R4, with R5 recommended as the next item. R5 is
+split in two:
+- R5a (this entry): OAuth, so claude.ai and Claude Desktop can add the
+  connector by URL, with no `mcp-remote` bridge and no pasted token.
+- R5b: the write tools and the feature-request tool.
+
+Nothing in the estate had built OAuth. Every sibling's `mcpAuth.js` only
+mentions it in a comment, so this was written fresh against the MCP
+authorization spec (rev 2025-06-18).
+
+**The flow.**
+- **Discovery.** A 401 from `/api/v1/mcp` now carries
+  `resource_metadata="<APP_URL>/.well-known/oauth-protected-resource"`
+  (RFC 9728). That document names the instance itself as the authorization
+  server, whose RFC 8414 metadata lists the endpoints below. The issuer is
+  `APP_URL`, read per call.
+- **Registration.** `POST /oauth/register` (RFC 7591) registers PUBLIC clients
+  only. No secret is issued: PKCE and the exact redirect URI are the proof, and
+  a client that asks for `client_secret_post` is registered `none` (the RFC
+  lets the server substitute). Redirect URIs must be https on an ALLOWLISTED host (`claude.ai`,
+  `claude.com`; `MCP_OAUTH_REDIRECT_HOSTS` replaces the list) or http on a
+  loopback host (Claude Code/Desktop). A custom scheme or a plain-http host
+  could hand the code to someone else, so neither is accepted. The allowlist
+  came from the security review (below): with any https host allowed,
+  anonymous registration plus error redirects made `/oauth/authorize` an open
+  redirector off this domain.
+- **Authorization.** `GET /oauth/authorize` checks the client and the redirect
+  URI first. Until both hold, the error is answered on the spot and never
+  redirected (RFC 6749 §4.1.2.1). After that, errors go back to the client:
+  `response_type=code`, PKCE `S256` (plain is refused) and an RFC 8707
+  `resource` that must name this server if sent. A valid request becomes a
+  PENDING row (ten minutes) and the browser goes to `/<lc>/tengja/<id>`.
+- **Consent.** `ConnectClaudeView` handles all three cases:
+  - signed out: a sign-in button that opens the nav's login modal through a
+    `login:open` event;
+  - not an admin: a refusal;
+  - an admin: the client's self-chosen name, the redirect HOST as its own
+    emphasised line, the access to be granted, and a warning to approve only a
+    connection you just started.
+  The host is the fact that matters, because anyone can call their client
+  "Claude". Approve and Deny are CSRF-protected admin POSTs. The server mints
+  a single-use code (five minutes) and the page follows the returned redirect,
+  which carries `code`, `state` and `iss`.
+- **Tokens.** `POST /oauth/token` redeems the code in one conditional UPDATE
+  (single use). A second presentation revokes every token that client holds
+  for that admin (OAuth 2.1 §4.1.2). Then the endpoint checks:
+  - the client id;
+  - the exact redirect URI;
+  - the PKCE verifier;
+  - the resource;
+  - that the approving admin is still an admin.
+
+  If all hold, it mints a pair in `mcp_tokens`: a refresh token (30 days,
+  `kind = 'refresh'`, standing for the connection) and an access token (one
+  hour, `kind = 'access'`, `parent_id` = the refresh token).
+- **Refresh.** Tokens rotate on every use. The presented refresh token is
+  retired by a conditional UPDATE, so of two racing requests only one wins, and
+  a replay of a retired token revokes the whole grant. The old access token
+  keeps its hour. A client may narrow the scope on refresh, never widen it.
+- **Revocation.** `POST /oauth/revoke` (RFC 7009) always answers 200 and only
+  revokes a token that belongs to the calling client.
+- **Scopes.** `write` is granted only when the client asked for it, the admin
+  ticked it (the box starts UNticked), and the stack's `MCP_ALLOWED_SCOPES` includes it. The
+  per-call scope double-gate from v1 still applies on top.
+
+**Two things changed for manual tokens as well.**
+- **A refresh token is not a bearer credential.** `findLiveByPlaintext` takes
+  the bearer kinds (`manual`, `access`) by default.
+- **Every MCP call re-resolves the token's owner** (`server/mcp/owner.js`: the
+  role set, then `applyMfaPolicy`) and refuses a token whose owner is no longer
+  an admin, or is disabled. Until now a demoted admin's token kept working
+  until it expired (90 days by default), because v1 checked only that the token
+  row was live.
+
+**Storage.** Migration `110_mcp_oauth` adds two tables:
+- `mcp_oauth_clients`;
+- `mcp_oauth_codes`, one row per authorization request (pending → approved or
+  denied, then consumed), with the code stored as a sha256 hash.
+
+The tokens reuse 088's `kind`, `oauth_client_id` and `parent_id` columns, which
+were pre-shipped for exactly this. `McpToken.revoke` now walks the descendants,
+so revoking a connection on `/admin/mcp` ends its access tokens.
+`listAll` shows the connection rows, tagged OAuth with the client's name, and
+leaves out the hourly access tokens.
+
+**Also fixed.** The MCP `serverInfo.name` still said "Icelandic Store
+Wholesale [TEST|PROD]", a leftover from the icelandicstore port. It now reads
+`identity.brand.name`, which is the name claude.ai shows on the connector.
+
+**Invariants.**
+- #3: this is not a second auth system. The consent runs behind the Lucia
+  session, and the tokens are the existing opaque `mcp_tokens` rows.
+- #5: `/oauth/register`, `/oauth/token` and `/oauth/revoke` answer RFC 6749/7591
+  error bodies (`{ error: "invalid_grant", error_description }`). That is a
+  documented exemption in the controller's header, the same class as the
+  transport's JSON-RPC errors. The consent API keeps `{ error, code }`.
+- #7: the machine endpoints read no cookies, which is why they carry no CSRF
+  (the same reason `/api/v1/mcp` has none). Each has its own IP limiter.
+- #8: only the server turns a pending request into a code, behind
+  `requireAuth` + `requireRole('admin')`.
+- Mounting: the router is mounted at `/` (the paths are fixed by the specs), so
+  every route carries its own `MCP_ENABLED` gate rather than a router-wide one
+  that would touch the whole site. `/tengja` is noindexed through a new
+  engine-level prefix list in `publicSurface.js`.
+
+**Tests.**
+- `tests/unit/mcpOAuth.test.js` (new, 21): metadata and issuer, resource
+  matching, redirect-URI rules (5 accepted, 8 refused), PKCE (right, wrong,
+  plain, malformed), scope parsing, redirects and the error shape.
+- `tests/integration/mcpOAuth.test.js` (new, 33): discovery and the 401's
+  `resource_metadata`; the flow dark with `MCP_ENABLED` off; registration
+  (public, with six refusals); authorization errors answered locally vs sent
+  back; the consent API's 401/403/200 matrix; the page noindexed; deny;
+  an expired request; the happy path to a working token; a refresh token
+  refused as a bearer credential; the write-scope matrix; a wrong verifier,
+  redirect or resource; a replayed code; a code redeemed by another client;
+  refresh rotation, replay and narrowing; RFC 7009 revocation by owner and by
+  a stranger; the `/admin/mcp` connection row and its revoke; the owner
+  demoted and disabled.
+- `tests/integration/mcp.test.js`: two assertions updated. The 401 now DOES
+  advertise `resource_metadata` (that assertion said it must not, "until PR 2
+  serves the document", and this is that PR). `serverInfo.name` is read from
+  the identity.
+- `e2e/mcp-oauth.spec.js` (new, 2) runs in a real browser. Register and
+  authorize as a client; sign in on the consent page through the modal; see
+  "Claude" and `claude.ai`; approve; land on the (locally fulfilled) claude.ai
+  callback with the code and state; redeem it; `tools/list` answers. The
+  second test denies and gets `access_denied`. The main e2e server now runs
+  with `MCP_ENABLED=true`.
+- The consent card was screenshotted on Glóð, Bjart and Miðnætti. That look
+  found the access line promising "Les- og skrifaðgangur" right above the note
+  saying the environment grants read only. The line now states what will be
+  granted.
+
+**Security review** (invariant-reviewer, before the merge): no Critical or
+High findings. The fixes:
+- MEDIUM, open redirect: the redirect-host allowlist above.
+- The write box starts unticked (least privilege).
+- Revoking a connection (on `/admin/mcp`, or RFC 7009 with a refresh token)
+  ends the whole grant. Before this, the access token a rotation left running
+  survived for up to an hour. `/admin/mcp` lists one row per connection (the
+  newest refresh token of its chain), not one per rotation.
+- Registered clients that never finished connecting are swept after a day.
+- `resource_name` reads the brand.
+- `no-store` on the approve/deny responses.
+- The browser route's rate-limit message uses the app's error shape.
+
+Accepted and recorded rather than fixed:
+- A code replayed within milliseconds of its first redemption may miss the
+  revocation. Only one pair is ever minted either way.
+- Consent phishing is stopped only by the admin reading the host line. A
+  request started on the real claude.ai by someone else looks legitimate.
+
+**Final runs:** unit 1609 passed; full Jest 162 suites, 3581 passed, 1 skipped; full Playwright 223 passed. A first full Jest run showed three unrelated failures (a CORP header, the 2FA reminder, discounts). The reviewer agent had started its own Jest run in the same worktree at the same time, and both runs used the SAME per-branch worker databases, so each one's cleanTables() emptied the other's rows. The three suites pass alone, and the rerun was clean. Lesson: a reviewer must not run Jest in a worktree whose suite is running.
+
+**Rollback note.** The previous release accepts ANY live `mcp_tokens` row as
+a bearer and does not check the owner. Before rolling back past this release,
+run `UPDATE mcp_tokens SET revoked_at = NOW() WHERE kind IN ('access',
+'refresh') AND revoked_at IS NULL`. Otherwise live refresh tokens act as
+30-day bearer credentials there. The same note is in `docs/mcp.md`.
+
+**Copy.** `connect.*` and `mcp.oauthLabel/oauthHelp/kindOAuth` were written
+natively in Icelandic, mirrored in English, and are DRAFT pending Halli.
+
+**Downstreams.** The flow arrives by merge with migration 110, which needs no
+alias. It is dark wherever `MCP_ENABLED` is unset. Each downstream's `APP_URL`
+must be set, because it is the issuer.

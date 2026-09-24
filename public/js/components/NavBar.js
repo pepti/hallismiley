@@ -17,6 +17,9 @@ function navHref(route) {
 export class NavBar {
   constructor() {
     this._loginModal = new LoginModal();
+    // A view that needs a signed-in visitor (the MCP consent page) asks for
+    // the modal by event rather than importing the nav.
+    window.addEventListener('login:open', () => this._loginModal.open());
     // The cart is the shop's (R4): no shop module on this instance, no icon.
     this._cartIcon   = moduleEnabled('shop') ? new CartIcon() : null;
     this._nav        = null;

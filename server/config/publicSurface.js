@@ -49,11 +49,16 @@ const NOINDEX_ROUTES = Object.entries(productRoutes())
   .filter(([, e]) => e.noindex)
   .map(([route]) => route);
 
-// Everything ssrMeta must mark noindex: the hidden surfaces (by prefix) plus
-// the product's noindex routes (exact).
+// The engine's own never-indexed pages, by prefix: the MCP consent page
+// (/tengja/<request id>, R5a) — one-off URLs behind an admin sign-in.
+const ENGINE_NOINDEX_PREFIXES = ['/tengja'];
+
+// Everything ssrMeta must mark noindex: the hidden surfaces (by prefix), the
+// engine's noindex pages (by prefix) and the product's noindex routes (exact).
 function isDeindexedRoute(pathname) {
   if (!pathname) return false;
-  return isHiddenRoute(pathname) || NOINDEX_ROUTES.includes(pathname);
+  return isHiddenRoute(pathname) || NOINDEX_ROUTES.includes(pathname)
+    || ENGINE_NOINDEX_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'));
 }
 
 // The public IA (identity-seam-2, 2026-09-23): the ordered links after "Home"

@@ -67,6 +67,10 @@ const SERVER_ENV = {
   // runs on the second server below.
   // Exercise the encrypted-at-rest path. 32 bytes, base64, e2e-only.
   TOTP_ENC_KEY: 'ZTJlLW9ubHktdG90cC1rZXktMzItYnl0ZXMtbG9uZyE=',
+  // The MCP connector and its OAuth flow (R5a): e2e/mcp-oauth.spec.js walks
+  // the consent page in a browser. Read-only ceiling (MCP_ALLOWED_SCOPES
+  // unset), like a production stack.
+  MCP_ENABLED: 'true',
 };
 
 module.exports = defineConfig({
