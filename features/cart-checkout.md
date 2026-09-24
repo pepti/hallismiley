@@ -4,7 +4,7 @@ name: {is: "Verslun, karfa og greiðsla", en: "Storefront, cart and checkout"}
 domain: 11
 owner: engine
 status: hidden
-flag: null
+flag: modules.shop.enabled
 paths:
   - server/routes/shopRoutes.js
   - server/controllers/shopController.js

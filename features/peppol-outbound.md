@@ -4,7 +4,7 @@ name: {is: "Peppol/UBL útflutningur", en: "Peppol UBL outbound"}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/services/bookkeeping/peppol/**
   - tests/integration/booksPeppolUbl.test.js

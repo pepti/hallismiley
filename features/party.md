@@ -4,7 +4,7 @@ name: {is: Veisla, en: "Party (RSVP)"}
 domain: 12
 owner: engine
 status: hidden
-flag: null
+flag: modules.party.enabled
 paths:
   - server/routes/partyRoutes.js
   - server/controllers/partyController.js

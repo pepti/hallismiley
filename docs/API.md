@@ -259,7 +259,12 @@ Rate-limit responses use HTTP `429` with standard `RateLimit-*` headers.
 ## Router inventory (`server/app.js` mounts, in mount order)
 
 Gates are the router's own (`requireAuth`, `requireRole`, `requireView(id)` —
-view ids in `server/auth/adminViews.js`). Most `/api/v1/admin/*` routers are
+view ids in `server/auth/adminViews.js`), plus one in front of them all: a
+mount that belongs to a module this instance has switched off (`modules.*` in
+`config/client.json`; the owners are `server/config/moduleCatalog.js`) answers
+`404 { "error": "Not found", "code": 404 }` from `moduleGate`, mounted after
+`hpp()` and before every row below — before body parsing, limiters, CSRF and
+auth (R4, [HISTORY](HISTORY.md#module-flags-2026-09-24)). Most `/api/v1/admin/*` routers are
 mounted before the generic `/api/v1/admin` router, but `mcp-tokens` and
 `events` are mounted AFTER it (their inline comments claim otherwise) — it
 works today only because `adminRoutes.js` has no handler on those paths.

@@ -1020,6 +1020,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | | |
 |---|---|
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
+| Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`; `tests/integration/migrateRunner.test.js` |
@@ -1029,6 +1030,18 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
 
 **Rules that must hold**
+- **A module that is off is absent, not hidden** ([module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)):
+  `modules.preset` (`all` default · `vefur` · `verslun` · `rekstur`) plus
+  `modules.<id>.enabled`; an explicit switch beats the preset. What a module
+  owns is `server/config/moduleCatalog.js` only — a new module surface (an API
+  mount, an SPA route, an admin view, a registry feature) is added there in
+  the same change, and `moduleCatalog.test.js` fails on drift both ways. Off =
+  `moduleGate` 404s its API/upload prefixes before auth (mounted before the
+  raw-body routes), its pages get a 404 with the DEFAULT head (never the
+  route's meta, detail row or crawler list), it leaves nav/sitemap/index, the
+  role editor and `canSeeView()`. Longest prefix owns a path. Hidden
+  (`identity.surface.hiddenRoutes`) is the other idea: still working at its
+  URL — this instance hides its portfolio and keeps `preset: "all"`.
 - **Engine-only pins are gated on `engine.json.role`** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   a test that states a fact about THIS repo (the committed `client.json`
   equals the schema defaults, `features/local.json` is empty, the product
@@ -1124,7 +1137,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   green CI on `main`, unlike here, and has zero e2e coverage of checkout, so a
   base PR touching it is verified by hand first [ui-kit](HISTORY.md#ui-kit).
 
-**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live)
+**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)
 
 ## 21. Seller area — the published copy on the public instance
 

@@ -40,6 +40,8 @@ const {
   productRoutes, organizationDescription,
 } = require('../config/identity');
 const { isDeindexedRoute } = require('../config/publicSurface');
+// The module switches' hand-off (R4) — rides next to the identity one.
+const { modulesScriptTag, isDisabledRoute } = require('../config/modules');
 // The page parts and descriptions are i18n keys (`meta.<key>.*`) resolved
 // through the engine table + the product overlay — identity-seam-2.
 const { t, has: hasText } = require('../i18n');
@@ -888,9 +890,9 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
     html = html.replace(/<link rel="stylesheet" href="\/css\/main\.css"/i,
       () => `${scenePreload}\n  <link rel="stylesheet" href="/css/main.css"`);
   }
-  // Inject the identity hand-off and the per-route JSON-LD just before
-  // </head>. The Organization is part of jsonLd on every page.
-  const tail = [identityScriptTag(), jsonLd].filter(Boolean).join('\n  ');
+  // Inject the identity + module hand-offs and the per-route JSON-LD just
+  // before </head>. The Organization is part of jsonLd on every page.
+  const tail = [identityScriptTag(), modulesScriptTag(), jsonLd].filter(Boolean).join('\n  ');
   html = html.replace(/<\/head>/i, () => `  ${tail}\n</head>`);
   return html;
 }
@@ -921,8 +923,14 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   // Static + section routes take precedence over detail patterns so that
   // /shop/products etc. don't accidentally match the /shop/:slug product
   // regex (which would try to fetch a product with slug='products').
-  const staticMeta = ROUTE_META[route] || null;
-  const detail = staticMeta ? null : extractDetail(route);
+  //
+  // A route of a module this instance does not have (R4) is served exactly
+  // like a path nobody knows: the default head, no detail row fetched, no
+  // crawler list — a 404 page must not publish the switched-off module's
+  // products or articles. app.js has already set the 404 status.
+  const disabledRoute = isDisabledRoute(route);
+  const staticMeta = disabledRoute ? null : (ROUTE_META[route] || null);
+  const detail = (staticMeta || disabledRoute) ? null : extractDetail(route);
 
   let title, description, ogImage;
   let schemas = [];
@@ -1053,7 +1061,9 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   // SPA — their <head> meta plus JSON-LD give crawlers enough signal and
   // the content there changes too rarely to be worth pre-rendering.
   let crawlerHtml = '';
-  if (detail) {
+  if (disabledRoute) {
+    // Nothing: see `disabledRoute` above.
+  } else if (detail) {
     if (detailRow) crawlerHtml = crawlerDetailHtml(detail.type, detailRow, locale);
   } else if (route === '/news' || route === '/shop' || route === '/projects') {
     const section = route.slice(1);

@@ -19,6 +19,15 @@ portfolio site) lives in the `hallismiley` repo, not here.
 
 No instance of this repo has been deployed; every entry below is on `master`.
 
+### 2026-09-24
+
+- Module switches (roadmap R4, ENHANCEMENTS #5): `modules.preset` (`all` ·
+  `vefur` (core + news) · `verslun` · `rekstur`) and `modules.<id>.enabled` for shop, pos,
+  books, news, projects, party, bio and salesOps in `config/client.json`. A
+  module that is off is absent: its APIs and uploads 404 before auth, its
+  pages 404 with noindex, and it leaves the nav, sitemap, admin sidebar and
+  role editor. This instance keeps `all`. No migration.
+
 ### 2026-09-21
 
 - Seller area (D-020): `INSTANCE_ROLE` (`ops` default / `public`); migration

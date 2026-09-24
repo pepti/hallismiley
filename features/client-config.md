@@ -8,16 +8,21 @@ flag: null
 paths:
   - server/config/clientConfig.js
   - server/config/identity.js
+  - server/config/moduleCatalog.js
+  - server/config/modules.js
   - public/js/utils/features.js
   - public/js/utils/identity.js
+  - public/js/utils/modules.js
   - e2e/lib/identity.js
   - tests/unit/clientConfig.test.js
   - tests/unit/identityConfig.test.js
+  - tests/unit/moduleCatalog.test.js
+  - tests/integration/moduleFlags.test.js
   - tests/integration/identityDownstream.test.js
 migrations: []
 since: 2026-08-10
 origin: null
-history: [self-update, identity-seam-2026-09-22, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23]
+history: [self-update, identity-seam-2026-09-22, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, module-flags-2026-09-24]
 ---
 
 The per-instance seam: schema defaults in `clientConfig.js` < committed `config/client.json` (product-owned, never synced) < `CLIENT_CONFIG_*` env vars, deep-frozen at boot and logged in full; `features.js` is its client shim for module flags. Every feature `flag` in this registry is a key path here. Since 2026-09-22 the same seam carries the **product identity** (`identity.*`: brand + title suffix, visitor-default locale, theme trio, hero clip, hidden public routes and admin views, the Organization record; since identity-seam-3 also the product's own routes' meta, `identity.routes`) — what a downstream would otherwise fork out of engine files. `server/config/identity.js` is the server reader plus the pure head helpers (`productRoutes()`, `organizationDescription()`); ssrMeta hands the resolved record to the browser as `<html data-*-theme>` (for the pre-paint `theme-boot.js`) and `<script id="identity">`, which `public/js/utils/identity.js` parses once for every other client reader (`routeMeta()`, `routeLockFor()`).
@@ -29,4 +34,5 @@ The per-instance seam: schema defaults in `clientConfig.js` < committed `config/
 - The theme set is validated together: a picker without its DEFAULT is rejected as a whole; the root may sit outside the picker (a two-theme product keeps `:root` as an unlisted base, identity-seam-2). `identity.theme.dark` names the ids that paint a dark page; `themePrefs.js` `DARK_THEMES` reads it.
 - `identity.surface.nav` (since identity-seam-2) is a list of `{ route, labelKey }` records — schema type `object[]`, JSON in the env layer, validated per entry (bare route, i18n key, no other fields, no repeats); `defaults()` hands out fresh records. The engine-only pins in `identityConfig.test.js` compare `defaults()`, never the resolved instance, and the "committed client.json equals the defaults" case runs only when `engine.json.role` is `engine`.
 - `identity.routes` (identity-seam-3) is a map of bare route (or `/`) → `{ titleKey, descriptionKey?, titleMode?: "bare"|"suffix", noindex?, locale? }` — schema type `object`, JSON in the env layer, `$comment` keys dropped at any level, validated per record (i18n-key shape, no unknown fields). An entry replaces the engine's row for that route whole. `identity.theme.swatches` is the other map (`{ id: { bg, fg } }`, CSS colour literals). `identity.organization.description` may be an i18n key resolved per locale; `identity.organization.ogImage` is the og:image card (`image` stays the entity's picture). `productRoutes()` (server) and `routeMeta()` (client) normalise an entry identically.
+- **Module switches** (R4, 2026-09-24): `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for the modules `server/config/moduleCatalog.js` lists; the preset answers only the switches the file and env leave unset. `server/config/modules.js` is the runtime reader (the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off, `moduleSummary` for MCP); `public/js/utils/modules.js` its client half. A catalogued feature's registry `flag` is its module's switch, so the feature gate skips its suites where the module is off.
 - Full rules: [../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting](../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting).

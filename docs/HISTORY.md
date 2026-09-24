@@ -54,6 +54,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [`/ready` details and the product-import body behind the gate](#ready-and-import-order-2026-09-23) | Two findings from rekstrarkerfid's 2026-09-19 review, fixed in the engine: anonymous `/ready` returns status/uptime/timestamp only (`checks` follow the `/metrics` rule, `internalsDenied()`; admins read `GET /api/v1/admin/events/health`); the 4 MB import and 5 MB change-request parsers moved into their routers behind the gates, `sanitizeBody` re-applied; the review found `sanitizeBody`'s tag regex quadratic (100 kb of `<` = 2.3 s, before any limiter) — replaced by a linear, byte-identical `stripTags()`; no migration |
 | 2026-09-23 | [SSR splices saved copy literally — replacer functions in `ssrMeta.js`](#ssr-replace-literal-2026-09-23) | Öryggisvörður LOW from rekstrarkerfid: `$&`/`` $` ``/`$'`/`$$` in site_content copy and in the request path (og:url, no login needed) were expanded by `String.replace`; 17 calls in `rewriteHead` + `injectCrawlerContent` now take `() =>`; regression tests through `<head>`, JSON-LD and the crawler mirror; the review found the same bug in both `t()` interpolations, fixed too; no migration |
 | 2026-09-23 | [The seller area follows the 2FA switch; a dismissible two-step reminder](#mfa-reminder-2026-09-23) | Halli: sellers optional too, "but put a reminder somewhere, and a checkmark not to see the reminder again"; `sellerRoutes.js` rule 4 only under `required`; `mfa_reminder` on the session (`mfaPolicy.reminderCandidate`, never under `required`); migration 109 `users.mfa_reminder_dismissed_at` + `POST /auth/mfa-reminder/dismiss`; notice atop the admin shell and the seller area, ✕ per page load, the checkbox saves at once; e2e runs a second server under `required` for the enrolment spec; copy DRAFT |
+| 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
 
 ---
 
@@ -1974,3 +1975,147 @@ the estate today). Migration 109 arrives with the merge, no alias. rekstrarkerfi
 reminder if its `config/client.json` says `required`. `playwright.config.js` is
 engine-owned, so the second e2e server arrives with the merge; a downstream
 runs its e2e with `E2E_PORT + 1` free as well.
+
+<a id="module-flags-2026-09-24"></a>
+## 2026-09-24 — Module switches: R4, the module-flag system (ENHANCEMENTS #5)
+
+Halli: "Lets finish the roadmap". Asked which items to build, he picked R4
+alone, the one the plan says unblocks R5's write tools. ENHANCEMENTS #5 had
+been waiting for his sign-off since 2026-08-09, and that answer is the
+sign-off.
+
+**What an instance now declares.** `modules` in `config/client.json` gains
+`preset`. It is either `all` (the default: every module, exactly the engine
+before R4) or one of the Rekstrarkerfið tiers from ORANGE-SMILEY-PLAN §1:
+`vefur` (the core + news), `verslun` (adds `shop` and `pos`) and `rekstur`
+(adds `books`). Each module also gets its own `enabled` switch: `shop`, `pos`,
+`books`, `news`, `projects`, `party`, `bio`, `salesOps`. A switch set in the
+file or by `CLIENT_CONFIG_MODULES_<ID>_ENABLED` beats the preset, and the
+preset answers only the switches nobody set. `resolveConfig` records which
+leaves the two layers set and derives the rest after both, so an env preset
+re-derives whatever the file left alone. Asked whether news and references
+belong in Vefur, Halli answered mid-chunk: "news yes, projects hidden for
+now, shop hidden" — so `news` is in every tier; `projects`, `party`, `bio`
+and `salesOps` are in none, and an instance that wants one says so; and this
+instance's shop stays hidden-but-working, not switched off.
+
+**What each module owns** lives in one file, `server/config/moduleCatalog.js`:
+bare SPA routes (public and admin), API prefixes, upload prefixes, admin view
+ids, and the registry features whose `flag` is the module's switch. It is pure
+data with no requires; `clientConfig.js` builds its schema leaves and presets
+from it. The longest prefix wins, so the till (`pos`) owns
+`/api/v1/admin/bookkeeping/pos` and `/admin/books/pos` even though they sit
+under bókhald's mounts. That is what lets Verslun have a till without books,
+and lets a bókhald instance switch its till off. `salesOps` is Orange Smiley's
+own sales operation (handbook, Markaður, accounts, commission, the published
+seller area), nothing a customer instance needs. The core is never
+switchable: public pages, auth/users/roles, site content, leads, change
+requests, analytics, monitoring and the staff audit log, general settings.
+MCP and self-update keep their own switches.
+
+**Off means absent**, the rule `modules.selfUpdate.enabled` set in 2026-08:
+- `moduleGate` in `server/config/modules.js` answers every API and upload
+  prefix of a disabled module with `404 { error: 'Not found', code: 404 }`,
+  for an anonymous probe and an admin alike. It is mounted in `app.js` right
+  after `hpp()`, which puts it before the Stripe webhook and the
+  seller-publish ingest (both raw-body routes belong to switchable modules),
+  and before body parsing, the limiters, CSRF and auth.
+- A page route of a disabled module is served like a path nobody knows. The
+  SPA catch-all sets a real 404 and ssrMeta renders the DEFAULT head: no route
+  title, no detail row fetched, no crawler list, noindex. The first browser
+  check found that ssrMeta still titled `/is/shop` "Verslun", and would have
+  fetched a product by slug and published its name and Product JSON-LD on the
+  404 page. `disabledRoute` now short-circuits `staticMeta`, `extractDetail`
+  and the crawler block, and the client titles the page like an unknown path
+  too.
+- `isHiddenRoute` in `config/publicSurface.js` treats a disabled route as
+  hidden, so it leaves the nav, both footers, the sitemap and the index.
+  robots.txt still lists only `identity.surface.hiddenRoutes`, so it never
+  advertises a switched-off module.
+- In the admin, the role editor's `grantableViews` drop a disabled module's
+  views. Validation still accepts them, so a role that holds one saves
+  unchanged and the grant simply sleeps. Client-side, `canSeeView()` returns
+  false for those views, admin included. That one change covers the sidebar,
+  the dashboard cards, the route guards and in-view buttons such as
+  Markaður's "create account".
+- Matching ignores case, as Express routing does. The invariant review caught
+  the first version comparing case-sensitively: `/API/V1/Shop/products` or
+  `/api/v1/NEWS` reached a switched-off module's router with no login, and
+  `/Assets/Products/…` its uploads. `underPrefix` (server) and
+  `routeDisabledIn` (client) now lowercase both sides; mixed-case probes pin
+  it. Left as known, low: `POST /auth/party-magic-login` and the admin-only
+  `PATCH /api/v1/admin/users/:id/party-*` sit outside the party prefixes, and
+  MCP `environment_info` still counts orders/products/projects.
+- ssrMeta writes a client hand-off, `<script id="modules">`, beside the
+  identity one: `{ preset, enabled, routes: { '/shop': false, … },
+  disabledAdminViews }`. `public/js/utils/modules.js` parses it once and
+  resolves routes longest-prefix, ignoring case, exactly as the server does; a unit test
+  compares the two over every catalogued route under four configs. With no
+  hand-off, every module is on. The router renders the not-found view for a
+  disabled route, NavBar mounts the cart only with the shop, and the home page
+  skips its news fetch without the news module.
+- Nothing is deleted. Tables, rows and code stay, so switching a module back
+  on restores it as it was. No migration.
+
+**Hidden is not off.** This instance keeps `preset: "all"`. Its shop, news,
+party and bio are HIDDEN (`identity.surface.hiddenRoutes`, still working at
+their URLs, per Halli's standing rule), not switched off. The `$comment` in
+`client.json` says so, and an engine-only unit pin holds it.
+
+**The feature gate follows.** Every catalogued feature's registry `flag` is
+now its module's switch (24 files under `features/`), so
+`tests/lib/featureGate.js` skips those suites wherever the module is off. A
+downstream on `vefur` needs no `features/local.json` entry for the shop.
+`tests/unit/moduleCatalog.test.js` holds the registry and the catalogue equal
+in both directions, and checks the catalogue against the code it names:
+- every API prefix is an `app.js` mount or sits under one;
+- every upload prefix is an `/assets` mount;
+- every route is an SPA pattern or the prefix of one;
+- every admin view is a real id owned by exactly one module.
+
+**MCP.** `environment_info` now reports `modules: { preset, enabled: [...] }`,
+which is what an R5 module-flag write tool would act on.
+
+**Tests.**
+- `tests/unit/moduleCatalog.test.js` (new, 20 tests):
+  - the drift checks above;
+  - tier nesting and the default all-on;
+  - preset, file and env precedence;
+  - an unknown preset and a non-boolean switch warn and fall back;
+  - env names;
+  - longest prefix in both directions, '/' boundaries and core paths;
+  - server/client route parity;
+  - a malformed hand-off reads as all-on;
+  - the hand-off cannot close its script element.
+- `tests/integration/moduleFlags.test.js` (new, 9 tests), each case on a fresh
+  app under its env:
+  - under `vefur`, fifteen API/upload probes 404 with the envelope for
+    anonymous and admin. As a control, the same probes run with every module
+    on return 200, except three that 404 anyway on this instance: the two
+    seller routes without `INSTANCE_ROLE=public`, and a missing upload;
+  - the core still answers;
+  - disabled pages are 404 + noindex and carry the hand-off;
+  - a real product's name never reaches its 404 page, and the page title
+    equals an unknown path's (control: with the shop on, SSR publishes it);
+  - a nav-listed `/news` leaves the sitemap (control: it comes back with the
+    switch on);
+  - the role editor's list;
+  - MCP `environment_info`;
+  - `rekstur` with the till off: bókhald 200, till 404;
+  - the default gates nothing.
+- Browser check on a `vefur` server: no cart icon, nav unchanged; in-SPA
+  `/is/shop` and `/is/cart` show "Síða fannst ekki" titled "Orange Smiley";
+  `/is/thjonusta` unchanged; no new console errors.
+- Final runs: unit 1588 passed; full Jest 160 suites, 3524 passed, 1 skipped;
+  full Playwright 221 passed. An invariant review passed every invariant but
+  one, the case bypass above, fixed before the merge.
+
+**Downstreams.** Everything arrives by merge, and nothing changes for a
+downstream until it sets `modules` in its own `config/client.json` (the
+default is `all`). Where the switches likely land:
+- rekstrarkerfid: a tier preset on its demo and customer instances;
+- hallismiley: `salesOps` and `books` off;
+- LedgerLink: most of the set off.
+
+A downstream that recorded a feature as `hidden` or `disabled` in
+`features/local.json` keeps that entry; the gate reads both.

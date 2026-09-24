@@ -4,7 +4,7 @@ name: {is: "Markaður", en: "Market research list"}
 domain: 7
 owner: engine
 status: live
-flag: null
+flag: modules.salesOps.enabled
 paths:
   - server/routes/marketRoutes.js
   - server/controllers/marketController.js

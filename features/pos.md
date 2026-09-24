@@ -4,7 +4,7 @@ name: {is: Kassi, en: "Point of sale"}
 domain: 9
 owner: engine
 status: hidden
-flag: null
+flag: modules.pos.enabled
 paths:
   - server/services/bookkeeping/posService.js
   - public/js/views/AdminPosView.js
