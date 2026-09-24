@@ -2521,6 +2521,16 @@ shop-window specs passed (25).
 
 **Copy.** `auth.errors.signupClosed` and `adminGeneral.module.signup` are
 DRAFT. There is no migration.
+
+**Follow-up, the same day: every signed-out admin URL is the staff door.**
+rekstrarkerfid's own R2b PR (orange-smiley/rekstrarkerfid#53) found it in
+review. A signed-out `/admin`, or a bookmark to any `/admin/*` page, went
+to the home page. With `navSignIn` off, the home page has no way in. The
+router now sends every signed-out `/admin` and `/admin/*` URL to `/login`,
+which opens the login modal, the way `/profile` and `/orders` already did.
+Where the nav does show "Innskrá", this saves the visitor a click.
+A signed-in user without the view still goes home. `signup-closed.spec.js`
+gains the test for `/is/admin` and `/is/admin/users`.
 <a id="harvest-ice-f-2026-09-24"></a>
 ## 2026-09-24 — Harvest from icelandicstore, chunk F: telemetry, every 5xx logged, the deploy gate checks the build, Jest in three shards
 

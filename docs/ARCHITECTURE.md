@@ -119,7 +119,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   first-time Google/Facebook sign-in is refused (`signup_closed`) — existing
   accounts still sign in, and admins still create accounts. The nav's
   "Innskrá" is `identity.surface.navSignIn`; `/login` always opens the login
-  modal. Engine suites that exercise signup switch it on for their own file
+  modal, and a signed-out `/admin` or `/admin/*` URL goes there (the staff
+  door, whatever the nav shows). Engine suites that exercise signup switch it on for their own file
   (`CLIENT_CONFIG_MODULES_SIGNUP_ENABLED`, removed after); e2e sign-in goes
   through `helpers.openSignIn`, which follows the SERVED identity.
 - Emails are validated with `isEmail()` (length ≤ 254 BEFORE the regex; `EMAIL_RE`
