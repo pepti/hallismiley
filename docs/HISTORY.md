@@ -60,6 +60,8 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Public signup as a module; the nav's "Innskrá" as a switch (R2b step 1, engine half)](#signup-switch-2026-09-24) | `signup` joins the R4 catalogue (Verslun/Rekstur): off = `/auth/signup` + availability checks 404 before auth, `/signup` a noindex 404, no "Nýskrá" in nav or modal, social login signs in existing accounts only; `identity.surface.navSignIn` hides "Innskrá" and `/login` now opens the modal; engine specs read both switches; the second e2e server runs the shop-window setting; no migration |
 | 2026-09-24 | [Harvest from icelandicstore, chunk F — telemetry, every 5xx logged, the deploy gate checks the build, Jest in three shards](#harvest-ice-f-2026-09-24) | ice #254/#255/#358/#394/#356/#347/#323 read, not merged: pino warn+ and outbound fetch to App Insights (dark without a connection string; `applicationinsights` 2.9.8 exact), `eventLogOn5xx`, `X-App-Build` checked by deploy.yml and a stable promote (`vars.CANARY_URLS`), Jest ×3 shards behind the one check name, docs-only PR shim that still runs the unit tier, re-runnable-constraint test; the last server `console.*` gone; no migration |
 | 2026-09-24 | [Harvest from icelandicstore, chunk E — open tabs follow a release, release-stamped code URLs, lazy views, plurals, real 404s, Icelandic formats](#harvest-ice-e-2026-09-24) | ice #332/#333/#425/#426 + halves of #399/#313/#324: `X-App-Build` vs `<meta name="app-build">` reloads a stale tab (UpdateBanner when something is typed); `/js/_<tag>/` + `/css/_<tag>/` immutable a year, 404 under a foreign tag (the engine cached `/js` 1 h — the stale-release bug; supersedes rk `1b7aeff`); boot graph 158 → 39 modules; `plural()` IS rule; shell 404 for unknown routes and missing detail rows; `format.js` IS money/dates by hand; no migration |
+| 2026-09-24 | [Harvest from icelandicstore, chunk A — security, auth, users](#harvest-ice-a-2026-09-24) | ice `4694289`, lane 1: admin resets another user's 2FA (staff target → the acting admin's password; any view holder is staff); one outer door `requireStaff` on `/api/v1/admin`; MCP tokens revoked on demote/disable; "invite sent" means sent (`utils/inviteSend.js`, `invited_at` shown); logins without email (`@noemail.invalid`, one-time password, `new-password`); contact send budget; Claude over the Azure managed identity (dark); no migration |
+| 2026-09-24 | [Harvest from icelandicstore, chunk B — admin layout preferences, UI kit, theme hygiene](#harvest-ice-b-2026-09-24) | Migration 111 `users.page_widths`/`page_width_motion`/`aside_widths`/`cookie_consent` (= ice 125/127/128/135, aliased there); the sidebar page-width icon + Mjúk hreyfing; side-column width on the order page; the cookie banner follows the account and the theme; every error a centred dialog; sticky sideways scrollbar; the undefined-token test (21 engine references fixed); focus ring for radios/checkboxes/selects |
 
 ---
 
@@ -2676,3 +2678,241 @@ the page to try again." · `adminMonitoring.kind.stale_release` "úrelt útgáfa
 opnum flipa" · `adminMonitoring.kind.asset_load` "kóði síðunnar hlóðst ekki".
 
 **No migration.**
+
+<a id="harvest-ice-a-2026-09-24"></a>
+## 2026-09-24 — Harvest from icelandicstore, chunk A: security, auth, users
+
+Lane 1 of the three-lane upward harvest from icelandicstore `main` @ `4694289`
+(survey: gitignored `company/ice-harvest-2026-09-24.md`, chunk A). Ported by
+reading ice's commits and applying them to engine files, keeping ice's file and
+function names where the engine had no equivalent, so the eventual graft sees
+identical files. Every ice-derived commit carries `Feature:` and
+`Harvested-from: icelandicstore@<sha>` trailers. No migration.
+
+**What came up**
+
+- **An admin resets another user's two-step verification** (ice `03449a3`
+  #396, feature `admin-2fa`). `POST /api/v1/admin/users/:id/totp/reset`
+  (admin + CSRF, never your own account) runs `mfaService.disable` and ends
+  every session the target holds. A STAFF target needs the acting admin's own
+  password, checked by the new `mfaService.verifyPassword`, which the
+  self-service turn-off (`/auth/totp/disable`) now shares. Engine
+  adaptation: "staff" is admin, moderator or ANY role granting an admin view
+  (ice keys it on admin/moderator; the engine's dynamic roles make a seller or
+  a contractor staff too). The server asks for the password with
+  `reason: 'password_required'`, so the Users page prompts only when needed.
+  The Users list reads the real `totp_enabled` (a 2FA badge) and carries the
+  **Reset 2FA** action; `totp_reset` goes to the security log and
+  `staff_audit_log`. Enrolment stays optional by default (Halli); the reset is
+  the way back for an enrolled account that lost both the phone and the
+  recovery codes, short of the break-glass script.
+- **One outer door on `/api/v1/admin`** (ice `4e8eb79` #418, generic half,
+  `rate-limits-security`). `app.use('/api/v1/admin', requireAuth,
+  requireStaff)` ahead of every admin router, after `moduleGate` (a
+  switched-off module stays a 404 before auth). Ice's door is
+  `requireRole('admin', 'moderator')`; in the engine that would lock sellers
+  and custom roles out of the views they hold, so `requireStaff`
+  (`auth/requireView.js`) admits admin, moderator, or any role whose resolved,
+  MFA-withheld view set is non-empty — the same memoised set `requireView`
+  reads. `requireAuth` skips re-validation when the door already ran it
+  (`req._authValidated`). Checked first: no customer-facing route sits under
+  the prefix (seller area `/api/v1/seller`, MCP consent `/api/v1/oauth`,
+  profile `/api/v1/users`).
+- **MCP tokens die with their owner's admin role** (same ice commit,
+  `mcp-connector`). Demoting an admin (`PATCH role`), disabling one, or
+  removing them from the admin role in Admin → Roles revokes their live tokens
+  (`McpToken.revokeAllForUser`). The per-call owner re-check was already in the
+  engine (R5a `mcp/owner.js`).
+- **"Invite sent" means sent** (ice `8ff8344` #258, `email`). The engine had
+  the same defect: `sendPasswordResetEmail` returned undefined on both its
+  success and its muted path. The senders now return the provider id or
+  `false`; `emailService.isRedirecting()` reports an `EMAIL_ALLOWLIST`
+  rewrite; `utils/inviteSend.js` (ice's file) is the one reporting contract.
+  Admin → Customers "add" now sends the WELCOME invite (the bulk run's
+  template and saved copy, never the reset mail) through `sendWelcomeInvite`,
+  stamps `invited_at` only on a confirmed, un-redirected send, and shows it
+  ("Invite sent <date>" in the status column). A failed or redirected send
+  keeps the modal open with a red line, the reason and a copyable
+  set-password link.
+- **Logins without email** (ice `57faf5f` #382 + `4e3aca2` #397,
+  `users-admin`; Halli's default: allowed). The Customers "add" form has a
+  **No email** choice: the name becomes the one required field, the server
+  derives a username (`utils/username.js`, Icelandic letters transliterated:
+  "Þórður Ólafsson" → `thordurolafsson`), generates a ~98-bit dashed password
+  (`utils/generatePassword.js`), stores a reserved
+  `<username>@noemail.invalid` (`utils/placeholderEmail.js`, RFC 2606;
+  `users.email` stays NOT NULL, so no migration), approves the login at once
+  and answers the password ONCE (`no-store`), shown by
+  `components/OneTimeCredentials.js`. The placeholder is kept out of every
+  mail path (`deliver()` drops it before the allowlist rewrite, so staging
+  behaves like production), forgot-password and resend-verification, the
+  bulk invite candidates, the Users and Customers lists and their search, and
+  the profile page. `POST /admin/users/:id/new-password` replaces a lost one
+  for a mailbox-less, non-staff login only: the ADDRESS decides, never the
+  role, so an admin cannot mint a password for a colleague's real account.
+  Engine adaptation: ice's trigger is its workshop role and company members;
+  here it is the Customers form. `OneTimeCredentials` keeps ice's API over the
+  engine's own markup (`.otc`, tokens only). `placeholderEmail.js` is ice's
+  file verbatim, including ice's device domain `@pressan.invalid`, so an ice
+  database's tablet rows stay "no email" after the graft.
+- **Contact send budget** (ice `1787702` #295, generic half, `leads`).
+  `services/contactBudget.js` (ice's file): 30 sends/hour, 200/day, env
+  `CONTACT_HOURLY_BUDGET` / `CONTACT_DAILY_BUDGET`, in memory per process.
+  Over budget the visitor still gets a 200 and the lead is stored; no mail
+  goes out, the row's `notify_error` says "over send budget" and Admin →
+  Monitoring gets a warn row without PII. The lead mail opens with a
+  provenance line (anonymous form, unverified sender, untrusted links).
+- **Claude over the Azure managed identity** (ice `62ac373` #326 +
+  `7ebf8d0`, `platform-core` / `site-content`; Halli's default: off unless
+  configured). `services/anthropicAuth.js` (ice's file): workload identity
+  federation when the three federation settings and App Service's identity
+  endpoint are present, `ANTHROPIC_API_KEY` otherwise, nothing = Claude off;
+  bounded token fetches; a boot self-check logs which mode is live.
+  `translator.js` builds its client from it. `observability/trackedFetch.js`
+  arrives with chunk F (lane 3), so `anthropicAuth` fell back to global
+  `fetch` until then (dropped when lane 3 was merged in, below chunk B).
+  Setup and the two load-bearing issuer settings are in
+  `docs/DEPLOYMENT.md` § Anthropic authentication.
+
+**Left out, and why**
+
+- Ice's workshop role, company/store members, `CompanyWizard`, the Regla and
+  order-export placeholder hunks, the `memberFields` helper: customer-specific.
+- `forwardedFor.js` (engine `7c12cea`) and ice's "owner cannot see a lost
+  enquiry" half of #295 (every enquiry is a stored lead with its notification
+  outcome, migration 108): already in the engine.
+- `visionCore.js` wiring and `scripts/azure/provision.sh` changes of #326:
+  ice-only.
+- Also checked, per the survey: ice `5314314` (#54 SDL fixes: OAuth auto-link
+  on a verified email, CSV formula guard, `frame-ancestors`) and `7ec74c3`
+  (#180, a mute mail transport fails loudly) are both already in the engine.
+
+**Tests.** `adminTotp.test.js` (+17: staff/customer/custom-role targets, the
+password gate, sessions ended, CSRF, self, 404, callers), new
+`adminOuterGuard.test.js`, `mcp.test.js` (+3: demote, disable, role removal
+revoke the rows), new `inviteFeedback.test.js` (engine shape: the create path),
+new `adminNameOnlyLogin.test.js`, `contact.test.js` (+1: over budget), unit
+`emailNameOnlyRecipient`, `nameOnlyHelpers`, `generatePassword`,
+`contactBudget`, `anthropicAuth`, `anthropicWifWiring` (translator only).
+
+**Copy.** New `adminUsers.*`, `adminCustomers.*`, `errors.admin.*` and
+`email.lead.provenance` strings were written in Icelandic first and mirrored in
+English; all DRAFT.
+
+<a id="harvest-ice-b-2026-09-24"></a>
+## 2026-09-24 — Harvest from icelandicstore, chunk B: admin layout preferences, UI kit, theme hygiene
+
+Lane 1, second chunk (after [chunk A](#harvest-ice-a-2026-09-24)), from
+icelandicstore `main` @ `4694289`. Same method: ice's files and names kept
+where the engine had nothing, engine adaptations stated below, every commit
+trailered `Feature:` + `Harvested-from:`.
+
+**Migration `111_user_ui_prefs`** — one engine entry equal to ice's four
+(`125_user_page_widths`, `127_user_page_width_motion`,
+`128_user_cookie_consent`, `135_user_aside_widths`): `users.page_widths JSONB
+'{}'`, `page_width_motion BOOLEAN TRUE`, `aside_widths JSONB '{}'`,
+`cookie_consent TEXT CHECK (accepted|declined)`, each `ADD COLUMN IF NOT
+EXISTS`, expand-only. **Alias for ice's product file** (its eventual graft):
+`'111_user_ui_prefs': ['125_user_page_widths', '127_user_page_width_motion',
+'128_user_cookie_consent', '135_user_aside_widths']`. The four ride on the
+session payload (lucia attributes, `/auth/login`, `/auth/login/totp`,
+`/auth/session`) like `theme`, and are written by `PUT
+/api/v1/users/me/{page-width, page-width-motion, aside-width,
+cookie-consent}` (session + CSRF, the caller's own row). A width pick is one
+atomic `jsonb` UPDATE (two quick picks cannot lose each other's keys), 100 keys
+at most, `'*'` = all pages (it REPLACES the map; a later per-page pick still
+overrides it). Lane 2 owns the inventory-audit and variant-barcode migrations
+and may also have taken 111: whoever merges second renumbers.
+
+**What came up**
+
+- **Page width per account and page** (ice `822a553` #401, `55ad421` #402,
+  `e1048db` #403, `de107c8` #406, `c2a21e2` #407; `153d999` #367 folded in).
+  A 14px icon on the sidebar's Breyta row (`components/PageWidthControl.js`,
+  mounted by `renderAdminShell`) opens Venjuleg 1280 / Breið 1920 / Allur
+  skjárinn — the page's default ticked and marked "· sjálfgefin", a dot on the
+  icon while a page is off its default, "Nota á allar síður" and its undo, and
+  **Mjúk hreyfing** (the shell slides between widths, never under reduced
+  motion). Venjuleg is every page's default (`renderAdminShell({ wide })`
+  exists, unused). The key is the router's matched pattern
+  (`router.js` → `setPageRoute`), so `/admin/handbok/:slug` is one setting,
+  not one per guide. `services/pageWidth.js` and `components/widthMenu.js` are
+  ice's files verbatim.
+- **Side-column width** (ice `2c708f1` #413). Mjór 240 / Miðlungs 320 /
+  Breiður 440 from an icon on the side column's top card, per page or all,
+  sharing the width menu. Engine adaptation: ice's detail pages share one
+  `.customer-detail` grid; the engine's only two-column detail page is the
+  order page (`.ord-detail__grid`), so `mountAsideWidthControl` takes the grid,
+  column and heading selectors as options (ice's classes are the defaults) and
+  the grid reads `--aside-w` from `.aside-grid--<width>`. The order page's
+  default went from 300px to Miðlungs (320px). The account and invoice pages
+  have no side column, so no control there.
+- **The cookie banner follows the account** (ice `864f924` #411).
+  `services/cookieConsent.js` adopts the account's answer after the session
+  restore, carries a browser's earlier answer up to the account, saves a
+  banner choice; "declined" always wins. `consent.js` waits for
+  `consent:ready` (4 s backstop) and exposes `window.__cookieConsent`; the
+  privacy page gets "Breyta vali á vafrakökum". Engine adaptation: the restore
+  dispatches `authchange` without a reason, so `initCookieConsent` (run by
+  `main.js` after `tryRestoreSession`) does the restore sync itself and only a
+  `login` re-syncs. **Also closes the 09-08 reverse-queue item**: the banner's
+  hardcoded hex are now theme tokens (invariant 15).
+- **Every error opens a centred dialog** (ice `eebd481` #245,
+  `components/ErrorDialog.js`): `showToast(…, 'error')` → an alertdialog with
+  a focused OK (Enter/Escape/Space), queued, identical consecutive messages
+  collapsed, capped at 5, z-index 1000 over the admin modals; still in the
+  toast log; success/info toasts unchanged; no caller changes. The survey
+  flagged it as estate-wide at once; the engine's own e2e suite is its first
+  wide exercise (full run green). **Engine fix, back-port to ice**: ice
+  compared a new error only with the queue's tail, so the first repeat of the
+  error ON SCREEN was queued and shown twice; it now compares with the shown
+  message when nothing is queued (the e2e spec pins it).
+- **Sticky sideways scrollbar** (ice `38aa1ca` #325, UI half):
+  `utils/stickyHScroll.js`; first user the orders list, now inside an
+  `.admin-table-wrap`. The Excel export half of #325 is lane 2's (chunk D).
+- **Undefined-token test** (ice `d8a560f` #410,
+  `tests/unit/themeTokenDefined.test.js`): fails on any `var(--x)` nothing
+  defines. Its first engine run found 21 references to 8 undefined tokens —
+  `party.css` (`--border-color`, `--surface-2`, `--accent`, with frozen gold
+  and white literals), `news.css` (`--radius`, an invalid declaration, so no
+  radius at all), `admin-leads.css` (`--bg-primary`) — all fixed with tokens.
+  The TOTP QR plate's edge is a fixed dark hairline (it reads against the
+  plate's white, never the page).
+- **Focus ring** for radios, checkboxes and selects (ice `2b7db9f` #296, a11y
+  half): `reset.css` strips their outline and nothing gave one back.
+
+**Left out, and why**: ice's orders-table container query and the
+`#orders-more-btn` menu (#401's first shape, superseded by #402); the
+company/customer/user detail pages' aside mounts (not in the engine); ice's
+workshop-role refusals on the four user routes; the Excel export (#325's other
+half, chunk D).
+
+**Tests.** New `tests/integration/pageWidth.test.js`, `cookieConsent.test.js`,
+`tests/unit/pageWidth.client.test.js`, `cookieConsent.client.test.js`,
+`themeTokenDefined.test.js` (ice's, adapted: no workshop); e2e
+`admin-page-width.spec.js` (per-spec admin: a page's width kept on the
+account and nowhere else, all pages and its undo, Mjúk hreyfing, the error
+dialog) and `cookie-consent-account.spec.js` (the account's answer hides the
+banner in a fresh browser; a banner answer while signed in is saved; the
+privacy page reopens it). `schema-integrity.test.js` learns that
+`jsonb_object_keys` is a function, not a table.
+
+**Copy.** `admin.pageWidth.*`, `admin.asideWidth.*`, `toast.errorTitle`,
+`toast.ok`, `privacy.changeCookieChoice` and the `errors.user.*` strings are
+ice's Icelandic with the English mirror; DRAFT for Halli like all copy. The
+privacy text itself still says a choice is withdrawn "by clearing this site's
+cookies" — Halli's legal copy, left for him (the button now does it).
+
+**Merged with lane 3** (master `af6e325`: chunks F and E, plus the signup
+module and MCP OAuth, migration 110 — so `111_user_ui_prefs` follows it
+unchanged). `router.js` takes E's lazy form (`make('ViewName')` + `VIEWS`);
+lane 1 adds no routed view or route, and `setPageRoute(pattern)` runs before
+the (now awaited) factory, so a lazily loaded view's constructor sees its own
+page key. `emailService.js` keeps F's pino logging and lane 1's
+`deliver()` contract (the id, or `false` when nothing was deliverable).
+`anthropicAuth.js` drops its global-`fetch` fallback for F's `fetchNamed`,
+and `translator.js` passes the tracked `fetch` next to the auth options. E's
+"page failed to load" message (a view's file missing on the current release,
+after the one automatic reload) is an error toast, so it now opens the
+`ErrorDialog` — an acknowledged stop suits it, since the previous page stays
+on screen; the release banner is not a toast and is unaffected.

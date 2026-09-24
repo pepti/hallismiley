@@ -210,6 +210,32 @@ describe('POST /api/v1/contact — notification', () => {
     }
   });
 
+  // Process-wide send budget (harvested from icelandicstore #295, 2026-09-24):
+  // over it, the visitor still gets a 200 and the lead is stored, but no mail
+  // goes out and the row says why.
+  test('over the send budget: 200, lead stored, nothing sent, row says why', async () => {
+    const emailService = require('../../server/services/emailService');
+    const { contactBudget } = require('../../server/services/contactBudget');
+    const db = require('../../server/config/database');
+    const spy  = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(true);
+    const take = jest.spyOn(contactBudget, 'take').mockReturnValue(false);
+    try {
+      const res = await request(app).post('/api/v1/contact')
+        .send({ ...validPayload(), email: 'budget@example.com' });
+      expect(res.status).toBe(200);
+      let row;
+      for (let i = 0; i < 40 && !row?.notify_error; i++) {
+        await new Promise(r => setTimeout(r, 25));
+        row = (await db.query(`SELECT notify_error FROM leads WHERE email = 'budget@example.com'`)).rows[0];
+      }
+      expect(row.notify_error).toBe('over send budget');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      take.mockRestore();
+    }
+  });
+
   test('the honeypot path sends nothing', async () => {
     const emailService = require('../../server/services/emailService');
     const spy = jest.spyOn(emailService, 'sendLeadNotification').mockResolvedValue(undefined);

@@ -29,6 +29,19 @@ function applyAllowlist(to) {
   return ALLOWLIST;
 }
 
+// True when EMAIL_ALLOWLIST rewrites every recipient: a send "succeeds" but the
+// person asked for never gets it, so no UI may claim they were emailed
+// (utils/inviteSend.js, ice #258).
+function isRedirecting() {
+  return ALLOWLIST.length > 0;
+}
+
+// Reserved no-mailbox placeholders (utils/placeholderEmail — a name-only login,
+// ice #397) are not addresses: dropped from every recipient list before the
+// allowlist rewrite, so staging behaves like production here.
+const { isPlaceholderEmail } = require('../utils/placeholderEmail');
+const deliverable = (v) => (Array.isArray(v) ? v : [v]).filter(a => a && !isPlaceholderEmail(a));
+
 // A stalled mail endpoint must never hang a request that already COMMITted —
 // the account exists, the response never arrives, and a hung await shows up
 // in no telemetry (ice #199).
@@ -62,7 +75,13 @@ function sendFailed(channel, detail) {
 // The single choke point every sender goes through: allowlist rewrite,
 // bounded wait, loud failure. Returns Resend's { data, error } shape.
 async function deliver(payload, channel = 'generic') {
-  const msg = { ...payload, to: applyAllowlist(payload.to) };
+  // Nobody left to send to (only placeholder addresses): not sent at all.
+  // `id: null` reads as "not sent" to every caller that returns the id.
+  if (deliverable(payload.to).length === 0) {
+    logger.info({ channel }, 'email skipped: no deliverable recipient (placeholder address)');
+    return { data: { id: null }, error: null };
+  }
+  const msg = { ...payload, to: applyAllowlist(deliverable(payload.to)) };
   if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
   try {
     const result = await Promise.race([
@@ -158,7 +177,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
     // In development, retrieve the token directly from the database:
     //   SELECT email_verify_token FROM users WHERE email = '...';
     transportNotConfigured("verification", { note: "verification email skipped (retrieve token from DB)" });
-    return;
+    return false;
   }
 
   const subject = t(locale, 'email.verify.subject');
@@ -187,7 +206,9 @@ async function sendVerificationEmail(to, token, locale = 'en') {
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
+  if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Verification email sent');
+  return data.id;
 }
 
 // ── Password reset email ──────────────────────────────────────────────────────
@@ -200,7 +221,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
     // In development, retrieve the token directly from the database:
     //   SELECT password_reset_token FROM users WHERE email = '...';
     transportNotConfigured("password", { note: "password reset email skipped (retrieve token from DB)" });
-    return;
+    return false;
   }
 
   const subject = t(locale, 'email.reset.subject');
@@ -232,7 +253,12 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
+  if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Password reset email sent');
+  // Return the id, like sendWelcomeInviteEmail does (ice #258): this used to
+  // return undefined on BOTH paths, so a caller could not tell a real send from
+  // a muted one and answered "is a transport configured" instead.
+  return data.id;
 }
 
 // ── Welcome-invite email (bulk "Send invites" + preview) ─────────────────────
@@ -295,6 +321,7 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
   });
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
+  if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Welcome invite sent');
   return data?.id;
 }
@@ -1071,7 +1098,8 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
 
   const html = emailShell(subject, `
     <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 24px;padding:10px 12px;background-color:#1a1a1a;border:1px solid #333;border-radius:6px;font-size:13px;color:#bbb;line-height:1.5;">${escapeHtml(t(locale, 'email.lead.provenance'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid #222;">
       ${row(t(locale, 'email.lead.nameLabel'), name)}
       ${row(t(locale, 'email.lead.companyLabel'), company)}
@@ -1090,4 +1118,4 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
   return true;
 }
 
-module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured };
+module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured, isRedirecting };

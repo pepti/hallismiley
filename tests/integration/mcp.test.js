@@ -93,6 +93,34 @@ describe('MCP auth', () => {
     expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, short.token)).status).toBe(401);
   });
 
+  // ice #418 (harvest 2026-09-24): demoting or disabling an admin revokes the
+  // rows, not only the per-call owner check (mcp/owner.js), so Admin → MCP
+  // stops listing a dead admin's tokens as live.
+  test.each([
+    ['demoted', (id) => ['patch', `/api/v1/admin/users/${id}/role`, { role: 'user' }]],
+    ['disabled', (id) => ['patch', `/api/v1/admin/users/${id}/disable`, { disabled: true }]],
+    ['removed from the admin role', (id) => ['delete', `/api/v1/admin/roles/admin/members/${id}`, undefined]],
+  ])('an admin %s loses every live MCP token', async (_label, route) => {
+    const otherId = 'mcp-other-admin';
+    await db.query(
+      `INSERT INTO users (id, email, username, role, approval_status, email_verified)
+       VALUES ($1, 'mcp-other@test.com', 'mcpotheradmin', 'admin', 'approved', TRUE)
+       ON CONFLICT (id) DO NOTHING`, [otherId]);
+    const theirs = await McpToken.create({ userId: otherId, name: 'theirs' });
+    expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, theirs.token)).status).toBe(200);
+
+    const [method, path, body] = route(otherId);
+    const res = await request(app)[method](path).set('Cookie', adminCookie).send(body);
+    expect(res.status).toBeLessThan(300);
+
+    const { rows } = await db.query('SELECT revoked_at FROM mcp_tokens WHERE user_id = $1', [otherId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].revoked_at).not.toBeNull();
+    expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, theirs.token)).status).toBe(401);
+    // The acting admin's own token is untouched.
+    expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(200);
+  });
+
   test('an admin SESSION COOKIE does not authenticate — bearer only (the CSRF-exemption guarantee)', async () => {
     const res = await request(app)
       .post('/api/v1/mcp')

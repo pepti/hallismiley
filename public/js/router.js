@@ -1,5 +1,6 @@
 import { motionAllowed } from './utils/motion.js';
 import { titleForRoute } from './utils/pageTitle.js';
+import { setPageRoute } from './services/pageWidth.js';
 import { HomeView } from './views/HomeView.js';
 import { NotFoundView } from './views/NotFoundView.js';
 import { isAuthenticated, isAdmin, canEdit, canSeeView, mfaEnrolmentRequired } from './services/auth.js';
@@ -439,6 +440,9 @@ export class Router {
     }
 
     const { factory, params, pattern } = matchRoute(path);
+    // The admin page-width key is the matched pattern (services/pageWidth.js),
+    // set before the factory runs: a lazily loaded view's constructor may read it.
+    setPageRoute(pattern);
     let view;
     try {
       // A lazily loaded view (see VIEWS): its module may still be on the way.

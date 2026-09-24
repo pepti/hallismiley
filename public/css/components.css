@@ -533,6 +533,29 @@
   .pd-photo-grid    { grid-template-columns: 1fr; }
 }
 
+/* ── Error dialog (every error toast lands here, centered, until OK;
+   components/ErrorDialog.js, harvested from icelandicstore #245) ── */
+.error-dialog-overlay { z-index: 1000; }   /* above the admin modals (999) so an error inside one is still seen */
+.error-dialog { max-width: 480px; border-left: 4px solid var(--error); }
+.error-dialog__title { color: var(--error); }
+.error-dialog__msg { color: var(--text-primary); font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; margin: 0 0 var(--sp-5); }
+.error-dialog__actions { display: flex; justify-content: flex-end; }
+
+/* reset.css strips `outline` from every input/select/textarea, and only the
+   .form-input:focus rule puts anything back (a border + glow) — which covers
+   text fields. Radios, checkboxes and selects had NO visible focus at all, so
+   a keyboard user lost their place on every form built from them (harvested
+   from icelandicstore #296). :focus-visible keeps it off mouse clicks. Text
+   inputs are deliberately NOT in this list: browsers treat them as always
+   focus-visible, so the ring would appear on every click on top of the border. */
+select:focus-visible,
+.form-select:focus-visible,
+input[type=radio]:focus-visible,
+input[type=checkbox]:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
 /* ── Toast log (click-through history + Admin → Monitoring) ──
    Ported from icelandicstore components.css in harvest-ice-f-2026-09-24: the
    09-02 harvest brought ToastLog.js and the monitoring list but not these

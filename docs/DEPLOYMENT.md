@@ -154,6 +154,39 @@ Also set on any real instance:
 Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
 nothing reads them (the mail transport is Resend).
 
+### Anthropic authentication (workload identity, no stored secret)
+
+Every Claude call (today: auto-translate, `TRANSLATE_ENABLED`) authenticates
+through `server/services/anthropicAuth.js` (harvested from icelandicstore #326,
+2026-09-24). It ships **dark**: with nothing set, Claude features stay off.
+When **all** of `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` and
+`ANTHROPIC_WIF_AUDIENCE` are set, and the container has App Service's
+managed-identity endpoint (`IDENTITY_ENDPOINT`/`IDENTITY_HEADER`, injected
+automatically once the app has a system-assigned identity), the identity gets an
+Entra token for the audience and the Anthropic SDK exchanges it at
+`/v1/oauth/token` for a short-lived Anthropic token. No API key is read in that
+mode, even if `ANTHROPIC_API_KEY` is still set; otherwise the static key is the
+fallback. `ANTHROPIC_SERVICE_ACCOUNT_ID` / `ANTHROPIC_WORKSPACE_ID` are
+optional; token fetches are bounded by `ANTHROPIC_AUTH_TIMEOUT_MS` (10 s). At
+every boot the log says which mode is live: `[anthropic] workload identity OK`
+(or `FAILED` / `settings are incomplete`, at warn) after one cheap authenticated
+call, or `authenticating with the static API key`.
+
+- The federation rule matches ONE managed identity, and an identity belongs to
+  its slot: on a slotted app `ANTHROPIC_FEDERATION_RULE_ID` is a **sticky**
+  (`--slot-settings`) value, one rule per slot; the other settings are the same
+  on every slot.
+- Two issuer settings in the Anthropic console are load-bearing (ice's
+  switch-over, 2026-09-14): **maximum token lifetime 26 h** (App Service
+  identity tokens live 24 h with a back-dated `iat`; 24 h fails with
+  `jwt_lifetime_too_long`) and **JTI replay protection off** (App Service hands
+  out the same cached token for up to 24 h, so every hourly re-exchange would be
+  refused as a replay).
+- The app only ever logs an opaque 401; the reason is in the console's
+  Authentication events tab. The per-tenant ids (issuer, rules, service
+  account) are Orange Smiley's own and are set up when Halli turns Claude on for
+  an instance.
+
 **Canonical host = `APP_URL`'s host** (since 2026-09-12): in production
 `server/app.js` 301-redirects every request whose `Host` differs from the host
 part of `APP_URL` (only `/health` and `/ready` are exempt). Until then it was

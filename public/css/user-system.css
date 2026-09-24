@@ -492,6 +492,39 @@
   font-size: 0.68rem; font-family: var(--font-mono);
   color: var(--text-muted);
 }
+/* Two-step verification is on (users.totp_enabled) — the Reset 2FA action
+   sits in the actions column (ice #396). Tokens only (invariant 15). */
+.users-2sa-badge {
+  display: inline-block; margin-left: 6px;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+  color: var(--success); background: var(--success-dim);
+}
+.users-no-email { color: var(--text-muted); font-style: italic; font-family: var(--font-sans); }
+
+/* Shown-once credentials (components/OneTimeCredentials.js) — a login with no
+   mailbox gets its generated password on screen exactly once. Same job as the
+   2FA recovery-code panel, so it reads as a warning, not a form field. */
+.otc {
+  max-width: 560px; margin: var(--sp-4) 0; padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-surface); border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+}
+.otc__title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; color: var(--accent-ink); margin-bottom: var(--sp-2); }
+.otc__name { font-size: 0.9rem; color: var(--text-primary); margin-bottom: var(--sp-2); }
+.otc__warn {
+  margin: var(--sp-2) 0 var(--sp-4); padding: var(--sp-3);
+  font-size: 0.85rem; color: var(--text-primary);
+  background: var(--warning-dim); border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+}
+.otc__label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin: var(--sp-3) 0 var(--sp-1); }
+.otc__row { display: flex; gap: var(--sp-2); }
+.otc__value { font-family: var(--font-mono); font-size: 1rem; letter-spacing: 0.08em; }
+.otc__actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-4); }
+.users-totp-modal { max-width: 420px; display: flex; flex-direction: column; gap: var(--sp-3); }
+.users-totp-modal__actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-2); }
 
 /* Role select inline */
 .form-input--sm {
@@ -649,7 +682,12 @@
   padding: var(--sp-3);
   background: #fff;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
+  /* The edge belongs to the same exception as the plate (ice #410): it has to
+     read against the plate's WHITE, not against the page, so it cannot be
+     var(--border) — that token is a LIGHT hairline on Glóð and Miðnætti and
+     composites to almost nothing over white. A fixed dark hairline is correct
+     on every theme because the surface under it never changes. */
+  border: 1px solid rgba(18, 18, 18, 0.18);
   margin-bottom: var(--sp-3);
 }
 .totp-qr img { display: block; width: 200px; height: 200px; }

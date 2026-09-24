@@ -4,8 +4,10 @@
  * Anthropic-backed EN → IS translator for admin-saved content.
  *
  * Design rules (see plan `auto-translate-en-is-on-admin-save`):
- *   - Feature-flagged via TRANSLATE_ENABLED. When the flag is off OR
- *     ANTHROPIC_API_KEY is blank, every exported function becomes a no-op
+ *   - Feature-flagged via TRANSLATE_ENABLED. When the flag is off OR no
+ *     Anthropic credentials are configured (services/anthropicAuth.js: the
+ *     App Service managed identity via workload identity federation, else
+ *     ANTHROPIC_API_KEY), every exported function becomes a no-op
  *     returning null/unchanged input so we can deploy dark.
  *   - Never throws into the controller. Errors + timeouts log via pino
  *     and return null so the EN save still succeeds with IS left null.
@@ -26,6 +28,7 @@
 
 const { fetchNamed } = require('../observability/trackedFetch');
 const logger = require('../logger');
+const anthropicAuth = require('./anthropicAuth');
 
 // Keys that must NEVER be translated when walking a site_content jsonb.
 // Extend as new structural keys are introduced.
@@ -57,27 +60,29 @@ function isSupportedDirection(from, to) {
   return from !== to && !!LOCALE_NAMES[from] && !!LOCALE_NAMES[to];
 }
 
-// Lazy-initialised Anthropic client. Recreated if the API key changes at
-// runtime (rare but cheap).
+// Lazy-initialised Anthropic client, rebuilt whenever the auth configuration
+// changes (a key rotation, or the switch to workload identity — anthropicAuth,
+// harvested from icelandicstore #326, 2026-09-24).
 let cachedClient = null;
 let cachedKey = null;
 
 function getClient() {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = anthropicAuth.authSignature();
   if (!key) return null;
   if (cachedClient && cachedKey === key) return cachedClient;
 
+  const auth = anthropicAuth.clientAuthOptions({ name: 'Anthropic (translate)' });
   const AnthropicMod = require('@anthropic-ai/sdk');
   const Ctor = AnthropicMod.default || AnthropicMod.Anthropic || AnthropicMod;
   // fetch: the SDK's undici client is invisible to App Insights; the tracked
   // wrapper records each model call as an HTTP dependency (dark without AI).
-  cachedClient = new Ctor({ apiKey: key, fetch: fetchNamed('Anthropic messages (translate)') });
+  cachedClient = new Ctor({ ...auth, fetch: fetchNamed('Anthropic messages (translate)') });
   cachedKey = key;
   return cachedClient;
 }
 
 function isEnabled() {
-  return process.env.TRANSLATE_ENABLED === 'true' && !!process.env.ANTHROPIC_API_KEY;
+  return process.env.TRANSLATE_ENABLED === 'true' && anthropicAuth.isConfigured();
 }
 
 function getModel() {

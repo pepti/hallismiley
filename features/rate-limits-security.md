@@ -18,15 +18,19 @@ paths:
   - tests/unit/rateLimit.test.js
   - tests/unit/rateLimitDecide.test.js
   - tests/unit/rateLimitGuard.client.test.js
+  - tests/integration/adminOuterGuard.test.js
 migrations: []
 since: 2026-08-09
 origin: null
-history: [harvest-2, go-live]
+history: [harvest-2, go-live, harvest-ice-a-2026-09-24]
 ---
 
 The request-security posture: helmet/CSP and hpp (configured in `app.js`), csrf-csrf on state-changing routes, the express-rate-limit tiers with the static-asset exemption, `normalizeForwardedFor` ahead of every limiter, and the client's rate-limit guard/toast.
 
+One outer door on `/api/v1/admin` since 2026-09-24 (icelandicstore #418): `requireAuth` + `requireStaff` (admin, moderator, or any view holder) after `moduleGate`, before every admin router, which still guards itself.
+
 **Rules**
 - Tighten, never loosen; exemptions need an inline comment + reason (invariant 7).
 - Static-asset exemption is by LOCATION only, never by extension; `normalizeForwardedFor` runs right after `trust proxy`.
+- The `/api/v1/admin` outer door stays `requireStaff` (never narrowed to admin/moderator, never removed), after `moduleGate`.
 - Full rules: [../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting](../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting).

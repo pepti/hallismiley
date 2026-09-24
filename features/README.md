@@ -22,7 +22,7 @@ Downstream overrides go in `features/local.json`.
 | `signup` | Nýskráning / Public sign-up | 1 | engine | live | `modules.signup.enabled` | — | [signup.md](signup.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |
 | `users-admin` | Notendaumsjón / User administration | 1 | engine | live | — | `003_user_system`, `065_user_invited_at` | [users-admin.md](users-admin.md) |
-| `admin-shell` | Stjórnborðsrammi / Admin shell | 2 | engine | live | — | `053_admin_nav_config` | [admin-shell.md](admin-shell.md) |
+| `admin-shell` | Stjórnborðsrammi / Admin shell | 2 | engine | live | — | `053_admin_nav_config`, `111_user_ui_prefs` | [admin-shell.md](admin-shell.md) |
 | `admin-ui-kit` | Stjórnborðs-íhlutasafn / Admin UI kit | 2 | engine | live | — | — | [admin-ui-kit.md](admin-ui-kit.md) |
 | `public-site` | Opinber vefur / Public site | 3 | engine | live | — | `017_home_stats_content` | [public-site.md](public-site.md) |
 | `ambience` | Veður og birta / Ambience | 4 | engine | live | — | — | [ambience.md](ambience.md) |

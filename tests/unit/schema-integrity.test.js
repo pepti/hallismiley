@@ -26,6 +26,9 @@ const SQL_KEYWORDS = new Set([
   'join', 'table', 'index', 'trigger', 'function', 'procedure', 'view',
   'sequence', 'constraint', 'primary', 'foreign', 'key', 'references',
   'unique', 'check', 'column', 'if', 'only', 'row', 'no',
+  // Set-returning functions read FROM like a table (userController's
+  // page-width key cap, harvest-ice-b-2026-09-24).
+  'jsonb_object_keys',
 ]);
 
 /**

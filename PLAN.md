@@ -152,6 +152,39 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
+  `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
+  ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
+  2FA reset, the `/api/v1/admin` outer door, MCP tokens revoked with the admin
+  role, invite receipts, logins without email, the contact send budget, Claude
+  over the managed identity (dark). Open: (a) **the new `adminUsers.*`,
+  `adminCustomers.*`, `errors.admin.*` and `email.lead.provenance` strings are
+  DRAFT** (Halli); (b) turning Claude on for an instance needs the Anthropic
+  console setup in `docs/DEPLOYMENT.md` § Anthropic authentication (per-tenant
+  ids, Halli's hand); (c) lane 2 shares `server/app.js` and `emailService.js`
+  with this branch — whoever merges second rebases (lane 3 is merged in:
+  `emailService` logs through pino, `anthropicAuth.js` dropped its
+  global-fetch fallback for `trackedFetch`, the translator's client passes
+  the tracked `fetch` alongside the auth options); (d) icelandicstore's graft: its `4e8eb79` outer door
+  (`requireRole('admin','moderator')`) is superseded by the engine's
+  `requireStaff` — take the engine side.
+- Chunk B landed on the same branch
+  ([harvest-ice-b-2026-09-24](docs/HISTORY.md#harvest-ice-b-2026-09-24)): migration
+  `111_user_ui_prefs` (page width, Mjúk hreyfing, side-column width, cookie
+  choice on the account), the centred error dialog, the sticky sideways
+  scrollbar, the undefined-token test (21 engine references fixed), the focus
+  ring. Open: (a) **migration number** — master (lane 3, MCP OAuth) ends at
+  110, so 111 follows it; lane 2 (inventory audit, variant barcode) may also
+  have taken 111 — whoever merges second renumbers, and
+  ice's product file then lists `'<engine name>': ['125_user_page_widths',
+  '127_user_page_width_motion', '128_user_cookie_consent',
+  '135_user_aside_widths']` under `aliases`; (b) copy DRAFT (`admin.pageWidth.*`,
+  `admin.asideWidth.*`, `toast.errorTitle`/`ok`, `privacy.changeCookieChoice`);
+  (c) the privacy text still tells visitors to withdraw by clearing cookies —
+  Halli's legal copy, the new button now does it; (d) the error dialog changes
+  every error toast at once — watch the first downstream sync (chunk E's
+  "page failed to load" message, shown when a lazily loaded view's file is
+  missing on the current release, now opens the dialog too).
 - icelandicstore harvest, chunk F landed 2026-09-24 ([harvest-ice-f-2026-09-24](docs/HISTORY.md#harvest-ice-f-2026-09-24)):
   App Insights telemetry (dark), every 5xx in `event_logs`, `X-App-Build`
   checked by `deploy.yml` and a stable promote, Jest in three CI shards, the

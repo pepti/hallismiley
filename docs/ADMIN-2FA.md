@@ -141,9 +141,22 @@ in `config/client.json` (the identity seam, `server/config/identity.js`;
 enrolled earlier keeps the name the app stored at enrolment until the person
 turns two-step off and sets it up again.
 
+## An admin resets another account's two-step verification
+
+Since 2026-09-24 (harvested from icelandicstore #396) the running app has a
+way back for everyone but the last admin: **Admin → Notendur → Endurstilla
+2FA** (`POST /api/v1/admin/users/:id/totp/reset`, admin + CSRF). It runs the
+same teardown as the self-service turn-off (secret, recovery codes, replay
+marker) and ends every session the account holds; the password is untouched.
+Never your own account (that goes through the profile page, which re-asks the
+password). A STAFF account — admin, moderator, or any role that grants an
+admin view — needs the ACTING admin's own password as well, so a walk-up
+attacker at one admin's unlocked laptop cannot strip another's second factor.
+A plain customer account needs none.
+
 ## Break-glass: an admin has lost the phone AND the recovery codes
 
-Nothing in the running app can help — that is the point. The way back in is
+When no other admin can reset it (the section above), nothing in the running app can help — that is the point. The way back in is
 database access, a stronger credential than anything the web app accepts:
 
 ```bash

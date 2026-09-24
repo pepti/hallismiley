@@ -25,16 +25,26 @@ paths:
   - e2e/admin-surface.spec.js
   - e2e/admin-sidebar-scroll.spec.js
   - e2e/admin-nav-colors.spec.js
-migrations: [053_admin_nav_config]
+  - public/js/services/pageWidth.js
+  - public/js/components/PageWidthControl.js
+  - public/js/components/AsideWidthControl.js
+  - public/js/components/widthMenu.js
+  - tests/integration/pageWidth.test.js
+  - tests/unit/pageWidth.client.test.js
+  - e2e/admin-page-width.spec.js
+migrations: [053_admin_nav_config, 111_user_ui_prefs]
 since: 2026-08-09
 origin: null
-history: [r1, admin-reshape, harvest-2, identity-seam-2026-09-22]
+history: [r1, admin-reshape, harvest-2, identity-seam-2026-09-22, harvest-ice-b-2026-09-24]
 ---
 
 The sidebar (`ADMIN_NAV`, grouped IA with per-admin layout and 12 row tints saved in `admin_nav_config`), the company overview at `/admin`, and surface hiding: `HIDDEN_ADMIN_VIEWS` in `adminSurface.js` hides lines for `'*'` holders while the routes and ids stay live and grantable. The SET is the product's — `identity.surface.hiddenAdminViews` in `config/client.json`, read through `utils/identity.js`.
+
+**Layout preferences per account** (harvested from icelandicstore, 2026-09-24; migration 111): the page-width icon on the sidebar's Breyta row (Venjuleg 1280 / Breið 1920 / Allur skjárinn, per page or all pages, Mjúk hreyfing) and the side-column width on the order detail page (Mjór / Miðlungs / Breiður). `users.page_widths`, `page_width_motion`, `aside_widths` ride on the session like `theme`; `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}`. Migration 111 also carries `users.cookie_consent` (the analytics feature's).
 
 **Rules**
 - Hide, never delete: `HIDDEN_ADMIN_VIEWS` applies only to `'*'` holders; an all-hidden group renders no header. The ids come from the identity seam, never a literal in `adminSurface.js`; `admin-surface-parity.test.js` checks the engine defaults AND this instance's resolved list against `ADMIN_VIEW_IDS`.
 - Dashboard cards sit over EXISTING endpoints, each gated on the view its endpoint demands.
 - Every admin view carries `destroy()` and a stale-paint sequence guard.
+- A page's width key is the router's matched pattern; the client and server width lists move together; a pick is one atomic jsonb UPDATE.
 - Full rules: [../docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit](../docs/ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit).

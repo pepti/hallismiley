@@ -6,6 +6,7 @@ import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
+import { realEmail } from '../utils/placeholderEmail.js';
 import { THEMES, swatchFor, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
@@ -234,7 +235,9 @@ export class ProfileView {
     const roleBadge  = profile.role === 'admin'
       ? `<span class="badge badge--admin">${t('adminUsers.setRole')} — admin</span>`
       : `<span class="badge badge--user">${t('adminUsers.setRole')} — user</span>`;
-    const verified = profile.emailVerified
+    // A name-only login (no email, ice #397) has nothing to verify: no badge.
+    const verified = !realEmail(profile.email) ? ''
+      : profile.emailVerified
       ? `<span class="verified-badge">✓ ${t('adminUsers.verified')}</span>`
       : `<span class="unverified-badge">✗ ${t('adminUsers.unverified')}</span>`;
 
@@ -264,7 +267,7 @@ export class ProfileView {
             ${verified}
           </div>
           ${profile.displayName ? `<p class="profile-header__displayname">${escHtml(profile.displayName)}</p>` : ''}
-          <p class="profile-header__email">${escHtml(profile.email)}</p>
+          <p class="profile-header__email">${escHtml(realEmail(profile.email))}</p>
           <p class="profile-header__joined">${t('profile.memberSince')} ${formatDate(profile.createdAt)}</p>
         </div>
         <button class="btn btn--outline profile-edit-btn" id="profile-edit-btn" data-testid="edit-profile-btn">${t('profile.editProfile')}</button>

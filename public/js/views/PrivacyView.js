@@ -1,5 +1,6 @@
 import { t, href, getLocale } from '../i18n/i18n.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
+import { reopenCookieChoice } from '../services/cookieConsent.js';
 
 // Privacy policy for the public business site (/personuvernd).
 //
@@ -339,10 +340,15 @@ export class PrivacyView {
 
           <footer class="legal-footer-nav">
             <a href="${href('/')}" class="btn btn--outline">${t('common.backToHome')}</a>
+            <button type="button" class="btn btn--outline" id="privacy-cookie-choice" data-testid="privacy-cookie-choice">${t('privacy.changeCookieChoice')}</button>
           </footer>
         </article>
       </main>
     `;
+
+    // "Change cookie choice" shows the banner again; a signed-in answer is
+    // saved to the account (services/cookieConsent.js, ice #411).
+    view.querySelector('#privacy-cookie-choice')?.addEventListener('click', () => reopenCookieChoice());
 
     // Obfuscate the address — built from parts so scrapers can't harvest it
     // from the HTML source.

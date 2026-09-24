@@ -12,7 +12,7 @@
 // role set the views are resolved from.
 const Role = require('../models/Role');
 const { ALL } = require('./adminViews');
-const { heldRoles, forbiddenMessage } = require('./roles');
+const { heldRoles, hasRole, forbiddenMessage } = require('./roles');
 const { withholdViews } = require('./mfaPolicy');
 
 function requireView(viewId) {
@@ -29,4 +29,25 @@ function requireView(viewId) {
   };
 }
 
-module.exports = { requireView };
+// The ONE outer door on /api/v1/admin (app.js, harvested from ice #418): a
+// signed-in account with staff standing — admin or moderator, or any role that
+// grants at least one admin view (a seller, a contractor, a custom role). Every
+// admin router behind it still carries its own, usually narrower, guard; this
+// only guarantees that a router which forgets one is still closed to plain
+// customer accounts. Ice keys it on admin + moderator; the engine's dynamic
+// roles make any view holder staff. Same memoised, MFA-withheld view set as
+// requireView, so the two can never disagree about who is in.
+async function requireStaff(req, res, next) {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized', code: 401 });
+    if (hasRole(req.user, 'admin', 'moderator')) return next();
+    if (!req._resolvedViews) {
+      req._resolvedViews = await Role.getViewsForRoles(heldRoles(req.user));
+    }
+    const views = withholdViews(req._resolvedViews, req.user.mfaEnrolmentRequired === true);
+    if (views.length > 0) return next();
+    return res.status(403).json({ error: forbiddenMessage(req), code: 403 });
+  } catch (err) { next(err); }
+}
+
+module.exports = { requireView, requireStaff };

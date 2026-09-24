@@ -5,6 +5,7 @@ import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
 import { installSessionGuard } from './services/sessionGuard.js';
+import { initCookieConsent } from './services/cookieConsent.js';
 import { installBuildGuard } from './services/buildGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
@@ -23,6 +24,9 @@ installBuildGuard();
 
 // ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();
+// The cookie banner waits for this: a signed-in user whose account already
+// holds an answer is never shown it (services/cookieConsent.js, migration 111).
+initCookieConsent();
 
 // ── 2. Determine and load the active locale ───────────────────────────────────
 // Priority: locale in the URL hash → user's saved preference → Icelandic.
