@@ -299,3 +299,60 @@ describe('errorHandler → event log', () => {
     expect(res._body).toEqual({ error: 'Internal Server Error', code: 500 });
   });
 });
+
+// ── Every 5xx becomes a row, not just the ones that reach errorHandler ─────────
+// (server/middleware/eventLogOn5xx.js — icelandicstore #254, harvest-ice-f-2026-09-24)
+
+describe('eventLogOn5xx: direct res.status(5xx) responses are recorded', () => {
+  let savedStripe;
+  beforeEach(() => { savedStripe = process.env.STRIPE_SECRET_KEY; delete process.env.STRIPE_SECRET_KEY; });
+  afterEach(() => { if (savedStripe !== undefined) process.env.STRIPE_SECRET_KEY = savedStripe; });
+
+  test('a route-level 503 (checkout with no payment provider) is stored as a warn row with the request id', async () => {
+    const res = await request(app)
+      .post('/api/v1/shop/checkout')
+      .set('Cookie', adminCookie)
+      .send({ items: [] });
+    expect(res.status).toBe(503);
+
+    expect(await waitForRows(1)).toBe(1);
+    const rows = await EventLog.list({});
+    expect(rows[0]).toMatchObject({
+      source: 'server', level: 'warn', status: 503,
+      path: 'POST /api/v1/shop/checkout',
+      user_id: adminId,
+      request_id: res.headers['x-request-id'],
+    });
+    expect(rows[0].message).toBe('503 Service Unavailable');
+  });
+
+  test('a 5xx that went through errorHandler is stored once, not twice', async () => {
+    const eh = require('../../server/middleware/errorHandler');
+    const express = require('express');
+    const mini = express();
+    mini.use(require('../../server/middleware/eventLogOn5xx'));
+    mini.get('/boom', (req, res, next) => next(new Error('boom once')));
+    mini.use(eh);
+    const res = await request(mini).get('/boom');
+    expect(res.status).toBe(500);
+    await new Promise(r => setTimeout(r, 200));
+    await EventLog.flush();
+    const rows = await EventLog.list({});
+    expect(rows).toHaveLength(1);
+    expect(rows[0].message).toBe('boom once');
+  });
+
+  test('4xx responses are not recorded', async () => {
+    const res = await request(app).get('/api/v1/admin/events'); // 401 without a cookie
+    expect(res.status).toBe(401);
+    await new Promise(r => setTimeout(r, 150));
+    expect(await EventLog.count({})).toBe(0);
+  });
+
+  test('EventLog.flush() waits for an in-flight write', async () => {
+    const p = EventLog.record({ source: 'server', level: 'error', message: 'in flight' });
+    await EventLog.flush();
+    expect(await EventLog.count({})).toBe(1);
+    await expect(p).resolves.toMatchObject({ message: 'in flight' });
+  });
+});

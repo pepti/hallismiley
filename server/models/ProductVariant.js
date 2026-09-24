@@ -1,8 +1,13 @@
 // Repository for product_variants — per-SKU stock/price.
 // Parameterised queries throughout.
+//
+// `stock` is not a plain updatable column: a CHANGE moves through
+// Inventory.setAbsolute (an inventory_adjustments row naming who moved it), and
+// opening stock on create() is recorded as an 'opening' row. models/Inventory.js.
 const db = require('../config/database');
+const Inventory = require('./Inventory');
 
-const COLUMNS = 'id, product_id, sku, attributes, price_isk, price_eur, stock, bin, active, created_at, updated_at';
+const COLUMNS = 'id, product_id, sku, barcode, attributes, price_isk, price_eur, stock, bin, active, created_at, updated_at';
 
 class ProductVariant {
   // ── READ ──────────────────────────────────────────────────────────────────
@@ -61,15 +66,18 @@ class ProductVariant {
 
   // ── WRITE ─────────────────────────────────────────────────────────────────
 
-  static async create(data) {
+  static async create(data, { userId = null } = {}) {
     const {
       product_id, sku, attributes,
       price_isk = null, price_eur = null,
-      stock = 0, bin = null, active = true,
+      stock = 0, bin = null, active = true, barcode = null,
     } = data;
-    const { rows } = await db.query(
-      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, bin, active)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, bin, active, barcode)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)
        RETURNING ${COLUMNS}`,
       [
         String(product_id), String(sku),
@@ -77,42 +85,37 @@ class ProductVariant {
         price_isk === null || price_isk === undefined ? null : Number(price_isk),
         price_eur === null || price_eur === undefined ? null : Number(price_eur),
         Number(stock), bin || null, Boolean(active),
+        barcode || null,
       ]
-    );
-    return rows[0];
+      );
+      await Inventory.recordOpening(client, {
+        productId: rows[0].product_id, variantId: rows[0].id, stock: rows[0].stock, userId,
+      });
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
-  // Upsert by (product_id, attributes) — useful for seeding.
-  static async upsertByAttrs(data) {
-    const {
-      product_id, sku, attributes,
-      price_isk = null, price_eur = null,
-      stock = 0, active = true,
-    } = data;
-    const attrsJson = typeof attributes === 'string' ? attributes : JSON.stringify(attributes);
-    const { rows } = await db.query(
-      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, active)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
-       ON CONFLICT (product_id, attributes) DO UPDATE SET
-         sku = EXCLUDED.sku,
-         price_isk = EXCLUDED.price_isk,
-         price_eur = EXCLUDED.price_eur,
-         stock = EXCLUDED.stock,
-         active = EXCLUDED.active
-       RETURNING ${COLUMNS}`,
-      [
-        String(product_id), String(sku), attrsJson,
-        price_isk === null || price_isk === undefined ? null : Number(price_isk),
-        price_eur === null || price_eur === undefined ? null : Number(price_eur),
-        Number(stock), Boolean(active),
-      ]
-    );
-    return rows[0];
-  }
+  // There is deliberately NO upsert here. One used to exist (upsertByAttrs,
+  // "useful for seeding") with `stock = EXCLUDED.stock` in its DO UPDATE — an
+  // unaudited absolute stock overwrite with no caller (removed in icelandicstore
+  // #275 for the same reason). If one is ever needed, it must leave stock alone
+  // and let Inventory.applyLines move it.
 
-  static async update(id, data) {
-    const allowed = ['sku', 'price_isk', 'price_eur', 'stock', 'bin', 'active'];
-    const numeric = new Set(['price_isk', 'price_eur', 'stock']);
+  // `stock` is accepted but moves through Inventory.setAbsolute in a
+  // transaction that locks the parent product FOR KEY SHARE, then the variant
+  // FOR UPDATE (the lock order in models/Inventory.js) — the variant grid in the
+  // product editor PATCHes one cell at a time, stock among them, and before
+  // this each such edit was a blind absolute overwrite (ice #275).
+  static async update(id, data, { userId = null, stockReason = 'correction', stockNote = null } = {}) {
+    const allowed = ['sku', 'barcode', 'price_isk', 'price_eur', 'bin', 'active'];
+    // No 'stock' here: it is not in `allowed`, so the loop below never sees it.
+    const numeric = new Set(['price_isk', 'price_eur']);
     const bool    = new Set(['active']);
 
     const sets = [];
@@ -122,30 +125,62 @@ class ProductVariant {
       let v = data[f];
       if (numeric.has(f)) v = v === null ? null : Number(v);
       if (bool.has(f))    v = Boolean(v);
-      // Empty bin clears back to NULL (keeps the variant bin index sparse).
-      if (f === 'bin' && typeof v === 'string' && v.trim() === '') v = null;
+      // Empty bin / barcode clears back to NULL (keeps the partial indexes sparse).
+      if ((f === 'bin' || f === 'barcode') && typeof v === 'string' && v.trim() === '') v = null;
       params.push(v);
       sets.push(`${f} = $${params.length}`);
     }
-    if (sets.length === 0) return ProductVariant.findById(id);
-    params.push(String(id));
-    const { rows } = await db.query(
-      `UPDATE product_variants SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING ${COLUMNS}`,
-      params
-    );
-    return rows[0] || null;
-  }
+    const wantsStock = data.stock !== undefined && data.stock !== null && data.stock !== '';
 
-  // Atomic decrement — same contract as Product.decrementStockAtomic.
-  // Returns the new stock on success, null if the guard failed (insufficient).
-  static async decrementStockAtomic(client, variantId, qty) {
-    const { rows } = await client.query(
-      `UPDATE product_variants SET stock = stock - $1
-        WHERE id = $2 AND stock >= $1
-        RETURNING stock`,
-      [Number(qty), String(variantId)]
-    );
-    return rows[0]?.stock ?? null;
+    if (!wantsStock) {
+      if (sets.length === 0) return ProductVariant.findById(id);
+      params.push(String(id));
+      const { rows } = await db.query(
+        `UPDATE product_variants SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING ${COLUMNS}`,
+        params
+      );
+      return rows[0] || null;
+    }
+
+    const target = Number(data.stock);
+    if (!Number.isInteger(target) || target < 0) {
+      const err = new Error('stock must be a whole number of 0 or more');
+      err.status = 400;
+      throw err;
+    }
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // The parent FOR KEY SHARE and the variant FOR UPDATE, in ONE lock order,
+      // with no unlocked pre-read that could disagree with the row locked.
+      await client.query(
+        `SELECT id FROM products
+          WHERE id = (SELECT product_id FROM product_variants WHERE id = $1)
+          FOR KEY SHARE`,
+        [String(id)]
+      );
+      const { rows: cur } = await client.query(
+        'SELECT stock, product_id FROM product_variants WHERE id = $1 FOR UPDATE', [String(id)]
+      );
+      if (!cur[0]) { await client.query('ROLLBACK'); return null; }
+      if (sets.length) {
+        params.push(String(id));
+        await client.query(`UPDATE product_variants SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      }
+      await Inventory.setAbsolute(client, {
+        productId: cur[0].product_id, variantId: String(id),
+        previous: cur[0].stock, target,
+        reason: stockReason || 'correction', note: stockNote, userId,
+      });
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
+    return ProductVariant.findById(id);
   }
 
   // Total stock across all active variants of a product. Used to drive

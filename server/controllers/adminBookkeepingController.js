@@ -31,6 +31,8 @@ const securityLogger = require('../observability/securityLogger');
 const { toIsoDate, todayIso, assertAccountingDate, addDays, DateError } = require('../utils/booksDate');
 const { VatError } = require('../utils/vat');
 const { FxError } = require('../utils/fx');
+const Product = require('../models/Product');
+const { t } = require('../i18n');
 
 const MAX_LIMIT = 200;
 const MAX_OFFSET = 1_000_000;
@@ -1894,6 +1896,38 @@ async function getPosCatalogue(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+/**
+ * A scanned code at the till (components/ScanInput.js, harvested from
+ * icelandicstore): SKU or barcode → the one sellable line, variant first
+ * (Product.resolveByCode). Only what the catalogue above would sell: active,
+ * priced, with a VAT rate. A variant rings up at its own price under the
+ * parent product, with its attributes in the description.
+ */
+async function lookupPosCode(req, res, next) {
+  try {
+    const code = String(req.query.code || '').trim().slice(0, 100);
+    if (!code) return res.status(400).json({ error: t(req.locale, 'errors.pos.codeRequired'), code: 400 });
+    const hit = await Product.resolveByCode(code);
+    const notFound = () => res.status(404).json({ error: t(req.locale, 'errors.pos.codeNotFound', { code }), code: 404 });
+    if (!hit || !hit.active || !(hit.priceIsk > 0)) return notFound();
+    const { rows } = await db.query('SELECT vat_rate, is_bookable FROM products WHERE id = $1', [hit.productId]);
+    if (!rows[0] || rows[0].vat_rate === null) return notFound();
+    const attrs = hit.attributes && typeof hit.attributes === 'object'
+      ? Object.values(hit.attributes).filter(Boolean).join(' / ') : '';
+    res.json({
+      item: {
+        productId: hit.productId,
+        variantId: hit.variantId,
+        name: attrs ? `${hit.name} — ${attrs}` : hit.name,
+        sku: hit.sku,
+        price_isk: hit.priceIsk,
+        vat_rate: Number(rows[0].vat_rate),
+        is_service: Boolean(rows[0].is_bookable) && !hit.variantId,
+      },
+    });
+  } catch (err) { fail(res, err, next); }
+}
+
 async function exportPosCsv(req, res, next) {
   try {
     let from = null;
@@ -2050,6 +2084,7 @@ module.exports = {
   listPosReceipts,
   getPosDay,
   getPosCatalogue,
+  lookupPosCode,
   exportPosCsv,
   getReconciliationStatus,
   listBankTransactions,

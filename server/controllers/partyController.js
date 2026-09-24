@@ -29,6 +29,7 @@ const { AnalyticsEvent } = require('../models/Analytics');
 const { makeToken, hashToken, generateGuestUsername } = require('../auth/tokens');
 const { approveGuest, declineGuest, grantInstantAccess, sendWelcome } = require('../services/partyApproval');
 const { DEFAULT_PARTY_INFO, LOCALE_NEUTRAL_INFO_KEYS, readPartyInfo } = require('../services/partyInfo');
+const { isModuleEnabled } = require('../config/modules');
 
 // Base URL for links embedded in emails (mirrors emailService).
 const APP_URL = process.env.APP_URL || 'https://www.orangesmiley.is';
@@ -460,6 +461,7 @@ const partyController = {
       );
 
       let invite = null; // { to, name, token, locale } when auto-granted
+      let heldForReview = false; // a new guest held back because signup is off
       if (requiresReview) {
         await db.query(
           `UPDATE users
@@ -484,6 +486,22 @@ const partyController = {
             locale: result.user.preferred_locale || 'is',
           };
         }
+      } else if (!isModuleEnabled('signup')) {
+        // No public signup on this instance (the `signup` module, R2b): a
+        // brand-new guest becomes a PENDING request — no pre-approval, no
+        // magic link — and the owner decides through the review email below,
+        // exactly as for a declined guest. An account then exists only because
+        // an admin approved it (security review 2026-09-24).
+        const username = await generateGuestUsername(email, name);
+        await db.query(
+          `INSERT INTO users
+             (username, email, password_hash, role, display_name, preferred_locale,
+              email_verified, party_access, approval_status, requested_at,
+              approval_action_token_hash, approval_action_expires)
+           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, FALSE, 'pending', NOW(), $5, $6)`,
+          [username, email, name || null, req.locale || 'is', actionHash, actionExp]
+        );
+        heldForReview = true;
       } else {
         // Brand-new guest: a passwordless, pre-approved account with an
         // auto-generated username (username is UNIQUE NOT NULL) and a magic
@@ -527,7 +545,7 @@ const partyController = {
         const recipients = _partyNotifyRecipients(adminsRes.rows.map(r => r.email));
         return emailService.sendPartyRequestNotification({
           request: { name, email }, adminEmails: recipients, approveUrl,
-          granted: !requiresReview,
+          granted: !requiresReview && !heldForReview,
         });
       }).catch(err => logger.error({ err }, 'party request-access notification failed'));
     } catch (err) { next(err); }
@@ -821,7 +839,7 @@ const partyController = {
       // Fire-and-forget: admin notification + guest confirmation. Never fail
       // the request on email failure.
       _sendRsvpEmails({ userId: req.user.id, answers, isUpdate })
-        .catch(err => console.error(`[partyController] RSVP emails failed: ${err.message}`));
+        .catch(err => logger.error({ err }, '[partyController] RSVP emails failed'));
 
       // Count only NEW RSVPs as conversions, not edits to an existing one.
       if (!isUpdate) {
@@ -1160,7 +1178,7 @@ const partyController = {
         subject: subject?.trim() || null,
         body:    body?.trim()    || null,
         partyInfo,
-      }).catch(err => console.error(`[partyController] Party announcement failed: ${err.message}`));
+      }).catch(err => logger.error({ err }, '[partyController] Party announcement failed'));
     } catch (err) { next(err); }
   },
 

@@ -1,9 +1,11 @@
 // Public shop endpoints: browse, checkout, order lookup, Stripe webhook.
 // Admin-only product/order management lives in adminShopController.js.
+const logger = require('../logger');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const Collection = require('../models/Collection');
 const Order   = require('../models/Order');
+const Inventory = require('../models/Inventory');
 const { WebhookEvent } = require('../models/Order');
 const db = require('../config/database');
 const { SHIPPING_METHODS, getShippingPrice } = require('../config/shipping');
@@ -67,6 +69,29 @@ function buildLineName(product, variant) {
     .filter(Boolean)
     .map(v => String(v).charAt(0).toUpperCase() + String(v).slice(1));
   return bits.length ? `${product.name} — ${bits.join(' / ')}` : product.name;
+}
+
+// The public catalogue carries ONE inventory number, `available` (on hand
+// minus what paid, not-yet-fulfilled orders have committed — models/Inventory.js).
+// The raw on-hand count and the committed figure are warehouse-internal: sending
+// them would let any visitor read how much is on order, so they are stripped
+// for every viewer (harvested from icelandicstore #243). Inventory.decorate must
+// have run first.
+function stripStockInternals(product) {
+  const out = { ...product };
+  delete out.stock;
+  delete out.on_hand;
+  delete out.committed;
+  if (Array.isArray(out.variants)) {
+    out.variants = out.variants.map((v) => {
+      const vc = { ...v };
+      delete vc.stock;
+      delete vc.on_hand;
+      delete vc.committed;
+      return vc;
+    });
+  }
+  return out;
 }
 
 const shopController = {
@@ -133,7 +158,8 @@ const shopController = {
         variants:    variantsByProduct.get(p.id)    || [],
         collections: collectionsByProduct.get(p.id) || [],
       }));
-      return res.json({ products: withAll });
+      await Inventory.decorate(withAll);
+      return res.json({ products: withAll.map(stripStockInternals) });
     } catch (err) { next(err); }
   },
 
@@ -146,7 +172,8 @@ const shopController = {
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
       ]);
-      return res.json({ product: { ...product, images, variants } });
+      const full = await Inventory.decorate({ ...product, images, variants });
+      return res.json({ product: stripStockInternals(full) });
     } catch (err) { next(err); }
   },
 
@@ -245,12 +272,6 @@ const shopController = {
           if (!product) {
             return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
           }
-          if (variant.stock < qty) {
-            return res.status(409).json({
-              error: t(req.locale, 'errors.shop.notEnoughStock', { name: buildLineName(product, variant) }),
-              code: 409,
-            });
-          }
           resolvedItems.push({
             productId: product.id,
             variantId: variant.id,
@@ -274,12 +295,6 @@ const shopController = {
               code: 400,
             });
           }
-          // Bookable items (tech / carpentry services) skip stock — the
-          // post-checkout scheduling flow gates availability instead.
-          // Shop redesign step 5.
-          if (!product.is_bookable && product.stock < qty) {
-            return res.status(409).json({ error: t(req.locale, 'errors.shop.notEnoughStock', { name: product.name }), code: 409 });
-          }
           resolvedItems.push({
             productId: product.id,
             variantId: null,
@@ -291,6 +306,25 @@ const shopController = {
         } else {
           return res.status(400).json({ error: t(req.locale, 'errors.shop.itemNeedsId'), code: 400 });
         }
+      }
+
+      // ── Stock: Available, not on hand ─────────────────────────────────
+      // What paid-but-unshipped orders already hold is not for sale twice
+      // (models/Inventory.js). The engine does not oversell, so a line that
+      // Available cannot cover is a 409 here; the basket (utils/availability.js)
+      // catches it before the customer gets this far, and the webhook re-checks
+      // under the row locks when the payment lands. Bookable services at
+      // product level are skipped (the scheduling flow gates them).
+      const shortfalls = await Inventory.availabilityShortfalls(null,
+        resolvedItems.map(it => ({ productId: it.productId, variantId: it.variantId, qty: it.quantity })));
+      if (shortfalls.length) {
+        const s0 = shortfalls[0];
+        const line = resolvedItems.find(it => (s0.variantId ? String(it.variantId) === s0.variantId : String(it.productId) === s0.productId && !it.variantId));
+        return res.status(409).json({
+          error: t(req.locale, 'errors.shop.notEnoughStock', { name: line ? line.name : '' }),
+          code: 409, reason: 'NOT_ENOUGH_STOCK',
+          lines: shortfalls.map(x => ({ productId: x.productId, variantId: x.variantId, available: Math.max(0, x.available) })),
+        });
       }
 
       const shippingAmount = getShippingPrice(shippingMethod, currency);
@@ -406,7 +440,7 @@ const shopController = {
     if (!Buffer.isBuffer(req.body)) {
       // Defensive: a future refactor that moves express.json() above this
       // route would silently break signature verification. Fail loudly.
-      console.error('[stripeWebhook] req.body is not a Buffer — raw body parser missing');
+      logger.error('[stripeWebhook] req.body is not a Buffer — raw body parser missing');
       return res.status(500).send('Webhook misconfigured: raw body required');
     }
 
@@ -414,7 +448,7 @@ const shopController = {
     try {
       event = stripeService.verifyWebhook(req.body, sig);
     } catch (err) {
-      console.warn(`[stripeWebhook] Invalid signature: ${err.message}`);
+      logger.warn({ err: { message: err.message } }, '[stripeWebhook] Invalid signature');
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -440,7 +474,7 @@ const shopController = {
       }
       return res.status(200).send('OK');
     } catch (err) {
-      console.error(`[stripeWebhook] Processing ${event.type} failed:`, err);
+      logger.error({ err, eventType: event.type }, '[stripeWebhook] Processing failed');
       // Don't return 5xx here — Stripe will retry and we already marked the
       // event processed. Return 200 so we don't flood retries, but log loud.
       return res.status(200).send('Processed with errors');
@@ -482,7 +516,7 @@ const shopController = {
 async function handleCheckoutCompleted(session) {
   const order = await Order.findByStripeSessionId(session.id);
   if (!order) {
-    console.warn(`[stripeWebhook] checkout.session.completed: order not found for session ${session.id}`);
+    logger.warn({ sessionId: session.id }, '[stripeWebhook] checkout.session.completed: order not found for session');
     return;
   }
   if (order.status !== 'pending') {
@@ -495,7 +529,14 @@ async function handleCheckoutCompleted(session) {
     ? session.payment_intent
     : session.payment_intent?.id;
 
-  // Atomic transition pending→paid + atomic stock decrement per item.
+  // Atomic transition pending→paid. On hand does NOT move here any more — it
+  // moves once, at fulfilment (Order.setOrderStatuses; harvested from
+  // icelandicstore #243). What the payment does is COMMIT the lines, so it must
+  // not commit stock that other paid orders already hold: under the row locks
+  // (orders row by the UPDATE, then Inventory's lock order) the order's lines
+  // are checked against Available. Losing that check is the old "stock race
+  // lost" branch — roll back, mark failed, refund — because the engine does
+  // not oversell.
   const client = await db.pool.connect();
   let transitioned;
   let stockLost = false;
@@ -509,29 +550,22 @@ async function handleCheckoutCompleted(session) {
       return;
     }
 
-    const items = await Order.listItems(order.id);
-    for (const it of items) {
-      // Bookable items (services) are availability-gated by the scheduling
-      // flow, not by row count — skip stock decrement so they don't fail
-      // against a stock=0 column. Variant-backed bookables (uncommon but
-      // representable) still go through the variant decrement path because
-      // the variant table owns its own stock semantics.
-      // Shop redesign step 5.
-      if (it.is_bookable && !it.product_variant_id) continue;
-      // Variant-backed items decrement variant stock; legacy single-SKU
-      // items fall back to product stock. Both use atomic WHERE stock >= qty
-      // so a race-loser returns null and we abort the whole transaction.
-      const newStock = it.product_variant_id
-        ? await ProductVariant.decrementStockAtomic(client, it.product_variant_id, it.quantity)
-        : await Product.decrementStockAtomic(client, it.product_id, it.quantity);
-      if (newStock === null) {
-        stockLost = true;
-        break;
+    if (!transitioned.stock_deducted_at) {
+      const lines = await Inventory.linesForOrder(client, order.id);
+      if (lines.length) {
+        await Inventory.lockForWrite(client, {
+          productIds: lines.filter(l => !l.product_variant_id).map(l => l.product_id),
+          variantIds: lines.filter(l => l.product_variant_id).map(l => l.product_variant_id),
+        });
+        const short = await Inventory.availabilityShortfalls(client,
+          lines.map(l => ({ productId: l.product_id, variantId: l.product_variant_id, qty: l.quantity })),
+          { excludeOrderId: order.id });
+        if (short.length) stockLost = true;
       }
     }
 
     if (stockLost) {
-      // Roll back stock + status transition — order will be marked failed outside the tx
+      // Roll back the status transition — order will be marked failed outside the tx
       await client.query('ROLLBACK');
     } else {
       await client.query('COMMIT');
@@ -545,19 +579,19 @@ async function handleCheckoutCompleted(session) {
 
   if (stockLost) {
     // Lost the stock race — refund and mark failed.
-    console.warn(`[stripeWebhook] Stock race lost on order ${order.order_number}; refunding`);
+    logger.warn({ orderNumber: order.order_number }, '[stripeWebhook] Stock race lost; refunding');
     await Order.updateStatus(order.id, 'failed', { stripePaymentIntentId: paymentIntentId });
     if (paymentIntentId) {
       try {
         await stripeService.createRefund(paymentIntentId, { reason: 'requested_by_customer' });
       } catch (refundErr) {
-        console.error(`[stripeWebhook] Refund failed for order ${order.order_number}:`, refundErr);
+        logger.error({ err: refundErr, orderNumber: order.order_number }, '[stripeWebhook] Refund failed');
       }
     }
     return;
   }
 
-  // Success path — payment confirmed and stock committed.
+  // Success path — payment confirmed; its lines now count as committed.
   // Fire-and-forget conversion event (no PII — currency + amount only).
   AnalyticsEvent.record({
     event_type: 'shop_checkout',
@@ -598,7 +632,7 @@ async function handleCheckoutCompleted(session) {
           adminEmails,
         }));
       } else {
-        console.warn(`[stripeWebhook] No admin recipients for booking notification on ${finalOrder.order_number}`);
+        logger.warn({ orderNumber: finalOrder.order_number }, '[stripeWebhook] No admin recipients for booking notification');
       }
     }
 
@@ -606,11 +640,11 @@ async function handleCheckoutCompleted(session) {
     const results = await Promise.allSettled(sends);
     for (const r of results) {
       if (r.status === 'rejected') {
-        console.error(`[stripeWebhook] Email send rejected for ${order.order_number}:`, r.reason);
+        logger.error({ err: r.reason, orderNumber: order.order_number }, '[stripeWebhook] Email send rejected');
       }
     }
   } catch (emailErr) {
-    console.error(`[stripeWebhook] Receipt email block failed for ${order.order_number}:`, emailErr);
+    logger.error({ err: emailErr, orderNumber: order.order_number }, '[stripeWebhook] Receipt email block failed');
   }
 }
 

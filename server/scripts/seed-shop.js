@@ -21,7 +21,6 @@ require('dotenv').config({ path: require('path').join(__dirname, '../../.env') }
 const fs   = require('fs');
 const path = require('path');
 const { pool } = require('../config/database');
-const ProductVariant = require('../models/ProductVariant');
 const { productUploadDir, UPLOAD_ROOT } = require('../config/paths');
 
 const SIZES  = ['XS', 'S', 'M', 'L', 'XL'];
@@ -372,16 +371,19 @@ async function seedVariants(productId, p) {
   for (const color of COLORS) {
     for (const size of SIZES) {
       const sku = `${p.slug}-${color}-${size.toLowerCase()}`;
-      const variant = await ProductVariant.upsertByAttrs({
-        product_id: productId,
-        sku,
-        attributes: { color, size },
-        price_isk: null,          // inherit from product
-        price_eur: null,
-        stock: STOCK_BY_SIZE[size] ?? 8,
-        active: true,
-      });
-      created.push(variant);
+      // Upsert by (product_id, attributes). Opening stock is written on the
+      // first insert only: a re-seed leaves an existing variant's on hand
+      // alone, because every later movement belongs in inventory_adjustments
+      // (models/Inventory.js — ProductVariant carries no upsert on purpose).
+      const { rows } = await pool.query(
+        `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, active)
+         VALUES ($1, $2, $3::jsonb, NULL, NULL, $4, TRUE)
+         ON CONFLICT (product_id, attributes) DO UPDATE SET
+           sku = EXCLUDED.sku, price_isk = NULL, price_eur = NULL, active = TRUE
+         RETURNING *`,
+        [productId, sku, JSON.stringify({ color, size }), STOCK_BY_SIZE[size] ?? 8]
+      );
+      created.push(rows[0]);
     }
   }
   return created;

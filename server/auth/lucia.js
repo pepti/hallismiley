@@ -36,6 +36,12 @@ const lucia = new Lucia(adapter, {
       // deliberately not here — nothing outside mfaService should ever read it.
       totp_enabled:     attributes.totp_enabled,
       theme:            attributes.theme,
+      // Per-account admin layout + cookie choice (migration 111, harvested
+      // from icelandicstore): they ride on the session like `theme`.
+      page_widths:       attributes.page_widths,
+      page_width_motion: attributes.page_width_motion,
+      aside_widths:      attributes.aside_widths,
+      cookie_consent:    attributes.cookie_consent,
     };
   },
   getSessionAttributes(attributes) {

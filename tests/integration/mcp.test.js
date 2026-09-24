@@ -48,7 +48,11 @@ describe('MCP handshake', () => {
     expect(res.status).toBe(200);
     expect(res.body.result.protocolVersion).toBe('2025-06-18');
     expect(res.body.result.capabilities).toEqual({ tools: {} });
-    expect(res.body.result.serverInfo.name).toMatch(/Icelandic Store Wholesale \[(TEST|PROD)\]/);
+    // The product's brand from the identity seam, env-tagged (R5a — it was a
+    // port leftover, "Icelandic Store Wholesale", until 2026-09-24).
+    const { identity } = require('../../server/config/identity');
+    const { name } = res.body.result.serverInfo;
+    expect([`${identity.brand.name} [TEST]`, `${identity.brand.name} [PROD]`]).toContain(name);
   });
 
   test('notifications/initialized → 202 with no body', async () => {
@@ -74,11 +78,12 @@ describe('MCP auth', () => {
     for (const bearer of [null, 'mcp_' + 'a'.repeat(64)]) {
       const res = await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, bearer);
       expect(res.status).toBe(401);
-      // Plain Bearer challenge: we must NOT advertise resource_metadata until
-      // PR 2 actually serves /.well-known/oauth-protected-resource — pointing
-      // OAuth clients at the SPA catch-all breaks their discovery flow.
+      // Since R5a (2026-09-24) the challenge advertises resource_metadata —
+      // the document it names is really served now (mcpOAuth.test.js reads
+      // it); before that, advertising it would have sent OAuth clients to the
+      // SPA catch-all.
       expect(res.headers['www-authenticate']).toMatch(/^Bearer/);
-      expect(res.headers['www-authenticate']).not.toMatch(/resource_metadata/);
+      expect(res.headers['www-authenticate']).toMatch(/resource_metadata="https:\/\/[^"]+\/\.well-known\/oauth-protected-resource"/);
     }
     await McpToken.revoke(tokenRow.id);
     expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(401);
@@ -86,6 +91,34 @@ describe('MCP auth', () => {
     const short = await McpToken.create({ userId: adminId, name: 'expired' });
     await db.query('UPDATE mcp_tokens SET expires_at = NOW() - interval \'1 hour\' WHERE id = $1', [short.row.id]);
     expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, short.token)).status).toBe(401);
+  });
+
+  // ice #418 (harvest 2026-09-24): demoting or disabling an admin revokes the
+  // rows, not only the per-call owner check (mcp/owner.js), so Admin → MCP
+  // stops listing a dead admin's tokens as live.
+  test.each([
+    ['demoted', (id) => ['patch', `/api/v1/admin/users/${id}/role`, { role: 'user' }]],
+    ['disabled', (id) => ['patch', `/api/v1/admin/users/${id}/disable`, { disabled: true }]],
+    ['removed from the admin role', (id) => ['delete', `/api/v1/admin/roles/admin/members/${id}`, undefined]],
+  ])('an admin %s loses every live MCP token', async (_label, route) => {
+    const otherId = 'mcp-other-admin';
+    await db.query(
+      `INSERT INTO users (id, email, username, role, approval_status, email_verified)
+       VALUES ($1, 'mcp-other@test.com', 'mcpotheradmin', 'admin', 'approved', TRUE)
+       ON CONFLICT (id) DO NOTHING`, [otherId]);
+    const theirs = await McpToken.create({ userId: otherId, name: 'theirs' });
+    expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, theirs.token)).status).toBe(200);
+
+    const [method, path, body] = route(otherId);
+    const res = await request(app)[method](path).set('Cookie', adminCookie).send(body);
+    expect(res.status).toBeLessThan(300);
+
+    const { rows } = await db.query('SELECT revoked_at FROM mcp_tokens WHERE user_id = $1', [otherId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].revoked_at).not.toBeNull();
+    expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, theirs.token)).status).toBe(401);
+    // The acting admin's own token is untouched.
+    expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(200);
   });
 
   test('an admin SESSION COOKIE does not authenticate — bearer only (the CSRF-exemption guarantee)', async () => {

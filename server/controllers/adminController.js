@@ -8,6 +8,47 @@ const UserRole           = require('../models/UserRole');
 const { declineGuest, sendWelcome } = require('../services/partyApproval');
 // Disabling/enabling an account is a staff action (migration 098); best-effort.
 const staffAudit         = require('../services/staffAudit');
+const securityLogger     = require('../observability/securityLogger');
+const mfaService         = require('../services/mfaService');
+const McpToken           = require('../models/McpToken');
+const { Scrypt }         = require('oslo/password');
+const { generatePassword } = require('../utils/generatePassword');
+// A name-only login's reserved <username>@noemail.invalid is never shown or
+// searched as an address (ice #397): the list reads it as NULL + no_email.
+const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
+const EMAIL_SHOWN = realEmailExpr('email');
+
+// Only an admin may hold an MCP token (mcpAdminRoutes mints them; mcp/owner.js
+// refuses a non-admin owner on every call). When an account stops being an
+// admin, or is disabled, its rows are revoked too so Admin → MCP tells the
+// truth (ice #418). Best-effort after the change has committed.
+async function revokeMcpTokens(req, userId, reason) {
+  try {
+    const revoked = await McpToken.revokeAllForUser(userId);
+    if (revoked) securityLogger.adminAction(req.user.id, 'mcp_tokens_revoked', userId, { count: revoked, reason });
+    return revoked;
+  } catch (err) {
+    securityLogger.alert('warning', 'MCP token revocation failed', { userId, reason, err: err.message });
+    return 0;
+  }
+}
+
+// Does this account hold staff standing — admin or moderator, or any role that
+// grants an admin view (a seller, a contractor, a custom role)? A 2FA reset on
+// such an account asks for the ACTING admin's own password (ice #396; ice keys
+// it on admin/moderator — the engine's dynamic roles make any view holder staff).
+async function isStaffAccount(userId) {
+  const { rows } = await dbQuery(
+    `SELECT 1
+       FROM roles r
+      WHERE (r.name = (SELECT role FROM users WHERE id = $1)
+             OR r.name IN (SELECT role_name FROM user_roles WHERE user_id = $1))
+        AND (r.name IN ('admin', 'moderator') OR jsonb_array_length(r.view_access) > 0)
+      LIMIT 1`,
+    [userId]
+  );
+  return rows.length > 0;
+}
 
 const adminController = {
   // GET /api/v1/admin/users?limit=20&offset=0&sort=username&order=asc&q=foo
@@ -35,14 +76,16 @@ const adminController = {
       // the filtered set.
       const q = String(req.query.q || '').trim(); // String() guards array params (?q=a&q=b)
       const whereSql = q
-        ? 'WHERE (username ILIKE $1 OR email ILIKE $1 OR display_name ILIKE $1)'
+        ? `WHERE (username ILIKE $1 OR ${EMAIL_SHOWN} ILIKE $1 OR display_name ILIKE $1)`
         : '';
       const term = q ? [`%${q}%`] : []; // $1 when present
 
       const { rows } = await dbQuery(
-        `SELECT id, username, email, role, avatar, display_name,
+        `SELECT id, username, ${EMAIL_SHOWN} AS email, NOT (${realEmailSql('email')}) AS no_email,
+                role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
-                party_access, approval_status, requested_at, created_at, last_login_at
+                party_access, approval_status, requested_at, created_at, last_login_at,
+                totp_enabled
          FROM users
          ${whereSql}
          ORDER BY ${sortCol} ${dir}, id DESC
@@ -121,6 +164,7 @@ const adminController = {
         await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
         await client.query('COMMIT');
         UserRole.invalidateUser(id); // clear the cached set after the commit
+        if (role !== 'admin') await revokeMcpTokens(req, id, 'role_change');
         return res.json(rows[0]);
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
@@ -199,6 +243,102 @@ const adminController = {
     } catch (err) { next(err); }
   },
 
+  // POST /api/v1/admin/users/:id/totp/reset  { password? }
+  // Turn another user's two-step verification off: secret, recovery codes and
+  // the replay marker all go (mfaService.disable, the same teardown the owner's
+  // own turn-off uses). Their password is untouched, so they sign in with it
+  // alone and can set 2FA up again from their profile. The way back in for
+  // someone who lost their phone AND their recovery codes (ice #396).
+  //
+  // Refused for your own account: the self-service turn-off re-checks the
+  // password so a walk-up attacker at an unlocked, signed-in laptop cannot strip
+  // the second factor, and this route would skip that check.
+  //
+  // Staff targets (isStaffAccount) also need the ACTING admin's own password in
+  // the body — the same re-check (mfaService.verifyPassword). Otherwise a walk-up
+  // attacker at one admin's laptop could strip another staff account's second
+  // factor. A plain customer account needs none.
+  //
+  // Every session the target holds is ended, as disabling does. Idempotent:
+  // resetting an account with no 2FA answers { enabled: false } too, and still
+  // clears a half-finished enrolment's secret.
+  async resetTotp(req, res, next) {
+    try {
+      const { id } = req.params;
+      if (id === req.user.id) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotResetOwnTotp'), code: 400 });
+      }
+      const { rows } = await dbQuery('SELECT id, username, role, totp_enabled FROM users WHERE id = $1', [id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+
+      const target = rows[0];
+      if (await isStaffAccount(id)) {
+        const password = req.body?.password;
+        if (!password) {
+          // `reason` lets the Users page ask for the password and retry.
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.totpResetPasswordRequired'), code: 400, reason: 'password_required' });
+        }
+        if (!(await mfaService.verifyPassword(req.user.id, password))) {
+          securityLogger.loginFailed(req.ip, `${req.user.username} failed password check resetting 2FA for ${id}`);
+          return res.status(403).json({ error: t(req.locale, 'errors.admin.totpResetPasswordWrong'), code: 403 });
+        }
+      }
+
+      await mfaService.disable(id);
+      await lucia.invalidateUserSessions(id);
+      securityLogger.adminAction(req.user.id, 'totp_reset', id,
+        { wasEnabled: target.totp_enabled, targetRole: target.role, ip: req.ip });
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.totp_reset',
+        entityType: 'user', entityId: id, summary: { username: target.username },
+      });
+      return res.json({ enabled: false });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/users/:id/new-password — replace a MAILBOX-LESS login's
+  // password (ice #382/#397): the only way back in when the one shown at create
+  // time is lost, since there is nowhere to send a reset link. Answers with the
+  // new password ONCE (no-store); it is never logged or stored in the clear.
+  //
+  // The ADDRESS decides, not the role: only a login created without a mailbox
+  // (a reserved placeholder address, which the admin UI can never set) qualifies
+  // — otherwise an admin could mint a password for a colleague's real account,
+  // read it off the screen and impersonate them. And never a staff account
+  // (isStaffAccount): staff always set their own password.
+  async newPassword(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { rows } = await dbQuery('SELECT id, username, role, email FROM users WHERE id = $1', [id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      if (!isPlaceholderEmail(rows[0].email) || await isStaffAccount(id)) {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.hasMailbox'), code: 409 });
+      }
+      const password = generatePassword();
+      await dbQuery(
+        `UPDATE users
+            SET password_hash = $1,
+                password_reset_token = NULL, password_reset_expires = NULL,
+                failed_login_attempts = 0, locked_until = NULL
+          WHERE id = $2`,
+        [await new Scrypt().hash(password), id]
+      );
+      await lucia.invalidateUserSessions(id);
+      // Who replaced a credential, and when — never the password itself.
+      securityLogger.adminAction(req.user.id, 'name_only_password_rotated', id, { role: rows[0].role });
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.password_replaced',
+        entityType: 'user', entityId: id, summary: { username: rows[0].username },
+      });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ username: rows[0].username, password });
+    } catch (err) { next(err); }
+  },
+
   // PATCH /api/v1/admin/users/:id/disable  { disabled, reason? }
   async disableUser(req, res, next) {
     try {
@@ -229,9 +369,11 @@ const adminController = {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
       }
 
-      // If disabling, invalidate all their active sessions immediately
+      // If disabling, invalidate all their active sessions — and their MCP
+      // tokens, the other credential an admin can hold — immediately.
       if (disabled) {
         await lucia.invalidateUserSessions(id);
+        await revokeMcpTokens(req, id, 'disabled');
       }
       await staffAudit.recordSafe({
         ...staffAudit.actorOf(req), action: disabled ? 'user.disabled' : 'user.enabled',

@@ -4,7 +4,7 @@ name: {is: "Handbók sölufólks", en: "Sales handbook"}
 domain: 10
 owner: engine
 status: live
-flag: null
+flag: modules.salesOps.enabled
 paths:
   - server/routes/salesGuidesRoutes.js
   - server/controllers/salesGuidesController.js

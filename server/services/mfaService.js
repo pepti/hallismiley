@@ -105,7 +105,9 @@ function isProtected(user) {
  * `security.mfa.enrolment` says. Whether enrolment is ENFORCED is
  * auth/mfaPolicy.js's call, on every session read — only under `required`
  * (the default is `optional`, 2026-09-23); that file, not this function,
- * withholds anything (and knows the test exemption).
+ * withholds anything (and knows the test exemption). Under `optional` it is
+ * also who gets the dismissible two-step reminder (mfaPolicy.reminderCandidate,
+ * mfa-reminder-2026-09-23).
  */
 function shouldEnrol(user) {
   return protectedRole(user) && user.totp_enabled !== true;
@@ -185,6 +187,18 @@ async function confirmEnrolment(userId, code) {
   );
 
   return { ok: true, recoveryCodes: codes };
+}
+
+/**
+ * Re-check a signed-in user's password before a 2FA change. Used by the
+ * self-service turn-off and by an admin resetting another staff account's 2FA,
+ * so the two can never drift apart. Never throws on a malformed hash.
+ * (Harvested from icelandicstore #396, 2026-09-24.)
+ */
+async function verifyPassword(userId, password) {
+  if (!password) return false;
+  const { rows } = await dbQuery('SELECT password_hash FROM users WHERE id = $1', [userId]);
+  try { return await scrypt.verify(rows[0]?.password_hash || '', String(password)); } catch { return false; }
 }
 
 /** Turn 2FA off and destroy every associated secret and fallback. */
@@ -322,7 +336,7 @@ async function remainingRecoveryCodes(userId) {
 module.exports = {
   CHALLENGE_TTL_MS, MAX_CHALLENGE_ATTEMPTS, RECOVERY_CODE_COUNT,
   isProtected, shouldEnrol, protectedRole,
-  beginEnrolment, confirmEnrolment, disable,
+  beginEnrolment, confirmEnrolment, disable, verifyPassword,
   createChallenge, verifyChallenge,
   consumeRecoveryCode, remainingRecoveryCodes,
   generateRecoveryCode, normaliseRecovery,

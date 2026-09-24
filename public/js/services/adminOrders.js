@@ -58,3 +58,29 @@ export function fulfillmentBadge(t, status) {
   const s = status || 'unfulfilled';
   return `<span class="ord-badge ord-badge--ful-${s}">${t('orderFulfillment.' + s)}</span>`;
 }
+
+// Every order matching the list's filters as a real .xlsx workbook, built on
+// the server (GET /orders/export.xlsx — services/orderExport.js). Fetched, not a
+// plain link, so a refusal (413: too many rows) arrives as an error the page can
+// show instead of a saved JSON "workbook".
+export async function downloadOrdersXlsx(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) { if (v) qs.set(k, v); }
+  const res = await fetch('/api/v1/admin/shop/orders/export.xlsx' + (qs.toString() ? `?${qs}` : ''), { credentials: 'include' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to export orders');
+  }
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const filename = (disposition.match(/filename="([^"]+)"/) || [])[1] || 'orders.xlsx';
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke after a beat: Safari and older Firefox cancel a download whose URL
+  // is revoked straight after click() (ice #325 review).
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}

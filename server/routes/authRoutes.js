@@ -89,6 +89,18 @@ router.post('/totp/setup',   csrfProtect, requireAuth, authController.totpSetup)
 router.post('/totp/confirm', csrfProtect, requireAuth, authController.totpConfirm);
 router.post('/totp/disable', csrfProtect, requireAuth, authController.totpDisable);
 
+// ── Two-step reminder: "don't show this again" (mfa-reminder-2026-09-23) ─────
+// A per-account preference write: session + CSRF like the enrolment routes,
+// plus its own limiter (not authLimiter — that counter is the login budget).
+// 30 per 15 min per IP is far above a person ticking a box.
+const reminderLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  skip: isTest,
+  message: { error: 'Too many requests, try again later.', code: 429 },
+});
+router.post('/mfa-reminder/dismiss', reminderLimiter, csrfProtect, requireAuth, authController.mfaReminderDismiss);
+
 // ── Availability checks ───────────────────────────────────────────────────────
 router.get('/check-username/:username', checkLimiter, authController.checkUsername);
 router.get('/check-email/:email',       checkLimiter, authController.checkEmail);

@@ -7,6 +7,15 @@ const crypto = require('crypto');
 const { query: dbQuery, pool } = require('../config/database');
 const { lucia } = require('../auth/lucia');
 const UserRole = require('./UserRole');
+const { Scrypt } = require('oslo/password');
+// Name-only logins (harvested from icelandicstore #397, 2026-09-24): a person
+// with no email gets a reserved <username>@noemail.invalid address, a generated
+// username and a one-time password. The list and its search read such an
+// address as NULL — it is never shown or matched as an address.
+const { uniqueUsername } = require('../utils/username');
+const { NO_EMAIL_DOMAIN, noEmailEmail, realEmailExpr } = require('../utils/placeholderEmail');
+const { generatePassword } = require('../utils/generatePassword');
+const U_EMAIL = realEmailExpr('u.email');
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days to accept an invite
 
@@ -53,14 +62,14 @@ const Customer = {
     let where = '';
     if (q) {
       params.push(`%${q}%`);
-      where = `WHERE u.email ILIKE $1 OR u.display_name ILIKE $1 OR u.username ILIKE $1`;
+      where = `WHERE ${U_EMAIL} ILIKE $1 OR u.display_name ILIKE $1 OR u.username ILIKE $1`;
     }
     const lim = Math.min(Math.max(Number(limit) || 200, 1), 1000);
     const off = Math.max(Number(offset) || 0, 0);
     params.push(lim, off);
     const { rows } = await dbQuery(
-      `SELECT u.id, u.email, u.username, u.display_name, u.phone, u.role,
-              u.email_verified, u.disabled, u.created_at,
+      `SELECT u.id, ${U_EMAIL} AS email, u.username, u.display_name, u.phone, u.role,
+              u.email_verified, u.disabled, u.created_at, u.invited_at,
               ${isPartyGuest('u')} AS is_party_guest,
               COALESCE(o.cnt, 0)::int    AS order_count,
               COALESCE(o.spent, 0)::bigint AS total_spent
@@ -96,7 +105,37 @@ const Customer = {
   // derives the same base can win the username UNIQUE race — re-derive and retry
   // on that specific conflict (an email conflict is pre-checked by the caller and
   // bubbles up unchanged).
-  async create({ email, display_name = null, phone = null }) {
+  //
+  // nameOnly (admin-only callers, ice #397): the person has no email at all. The
+  // row gets a reserved `<username>@noemail.invalid` address (users.email stays
+  // NOT NULL, no migration), a username derived from the name (Icelandic
+  // letters transliterated), a generated password hashed with the same oslo
+  // Scrypt as the rest of auth, approval at once, and NO reset token: there is
+  // nowhere to mail one. Returns { user, resetToken: null, password } — the
+  // caller hands `password` to the admin ONCE and must never log or store it.
+  async create({ email, display_name = null, phone = null, nameOnly = false }) {
+    if (nameOnly) {
+      const password = generatePassword();
+      const hash     = await new Scrypt().hash(password);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const username = await uniqueUsername(display_name, null, { emailDomain: NO_EMAIL_DOMAIN });
+        try {
+          const { rows } = await dbQuery(
+            `INSERT INTO users
+               (username, email, password_hash, role, display_name, phone,
+                approval_status, email_verified)
+             VALUES ($1, $2, $3, 'user', $4, $5, 'approved', FALSE)
+             RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
+            [username, noEmailEmail(username), hash, display_name, phone]
+          );
+          return { user: rows[0], resetToken: null, password };
+        } catch (err) {
+          if (err && err.code === '23505') continue; // lost the username/address race — re-derive
+          throw err;
+        }
+      }
+      throw new Error('Could not allocate a unique username');
+    }
     const lowered    = String(email).toLowerCase().trim();
     const resetToken = makeToken();
     const expires    = new Date(Date.now() + INVITE_TTL_MS);

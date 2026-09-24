@@ -111,6 +111,56 @@ jobs:
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # ── The soak, proven (icelandicstore #358 + #394, harvest-ice-f-2026-09-24) ─
+      # Ported by hand from the engine (engine-sync-4, 2026-09-24): this file is
+      # product-owned. hallismiley has no channel armed, so it is inert here.
+      # "Promote the SAME sha to stable after the canary soak" used to be a
+      # promise. Every response carries X-App-Build = first 12 hex of
+      # sha256(<git sha>) (server/config/version.js publicBuildTag; pinned to
+      # this formula by tests/integration/buildHeader.test.js), so before a
+      # STABLE publish each canary instance listed in vars.CANARY_URLS
+      # (space-separated origins) must answer /ready 200 AS THIS BUILD — a
+      # canary that never pulled the image, or rolled itself back, blocks the
+      # promote instead of waving it through. Unset = the check is skipped with
+      # a warning (the pre-2026-09-24 behaviour); a canary publish never waits.
+      - name: Canary instances are serving this build
+        if: ${{ inputs.channel == 'stable' }}
+        env:
+          SHA: ${{ inputs.sha }}
+          CANARY_URLS: ${{ vars.CANARY_URLS }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CANARY_URLS:-}" ]; then
+            echo "::warning::vars.CANARY_URLS is not set — the soak is not verified. Set it to the canary instances' origins."
+            exit 0
+          fi
+          want="$(printf '%s' "$SHA" | sha256sum | cut -c1-12)"
+          echo "Expecting X-App-Build: $want on every canary"
+          bad=""
+          for url in $CANARY_URLS; do
+            url="${url%/}"
+            ok=""
+            for i in $(seq 1 6); do
+              hdr="$(mktemp)"
+              code="$(curl -s -D "$hdr" -o /tmp/ready.json -w '%{http_code}' --max-time 15 "$url/ready" || true)"
+              # '|| true': an EMPTY answer during a restart must retry, not end
+              # the step under pipefail (ice #394).
+              got="$(grep -i '^x-app-build:' "$hdr" | tail -1 | tr -d '\r' | awk '{print $2}' || true)"
+              if [ "$code" = "200" ] && [ "$got" = "$want" ]; then ok=1; break; fi
+              echo "  $url: HTTP $code, X-App-Build ${got:-<none>} — retrying"
+              sleep 10
+            done
+            if [ -n "$ok" ]; then echo "$url serves $want"; else bad="$bad $url"; fi
+          done
+          if [ -n "$bad" ]; then
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "::warning::Not serving $want:$bad (dry run — continuing)"
+              exit 0
+            fi
+            echo "::error::These canary instances are not serving $want:$bad. Soak first, then promote to stable."
+            exit 1
+          fi
+
       # Resolve the tag to the immutable digest ONCE, and use that digest for
       # everything downstream. Between "read the tag" and "publish the manifest"
       # the tag could move; the digest cannot.

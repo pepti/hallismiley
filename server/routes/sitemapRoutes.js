@@ -1,7 +1,7 @@
 'use strict';
 /*
  * Dynamic sitemap.xml — the PUBLIC surface only: home, the product's nav
- * routes and the legal pages (STATIC_ROUTES below, derived from the identity
+ * routes and the legal pages (staticRoutes() below, derived from the identity
  * seam). Regenerated on each request; projected sitemap size stays well under
  * Google's 50,000-URL / 50 MiB limit for the foreseeable future.
  *
@@ -31,7 +31,7 @@
 const express = require('express');
 const db      = require('../config/database');
 const { forcedLocaleFor, SUPPORTED_LOCALES, PUBLIC_DEFAULT_LOCALE } = require('../config/i18n');
-const { PUBLIC_NAV, LEGAL_ROUTES, NOINDEX_ROUTES } = require('../config/publicSurface');
+const { publicNav, legalRoutes, NOINDEX_ROUTES } = require('../config/publicSurface');
 const { identity, organizationDescription } = require('../config/identity');
 const { t, has } = require('../i18n');
 
@@ -45,11 +45,15 @@ const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/
 // and minus any route the product marks `noindex` in `identity.routes`
 // (identity-seam-3: a noindex page may be linked, never advertised).
 // Nothing here is a route literal, so a downstream's sitemap is its own nav.
-const STATIC_ROUTES = [
-  { path: '', priority: '1.0', changefreq: 'monthly', includeXDefault: true },
-  ...PUBLIC_NAV.map(e => ({ path: e.route, priority: '0.8', changefreq: 'monthly' })),
-  ...LEGAL_ROUTES.map(r => ({ path: r, priority: '0.3', changefreq: 'yearly' })),
-].filter(r => !NOINDEX_ROUTES.includes(r.path || '/'));
+// Read per request since R5b: a module an admin switches off at run time
+// leaves the sitemap at once (config/modules.js).
+function staticRoutes() {
+  return [
+    { path: '', priority: '1.0', changefreq: 'monthly', includeXDefault: true },
+    ...publicNav().map(e => ({ path: e.route, priority: '0.8', changefreq: 'monthly' })),
+    ...legalRoutes().map(r => ({ path: r, priority: '0.3', changefreq: 'yearly' })),
+  ].filter(r => !NOINDEX_ROUTES.includes(r.path || '/'));
+}
 
 // XML escaping — URLs can contain &, <, > via slugs in principle even
 // though the DB constraints should forbid it. Cheap safety net.
@@ -132,7 +136,7 @@ function ssrMeta() { return require('../middleware/ssrMeta'); }
 /** route → site_content keys, for every advertised route that has any. */
 function lastmodKeys() {
   const out = {};
-  for (const r of STATIC_ROUTES) {
+  for (const r of staticRoutes()) {
     const keys = ssrMeta().contentKeysForRoute(r.path || '/');
     if (keys.length) out[r.path] = keys;
   }
@@ -182,7 +186,7 @@ async function buildSitemap() {
 
   // Static pages. Locale-locked routes are derived from config/i18n rather than
   // flagged in the table above, so the lock has exactly one source of truth.
-  for (const r of STATIC_ROUTES) {
+  for (const r of staticRoutes()) {
     urls.push(urlEntry({
       localePath: r.path,
       lastmod: lastmods[r.path],
@@ -224,7 +228,7 @@ function llmsPageLine(locale, route) {
 function buildLlmsTxt() {
   const { brand, organization } = identity;
   const locales = [PUBLIC_DEFAULT_LOCALE, ...SUPPORTED_LOCALES.filter(lc => lc !== PUBLIC_DEFAULT_LOCALE)];
-  const advertised = STATIC_ROUTES.map(r => r.path || '/');
+  const advertised = staticRoutes().map(r => r.path || '/');
   const description = organizationDescription(PUBLIC_DEFAULT_LOCALE, { has, t });
   const place = [organization.addressLocality, organization.areaServed].filter(Boolean).join(', ');
   const lines = [

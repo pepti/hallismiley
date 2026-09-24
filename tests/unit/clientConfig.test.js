@@ -399,14 +399,17 @@ describe('clientConfig — security.mfa.enrolment (mfa-optional-2026-09-23)', ()
     expect(warnings).toEqual([expect.stringContaining('must be one of optional, required')]);
   });
 
-  // hallismiley (engine-sync-3): an engine-only pin. The engine's committed file
-  // spells `optional` out; a downstream that leaves it unset (the instruction
-  // here) must still resolve to it.
-  test('this instance spells out optional (Halli, 2026-09-23)', () => {
-    const { fileConfig } = loadFileConfig();
-    const { role } = JSON.parse(fs.readFileSync(path.join(__dirname, '../../engine.json'), 'utf8'));
-    if (role === 'engine') expect(fileConfig.security.mfa.enrolment).toBe('optional');
-    else expect(resolve(fileConfig, {}).config.security.mfa.enrolment).toBe('optional');
+  // The engine's own client.json spells the setting out; a downstream is told
+  // NOT to (Halli's instruction is estate-wide, the default carries it), so
+  // there the pin is only that the file resolves to optional. Without this
+  // gate every downstream re-applied a local edit here (hallismiley #172).
+  const isEngine = require('../../engine.json').role === 'engine';
+  (isEngine ? test : test.skip)('this instance spells out optional (Halli, 2026-09-23)', () => {
+    expect(loadFileConfig().fileConfig.security.mfa.enrolment).toBe('optional');
+  });
+
+  test('this instance resolves to optional (every repo)', () => {
+    expect(resolve(loadFileConfig().fileConfig).config.security.mfa.enrolment).toBe('optional');
   });
 });
 

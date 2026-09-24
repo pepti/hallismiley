@@ -1619,9 +1619,9 @@ button.party-admin__stat:focus-visible {
   padding: 1px 8px;
   font-size: 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(201, 168, 76, 0.5);
-  color: var(--accent, #c9a84c);
-  background: rgba(201, 168, 76, 0.08);
+  border: 1px solid var(--border);
+  color: var(--accent-ink);
+  background: var(--accent-amber-dim);
 }
 
 .party-admin__pending-actions {
@@ -1781,9 +1781,9 @@ button.party-admin__stat:focus-visible {
   font-size: 0.85rem;
   font-weight: 600;
   padding: 0.25rem 1.5rem 0.25rem 0.5rem;
-  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  background: var(--bg-hover);
   color: var(--text-primary, inherit);
   cursor: pointer;
   max-width: 100%;
@@ -1807,9 +1807,9 @@ button.party-admin__stat:focus-visible {
   font: inherit;
   font-size: 0.85rem;
   padding: 0.25rem 1.5rem 0.25rem 0.5rem;
-  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.35));
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  background: var(--bg-hover);
   color: var(--text-primary, inherit);
   cursor: pointer;
   max-width: 100%;
@@ -1830,11 +1830,11 @@ button.party-admin__stat:focus-visible {
   background: transparent;
   color: var(--text-primary, inherit);
 }
-.party-admin__cell-input:hover  { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__cell-input:hover  { border-color: var(--border-dim); }
 .party-admin__cell-input:focus  {
   outline: none;
   border-color: #d4b877;
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  background: var(--bg-hover);
 }
 .party-admin__cell-input:disabled { opacity: 0.55; cursor: progress; }
 
@@ -1905,7 +1905,7 @@ button.party-admin__stat:focus-visible {
   width: 3.2rem;
   font: inherit;
   padding: 0.15rem 0.3rem;
-  border: 1px solid var(--border-color, rgba(200, 170, 110, 0.25));
+  border: 1px solid var(--border-dim);
   border-radius: 5px;
   background: transparent;
   color: var(--text-primary, inherit);
@@ -1920,12 +1920,12 @@ button.party-admin__stat:focus-visible {
   background: transparent;
   color: var(--text-primary, inherit);
 }
-.party-admin__companion-ages:hover { border-color: var(--border-color, rgba(200, 170, 110, 0.25)); }
+.party-admin__companion-ages:hover { border-color: var(--border-dim); }
 .party-admin__companion-ages:focus,
 .party-admin__companion-kids:focus {
   outline: none;
   border-color: #d4b877;
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  background: var(--bg-hover);
 }
 .party-admin__companions-cell input:disabled { opacity: 0.55; cursor: progress; }
 

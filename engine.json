@@ -4,9 +4,9 @@
   "role": "personal",
   "upstream": "https://github.com/orange-smiley/orangesmiley.git",
   "upstreamBranch": "master",
-  "rev": "61e0920c16ce9405ca9bbf6386a489229027b627",
-  "syncedAt": "2026-09-23T08:30:28.342Z",
-  "syncedPr": 172,
+  "rev": "702af0f26caaa3965aeb353131f6f637d0b44a2c",
+  "syncedAt": "2026-09-24T19:35:11.711Z",
+  "syncedPr": 173,
   "grafted": {
     "at": "2026-09-22",
     "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
@@ -41,6 +41,16 @@
       "upstreamCommits": 14,
       "conflicts": 11,
       "note": "sync — MFA optional by default (security.mfa.enrolment, not set here), identity seam v3: /aron13ara meta/noindex/IS lock in identity.routes; ssrMeta/pageTitle/both i18n.js/localeLock hooks and the six engine-test re-applies retired; rk feed (migration 108 runs); residuals: router.js /aron13ara view route + a role gate on clientConfig.test.js's engine-only MFA pin"
+    },
+    {
+      "rev": "702af0f26caaa3965aeb353131f6f637d0b44a2c",
+      "date": "2026-09-24",
+      "upstreamCommits": 53,
+      "conflicts": 5,
+      "note": "sync — the icelandicstore harvest (ice A–F), 2FA reminder, R4 module switches, MCP OAuth, signup module; Aron13View into the lazy VIEWS table (router.js stays the one hook), its stylesheet resolved next to the stamped main.css, aron13.css custom-property defaults; deploy.yml ported the X-App-Build post-deploy check by hand, promote.yml the stable canary gate (inert, no channel); moduleFlags.test.js /thjonusta robots line gated on isHiddenRoute; clientConfig.test.js gate taken back by the engine; migrations 109–113 run",
+      "regenerated": [
+        "features/README.md"
+      ]
     }
   ]
 }

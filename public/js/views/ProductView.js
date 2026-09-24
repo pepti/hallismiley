@@ -181,11 +181,13 @@ export class ProductView {
     return this._product[field];
   }
 
+  // What the customer can still order: `available` = on hand minus what paid,
+  // unshipped orders hold (the public API sends no other inventory number).
   _effectiveStock() {
     const v = this._selectedVariant();
-    if (v) return Number(v.stock);
+    if (v) return Number(v.available ?? 0);
     // Fallback for single-SKU products
-    return Number(this._product.stock);
+    return Number(this._product.available ?? 0);
   }
 
   _paint() {

@@ -29,4 +29,5 @@ The feedback widget (screenshot + note, 5 MB body) and the `/admin/change-reques
 - The gate = admin AND (non-prod app-env OR `change_requests.enabled`); it answers 404, not 403.
 - The TEST chrome is admins only on every stack; `themePrefs.getEffectiveEnv()` is the one client answer.
 - While mounted the launcher sets `body.has-cr-widget` and `--cr-widget-clearance`; a page's own fixed bottom-right bar adds the variable to its `bottom` instead of sharing the corner.
+- The 5 MB submit body is parsed after the limiter, the gate and CSRF, then sanitized ([history](../docs/HISTORY.md#ready-and-import-order-2026-09-23)).
 - Full rules: [../docs/ARCHITECTURE.md#16-change-requests--breytingarbeiðnir](../docs/ARCHITECTURE.md#16-change-requests--breytingarbeiðnir).

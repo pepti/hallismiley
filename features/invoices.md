@@ -4,7 +4,7 @@ name: {is: Reikningar, en: Invoices}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/models/Invoice.js
   - server/services/bookkeeping/invoiceService.js

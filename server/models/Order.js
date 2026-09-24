@@ -2,11 +2,12 @@
 // All money stored as integers in the order's currency's smallest unit.
 const crypto = require('crypto');
 const db = require('../config/database');
+const Inventory = require('./Inventory');
 
 const COLUMNS = `id, order_number, user_id, guest_email, guest_name, currency,
   subtotal, shipping, total, status, payment_status, fulfillment_status,
   shipping_method, shipping_address,
-  stripe_session_id, stripe_payment_intent_id, paid_at, fulfilled_at, tags,
+  stripe_session_id, stripe_payment_intent_id, paid_at, fulfilled_at, stock_deducted_at, tags,
   created_at, updated_at`;
 
 const ITEM_COLUMNS = `id, order_id, product_id, product_variant_id,
@@ -109,6 +110,11 @@ class Order {
       );
       const order = orderRows[0];
 
+      // Each line insert share-locks its product / variant through the foreign
+      // key — in CART order, left to itself. Take them up front in the stock
+      // lock order (models/Inventory.js), or a cart listing two rows the other
+      // way round from a fulfilment's sorted FOR UPDATE can deadlock with it.
+      await Inventory.lockReferences(client, items);
       for (const it of items) {
         await client.query(
           `INSERT INTO order_items (
@@ -241,26 +247,67 @@ class Order {
 
   // Set payment and/or fulfillment status independently; derives the legacy
   // `status` and maintains paid_at / fulfilled_at timestamps.
-  static async setOrderStatuses(id, { payment_status, fulfillment_status } = {}) {
-    const current = await Order.findById(id);
-    if (!current) return null;
-    const payment     = payment_status     != null ? payment_status     : current.payment_status;
-    const fulfillment = fulfillment_status != null ? fulfillment_status : current.fulfillment_status;
-    if (!PAYMENT_STATES.includes(payment))         throw new Error(`Invalid payment_status: ${payment}`);
-    if (!FULFILLMENT_STATES.includes(fulfillment)) throw new Error(`Invalid fulfillment_status: ${fulfillment}`);
-    const status  = deriveStatus(payment, fulfillment);
-    const paidSql = payment === 'paid' ? 'COALESCE(paid_at, NOW())' : payment === 'pending' ? 'NULL' : 'paid_at';
-    const fulSql  = (fulfillment === 'fulfilled' || fulfillment === 'delivered') ? 'COALESCE(fulfilled_at, NOW())'
-                  : fulfillment === 'unfulfilled' ? 'NULL' : 'fulfilled_at';
-    const { rows } = await db.query(
-      `UPDATE orders
-          SET payment_status = $1, fulfillment_status = $2, status = $3,
-              paid_at = ${paidSql}, fulfilled_at = ${fulSql}
-        WHERE id = $4
-      RETURNING ${COLUMNS}`,
-      [payment, fulfillment, status, String(id)]
-    );
-    return rows[0] || null;
+  //
+  // This is also the ONE place on hand moves for an order (models/Inventory.js,
+  // harvested from icelandicstore): entering fulfilled/delivered deducts every
+  // stock line and stamps stock_deducted_at in the same transaction; going back
+  // to unfulfilled/partial restores it. The orders row is locked FOR UPDATE
+  // first (then variants, then products — Inventory's lock order), so two
+  // fulfils of one order serialise and the second sees the stamp and moves
+  // nothing. Deliberately NOT moved: a fulfilled order later cancelled or
+  // refunded keeps its deduction (the goods left — restock by hand), and a
+  // cancelled/refunded order marked fulfilled writes the status only. A
+  // fulfilment the shelf cannot cover throws INSUFFICIENT_STOCK (409) and
+  // changes nothing — the engine keeps stock >= 0. `userId` names the actor on
+  // the audit rows.
+  static async setOrderStatuses(id, { payment_status, fulfillment_status } = {}, { userId = null } = {}) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows: cur } = await client.query(
+        `SELECT ${COLUMNS} FROM orders WHERE id = $1 FOR UPDATE`, [String(id)]
+      );
+      const current = cur[0];
+      if (!current) { await client.query('ROLLBACK'); return null; }
+      const payment     = payment_status     != null ? payment_status     : current.payment_status;
+      const fulfillment = fulfillment_status != null ? fulfillment_status : current.fulfillment_status;
+      if (!PAYMENT_STATES.includes(payment))         throw new Error(`Invalid payment_status: ${payment}`);
+      if (!FULFILLMENT_STATES.includes(fulfillment)) throw new Error(`Invalid fulfillment_status: ${fulfillment}`);
+      const status  = deriveStatus(payment, fulfillment);
+      const paidSql = payment === 'paid' ? 'COALESCE(paid_at, NOW())' : payment === 'pending' ? 'NULL' : 'paid_at';
+      const fulSql  = (fulfillment === 'fulfilled' || fulfillment === 'delivered') ? 'COALESCE(fulfilled_at, NOW())'
+                    : fulfillment === 'unfulfilled' ? 'NULL' : 'fulfilled_at';
+
+      // Inventory: deduct once on the way into fulfilled/delivered, restore on
+      // the way back out. The stamp is the idempotency key.
+      const closing = fulfillment === 'fulfilled' || fulfillment === 'delivered';
+      const opening = fulfillment === 'unfulfilled' || fulfillment === 'partial';
+      let deductedSql = 'stock_deducted_at';
+      if (closing && !current.stock_deducted_at && !['cancelled', 'refunded'].includes(status)) {
+        await Inventory.moveForOrder(client, current.id, 'deduct', { userId });
+        deductedSql = 'NOW()';
+      } else if (opening && current.stock_deducted_at) {
+        await Inventory.moveForOrder(client, current.id, 'restore', { userId });
+        deductedSql = 'NULL';
+      }
+
+      const { rows } = await client.query(
+        `UPDATE orders
+            SET payment_status = $1, fulfillment_status = $2, status = $3,
+                paid_at = ${paidSql}, fulfilled_at = ${fulSql},
+                stock_deducted_at = ${deductedSql}
+          WHERE id = $4
+        RETURNING ${COLUMNS}`,
+        [payment, fulfillment, status, String(id)]
+      );
+      await client.query('COMMIT');
+      return rows[0] || null;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   // Replace the order's tags (deduped, trimmed, capped at 50).

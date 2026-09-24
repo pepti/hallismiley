@@ -16,6 +16,8 @@
 // environment, behaves exactly as the engine did before the seam existed.
 // tests/unit/identityConfig.test.js pins the two copies equal.
 
+import { isDisabledRoute } from './modules.js';
+
 export const IDENTITY_DEFAULTS = Object.freeze({
   brand: Object.freeze({
     name: 'Orange Smiley',
@@ -44,6 +46,7 @@ export const IDENTITY_DEFAULTS = Object.freeze({
     ]),
     hiddenRoutes: Object.freeze(['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni']),
     hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background']),
+    navSignIn: true,
   }),
   // The product's OWN routes' meta (identity-seam-3): route → { titleKey,
   // descriptionKey?, titleMode?, noindex?, locale? }. utils/pageTitle.js
@@ -167,10 +170,13 @@ export function routeLockFor(route, id = getIdentity()) {
 /**
  * Is `route` (locale-stripped) off the product's discovery surfaces? The
  * client twin of server/config/publicSurface.js isHiddenRoute: prefix-aware,
- * '/news' hides '/news/<slug>'. Pure; `id` defaults to the served identity.
+ * '/news' hides '/news/<slug>'. `id` defaults to the served identity. A route
+ * of a module this instance does not have (utils/modules.js, R4) is hidden
+ * too, as on the server.
  */
 export function isHiddenRoute(route, id = getIdentity()) {
   if (!route) return false;
+  if (isDisabledRoute(route)) return true;
   return id.surface.hiddenRoutes.some((base) => route === base || route.startsWith(base + '/'));
 }
 

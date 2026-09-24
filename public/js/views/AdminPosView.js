@@ -17,8 +17,10 @@
 import { isAuthenticated, canSeeView, isAdmin } from '../services/auth.js';
 import {
   fetchPosCatalogue, fetchPosDay, fetchPosReceipts, ringUpSale, receiptPdfUrl, posCsvUrl,
-  newIdempotencyKey,
+  newIdempotencyKey, lookupPosCode,
 } from '../services/adminBookkeeping.js';
+import { ScanInput } from '../components/ScanInput.js';
+import { readPref, writePref } from '../utils/localPref.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
@@ -80,6 +82,7 @@ export class AdminPosView {
       ${isAdmin() ? `
         <div class="books-pos">
           <div class="books-pos__catalogue">
+            <div class="pos-scan" id="pos-scan"></div>
             <label class="books-pos__search">${escHtml(t('adminBooks.pos.search'))}
               <input type="search" id="pos-search" autocomplete="off"
                      placeholder="${escHtml(t('adminBooks.pos.searchPlaceholder'))}" />
@@ -362,7 +365,62 @@ export class AdminPosView {
 
   // ── Wiring ─────────────────────────────────────────────────────────────────
 
+  // USB barcode scanner (components/ScanInput.js, harvested from
+  // icelandicstore): one scan adds one of the matched item, variant-aware and
+  // server-resolved; the search box stays the manual fallback. Sounds are a
+  // per-device switch (a till in a quiet shop vs a noisy floor), default on.
+  _mountScanner() {
+    const host = this._el.querySelector('#pos-scan');
+    if (!host) return;
+    const sounds = readPref('pos.scanSounds', true) !== false;
+    this._scan = new ScanInput({ onScan: (code) => this._scanCode(code), sounds });
+    host.appendChild(this._scan.mountInput({ placeholder: t('scan.input.placeholder'), hint: t('scan.input.hint') }));
+    const sound = document.createElement('label');
+    sound.className = 'pos-scan__sound';
+    sound.innerHTML = `<input type="checkbox" ${sounds ? 'checked' : ''}/> ${escHtml(t('scan.sounds'))}`;
+    sound.querySelector('input').addEventListener('change', (e) => {
+      writePref('pos.scanSounds', e.target.checked);
+      this._scan?.setAudio({ sounds: e.target.checked });
+    });
+    host.appendChild(sound);
+    this._scan.attachGlobal();
+    setTimeout(() => this._scan && this._scan.focus(), 0);
+  }
+
+  async _scanCode(code) {
+    try {
+      const { item } = await lookupPosCode(code);
+      if (!this._scan) return;
+      this._scan.feedbackOk();
+      this._addScanned(item);
+    } catch (err) {
+      if (!this._scan) return;
+      this._scan.feedbackErr();
+      showToast(err.message || t('scan.notFound', { code }), 'error');
+    }
+  }
+
+  _addScanned(item) {
+    const existing = this._basket.find(l => l.productId === item.productId
+      && l.description === item.name && l.unitPriceGross === item.price_isk);
+    if (existing) existing.quantity += 1;
+    else {
+      this._basket.push({
+        key: this._nextKey++,
+        productId: item.productId,
+        description: item.name,
+        quantity: 1,
+        unitPriceGross: item.price_isk,
+        vatRate: item.vat_rate,
+        isService: item.is_service,
+      });
+    }
+    this._paintBasket();
+    this._scan?.focus();
+  }
+
   _wireTill() {
+    this._mountScanner();
     const search = this._el.querySelector('#pos-search');
     if (search) {
       search.addEventListener('input', () => this._paintCatalogue(search.value));
@@ -527,6 +585,7 @@ export class AdminPosView {
 
   destroy() {
     this._generation++;
+    if (this._scan) { this._scan.destroy(); this._scan = null; }
     this._el = null;
   }
 }

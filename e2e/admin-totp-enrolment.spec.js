@@ -4,19 +4,35 @@
 // (covered against the API in tests/integration/adminTotpEnforcement.test.js);
 // this is the person's side of it, in a real browser, end to end.
 //
-// This is the MANDATORY mode — security.mfa.enrolment = 'required', which
-// playwright.config.js sets for the e2e server. An instance's default is
-// 'optional' (mfa-optional-2026-09-23), where none of this applies.
+// This is the MANDATORY mode — security.mfa.enrolment = 'required'. An
+// instance's default is 'optional' (mfa-optional-2026-09-23), where none of
+// this applies and the main e2e server runs that default (the two-step
+// reminder, e2e/mfa-reminder.spec.js). So this spec runs against the SECOND
+// e2e server playwright.config.js starts for it — same code, same database,
+// `required` — at E2E_REQUIRED_BASE_URL (mfa-reminder-2026-09-23).
 //
-// The shared `testadmin` is exempt by name (playwright.config.js); `enroladmin`
-// is not, so it meets the production rule. One sign-in per test — TOTP's
+// `enroladmin` is not exempt (playwright.config.js exempts only `testadmin`
+// there), so it meets the production rule. One sign-in per test — TOTP's
 // replay guard allows one code per 30-second step.
 const { test, expect } = require('@playwright/test');
+const { openSignIn } = require('./helpers');
 const { execFileSync } = require('child_process');
 const path = require('path');
 const totp = require('../server/utils/totp');
 
 const ADMIN = { username: 'enroladmin', email: 'enroladmin@e2e.test', password: 'EnrolAdmin123' };
+const REQUIRED_BASE_URL = process.env.E2E_REQUIRED_BASE_URL;
+
+// Every page and request in this file goes to the `required` server; the
+// cookie banner is pre-dismissed for its origin as the config does for the
+// main one.
+test.use({
+  baseURL: REQUIRED_BASE_URL,
+  storageState: {
+    cookies: [],
+    origins: [{ origin: REQUIRED_BASE_URL, localStorage: [{ name: 'cookie_consent', value: 'declined' }] }],
+  },
+});
 const ROOT = path.join(__dirname, '..');
 
 function script(name, ...args) {
@@ -29,7 +45,7 @@ function script(name, ...args) {
 
 async function signIn(page) {
   await page.goto('/is/');
-  await page.locator('[data-testid="nav-signin"]').click();
+  await openSignIn(page);
   await page.fill('#login-username', ADMIN.username);
   await page.fill('#login-password', ADMIN.password);
   await page.click('.login-form [type=submit]');

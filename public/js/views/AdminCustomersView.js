@@ -16,6 +16,7 @@ import {
 } from '../services/adminCustomers.js';
 import { parseCsvRecords } from '../utils/csv.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
+import { credentialsPanelHtml, wireCredentialsPanel } from '../components/OneTimeCredentials.js';
 
 // Parse an Email/Name/Phone CSV → [{ email, display_name, phone }]. Tolerant of
 // either English or Icelandic header names; rows without an email are dropped.
@@ -112,9 +113,14 @@ export class AdminCustomersView {
     return iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   }
 
+  // invited_at is stamped only on a confirmed send (ice #258), so "Invited
+  // <date>" is a receipt the admin can trust; a name-only login (no email,
+  // ice #397) has nothing to verify or invite.
   _statusLabel(c) {
     if (c.disabled) return t('adminCustomers.disabled');
-    return c.email_verified ? t('adminCustomers.verified') : t('adminCustomers.pending');
+    if (!c.email) return t('adminCustomers.noEmailLogin');
+    if (c.email_verified) return t('adminCustomers.verified');
+    return c.invited_at ? t('adminCustomers.invitedOn', { date: this._date(c.invited_at) }) : t('adminCustomers.pending');
   }
 
   _paint() {
@@ -136,7 +142,7 @@ export class AdminCustomersView {
               ${admin ? `<td class="cust-select">${(c.role === 'user' && !c.is_party_guest)
                 ? `<input type="checkbox" class="cust-row-select" data-id="${escHtml(String(c.id))}" aria-label="${t('adminCustomers.selectRow')}"/>`
                 : ''}</td>` : ''}
-              <td>${escHtml(c.email)}</td>
+              <td>${c.email ? escHtml(c.email) : `<span class="users-no-email">${t('adminUsers.noEmail')}</span>`}</td>
               <td>${escHtml(c.display_name || '—')}</td>
               <td>${escHtml(c.phone || '—')}</td>
               <td>${Number(c.order_count) || 0}</td>
@@ -144,7 +150,7 @@ export class AdminCustomersView {
               <td>${this._date(c.created_at)}</td>
               <td>${escHtml(this._statusLabel(c))}</td>
               <td>${c.role === 'user'
-                ? `<button type="button" class="cust-notes-btn" data-id="${escHtml(String(c.id))}" data-email="${escHtml(c.email)}">${t('customerNotes.title')}</button>`
+                ? `<button type="button" class="cust-notes-btn" data-id="${escHtml(String(c.id))}" data-email="${escHtml(c.email || c.display_name || c.username || '')}">${t('customerNotes.title')}</button>`
                 : ''}</td>
             </tr>`).join('')}
         </tbody>
@@ -565,6 +571,10 @@ export class AdminCustomersView {
           <label>${t('adminCustomers.email')}
             <input type="email" name="email" required maxlength="200"/>
           </label>
+          <label class="admin-shop__checkbox">
+            <input type="checkbox" name="no_email" id="cust-add-no-email"/>
+            <span>${t('adminCustomers.noEmailOption')}</span>
+          </label>
           <label>${t('adminCustomers.name')}
             <input type="text" name="display_name" maxlength="200"/>
           </label>
@@ -583,24 +593,84 @@ export class AdminCustomersView {
     modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     const errorEl = modal.querySelector('#cust-add-error');
+    const form    = modal.querySelector('#cust-add-form');
 
-    modal.querySelector('#cust-add-form').addEventListener('submit', async (e) => {
+    // "No email" (ice #397): the name becomes the one required field and the
+    // server answers with a generated username + one-time password.
+    const noEmailBox = form.querySelector('#cust-add-no-email');
+    noEmailBox.addEventListener('change', () => {
+      const emailInput = form.querySelector('[name=email]');
+      const nameInput  = form.querySelector('[name=display_name]');
+      emailInput.disabled = noEmailBox.checked;
+      emailInput.required = !noEmailBox.checked;
+      nameInput.required  = noEmailBox.checked;
+      if (noEmailBox.checked) emailInput.value = '';
+    });
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.textContent = '';
       const fd = new FormData(e.target);
+      const noEmail = noEmailBox.checked;
       try {
         const res = await adminCreateCustomer({
-          email:        String(fd.get('email') || '').trim(),
+          ...(noEmail ? { no_email: true } : { email: String(fd.get('email') || '').trim() }),
           display_name: String(fd.get('display_name') || '').trim() || null,
           phone:        String(fd.get('phone') || '').trim() || null,
         });
-        close();
-        showToast(res.invited ? t('adminCustomers.invited') : t('adminCustomers.createdNoEmail'), 'success');
         await this._load();
+        if (res.noEmail) {
+          // The one and only sight of the password — keep the modal open.
+          form.innerHTML = credentialsPanelHtml({
+            name: res.customer?.display_name, username: res.username, password: res.password, idPrefix: 'cust-otc',
+            actionsHtml: `<button type="button" class="admin-shop__primary-btn" data-otc-done>${t('adminUsers.passwordDone')}</button>`,
+          });
+          wireCredentialsPanel(form);
+          form.querySelector('[data-otc-done]').addEventListener('click', close);
+          return;
+        }
+        if (res.invited) {
+          close();
+          showToast(t('adminCustomers.invited'), 'success');
+          return;
+        }
+        // "Invite sent" means sent (ice #258): the mail did not reach the
+        // customer, so hand the admin the set-password link to pass on.
+        form.innerHTML = this._inviteLinkHtml(res);
+        form.querySelector('[data-copy-link]')?.addEventListener('click', async () => {
+          const input = form.querySelector('#cust-invite-link');
+          input.select();
+          try { await navigator.clipboard.writeText(input.value); } catch { /* selected */ }
+        });
+        form.querySelector('[data-link-done]').addEventListener('click', close);
+        if (res.emailError) showToast(t('adminCustomers.inviteFailed'), 'error');
       } catch (err) {
         errorEl.textContent = err.message;
       }
     });
+  }
+
+  // The set-password link for a customer the invite did NOT reach: a failed
+  // send (red, with the reason — staff eyes only), no mail transport, or an
+  // EMAIL_ALLOWLIST redirect.
+  _inviteLinkHtml(res) {
+    const why = res.emailError
+      ? `<p class="admin-shop__error" role="alert">${t('adminCustomers.inviteFailed')}</p>
+         <p class="admin-shop__hint">${escHtml(res.emailError)}</p>`
+      : `<p class="admin-shop__hint">${res.redirected ? t('adminCustomers.inviteRedirected') : t('adminCustomers.createdNoEmail')}</p>`;
+    return `
+      ${why}
+      ${res.resetUrl ? `
+      <label>${t('adminCustomers.inviteLinkLabel')}
+        <input type="text" id="cust-invite-link" readonly value="${escHtml(res.resetUrl)}"/>
+      </label>
+      <div class="admin-shop__form-actions">
+        <button type="button" class="admin-shop__primary-btn" data-copy-link>${t('adminUsers.copy')}</button>
+        <button type="button" class="admin-shop__primary-btn" data-link-done>${t('adminUsers.passwordDone')}</button>
+      </div>` : `
+      <div class="admin-shop__form-actions">
+        <button type="button" class="admin-shop__primary-btn" data-link-done>${t('adminUsers.passwordDone')}</button>
+      </div>`}`;
   }
 
   _openImportModal() {

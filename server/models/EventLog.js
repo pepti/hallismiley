@@ -29,12 +29,35 @@ function clamp(value, max) {
 }
 
 class EventLog {
+  static _pending = new Set();
+
   /**
    * Insert one row. Never throws — callers are error paths and cleanup paths,
    * and a logging failure must not replace or mask the failure being logged.
    * Returns the row on success, null if it was dropped.
    */
-  static async record({
+  static record(fields = {}) {
+    // Callers fire-and-forget (the response must never wait on diagnostics), so
+    // the write can still be in flight when something else touches the table —
+    // a TRUNCATE in the test helpers deadlocked against exactly that
+    // (icelandicstore #254). Track the in-flight writes so flush() can await
+    // them (tests before cleaning tables, shutdown before closing the pool).
+    // _insert never rejects from inside its try, but an async function's
+    // parameter destructuring runs before it — guard here so record() itself
+    // keeps the "never throws, never rejects" promise its callers rely on.
+    const p = EventLog._insert(fields)
+      .catch(() => null)
+      .finally(() => EventLog._pending.delete(p));
+    EventLog._pending.add(p);
+    return p;
+  }
+
+  /** Await every in-flight record() write. Never rejects. */
+  static async flush() {
+    await Promise.allSettled([...EventLog._pending]);
+  }
+
+  static async _insert({
     source, level = 'error', message, path = null, status = null,
     userId = null, username = null, requestId = null, userAgent = null, context = null,
   } = {}) {

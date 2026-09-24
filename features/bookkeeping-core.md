@@ -4,7 +4,7 @@ name: {is: "Bókhaldskjarni", en: "Bookkeeping core"}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/routes/adminBookkeepingRoutes.js
   - server/controllers/adminBookkeepingController.js

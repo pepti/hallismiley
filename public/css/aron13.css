@@ -1043,7 +1043,13 @@ body:has(.aron13) .theme-switcher { display: none !important; }
   pointer-events: none;
 }
 
+/* Per-piece values are written inline by Aron13View.js / aron13-fx.js (an
+   inline custom property always beats these). The defaults exist so every
+   var() names a defined token (tests/unit/themeTokenDefined.test.js, engine
+   harvest-ice-b; engine-sync-4) — a piece without them is simply invisible. */
 .a13-confetti__bit {
+  --x: 0vw; --s: 0px; --t: 1; --c: transparent;
+  --d: 1s; --dl: 0s; --dx: 0px; --r: 0deg;
   position: absolute;
   top: -20px;
   left: var(--x);
@@ -1068,6 +1074,8 @@ body:has(.aron13) .theme-switcher { display: none !important; }
 }
 
 .a13-particle {
+  --s: 0px; --c: transparent; --d: 1s;
+  --dx: 0px; --dy: 0px; --fall: 0px;
   position: absolute;
   width: var(--s);
   height: var(--s);

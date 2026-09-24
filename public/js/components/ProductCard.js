@@ -30,12 +30,10 @@ export function renderProductCard(product) {
   const price = cur === 'ISK' ? product.price_isk : product.price_eur;
   const cover = product.images?.[0]?.url || '';
 
-  // Stock shown on the card is the aggregate across active variants when the
-  // product uses variants; otherwise the single products.stock column.
-  const variants = Array.isArray(product.variants) ? product.variants.filter(v => v.active) : [];
-  const stock = variants.length > 0
-    ? variants.reduce((sum, v) => sum + Number(v.stock || 0), 0)
-    : Number(product.stock);
+  // The card shows `available` — on hand minus what paid orders already hold,
+  // the only inventory number the public API sends (server models/Inventory.js).
+  // The server rolls it up across active variants, so no client-side sum.
+  const stock = Number(product.available ?? 0);
 
   const a = document.createElement('a');
   a.className = 'product-card';

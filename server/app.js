@@ -37,18 +37,29 @@ const { router: manifestRoutes } = require('./routes/manifestRoutes');
 const { router: robotsRoutes } = require('./routes/robotsRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
+const eventLogOn5xx  = require('./middleware/eventLogOn5xx');
+const { buildTag }   = require('./config/version');
+const { staticCacheControl } = require('./utils/staticCacheControl');
+const { versionedStatic }    = require('./middleware/versionedStatic');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { normalizeForwardedFor } = require('./middleware/forwardedFor');
 const localeMiddleware = require('./middleware/locale');
 const { generateCsrfToken } = require('./middleware/csrf');
 const { register, dbPoolTotal, dbPoolIdle, dbPoolWaiting } = require('./observability/metrics');
 const httpMetrics     = require('./observability/httpMetrics');
-const { dbCircuitBreakerMiddleware, dbCircuitBreaker } = require('./observability/circuitBreaker');
-const { healthCheckFailed } = require('./observability/alerts');
-const { readMemory } = require('./observability/memoryUsage');
+const { dbCircuitBreakerMiddleware } = require('./observability/circuitBreaker');
+const { runReadinessChecks, readinessBody } = require('./observability/readiness');
 const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
+
+// ── Every 5xx → event_logs (Admin → Monitoring), whether or not it went through
+// errorHandler (icelandicstore #254). Mounted FIRST so routers that answer
+// directly — the circuit breaker's 503s, the checkout-unavailable 503s, the MCP
+// endpoint above the general middleware — are covered too. Observes the
+// response only; reads req.requestId / req.user at finish time, so later
+// middleware still enriches the row. See middleware/eventLogOn5xx.js.
+app.use(eventLogOn5xx);
 
 // Trust the first proxy (Azure App Service's reverse proxy) so req.ip and rate limiting work correctly
 if (process.env.NODE_ENV === 'production') {
@@ -69,6 +80,13 @@ if (process.env.NODE_ENV !== 'test') {
     logger,
     genReqId(req) {
       return req.requestId || crypto.randomBytes(8).toString('hex');
+    },
+    // pino-http's default logs EVERY completion at info regardless of status
+    // (it only switches the message). 5xx completions must be `error` so the
+    // warn+ App Insights forwarder (observability/aiLogStream.js) sees them —
+    // that is the only per-request record a direct `res.status(5xx)` leaves.
+    customLogLevel(req, res, err) {
+      return (err || res.statusCode >= 500) ? 'error' : 'info';
     },
     // scrubUrl, not req.url: these message strings bypass the `req` serializer
     // where the redaction otherwise lives, so a search term or a token in the
@@ -187,6 +205,16 @@ app.use(cors({
 // ── A03 Injection: HTTP Parameter Pollution protection ────────────────────────
 app.use(hpp());
 
+// ── Module switches (R4) — a module this instance does not HAVE is absent:
+// its API and upload prefixes answer 404 here, before the raw-body routes
+// below (the Stripe webhook is the shop's, the seller-publish ingest is
+// salesOps'), before body parsing, the limiters, CSRF and auth. Enabled
+// modules pass straight through. What each module owns:
+// server/config/moduleCatalog.js; the switches: `modules.*` in
+// config/client.json.
+const { moduleGate, isDisabledRoute } = require('./config/modules');
+app.use(moduleGate);
+
 // ── Stripe webhook — MUST be registered BEFORE express.json() so the raw
 // body bytes are available for HMAC signature verification. Stripe's
 // constructEvent is byte-exact; a JSON re-serialisation would break it.
@@ -204,21 +232,27 @@ app.post('/api/v1/shop/webhook',
 // 404 unless INSTANCE_ROLE=public with SELLER_PUBLISH_SECRET set.
 app.use('/api/v1/seller-publish', require('./routes/sellerPublishRoutes'));
 
-// Change-request submissions may carry an inline base64 screenshot, so this
-// path gets a larger JSON limit. Mounted BEFORE the global 100 kb parser —
-// once body-parser sets req._body the global parser short-circuits for this
-// path. Note this parser also runs before the rate limiters and the route's
-// gate (middleware/changeRequestGate.js): a body on this path is parsed before
-// anything can refuse it, which is the price of the ordering trick above.
-app.use('/api/v1/change-requests', express.json({ limit: '5mb' }));
+// Change-request submissions may carry an inline base64 screenshot (5 MB).
+// Like the product import below, that body is parsed in its own router
+// (routes/changeRequestRoutes.js) AFTER the submit limiter, the admin gate and
+// CSRF — until 2026-09-23 an app-level 5 MB parser sat here, ahead of all of
+// them, so an anonymous body was parsed and sanitized before the gate 404'd it.
 
-// Product CSV import posts the whole catalogue as JSON rows, so this path gets a
-// larger JSON limit. Mounted BEFORE the global 100 kb parser (same pattern as
-// change-requests above); still admin-gated downstream by the shop routes.
-app.use('/api/v1/admin/shop/products/import', express.json({ limit: '4mb' }));
+// Product CSV import posts the whole catalogue as JSON rows (up to 4 MB). That
+// body is NOT parsed here: until 2026-09-23 a 4 MB parser sat at this point,
+// ahead of the rate limiters and the admin gate, so an anonymous caller got a
+// 4 MB body parsed and sanitized before anything could refuse it. The global
+// parser below now skips the import path, and adminShopRoutes.js parses it
+// (and runs sanitizeBody on it) only after requireAuth, requireView('products'),
+// both limiters and — for apply — CSRF. The match is case-insensitive like
+// Express routing, and ends at a slash or end of path, so only the import
+// routes themselves are skipped.
+// The two large-body paths the global parser leaves unread (see above).
+const LARGE_BODY_PATH = /^\/api\/v1\/(admin\/shop\/products\/import|change-requests)(\/|$)/i;
+const defaultJson = express.json({ limit: '100kb' });
 
 // ── A04 Insecure Design: limit request body size (100 kb) ────────────────────
-app.use(express.json({ limit: '100kb' }));
+app.use((req, res, next) => (LARGE_BODY_PATH.test(req.path) ? next() : defaultJson(req, res, next)));
 app.use(cookieParser());
 
 // ── A03 Injection: sanitize all incoming body strings ────────────────────────
@@ -364,6 +398,12 @@ app.use((req, res, next) => {
 
   res.setHeader('X-Request-ID', reqId);
   res.setHeader('X-Trace-ID', traceId);
+  // Which release answered (icelandicstore #332/#358). The deploy workflows
+  // compare it with the tag of the sha they shipped, so a 200 on /ready from
+  // the OLD container no longer passes the gate. Set here, ahead of /health and
+  // every route, so all responses carry it. The public tag, not the commit:
+  // /api/v1/system/version answers the sha to admins only.
+  res.setHeader('X-App-Build', buildTag);
   next();
 });
 
@@ -417,98 +457,43 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ── Readiness probe — checks DB and system health before accepting traffic ─────
-app.get('/ready', async (req, res) => {
-  const { query: dbQuery, pool } = require('./config/database');
-
-  async function measureEventLoopLag() {
-    return new Promise(resolve => {
-      const start = process.hrtime.bigint();
-      setImmediate(() => resolve(Number(process.hrtime.bigint() - start) / 1e6));
-    });
-  }
-
-  const checks = {};
-  let overallOk = true;
-
-  // DB connectivity
-  try {
-    await Promise.race([
-      dbQuery('SELECT 1'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-    ]);
-    checks.database = { status: 'ok' };
-  } catch (err) {
-    checks.database = { status: 'error', message: err.message };
-    overallOk = false;
-    healthCheckFailed('database', { message: err.message });
-  }
-
-  // DB pool health
-  checks.dbPool = {
-    status:   pool.waitingCount > 5 ? 'degraded' : 'ok',
-    total:    pool.totalCount,
-    idle:     pool.idleCount,
-    waiting:  pool.waitingCount,
-  };
-  if (pool.waitingCount > 5) overallOk = false;
-
-  // Circuit breaker state
-  checks.circuitBreaker = {
-    status: dbCircuitBreaker.state === 'closed' ? 'ok' : 'degraded',
-    state:  dbCircuitBreaker.state,
-  };
-  if (dbCircuitBreaker.state === 'open') overallOk = false;
-
-  // Memory usage — reported for visibility; does not flip readiness. Reading
-  // comes from observability/memoryUsage.js, shared with the periodic alert so
-  // the two can never disagree again (they did: both used heapUsed/heapTotal,
-  // which V8 grows on demand — see the module header). Ported from
-  // icelandicstore #180.
-  const mem = readMemory();
-  checks.memory = {
-    status:      mem.heapRatio > 0.9 ? 'critical' : mem.heapRatio > 0.8 ? 'degraded' : 'ok',
-    heapUsedMb:  mem.heapUsedMb,
-    heapLimitMb: mem.heapLimitMb,
-    rssMb:       mem.rssMb,
-    ratio:       mem.ratioPct,
-  };
-
-  // Event loop lag — reported for visibility; does not flip readiness.
-  // Short-lived spikes (GC, test noise) shouldn't evict the pod from the LB.
-  const lagMs = await measureEventLoopLag();
-  checks.eventLoop = {
-    status: lagMs > 100 ? 'degraded' : 'ok',
-    lagMs:  Math.round(lagMs),
-  };
-
-  const status = overallOk ? 200 : 503;
-  res.status(status).json({
-    status:    overallOk ? 'ok' : 'degraded',
-    uptime:    Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-    checks,
-  });
-});
-
-// ── Prometheus metrics endpoint ───────────────────────────────────────────────
-app.get('/metrics', async (req, res) => {
-  // Auth: bearer token if METRICS_TOKEN is set, otherwise localhost only
+// Who may read process internals (/metrics, and the `checks` detail of /ready):
+// a bearer METRICS_TOKEN when one is configured, otherwise localhost only in
+// production, anyone in dev/test. Returns null when allowed, else the HTTP
+// status /metrics answers with. One rule for both endpoints, so /ready can
+// never disclose what /metrics refuses.
+function internalsDenied(req) {
   const metricsToken = process.env.METRICS_TOKEN;
   if (metricsToken) {
     // Constant-time: `!==` returns at the first differing byte, so response
     // time would tell a caller how much of a guessed token was right.
-    const authHeader = req.headers.authorization || '';
-    if (!safeEqual(authHeader, `Bearer ${metricsToken}`)) {
-      return res.status(401).json({ error: 'Unauthorized', code: 401 });
-    }
-  } else if (process.env.NODE_ENV === 'production') {
-    // In prod without a token configured, only allow localhost
-    const ip = req.ip || req.socket.remoteAddress;
-    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
-      return res.status(403).json({ error: 'Forbidden', code: 403 });
-    }
+    return safeEqual(req.headers.authorization || '', `Bearer ${metricsToken}`) ? null : 401;
   }
+  if (process.env.NODE_ENV === 'production') {
+    const ip = req.ip || req.socket.remoteAddress;
+    return (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') ? null : 403;
+  }
+  return null;
+}
+
+// ── Readiness probe — checks DB and system health before accepting traffic ─────
+// Anyone gets the verdict: the HTTP status (200/503), `status`, `uptime` and
+// `timestamp`. `uptime` stays public on purpose — deploy.yml reads it to prove
+// the answering process is younger than the container swap. The `checks`
+// detail (pool counts, breaker state, heap and RSS, event-loop lag) goes only
+// to a caller who may read /metrics (internalsDenied above): it told anonymous
+// callers how loaded and how close to its limits the instance was. Admins read
+// the full report at GET /api/v1/admin/events/health (Admin → Monitoring).
+// The checks themselves live in observability/readiness.js.
+app.get('/ready', async (req, res) => {
+  const report = await runReadinessChecks();
+  res.status(report.ok ? 200 : 503).json(readinessBody(report, !internalsDenied(req)));
+});
+
+// ── Prometheus metrics endpoint ───────────────────────────────────────────────
+app.get('/metrics', async (req, res) => {
+  const denied = internalsDenied(req);
+  if (denied) return res.status(denied).json({ error: denied === 401 ? 'Unauthorized' : 'Forbidden', code: denied });
 
   try {
     // prom-client gauges are pull-based: refresh the pool numbers at scrape
@@ -562,6 +547,10 @@ app.use('/assets/party',    express.static(path.join(UPLOAD_ROOT, 'party'),    u
 app.use('/assets/projects', express.static(path.join(UPLOAD_ROOT, 'projects'), uploadStaticOpts));
 app.use('/assets/avatars',  express.static(path.join(UPLOAD_ROOT, 'avatars'),  uploadStaticOpts));
 app.use('/assets/products', express.static(path.join(UPLOAD_ROOT, 'products'), uploadStaticOpts));
+// `<original>.thumb.webp` is generated on first request and written next to the
+// original, so the static above serves it from the second request on
+// (services/productImages.js, harvest-ice-d-2026-09-24).
+app.use('/assets/products', require('./services/productImages').thumbnailHandler);
 app.use('/assets/content',  express.static(path.join(UPLOAD_ROOT, 'content'),  uploadStaticOpts));
 // Change-request screenshots: persistScreenshot (changeRequestController.js)
 // writes under UPLOAD_ROOT/change-requests and links /assets/change-requests/…
@@ -613,6 +602,19 @@ app.get(/^\/([A-Za-z0-9-]{8,128})\.txt$/, (req, res, next) => {
   res.send(expected);
 });
 
+// Release-stamped code URLs (/js/_<tag>/…, /css/_<tag>/…) — cached immutable
+// for a year, a 404 (no-store) under any other release's tag. The shell points
+// at them on a stamped build (ssrMeta.js stampAssetUrls). Same-origin paths,
+// so CSP is untouched ('self'). See middleware/versionedStatic.js
+// (icelandicstore #425, harvest-ice-e-2026-09-24).
+app.use(versionedStatic());
+
+// Browsers and crawlers ask for /favicon.ico whatever the <link rel="icon">
+// says; the site ships favicon.svg only, so the bare request was a 404 (and a
+// SPA shell) on every first visit. A permanent redirect lets the client
+// remember the answer (icelandicstore #399).
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
+
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
@@ -623,16 +625,11 @@ app.use(express.static(path.join(__dirname, '../public'), {
   // raw index.html with placeholder tags.
   index: false,
   setHeaders(res, filePath) {
-    // Never cache the HTML entry point — the SPA must always get a fresh shell
-    if (filePath.endsWith('index.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-    // In development, don't cache JS/CSS/JSON either — avoids stale ES modules
-    // and stale i18n locale files when iterating on the frontend.
-    if (process.env.NODE_ENV !== 'production' &&
-        (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.json'))) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    // The HTML shell is never cached; unstamped JS/CSS/JSON always revalidate
+    // (the 1 h maxAge let a reload mix releases — icelandicstore #332), so a
+    // reload never runs two releases. See utils/staticCacheControl.js.
+    const cc = staticCacheControl(filePath);
+    if (cc) res.setHeader('Cache-Control', cc);
   },
 }));
 app.use('/auth',              authRoutes);
@@ -642,6 +639,12 @@ app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/change-requests', changeRequestRoutes);
 app.use('/api/v1/system',     systemRoutes);
+// One outer door for the whole back office (ice #418). Every admin router below
+// still guards itself (and most are narrower); this only guarantees that a
+// router which forgets its own guard is still closed to plain customer
+// accounts. After moduleGate (a switched-off module stays a 404 before auth)
+// and before every /api/v1/admin mount, including the two further down.
+app.use('/api/v1/admin', require('./auth/middleware').requireAuth, require('./auth/requireView').requireStaff);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all
@@ -660,6 +663,7 @@ app.use('/api/v1/admin/markadur', require('./routes/marketRoutes')); // must com
 app.use('/api/v1/admin/accounts', require('./routes/adminAccountRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/commission', require('./routes/adminCommissionRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/audit', require('./routes/adminAuditRoutes')); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/modules', require('./routes/adminModulesRoutes')); // R5b: the admin's module switches; before the catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 // Seller area (D-020): read-only, published copy; 404 unless INSTANCE_ROLE=public.
@@ -675,6 +679,10 @@ app.use('/api/v1/seller',     require('./routes/sellerRoutes'));
 // 2026-09-11, docs/mcp.md). Moving it above those two is a decision, not a
 // tidy-up: it would exempt MCP from two global protections (invariant 7).
 app.use('/api/v1/mcp', require('./routes/mcpRoutes'));
+// OAuth 2.1 for the connector (R5a): /.well-known discovery, /oauth/* and the
+// admin consent API. Mounted at '/' because the paths are fixed by the specs;
+// every route carries its own MCP_ENABLED gate (routes/mcpOAuthRoutes.js).
+app.use(require('./routes/mcpOAuthRoutes'));
 app.use('/api/v1/events',     require('./routes/eventRoutes'));
 app.use('/api/v1/admin/mcp-tokens', require('./routes/mcpAdminRoutes')); // before the /api/v1/admin catch-all
 app.use('/api/v1/admin/events', require('./routes/adminEventRoutes')); // must come before /api/v1/admin catch-all
@@ -752,6 +760,12 @@ app.get('/{*splat}', (req, res, next) => {
   if (parts.length === 1 && SUPPORTED_LOCALES.includes(parts[0]) && !req.path.endsWith('/')) {
     return res.redirect(301, `/${parts[0]}/${req.url.slice(parts[0].length + 1)}`);
   }
+  // A page of a module this instance does not have (R4): the shell still
+  // renders — the SPA shows its not-found view — but with a real 404 status,
+  // and ssrMeta marks it noindex (publicSurface treats a disabled route as
+  // hidden). ssrMeta sends without touching the status.
+  const bare = SUPPORTED_LOCALES.includes(parts[0]) ? '/' + parts.slice(1).join('/') : req.path;
+  if (isDisabledRoute(bare)) res.status(404);
   return ssrMetaMiddleware(req, res, next);
 });
 

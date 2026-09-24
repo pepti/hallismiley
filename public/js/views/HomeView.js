@@ -8,6 +8,7 @@ import { SceneStage } from '../scenes/SceneStage.js';
 import { productSiteUrl } from '../utils/productSite.js';
 import { motionAllowed, onMotionChange } from '../utils/motion.js';
 import { getIdentity, publicNav, isHiddenRoute } from '../utils/identity.js';
+import { moduleEnabled } from '../utils/modules.js';
 
 // The home hero clip and its still — the PRODUCT's, from identity.hero in
 // config/client.json (utils/identity.js; the engine default is Orange
@@ -573,6 +574,8 @@ export class HomeView {
 
   // ── Load news articles from API ─────────────────────────────────────────
   async _loadNews() {
+    // No news module on this instance (R4): nothing to fetch, the API 404s.
+    if (!moduleEnabled('news')) return;
     try {
       const res = await fetch('/api/v1/news?limit=3');
       if (res.ok) {

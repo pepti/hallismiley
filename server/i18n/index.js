@@ -65,7 +65,9 @@ function t(locale, key, params) {
 
   const all = { ...implicitParams(), ...(params || {}) };
   for (const [k, v] of Object.entries(all)) {
-    msg = msg.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v ?? ''));
+    // A replacer function: a param value is inserted as is, so `$&`, `$'`
+    // and friends in a name or a config string are never expanded.
+    msg = msg.replace(new RegExp(`\\{${k}\\}`, 'g'), () => String(v ?? ''));
   }
   return msg;
 }

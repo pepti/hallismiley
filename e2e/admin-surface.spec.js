@@ -18,6 +18,7 @@ gateSpec(test, __filename);
 const { Pool } = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { seedAdminUser, signInViaApi } = require('./lib/accounts');
+const { openSignIn } = require('./helpers');
 // The hidden set is the product identity's (identity.surface.hiddenAdminViews
 // in config/client.json). This spec demonstrates the policy on the shop group
 // — Orange Smiley hides it; a downstream that is a shop lists nothing there
@@ -160,7 +161,7 @@ test.describe('admin nav — a role granted only a hidden view', () => {
 
   test('lands on Pantanir with a one-item sidebar', async ({ page }) => {
     await page.goto('/');
-    await page.locator('[data-testid="nav-signin"]').click();
+    await openSignIn(page);
     await page.fill('#login-username', USER.username);
     await page.fill('#login-password', USER.password);
     await page.click('.login-form [type=submit]');

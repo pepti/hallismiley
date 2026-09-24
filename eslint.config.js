@@ -63,6 +63,36 @@ module.exports = [
     },
   },
 
+  // Observability contract for application code (icelandicstore #254,
+  // harvest-ice-f-2026-09-24; stack invariant 6). Both rules exist because the
+  // failure they prevent is silent: a console.* line or a bare fetch() is
+  // invisible to App Insights, so the next incident would again leave no trace.
+  //   • no-console: pino only. The App Insights forwarder and the App Service
+  //     diagnostic stream only see pino's JSON lines.
+  //   • no-restricted-globals fetch: every outbound call goes through
+  //     server/observability/trackedFetch.js so it becomes a `dependencies` row.
+  // One-off scripts (server/scripts/) are exempt from both — they run by hand.
+  // EXCEPT migrate.js: server.js requires it at every container boot, so a
+  // failed migration must reach pino like any other boot failure.
+  {
+    files: ['server/**/*.js'],
+    ignores: ['server/scripts/**', '!server/scripts/migrate.js'],
+    rules: {
+      'no-console': 'error',
+      'no-restricted-globals': ['error', {
+        name: 'fetch',
+        message: 'Use trackedFetch()/fetchNamed() from server/observability/trackedFetch.js so the call is recorded as an App Insights dependency.',
+      }],
+      // no-restricted-globals only sees the bare identifier; close the
+      // `globalThis.fetch` / `global.fetch` door too. trackedFetch.js is the
+      // one legitimate user and carries an inline disable with the reason.
+      'no-restricted-syntax': ['error', {
+        selector: "MemberExpression[object.name=/^(globalThis|global|window)$/][property.name='fetch']",
+        message: 'Use trackedFetch()/fetchNamed() from server/observability/trackedFetch.js — globalThis.fetch bypasses dependency tracking.',
+      }],
+    },
+  },
+
   {
     files: ['tests/**/*.js'],
     languageOptions: {

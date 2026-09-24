@@ -4,7 +4,7 @@ name: {is: "Söluþóknun", en: Commission}
 domain: 8
 owner: engine
 status: live
-flag: null
+flag: modules.salesOps.enabled
 paths:
   - server/routes/adminCommissionRoutes.js
   - server/models/Commission.js

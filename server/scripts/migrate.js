@@ -18,12 +18,20 @@
 // happen under the same advisory lock and are printed, so a first boot on a
 // grafted database is legible in the log.
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });
+const logger = require('../logger');
 const { pool } = require('../config/database');
 const { migrations, aliases, superseded } = require('../config/migrationSet');
 
 // Arbitrary but fixed key for the session-level advisory lock. Any process
 // running this runner against the same database contends on it.
 const MIGRATION_LOCK_ID = 725_100_318;
+
+// --plan is a report for the human at the terminal, whatever NODE_ENV or
+// LOG_LEVEL say (pino is disabled under NODE_ENV=test). Everything a BOOT
+// prints goes through pino instead: server.js runs this at every container
+// start, so a failed migration must reach the same log stream (and App
+// Insights) as any other boot failure (icelandicstore #254).
+function planLine(text) { process.stdout.write(text + '\n'); }
 
 async function migrate(options = {}) {
   const plan = Boolean(options.plan);
@@ -73,41 +81,42 @@ async function migrate(options = {}) {
 
     for (const migration of migrations) {
       if (applied.has(migration.name)) {
-        if (plan) console.log(`[migrate:plan] applied     ${migration.name}`);
+        if (plan) planLine(`[migrate:plan] applied     ${migration.name}`);
         continue; // already applied
       }
 
       const via = (aliases[migration.name] || []).find(n => applied.has(n));
       if (via) {
-        if (plan) { console.log(`[migrate:plan] ALIAS       ${migration.name} via ${via}`); continue; }
+        if (plan) { planLine(`[migrate:plan] ALIAS       ${migration.name} via ${via}`); continue; }
         await client.query(
           'INSERT INTO schema_migrations (name, resolved_from) VALUES ($1, $2)',
           [migration.name, via]
         );
         applied.add(migration.name);
-        console.log(`[migrate] Recorded ${migration.name} as applied via ${via}`);
+        logger.info({ migration: migration.name, via }, '[migrate] Recorded as applied via alias');
         continue;
       }
 
       if (Object.prototype.hasOwnProperty.call(superseded, migration.name)) {
         const reason = String(superseded[migration.name]);
-        if (plan) { console.log(`[migrate:plan] SUPERSEDED  ${migration.name} (${reason})`); continue; }
+        if (plan) { planLine(`[migrate:plan] SUPERSEDED  ${migration.name} (${reason})`); continue; }
         await client.query(
           'INSERT INTO schema_migrations (name, resolved_from) VALUES ($1, $2)',
           [migration.name, `superseded: ${reason}`.slice(0, 255)]
         );
         applied.add(migration.name);
-        console.log(`[migrate] Skipped ${migration.name} (superseded: ${reason})`);
+        logger.info({ migration: migration.name, reason }, '[migrate] Skipped (superseded)');
         continue;
       }
 
-      if (plan) { console.log(`[migrate:plan] RUN         ${migration.name}`); continue; }
+      if (plan) { planLine(`[migrate:plan] RUN         ${migration.name}`); continue; }
 
       // One transaction per migration, covering the bookkeeping row: a migration
       // that fails half-way must leave no trace, or the next boot replays its
       // already-applied statements and crash-loops the deploy. Postgres runs DDL
       // transactionally, and no migration here uses a statement that cannot run
       // inside a transaction block (CREATE INDEX CONCURRENTLY, VACUUM).
+      const startedAt = Date.now();
       await client.query('BEGIN');
       try {
         for (const sql of migration.statements) {
@@ -124,10 +133,13 @@ async function migrate(options = {}) {
         throw err;
       }
       applied.add(migration.name);
-      console.log(`[migrate] Applied: ${migration.name}`);
+      // `ms` is the boot cost per migration (icelandicstore #296): a new image
+      // migrates the live database before it serves, so a slow one shows here.
+      logger.info({ migration: migration.name, ms: Date.now() - startedAt }, '[migrate] Applied');
     }
 
-    console.log(plan ? '[migrate:plan] Nothing was executed.' : '[migrate] All migrations up to date.');
+    if (plan) planLine('[migrate:plan] Nothing was executed.');
+    else logger.info('[migrate] All migrations up to date.');
   } finally {
     // Release before returning the connection to the pool: a pooled connection
     // is reused, and a session-level advisory lock left held would travel with
@@ -139,7 +151,7 @@ async function migrate(options = {}) {
       try {
         await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_ID]);
       } catch (err) {
-        console.warn(`[migrate] advisory unlock failed: ${err.message}`);
+        logger.warn({ err }, '[migrate] advisory unlock failed');
       }
     }
     client.release();
@@ -153,5 +165,11 @@ if (require.main === module) {
   migrate({ plan: process.argv.includes('--plan') })
     .then(() => pool.end())
     .then(() => process.exit(0))
-    .catch(err => { console.error('Migration failed:', err.message); process.exit(1); });
+    .catch(err => {
+      // stderr as well as pino: pino is disabled under NODE_ENV=test, and the
+      // one line that says why a standalone run failed must never be lost.
+      process.stderr.write(`Migration failed: ${err.message}\n`);
+      logger.fatal({ err }, 'Migration failed');
+      logger.flush(() => process.exit(1));
+    });
 }

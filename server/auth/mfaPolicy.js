@@ -38,9 +38,13 @@
  *     view list (withholdViews) — requireView is the one place views are
  *     resolved for a guard, and it asks this file.
  *   • a published seller's routes demand totp_enabled themselves
- *     (routes/sellerRoutes.js, rule 4) — in BOTH modes, since that rule
- *     predates this file; under `required` the session payload also reports
+ *     (routes/sellerRoutes.js, rule 4, which asks enrolmentRequired() — so
+ *     only under `required` since mfa-reminder-2026-09-23; it applied in both
+ *     modes before); the session payload also reports
  *     mfa_enrolment_required so the SPA walks the seller to the panel.
+ *
+ * Under `optional` the same accounts get a dismissible REMINDER instead
+ * (reminderCandidate below; the session's `mfa_reminder`).
  * Other roles the account holds keep working: they never required a second
  * factor.
  *
@@ -60,7 +64,7 @@
  * switch — docs/ADMIN-2FA.md.
  */
 
-const { protectedRole } = require('../services/mfaService');
+const { protectedRole, shouldEnrol } = require('../services/mfaService');
 const Role = require('../models/Role');
 const { ALL } = require('./adminViews');
 const { clientConfig, envNameFor, SCHEMA } = require('../config/clientConfig');
@@ -128,6 +132,20 @@ function mustEnrol(user, roles) {
   return protectedRole({ ...user, admin_anywhere: user.admin_anywhere === true || holdsAdmin(user, roles) });
 }
 
+/**
+ * Is this account a candidate for the two-step REMINDER
+ * (mfa-reminder-2026-09-23)? Only while enrolment is `optional` — under
+ * `required` the forced flow above applies instead — and only for an account
+ * mfaService.shouldEnrol recommends it to (protected role, no TOTP). Same
+ * `user` flags as mustEnrol. Whether the account has dismissed it is the
+ * caller's to add (authController.roleFields reads users.mfa_reminder_dismissed_at);
+ * this is the predicate, the column is the preference.
+ */
+function reminderCandidate(user, roles) {
+  if (!user || enrolmentRequired()) return false;
+  return shouldEnrol({ ...user, admin_anywhere: user.admin_anywhere === true || holdsAdmin(user, roles) });
+}
+
 /** The role view of an account, with `admin` withheld while enrolment is owed. */
 function effectiveRoles(user, roles) {
   const set = roleSet(user, roles);
@@ -189,7 +207,7 @@ async function applyMfaPolicyToRequest(req) {
 }
 
 module.exports = {
-  mustEnrol, effectiveRoles, withholdViews, viewsHoldProtected,
+  mustEnrol, reminderCandidate, effectiveRoles, withholdViews, viewsHoldProtected,
   applyMfaPolicy, applyMfaPolicyToRequest, isExempt, holdsAdmin, PROTECTED_VIEW,
   enrolmentMode, enrolmentRequired, ENROLMENT_ENV,
 };

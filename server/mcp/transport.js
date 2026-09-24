@@ -18,6 +18,7 @@
 const logger = require('../logger');
 const securityLogger = require('../observability/securityLogger');
 const registry = require('./registry');
+const { identity } = require('../config/identity');
 
 const PROTOCOL_VERSION = '2025-06-18';
 // Older revisions we can serve identically (no session, plain JSON responses).
@@ -25,8 +26,11 @@ const ACCEPTED_VERSIONS = new Set(['2025-06-18', '2025-03-26', '2024-11-05']);
 
 function serverInfo() {
   const env = (process.env.APP_ENV || 'production') === 'test' ? 'TEST' : 'PROD';
+  // The product's brand (the identity seam): claude.ai shows this name on
+  // the connector. It said 'Icelandic Store Wholesale' — a port leftover —
+  // until R5a (2026-09-24).
   return {
-    name: `Icelandic Store Wholesale [${env}]`,
+    name: `${identity.brand.name} [${env}]`,
     version: process.env.npm_package_version || '1.0.0',
   };
 }
@@ -62,12 +66,17 @@ async function handleToolsCall(req, params) {
 
   const started = Date.now();
   try {
-    const result = await tool.handler(args);
+    // The calling token rides along (R5b): write tools attribute and audit
+    // their change to its owner. Read tools ignore it.
+    const result = await tool.handler(args, { token: req.mcpToken });
     logger.info({ tool: name, tokenId: req.mcpToken.id, durationMs: Date.now() - started }, 'mcp.tool_call');
     return toolText(result);
   } catch (err) {
     logger.warn({ tool: name, tokenId: req.mcpToken.id, err: { message: err.message } }, 'mcp.tool_error');
-    return { ...toolText({ error: err.message || 'Tool failed' }), isError: true };
+    // Only a message the tool marked for the caller (err.expose — a refusal
+    // such as "not in this instance's contract") goes on the wire; anything
+    // else (a database error) stays in the log line above (R5b review).
+    return { ...toolText({ error: err.expose ? err.message : 'Tool failed' }), isError: true };
   }
 }
 

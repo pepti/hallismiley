@@ -3,7 +3,13 @@
  *
  * Shows a consent banner on first visit.
  * Analytics are only loaded after the user explicitly accepts.
- * Consent choice is persisted in localStorage under 'cookie_consent'.
+ * Consent choice is persisted in localStorage under 'cookie_consent' and, for a
+ * signed-in user, on the account too (users.cookie_consent, migration 111;
+ * harvested from icelandicstore #411) — see services/cookieConsent.js, which
+ * talks to this script through window.__cookieConsent. The banner waits for the
+ * SPA's session check ('consent:ready') so a signed-in user who already answered
+ * never sees it. Its colours are the theme tokens (invariant 15), so it follows
+ * Bjart / Glóð / Miðnætti like the rest of the page.
  *
  * To wire up a real GA4 Measurement ID, set:
  *   window.GA_MEASUREMENT_ID = 'G-XXXXXXXXXX';
@@ -133,16 +139,16 @@
       'width:320px',
       'max-width:calc(100vw - 2rem)',
       'box-sizing:border-box',
-      'background:#1a1a1a',
-      'color:#e8e8e0',
+      'background:var(--bg-elevated)',
+      'color:var(--text-primary)',
       'padding:1rem 1.15rem',
       'display:flex',
       'flex-direction:column',
       'align-items:stretch',
       'gap:0.85rem',
-      'border:1px solid #333',
+      'border:1px solid var(--border)',
       'border-radius:10px',
-      'box-shadow:0 10px 34px rgba(0,0,0,0.5)',
+      'box-shadow:var(--shadow-modal)',
       'font-family:sans-serif',
       'font-size:0.82rem',
       'line-height:1.5'
@@ -155,7 +161,7 @@
     // '#/privacy' no longer works since the router moved to clean URLs.
     var privacyLink = document.createElement('a');
     privacyLink.textContent = s.link;
-    privacyLink.style.cssText = 'color:#a0a090;text-decoration:underline';
+    privacyLink.style.cssText = 'color:var(--text-secondary);text-decoration:underline';
     privacyLink.href = '/' + resolveLocale() + s.privacyPath;
     privacyLink.addEventListener('click', function (e) {
       if (e.defaultPrevented || e.button !== 0 ||
@@ -177,9 +183,9 @@
     acceptBtn.textContent = s.accept;
     acceptBtn.style.cssText = [
       'padding:0.4rem 1rem',
-      'background:#D8C3A5',
-      'color:#100D0A',
-      'border:none',
+      'background:var(--text-primary)',
+      'color:var(--bg-base)',
+      'border:1px solid var(--text-primary)',
       'border-radius:3px',
       'cursor:pointer',
       'font-size:0.875rem',
@@ -191,23 +197,15 @@
     declineBtn.style.cssText = [
       'padding:0.4rem 1rem',
       'background:transparent',
-      'color:#a0a090',
-      'border:1px solid #555',
+      'color:var(--text-secondary)',
+      'border:1px solid var(--border)',
       'border-radius:3px',
       'cursor:pointer',
       'font-size:0.875rem'
     ].join(';');
 
-    acceptBtn.addEventListener('click', function () {
-      setConsent('accepted');
-      loadAnalytics();
-      removeBanner(banner);
-    });
-
-    declineBtn.addEventListener('click', function () {
-      setConsent('declined');
-      removeBanner(banner);
-    });
+    acceptBtn.addEventListener('click', function () { choose('accepted'); });
+    declineBtn.addEventListener('click', function () { choose('declined'); });
 
     actions.appendChild(acceptBtn);
     actions.appendChild(declineBtn);
@@ -216,28 +214,61 @@
     return banner;
   }
 
-  function init() {
-    var consent = getConsent();
-
-    if (consent === 'accepted') {
-      loadAnalytics();
-      return;
+  // A choice made on the banner: stored here, and handed to the SPA (if it has
+  // registered onChoice) so a signed-in user's answer lands on the account.
+  function choose(value) {
+    setConsent(value);
+    if (value === 'accepted') loadAnalytics();
+    removeBanner(document.getElementById('cookie-consent-banner'));
+    var api = window.__cookieConsent;
+    if (api && typeof api.onChoice === 'function') {
+      try { api.onChoice(value); } catch (_) { /* never break the banner */ }
     }
+  }
 
-    if (consent === 'declined') {
-      return;
-    }
+  function showBanner() {
+    if (getConsent() === 'accepted' || getConsent() === 'declined') return;
+    if (document.getElementById('cookie-consent-banner')) return;
+    if (!document.body) return;
+    document.body.appendChild(createBanner());
+  }
 
-    // No stored choice — show banner once the DOM is ready.
-    function showBanner() {
+  // The SPA's handle on this script (services/cookieConsent.js).
+  window.__cookieConsent = {
+    get: getConsent,
+    // The account already holds an answer: adopt it here and drop the banner.
+    apply: function (value) {
+      if (value !== 'accepted' && value !== 'declined') return;
+      setConsent(value);
+      if (value === 'accepted') loadAnalytics();
+      removeBanner(document.getElementById('cookie-consent-banner'));
+    },
+    // "Change cookie choice" (the privacy page): ask again.
+    reopen: function () {
+      removeBanner(document.getElementById('cookie-consent-banner'));
       document.body.appendChild(createBanner());
-    }
+    },
+    onChoice: null,
+  };
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', showBanner);
-    } else {
-      showBanner();
+  function init() {
+    if (getConsent() === 'declined') return;
+
+    // Accepted here, or no choice at all: wait for the SPA's session check first
+    // (it fires 'consent:ready' after adopting the account's answer). A signed-in
+    // user who answered elsewhere is then never shown the banner, and one who
+    // DECLINED elsewhere never gets analytics loaded here first. The timer is the
+    // backstop for a page where the SPA never boots.
+    var done = false;
+    function ready() {
+      if (done) return;
+      done = true;
+      var consent = getConsent();
+      if (consent === 'accepted') loadAnalytics();
+      else if (consent !== 'declined') showBanner();
     }
+    window.addEventListener('consent:ready', ready);
+    setTimeout(ready, 4000);
   }
 
   init();

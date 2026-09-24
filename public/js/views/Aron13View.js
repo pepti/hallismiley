@@ -25,14 +25,23 @@ import { mountCrafting } from './aron13-games/crafting.js';
 // in the 2026-09-22 graft, which is why the crafting cells measured 0×0 in
 // e2e/aron13.spec.js). The view loads it itself, once, and waits for it so
 // the first paint is styled — no hook on an engine file.
-const STYLESHEET = '/css/aron13.css';
+// Since engine-sync-4 (2026-09-24) the shell loads main.css from a
+// release-stamped /css/_<tag>/ prefix (server/middleware/versionedStatic.js),
+// so the sheet is resolved NEXT TO main.css rather than by an absolute URL —
+// an absolute one would pair another release's CSS with this code
+// (tests/unit/noAbsoluteJsUrls.test.js). No main.css link (a bare test page):
+// the unstamped tree at the origin.
+function stylesheetHref() {
+  const main = document.querySelector('link[rel="stylesheet"][href$="/main.css"]');
+  return main ? new URL('aron13.css', main.href).href : new URL('css/aron13.css', window.location.origin + '/').href;
+}
 function ensureStylesheet() {
   const existing = document.querySelector('link[data-aron13-css]');
   if (existing) return existing.sheet ? Promise.resolve() : new Promise(res => existing.addEventListener('load', res, { once: true }));
   return new Promise(resolve => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = STYLESHEET;
+    link.href = stylesheetHref();
     link.dataset.aron13Css = '1';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true }); // render unstyled rather than never

@@ -3,6 +3,7 @@ import { escHtml } from '../utils/escHtml.js';
 import { getIdentity, publicNav } from '../utils/identity.js';
 import { LoginModal } from './LoginModal.js';
 import { CartIcon } from './CartIcon.js';
+import { moduleEnabled } from '../utils/modules.js';
 import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES, forcedLocaleFor } from '../i18n/i18n.js';
 import { navigate } from '../navigate.js';
 
@@ -16,7 +17,11 @@ function navHref(route) {
 export class NavBar {
   constructor() {
     this._loginModal = new LoginModal();
-    this._cartIcon   = new CartIcon();
+    // A view that needs a signed-in visitor (the MCP consent page) asks for
+    // the modal by event rather than importing the nav.
+    window.addEventListener('login:open', () => this._loginModal.open());
+    // The cart is the shop's (R4): no shop module on this instance, no icon.
+    this._cartIcon   = moduleEnabled('shop') ? new CartIcon() : null;
     this._nav        = null;
   }
 
@@ -30,7 +35,7 @@ export class NavBar {
 
     // Mount cart icon
     const cartSlot = nav.querySelector('#nav-cart-slot');
-    if (cartSlot) cartSlot.appendChild(this._cartIcon.render());
+    if (cartSlot && this._cartIcon) cartSlot.appendChild(this._cartIcon.render());
 
     this._renderAuth();
     this._bindScrollLinks(nav);
@@ -315,6 +320,11 @@ export class NavBar {
       container.appendChild(wrapper);
 
     } else {
+      // "Innskrá" unless the product hides it (identity.surface.navSignIn —
+      // staff then sign in at /login); "Nýskrá" only while the signup module
+      // is on (R2b).
+      const showSignIn = getIdentity().surface.navSignIn !== false;
+      const showSignUp = moduleEnabled('signup');
       const signIn = document.createElement('button');
       signIn.className = 'lol-nav__cta lol-nav__cta--ghost';
       signIn.setAttribute('data-testid', `nav-signin${suffix}`);
@@ -336,8 +346,8 @@ export class NavBar {
         navigate(navHref('/signup'));
       });
 
-      container.appendChild(signIn);
-      container.appendChild(signUp);
+      if (showSignIn) container.appendChild(signIn);
+      if (showSignUp) container.appendChild(signUp);
     }
   }
 
