@@ -185,7 +185,7 @@ test.describe('Iceland scene — inner pages', () => {
     ['/is/forgot-password', 'snow-rapids', '.auth-card'],
     ['/is/reset-password', 'snow-rapids', '.auth-card'],
     ['/is/verify-email', 'snow-rapids', '.auth-card'],
-  ]) {
+  ].filter(([p]) => p !== '/is/signup' || !require('./lib/featureGate').gate('signup').skip)) {
     test(`${path} sits on its landscape behind the card`, async ({ page }) => {
       await page.goto(path);
       const scene = page.locator(`.scene-page > .ice-scene--backdrop[data-scene="${image}"]`);

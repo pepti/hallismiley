@@ -62,6 +62,7 @@ const ORANGE_SMILEY = {
     ],
     hiddenRoutes: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
     hiddenAdminViews: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+    navSignIn: true,
   },
   // The engine has no routes of its own beyond ROUTE_META (identity-seam-3).
   routes: {},

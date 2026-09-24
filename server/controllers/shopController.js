@@ -1,5 +1,6 @@
 // Public shop endpoints: browse, checkout, order lookup, Stripe webhook.
 // Admin-only product/order management lives in adminShopController.js.
+const logger = require('../logger');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const Collection = require('../models/Collection');
@@ -439,7 +440,7 @@ const shopController = {
     if (!Buffer.isBuffer(req.body)) {
       // Defensive: a future refactor that moves express.json() above this
       // route would silently break signature verification. Fail loudly.
-      console.error('[stripeWebhook] req.body is not a Buffer — raw body parser missing');
+      logger.error('[stripeWebhook] req.body is not a Buffer — raw body parser missing');
       return res.status(500).send('Webhook misconfigured: raw body required');
     }
 
@@ -447,7 +448,7 @@ const shopController = {
     try {
       event = stripeService.verifyWebhook(req.body, sig);
     } catch (err) {
-      console.warn(`[stripeWebhook] Invalid signature: ${err.message}`);
+      logger.warn({ err: { message: err.message } }, '[stripeWebhook] Invalid signature');
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -473,7 +474,7 @@ const shopController = {
       }
       return res.status(200).send('OK');
     } catch (err) {
-      console.error(`[stripeWebhook] Processing ${event.type} failed:`, err);
+      logger.error({ err, eventType: event.type }, '[stripeWebhook] Processing failed');
       // Don't return 5xx here — Stripe will retry and we already marked the
       // event processed. Return 200 so we don't flood retries, but log loud.
       return res.status(200).send('Processed with errors');
@@ -515,7 +516,7 @@ const shopController = {
 async function handleCheckoutCompleted(session) {
   const order = await Order.findByStripeSessionId(session.id);
   if (!order) {
-    console.warn(`[stripeWebhook] checkout.session.completed: order not found for session ${session.id}`);
+    logger.warn({ sessionId: session.id }, '[stripeWebhook] checkout.session.completed: order not found for session');
     return;
   }
   if (order.status !== 'pending') {
@@ -578,13 +579,13 @@ async function handleCheckoutCompleted(session) {
 
   if (stockLost) {
     // Lost the stock race — refund and mark failed.
-    console.warn(`[stripeWebhook] Stock race lost on order ${order.order_number}; refunding`);
+    logger.warn({ orderNumber: order.order_number }, '[stripeWebhook] Stock race lost; refunding');
     await Order.updateStatus(order.id, 'failed', { stripePaymentIntentId: paymentIntentId });
     if (paymentIntentId) {
       try {
         await stripeService.createRefund(paymentIntentId, { reason: 'requested_by_customer' });
       } catch (refundErr) {
-        console.error(`[stripeWebhook] Refund failed for order ${order.order_number}:`, refundErr);
+        logger.error({ err: refundErr, orderNumber: order.order_number }, '[stripeWebhook] Refund failed');
       }
     }
     return;
@@ -631,7 +632,7 @@ async function handleCheckoutCompleted(session) {
           adminEmails,
         }));
       } else {
-        console.warn(`[stripeWebhook] No admin recipients for booking notification on ${finalOrder.order_number}`);
+        logger.warn({ orderNumber: finalOrder.order_number }, '[stripeWebhook] No admin recipients for booking notification');
       }
     }
 
@@ -639,11 +640,11 @@ async function handleCheckoutCompleted(session) {
     const results = await Promise.allSettled(sends);
     for (const r of results) {
       if (r.status === 'rejected') {
-        console.error(`[stripeWebhook] Email send rejected for ${order.order_number}:`, r.reason);
+        logger.error({ err: r.reason, orderNumber: order.order_number }, '[stripeWebhook] Email send rejected');
       }
     }
   } catch (emailErr) {
-    console.error(`[stripeWebhook] Receipt email block failed for ${order.order_number}:`, emailErr);
+    logger.error({ err: emailErr, orderNumber: order.order_number }, '[stripeWebhook] Receipt email block failed');
   }
 }
 

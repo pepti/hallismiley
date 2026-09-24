@@ -1,4 +1,5 @@
-import { isAuthenticated, isAdmin, adminGetUsers, adminUpdateUser, adminDeleteUser, adminApproveUser } from '../services/auth.js';
+import { isAuthenticated, isAdmin, getUser, adminGetUsers, adminUpdateUser, adminDeleteUser, adminApproveUser, adminResetTotp, adminNewPassword } from '../services/auth.js';
+import { credentialsPanelHtml, wireCredentialsPanel } from '../components/OneTimeCredentials.js';
 import { showToast }     from '../components/Toast.js';
 import { escHtml }       from '../utils/escHtml.js';
 import { avatarPathByName } from '../utils/avatar.js';
@@ -164,7 +165,7 @@ export class AdminUsersView {
                 <span class="user-username">${escHtml(u.username)}</span>
                 ${u.display_name ? `<span class="user-displayname">${escHtml(u.display_name)}</span>` : ''}
               </td>
-              <td class="user-email">${escHtml(u.email)}</td>
+              <td class="user-email">${u.no_email ? `<span class="users-no-email">${t('adminUsers.noEmail')}</span>` : escHtml(u.email)}</td>
               <td>
                 <select class="form-input form-input--sm role-select" data-user-id="${escHtml(String(u.id))}" data-action="role">
                   ${this._roleOptions(u.role)}
@@ -178,6 +179,8 @@ export class AdminUsersView {
                   ? `<span class="approval-badge approval-badge--pending">${t('adminUsers.pending')}</span>` : ''}
                 ${u.approval_status === 'declined'
                   ? `<span class="approval-badge approval-badge--declined">${t('adminUsers.declined')}</span>` : ''}
+                ${u.totp_enabled
+                  ? `<span class="users-2sa-badge" title="${t('adminUsers.twoStepOn')}">${t('adminUsers.twoStepShort')}</span>` : ''}
               </td>
               <td>
                 <label class="toggle-label" title="${u.disabled ? t('adminUsers.enable') : t('adminUsers.disable')}">
@@ -205,6 +208,16 @@ export class AdminUsersView {
                 <button class="btn btn--sm btn--ghost approve-user-btn"
                         data-user-id="${escHtml(String(u.id))}" data-approve-action="decline"
                         title="${t('adminUsers.decline')}">${t('adminUsers.decline')}</button>` : ''}
+                ${u.no_email && u.role === 'user' ? `
+                <button class="btn btn--sm btn--outline new-password-btn"
+                        data-user-id="${escHtml(String(u.id))}"
+                        data-username="${escHtml(u.username)}"
+                        title="${t('adminUsers.newPasswordHint')}">${t('adminUsers.newPassword')}</button>` : ''}
+                ${u.totp_enabled && String(u.id) !== String(getUser()?.id) ? `
+                <button class="btn btn--sm btn--outline reset-totp-btn"
+                        data-user-id="${escHtml(String(u.id))}"
+                        data-username="${escHtml(u.username)}"
+                        title="${t('adminUsers.twoStepResetHint')}">${t('adminUsers.twoStepReset')}</button>` : ''}
                 ${u.role !== 'admin' ? `
                 <button class="btn btn--sm btn--danger delete-user-btn"
                         data-user-id="${escHtml(String(u.id))}"
@@ -235,6 +248,14 @@ export class AdminUsersView {
 
     wrap.querySelectorAll('.approve-user-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onApproveUser(btn));
+    });
+
+    wrap.querySelectorAll('.new-password-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onNewPassword(btn));
+    });
+
+    wrap.querySelectorAll('.reset-totp-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onResetTotp(btn));
     });
 
   }
@@ -316,6 +337,93 @@ export class AdminUsersView {
     } catch (err) {
       showToast(err.message, 'error');
     }
+  }
+
+  // Reset another user's two-step verification (ice #396). A plain customer
+  // account resets after a confirm(); a staff account (any admin view) needs
+  // the acting admin's own password, which the server asks for with
+  // reason 'password_required' — so the page never has to know who is staff.
+  async _onResetTotp(btn) {
+    const userId   = btn.dataset.userId;
+    const username = btn.dataset.username;
+    if (!confirm(t('adminUsers.twoStepResetConfirm', { name: username }))) return;
+    btn.disabled = true;
+    try {
+      try {
+        await adminResetTotp(userId);
+      } catch (err) {
+        if (err.reason !== 'password_required') throw err;
+        const password = await this._askOwnPassword(username);
+        if (!password) return;
+        await adminResetTotp(userId, password);
+      }
+      showToast(t('adminUsers.twoStepResetDone', { name: username }), 'success');
+      await this._load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // A login with no mailbox lost its password: mint a new one and show it
+  // ONCE (ice #382/#397). The old one stops working and its sessions end.
+  async _onNewPassword(btn) {
+    const username = btn.dataset.username;
+    if (!confirm(t('adminUsers.newPasswordConfirm', { name: username }))) return;
+    btn.disabled = true;
+    try {
+      const res = await adminNewPassword(btn.dataset.userId);
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay open';
+      overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${credentialsPanelHtml({
+        username: res.username, password: res.password, idPrefix: 'users-otc',
+        actionsHtml: `<button type="button" class="btn btn--primary" data-otc-done>${t('adminUsers.passwordDone')}</button>`,
+      })}</div>`;
+      document.body.appendChild(overlay);
+      wireCredentialsPanel(overlay);
+      overlay.querySelector('[data-otc-done]').addEventListener('click', () => overlay.remove());
+      overlay.querySelector('[data-otc]')?.focus();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // A small modal asking for the ACTING admin's password. Resolves the typed
+  // value, or null on cancel / Escape / a click outside. Never stored.
+  _askOwnPassword(username) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay open';
+      overlay.innerHTML = `
+        <form class="modal users-totp-modal" role="dialog" aria-modal="true" aria-labelledby="users-totp-title">
+          <h2 class="modal__title" id="users-totp-title">${t('adminUsers.twoStepReset')}</h2>
+          <p class="modal__desc">${escHtml(t('adminUsers.twoStepPasswordHint', { name: username }))}</p>
+          <label class="form-label" for="users-totp-pw">${t('adminUsers.twoStepYourPassword')}</label>
+          <input class="form-input" id="users-totp-pw" type="password" autocomplete="current-password" required/>
+          <div class="users-totp-modal__actions">
+            <button type="button" class="btn btn--ghost" data-cancel>${t('form.cancel')}</button>
+            <button type="submit" class="btn btn--primary">${t('adminUsers.twoStepReset')}</button>
+          </div>
+        </form>`;
+      const done = (value) => {
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(value);
+      };
+      const onKey = (e) => { if (e.key === 'Escape') done(null); };
+      document.addEventListener('keydown', onKey);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) done(null); });
+      overlay.querySelector('[data-cancel]').addEventListener('click', () => done(null));
+      overlay.querySelector('form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        done(overlay.querySelector('#users-totp-pw').value || null);
+      });
+      document.body.appendChild(overlay);
+      overlay.querySelector('#users-totp-pw').focus();
+    });
   }
 
   async _onToggleDisabled(checkbox) {

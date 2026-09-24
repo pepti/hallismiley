@@ -4,9 +4,14 @@
 // MAX_VISIBLE stay on screen. Nothing is lost when one is evicted or fades:
 // every toast is recorded in the session log (services/toastLog.js), which a
 // click on any toast opens.
+//
+// ERRORS do not go to the corner (harvested from icelandicstore #245): a red
+// toast bottom-right was too easy to miss — every `error` opens the centered
+// ErrorDialog with an OK button instead, and is still logged like any toast.
 
 import { logToast } from '../services/toastLog.js';
 import { openToastLog } from './ToastLog.js';
+import { showErrorDialog } from './ErrorDialog.js';
 import { t } from '../i18n/i18n.js';
 
 // ice ships 20s here; this repo keeps its 3s default — the linger was an
@@ -42,6 +47,7 @@ function removeNow(toast) {
 
 export function showToast(message, type = 'success', duration = DEFAULT_DURATION) {
   logToast(message, type);
+  if (type === 'error') { showErrorDialog(message); return; }
 
   const toast = document.createElement('div');
   toast.className = `toast toast--${type}`;

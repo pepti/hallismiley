@@ -85,7 +85,11 @@ describe('a downstream that hides public-site', () => {
       'public-site': { status: 'hidden', note: 'LedgerLink has no company site; the product landing is its own view' },
       'sales-handbook': { status: 'live' },
     }));
-    g = createGate({ localPath });
+    // Over the ENGINE default (every module on), not this product's contract:
+    // a product that switches a module off (rekstrarkerfid: signup, party)
+    // would otherwise skip that module's specs too, and "everything else
+    // still runs" would be about the product, not about local.json.
+    g = createGate({ localPath, config: require('../../server/config/clientConfig').defaults() });
   });
 
   afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));

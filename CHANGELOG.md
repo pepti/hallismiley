@@ -21,6 +21,28 @@ No instance of this repo has been deployed; every entry below is on `master`.
 
 ### 2026-09-24
 
+- Harvest from icelandicstore, chunk B (admin layout, UI kit, themes): each
+  admin page's width (normal, wide, full screen — per page or for all pages,
+  with an optional smooth slide) and the order page's side-column width are
+  chosen from small icons and saved on the account; the cookie banner
+  remembers a signed-in user's answer on the account and now follows the
+  theme; every error opens a centred dialog with an OK button; the orders
+  list keeps its sideways scrollbar on screen; radios, checkboxes and selects
+  show a keyboard focus ring; a test now catches CSS asking for a colour
+  token that does not exist (21 such references fixed).
+- Harvest from icelandicstore, chunk A (security, auth, users): an admin can
+  reset another user's two-step verification (a staff account needs the
+  acting admin's own password); one outer door on `/api/v1/admin` for staff
+  only; MCP tokens are revoked when their owner stops being an admin; "invite
+  sent" now means the mail reached the customer (otherwise the admin gets the
+  link), with the date shown; customer logins without email (a username and a
+  one-time password, replaceable by an admin); a send budget on contact-form
+  notifications; Claude can authenticate with the Azure managed identity
+  (off unless configured).
+- Public signup can be switched off (the `signup` module): no sign-up page,
+  API or nav link, and social login signs in existing accounts only. The nav's
+  "Innskrá" can be hidden (`identity.surface.navSignIn`); `/login` opens the
+  login modal. For rekstrarkerfi.is's shop window (R2b).
 - MCP write tools (roadmap R5b): Claude can change the update channel, mode
   and maintenance window, switch a module off and back on (within the
   instance's contract), and file a feature request into the change-request

@@ -5432,6 +5432,41 @@ END; $$ LANGUAGE plpgsql`,
     ],
   },
   {
+    // Per-account admin layout preferences, harvested from icelandicstore
+    // (harvest-ice-b-2026-09-24). All four ride on the session payload like
+    // `theme`, so they follow the login to another browser:
+    //   page_widths       — { '<page key>' | '*': 'normal'|'wide'|'full' },
+    //                       the sidebar width icon (services/pageWidth.js);
+    //   page_width_motion — does the admin shell SLIDE to a new width
+    //                       ("Mjúk hreyfing"); TRUE = yes;
+    //   aside_widths      — { '<page key>' | '*': 'narrow'|'medium'|'wide' },
+    //                       the right-hand column of the admin detail pages;
+    //   cookie_consent    — the analytics-cookie answer on the account, so a
+    //                       signed-in user is not asked again elsewhere; NULL =
+    //                       never answered while signed in; "declined" wins.
+    //
+    // ONE engine migration equal to ice's FOUR — ice's product-migrations
+    // file lists them as aliases so its databases record this name without
+    // running it: '111_user_ui_prefs': ['125_user_page_widths',
+    // '127_user_page_width_motion', '128_user_cookie_consent',
+    // '135_user_aside_widths'] (the runner resolves an alias when ONE listed
+    // name is applied; ice has all four, and each statement here is IF NOT
+    // EXISTS, so even running it there is a no-op). Same column names, types
+    // and defaults as ice's.
+    //
+    // Expand-only (invariant 14): the previous release neither reads nor
+    // writes these columns.
+    // Reference copy: server/migrations/111_user_ui_prefs.sql
+    name: '111_user_ui_prefs',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS page_widths JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS page_width_motion BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS aside_widths JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS cookie_consent TEXT
+         CHECK (cookie_consent IN ('accepted', 'declined'))`,
+    ],
+  },
+  {
     // On hand / Committed / Available, with every stock movement audited
     // (harvest-ice-c-2026-09-24; ENHANCEMENTS #23). Harvested from
     // icelandicstore, whose databases already hold the same DDL under FOUR

@@ -76,7 +76,7 @@
 .leads-detail__note textarea {
   font: inherit; padding: var(--sp-2);
   border: 1px solid var(--border-dim); border-radius: var(--radius-sm, 4px);
-  background: var(--bg-primary, transparent); color: var(--text-primary);
+  background: transparent; color: var(--text-primary);
   resize: vertical;
 }
 .leads-retention { margin-top: var(--sp-4); font-size: 0.8rem; color: var(--text-muted); }

@@ -41,7 +41,7 @@
 // the till (`pos`) lives under the bookkeeping API and screens.
 //
 // Always on, never listed (the core every tier is built on): the public site
-// pages, auth + users + roles, site content, leads (the contact form's inbox),
+// pages, sign-in + users + roles (public SIGNUP is its own module below), site content, leads (the contact form's inbox),
 // change requests, analytics, monitoring + the staff audit log, general
 // settings, the MCP connector (its own MCP_ENABLED switch) and self-update
 // (its own `modules.selfUpdate.enabled`).
@@ -129,6 +129,20 @@ const MODULES = Object.freeze({
     adminViews: ['handbok', 'markadur', 'accounts', 'commission', 'allaccounts'],
     features: ['sales-handbook', 'markadur', 'market-import', 'customer-accounts', 'commission',
       'seller-publication'],
+  },
+  // Nýskráning: anyone may create an account (the /signup page, the signup
+  // API and its username/email availability checks; social login may not
+  // create a NEW account either). Off = staff-only sign-in: accounts are
+  // created by an admin (Admin → Notendur) or the invite flow. In the tiers
+  // with customer accounts (Verslun, Rekstur); a shop window such as
+  // rekstrarkerfi.is switches it off (D-020, R2b).
+  signup: {
+    tiers: ['verslun', 'rekstur'],
+    routes: ['/signup'],
+    api: ['/auth/signup', '/auth/check-username', '/auth/check-email'],
+    assets: [],
+    adminViews: [],
+    features: ['signup'],
   },
 });
 

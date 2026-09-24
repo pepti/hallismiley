@@ -46,6 +46,7 @@ export const IDENTITY_DEFAULTS = Object.freeze({
     ]),
     hiddenRoutes: Object.freeze(['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni']),
     hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background']),
+    navSignIn: true,
   }),
   // The product's OWN routes' meta (identity-seam-3): route → { titleKey,
   // descriptionKey?, titleMode?, noindex?, locale? }. utils/pageTitle.js

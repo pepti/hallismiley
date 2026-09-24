@@ -1,6 +1,7 @@
 // Periodic cleanup of expired Lucia sessions.
 // Runs automatically every 24 hours while the server is live.
 
+const logger = require('../logger');
 const db = require('../config/database');
 
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -11,13 +12,13 @@ async function cleanExpiredSessions() {
       'DELETE FROM user_sessions WHERE expires_at < NOW()'
     );
     if (rowCount > 0) {
-      console.log(`[sessionCleanup] Removed ${rowCount} expired session(s).`);
+      logger.info({ rowCount }, '[sessionCleanup] Removed expired session(s)');
     } else {
-      console.log('[sessionCleanup] ran — 0 rows removed.');
+      logger.info('[sessionCleanup] ran — 0 rows removed.');
     }
   } catch (err) {
     // Log but never crash the server over cleanup
-    console.error('[sessionCleanup] Error during cleanup:', err.message);
+    logger.error({ err }, '[sessionCleanup] Error during cleanup');
   }
 }
 

@@ -194,7 +194,9 @@ describe('preset rekstur with the till switched off', () => {
 
 describe('the default — every module, as before R4', () => {
   test('nothing is gated and the hand-off says so', async () => {
-    await withEnv({}, async (app) => {
+    // The ENGINE default, whatever this product's contract switches off
+    // (rekstrarkerfid: party, signup): every catalogued module on, by env.
+    await withEnv(Object.fromEntries(require('../../server/config/moduleCatalog').MODULE_IDS.map((id) => [require('../../server/config/clientConfig').envNameFor(['modules', id, 'enabled']), 'true'])), async (app) => {
       expect((await request(app).get('/api/v1/shop/products')).status).toBe(200);
       expect((await request(app).get('/api/v1/news')).status).toBe(200);
       expect((await request(app).get('/api/v1/admin/bookkeeping/invoices').set('Cookie', adminCookie)).status).toBe(200);

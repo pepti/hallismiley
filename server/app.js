@@ -37,6 +37,10 @@ const { router: manifestRoutes } = require('./routes/manifestRoutes');
 const { router: robotsRoutes } = require('./routes/robotsRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
+const eventLogOn5xx  = require('./middleware/eventLogOn5xx');
+const { buildTag }   = require('./config/version');
+const { staticCacheControl } = require('./utils/staticCacheControl');
+const { versionedStatic }    = require('./middleware/versionedStatic');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { normalizeForwardedFor } = require('./middleware/forwardedFor');
 const localeMiddleware = require('./middleware/locale');
@@ -48,6 +52,14 @@ const { runReadinessChecks, readinessBody } = require('./observability/readiness
 const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
+
+// ── Every 5xx → event_logs (Admin → Monitoring), whether or not it went through
+// errorHandler (icelandicstore #254). Mounted FIRST so routers that answer
+// directly — the circuit breaker's 503s, the checkout-unavailable 503s, the MCP
+// endpoint above the general middleware — are covered too. Observes the
+// response only; reads req.requestId / req.user at finish time, so later
+// middleware still enriches the row. See middleware/eventLogOn5xx.js.
+app.use(eventLogOn5xx);
 
 // Trust the first proxy (Azure App Service's reverse proxy) so req.ip and rate limiting work correctly
 if (process.env.NODE_ENV === 'production') {
@@ -68,6 +80,13 @@ if (process.env.NODE_ENV !== 'test') {
     logger,
     genReqId(req) {
       return req.requestId || crypto.randomBytes(8).toString('hex');
+    },
+    // pino-http's default logs EVERY completion at info regardless of status
+    // (it only switches the message). 5xx completions must be `error` so the
+    // warn+ App Insights forwarder (observability/aiLogStream.js) sees them —
+    // that is the only per-request record a direct `res.status(5xx)` leaves.
+    customLogLevel(req, res, err) {
+      return (err || res.statusCode >= 500) ? 'error' : 'info';
     },
     // scrubUrl, not req.url: these message strings bypass the `req` serializer
     // where the redaction otherwise lives, so a search term or a token in the
@@ -379,6 +398,12 @@ app.use((req, res, next) => {
 
   res.setHeader('X-Request-ID', reqId);
   res.setHeader('X-Trace-ID', traceId);
+  // Which release answered (icelandicstore #332/#358). The deploy workflows
+  // compare it with the tag of the sha they shipped, so a 200 on /ready from
+  // the OLD container no longer passes the gate. Set here, ahead of /health and
+  // every route, so all responses carry it. The public tag, not the commit:
+  // /api/v1/system/version answers the sha to admins only.
+  res.setHeader('X-App-Build', buildTag);
   next();
 });
 
@@ -577,6 +602,19 @@ app.get(/^\/([A-Za-z0-9-]{8,128})\.txt$/, (req, res, next) => {
   res.send(expected);
 });
 
+// Release-stamped code URLs (/js/_<tag>/…, /css/_<tag>/…) — cached immutable
+// for a year, a 404 (no-store) under any other release's tag. The shell points
+// at them on a stamped build (ssrMeta.js stampAssetUrls). Same-origin paths,
+// so CSP is untouched ('self'). See middleware/versionedStatic.js
+// (icelandicstore #425, harvest-ice-e-2026-09-24).
+app.use(versionedStatic());
+
+// Browsers and crawlers ask for /favicon.ico whatever the <link rel="icon">
+// says; the site ships favicon.svg only, so the bare request was a 404 (and a
+// SPA shell) on every first visit. A permanent redirect lets the client
+// remember the answer (icelandicstore #399).
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
+
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
@@ -587,16 +625,11 @@ app.use(express.static(path.join(__dirname, '../public'), {
   // raw index.html with placeholder tags.
   index: false,
   setHeaders(res, filePath) {
-    // Never cache the HTML entry point — the SPA must always get a fresh shell
-    if (filePath.endsWith('index.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-    // In development, don't cache JS/CSS/JSON either — avoids stale ES modules
-    // and stale i18n locale files when iterating on the frontend.
-    if (process.env.NODE_ENV !== 'production' &&
-        (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.json'))) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    // The HTML shell is never cached; unstamped JS/CSS/JSON always revalidate
+    // (the 1 h maxAge let a reload mix releases — icelandicstore #332), so a
+    // reload never runs two releases. See utils/staticCacheControl.js.
+    const cc = staticCacheControl(filePath);
+    if (cc) res.setHeader('Cache-Control', cc);
   },
 }));
 app.use('/auth',              authRoutes);
@@ -606,6 +639,12 @@ app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/change-requests', changeRequestRoutes);
 app.use('/api/v1/system',     systemRoutes);
+// One outer door for the whole back office (ice #418). Every admin router below
+// still guards itself (and most are narrower); this only guarantees that a
+// router which forgets its own guard is still closed to plain customer
+// accounts. After moduleGate (a switched-off module stays a 404 before auth)
+// and before every /api/v1/admin mount, including the two further down.
+app.use('/api/v1/admin', require('./auth/middleware').requireAuth, require('./auth/requireView').requireStaff);
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all

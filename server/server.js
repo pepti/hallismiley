@@ -1,5 +1,11 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env'), quiet: true });
 
+// ── Azure Application Insights — MUST init before pg/http/express are required ─
+// so the SDK can patch them. No-op unless APPLICATIONINSIGHTS_CONNECTION_STRING
+// is set (ships dark, like Sentry below). See server/observability/appInsights.js
+// (icelandicstore #254, harvest-ice-f-2026-09-24).
+require('./observability/appInsights').start();
+
 // ── Sentry error tracking — init before anything else if DSN is configured ────
 if (process.env.SENTRY_DSN) {
   const Sentry = require('@sentry/node');
@@ -11,6 +17,7 @@ if (process.env.SENTRY_DSN) {
 // previously fell back to a hardcoded dev value (CSRF bypass), and a missing
 // NODE_ENV used to silently skip rate limiters. Both are now hard requirements
 // so a misconfigured deploy refuses to start instead of degrading silently.
+const logger = require('./logger');
 const REQUIRED_ENV = ['DATABASE_URL', 'ALLOWED_ORIGINS', 'CSRF_SECRET', 'NODE_ENV'];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 // A silent mail transport on production means verification, resets and
@@ -21,11 +28,11 @@ if (process.env.APP_ENV === 'production' && !process.env.RESEND_API_KEY) {
   missing.push('RESEND_API_KEY (required when APP_ENV=production)');
 }
 if (missing.length) {
-  console.error(`[server] Missing required environment variables: ${missing.join(', ')}`);
-  process.exit(1);
+  logger.fatal({ missing }, '[server] Missing required environment variables');
+  // In dev pino writes through the pino-pretty worker thread; exiting on the
+  // next statement could lose the one line that says why boot refused.
+  logger.flush(() => process.exit(1));
 }
-
-const logger = require('./logger');
 
 // ── Admin two-factor configuration ─────────────────────────────────────────────
 // A TOTP_ENC_KEY that is set but malformed must stop the boot: the alternative
@@ -50,6 +57,7 @@ const logger = require('./logger');
 
 const app    = require('./app');
 const { pool } = require('./config/database');
+const EventLog = require('./models/EventLog');
 const { checkMemory } = require('./observability/alerts');
 const { migrate } = require('./scripts/migrate');
 const { startEventLogCleanup } = require('./services/eventLogCleanup');
@@ -111,6 +119,10 @@ async function start() {
     startEventLogCleanup(); // daily event_logs prune (EVENT_LOG_RETENTION_DAYS)
     startLeadsCleanup();    // daily leads prune (LEAD_RETENTION_DAYS — the /personuvernd promise)
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
+    // Which Anthropic auth mode is live, proven end to end when it is workload
+    // identity (managed identity → token exchange → one cheap API call; ice
+    // #326). Fire and forget: it never blocks or fails startup.
+    require('./services/anthropicAuth').selfCheck().catch(() => {});
   });
 
   // Start periodic cleanup of expired sessions (runs every 24h)
@@ -135,6 +147,10 @@ async function start() {
       clearInterval(memoryTimer);
       updateChecker?.stop();
       logger.info('[server] HTTP server closed');
+      // A 5xx answered just before shutdown still has its event_logs insert in
+      // flight (eventLogOn5xx / errorHandler fire-and-forget) — let it land
+      // before the pool closes, or the failure's own trace is the thing lost.
+      await EventLog.flush();
       await pool.end();
       logger.info('[server] Database pool closed');
       process.exit(0);

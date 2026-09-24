@@ -4,6 +4,7 @@
 // from granting itself more access (privilege escalation).
 const Role = require('../models/Role');
 const UserRole = require('../models/UserRole');
+const McpToken = require('../models/McpToken');
 const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
 const { disabledAdminViews } = require('../config/modules');
@@ -228,6 +229,11 @@ const adminRolesController = {
           ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: userId,
           summary: { role: name },
         });
+        // No longer an admin → their MCP tokens go too (ice #418; the per-call
+        // owner check in mcp/owner.js already refuses them).
+        if (name === 'admin') {
+          await McpToken.revokeAllForUser(userId).catch(() => 0);
+        }
         return res.status(204).send();
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});

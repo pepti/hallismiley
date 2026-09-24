@@ -132,6 +132,12 @@ module.exports = defineConfig({
       PORT: REQUIRED_PORT,
       ALLOWED_ORIGINS: REQUIRED_BASE_URL,
       CLIENT_CONFIG_SECURITY_MFA_ENROLMENT: 'required',
+      // The shop-window setting (rekstrarkerfi.is, R2b): no public signup and
+      // no "Innskrá" in the nav — staff sign in at /login.
+      // e2e/signup-closed.spec.js walks it; every helper here signs in the way
+      // the SERVED identity says (e2e/helpers.js openSignIn).
+      CLIENT_CONFIG_MODULES_SIGNUP_ENABLED: 'false',
+      CLIENT_CONFIG_IDENTITY_SURFACE_NAV_SIGN_IN: 'false',
       // Under `required`, admins must enrol a second factor before they hold
       // admin rights (server/auth/mfaPolicy.js). `testadmin` is exempt by
       // name, through a switch production ignores, in case a spec on this

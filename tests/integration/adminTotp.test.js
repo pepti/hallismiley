@@ -461,3 +461,147 @@ describe('Login — admin held via the role SET faces the same challenge', () =>
     expect(res.body.mfaRequired).toBeUndefined();
   });
 });
+
+// ── Admin reset (harvested from icelandicstore #396, 2026-09-24) ─────────────
+// The way back in when the phone AND the recovery codes are gone. Enrolment is
+// optional by default, but an enrolled account that loses both was locked out
+// until an operator ran scripts/reset-admin-totp.js by hand.
+describe('Admin reset — the way back in when the phone AND the codes are gone', () => {
+  const reset = (id, body = {}, c = csrf) =>
+    request(app).post(`/api/v1/admin/users/${id}/totp/reset`).set('Cookie', c.cookie).set(c.headers).send(body);
+  const totpOn = async (id) =>
+    (await db.query('SELECT totp_enabled FROM users WHERE id = $1', [id])).rows[0].totp_enabled;
+
+  let otherId;
+  beforeEach(async () => {
+    otherId = await makeUser({ id: 'totp-other', username: 'totpother', role: 'admin' });
+    await enrol(otherId);
+    await db.query(`INSERT INTO user_recovery_codes (user_id, code_hash) VALUES ($1, 'x')`, [otherId]);
+  });
+
+  test('clears the other admin\'s 2FA; they then sign in with the password alone', async () => {
+    const res = await reset(otherId, { password: PASSWORD });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: false });
+
+    const { rows } = await db.query('SELECT totp_enabled, totp_secret, totp_secret_enc FROM users WHERE id = $1', [otherId]);
+    expect(rows[0]).toEqual({ totp_enabled: false, totp_secret: null, totp_secret_enc: null });
+    const codes = await db.query('SELECT 1 FROM user_recovery_codes WHERE user_id = $1', [otherId]);
+    expect(codes.rowCount).toBe(0);
+
+    const signIn = await login('totpother');
+    expect(signIn.status).toBe(200);
+    expect(signIn.body.mfaRequired).toBeUndefined();
+  });
+
+  test('the users list reports the real 2FA state', async () => {
+    const list = async () => (await request(app).get('/api/v1/admin/users?q=totpother').set('Cookie', adminCookie))
+      .body.users.find((u) => u.id === otherId);
+    expect((await list()).totp_enabled).toBe(true);
+    await reset(otherId, { password: PASSWORD });
+    expect((await list()).totp_enabled).toBe(false);
+  });
+
+  describe('a staff target needs the ACTING admin\'s own password', () => {
+    test('missing password → 400 with reason password_required, 2FA untouched', async () => {
+      const res = await reset(otherId);
+      expect(res.status).toBe(400);
+      expect(res.body.reason).toBe('password_required');
+      expect(await totpOn(otherId)).toBe(true);
+    });
+
+    test('wrong password → 403, 2FA untouched', async () => {
+      const res = await reset(otherId, { password: 'not-the-password' });
+      expect(res.status).toBe(403);
+      expect(await totpOn(otherId)).toBe(true);
+    });
+
+    test('the TARGET\'s password is not the acting admin\'s password', async () => {
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await scrypt.hash('TargetOnly123!'), otherId]);
+      expect((await reset(otherId, { password: 'TargetOnly123!' })).status).toBe(403);
+      expect(await totpOn(otherId)).toBe(true);
+    });
+
+    test('a moderator target needs it too', async () => {
+      const modId = await makeUser({ id: 'totp-modt', username: 'totpmodt', role: 'moderator' });
+      await enrol(modId);
+      expect((await reset(modId)).status).toBe(400);
+      expect(await totpOn(modId)).toBe(true);
+      expect((await reset(modId, { password: PASSWORD })).status).toBe(200);
+      expect(await totpOn(modId)).toBe(false);
+    });
+
+    test('so does a custom role that grants an admin view (engine: dynamic roles)', async () => {
+      await db.query(
+        `INSERT INTO roles (name, description, view_access, is_system)
+         VALUES ('totp_viewer', 'test', '["handbok"]'::jsonb, FALSE) ON CONFLICT (name) DO NOTHING`);
+      const id = await makeUser({ id: 'totp-viewer', username: 'totpviewer', role: 'user' });
+      await db.query(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'totp_viewer') ON CONFLICT DO NOTHING`, [id]);
+      await enrol(id);
+      try {
+        expect((await reset(id)).body.reason).toBe('password_required');
+        expect((await reset(id, { password: PASSWORD })).status).toBe(200);
+      } finally {
+        await db.query(`DELETE FROM user_roles WHERE role_name = 'totp_viewer'`);
+        await db.query(`DELETE FROM roles WHERE name = 'totp_viewer'`);
+      }
+    });
+  });
+
+  test('a plain customer target needs no password', async () => {
+    const id = await makeUser({ id: 'totp-usert', username: 'totpusert', role: 'user' });
+    await enrol(id);
+    const res = await reset(id);
+    expect(res.status).toBe(200);
+    expect(await totpOn(id)).toBe(false);
+  });
+
+  test('a second reset is idempotent', async () => {
+    expect((await reset(otherId, { password: PASSWORD })).status).toBe(200);
+    const again = await reset(otherId, { password: PASSWORD });
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual({ enabled: false });
+  });
+
+  test('ends every session the target holds', async () => {
+    const targetCookie = await getTestSessionCookie(otherId);
+    const me = () => request(app).get('/api/v1/users/me').set('Cookie', targetCookie);
+    expect((await me()).status).toBe(200);
+    expect((await reset(otherId, { password: PASSWORD })).status).toBe(200);
+    expect((await me()).status).toBe(401);
+    const { rows } = await db.query('SELECT 1 FROM user_sessions WHERE user_id = $1', [otherId]);
+    expect(rows).toHaveLength(0);
+  });
+
+  // csrfProtect is bypassed under NODE_ENV=test but reads NODE_ENV per request,
+  // so step out of test mode for this one call to prove the route carries it.
+  test('refuses a request without the CSRF token', async () => {
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    let res;
+    try {
+      res = await request(app).post(`/api/v1/admin/users/${otherId}/totp/reset`)
+        .set('Cookie', adminCookie).send({ password: PASSWORD });
+    } finally { process.env.NODE_ENV = prev; }
+    expect(res.status).toBe(403);
+    expect(await totpOn(otherId)).toBe(true);
+  });
+
+  test('refuses your own account — that path must re-check the password', async () => {
+    await enrol(adminId);
+    const res = await reset(adminId, { password: PASSWORD });
+    expect(res.status).toBe(400);
+    expect(await totpOn(adminId)).toBe(true);
+  });
+
+  test('404 for an unknown user', async () => {
+    expect((await reset('no-such-user')).status).toBe(404);
+  });
+
+  test.each(['moderator', 'user'])('a %s caller cannot reset anyone', async (role) => {
+    const callerId = await makeUser({ id: `totp-${role}c`, username: `totp${role}c`, role });
+    const callerCsrf = await csrfHeaders(await getTestSessionCookie(callerId));
+    expect((await reset(otherId, { password: PASSWORD }, callerCsrf)).status).toBe(403);
+    expect(await totpOn(otherId)).toBe(true);
+  });
+});

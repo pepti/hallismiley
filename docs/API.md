@@ -269,15 +269,21 @@ mounted before the generic `/api/v1/admin` router, but `mcp-tokens` and
 `events` are mounted AFTER it (their inline comments claim otherwise) — it
 works today only because `adminRoutes.js` has no handler on those paths.
 
+**One outer door** ([HISTORY](HISTORY.md#harvest-ice-a-2026-09-24)): `app.use('/api/v1/admin', requireAuth, requireStaff)` runs after
+`moduleGate` and before every `/api/v1/admin*` row below (the `mcp-tokens`/`events`
+mounts included). Signed out → 401; a signed-in account with no staff standing
+(not admin/moderator, no admin view) → 403 before any admin router runs. Each
+router's own gate still applies behind it.
+
 | Mount | File | Gate | Feature doc |
 |---|---|---|---|
 | `/api/v1/seller-publish` | `sellerPublishRoutes.js` | mounted BEFORE `express.json` (raw body); `INSTANCE_ROLE=public` + `SELLER_PUBLISH_SECRET`, else 404; HMAC signature (401), shape (400), newer-than-last (409); own limiter 30/15 min | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/.well-known/oauth-protected-resource[/api/v1/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, `/api/v1/oauth/requests/:id[/approve\|/deny]` | `mcpOAuthRoutes.js` (mounted at `/`, after the MCP router) | every route `MCP_ENABLED` else 404; register/token/revoke: no cookies, own IP limiters, RFC 6749 error bodies; authorize: validates, stores a pending request, 302 to `/<lc>/tengja/<id>`; consent API: session + `admin` + CSRF on writes | [ARCHITECTURE §15](ARCHITECTURE.md#15-mcp-connector) · [HISTORY](HISTORY.md#mcp-oauth-2026-09-24) |
 | `/api/v1/admin/modules` | `adminModulesRoutes.js` | session + `admin`; `PATCH /:id` CSRF — `{ enabled }`, the contract is the ceiling (400 beyond it) | [ARCHITECTURE §20](ARCHITECTURE.md#20-infrastructure-and-cross-cutting) · [HISTORY](HISTORY.md#mcp-write-tools-2026-09-24) |
-| `/auth` | `authRoutes.js` | per route (above) | — |
+| `/auth` | `authRoutes.js` | per route (above); `/auth/signup`, `/auth/check-username`, `/auth/check-email` belong to the `signup` module (404 before auth when it is off, [HISTORY](HISTORY.md#signup-switch-2026-09-24)) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |
-| `/api/v1/users` | `userRoutes.js` | session | — |
+| `/api/v1/users` | `userRoutes.js` | session; `PUT /me/{page-width, aside-width}` `{ path, width }` (`'*'` = all pages, `null` = page default; 100 keys) · `PUT /me/page-width-motion` `{ on }` · `PUT /me/cookie-consent` `{ value: accepted\|declined }` — CSRF, the caller's own row | [HISTORY](HISTORY.md#harvest-ice-b-2026-09-24) |
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
 | `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (admin, and non-prod or switch on) | — |
 | `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |
@@ -290,7 +296,7 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
 | `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
-| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view | `docs/SALES-STAFF.md` |
+| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`) | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
 | `/api/v1/admin/customer-notes` | `adminCustomerNotesRoutes.js` | `customers` view | — |
 | `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (76 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views; admin for issuing | `docs/BOOKKEEPING-SYSTEM.md` |
 | `/api/v1/admin/handbok` | `salesGuidesRoutes.js` | `handbok` view; admin/moderator edit | `docs/SALES-STAFF.md` |
@@ -299,7 +305,7 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#migrations-100-102) |
 | `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
-| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all) | — |
+| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`) | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
 | `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me` only under `security.mfa.enrolment = required` (mfa-reminder-2026-09-23); per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |

@@ -20,9 +20,19 @@
 const McpToken = require('../models/McpToken');
 const { ownerMayUseMcp } = require('../mcp/owner');
 const { protectedResourceMetadataUrl } = require('../mcp/oauth');
+const { identity } = require('../config/identity');
+
+// The realm names this product (a label, not a credential): the brand from
+// the identity seam, lowercased to its ASCII letters and digits — `orangesmiley-mcp`,
+// `rekstrarkerfi-mcp` ("Rekstrarkerfið"). It was an engine literal until
+// 2026-09-24, which rekstrarkerfid had to fork.
+function mcpRealm() {
+  const slug = String(identity.brand.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return `${slug || 'mcp'}-mcp`;
+}
 
 function unauthorized(req, res) {
-  res.set('WWW-Authenticate', `Bearer realm="orangesmiley-mcp", resource_metadata="${protectedResourceMetadataUrl()}"`);
+  res.set('WWW-Authenticate', `Bearer realm="${mcpRealm()}", resource_metadata="${protectedResourceMetadataUrl()}"`);
   return res.status(401).json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } });
 }
 
@@ -42,4 +52,4 @@ async function mcpAuth(req, res, next) {
   }
 }
 
-module.exports = { mcpAuth };
+module.exports = { mcpAuth, mcpRealm };

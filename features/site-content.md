@@ -13,7 +13,7 @@ paths:
 migrations: [005_site_content]
 since: 2026-08-09
 origin: null
-history: [r1]
+history: [r1, harvest-ice-a-2026-09-24]
 ---
 
 The `site_content` key/value store (005) behind every editable block: public reads, admin writes, per-key image upload, locale columns. Seeded rows shadow the JS fallbacks; product migrations move the seeded copy.

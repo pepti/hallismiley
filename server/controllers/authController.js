@@ -1,6 +1,7 @@
 // Session-based auth using Lucia v3.
 // Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
 // Account lockout: 5 failures → 15-min lock.
+const logger = require('../logger');
 const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { makeToken, hashToken } = require('../auth/tokens');
@@ -37,6 +38,9 @@ async function isEnrolmentEligible(user) {
 }
 const { t }               = require('../i18n');
 const mfaPolicy           = require('../auth/mfaPolicy');
+// A name-only login's reserved <username>@noemail.invalid (ice #397) is never a
+// reset or verification target: guessable from the username, deliverable nowhere.
+const { realEmailSql }    = require('../utils/placeholderEmail');
 
 const scrypt = new Scrypt();
 
@@ -115,6 +119,7 @@ const authController = {
                 failed_login_attempts, locked_until,
                 disabled, disabled_reason,
                 avatar, display_name, phone, totp_enabled, theme,
+                page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status
          FROM users
          WHERE LOWER(username) = LOWER($1)
@@ -233,6 +238,12 @@ const authController = {
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
+          // Per-account admin layout + cookie choice (migration 111): adopted like
+          // the theme, so they follow the login to another browser.
+          page_widths:       user.page_widths || {},
+          page_width_motion: user.page_width_motion !== false,
+          aside_widths:      user.aside_widths || {},
+          cookie_consent:    user.cookie_consent || null,
         },
       });
     } catch (err) { next(err); }
@@ -274,6 +285,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
+                page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status, totp_enabled
            FROM users
           WHERE id = $1`,
@@ -320,6 +332,12 @@ const authController = {
           // Saved UI theme — the SPA adopts it on login and on session restore,
           // so the account's theme follows the user to any browser (themePrefs.js).
           theme:          user.theme || null,
+          // Per-account admin layout + cookie choice (migration 111): adopted like
+          // the theme, so they follow the login to another browser.
+          page_widths:       user.page_widths || {},
+          page_width_motion: user.page_width_motion !== false,
+          aside_widths:      user.aside_widths || {},
+          cookie_consent:    user.cookie_consent || null,
         },
       });
     } catch (err) { next(err); }
@@ -398,10 +416,7 @@ const authController = {
         return res.status(400).json({ error: t(req.locale, 'errors.auth.usernamePasswordRequired'), code: 400 });
       }
 
-      const { rows } = await dbQuery('SELECT password_hash FROM users WHERE id = $1', [user.id]);
-      let validPass = false;
-      try { validPass = await scrypt.verify(rows[0]?.password_hash || '', password); } catch { validPass = false; }
-      if (!validPass) {
+      if (!(await mfaService.verifyPassword(user.id, password))) {
         securityLogger.loginFailed(req.ip, `${user.username} failed password check disabling 2FA`);
         return res.status(401).json({ error: t(req.locale, 'errors.auth.invalidCredentials'), code: 401 });
       }
@@ -568,7 +583,7 @@ const authController = {
       try {
         await sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale);
       } catch (emailErr) {
-        console.error('[signup] Verification email failed:', emailErr.message);
+        logger.error({ err: emailErr }, '[signup] Verification email failed');
       }
 
       // Log the new user in immediately — no extra round-trip through /login.
@@ -641,7 +656,8 @@ const authController = {
       }
 
       const { rows } = await dbQuery(
-        'SELECT id, preferred_locale FROM users WHERE email = $1 AND disabled = FALSE',
+        `SELECT id, preferred_locale FROM users
+          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
         [email.toLowerCase()]
       );
 
@@ -658,7 +674,7 @@ const authController = {
         try {
           await sendPasswordResetEmail(email.toLowerCase(), resetToken, rows[0].preferred_locale || req.locale);
         } catch (emailErr) {
-          console.error('[forgot-password] Email failed:', emailErr.message);
+          logger.error({ err: emailErr }, '[forgot-password] Email failed');
         }
       }
 
@@ -764,6 +780,12 @@ const authController = {
           totp_enabled:   !!user.totp_enabled,
           // Saved UI theme — adopted during session restore, before first render.
           theme:          user.theme || null,
+          // Per-account admin layout + cookie choice (migration 111): adopted like
+          // the theme, so they follow the login to another browser.
+          page_widths:       user.page_widths || {},
+          page_width_motion: user.page_width_motion !== false,
+          aside_widths:      user.aside_widths || {},
+          cookie_consent:    user.cookie_consent || null,
         },
       });
     } catch (err) { next(err); }
@@ -792,7 +814,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, email_verified, email_verify_token, email_verify_expires
-         FROM users WHERE email = $1 AND disabled = FALSE`,
+         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
         [email.toLowerCase()]
       );
 
@@ -812,7 +834,7 @@ const authController = {
       try {
         await sendVerificationEmail(email.toLowerCase(), newToken, req.locale);
       } catch (emailErr) {
-        console.error('[resend-verification] Email failed:', emailErr.message);
+        logger.error({ err: emailErr }, '[resend-verification] Email failed');
       }
 
       return res.json({ message: t(req.locale, 'errors.auth.resendVerificationSent') });

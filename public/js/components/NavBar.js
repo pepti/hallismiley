@@ -320,6 +320,11 @@ export class NavBar {
       container.appendChild(wrapper);
 
     } else {
+      // "Innskrá" unless the product hides it (identity.surface.navSignIn —
+      // staff then sign in at /login); "Nýskrá" only while the signup module
+      // is on (R2b).
+      const showSignIn = getIdentity().surface.navSignIn !== false;
+      const showSignUp = moduleEnabled('signup');
       const signIn = document.createElement('button');
       signIn.className = 'lol-nav__cta lol-nav__cta--ghost';
       signIn.setAttribute('data-testid', `nav-signin${suffix}`);
@@ -341,8 +346,8 @@ export class NavBar {
         navigate(navHref('/signup'));
       });
 
-      container.appendChild(signIn);
-      container.appendChild(signUp);
+      if (showSignIn) container.appendChild(signIn);
+      if (showSignUp) container.appendChild(signUp);
     }
   }
 

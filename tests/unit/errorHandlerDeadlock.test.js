@@ -7,6 +7,7 @@
 jest.mock('../../server/models/EventLog', () => ({ record: jest.fn() }));
 const EventLog = require('../../server/models/EventLog');
 const errorHandler = require('../../server/middleware/errorHandler');
+const logger = require('../../server/logger');
 
 const run = (err, locale = 'en') => {
   const res = { locals: {}, status: jest.fn().mockReturnThis(), json: jest.fn() };
@@ -14,13 +15,15 @@ const run = (err, locale = 'en') => {
   return res;
 };
 
-let spy;
+let warn, error;
 beforeEach(() => {
   EventLog.record.mockClear();
-  // The handler still logs every error server-side; keep the test output quiet.
-  spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  // The handler logs every error server-side through pino (invariant 6); the
+  // spies keep the output quiet and pin the level.
+  warn  = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+  error = jest.spyOn(logger, 'error').mockImplementation(() => {});
 });
-afterEach(() => spy.mockRestore());
+afterEach(() => { warn.mockRestore(); error.mockRestore(); });
 
 test('40P01 → 409 { reason: BUSY, retryable: true }, localised, not recorded as a 5xx', () => {
   const err = Object.assign(new Error('deadlock detected'), { code: '40P01', detail: 'Process 1 waits for ShareLock…' });
@@ -30,6 +33,9 @@ test('40P01 → 409 { reason: BUSY, retryable: true }, localised, not recorded a
   expect(body).toMatchObject({ code: 409, reason: 'BUSY', retryable: true });
   expect(body.error).not.toMatch(/deadlock|ShareLock/i);
   expect(EventLog.record).not.toHaveBeenCalled();
+  // Logged as a warn with the status it was answered with, never as an error.
+  expect(error).not.toHaveBeenCalled();
+  expect(warn).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }), expect.stringMatching(/40P01/));
   expect(run(err, 'is').json.mock.calls[0][0].error).not.toBe(body.error);
 });
 
@@ -40,4 +46,5 @@ test('an error that already chose its status keeps it, and any other pg failure 
   expect(res.status).toHaveBeenCalledWith(500);
   expect(res.json.mock.calls[0][0]).toEqual({ error: 'Internal Server Error', code: 500 });
   expect(EventLog.record).toHaveBeenCalledTimes(1);
+  expect(error).toHaveBeenCalledWith(expect.objectContaining({ status: 500 }), expect.any(String));
 });

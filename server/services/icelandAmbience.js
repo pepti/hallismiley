@@ -7,6 +7,7 @@
 // it, null if we never got any — the client then simply leaves the scenes
 // static. Never throws.
 const logger = require('../logger');
+const { trackedFetch } = require('../observability/trackedFetch');
 
 const LAT = 64.07;
 const LON = -21.97;
@@ -34,7 +35,7 @@ function conditionFor(code, precip, snowfall, tempC, cloudPct) {
 }
 
 async function fetchOnce() {
-  const res = await fetch(URL, {
+  const res = await trackedFetch('Vedur.is observations', URL, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { 'User-Agent': 'rekstrarkerfid-ambience/1.0' },
   });

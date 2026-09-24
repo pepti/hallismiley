@@ -4,6 +4,7 @@
 import { fetchOrders, paymentBadge, fulfillmentBadge, bulkDeliveryNotesUrl, downloadOrdersXlsx } from '../services/adminOrders.js';
 import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
+import { attachStickyHScroll } from '../utils/stickyHScroll.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 
@@ -93,6 +94,7 @@ export class AdminOrdersView {
         <button type="button" class="admin-shop__primary-btn" id="admin-orders-print">${t('adminOrders.print')}</button>
         <button type="button" class="admin-shop__link" id="admin-orders-clear">${t('adminOrders.clearSelection')}</button>
       </div>
+      <div class="admin-table-wrap" id="orders-table-wrap">
       <table class="admin-shop__table">
         <thead><tr>
           <th class="admin-orders__check"><input type="checkbox" id="admin-orders-all" aria-label="${t('adminOrders.selectAll')}"/></th>
@@ -114,7 +116,13 @@ export class AdminOrdersView {
             </tr>`).join('')}
         </tbody>
       </table>
+      </div>
     `;
+    // A sideways scrollbar that stays on screen while the list is taller than
+    // the window (utils/stickyHScroll.js, ice #325). The wrap is rebuilt on
+    // every paint, so the mirror is too.
+    this._hscroll?.detach();
+    this._hscroll = attachStickyHScroll(body.querySelector('#orders-table-wrap'));
     body.querySelectorAll('.admin-orders__row-check').forEach(cb => {
       cb.addEventListener('change', () => {
         if (cb.checked) this._selected.add(cb.dataset.id); else this._selected.delete(cb.dataset.id);
@@ -166,5 +174,5 @@ export class AdminOrdersView {
     }
   }
 
-  destroy() { clearTimeout(this._searchDebounce); }
+  destroy() { clearTimeout(this._searchDebounce); this._hscroll?.detach(); this._hscroll = null; }
 }

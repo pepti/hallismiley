@@ -1,10 +1,10 @@
 // Email service using Resend API.
-// Falls back to a no-op with a console notice when RESEND_API_KEY is not set (dev/test mode).
+// Falls back to a no-op with a logged notice when RESEND_API_KEY is not set (dev/test mode).
 const { Resend } = require('resend');
 const { t }      = require('../i18n');
-// New senders log through pino (stack invariant). The older senders in this
-// file still use console.log — converting all of them is proposed separately
-// rather than folded into an unrelated change.
+// Every sender logs through pino (stack invariant 6; the last console.* calls
+// here were converted in harvest-ice-f-2026-09-24, and ESLint's no-console now
+// holds the line for all of server/).
 const logger     = require('../logger');
 
 const APP_URL   = process.env.APP_URL || 'https://www.orangesmiley.is';
@@ -28,6 +28,19 @@ function applyAllowlist(to) {
   if (!ALLOWLIST.length) return to;
   return ALLOWLIST;
 }
+
+// True when EMAIL_ALLOWLIST rewrites every recipient: a send "succeeds" but the
+// person asked for never gets it, so no UI may claim they were emailed
+// (utils/inviteSend.js, ice #258).
+function isRedirecting() {
+  return ALLOWLIST.length > 0;
+}
+
+// Reserved no-mailbox placeholders (utils/placeholderEmail — a name-only login,
+// ice #397) are not addresses: dropped from every recipient list before the
+// allowlist rewrite, so staging behaves like production here.
+const { isPlaceholderEmail } = require('../utils/placeholderEmail');
+const deliverable = (v) => (Array.isArray(v) ? v : [v]).filter(a => a && !isPlaceholderEmail(a));
 
 // A stalled mail endpoint must never hang a request that already COMMITted —
 // the account exists, the response never arrives, and a hung await shows up
@@ -62,7 +75,13 @@ function sendFailed(channel, detail) {
 // The single choke point every sender goes through: allowlist rewrite,
 // bounded wait, loud failure. Returns Resend's { data, error } shape.
 async function deliver(payload, channel = 'generic') {
-  const msg = { ...payload, to: applyAllowlist(payload.to) };
+  // Nobody left to send to (only placeholder addresses): not sent at all.
+  // `id: null` reads as "not sent" to every caller that returns the id.
+  if (deliverable(payload.to).length === 0) {
+    logger.info({ channel }, 'email skipped: no deliverable recipient (placeholder address)');
+    return { data: { id: null }, error: null };
+  }
+  const msg = { ...payload, to: applyAllowlist(deliverable(payload.to)) };
   if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
   try {
     const result = await Promise.race([
@@ -158,7 +177,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
     // In development, retrieve the token directly from the database:
     //   SELECT email_verify_token FROM users WHERE email = '...';
     transportNotConfigured("verification", { note: "verification email skipped (retrieve token from DB)" });
-    return;
+    return false;
   }
 
   const subject = t(locale, 'email.verify.subject');
@@ -187,7 +206,9 @@ async function sendVerificationEmail(to, token, locale = 'en') {
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Verification email sent: id=${data.id}`);
+  if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
+  logger.info({ id: data.id }, '[EmailService] Verification email sent');
+  return data.id;
 }
 
 // ── Password reset email ──────────────────────────────────────────────────────
@@ -200,7 +221,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
     // In development, retrieve the token directly from the database:
     //   SELECT password_reset_token FROM users WHERE email = '...';
     transportNotConfigured("password", { note: "password reset email skipped (retrieve token from DB)" });
-    return;
+    return false;
   }
 
   const subject = t(locale, 'email.reset.subject');
@@ -232,7 +253,12 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Password reset email sent: id=${data.id}`);
+  if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
+  logger.info({ id: data.id }, '[EmailService] Password reset email sent');
+  // Return the id, like sendWelcomeInviteEmail does (ice #258): this used to
+  // return undefined on BOTH paths, so a caller could not tell a real send from
+  // a muted one and answered "is a transport configured" instead.
+  return data.id;
 }
 
 // ── Welcome-invite email (bulk "Send invites" + preview) ─────────────────────
@@ -295,7 +321,8 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
   });
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Welcome invite sent: id=${data.id}`);
+  if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
+  logger.info({ id: data.id }, '[EmailService] Welcome invite sent');
   return data?.id;
 }
 
@@ -325,7 +352,7 @@ function escapeHtml(str) {
 async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems = false } = {}) {
   const to = order.guest_email || order.user_email;
   if (!to) {
-    console.warn(`[EmailService] No recipient for order ${order.order_number} receipt`);
+    logger.warn({ orderNumber: order.order_number }, '[EmailService] No recipient for order receipt');
     return;
   }
 
@@ -419,7 +446,7 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Order receipt sent: order=${order.order_number} id=${data.id}`);
+  logger.info({ orderNumber: order.order_number, id: data.id }, '[EmailService] Order receipt sent');
 }
 
 // ── Booking notification to admins (shop redesign step 5) ───────────────────
@@ -494,7 +521,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
     from: FROM, to: adminEmails, subject, html,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Booking notification sent: order=${order.order_number} items=${bookableItems.length} recipients=${adminEmails.length} id=${data.id}`);
+  logger.info({ orderNumber: order.order_number, items: bookableItems.length, recipients: adminEmails.length, id: data.id }, '[EmailService] Booking notification sent');
 }
 
 // ── RSVP notification to admins ───────────────────────────────────────────────
@@ -568,7 +595,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     from: FROM, to: adminEmails, subject, html,
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] RSVP notification sent: user=${user.id} isUpdate=${isUpdate} recipients=${adminEmails.length} id=${data.id}`);
+  logger.info({ userId: user.id, isUpdate, recipients: adminEmails.length, id: data.id }, '[EmailService] RSVP notification sent');
 }
 
 // ── RSVP confirmation to the guest ────────────────────────────────────────────
@@ -655,7 +682,7 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] RSVP confirmation sent: user=${user.id} isUpdate=${isUpdate} id=${data.id}`);
+  logger.info({ userId: user.id, isUpdate, id: data.id }, '[EmailService] RSVP confirmation sent');
 }
 
 // ── Party announcement to going/maybe guests ──────────────────────────────────
@@ -757,10 +784,10 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
       const msg = r.status === 'rejected' ? r.reason?.message : r.value?.error?.message;
       // Log the index, not the address — index is enough to correlate with
       // the recipient list at the call site without leaking PII into logs.
-      console.error(`[EmailService] Party announcement send failed (idx=${i}): ${msg}`);
+      logger.error({ idx: i, reason: msg }, '[EmailService] Party announcement send failed');
     }
   });
-  console.log(`[EmailService] Party announcement: sent=${sent} failed=${failed} total=${recipients.length}`);
+  logger.info({ sent, failed, total: recipients.length }, '[EmailService] Party announcement');
   return { sent, failed };
 }
 
@@ -819,7 +846,7 @@ async function sendPartyRequestNotification({ request, adminEmails, approveUrl, 
 
   const { data, error } = await deliver({ from: FROM, to: adminEmails, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party request notification sent: recipients=${adminEmails.length} id=${data.id}`);
+  logger.info({ recipients: adminEmails.length, id: data.id }, '[EmailService] Party request notification sent');
 }
 
 // ── Party invite (magic link) to the guest ────────────────────────────────────
@@ -865,7 +892,7 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party invite email sent: id=${data.id}`);
+  logger.info({ id: data.id }, '[EmailService] Party invite email sent');
 }
 
 // ── Party welcome / info email to the guest ───────────────────────────────────
@@ -1041,7 +1068,7 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
   if (error) throw new Error(`Resend error: ${error.message}`);
-  console.log(`[EmailService] Party welcome email sent: user=${user.id} id=${data.id}`);
+  logger.info({ userId: user.id, id: data.id }, '[EmailService] Party welcome email sent');
 }
 
 // ── Lead notification to the company inbox ───────────────────────────────────
@@ -1071,7 +1098,8 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
 
   const html = emailShell(subject, `
     <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 24px;padding:10px 12px;background-color:#1a1a1a;border:1px solid #333;border-radius:6px;font-size:13px;color:#bbb;line-height:1.5;">${escapeHtml(t(locale, 'email.lead.provenance'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid #222;">
       ${row(t(locale, 'email.lead.nameLabel'), name)}
       ${row(t(locale, 'email.lead.companyLabel'), company)}
@@ -1090,4 +1118,4 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
   return true;
 }
 
-module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured };
+module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured, isRedirecting };

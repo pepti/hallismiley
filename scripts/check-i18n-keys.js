@@ -88,6 +88,12 @@ const USAGE_RES = [
   /\b(?:labelKey|descKey)\s*:\s*"([a-z0-9_$]+(?:\.[a-z0-9_$-]+)+)"(?=\s*[,}\r\n])/gi,
 ];
 
+// plural(n, 'x.one', 'x.many', …) — both keys are literals after the count
+// argument. The count may itself be an expression (`rows.length`), so the
+// first argument is skipped lazily up to the first quoted key (icelandicstore
+// #399, harvest-ice-e-2026-09-24).
+const PLURAL_RE = /\bplural\([^'";]*?,\s*['"]([a-z0-9_$]+(?:\.[a-z0-9_$-]+)+)['"]\s*,\s*['"]([a-z0-9_$]+(?:\.[a-z0-9_$-]+)+)['"]/gi;
+
 function* walkJs(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
@@ -109,6 +115,15 @@ function findUndefinedUsedKeys(enMessages) {
         const key = m[1];
         if (key in enMessages || MISSING_OK.has(key) || missing.has(key)) continue;
         const line = src.slice(0, m.index).split('\n').length;
+        missing.set(key, `${path.relative(path.resolve(__dirname, '..'), file)}:${line}`);
+      }
+    }
+    PLURAL_RE.lastIndex = 0;
+    let pm;
+    while ((pm = PLURAL_RE.exec(src)) !== null) {
+      for (const key of [pm[1], pm[2]]) {
+        if (key in enMessages || MISSING_OK.has(key) || missing.has(key)) continue;
+        const line = src.slice(0, pm.index).split('\n').length;
         missing.set(key, `${path.relative(path.resolve(__dirname, '..'), file)}:${line}`);
       }
     }

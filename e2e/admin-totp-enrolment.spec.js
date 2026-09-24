@@ -15,6 +15,7 @@
 // there), so it meets the production rule. One sign-in per test — TOTP's
 // replay guard allows one code per 30-second step.
 const { test, expect } = require('@playwright/test');
+const { openSignIn } = require('./helpers');
 const { execFileSync } = require('child_process');
 const path = require('path');
 const totp = require('../server/utils/totp');
@@ -44,7 +45,7 @@ function script(name, ...args) {
 
 async function signIn(page) {
   await page.goto('/is/');
-  await page.locator('[data-testid="nav-signin"]').click();
+  await openSignIn(page);
   await page.fill('#login-username', ADMIN.username);
   await page.fill('#login-password', ADMIN.password);
   await page.click('.login-form [type=submit]');

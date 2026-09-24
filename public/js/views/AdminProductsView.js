@@ -5,6 +5,7 @@ import { t, href } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { thumbUrl } from '../utils/imageUrl.js';
+import { formatDateTime } from '../utils/format.js';
 import {
   adminExportProductsUrl, adminPreviewProductImport, adminApplyProductImport,
   adminBulkProducts, adminProductAdjustments, adminParseProductImportFile,
@@ -300,7 +301,7 @@ export class AdminProductsView {
             <th>${t('adminProducts.historyReason')}</th><th>${t('adminProducts.historyWho')}</th>
           </tr></thead>
           <tbody>${adjustments.map(a => `<tr>
-            <td>${_esc(new Date(a.created_at).toLocaleString(document.documentElement.lang || undefined))}</td>
+            <td>${_esc(formatDateTime(a.created_at))}</td>
             <td><code>${_esc(a.variant_sku || product.sku || '—')}</code></td>
             <td class="prod-history__delta${a.delta < 0 ? ' prod-history__delta--neg' : ''}">${a.delta > 0 ? '+' : ''}${a.delta} (${a.previous_stock} → ${a.new_stock})</td>
             <td>${_esc(reason(a.reason))}${a.order_number ? ` · ${_esc(a.order_number)}` : ''}${a.note ? ` · ${_esc(a.note)}` : ''}</td>
