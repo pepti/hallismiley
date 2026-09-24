@@ -580,3 +580,30 @@
   padding: var(--sp-5) 0; text-align: center;
   color: var(--text-muted); font-size: 0.9rem;
 }
+
+/* ── Update banner (services/buildGuard.js; icelandicstore #332/#333) ──
+   "A new release is out — save and reload." Top-centre, clear of the toasts and
+   the change-request button, below modals. Tokens only, so it reads on every
+   theme: body text on the surface, a warning rule to mark it. Centred by equal
+   insets + auto margins, not left:50% + translate: a shrink-to-fit box starting
+   at 50% can only use the right half of the viewport, so on a 390 px phone it
+   collapsed to ~237 px and five lines. */
+.update-banner {
+  position: fixed; top: calc(var(--nav-h, 64px) + var(--sp-2));
+  left: var(--sp-4); right: var(--sp-4);
+  margin-inline: auto;
+  width: fit-content;
+  z-index: 900;
+  display: flex; align-items: center; gap: var(--sp-3);
+  max-width: min(640px, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  font-size: 0.875rem;
+}
+.update-banner__msg { flex: 1; }
+.update-banner__reload { flex: none; }

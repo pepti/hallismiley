@@ -249,15 +249,32 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization) |
 | Views | `public/js/views/HomeView.js`, `ThjonustaView.js`, `UmOkkurView.js`, `ContactView.js`, `PrivacyView.js`, `TermsView.js`, `NotFoundView.js`; `HalliView.js` serves the hidden `/about`/`/halli` (`AboutView.js` is dead — see Ownership notes) |
 | Components | `public/js/components/NavBar.js` |
-| Client | `public/js/router.js`, `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
+| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
-| e2e | `e2e/business-routes.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
+| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017, 091, 092 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
 **Rules that must hold**
+- **Unknown paths answer 404** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): the shell (same body, `noindex`)
+  with status 404 for a path no SPA route matches (`public/js/routePatterns.json`
+  via `server/utils/spaRoutes.js`, or a product route in `ROUTE_META`) and for a
+  detail slug (article, product, project) with no live row — never cached. A
+  FAILED detail lookup (pool timeout) stays 200 `no-store` (`ssrMeta.lookups`
+  is the test seam). Add a route to `router.js` AND `routePatterns.json`
+  (`routePatterns.test.js`; a product route may live in `identity.routes`
+  instead). `/favicon.ico` 301s to `/favicon.svg`. The shell is `public,
+  no-cache` (it names its release in `<meta name="app-build">`).
+- **Views load when visited** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): `router.js` imports only
+  `HomeView` and `NotFoundView`; every other route factory is `async` and
+  builds its view through `make('<Name>', …)` from the `VIEWS` loader table.
+  A new view = a `VIEWS` entry + `make()` in its route; a static view import
+  in the router, or a view pulled into main.js's graph, fails
+  `routerLazyViews.test.js`. A module that cannot load goes to
+  `recoverFromAssetFailure()` (reload onto a new release, else one reload,
+  then `errors.pageLoadFailed`). `pageTitle` and module switches (R4) are unchanged.
 - **The public IA is the product's** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `/`, then `identity.surface.nav` (ordered `{ route, labelKey }` entries;
   `/thjonusta`, `/um-okkur`, `/hafa-samband` here), then the legal pages —
@@ -368,7 +385,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Canonical host derives from `APP_URL` (still hallismiley.is until the domain
   cutover — intentional, tracked in `PLAN.md`).
 
-**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23) · [rk-feed](HISTORY.md#rk-feed-2026-09-23)
+**History**: [homepage](HISTORY.md#homepage) · [r1](HISTORY.md#r1) · [services-page](HISTORY.md#services-page) · [ui-kit](HISTORY.md#ui-kit) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23) · [rk-feed](HISTORY.md#rk-feed-2026-09-23) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)
 
 ## 4. Themes, scenes, ambience
 
@@ -437,12 +454,24 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Services | `server/services/translator.js`, `autoTranslateFields.js`, `siteContentTranslate.js` |
 | Client | `public/js/i18n/i18n.js`, `public/js/i18n/en.json`, `public/js/i18n/is.json` |
 | Scripts | `scripts/check-i18n-keys.js` (`npm run check:i18n`), `scripts/backfill-is-translations.js`, `scripts/retranslate-party-en.js` |
-| Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js`, `i18nIdentity.test.js` |
+| Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js`, `i18nIdentity.test.js`, `plural.client.test.js`, `i18nLoadFailure.client.test.js`, `formatMoney.client.test.js`, `formatDate.client.test.js` |
 | Migrations | 028–038 (eleven consecutive i18n migrations) |
 | Features | [i18n](../features/i18n.md) |
 | Feature doc | — |
 
 **Rules that must hold**
+- **Counted strings use `plural(n, 'x.one', 'x.many')`** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): the
+  Icelandic rule is the last digit (1, 21, 101 singular; 11, 111 plural);
+  both keys exist in both tables with the count as `{n}`, and
+  `check:i18n` reads both literals.
+- **Icelandic money, numbers and dates are built by hand** in
+  `public/js/utils/format.js` ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): Chrome ships no `is` ICU data, so
+  `Intl` answered "ISK 8,400" / "14 Sept 2026"; the output equals a full-ICU
+  runtime's ("8.400 kr.", "14. sep. 2026"). `formatRelative` still uses
+  `Intl.RelativeTimeFormat` (same gap, open item).
+- Locale tables are fetched through `utils/assetBase.js` `jsUrl()` (the
+  release-stamped tree); a failed engine table keeps the current strings and
+  raises `app:asset-load-failed` for the build guard.
 - **The page meta is i18n** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)): `meta.<key>.title`
   (both tables) and `meta.<key>.description` (server table) carry the text
   `ssrMeta.js` / `pageTitle.js` used to hold as literals; a product overrides
@@ -491,7 +520,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Two column conventions coexist: news bodies are `_is` siblings, sales guides
   are IS-canonical with `_en` siblings ([sales-staff](HISTORY.md#sales-staff)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23) · [identity-seam-3](HISTORY.md#identity-seam-3-2026-09-23) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)
 
 ## 6. Leads — Fyrirspurnir
 
@@ -1071,6 +1100,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
+| Release delivery | `server/middleware/versionedStatic.js` (`/js/_<tag>/`, `/css/_<tag>/`, immutable a year, 404 `no-store` under another tag), `server/utils/staticCacheControl.js` (unstamped JS/CSS/JSON `no-cache`); client `public/js/services/buildGuard.js`, `public/js/utils/buildCheck.js`, `public/js/utils/assetBase.js`, `public/js/components/UpdateBanner.js`; `tests/integration/versionedShell.test.js`, `tests/unit/versionedStatic.test.js`, `staticCacheControl.test.js`, `buildCheck.client.test.js`, `noAbsoluteJsUrls.test.js` · e2e `e2e/build-reload.spec.js` |
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
@@ -1156,6 +1186,20 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - CI: weekly cron + Jest transform cache; dependabot `rebase-strategy:
   disabled` + docker ecosystem; ice's `main-gate` job was deliberately NOT
   ported (this repo merges locally; deploy is dispatch-only) [harvest-2](HISTORY.md#harvest-2).
+- **An open tab never runs two releases** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): the shell names its
+  release (`<meta name="app-build">`); `buildGuard` compares every
+  same-origin response's `X-App-Build`, probes `/health` before a navigation
+  after a quiet minute, and reloads instead of switching views (refocus:
+  reload unless something was typed — then `UpdateBanner`; a reload for the
+  same build within a minute is not repeated, `stale_release` event). On a
+  stamped build `ssrMeta` points the shell at `/js/_<tag>/` + `/css/_<tag>/`
+  (imports are relative, so the graph follows); those URLs are immutable for
+  a year and 404 under a foreign tag, which is what turns a deploy into a
+  reload. `theme-boot.js` stays unstamped and reloads once when a stamped
+  file 404s at boot. No absolute `/js/` or `/css/` URL in client code
+  (`noAbsoluteJsUrls.test.js`; use `jsUrl()` or a relative import). Same
+  origin, so CSP is unchanged. `dev`/`unknown` builds are never stamped and
+  never trigger a reload. This supersedes rekstrarkerfid's `1b7aeff`.
 - **The check "Lint + Integration tests" is an aggregator** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)):
   `lint` + three `test-shard` jobs (`--shard=N/3`, coverage threshold off
   per shard) feed a job of that name that runs `if: always()`, is red unless
@@ -1213,7 +1257,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   green CI on `main`, unlike here, and has zero e2e coverage of checkout, so a
   base PR touching it is verified by hand first [ui-kit](HISTORY.md#ui-kit).
 
-**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)
+**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)
 
 ## 21. Seller area — the published copy on the public instance
 

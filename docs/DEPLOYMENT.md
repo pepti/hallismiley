@@ -301,6 +301,7 @@ yearly books archive to media in Iceland is the compliance step, not a nicety.
 | Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` |
 | Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — which it is on orangesmiley.is until the release host exists; read the `gitSha` from `/ready` logs or the deploy run summary instead) | `gitSha` = the dispatched SHA |
 | Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
+| Release on the wire | any response header; view-source of a page | `X-App-Build` = `sha256(<sha>)[:12]`; the shell's `<meta name="app-build">` says the same and its scripts/stylesheets load from `/js/_<that tag>/…` and `/css/_<that tag>/…` (cached a year; any other tag 404s). A build without `GIT_SHA` reports `unknown` and is served unstamped — fix the build-args, the site still works (since 2026-09-24, [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)) |
 
 ## 8. Rollback
 

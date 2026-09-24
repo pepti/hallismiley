@@ -80,4 +80,27 @@ describe('X-App-Build', () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.headers['x-app-build']).toBe(version.buildTag);
   });
+
+  // Chunk E (icelandicstore #332, harvest-ice-e-2026-09-24): the page's baseline.
+  test('the SSR shell names its release in <meta name="app-build">', async () => {
+    const res = await request(app).get('/is/thjonusta').set('Accept', 'text/html');
+    expect(res.status).toBe(200);
+    expect(res.headers['x-app-build']).toBe(version.buildTag);
+    expect(res.text).toMatch(new RegExp(`<meta[^>]*name="app-build"[^>]*content="${version.buildTag}"`));
+    // Exactly one — the template placeholder is replaced, not duplicated.
+    expect(res.text.match(/name="app-build"/g)).toHaveLength(1);
+  });
+
+  test('the shell is revalidated, never served stale from cache', async () => {
+    const res = await request(app).get('/en/um-okkur').set('Accept', 'text/html');
+    expect(res.headers['cache-control']).toBe('public, no-cache');
+  });
+
+  test('a 304 revalidation still carries X-App-Build', async () => {
+    const first = await request(app).get('/js/main.js');
+    expect(first.headers.etag).toBeTruthy();
+    const again = await request(app).get('/js/main.js').set('If-None-Match', first.headers.etag);
+    expect(again.status).toBe(304);
+    expect(again.headers['x-app-build']).toBe(version.buildTag);
+  });
 });

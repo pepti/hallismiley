@@ -58,6 +58,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
 | 2026-09-24 | [Harvest from icelandicstore, chunk F — telemetry, every 5xx logged, the deploy gate checks the build, Jest in three shards](#harvest-ice-f-2026-09-24) | ice #254/#255/#358/#394/#356/#347/#323 read, not merged: pino warn+ and outbound fetch to App Insights (dark without a connection string; `applicationinsights` 2.9.8 exact), `eventLogOn5xx`, `X-App-Build` checked by deploy.yml and a stable promote (`vars.CANARY_URLS`), Jest ×3 shards behind the one check name, docs-only PR shim that still runs the unit tier, re-runnable-constraint test; the last server `console.*` gone; no migration |
+| 2026-09-24 | [Harvest from icelandicstore, chunk E — open tabs follow a release, release-stamped code URLs, lazy views, plurals, real 404s, Icelandic formats](#harvest-ice-e-2026-09-24) | ice #332/#333/#425/#426 + halves of #399/#313/#324: `X-App-Build` vs `<meta name="app-build">` reloads a stale tab (UpdateBanner when something is typed); `/js/_<tag>/` + `/css/_<tag>/` immutable a year, 404 under a foreign tag (the engine cached `/js` 1 h — the stale-release bug; supersedes rk `1b7aeff`); boot graph 158 → 39 modules; `plural()` IS rule; shell 404 for unknown routes and missing detail rows; `format.js` IS money/dates by hand; no migration |
 
 ---
 
@@ -2502,3 +2503,68 @@ OpenTelemetry); the only fix npm offers is the 3.x major, a different SDK
 **No migration.** Downstream consequence: a sync carries everything except the
 two product-owned workflows (see above); rekstrarkerfid's `1b7aeff` is chunk
 E's business, not this one's.
+
+<a id="harvest-ice-e-2026-09-24"></a>
+## 2026-09-24 — Harvest from icelandicstore, chunk E: open tabs follow a release, code under release-stamped URLs, views loaded when visited, plurals, real 404s, Icelandic formats
+
+Lane 3, second chunk (`company/ice-harvest-2026-09-24.md` §2, chunk E), after
+[chunk F](#harvest-ice-f-2026-09-24), whose `X-App-Build` header this builds on.
+Source: the read-only clone `C:\ice-harvest`, ice `main` @ `4694289`; ported by
+reading each commit, ice's file names kept.
+
+**What came over**
+
+| ice | What | Engine files |
+|---|---|---|
+| `859be10` #332 + `96a9cb2` #333 | **Open pages reload onto a new release.** The shell names its release (`<meta name="app-build">`, filled by `ssrMeta.js`, shell now `public, no-cache` instead of `max-age=300`); `services/buildGuard.js` compares every same-origin response's `X-App-Build` with it; `Router._navigate()` awaits `shouldReloadOnNavigate()` (asks `/health` after 60 s of silence) and reloads instead of switching views; on refocus it reloads unless something was typed, then `UpdateBanner` asks; one reload per build per minute, then the banner and a `stale_release` event. Unstamped `/js`, `/css`, JSON are `no-cache` in production (`utils/staticCacheControl.js`) — **the engine served `/js` with `max-age=1h`, the exact stale-release bug** | new `public/js/services/buildGuard.js`, `utils/buildCheck.js`, `components/UpdateBanner.js`, `server/utils/staticCacheControl.js`; `public/js/{main,router}.js`, `public/index.html`, `server/middleware/ssrMeta.js`, `server/app.js`, `server/controllers/eventLogController.js`, `components.css`, i18n |
+| `dfd7a0f` #425 | **Code under release-stamped URLs, cached a year.** On a stamped build the shell loads `/js/_<buildTag>/main.js` and `/css/_<buildTag>/main.css`; imports and `@import`s are relative, so the whole graph follows the prefix. `middleware/versionedStatic.js` serves those `immutable` for a year from per-directory roots, and answers 404 `no-store` under any other tag (never another release's bytes under an immutable URL). `theme-boot.js` stays unstamped and reloads once when a stamped file 404s at boot. Locale tables and the html2canvas script go through `utils/assetBase.js` `jsUrl()`; the two Chart.js imports became relative; `noAbsoluteJsUrls.test.js` fails a new absolute `/js/` URL. A failed locale fetch keeps the current strings and raises `app:asset-load-failed` | new `server/middleware/versionedStatic.js`, `public/js/utils/assetBase.js`; `server/app.js`, `ssrMeta.js`, `theme-boot.js`, `i18n.js`, `ChangeRequestWidget.js`, `AdminAnalyticsView.js`, `AdminSalesView.js` |
+| `4694289` #426 | **Views load when visited.** `router.js` became a `VIEWS` table of loaders plus `make()`; route factories that build a lazy view are `async`, every pattern line otherwise unchanged; `HomeView` + `NotFoundView` stay eager (the router's fallbacks). A module that cannot load goes to `recoverFromAssetFailure()`: reload onto a newer release, or (the page IS current) one reload, then an `errors.pageLoadFailed` toast. **Boot graph from `main.js`: 158 files / ~1.87 MB (68 views) → 39 files / ~313 KB (2 views)** | `public/js/router.js`, `routerLazyViews.test.js`, `e2e/lazy-views.spec.js` |
+| `6f5b37e` #399 (generic half) | `plural(n, one, many)` with the Icelandic last-digit rule + `check:i18n` reading both keys; the SSR shell answers **404** (shell body, `noindex`) for a path no route matches (`public/js/routePatterns.json` via `server/utils/spaRoutes.js`) and for a detail slug with no live row (article, product, project); a FAILED lookup stays 200 `no-store`; `/favicon.ico` 301 | `i18n.js`, `scripts/check-i18n-keys.js`, new `public/js/routePatterns.json`, `server/utils/spaRoutes.js`, `ssrMeta.js`, `app.js` |
+| `219d33e` #313 + `8e977ae` #324 (format halves) | `utils/format.js` builds Icelandic money ("8.400 kr."), numbers and dates ("14. sep. 2026") by hand — Chrome has no `is` ICU data, so `Intl` answered "ISK 8,400" / "14 Sept 2026" on every Icelandic admin page | `public/js/utils/format.js` (ice's file + the engine's `formatRelative`) |
+
+**Engine differences, on purpose**
+
+- **The 404 list knows product routes.** A downstream declares its own pages
+  in `identity.routes`; ssrMeta already folds them into `ROUTE_META`, so a
+  route with static meta is never "unknown". `routePatterns.test.js` accepts a
+  router pattern that is an `identity.routes` key missing from the JSON. A
+  product that adds a route to `router.js` without either gets a 404 status on
+  a hard load (the page still renders) — the test names it.
+- **Detail 404s cover three types** (news, product, project) where ice has
+  products only; the failed-lookup sentinel covers all three.
+- **Build-guard event kinds:** `asset_load` joins `stale_release` in the
+  event-log controller (ice's `recoverFromAssetFailure` reports `asset_load`
+  but its controller files it as `toast`).
+- **No `ErrorDialog`** (lane 1's chunk B): a view that cannot load says so with
+  an error toast, which becomes a dialog once B lands.
+- **Skip link** was already localised here (`data-i18n`); ice's SSR half is not ported.
+- **CSP untouched:** the stamped URLs are same-origin paths under `'self'`.
+- **Left out of #399:** IS postcode/phone validation twins (they change
+  `server/middleware/validate.js`, lane 2's file, and the contact form's
+  contract — a proposal of its own), amber pending pills (ice-only classes),
+  Pressan/invoice-unit/product-page items (ice-only).
+
+**Supersedes rekstrarkerfid `1b7aeff`** ("JS/CSS/JSON revalidate in
+production", on `from-rk/master`, never on engine master). rk's next engine
+sync conflicts on the `express.static` block in `server/app.js`: take the
+engine side — its `staticCacheControl` gives the same revalidation for
+unstamped URLs, and stamped builds no longer use those URLs at all.
+
+**What a downstream must do:** nothing to turn it on — a build stamped by
+`deploy.yml` (`GIT_SHA` build-arg) is stamped automatically; a checkout stays
+unstamped. A product whose own views are imported statically in `router.js`
+keeps working (a static import is still allowed for them, only the engine
+test counts the engine's), but loses the boot-graph win until it moves them
+into `VIEWS`.
+
+**Tests.** New: `buildCheck.client`, `staticCacheControl`, `versionedStatic`, `noAbsoluteJsUrls`, `routerLazyViews`, `routePatterns`, `plural.client`, `i18nLoadFailure.client`, `formatMoney.client`, `formatDate.client` (unit); `versionedShell`, `spaStatus` (integration; the whole route list 200 in both locales, unknown paths and missing rows 404, a failed lookup 200); `buildHeader` +3; e2e `build-reload.spec.js` (7) and `lazy-views.spec.js` (2). `ssrMeta.test.js` pins moved from 200 / `max-age=300` to 404 / `public, no-cache` where the behaviour changed on purpose. Full runs: Jest 180 suites, 3806 passed, 1 skipped; Playwright 233 passed (ports 3061/3062).
+
+**Copy (DRAFT, IS canonical):** `updateBanner.message` "Ný útgáfa af kerfinu er
+komin. Vistaðu breytingar og endurhlaðaðu." / "A new version of the system is
+available. Save your changes and reload." · `updateBanner.reload` "Endurhlaða"
+/ "Reload" · `errors.pageLoadFailed` "Ekki tókst að hlaða síðunni.
+Endurhlaðaðu síðuna og reyndu aftur." / "This page could not be loaded. Reload
+the page to try again." · `adminMonitoring.kind.stale_release` "úrelt útgáfa í
+opnum flipa" · `adminMonitoring.kind.asset_load` "kóði síðunnar hlóðst ekki".
+
+**No migration.**

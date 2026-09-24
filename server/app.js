@@ -39,6 +39,8 @@ const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
 const eventLogOn5xx  = require('./middleware/eventLogOn5xx');
 const { buildTag }   = require('./config/version');
+const { staticCacheControl } = require('./utils/staticCacheControl');
+const { versionedStatic }    = require('./middleware/versionedStatic');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { normalizeForwardedFor } = require('./middleware/forwardedFor');
 const localeMiddleware = require('./middleware/locale');
@@ -596,6 +598,19 @@ app.get(/^\/([A-Za-z0-9-]{8,128})\.txt$/, (req, res, next) => {
   res.send(expected);
 });
 
+// Release-stamped code URLs (/js/_<tag>/…, /css/_<tag>/…) — cached immutable
+// for a year, a 404 (no-store) under any other release's tag. The shell points
+// at them on a stamped build (ssrMeta.js stampAssetUrls). Same-origin paths,
+// so CSP is untouched ('self'). See middleware/versionedStatic.js
+// (icelandicstore #425, harvest-ice-e-2026-09-24).
+app.use(versionedStatic());
+
+// Browsers and crawlers ask for /favicon.ico whatever the <link rel="icon">
+// says; the site ships favicon.svg only, so the bare request was a 404 (and a
+// SPA shell) on every first visit. A permanent redirect lets the client
+// remember the answer (icelandicstore #399).
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
+
 // Routes
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
@@ -606,16 +621,11 @@ app.use(express.static(path.join(__dirname, '../public'), {
   // raw index.html with placeholder tags.
   index: false,
   setHeaders(res, filePath) {
-    // Never cache the HTML entry point — the SPA must always get a fresh shell
-    if (filePath.endsWith('index.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-    // In development, don't cache JS/CSS/JSON either — avoids stale ES modules
-    // and stale i18n locale files when iterating on the frontend.
-    if (process.env.NODE_ENV !== 'production' &&
-        (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.json'))) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    // The HTML shell is never cached; unstamped JS/CSS/JSON always revalidate
+    // (the 1 h maxAge let a reload mix releases — icelandicstore #332), so a
+    // reload never runs two releases. See utils/staticCacheControl.js.
+    const cc = staticCacheControl(filePath);
+    if (cc) res.setHeader('Cache-Control', cc);
   },
 }));
 app.use('/auth',              authRoutes);

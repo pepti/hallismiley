@@ -37,7 +37,6 @@ paths:
   - tests/unit/maintenanceWindow.test.js
   - tests/unit/version.test.js
   - tests/unit/buildManifest.test.js
-  - tests/integration/buildHeader.test.js
   - e2e/admin-updates.spec.js
 migrations: [081_system_updates]
 since: 2026-08-10
