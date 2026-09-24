@@ -219,7 +219,7 @@
   flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   overflow: hidden;
   text-decoration: none;
   color: inherit;
@@ -559,7 +559,7 @@
 .news-editor {
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   width: 100%;
   max-width: 760px;
   margin: auto;

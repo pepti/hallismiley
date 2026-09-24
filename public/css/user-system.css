@@ -682,7 +682,12 @@
   padding: var(--sp-3);
   background: #fff;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
+  /* The edge belongs to the same exception as the plate (ice #410): it has to
+     read against the plate's WHITE, not against the page, so it cannot be
+     var(--border) — that token is a LIGHT hairline on Glóð and Miðnætti and
+     composites to almost nothing over white. A fixed dark hairline is correct
+     on every theme because the surface under it never changes. */
+  border: 1px solid rgba(18, 18, 18, 0.18);
   margin-bottom: var(--sp-3);
 }
 .totp-qr img { display: block; width: 200px; height: 200px; }
