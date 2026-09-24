@@ -183,7 +183,10 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
     APIs 404 before auth, its pages 404, off every discovery surface and the
     admin); what each owns is `server/config/moduleCatalog.js`, engine-owned.
     Its features' suites skip through the registry `flag` — no
-    `features/local.json` entry needed for a module that is off.
+    `features/local.json` entry needed for a module that is off. Public
+    signup is one of them (`modules.signup.enabled`), and the nav's
+    "Innskrá" is `identity.surface.navSignIn` — a shop window sets both
+    false and signs staff in at `/login` (signup-switch-2026-09-24).
   - **Tests for a hidden feature skip; never delete an engine spec.** A
     feature the product hides, disables or forks is recorded in
     `features/local.json`; the feature gate (`tests/lib/featureGate.js`,

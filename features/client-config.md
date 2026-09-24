@@ -24,7 +24,7 @@ paths:
 migrations: []
 since: 2026-08-10
 origin: null
-history: [self-update, identity-seam-2026-09-22, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, module-flags-2026-09-24, mcp-write-tools-2026-09-24]
+history: [self-update, identity-seam-2026-09-22, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, module-flags-2026-09-24, mcp-write-tools-2026-09-24, signup-switch-2026-09-24]
 ---
 
 The per-instance seam: schema defaults in `clientConfig.js` < committed `config/client.json` (product-owned, never synced) < `CLIENT_CONFIG_*` env vars, deep-frozen at boot and logged in full; `features.js` is its client shim for module flags. Every feature `flag` in this registry is a key path here. Since 2026-09-22 the same seam carries the **product identity** (`identity.*`: brand + title suffix, visitor-default locale, theme trio, hero clip, hidden public routes and admin views, the Organization record; since identity-seam-3 also the product's own routes' meta, `identity.routes`) — what a downstream would otherwise fork out of engine files. `server/config/identity.js` is the server reader plus the pure head helpers (`productRoutes()`, `organizationDescription()`); ssrMeta hands the resolved record to the browser as `<html data-*-theme>` (for the pre-paint `theme-boot.js`) and `<script id="identity">`, which `public/js/utils/identity.js` parses once for every other client reader (`routeMeta()`, `routeLockFor()`).

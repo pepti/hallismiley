@@ -22,7 +22,7 @@ const PAGES = [
   { name: 'homepage',       path: '/' },
   { name: 'projects',       path: '/projects' },
   { name: 'signup',         path: '/signup' },
-];
+].filter((p) => p.name !== 'signup' || !require('./lib/featureGate').gate('signup').skip);
 
 test.beforeAll(() => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });

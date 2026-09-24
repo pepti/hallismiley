@@ -31,7 +31,7 @@ async function seedSalesUser() {
 async function loginAsSales(page) {
   await page.goto('/');
   if (await page.locator('[data-testid="nav-user-btn"]').isVisible()) return;
-  await page.locator('[data-testid="nav-signin"]').click();
+  await require('../helpers').openSignIn(page);
   await page.fill('#login-username', SALES_USER.username);
   await page.fill('#login-password', SALES_USER.password);
   await page.click('.login-form [type=submit]');

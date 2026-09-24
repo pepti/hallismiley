@@ -1,8 +1,29 @@
+const { readIdentity } = require('./lib/identity');
+const { gate } = require('./lib/featureGate');
+const { seedUser, signInViaApi } = require('./lib/accounts');
+
 const TEST_ADMIN = {
   username: 'testadmin',
   email:    'admin@e2e.test',
   password: 'AdminPass123',
 };
+
+/**
+ * Open the login modal the way THIS server offers it: the nav's "Innskrá",
+ * or — on a product that hides it (identity.surface.navSignIn, R2b) — the
+ * /login door, which opens the same modal. Reads the identity the page was
+ * SERVED, so it is right on either e2e server. Call after a page.goto.
+ */
+async function openSignIn(page) {
+  const id = await readIdentity(page);
+  if (!id || id.surface.navSignIn !== false) {
+    await page.locator('[data-testid="nav-signin"]').click();
+    return;
+  }
+  const lc = new URL(page.url()).pathname.split('/').filter(Boolean)[0] || id.locale.publicDefault;
+  await page.goto(`/${lc}/login`);
+  await page.locator('#login-username').waitFor();
+}
 
 /**
  * Log in as the E2E admin account via the login modal.
@@ -14,7 +35,7 @@ async function loginAsAdmin(page) {
   // Already logged in?
   if (await page.locator('[data-testid="nav-user-btn"]').isVisible()) return;
 
-  await page.locator('[data-testid="nav-signin"]').click();
+  await openSignIn(page);
   await page.fill('#login-username', TEST_ADMIN.username);
   await page.fill('#login-password', TEST_ADMIN.password);
   await page.click('.login-form [type=submit]');
@@ -30,6 +51,14 @@ async function createTestUser(page) {
   const username = `testuser${uid}`;
   const email    = `testuser${uid}@e2e.test`;
   const password = 'TestUser123';
+
+  // No public signup here (the `signup` module off, R2b): seed the account
+  // and sign it in, which is where the signup form leaves a new user too.
+  if (gate('signup').skip) {
+    await seedUser({ username, email, password });
+    await signInViaApi(page, { username, password });
+    return { username, email, password };
+  }
 
   await page.goto('/#/signup');
   await page.fill('#signup-email', email);
@@ -81,4 +110,4 @@ async function clickAndExpectApi(page, locator, { method, path, status = 200 }) 
 }
 
 module.exports = {
-  clickAndExpectApi, loginAsAdmin, createTestUser, signupUser, navigateToProject, TEST_ADMIN };
+  clickAndExpectApi, loginAsAdmin, openSignIn, createTestUser, signupUser, navigateToProject, TEST_ADMIN };

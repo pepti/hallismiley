@@ -109,10 +109,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js` |
 | e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` (on the second, `required` e2e server), `mfa-reminder.spec.js` |
 | Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again") |
-| Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
+| Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [signup](../features/signup.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
 **Rules that must hold**
+- **Public signup is a module; signing in is not** ([signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24)):
+  `modules.signup.enabled` (R4 catalogue, Verslun/Rekstur) owns `/signup`,
+  `/auth/signup` and the availability checks; off, they are absent and a
+  first-time Google/Facebook sign-in is refused (`signup_closed`) — existing
+  accounts still sign in, and admins still create accounts. The nav's
+  "Innskrá" is `identity.surface.navSignIn`; `/login` always opens the login
+  modal. Engine suites that exercise signup switch it on for their own file
+  (`CLIENT_CONFIG_MODULES_SIGNUP_ENABLED`, removed after); e2e sign-in goes
+  through `helpers.openSignIn`, which follows the SERVED identity.
 - Emails are validated with `isEmail()` (length ≤ 254 BEFORE the regex; `EMAIL_RE`
   alone backtracks quadratically on anonymous input) ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - Lucia v3 owns sessions; there is no JWT layer (invariant 3).
@@ -182,7 +191,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 

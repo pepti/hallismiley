@@ -125,6 +125,7 @@ document.body.appendChild(new ThemeSwitcher().render());
     account_disabled:         'auth.errors.accountDisabled',
     google_profile_invalid:   'auth.errors.googleProfileInvalid',
     google_not_configured:    'auth.errors.googleNotConfigured',
+    signup_closed:            'auth.errors.signupClosed',
     email_already_registered: 'auth.errors.emailAlreadyRegistered',
     facebook_profile_invalid: 'auth.errors.facebookProfileInvalid',
     admin_oauth_blocked:      'auth.errors.adminOauthBlocked',
