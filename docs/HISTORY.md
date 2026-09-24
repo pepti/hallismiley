@@ -2592,7 +2592,10 @@ and may also have taken 111: whoever merges second renumbers.
   collapsed, capped at 5, z-index 1000 over the admin modals; still in the
   toast log; success/info toasts unchanged; no caller changes. The survey
   flagged it as estate-wide at once; the engine's own e2e suite is its first
-  wide exercise.
+  wide exercise (full run green). **Engine fix, back-port to ice**: ice
+  compared a new error only with the queue's tail, so the first repeat of the
+  error ON SCREEN was queued and shown twice; it now compares with the shown
+  message when nothing is queued (the e2e spec pins it).
 - **Sticky sideways scrollbar** (ice `38aa1ca` #325, UI half):
   `utils/stickyHScroll.js`; first user the orders list, now inside an
   `.admin-table-wrap`. The Excel export half of #325 is lane 2's (chunk D).

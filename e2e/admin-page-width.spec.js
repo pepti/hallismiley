@@ -81,8 +81,8 @@ test.describe('Admin page width', () => {
     await expect(shell).toHaveClass(/admin-shell--full/);
     await expect(icon).toHaveClass(/is-custom/);
     expect(await savedWidths()).toEqual({ '/admin/users': 'full' });
-    const box = await shell.boundingBox();
-    expect(box && box.width).toBeGreaterThan(1900);
+    // Mjúk hreyfing is on by default, so the shell slides there (0.28s).
+    await expect.poll(async () => (await shell.boundingBox())?.width ?? 0).toBeGreaterThan(1900);
 
     // Survives a reload (it rides on the session), and another page keeps its own.
     await page.reload();

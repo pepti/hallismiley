@@ -17,6 +17,7 @@ const FADE_MS = 150;
 
 let overlay = null;
 let isOpen = false;
+let shown = null;   // the message on screen
 const queue = [];
 
 function mount() {
@@ -50,6 +51,7 @@ function present(message) {
   const ok = t('toast.ok');
   overlay.querySelector('.error-dialog__ok').textContent = ok === 'toast.ok' ? 'OK' : ok;
   overlay.querySelector('#error-dialog-msg').textContent = message;
+  shown = message;
   // Commit the opacity:0 start state before adding .open so the fade-in runs
   // (see ToastLog.js for why this is a forced flush, not requestAnimationFrame).
   void overlay.offsetWidth;
@@ -61,7 +63,11 @@ function present(message) {
 export function showErrorDialog(message) {
   const msg = String(message == null ? '' : message);
   if (isOpen) {
-    if (queue[queue.length - 1] !== msg && queue.length < MAX_QUEUED) queue.push(msg);
+    // Engine fix (harvest-ice-b-2026-09-24): compare with the message ON
+    // SCREEN when nothing is queued yet — ice compared only with the queue's
+    // tail, so the first repeat of the shown error was queued, not collapsed.
+    const last = queue.length ? queue[queue.length - 1] : shown;
+    if (last !== msg && queue.length < MAX_QUEUED) queue.push(msg);
     return;
   }
   present(msg);
