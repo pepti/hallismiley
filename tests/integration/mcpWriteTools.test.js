@@ -132,24 +132,28 @@ describe('set_module', () => {
   });
 
   test('two switches in flight at once both land (serialised, re-read under a row lock)', async () => {
+    // Two modules THIS product contracts (a downstream may leave party or
+    // news out of its contract; the engine's picks would be refused there).
+    const [m1, m2] = modules.moduleSummary().contract;
     const [a, b] = await Promise.all([
-      call('set_module', { module: 'news', enabled: false }),
-      request(app).patch('/api/v1/admin/modules/party').set('Cookie', adminCookie).send({ enabled: false }),
+      call('set_module', { module: m1, enabled: false }),
+      request(app).patch(`/api/v1/admin/modules/${m2}`).set('Cookie', adminCookie).send({ enabled: false }),
     ]);
     expect(a.body.result.isError).toBeUndefined();
     expect(b.status).toBe(200);
     const { rows } = await db.query('SELECT value FROM app_settings WHERE key = $1', [modules.ADMIN_OFF_KEY]);
-    expect(rows[0].value).toEqual(['news', 'party']);
-    expect(modules.moduleSummary().switched_off).toEqual(['news', 'party']);
+    expect(rows[0].value).toEqual([m1, m2].sort());
+    expect(modules.moduleSummary().switched_off).toEqual([m1, m2]); // catalogue order
   });
 
   test('a switch never erases what another process stored (it re-reads the row)', async () => {
-    await db.query(`INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb)`, [modules.ADMIN_OFF_KEY, JSON.stringify(['bio'])]);
+    const [m1, m2] = modules.moduleSummary().contract;
+    await db.query(`INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb)`, [modules.ADMIN_OFF_KEY, JSON.stringify([m2])]);
     // This process never loaded it (as if its boot load had failed).
-    const res = payload(await call('set_module', { module: 'news', enabled: false }));
-    expect(res.modules.switched_off).toEqual(['news', 'bio']); // catalogue order
+    const res = payload(await call('set_module', { module: m1, enabled: false }));
+    expect(res.modules.switched_off).toEqual([m1, m2]); // catalogue order
     const { rows } = await db.query('SELECT value FROM app_settings WHERE key = $1', [modules.ADMIN_OFF_KEY]);
-    expect(rows[0].value).toEqual(['bio', 'news']);
+    expect(rows[0].value).toEqual([m1, m2].sort());
   });
 
   test('an unknown module is refused by the schema', async () => {
