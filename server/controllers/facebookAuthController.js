@@ -16,6 +16,8 @@
 //
 // Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 
+const logger = require('../logger');
+const { trackedFetch } = require('../observability/trackedFetch');
 const { query: dbQuery }           = require('../config/database');
 const { userIsAdminAnywhere } = require('../utils/adminRole');
 const { lucia }                    = require('../auth/lucia');
@@ -104,13 +106,13 @@ async function callback(req, res, next) {
         ? tokens.accessToken()
         : tokens.accessToken;
 
-      const userinfoRes = await fetch(USERINFO_URL, {
+      const userinfoRes = await trackedFetch('Facebook userinfo', USERINFO_URL, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!userinfoRes.ok) throw new Error(`userinfo ${userinfoRes.status}`);
       profile = await userinfoRes.json();
     } catch (err) {
-      console.error('[facebook-oauth] token exchange failed:', err.message);
+      logger.error({ err }, '[facebook-oauth] token exchange failed');
       return redirectWithError(res, 'oauth_failed', req.locale);
     }
 

@@ -803,10 +803,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Controllers | `server/controllers/eventLogController.js`, `analyticsController.js` |
 | Models | `server/models/EventLog.js`, `Analytics.js` |
 | Services | `server/services/eventLogCleanup.js`, `analyticsSalt.js`, `uploadVolumeAlert.js`; `server/utils/maintenanceWindow.js` |
+| Observability | `server/observability/appInsights.js` (SDK start, dark without a connection string), `aiClient.js`, `aiLogStream.js` (pino warn+ → traces/exceptions), `trackedFetch.js` (outbound fetch → dependencies); `server/middleware/eventLogOn5xx.js` (every 5xx → `event_logs`) |
 | Views | `public/js/views/AdminMonitoringView.js`, `AdminAnalyticsView.js` |
 | Client | `public/js/services/adminEvents.js`, `errorReporter.js`, `usage.js`; `public/js/analytics.js`, `public/js/consent.js`; `public/js/api/rateLimitDecide.js`, `rateLimitGuard.js` |
 | CSS | `public/css/admin-monitoring.css`, `analytics-admin.css` |
-| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js` |
+| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js`, `aiLogStream.test.js`, `trackedFetch.test.js` |
 | e2e | `e2e/admin-monitoring.spec.js` |
 | Migrations | 046 (analytics), 087 (event logs) |
 | Features | [analytics](../features/analytics.md), [monitoring](../features/monitoring.md) |
@@ -830,8 +831,27 @@ company/                  gitignored: plans, decisions, logs, market-research st
   Admin → Monitoring gets the full report from `GET /api/v1/admin/events/health`
   (admin only, `no-store`) ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - The staff audit log is read on `/admin/monitoring` (domain 8 owns the writes).
+- **Every 5xx is an `event_logs` row** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)): `eventLogOn5xx` is the
+  FIRST middleware in `app.js` and records on `finish`/`close` whatever did not
+  go through `errorHandler` (which sets `res.locals.eventLogRecorded` so a
+  failure is stored once). 503 = `warn` (the server said "not available"),
+  500/502/504 = `error`; a route may set `res.locals.errorMessage` /
+  `errorContext`. Nothing is written while the DB circuit breaker is open.
+  `EventLog.record` tracks its in-flight writes: `EventLog.flush()` runs
+  before `pool.end()` on shutdown and before the test helpers TRUNCATE.
+- **Telemetry ships dark** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)): nothing loads `applicationinsights`
+  unless `APPLICATIONINSIGHTS_CONNECTION_STRING` is set; `appInsights.start()`
+  runs FIRST in `server.js` (before pg/http/express). pino forwards warn+
+  lines in-process (a multistream, never a worker transport, so the request
+  correlation survives); pino-http logs 5xx completions at `error`.
+- **No `console.*` and no bare `fetch` under `server/`** (ESLint, [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)):
+  outbound calls go through `trackedFetch(name, url, init, { data })` /
+  `fetchNamed(name)` — the recorded URL drops the query string, and a caller
+  whose PATH carries a secret (a webhook) passes `data` = origin only.
+  `server/scripts/` is exempt except `migrate.js`, which runs at every boot;
+  its `--plan` report is written to stdout directly.
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)
 
 ## 14. Self-update
 
@@ -845,7 +865,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Components | `public/js/components/ChangesList.js` (shared with Monitoring) |
 | Scripts | `server/scripts/generate-changes.js`; `scripts/build-manifest.js`, `check-manifest.js`, `generate-version.js` |
 | CSS | `public/css/admin-updates.css` |
-| Jest | `tests/integration/systemUpdatesApi.test.js`, `systemUpdatesRoutes.test.js`, `systemChanges.test.js`, `systemChangesGate.test.js`, `systemVersion.test.js`, `updateApplier.test.js`, `updateChecker.test.js`, `selfUpdateSettings.test.js`, `selfUpdateDisabled.test.js`; `tests/unit/changelogRender.test.js`, `generateChanges.test.js`, `semver.test.js` |
+| Jest | `tests/integration/systemUpdatesApi.test.js`, `systemUpdatesRoutes.test.js`, `systemChanges.test.js`, `systemChangesGate.test.js`, `systemVersion.test.js`, `updateApplier.test.js`, `updateChecker.test.js`, `selfUpdateSettings.test.js`, `selfUpdateDisabled.test.js`, `buildHeader.test.js`; `tests/unit/changelogRender.test.js`, `generateChanges.test.js`, `semver.test.js` |
 | e2e | `e2e/admin-updates.spec.js` |
 | Migrations | 081 |
 | Features | [self-update](../features/self-update.md) |
@@ -867,8 +887,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
   instances with self-update OFF still get the card; `[internal]` /
   `Customer-visible: no` opt a commit out [harvest-2](HISTORY.md#harvest-2).
 - `CHANGELOG.md` must keep a `## [0.1.0]` section — `build-manifest.js` parses it.
+- **Every response names its release** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)): `X-App-Build` =
+  `publicBuildTag(gitSha)` = the first 12 hex of sha256(sha) (`version.js`
+  `buildTag`; `dev`/`unknown` pass through), set with the request id. The
+  commit itself stays admin-only. `deploy.yml` requires the tag of the sha it
+  shipped on `/ready` (uptime rule only for an image too old to send it), and
+  a `stable` promote requires it on every `vars.CANARY_URLS` origin.
+  `buildHeader.test.js` pins the formula to both workflows — change one, change all.
 
-**History**: [self-update](HISTORY.md#self-update) · [harvest-2](HISTORY.md#harvest-2)
+**History**: [self-update](HISTORY.md#self-update) · [harvest-2](HISTORY.md#harvest-2) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)
 
 ## 15. MCP connector
 
@@ -1048,8 +1075,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
-| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`; `tests/integration/migrateRunner.test.js` |
-| CI / deploy | `.github/workflows/ci.yml`, `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `Dockerfile` |
+| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`; `tests/integration/migrateRunner.test.js` |
+| CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
 | Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
@@ -1129,6 +1156,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - CI: weekly cron + Jest transform cache; dependabot `rebase-strategy:
   disabled` + docker ecosystem; ice's `main-gate` job was deliberately NOT
   ported (this repo merges locally; deploy is dispatch-only) [harvest-2](HISTORY.md#harvest-2).
+- **The check "Lint + Integration tests" is an aggregator** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)):
+  `lint` + three `test-shard` jobs (`--shard=N/3`, coverage threshold off
+  per shard) feed a job of that name that runs `if: always()`, is red unless
+  every upstream result is `success`, and enforces `jest.config.js`'s global
+  floor on the merged map (`scripts/merge-coverage.js`, fails closed on a
+  missing shard). Never give a shard that name. Push runs everything; a
+  docs-only PR skips ci.yml and `ci-skipped.yml` answers the three names —
+  and runs the unit tier, because the engine's docs are tested content.
+  The docs list must equal ci.yml's `pull_request.paths-ignore` and the
+  detector's `case` (`ciSkippedShim.test.js`).
+- **A new `ADD CONSTRAINT` is re-runnable** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)): inside a
+  `pg_constraint`/`information_schema` existence check, or after a `DROP
+  CONSTRAINT IF EXISTS` of the same name — `migrationIdempotent.test.js` reads
+  both arrays; the two bare applied ones (070, 074) are grandfathered and the
+  list may only shrink. `[migrate] Applied` logs `ms` per migration.
 - `deploy.yml` is dispatch-only; its targets are `production`-environment vars
   and it pins the web app to an image DIGEST, never a tag, after Trivy on that
   digest and before a `/ready` check that only believes a process younger than
@@ -1171,7 +1213,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   green CI on `main`, unlike here, and has zero e2e coverage of checkout, so a
   base PR touching it is verified by hand first [ui-kit](HISTORY.md#ui-kit).
 
-**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)
+**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)
 
 ## 21. Seller area — the published copy on the public instance
 

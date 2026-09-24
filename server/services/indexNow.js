@@ -23,6 +23,7 @@
  */
 
 const logger = require('../logger');
+const { trackedFetch } = require('../observability/trackedFetch');
 
 const APP_URL          = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/IndexNow';
@@ -40,7 +41,7 @@ async function postBatch(host, key, batch) {
     keyLocation: `${APP_URL}/${key}.txt`,
     urlList: batch,
   });
-  const res = await fetch(INDEXNOW_ENDPOINT, {
+  const res = await trackedFetch('IndexNow ping', INDEXNOW_ENDPOINT, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
     body,

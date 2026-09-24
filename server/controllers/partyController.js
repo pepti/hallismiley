@@ -821,7 +821,7 @@ const partyController = {
       // Fire-and-forget: admin notification + guest confirmation. Never fail
       // the request on email failure.
       _sendRsvpEmails({ userId: req.user.id, answers, isUpdate })
-        .catch(err => console.error(`[partyController] RSVP emails failed: ${err.message}`));
+        .catch(err => logger.error({ err }, '[partyController] RSVP emails failed'));
 
       // Count only NEW RSVPs as conversions, not edits to an existing one.
       if (!isUpdate) {
@@ -1160,7 +1160,7 @@ const partyController = {
         subject: subject?.trim() || null,
         body:    body?.trim()    || null,
         partyInfo,
-      }).catch(err => console.error(`[partyController] Party announcement failed: ${err.message}`));
+      }).catch(err => logger.error({ err }, '[partyController] Party announcement failed'));
     } catch (err) { next(err); }
   },
 

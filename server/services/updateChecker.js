@@ -19,6 +19,7 @@
 // runs stay quiet.
 
 const { buildInfo, isDevBuild } = require('../config/version');
+const { fetchNamed } = require('../observability/trackedFetch');
 const { getSelfUpdateSettings, manifestUrlFor, isAuto, isEnabled } = require('./selfUpdateSettings');
 const { assertAllowedUrl, OutboundBlockedError } = require('./outboundAllowlist');
 const { isNewer, gte, isValid } = require('../utils/semver');
@@ -86,7 +87,7 @@ function validateManifest(raw) {
 }
 
 /** Fetch + parse the manifest. Throws on anything that isn't a usable body. */
-async function fetchManifest(url, fetchImpl = globalThis.fetch) {
+async function fetchManifest(url, fetchImpl = fetchNamed('Release manifest')) {
   const res = await fetchImpl(url, {
     method: 'GET',
     // A redirect is a way off the allowlist — the host we vetted is not
@@ -125,7 +126,7 @@ async function fetchManifest(url, fetchImpl = globalThis.fetch) {
 async function checkOnce({
   settings = null,
   build = buildInfo,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = fetchNamed('Release manifest'),
   now = new Date(),
   log = baseLogger,
 } = {}) {

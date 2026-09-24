@@ -13,8 +13,9 @@
 // consider upgradeable — a dev box must never decide it is out of date against
 // a production release channel.
 
-const fs   = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
 const VERSION_FILE = path.join(__dirname, '..', 'version.json');
 // Recent changes, written by server/scripts/generate-changes.js on the build
@@ -84,4 +85,24 @@ function shortSha(sha = buildInfo.gitSha) {
   return String(sha || '').slice(0, 12);
 }
 
-module.exports = { buildInfo, isDevBuild, shortSha, readBuildInfo, VERSION_FILE, DEV_BUILD, changes, readChanges, CHANGES_FILE };
+// A public name for this release, safe to hand to every visitor (icelandicstore
+// #332/#358, harvest-ice-f-2026-09-24).
+//
+// Every response carries it as `X-App-Build` (server/app.js). Two readers:
+// the deploy workflows, which prove WHICH image answers /ready by computing the
+// same tag from the sha they shipped (`printf '%s' "$SHA" | sha256sum | cut -c1-12`
+// — tests/integration/buildHeader.test.js pins the two together), and the
+// SPA's stale-release guard. The COMMIT is a different matter: the repo is
+// private and GET /api/v1/system/version answers the sha to admins only, so a
+// truncated digest — changes every release, names no commit — goes public
+// instead. 'dev' and 'unknown' pass through as themselves: they are the two
+// values that mean "no release".
+function publicBuildTag(sha) {
+  if (!sha || sha === 'dev' || sha === 'unknown') return sha || 'dev';
+  return crypto.createHash('sha256').update(String(sha)).digest('hex').slice(0, 12);
+}
+
+/** The public tag of the running build — X-App-Build / <meta name="app-build">. */
+const buildTag = publicBuildTag(buildInfo.gitSha);
+
+module.exports = { buildInfo, buildTag, publicBuildTag, isDevBuild, shortSha, readBuildInfo, VERSION_FILE, DEV_BUILD, changes, readChanges, CHANGES_FILE };

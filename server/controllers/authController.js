@@ -1,6 +1,7 @@
 // Session-based auth using Lucia v3.
 // Passwords hashed with oslo Scrypt (pure-Node, no native bindings needed).
 // Account lockout: 5 failures → 15-min lock.
+const logger = require('../logger');
 const { query: dbQuery } = require('../config/database');
 const { lucia }           = require('../auth/lucia');
 const { makeToken, hashToken } = require('../auth/tokens');
@@ -568,7 +569,7 @@ const authController = {
       try {
         await sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale);
       } catch (emailErr) {
-        console.error('[signup] Verification email failed:', emailErr.message);
+        logger.error({ err: emailErr }, '[signup] Verification email failed');
       }
 
       // Log the new user in immediately — no extra round-trip through /login.
@@ -658,7 +659,7 @@ const authController = {
         try {
           await sendPasswordResetEmail(email.toLowerCase(), resetToken, rows[0].preferred_locale || req.locale);
         } catch (emailErr) {
-          console.error('[forgot-password] Email failed:', emailErr.message);
+          logger.error({ err: emailErr }, '[forgot-password] Email failed');
         }
       }
 
@@ -812,7 +813,7 @@ const authController = {
       try {
         await sendVerificationEmail(email.toLowerCase(), newToken, req.locale);
       } catch (emailErr) {
-        console.error('[resend-verification] Email failed:', emailErr.message);
+        logger.error({ err: emailErr }, '[resend-verification] Email failed');
       }
 
       return res.json({ message: t(req.locale, 'errors.auth.resendVerificationSent') });

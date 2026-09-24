@@ -1,5 +1,6 @@
 'use strict';
 
+const { trackedFetch } = require('./trackedFetch');
 const securityLogger = require('./securityLogger');
 const { readMemory } = require('./memoryUsage');
 
@@ -49,12 +50,14 @@ async function alert(severity, title, details = {}) {
   });
 
   try {
-    await fetch(webhookUrl, {
+    // The webhook token lives in the URL PATH (Slack/Discord/PagerDuty), so the
+    // dependency row must record the origin only — never the path.
+    await trackedFetch('Alert webhook', webhookUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
       signal: AbortSignal.timeout(5000),
-    });
+    }, { data: new URL(webhookUrl).origin + '/***' });
   } catch {
     // Never let a webhook failure crash the app.
     // Mask the URL before logging — Slack/Discord webhook URLs contain embedded

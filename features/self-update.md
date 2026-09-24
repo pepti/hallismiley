@@ -37,11 +37,12 @@ paths:
   - tests/unit/maintenanceWindow.test.js
   - tests/unit/version.test.js
   - tests/unit/buildManifest.test.js
+  - tests/integration/buildHeader.test.js
   - e2e/admin-updates.spec.js
 migrations: [081_system_updates]
 since: 2026-08-10
 origin: null
-history: [self-update, harvest-2]
+history: [self-update, harvest-2, harvest-ice-f-2026-09-24]
 ---
 
 The fleet update mechanism: a release manifest per channel, the checker, the applier (managed / manual / auto within a maintenance window), rollback, the build identity (`version.js`, `build-manifest.js`) and the `/admin/updates` screen with the latest-changes card. Gated by `modules.selfUpdate.enabled` in `config/client.json`; `GET /system/changes` sits above the gate.

@@ -1,5 +1,6 @@
 const crypto    = require('crypto');
 const db        = require('../server/config/database');
+const EventLog  = require('../server/models/EventLog');
 const { lucia } = require('../server/auth/lucia');
 const UserRole  = require('../server/models/UserRole');
 const ledgerService = require('../server/services/bookkeeping/ledgerService');
@@ -181,6 +182,11 @@ async function getTestSessionCookie(userId) {
 
 /** Truncate all mutable tables and reset sequences between tests. */
 async function cleanTables() {
+  // event_logs is truncated via CASCADE (it references users); a fire-and-forget
+  // EventLog.record() from the previous test (errorHandler, eventLogOn5xx) can
+  // still be inserting, and TRUNCATE + that INSERT deadlock. Let the writes land
+  // first (icelandicstore #254).
+  await EventLog.flush();
   await db.query(
     'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_logistics_categories, party_plan_tasks, party_plan_phases, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
   );

@@ -57,6 +57,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
+| 2026-09-24 | [Harvest from icelandicstore, chunk F — telemetry, every 5xx logged, the deploy gate checks the build, Jest in three shards](#harvest-ice-f-2026-09-24) | ice #254/#255/#358/#394/#356/#347/#323 read, not merged: pino warn+ and outbound fetch to App Insights (dark without a connection string; `applicationinsights` 2.9.8 exact), `eventLogOn5xx`, `X-App-Build` checked by deploy.yml and a stable promote (`vars.CANARY_URLS`), Jest ×3 shards behind the one check name, docs-only PR shim that still runs the unit tier, re-runnable-constraint test; the last server `console.*` gone; no migration |
 
 ---
 
@@ -2406,3 +2407,98 @@ Full runs before these fixes: Jest 3593 passed, with one expected failure (R4's 
 **Copy.** `adminGeneral.modules*`, `adminGeneral.module.*` and
 `adminGeneral.preset.*` were written in Icelandic, mirrored in English, and are
 DRAFT. There is no migration.
+
+<a id="harvest-ice-f-2026-09-24"></a>
+## 2026-09-24 — Harvest from icelandicstore, chunk F: telemetry, every 5xx logged, the deploy gate checks the build, Jest in three shards
+
+Lane 3 of the icelandicstore → engine harvest (`company/ice-harvest-2026-09-24.md`
+§2, chunk F; Halli 2026-09-24). Source: the read-only clone `C:\ice-harvest`,
+ice `main` @ `4694289`. Ported by reading each commit, not by merge (no shared
+history); ice's file names are kept so the eventual graft meets identical files.
+
+**What came over**
+
+| ice | What | Engine files |
+|---|---|---|
+| `e9ff76d` #254 + `b3bb35d` #255 | pino warn+ → App Insights `traces`/`exceptions` (`aiClient.js`, `aiLogStream.js`, in-process multistream so request correlation survives); `trackedFetch.js` records every outbound fetch as a `dependencies` row (query string dropped; `data` override for a secret in the PATH; the intended name kept in `customDimensions.dependencyName`); `eventLogOn5xx.js` — every 5xx an `event_logs` row, 503 as `warn`, stored once, nothing while the breaker is open; `EventLog.record` tracks in-flight writes + `flush()` (shutdown, test TRUNCATE); pino-http logs 5xx at `error`; errorHandler through pino; ESLint `no-console` + no bare/`globalThis` fetch under `server/` | new `server/observability/{appInsights,aiClient,aiLogStream,trackedFetch}.js`, `server/middleware/eventLogOn5xx.js`; `server/{app,server}.js`, `observability/{logger,alerts}.js`, `middleware/errorHandler.js`, `models/EventLog.js`, `config/database.js`, `eslint.config.js`, `tests/helpers.js` |
+| (same, the code line of `2efe4f4`) | `appInsights.start()` FIRST in `server.js`, dark without `APPLICATIONINSIGHTS_CONNECTION_STRING`. The engine had no SDK at all before this | `package.json` `applicationinsights` **2.9.8, exact pin** |
+| `3ccee89` #358 + `eee1963` #394 | the deploy gate asks WHICH image answers `/ready`: `X-App-Build` = sha256(sha)[:12] on every response, compared with the tag of the sha shipped; uptime rule only for an image too old to send it; `|| true` on every pipeline so an empty `/ready` during a restart retries | `server/config/version.js` (`publicBuildTag`, `buildTag`), `app.js` (header), `.github/workflows/deploy.yml` (post-deploy check), `promote.yml` (stable gate), `tests/integration/buildHeader.test.js` |
+| `e1e9b2b` #356 | Jest in three shards behind the one check name: `lint` job, `test-shard` ×3 (threshold off, `coverage-final.json` uploaded), aggregator "Lint + Integration tests" (`always()`, red unless all upstream `success`, merged floor via `scripts/merge-coverage.js`, fails closed on a missing shard) | `.github/workflows/ci.yml`, new `scripts/merge-coverage.js`, `istanbul-lib-coverage` 3.2.2 as an explicit devDependency (was hoisted only) |
+| `bff5703` #347 | docs-only PR shim: `ci-skipped.yml` answers the three check names for a PR whose every file is `**.md`/`docs/**`/`LICENSE`; names only as matrix data behind a detector (the mixed-PR trap); drift test | new `.github/workflows/ci-skipped.yml`, `tests/unit/ciSkippedShim.test.js` |
+| `6a35ec4` #323 (the static half) | every new `ADD CONSTRAINT` must be re-runnable — behind a `pg_constraint`/`information_schema` check or after `DROP CONSTRAINT IF EXISTS` | new `tests/unit/migrationIdempotent.test.js` |
+| `2b7db9f` (one line) | `ms` on `[migrate] Applied` | `server/scripts/migrate.js` |
+
+**Where the engine differs from ice, on purpose**
+
+- **The deploy gate lives in `deploy.yml` AND `promote.yml`.** ice's gate
+  guards a slot swap in `promote-prod.yml`. The engine's `promote.yml` never
+  touches an App Service — it retags a digest and publishes a channel manifest —
+  and `deploy.yml` (armed 2026-09-22) is the one that restarts a web app and
+  polls `/ready`. So `deploy.yml`'s post-deploy check now requires the shipped
+  tag, and `promote.yml` gains the engine's own analogue: before a **stable**
+  publish, every origin in `vars.CANARY_URLS` must answer `/ready` as this
+  build — the soak is proven instead of promised. Unset = a warning and the
+  old behaviour. **Both workflows are PRODUCT-owned** (`.engine-paths`): an
+  engine sync never overwrites a downstream's copy, so rekstrarkerfid,
+  LedgerLink and hallismiley keep their own gates until each copies the step
+  (their `deploy.yml`s already carry the uptime rule this refines).
+- **Docs are tested here.** ice's shim waves a docs-only PR through untested.
+  The engine's docs are what `architectureIndex.test.js` and
+  `featureRegistry.test.js` read, and `CHANGELOG.md` feeds the release
+  manifest, so the shim's "Lint + Integration tests" entry runs the unit tier
+  and the manifest build, and ci.yml's **push** trigger keeps no paths filter
+  (the engine takes direct merges to master; ice's `main-gate` was never
+  ported). Only `pull_request` has `paths-ignore`, and the drift test pins that.
+- **No `main-gate`, no `sanity` job, no history fragments.** ice's `main-gate`
+  and its deploy-side `sanity` job exist because ice deploys TEST on green
+  main; the engine deploys by dispatch. The per-PR `docs/history.d/` fragments
+  (`459dba6`) change the "Recording a chunk" rule in CLAUDE.md and wait for
+  Halli (harvest plan Q6).
+- **The constraint test is static only, with a grandfather list.** ice's live
+  re-runs are of its own migrations 111/112/115. Here the rule reads both
+  arrays (`migrationSet.js`) and grandfathers the two bare applied constraints
+  it found, `070 party_photos_media_type_check` and `074
+  products_vat_rate_check` — never edited (invariant 4), and harmless while the
+  runner applies each migration in one transaction; the list may only shrink.
+- **Outbound calls, engine edition.** The engine sends mail through the
+  Resend SDK, not Graph, so there is no mail `trackedFetch` (the SDK's own
+  fetch is not wrapped — a later item if the dependency view needs it).
+  Wrapped: Google/Facebook userinfo, the alert webhook (origin only), the
+  Anthropic translator (`fetchNamed`), vedur.is ambience, IndexNow, and the
+  update checker/applier's default `fetchImpl` (the tests' injected fetch is
+  unchanged).
+- **Cloud role** = `APPLICATIONINSIGHTS_ROLE_NAME`, else the App Service site
+  name, else the package name — ice hard-codes `icelandicstore[-test]`.
+
+**Invariant 6, finished.** The last `console.*` calls under `server/` outside
+the one-off scripts are gone: `emailService.js` (13 — the file's header had
+said converting them "is proposed separately"), `shopController.js` (Stripe
+webhook, 9), `authController.js` (3), `partyController.js` (2), the OAuth
+controllers, `tokenCleanup.js`, `database.js`, `errorHandler.js`, `server.js`
+(missing env → `logger.fatal` + flush) and `migrate.js` (boot lines through
+pino; the `--plan` report goes straight to stdout because it is for the human
+at the terminal and pino is off under `NODE_ENV=test`). ESLint now fails the
+next one. `appInsights.js` keeps one `console.error` with an inline disable: it
+runs before pino is loaded.
+
+**Also.** The engine had no `.toast-log` rules at all — the 09-02 harvest
+brought `ToastLog.js` and the Monitoring list but not ice's `components.css`
+block, so both rendered unstyled. Ported, tokens only; the engine has no
+`--info`, so info rows take `--gold`; warn rows (`eventLogOn5xx`'s 503s) take
+`--warning`.
+
+**Tests.** New: `aiLogStream.test.js` (7), `trackedFetch.test.js` (9),
+`ciSkippedShim.test.js` (6), `migrationIdempotent.test.js` (3),
+`buildHeader.test.js` (10), `eventLog.test.js` +4 (a direct 503 stored as
+`warn` with the request id and the user; an errorHandler 5xx stored once;
+4xx not stored; `flush()` awaits a write).
+
+**Dependency.** `applicationinsights@2.9.8` (what ice runs). `npm audit
+--audit-level=high` is clean; four **moderate** advisories come with it
+(`@opentelemetry/core` < 2.8 W3C-baggage memory, via the SDK's bundled
+OpenTelemetry); the only fix npm offers is the 3.x major, a different SDK
+(OpenTelemetry-based) — the same position ice is in. A 3.x move is its own item.
+
+**No migration.** Downstream consequence: a sync carries everything except the
+two product-owned workflows (see above); rekstrarkerfid's `1b7aeff` is chunk
+E's business, not this one's.

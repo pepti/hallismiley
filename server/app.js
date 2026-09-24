@@ -37,6 +37,8 @@ const { router: manifestRoutes } = require('./routes/manifestRoutes');
 const { router: robotsRoutes } = require('./routes/robotsRoutes');
 const shopController = require('./controllers/shopController');
 const errorHandler   = require('./middleware/errorHandler');
+const eventLogOn5xx  = require('./middleware/eventLogOn5xx');
+const { buildTag }   = require('./config/version');
 const { sanitizeBody } = require('./middleware/sanitize');
 const { normalizeForwardedFor } = require('./middleware/forwardedFor');
 const localeMiddleware = require('./middleware/locale');
@@ -48,6 +50,14 @@ const { runReadinessChecks, readinessBody } = require('./observability/readiness
 const { safeEqual } = require('./utils/safeEqual');
 
 const app = express();
+
+// ── Every 5xx → event_logs (Admin → Monitoring), whether or not it went through
+// errorHandler (icelandicstore #254). Mounted FIRST so routers that answer
+// directly — the circuit breaker's 503s, the checkout-unavailable 503s, the MCP
+// endpoint above the general middleware — are covered too. Observes the
+// response only; reads req.requestId / req.user at finish time, so later
+// middleware still enriches the row. See middleware/eventLogOn5xx.js.
+app.use(eventLogOn5xx);
 
 // Trust the first proxy (Azure App Service's reverse proxy) so req.ip and rate limiting work correctly
 if (process.env.NODE_ENV === 'production') {
@@ -68,6 +78,13 @@ if (process.env.NODE_ENV !== 'test') {
     logger,
     genReqId(req) {
       return req.requestId || crypto.randomBytes(8).toString('hex');
+    },
+    // pino-http's default logs EVERY completion at info regardless of status
+    // (it only switches the message). 5xx completions must be `error` so the
+    // warn+ App Insights forwarder (observability/aiLogStream.js) sees them —
+    // that is the only per-request record a direct `res.status(5xx)` leaves.
+    customLogLevel(req, res, err) {
+      return (err || res.statusCode >= 500) ? 'error' : 'info';
     },
     // scrubUrl, not req.url: these message strings bypass the `req` serializer
     // where the redaction otherwise lives, so a search term or a token in the
@@ -379,6 +396,12 @@ app.use((req, res, next) => {
 
   res.setHeader('X-Request-ID', reqId);
   res.setHeader('X-Trace-ID', traceId);
+  // Which release answered (icelandicstore #332/#358). The deploy workflows
+  // compare it with the tag of the sha they shipped, so a 200 on /ready from
+  // the OLD container no longer passes the gate. Set here, ahead of /health and
+  // every route, so all responses carry it. The public tag, not the commit:
+  // /api/v1/system/version answers the sha to admins only.
+  res.setHeader('X-App-Build', buildTag);
   next();
 });
 

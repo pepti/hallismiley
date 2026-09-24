@@ -532,3 +532,51 @@
   .pd-video-grid    { grid-template-columns: 1fr; }
   .pd-photo-grid    { grid-template-columns: 1fr; }
 }
+
+/* ── Toast log (click-through history + Admin → Monitoring) ──
+   Ported from icelandicstore components.css in harvest-ice-f-2026-09-24: the
+   09-02 harvest brought ToastLog.js and the monitoring list but not these
+   rules, so both rendered unstyled. Tokens only (invariant 15); the engine has
+   no --info token, so info rows take the brown ramp (--gold). --warn is the
+   event_logs level eventLogOn5xx gives a 503 the server answered itself. */
+.toast-log-modal__body { max-height: 60vh; overflow-y: auto; }
+.toast-log { display: flex; flex-direction: column; gap: var(--sp-2); list-style: none; margin: 0; padding: 0; }
+.toast-log__item {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+}
+.toast-log__item--success { border-left-color: var(--success); }
+.toast-log__item--error   { border-left-color: var(--error); }
+.toast-log__item--warn    { border-left-color: var(--warning); }
+.toast-log__item--info    { border-left-color: var(--gold); }
+.toast-log__time {
+  font-family: var(--font-mono); font-size: 0.75rem;
+  color: var(--text-muted); white-space: nowrap;
+}
+.toast-log__user {
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--text-secondary); white-space: nowrap;
+  max-width: 12ch; overflow: hidden; text-overflow: ellipsis;
+}
+.toast-log__user.is-anon { color: var(--text-muted); font-style: italic; }
+.toast-log__badge {
+  font-size: 0.62rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-muted); white-space: nowrap;
+}
+.toast-log__item--success .toast-log__badge { color: var(--success); }
+.toast-log__item--error   .toast-log__badge { color: var(--error); }
+.toast-log__item--warn    .toast-log__badge { color: var(--warning); }
+.toast-log__msg { color: var(--text-primary); overflow-wrap: anywhere; }
+.toast-log__empty {
+  padding: var(--sp-5) 0; text-align: center;
+  color: var(--text-muted); font-size: 0.9rem;
+}

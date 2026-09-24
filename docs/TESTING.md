@@ -209,15 +209,20 @@ This is engine work, and since D-021 (2026-09-22) this repo IS the engine, so
 it is home: ice #225/#233 built it first and it reaches every downstream by
 engine-sync merge (`docs/ENGINE-SYNC.md`). The BASE-SYNC queue entry is history.
 
-## What CI actually runs (`.github/workflows/ci.yml`, read 2026-09-11)
+## What CI actually runs (`.github/workflows/ci.yml`, re-read 2026-09-24)
 
-Triggers: push and pull request to **`master`** (the long-lived branch — the
-file said `main` until 2026-09-02 and CI had never run), plus a weekly cron
-(`17 5 * * 1`) so a new npm advisory or base-image CVE is noticed between
-merges. There is **no `paths` / `paths-ignore` filter**: a markdown-only
-commit or pull request runs the whole workflow.
+Triggers: push and pull request to **`master`** or `main` (the engine and two
+products use `master`, hallismiley and icelandicstore `main`), plus a weekly
+cron (`17 5 * * 1`) so a new npm advisory or base-image CVE is noticed between
+merges. **Push has no paths filter** — the engine's docs are tested content
+and master takes direct merges, so every push runs everything. **A pull request
+that is documentation only** (`**.md`, `docs/**`, `LICENSE`) skips ci.yml; the
+shim `.github/workflows/ci-skipped.yml` then reports the three check names and
+runs the unit tier (which holds the docs parity tests) plus the manifest build
+under "Lint + Integration tests" ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)).
+`tests/unit/ciSkippedShim.test.js` fails when the docs list or the check names drift.
 
-Three independent jobs on `ubuntu-latest`, each with its own
+Jobs on `ubuntu-latest`, each Jest/e2e/smoke job with its own
 `postgres:16-alpine` service container (databases `orangesmiley_test`,
 `orangesmiley_e2e`, `orangesmiley_smoke`) and Node **24** (`node-version: 24`
 — the same major as the digest-pinned `Dockerfile` base image; the two move
@@ -225,13 +230,24 @@ together):
 
 | Job | Steps |
 |---|---|
-| `test` — Lint + Integration tests | `npm ci` · `npm audit --audit-level=high` · `npm run lint` · `npm run check:i18n` · runner spec · release-manifest schema · Jest transform cache · `npm run test:ci` (coverage) |
+| `lint` — Lint · audit · i18n | `npm ci` · `npm audit --audit-level=high` · `npm run lint` · `npm run check:i18n` · release-manifest schema |
+| `test-shard` ×3 — Integration shard N/3 | runner spec · Jest transform cache (per shard) · `npm run test:ci -- --shard=N/3 --coverageThreshold='{}' --coverageReporters=json` · upload `coverage-final.json` |
+| `test` — **Lint + Integration tests** (the check name) | `if: always()`; red unless `lint` AND every shard succeeded (cancelled/skipped count as red) · downloads the three coverage maps · `scripts/merge-coverage.js` enforces `jest.config.js`'s global floor on the MERGED map, failing closed on a missing shard |
 | `e2e` — E2E tests (Playwright) | Chromium install (cached) · `npm run test:e2e` against two booted servers (ports 3000 and 3001 — the second runs 2FA enrolment `required`), workers = the runner's CPUs (2), list + html reporters |
 | `docker` — Docker build + boot smoke test | image build · Trivy (`HIGH,CRITICAL`, `ignore-unfixed`) · boot with `UPLOAD_ROOT` and `DB_SSL=false` declared · readiness probe |
 
-The jobs are deliberately not gated on each other. The `test` job has a
-45-minute ceiling because a contended 2-vCPU runner showed a 3.7× run-to-run
-spread on an identical tree.
+**Why three shards** (icelandicstore #356): the Jest step was most of a
+15-minute job, CPU-saturated on the 2-vCPU runner with a broad tail rather than
+a few slow suites; runner queue time is seconds, so more machines per run is the
+lever. A shard alone can never meet the coverage floor, so shards run with the
+threshold off and the aggregator enforces it — change the floor in
+`jest.config.js` only (the merge script reads it, and refuses a threshold shape
+it cannot enforce). Keep `SHARDS`, the matrix and the `/3` in both names in step.
+Locally nothing changed: `npm test` is still one run.
+
+The jobs are otherwise not gated on each other. A shard has a 45-minute ceiling
+because a contended 2-vCPU runner showed a 3.7× run-to-run spread on an
+identical tree.
 
 ## Measuring the suite
 
