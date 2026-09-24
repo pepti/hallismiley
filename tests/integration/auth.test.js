@@ -1,3 +1,9 @@
+// The engine's signup code is exercised in every product, whether or not its
+// instance runs the `signup` module (R2b): this suite switches it on for
+// itself, and hands the environment back afterwards.
+process.env.CLIENT_CONFIG_MODULES_SIGNUP_ENABLED = 'true';
+afterAll(() => { delete process.env.CLIENT_CONFIG_MODULES_SIGNUP_ENABLED; });
+
 const request = require('supertest');
 const app     = require('../../server/app');
 // API strings are asserted in the visitor-default locale (tests/lib/locale.js):

@@ -40,6 +40,25 @@ async function seedAdminUser({ username, email, password }) {
   }
 }
 
+/** A plain `user` account, written straight to the e2e database — for a
+ *  product whose public signup is switched off (the `signup` module, R2b),
+ *  where the signup form does not exist. */
+async function seedUser({ username, email, password }) {
+  const { Scrypt } = require('oslo/password');
+  const hash = await new Scrypt().hash(password);
+  const pool = new Pool({ connectionString: e2eDatabaseUrl(), ssl: false });
+  try {
+    await pool.query(
+      `INSERT INTO users (email, username, password_hash, role, email_verified)
+       VALUES ($1, $2, $3, 'user', TRUE)
+       ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+      [email, username, hash]
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
 /** Sign in through POST /auth/login; the page's next load is authenticated. */
 async function signInViaApi(page, { username, password }) {
   const res = await page.request.post('/auth/login', { data: { username, password } });
@@ -48,4 +67,4 @@ async function signInViaApi(page, { username, password }) {
   }
 }
 
-module.exports = { seedAdminUser, signInViaApi };
+module.exports = { seedAdminUser, seedUser, signInViaApi };

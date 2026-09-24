@@ -12,13 +12,14 @@ Status: `live` · `hidden` (served, hidden from nav/sitemap/admin lines) ·
 `config/client.json` key path that gates the feature, when one exists.
 Downstream overrides go in `features/local.json`.
 
-## Engine features (52)
+## Engine features (53)
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
 | `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | `security.mfa.enrolment` | `082_admin_totp`, `107_totp_secret_enc`, `109_user_mfa_reminder` | [admin-2fa.md](admin-2fa.md) |
 | `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique` | [auth-sessions.md](auth-sessions.md) |
 | `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles` | [rbac-roles.md](rbac-roles.md) |
+| `signup` | Nýskráning / Public sign-up | 1 | engine | live | `modules.signup.enabled` | — | [signup.md](signup.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |
 | `users-admin` | Notendaumsjón / User administration | 1 | engine | live | — | `003_user_system`, `065_user_invited_at` | [users-admin.md](users-admin.md) |
 | `admin-shell` | Stjórnborðsrammi / Admin shell | 2 | engine | live | — | `053_admin_nav_config` | [admin-shell.md](admin-shell.md) |

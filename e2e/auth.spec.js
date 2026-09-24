@@ -3,11 +3,18 @@ const { test, expect } = require('@playwright/test');
 // this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
 const { gateSpec } = require('./lib/featureGate');
 gateSpec(test, __filename);
-const { TEST_ADMIN }   = require('./helpers');
+const { TEST_ADMIN, openSignIn } = require('./helpers');
+const { gate } = require('./lib/featureGate');
+const { identity } = require('./lib/identity');
+// A product may run with public signup off and the nav's "Innskrá" hidden
+// (the `signup` module, identity.surface.navSignIn — R2b).
+const SIGNUP_OFF = gate('signup').skip;
+const NAV_SIGN_IN = identity.surface.navSignIn !== false;
 
 test.describe('Auth flows', () => {
 
   test.describe('Sign Up page', () => {
+    test.skip(SIGNUP_OFF, 'public signup is switched off on this product (the signup module)');
     test('loads with avatar picker and form fields', async ({ page }) => {
       await page.goto('/#/signup');
       await expect(page.locator('#avatar-picker')).toBeVisible();
@@ -58,7 +65,7 @@ test.describe('Auth flows', () => {
   test.describe('Login', () => {
     test('valid credentials succeed — navbar shows username', async ({ page }) => {
       await page.goto('/');
-      await page.locator('[data-testid="nav-signin"]').click();
+      await openSignIn(page);
       await page.fill('#login-username', TEST_ADMIN.username);
       await page.fill('#login-password', TEST_ADMIN.password);
       await page.locator('[data-testid="login-submit"]').click();
@@ -69,7 +76,7 @@ test.describe('Auth flows', () => {
 
     test('wrong password shows error message', async ({ page }) => {
       await page.goto('/');
-      await page.locator('[data-testid="nav-signin"]').click();
+      await openSignIn(page);
       await page.fill('#login-username', TEST_ADMIN.username);
       await page.fill('#login-password', 'wrong-password');
       await page.locator('[data-testid="login-submit"]').click();
@@ -79,7 +86,7 @@ test.describe('Auth flows', () => {
 
     test('signing in with the admin email (any case) works', async ({ page }) => {
       await page.goto('/');
-      await page.locator('[data-testid="nav-signin"]').click();
+      await openSignIn(page);
       await page.fill('#login-username', TEST_ADMIN.email.toUpperCase());
       await page.fill('#login-password', TEST_ADMIN.password);
       await page.locator('[data-testid="login-submit"]').click();
@@ -89,7 +96,7 @@ test.describe('Auth flows', () => {
 
     test('login field has mobile-friendly keyboard hints', async ({ page }) => {
       await page.goto('/');
-      await page.locator('[data-testid="nav-signin"]').click();
+      await openSignIn(page);
       const input = page.locator('#login-username');
       await expect(input).toHaveAttribute('inputmode', 'email');
       await expect(input).toHaveAttribute('autocapitalize', 'none');
@@ -99,7 +106,7 @@ test.describe('Auth flows', () => {
 
     test('password reveal toggle flips input type and aria-pressed', async ({ page }) => {
       await page.goto('/');
-      await page.locator('[data-testid="nav-signin"]').click();
+      await openSignIn(page);
 
       const pw     = page.locator('#login-password');
       const toggle = page.locator('.login-modal-overlay .password-toggle__btn');
@@ -123,7 +130,7 @@ test.describe('Auth flows', () => {
     test('logout clears session and shows Sign In / Sign Up', async ({ page }) => {
       // Log in first
       await page.goto('/');
-      await page.locator('[data-testid="nav-signin"]').click();
+      await openSignIn(page);
       await page.fill('#login-username', TEST_ADMIN.username);
       await page.fill('#login-password', TEST_ADMIN.password);
       await page.locator('[data-testid="login-submit"]').click();
@@ -134,8 +141,9 @@ test.describe('Auth flows', () => {
       await page.locator('[data-testid="nav-signout"]').click();
 
       // Nav should revert to guest state
-      await expect(page.locator('[data-testid="nav-signin"]')).toBeVisible({ timeout: 8_000 });
-      await expect(page.locator('[data-testid="nav-signup"]')).toBeVisible();
+      await expect(page.locator('[data-testid="nav-user-btn"]')).toHaveCount(0, { timeout: 8_000 });
+      await expect(page.locator('[data-testid="nav-signin"]')).toHaveCount(NAV_SIGN_IN ? 1 : 0);
+      await expect(page.locator('[data-testid="nav-signup"]')).toHaveCount(SIGNUP_OFF ? 0 : 1);
     });
   });
 

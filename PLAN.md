@@ -291,6 +291,11 @@ chunk lands; add a HISTORY entry for the story.
   (`connect.*`, `mcp.oauth*`) is DRAFT; (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
+- Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
+  the engine half of rekstrarkerfid's R2b step 1. Open: rekstrarkerfid's next
+  engine sync, then its own PR (config: signup off + `navSignIn` false; the
+  DRÖG footer line "Ertu í viðskiptum? Skráðu þig inn á þínu kerfi"); the
+  deploy is Halli's go; `auth.errors.signupClosed` copy is DRAFT.
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

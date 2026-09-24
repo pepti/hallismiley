@@ -143,6 +143,11 @@ const SCHEMA = {
         default: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
         validate: validateRoutePaths,
       },
+      // Does the public nav offer "Innskrá"? Off for a shop window whose only
+      // sign-in is staff (rekstrarkerfi.is, D-020): they sign in at /login,
+      // which opens the same login modal. Independent of the `signup` module
+      // (the "Nýskrá" link follows that).
+      navSignIn: { type: 'boolean', default: true },
       // Admin screens hidden from the sidebar for accounts that hold every
       // view; routes and ids stay live and grantable. Every id must be a real
       // ADMIN_VIEW_IDS entry — tests/unit/admin-surface-parity.test.js checks

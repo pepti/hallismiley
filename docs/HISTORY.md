@@ -57,6 +57,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
+| 2026-09-24 | [Public signup as a module; the nav's "Innskrá" as a switch (R2b step 1, engine half)](#signup-switch-2026-09-24) | `signup` joins the R4 catalogue (Verslun/Rekstur): off = `/auth/signup` + availability checks 404 before auth, `/signup` a noindex 404, no "Nýskrá" in nav or modal, social login signs in existing accounts only; `identity.surface.navSignIn` hides "Innskrá" and `/login` now opens the modal; engine specs read both switches; the second e2e server runs the shop-window setting; no migration |
 
 ---
 
@@ -2405,4 +2406,110 @@ Full runs before these fixes: Jest 3593 passed, with one expected failure (R4's 
 
 **Copy.** `adminGeneral.modules*`, `adminGeneral.module.*` and
 `adminGeneral.preset.*` were written in Icelandic, mirrored in English, and are
+DRAFT. There is no migration.
+
+<a id="signup-switch-2026-09-24"></a>
+## 2026-09-24 — Public signup as a module; the nav's "Innskrá" as a switch (R2b step 1, engine half)
+
+R2b step 1 in rekstrarkerfid's PLAN reads: close public signup on
+rekstrarkerfi.is. Remove "Nýskrá" and "Innskrá" from the nav, refuse the signup
+route on the server, and keep staff sign-in reachable. Halli said "Continue"
+after this was proposed as the next step.
+
+A shop window with no public signup is not specific to rekstrarkerfi.is. Any
+product may want it, and D-021 says generic work is authored in the engine as
+CONFIG. So the engine got the two switches, and rekstrarkerfid will take them
+by sync and set them in its own `config/client.json`, together with its
+product footer line.
+
+**Public signup is a module** (the R4 catalogue):
+- `signup` owns `/signup`, `POST /auth/signup`, `/auth/check-username` and
+  `/auth/check-email`. Its tiers are Verslun and Rekstur, the tiers with
+  customer accounts.
+- Off, it behaves like every module: the APIs 404 before auth (mixed case
+  too), `/signup` is the not-found shell with noindex, and the hand-off tells
+  the SPA. The nav drops "Nýskrá" and the login modal drops its "Nýskrá" link
+  and separator.
+- **Social login signs in existing accounts only.** Google and Facebook may
+  not create an account while signup is off; they redirect with
+  `signup_closed`, shown as `auth.errors.signupClosed`.
+- Because it is a module, it takes the admin's layer-2 switch for free
+  (`/admin/general`, MCP `set_module`).
+- **Registry:** a new feature, `features/signup.md`, with
+  `flag: modules.signup.enabled`. It claims `SignupView.js` and
+  `e2e/signup-flow.spec.js`, both moved from `auth-sessions`, so the feature
+  gate skips that spec where signup is off.
+
+**The nav's "Innskrá" is a separate identity switch,
+`identity.surface.navSignIn`** (default true). A product that hides it signs
+staff in at **`/login`**, which now opens the login modal. Before, it silently
+redirected home, and `/profile` and `/orders` sent a signed-out visitor there
+to no effect. The engine's committed `client.json` spells `navSignIn: true`
+out (the engine-only pin).
+
+**Engine tests read both switches.** An engine spec is never deleted, and a
+downstream that switches these off must pass the engine's suites:
+- `auth.test.js`, `auth.google.test.js` and `auth.facebook.test.js` switch
+  signup ON for their own file (`CLIENT_CONFIG_MODULES_SIGNUP_ENABLED`, removed
+  after the file), so the engine's signup code stays covered in every product.
+- A new Google test switches signup off at run time: a first-time Google user
+  is refused with `signup_closed` and no row is written, and an existing
+  account still signs in.
+- `tests/integration/signupSwitch.test.js` (new, 4) covers signup off: the
+  API is absent (including a mixed-case path), `/signup` is the noindex 404
+  with the hand-off, and login, password reset and session are untouched.
+  With signup on, the API answers.
+- e2e:
+  - `helpers.openSignIn(page)` opens the modal the way the SERVED identity
+    says (the nav button, or `/login`); `loginAsAdmin` and every spec that
+    clicked the nav button use it;
+  - `createTestUser` seeds the user and signs in through the API when signup
+    is off (`lib/accounts.seedUser`);
+  - `auth.spec` skips the Sign Up page tests and asserts the guest nav from
+    both switches;
+  - `responsive`, `iceland-scene` and `responsive-screenshots` leave out the
+    signup page and the drawer's buttons accordingly.
+- The SECOND e2e server now runs the shop-window setting (signup off, nav
+  sign-in hidden, alongside `required` 2FA). `e2e/signup-closed.spec.js` (new,
+  3) walks it:
+  - the nav has neither button;
+  - `/is/login` opens the modal, with no sign-up link;
+  - staff sign in;
+  - `/is/signup` is a 404 and the signup API is absent;
+  - a signed-out `/profile` lands in the modal.
+- Checked by eye: the nav without the buttons, and the modal with only
+  "Gleymdirðu lykilorðinu?".
+
+**Review** (invariant-reviewer, no test runs): no Critical or High findings.
+Fixed before the merge:
+- **M1:** party `request-access` pre-approved brand-new guests and mailed
+  them a magic sign-in link. With signup off that is still self-service
+  account creation. Such a guest is now a PENDING request (no party access, no
+  magic link), and the owner decides through the existing review email.
+  `party.test.js` switches signup on for its own file and gains the signup-off
+  test.
+- **L1:** `e2e/lib/salesUser.js` `loginAsSales` now signs in through
+  `openSignIn` (accounts, markadur and sales-handbook specs).
+- **L2:** the verify-email error page no longer links to `/signup` when
+  signup is off.
+- **L3:** three comments were put back above their own code.
+- **L4:** a Facebook `signup_closed` test was added.
+- **L5:** `openSignIn`'s locale fallback reads the visitor default.
+
+Recorded, not changed: `vefur` instances lose public signup when this merges
+(the tier table puts customer accounts in Verslun). `/login` opens the modal
+for a signed-in visitor too.
+
+**Final runs:** full Jest 164 suites, 3604 passed, 1 skipped. Full Playwright
+227 passed before the review fixes; afterwards the auth, sales-login and
+shop-window specs passed (25).
+
+**Not here (rekstrarkerfid's own PR, after its next engine sync):**
+- its `config/client.json` sets `modules.signup.enabled: false` and
+  `identity.surface.navSignIn: false`;
+- the customer footer line "Ertu í viðskiptum? Skráðu þig inn á þínu kerfi"
+  (DRÖG), in its LandingView footer;
+- the deploy, on Halli's go.
+
+**Copy.** `auth.errors.signupClosed` and `adminGeneral.module.signup` are
 DRAFT. There is no migration.

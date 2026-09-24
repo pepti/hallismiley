@@ -138,7 +138,10 @@ const ROUTES = [
   // gates the API behind it.
   { pattern: '/tengja/:id',      factory: (p) => new ConnectClaudeView(p.id) },
   { pattern: '/signup',          factory: ()  => new SignupView() },
-  { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); return new HomeView(); } },
+  // /login lands on home and opens the login modal — the sign-in door for a
+  // product that hides the nav's "Innskrá" (identity.surface.navSignIn), and
+  // where /profile and /orders send a signed-out visitor.
+  { pattern: '/login',           factory: ()  => { navigateReplace('/' + getLocale() + '/'); setTimeout(() => window.dispatchEvent(new CustomEvent('login:open')), 0); return new HomeView(); } },
   { pattern: '/profile',         factory: (_, qs) => new ProfileView(qs) },
   { pattern: '/verify-email',    factory: (_, qs) => new VerifyEmailView(qs) },
   { pattern: '/forgot-password', factory: ()  => new ForgotPasswordView() },

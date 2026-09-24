@@ -52,6 +52,11 @@ global.fetch = jest.fn(async () => ({
 // LIVE, so opt in before the app is required (the gate reads env per request,
 // but set it up-front for clarity).
 process.env.SOCIAL_LOGIN_ENABLED = 'true';
+// The engine's signup code is exercised in every product, whether or not its
+// instance runs the `signup` module (R2b): this suite switches it on for
+// itself, and hands the environment back afterwards.
+process.env.CLIENT_CONFIG_MODULES_SIGNUP_ENABLED = 'true';
+afterAll(() => { delete process.env.CLIENT_CONFIG_MODULES_SIGNUP_ENABLED; });
 
 const app = require('../../server/app');
 // The OAuth callbacks land on the visitor-default locale (tests/lib/locale.js);
@@ -184,6 +189,29 @@ describe('GET /auth/google/callback', () => {
     expect(rows[0].email_verified).toBe(true);
     expect(rows[0].username).toMatch(/^[a-z0-9]+$/);
     expect(rows[0].username.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('with public signup switched off, a NEW Google account is refused and an existing one still signs in', async () => {
+    const modules = require('../../server/config/modules');
+    await modules.setModuleSwitch('signup', false);
+    try {
+      const res = await request(app).get('/auth/google/callback?code=abc&state=test-state-123').set('Cookie', cookieHeader);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe(`${localePrefix()}/#/?error=signup_closed`);
+      const { rows } = await db.query('SELECT 1 FROM users WHERE email = $1', ['newgoogleuser@example.com']);
+      expect(rows).toHaveLength(0);
+
+      await db.query(
+        `INSERT INTO users (email, username, role, email_verified, google_id, oauth_provider)
+         VALUES ($1, 'existinggoogle', 'user', TRUE, 'google-sub-1', 'google')`,
+        ['newgoogleuser@example.com'],
+      );
+      const again = await request(app).get('/auth/google/callback?code=abc&state=test-state-123').set('Cookie', cookieHeader);
+      expect(again.headers.location).toBe(`${localePrefix()}/`);
+    } finally {
+      await modules.setModuleSwitch('signup', true);
+      await db.query(`DELETE FROM app_settings WHERE key = $1`, [modules.ADMIN_OFF_KEY]);
+    }
   });
 
   test('Icelandic profile name produces a username with Icelandic letters intact', async () => {

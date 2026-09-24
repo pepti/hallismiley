@@ -1,4 +1,5 @@
 import { login, loginTotp, mfaEnrolmentRequired } from '../services/auth.js';
+import { moduleEnabled } from '../utils/modules.js';
 import { navigate } from '../navigate.js';
 import { decideTotpFailure } from './totpFailure.js';
 import { showToast } from './Toast.js';
@@ -70,7 +71,16 @@ export class LoginModal {
     overlay.querySelector('.login-form').addEventListener('submit', e => this._onSubmit(e));
 
     overlay.querySelector('#login-forgot-link').addEventListener('click', () => this.close());
-    overlay.querySelector('#login-signup-link').addEventListener('click', () => this.close());
+    // No public signup on this instance (the `signup` module, R2b): the link
+    // and the separator before it go.
+    const signupLink = overlay.querySelector('#login-signup-link');
+    if (moduleEnabled('signup')) {
+      signupLink.addEventListener('click', () => this.close());
+    } else {
+      const sep = signupLink.previousElementSibling;
+      if (sep && sep.classList.contains('login-modal__sep')) sep.remove();
+      signupLink.remove();
+    }
 
     document.body.appendChild(overlay);
     this._overlay = overlay;
