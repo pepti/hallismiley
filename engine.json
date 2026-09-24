@@ -47,7 +47,7 @@
       "date": "2026-09-24",
       "upstreamCommits": 53,
       "conflicts": 5,
-      "note": "sync — the icelandicstore harvest (ice A–F), 2FA reminder, R4 module switches, MCP OAuth, signup module; Aron13View into the lazy VIEWS table (router.js stays the one hook), its stylesheet resolved next to the stamped main.css, aron13.css custom-property defaults; deploy.yml ported the X-App-Build post-deploy check by hand; clientConfig.test.js gate taken back by the engine; migrations 109–113 run",
+      "note": "sync — the icelandicstore harvest (ice A–F), 2FA reminder, R4 module switches, MCP OAuth, signup module; Aron13View into the lazy VIEWS table (router.js stays the one hook), its stylesheet resolved next to the stamped main.css, aron13.css custom-property defaults; deploy.yml ported the X-App-Build post-deploy check by hand, promote.yml the stable canary gate (inert, no channel); moduleFlags.test.js /thjonusta robots line gated on isHiddenRoute; clientConfig.test.js gate taken back by the engine; migrations 109–113 run",
       "regenerated": [
         "features/README.md"
       ]

@@ -85,7 +85,12 @@ describe('preset vefur — the core + news', () => {
       expect((await request(app).get('/api/v1/news')).status).toBe(200);
       const page = await request(app).get('/is/thjonusta');
       expect(page.status).toBe(200);
-      expect(page.text).toContain('<meta name="robots" content="index, follow"');
+      // hallismiley (engine-sync-4): a product that hides /thjonusta
+      // (identity.surface.hiddenRoutes) serves it noindex — still a 200, which
+      // is what this case is about. The engine should take the gate.
+      const { isHiddenRoute } = require('../../server/config/publicSurface');
+      const robots = isHiddenRoute('/thjonusta') ? 'noindex, nofollow' : 'index, follow';
+      expect(page.text).toContain(`<meta name="robots" content="${robots}"`);
     });
   });
 

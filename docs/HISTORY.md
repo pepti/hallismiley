@@ -3819,8 +3819,14 @@ module, the `/ready` + SSR hardening, and the signed-out `/admin` staff door.
   after the restart it polls `https://hallismiley-app.azurewebsites.net/ready`
   until `X-App-Build` equals sha256(`DEPLOY_SHA`)[:12] (uptime-younger-than-the-
   swap for an image too old to send the header), 5 min, else the job fails and
-  `alert-deploy-failed` mails Halli. `promote.yml`'s new stable gate
-  (`vars.CANARY_URLS`) is not ported: hallismiley has no channel.
+  `alert-deploy-failed` mails Halli. `promote.yml` (product-owned too) got the
+  engine's stable gate verbatim (`vars.CANARY_URLS`; unset = a warning) —
+  inert here, since hallismiley arms no channel, but `buildHeader.test.js`
+  pins both workflows to the tag formula.
+- **One engine test re-applied:** `moduleFlags.test.js` "the core still
+  answers" expected `/is/thjonusta` indexable; here that page is in
+  `hiddenRoutes`, so it is noindex — the line now asks `isHiddenRoute()`
+  (marked `hallismiley (engine-sync-4)`; the engine should take the gate).
 - **CI** (engine-owned `ci.yml`) still triggers on `[master, main]`; Jest now
   runs in three shards behind the one "Lint + Integration tests" name, and the
   e2e job starts two servers (the second runs `security.mfa.enrolment:
