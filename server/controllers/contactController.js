@@ -18,6 +18,12 @@ const Lead           = require('../models/Lead');
 // notification can be stubbed in tests (a destructured binding captures the
 // original and ignores any later spy).
 const emailService = require('../services/emailService');
+// Process-wide ceiling on notification sends (harvested from icelandicstore
+// #295, 2026-09-24): the per-IP limiter cannot bound a rotating-IP bot, and
+// every accepted enquiry is one send from the transactional sender that also
+// carries every invite and password reset.
+const { contactBudget } = require('../services/contactBudget');
+const EventLog       = require('../models/EventLog');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -85,6 +91,27 @@ async function submit(req, res, next) {
     // null), so the email below and the response already sent are untouched
     // by whatever the database does.
     const stored = Lead.create(lead).catch(() => null);
+
+    // Over the send budget: the lead is still stored and the visitor already
+    // has their 200 (the form must not tell a bot it found a limit), but no
+    // mail goes out. The row says why, and Admin → Monitoring gets a warn row
+    // (no PII) — that is where the owner looks.
+    if (!contactBudget.take()) {
+      logger.warn({ submissionId, budget: contactBudget.snapshot() }, 'lead notification NOT sent — contact send budget exhausted');
+      EventLog.record({
+        source: 'server', level: 'warn',
+        message: 'Contact enquiry notification not sent (over budget)',
+        path: 'POST /api/v1/contact', status: 200,
+        requestId: req.requestId || null,
+        context: { submissionId, outcome: 'over_budget' },
+      });
+      stored.then(() => Lead.recordNotification(submissionId, 'over send budget'))
+        .catch(err => logger.error({ submissionId, err: err.message }, 'lead notification outcome not recorded'));
+      AnalyticsEvent.record({
+        event_type: 'contact_submit', locale: req.locale, props: { platform: platform || 'none' },
+      }).catch(() => {});
+      return;
+    }
 
     // The notification, independent of the row. Its OUTCOME is recorded on
     // the row once both have settled (the outcome write would otherwise race

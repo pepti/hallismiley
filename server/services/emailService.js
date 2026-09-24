@@ -1098,7 +1098,8 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
 
   const html = emailShell(subject, `
     <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 24px;padding:10px 12px;background-color:#1a1a1a;border:1px solid #333;border-radius:6px;font-size:13px;color:#bbb;line-height:1.5;">${escapeHtml(t(locale, 'email.lead.provenance'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid #222;">
       ${row(t(locale, 'email.lead.nameLabel'), name)}
       ${row(t(locale, 'email.lead.companyLabel'), company)}

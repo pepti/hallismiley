@@ -411,6 +411,7 @@
   "email.lead.subject": "New enquiry from {name}",
   "email.lead.heading": "New enquiry",
   "email.lead.body": "An enquiry came in through the website. Just reply to this email to respond.",
+  "email.lead.provenance": "Submitted anonymously through the public website form. The sender's name and email are unverified; treat any link in the message as untrusted. Replying goes to the address they gave.",
   "email.lead.nameLabel": "Name",
   "email.lead.companyLabel": "Company",
   "email.lead.emailLabel": "Email",

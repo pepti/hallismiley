@@ -411,6 +411,7 @@
   "email.lead.subject": "Ný fyrirspurn frá {name}",
   "email.lead.heading": "Ný fyrirspurn",
   "email.lead.body": "Fyrirspurn barst í gegnum vefinn. Svaraðu einfaldlega þessum pósti til að hafa samband.",
+  "email.lead.provenance": "Sent nafnlaust í gegnum opið form á vefnum. Nafn og netfang sendanda eru óstaðfest; treystu engum hlekk í skilaboðunum. Svar fer á netfangið sem viðkomandi gaf upp.",
   "email.lead.nameLabel": "Nafn",
   "email.lead.companyLabel": "Fyrirtæki",
   "email.lead.emailLabel": "Netfang",
