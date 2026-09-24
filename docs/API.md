@@ -272,6 +272,7 @@ works today only because `adminRoutes.js` has no handler on those paths.
 | Mount | File | Gate | Feature doc |
 |---|---|---|---|
 | `/api/v1/seller-publish` | `sellerPublishRoutes.js` | mounted BEFORE `express.json` (raw body); `INSTANCE_ROLE=public` + `SELLER_PUBLISH_SECRET`, else 404; HMAC signature (401), shape (400), newer-than-last (409); own limiter 30/15 min | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
+| `/.well-known/oauth-protected-resource[/api/v1/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, `/api/v1/oauth/requests/:id[/approve\|/deny]` | `mcpOAuthRoutes.js` (mounted at `/`, after the MCP router) | every route `MCP_ENABLED` else 404; register/token/revoke: no cookies, own IP limiters, RFC 6749 error bodies; authorize: validates, stores a pending request, 302 to `/<lc>/tengja/<id>`; consent API: session + `admin` + CSRF on writes | [ARCHITECTURE §15](ARCHITECTURE.md#15-mcp-connector) · [HISTORY](HISTORY.md#mcp-oauth-2026-09-24) |
 | `/auth` | `authRoutes.js` | per route (above) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |

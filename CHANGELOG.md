@@ -21,6 +21,11 @@ No instance of this repo has been deployed; every entry below is on `master`.
 
 ### 2026-09-24
 
+- MCP connector over OAuth 2.1 (roadmap R5a): claude.ai and Claude Desktop
+  add `<origin>/api/v1/mcp` as a custom connector with no token to paste; an
+  admin approves the connection on `/tengja/<id>`. Discovery, dynamic client
+  registration, PKCE, rotated refresh tokens, revocation; migration 110.
+  Tokens now stop working the moment their owner stops being an admin.
 - Module switches (roadmap R4, ENHANCEMENTS #5): `modules.preset` (`all` ·
   `vefur` (core + news) · `verslun` · `rekstur`) and `modules.<id>.enabled` for shop, pos,
   books, news, projects, party, bio and salesOps in `config/client.json`. A

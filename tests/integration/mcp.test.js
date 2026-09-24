@@ -48,7 +48,11 @@ describe('MCP handshake', () => {
     expect(res.status).toBe(200);
     expect(res.body.result.protocolVersion).toBe('2025-06-18');
     expect(res.body.result.capabilities).toEqual({ tools: {} });
-    expect(res.body.result.serverInfo.name).toMatch(/Icelandic Store Wholesale \[(TEST|PROD)\]/);
+    // The product's brand from the identity seam, env-tagged (R5a — it was a
+    // port leftover, "Icelandic Store Wholesale", until 2026-09-24).
+    const { identity } = require('../../server/config/identity');
+    const { name } = res.body.result.serverInfo;
+    expect([`${identity.brand.name} [TEST]`, `${identity.brand.name} [PROD]`]).toContain(name);
   });
 
   test('notifications/initialized → 202 with no body', async () => {
@@ -74,11 +78,12 @@ describe('MCP auth', () => {
     for (const bearer of [null, 'mcp_' + 'a'.repeat(64)]) {
       const res = await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, bearer);
       expect(res.status).toBe(401);
-      // Plain Bearer challenge: we must NOT advertise resource_metadata until
-      // PR 2 actually serves /.well-known/oauth-protected-resource — pointing
-      // OAuth clients at the SPA catch-all breaks their discovery flow.
+      // Since R5a (2026-09-24) the challenge advertises resource_metadata —
+      // the document it names is really served now (mcpOAuth.test.js reads
+      // it); before that, advertising it would have sent OAuth clients to the
+      // SPA catch-all.
       expect(res.headers['www-authenticate']).toMatch(/^Bearer/);
-      expect(res.headers['www-authenticate']).not.toMatch(/resource_metadata/);
+      expect(res.headers['www-authenticate']).toMatch(/resource_metadata="https:\/\/[^"]+\/\.well-known\/oauth-protected-resource"/);
     }
     await McpToken.revoke(tokenRow.id);
     expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(401);

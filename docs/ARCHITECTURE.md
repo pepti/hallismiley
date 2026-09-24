@@ -874,14 +874,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/mcpRoutes.js` → `/api/v1/mcp` (`MCP_ENABLED` + bearer) · `mcpAdminRoutes.js` → `/api/v1/admin/mcp-tokens` (admin) |
-| Controllers | `server/controllers/mcpAdminController.js` |
-| Models | `server/models/McpToken.js` |
-| Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `server/mcp/tools/system.js` |
-| Views | `public/js/views/AdminMcpSettingsView.js` |
+| Routes | `server/routes/mcpRoutes.js` → `/api/v1/mcp` (`MCP_ENABLED` + bearer) · `mcpAdminRoutes.js` → `/api/v1/admin/mcp-tokens` (admin) · `mcpOAuthRoutes.js` → `/.well-known/oauth-*`, `/oauth/{register,authorize,token,revoke}`, `/api/v1/oauth/requests/:id` (consent, admin) |
+| Controllers | `server/controllers/mcpAdminController.js`, `mcpOAuthController.js` |
+| Models | `server/models/McpToken.js`, `McpOAuth.js` (clients + authorization requests/codes) |
+| Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `oauth.js` (the OAuth protocol rules), `owner.js` (the owner re-check), `server/mcp/tools/system.js` |
+| Views | `public/js/views/AdminMcpSettingsView.js`, `ConnectClaudeView.js` (`/tengja/:id`, the consent page) |
 | Client | `public/js/services/adminMcp.js` |
-| Jest | `tests/integration/mcp.test.js` |
-| Migrations | 088 |
+| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`; `tests/unit/mcpOAuth.test.js` · e2e `e2e/mcp-oauth.spec.js` |
+| Migrations | 088, 110 |
 | Features | [mcp-connector](../features/mcp-connector.md) |
 | Feature doc | `docs/mcp.md` |
 
@@ -892,8 +892,25 @@ company/                  gitignored: plans, decisions, logs, market-research st
   (moving the mount would exempt it from two global protections — invariant 7);
   the router mounts AFTER the generic admin router (see Global facts).
 - No leads tool without a separate sign-off ([leads](HISTORY.md#leads)).
+- **OAuth 2.1 is the connector's own** ([mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24)):
+  the instance is its own authorization server (issuer = `APP_URL`); public
+  clients only, registered dynamically; PKCE S256 required; exact redirect
+  URIs, https on an allowlisted host (`MCP_OAUTH_REDIRECT_HOSTS`, default
+  claude.ai/claude.com) or loopback http only — never any https host (open
+  redirect); revoking a refresh token ends the whole grant; errors go to a redirect URI only after
+  the client and the URI are verified. Only an ADMIN turns a pending request
+  into a code, on `/tengja/<id>`, which names the redirect host. Codes are
+  single-use (a replay revokes the grant); refresh tokens rotate (a replay
+  revokes the grant) and are never bearer credentials; access tokens live an
+  hour. Every route carries its own `MCP_ENABLED` gate — the router is mounted
+  at `/`. The machine endpoints read no cookies (why they omit CSRF) and
+  answer RFC 6749 error bodies (a documented envelope exemption, like the
+  JSON-RPC one).
+- **A token is only as good as its owner**: `mcpAuth` and the token endpoint
+  re-resolve the owner on every call (`server/mcp/owner.js` — role set, then
+  the 2FA policy); not an admin, or disabled → 401.
 
-**History**: [harvest-1](HISTORY.md#harvest-1)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24)
 
 ## 16. Change requests — Breytingarbeiðnir
 

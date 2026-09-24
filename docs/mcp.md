@@ -44,8 +44,19 @@ Revocation is immediate.
   `claude mcp add --transport http orangesmiley-<env> <endpoint> --header "Authorization: Bearer mcp_…"`
   (the connector name is only the client-side label; it said
   `icelandicstore-<env>` until 2026-09-12).
-- **claude.ai / Claude Desktop** — custom connectors authenticate via OAuth,
-  which is **not built**. The 401s carry a plain `WWW-Authenticate: Bearer`
+- **claude.ai / Claude Desktop** — Settings → Connectors → *Add custom
+  connector*, URL `<origin>/api/v1/mcp`, nothing else. Since R5a (2026-09-24)
+  the instance is its own OAuth 2.1 server: Claude reads the discovery
+  documents, registers itself, and opens `/oauth/authorize` in the browser,
+  which lands on **`/tengja/<id>`** — sign in as an admin, check that the
+  "Sendir þig til baka á" host is `claude.ai` (or `localhost` for Claude
+  Code/Desktop), approve. Claude gets an access token (1 hour) and a refresh
+  token (30 days, rotated on every use); the connection shows on `/admin/mcp`
+  with an OAuth tag, and revoking it there ends both. Write access is granted
+  only when Claude asks for it, the admin ticks it AND the stack's
+  `MCP_ALLOWED_SCOPES` includes `write`.
+- *History:* until R5a custom connectors authenticated via OAuth,
+  which was **not built**. The 401s carry a plain `WWW-Authenticate: Bearer`
   and deliberately do NOT advertise an RFC 9728 `resource_metadata` URL
   (`server/middleware/mcpAuth.js:9-11` — advertising discovery with no
   `/.well-known` document behind it would make OAuth clients fail confusingly
@@ -66,6 +77,24 @@ deliberately NOT queryable yet — that needs its own sign-off (ENHANCEMENTS
 #13 note) — and customer/order/bookkeeping tools wait for a real need. The
 icelandicstore connector this was ported from ships fourteen commerce and
 finance tools besides `environment_info`; none of them exist here.
+
+## OAuth 2.1 (R5a)
+
+`server/mcp/oauth.js` holds the rules, `controllers/mcpOAuthController.js`
+the endpoints, migration `110_mcp_oauth` the clients and requests; tokens
+stay in `mcp_tokens` (kind `access`/`refresh`). Public clients only (PKCE
+S256, exact redirect URIs, https or loopback http); a replayed code or
+refresh token revokes every token that client holds for that admin; a
+refresh token is never accepted as a bearer credential. Every MCP call and
+token exchange re-checks that the owner is still an admin and not disabled
+(`server/mcp/owner.js`) — that applies to manual tokens too. Full rules:
+`docs/ARCHITECTURE.md` §15; the story: `docs/HISTORY.md#mcp-oauth-2026-09-24`.
+
+**Rolling back past R5a:** the previous release accepts any live token row as
+a bearer (no kind filter, no owner check), so revoke the OAuth tokens first:
+`UPDATE mcp_tokens SET revoked_at = NOW() WHERE kind IN ('access','refresh') AND revoked_at IS NULL`.
+Redirect hosts: `claude.ai` and `claude.com` by default;
+`MCP_OAUTH_REDIRECT_HOSTS` (comma list) replaces them for another client.
 
 ## Design notes (for maintainers)
 

@@ -161,6 +161,8 @@ Original proposal kept below for the record.
 
 > STATUS 2026-08-22 (strategy): this connector is the substrate of the one-product-for-all AI-operations model — per-customer monitoring, module management and the feature-request workflow all run over it. Phase 2 (OAuth 2.1 + write tools + feature-request tool) is roadmap item **R5**, the AI ops loop **R8** (`company/REKSTRARKERFI-PLAN.md` §5/§7). Write tools remain a separate Halli sign-off.
 
+> STATUS 2026-09-24 (R5a): **the OAuth half of phase 2 is IMPLEMENTED** — discovery, dynamic client registration, PKCE, admin consent on `/tengja/<id>`, rotated refresh tokens, revocation (migration 110; [HISTORY](docs/HISTORY.md#mcp-oauth-2026-09-24)). Tokens are the opaque `mcp_tokens` rows, not JWTs (none exist). Every call re-checks the owner is still an admin. Write tools and the feature-request tool are R5b.
+
 > NOTE 2026-09-07: the "no leads tool — leads have no DB rows" premise changed with #2 (migration 097). A read-only `leads` tool (counts + the queue, never the message bodies by default) is a natural candidate for the next tool sign-off; it is NOT added here.
 
 ### 14. In-app AI assistant for the sales handbook

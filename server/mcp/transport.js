@@ -18,6 +18,7 @@
 const logger = require('../logger');
 const securityLogger = require('../observability/securityLogger');
 const registry = require('./registry');
+const { identity } = require('../config/identity');
 
 const PROTOCOL_VERSION = '2025-06-18';
 // Older revisions we can serve identically (no session, plain JSON responses).
@@ -25,8 +26,11 @@ const ACCEPTED_VERSIONS = new Set(['2025-06-18', '2025-03-26', '2024-11-05']);
 
 function serverInfo() {
   const env = (process.env.APP_ENV || 'production') === 'test' ? 'TEST' : 'PROD';
+  // The product's brand (the identity seam): claude.ai shows this name on
+  // the connector. It said 'Icelandic Store Wholesale' — a port leftover —
+  // until R5a (2026-09-24).
   return {
-    name: `Icelandic Store Wholesale [${env}]`,
+    name: `${identity.brand.name} [${env}]`,
     version: process.env.npm_package_version || '1.0.0',
   };
 }

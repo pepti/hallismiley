@@ -888,3 +888,7 @@ client identity merge whitelists a route record's field TYPES, so a new
 lists. Both are the guards doing their job; the lesson is to run
 `test:unit` before assuming a green lint means the docs are the only thing
 left.
+
+### 2026-09-24 — two Jest runs in one worktree clean each other's tables
+
+_(factory)_ The per-branch test databases (`tests/workerDb.js`: `<db>_<branch>_w<N>_test`) are shared by EVERY Jest process in that worktree. While a full run was going, a review agent started its own Jest run on the same branch. Each run's `cleanTables()` emptied the other's rows mid-test, and three unrelated suites failed (a CORP header, the 2FA reminder, discounts). Alone, and on a rerun, they passed. So: never start a second Jest run in a worktree whose suite is running. A reviewer that wants tests should ask, or run them in its own worktree. A possible template fix: take a per-branch advisory lock in the Jest global setup and fail fast with "another run holds this branch's test databases".
