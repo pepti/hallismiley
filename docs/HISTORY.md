@@ -58,6 +58,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
 | 2026-09-24 | [Harvest from icelandicstore, chunk A — security, auth, users](#harvest-ice-a-2026-09-24) | ice `4694289`, lane 1: admin resets another user's 2FA (staff target → the acting admin's password; any view holder is staff); one outer door `requireStaff` on `/api/v1/admin`; MCP tokens revoked on demote/disable; "invite sent" means sent (`utils/inviteSend.js`, `invited_at` shown); logins without email (`@noemail.invalid`, one-time password, `new-password`); contact send budget; Claude over the Azure managed identity (dark); no migration |
+| 2026-09-24 | [Harvest from icelandicstore, chunk B — admin layout preferences, UI kit, theme hygiene](#harvest-ice-b-2026-09-24) | Migration 111 `users.page_widths`/`page_width_motion`/`aside_widths`/`cookie_consent` (= ice 125/127/128/135, aliased there); the sidebar page-width icon + Mjúk hreyfing; side-column width on the order page; the cookie banner follows the account and the theme; every error a centred dialog; sticky sideways scrollbar; the undefined-token test (21 engine references fixed); focus ring for radios/checkboxes/selects |
 
 ---
 
@@ -2526,3 +2527,104 @@ new `adminNameOnlyLogin.test.js`, `contact.test.js` (+1: over budget), unit
 **Copy.** New `adminUsers.*`, `adminCustomers.*`, `errors.admin.*` and
 `email.lead.provenance` strings were written in Icelandic first and mirrored in
 English; all DRAFT.
+
+<a id="harvest-ice-b-2026-09-24"></a>
+## 2026-09-24 — Harvest from icelandicstore, chunk B: admin layout preferences, UI kit, theme hygiene
+
+Lane 1, second chunk (after [chunk A](#harvest-ice-a-2026-09-24)), from
+icelandicstore `main` @ `4694289`. Same method: ice's files and names kept
+where the engine had nothing, engine adaptations stated below, every commit
+trailered `Feature:` + `Harvested-from:`.
+
+**Migration `111_user_ui_prefs`** — one engine entry equal to ice's four
+(`125_user_page_widths`, `127_user_page_width_motion`,
+`128_user_cookie_consent`, `135_user_aside_widths`): `users.page_widths JSONB
+'{}'`, `page_width_motion BOOLEAN TRUE`, `aside_widths JSONB '{}'`,
+`cookie_consent TEXT CHECK (accepted|declined)`, each `ADD COLUMN IF NOT
+EXISTS`, expand-only. **Alias for ice's product file** (its eventual graft):
+`'111_user_ui_prefs': ['125_user_page_widths', '127_user_page_width_motion',
+'128_user_cookie_consent', '135_user_aside_widths']`. The four ride on the
+session payload (lucia attributes, `/auth/login`, `/auth/login/totp`,
+`/auth/session`) like `theme`, and are written by `PUT
+/api/v1/users/me/{page-width, page-width-motion, aside-width,
+cookie-consent}` (session + CSRF, the caller's own row). A width pick is one
+atomic `jsonb` UPDATE (two quick picks cannot lose each other's keys), 100 keys
+at most, `'*'` = all pages (it REPLACES the map; a later per-page pick still
+overrides it). Lane 2 owns the inventory-audit and variant-barcode migrations
+and may also have taken 111: whoever merges second renumbers.
+
+**What came up**
+
+- **Page width per account and page** (ice `822a553` #401, `55ad421` #402,
+  `e1048db` #403, `de107c8` #406, `c2a21e2` #407; `153d999` #367 folded in).
+  A 14px icon on the sidebar's Breyta row (`components/PageWidthControl.js`,
+  mounted by `renderAdminShell`) opens Venjuleg 1280 / Breið 1920 / Allur
+  skjárinn — the page's default ticked and marked "· sjálfgefin", a dot on the
+  icon while a page is off its default, "Nota á allar síður" and its undo, and
+  **Mjúk hreyfing** (the shell slides between widths, never under reduced
+  motion). Venjuleg is every page's default (`renderAdminShell({ wide })`
+  exists, unused). The key is the router's matched pattern
+  (`router.js` → `setPageRoute`), so `/admin/handbok/:slug` is one setting,
+  not one per guide. `services/pageWidth.js` and `components/widthMenu.js` are
+  ice's files verbatim.
+- **Side-column width** (ice `2c708f1` #413). Mjór 240 / Miðlungs 320 /
+  Breiður 440 from an icon on the side column's top card, per page or all,
+  sharing the width menu. Engine adaptation: ice's detail pages share one
+  `.customer-detail` grid; the engine's only two-column detail page is the
+  order page (`.ord-detail__grid`), so `mountAsideWidthControl` takes the grid,
+  column and heading selectors as options (ice's classes are the defaults) and
+  the grid reads `--aside-w` from `.aside-grid--<width>`. The order page's
+  default went from 300px to Miðlungs (320px). The account and invoice pages
+  have no side column, so no control there.
+- **The cookie banner follows the account** (ice `864f924` #411).
+  `services/cookieConsent.js` adopts the account's answer after the session
+  restore, carries a browser's earlier answer up to the account, saves a
+  banner choice; "declined" always wins. `consent.js` waits for
+  `consent:ready` (4 s backstop) and exposes `window.__cookieConsent`; the
+  privacy page gets "Breyta vali á vafrakökum". Engine adaptation: the restore
+  dispatches `authchange` without a reason, so `initCookieConsent` (run by
+  `main.js` after `tryRestoreSession`) does the restore sync itself and only a
+  `login` re-syncs. **Also closes the 09-08 reverse-queue item**: the banner's
+  hardcoded hex are now theme tokens (invariant 15).
+- **Every error opens a centred dialog** (ice `eebd481` #245,
+  `components/ErrorDialog.js`): `showToast(…, 'error')` → an alertdialog with
+  a focused OK (Enter/Escape/Space), queued, identical consecutive messages
+  collapsed, capped at 5, z-index 1000 over the admin modals; still in the
+  toast log; success/info toasts unchanged; no caller changes. The survey
+  flagged it as estate-wide at once; the engine's own e2e suite is its first
+  wide exercise.
+- **Sticky sideways scrollbar** (ice `38aa1ca` #325, UI half):
+  `utils/stickyHScroll.js`; first user the orders list, now inside an
+  `.admin-table-wrap`. The Excel export half of #325 is lane 2's (chunk D).
+- **Undefined-token test** (ice `d8a560f` #410,
+  `tests/unit/themeTokenDefined.test.js`): fails on any `var(--x)` nothing
+  defines. Its first engine run found 21 references to 8 undefined tokens —
+  `party.css` (`--border-color`, `--surface-2`, `--accent`, with frozen gold
+  and white literals), `news.css` (`--radius`, an invalid declaration, so no
+  radius at all), `admin-leads.css` (`--bg-primary`) — all fixed with tokens.
+  The TOTP QR plate's edge is a fixed dark hairline (it reads against the
+  plate's white, never the page).
+- **Focus ring** for radios, checkboxes and selects (ice `2b7db9f` #296, a11y
+  half): `reset.css` strips their outline and nothing gave one back.
+
+**Left out, and why**: ice's orders-table container query and the
+`#orders-more-btn` menu (#401's first shape, superseded by #402); the
+company/customer/user detail pages' aside mounts (not in the engine); ice's
+workshop-role refusals on the four user routes; the Excel export (#325's other
+half, chunk D).
+
+**Tests.** New `tests/integration/pageWidth.test.js`, `cookieConsent.test.js`,
+`tests/unit/pageWidth.client.test.js`, `cookieConsent.client.test.js`,
+`themeTokenDefined.test.js` (ice's, adapted: no workshop); e2e
+`admin-page-width.spec.js` (per-spec admin: a page's width kept on the
+account and nowhere else, all pages and its undo, Mjúk hreyfing, the error
+dialog) and `cookie-consent-account.spec.js` (the account's answer hides the
+banner in a fresh browser; a banner answer while signed in is saved; the
+privacy page reopens it). `schema-integrity.test.js` learns that
+`jsonb_object_keys` is a function, not a table.
+
+**Copy.** `admin.pageWidth.*`, `admin.asideWidth.*`, `toast.errorTitle`,
+`toast.ok`, `privacy.changeCookieChoice` and the `errors.user.*` strings are
+ice's Icelandic with the English mirror; DRAFT for Halli like all copy. The
+privacy text itself still says a choice is withdrawn "by clearing this site's
+cookies" — Halli's legal copy, left for him (the button now does it).

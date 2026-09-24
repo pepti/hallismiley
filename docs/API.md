@@ -283,7 +283,7 @@ router's own gate still applies behind it.
 | `/auth` | `authRoutes.js` | per route (above) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |
-| `/api/v1/users` | `userRoutes.js` | session | — |
+| `/api/v1/users` | `userRoutes.js` | session; `PUT /me/{page-width, aside-width}` `{ path, width }` (`'*'` = all pages, `null` = page default; 100 keys) · `PUT /me/page-width-motion` `{ on }` · `PUT /me/cookie-consent` `{ value: accepted\|declined }` — CSRF, the caller's own row | [HISTORY](HISTORY.md#harvest-ice-b-2026-09-24) |
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
 | `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (admin, and non-prod or switch on) | — |
 | `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |

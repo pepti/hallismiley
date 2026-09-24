@@ -96,6 +96,45 @@
         "ice forwardedFor.js and the lost-enquiry half of #295 (already in the engine)",
         "trackedFetch dependency tracking in anthropicAuth (arrives with chunk F; global fetch fallback until then)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-24",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@469428987587b7bf936a0e73e212fba344847060",
+      "chunk": "B (admin layout preferences, UI kit, theme hygiene)",
+      "commits": [
+        "822a5537463b06909ed40b54d599349f4c049129 (#401 page width)",
+        "55ad4218d7962a6ba0e7dcd9fa94033f3ced1302 (#402 sidebar icon)",
+        "e1048db54657f835bd8085625583ea339d3c79ee (#403 all pages)",
+        "de107c89fffede2ef132e185e9cb79ba9ce5298d (#406 Venjuleg default)",
+        "c2a21e214d0d5484f8650a13a89867bc9aef1915 (#407 Mjuk hreyfing)",
+        "153d99956c95f75c08a6d4cdb012f03243bcfe31 (#367, superseded, folded in)",
+        "2c708f166ae45e92b2e75395ff9ce999c2ee25c6 (#413 side-column width)",
+        "864f924c1a1da03f4092ad734c7b3252a85d739e (#411 cookie consent on the account)",
+        "eebd48125386d9066466fb4b1c903f6e96ff807e (#245 error dialog)",
+        "38aa1ca246f1825e382750a6206ea6b07a08ea67 (#325 UI half: sticky sideways scrollbar)",
+        "d8a560fdb808d3ff315af481017a1d7ae25559dd (#410 undefined-token test)",
+        "2b7db9fafdee5255843a6fc967ce156e4a64ff6e (#296 a11y half: focus ring)"
+      ],
+      "branch": "harvest/ice-2026-09-24-ab",
+      "features": [
+        "admin-shell",
+        "admin-ui-kit",
+        "analytics",
+        "themes"
+      ],
+      "migrations": {
+        "111_user_ui_prefs": "ice 125_user_page_widths + 127_user_page_width_motion + 128_user_cookie_consent + 135_user_aside_widths (alias all four in ice's product file); IF NOT EXISTS"
+      },
+      "trimmed": [
+        "ice #401 Fleiri adgerdir menu + orders container query (superseded by #402 / ice-only CSS)",
+        "aside mounts on ice's customer/company/user detail pages (not in the engine); engine mounts on the order page, selectors as options",
+        "ice workshop refusals on the four user routes and in cookieConsent.js",
+        "#325 Excel export half (lane 2, chunk D)"
+      ]
     }
   ]
 }

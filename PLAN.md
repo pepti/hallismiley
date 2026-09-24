@@ -167,6 +167,20 @@ chunk lands; add a HISTORY entry for the story.
   `trackedFetch`; (d) icelandicstore's graft: its `4e8eb79` outer door
   (`requireRole('admin','moderator')`) is superseded by the engine's
   `requireStaff` — take the engine side.
+- Chunk B landed on the same branch
+  ([harvest-ice-b-2026-09-24](docs/HISTORY.md#harvest-ice-b-2026-09-24)): migration
+  `111_user_ui_prefs` (page width, Mjúk hreyfing, side-column width, cookie
+  choice on the account), the centred error dialog, the sticky sideways
+  scrollbar, the undefined-token test (21 engine references fixed), the focus
+  ring. Open: (a) **migration number** — lane 2 (inventory audit, variant
+  barcode) may also have taken 111; whoever merges second renumbers, and
+  ice's product file then lists `'<engine name>': ['125_user_page_widths',
+  '127_user_page_width_motion', '128_user_cookie_consent',
+  '135_user_aside_widths']` under `aliases`; (b) copy DRAFT (`admin.pageWidth.*`,
+  `admin.asideWidth.*`, `toast.errorTitle`/`ok`, `privacy.changeCookieChoice`);
+  (c) the privacy text still tells visitors to withdraw by clearing cookies —
+  Halli's legal copy, the new button now does it; (d) the error dialog changes
+  every error toast at once — watch the first downstream sync.
 
 - Identity seam + feature gate ([identity-seam-2026-09-22](docs/HISTORY.md#identity-seam-2026-09-22)):
   the hallismiley draft PR pepti/hallismiley#168 becomes mergeable once it sets

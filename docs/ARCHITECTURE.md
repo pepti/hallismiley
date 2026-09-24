@@ -210,19 +210,31 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` |
+| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
 | Models | `server/models/AdminNavConfig.js` |
 | Views | `public/js/views/AdminView.js` (the company overview at `/admin`), `AdminProjectsView.js` (unlisted `/admin/projects` board) |
-| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `Lightbox.js`, `ChangesList.js` |
-| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`; `public/js/utils/listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
+| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
+| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
 | CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
-| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js` |
-| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js` |
-| Migrations | 053 (nav config) |
+| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`; `tests/integration/pageWidth.test.js` |
+| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
+| Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
 | Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
 
 **Rules that must hold**
+- **Layout preferences live on the account** ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): `users.page_widths` /
+  `aside_widths` (`{ '<page key>' | '*': width }`) and `page_width_motion`
+  (111) ride on every session payload like `theme`; a page's key is the
+  router's matched pattern (`setPageRoute`), else one derived from the URL
+  with ids folded to `:id`. The client value lists (`services/pageWidth.js`
+  `WIDTHS`/`ASIDE_WIDTHS`/`ALL_KEY`) and the server's (`userController`)
+  move together. A pick is one atomic jsonb UPDATE, never a read-modify-write;
+  the inherited width is never saved as a choice (it clears it). Venjuleg
+  (1280px) is every admin page's default.
+- **Every `showToast(…, 'error')` is the centred `ErrorDialog`**, never a
+  corner toast; it is still logged. A flow that expects an error must
+  acknowledge the dialog (OK/Enter) before the page is clickable again ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)).
 - `HIDDEN_ADMIN_VIEWS` applies only to accounts holding `'*'`; a role granted
   `orders` alone still sees it. Routes stay live and ids stay grantable. The
   eye toggle writes `revealedItems` into the layout blob; Reset re-hides; an
@@ -259,7 +271,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Neutral status chips use `--text-secondary`; `--overlay` is a per-theme token
   ([review-099](HISTORY.md#review-099)).
 
-**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit)
+**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
 
 ## 3. Public site — home, /thjonusta, /um-okkur, /hafa-samband, SSR meta, sitemap, SEO
 
@@ -405,13 +417,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/theme-boot.js`, `public/js/services/themePrefs.js`, `ambiencePrefs.js`; `public/js/utils/chartTheme.js`, `motion.js` |
 | CSS | `public/css/themes.css`, `theme-switcher.css`, `iceland-scene.css`, `test-env.css` |
 | Scripts | `scripts/build-iceland-scenes.js`, `scripts/audit-text-contrast.js`, `scripts/self-host-fonts.js`, `scripts/recompress-images.js` |
-| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js` |
+| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token) |
 | e2e | `e2e/iceland-scene.spec.js` |
 | Migrations | 083, 084 (user theme), 086, 089 (landing background scene/video), 094 (three-theme set), 106 (theme CHECK dropped so a product may add ids) |
 | Features | [ambience](../features/ambience.md), [scene-engine](../features/scene-engine.md), [themes](../features/themes.md) |
 | Feature doc | `CLAUDE.md` Design rules; `public/assets/iceland/CREDITS.md` |
 
 **Rules that must hold**
+- **Every `var(--token)` in `public/css` names a token something defines**
+  (`tests/unit/themeTokenDefined.test.js`, [harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): an undefined token with a
+  literal fallback is frozen on one theme, and one without makes the whole
+  declaration invalid. A custom property set from JS goes on the test's
+  `JS_INJECTED` list with the view that writes it. Radios, checkboxes and
+  selects keep a `:focus-visible` ring (`components.css`).
 - Three themes here: `ember`/Glóð (default), `classic`/Bjart (owns `:root`),
   `midnight`/Miðnætti. The trio is the PRODUCT's — `identity.theme`
   (`default`, `root`, `picker`) in `config/client.json`, validated together;
@@ -449,7 +467,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the hardest cut, for contrast) [scene-engine](HISTORY.md#scene-engine).
 - `landing_background` mode `video` is the hero default (089 reverted 086).
 
-**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2)
+**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
 
 ## 5. i18n
 
@@ -831,15 +849,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Models | `server/models/EventLog.js`, `Analytics.js` |
 | Services | `server/services/eventLogCleanup.js`, `analyticsSalt.js`, `uploadVolumeAlert.js`; `server/utils/maintenanceWindow.js` |
 | Views | `public/js/views/AdminMonitoringView.js`, `AdminAnalyticsView.js` |
-| Client | `public/js/services/adminEvents.js`, `errorReporter.js`, `usage.js`; `public/js/analytics.js`, `public/js/consent.js`; `public/js/api/rateLimitDecide.js`, `rateLimitGuard.js` |
+| Client | `public/js/services/adminEvents.js`, `errorReporter.js`, `usage.js`; `public/js/analytics.js`, `public/js/consent.js`, `public/js/services/cookieConsent.js` (the banner's account side); `public/js/api/rateLimitDecide.js`, `rateLimitGuard.js` |
 | CSS | `public/css/admin-monitoring.css`, `analytics-admin.css` |
-| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js` |
-| e2e | `e2e/admin-monitoring.spec.js` |
-| Migrations | 046 (analytics), 087 (event logs) |
+| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js`, `cookieConsent.client.test.js`; `tests/integration/cookieConsent.test.js` |
+| e2e | `e2e/admin-monitoring.spec.js`, `cookie-consent-account.spec.js` |
+| Migrations | 046 (analytics), 087 (event logs), 111 (`users.cookie_consent`) |
 | Features | [analytics](../features/analytics.md), [monitoring](../features/monitoring.md) |
 | Feature doc | `RUNBOOK.md` (Analytics, Health), `docs/SLO.md` |
 
 **Rules that must hold**
+- **The cookie choice follows the account** ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): a signed-in answer is
+  `users.cookie_consent` (111, `PUT /api/v1/users/me/cookie-consent`);
+  `consent.js` shows the banner only after `consent:ready` (fired by
+  `initCookieConsent` after the session restore; 4 s backstop), and
+  "declined" wins — an account "accepted" never overrides a browser that
+  declined. The banner's colours are theme tokens, never literals.
 - `query()` feeds the DB circuit breaker (connectivity errors only) and
   `db_query_duration_seconds`; httpMetrics feeds the error-rate alert; the
   client rate-limit toast ignores the error beacon and stays silent before the
@@ -858,7 +882,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   (admin only, `no-store`) ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 - The staff audit log is read on `/admin/monitoring` (domain 8 owns the writes).
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
 
 ## 14. Self-update
 
