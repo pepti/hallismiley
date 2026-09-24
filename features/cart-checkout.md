@@ -27,6 +27,7 @@ paths:
   - tests/integration/shop.test.js
   - tests/unit/shopFilters.test.js
   - tests/unit/availability.client.test.js
+  - e2e/cart-sold-out.spec.js
 migrations: []
 since: 2026-08-09
 origin: null

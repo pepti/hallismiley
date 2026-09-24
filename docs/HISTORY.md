@@ -58,6 +58,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
 | 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
+| 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
 
 ---
 
@@ -2570,3 +2571,121 @@ Runs: lint and `check:i18n` clean; `test:unit` 82 suites, 1621 passed; full Jest
 `cart.*` / `checkout.*` stock notices, `scan.*` and the server
 `errors.inventory.*` / `errors.pos.*` / `errors.busyRetry` strings are Icelandic
 first (the cart ones are ice's), mirrored in English, and DRAFT.
+
+<a id="harvest-ice-d-2026-09-24"></a>
+## 2026-09-24 — Ice harvest, chunk D: import, export, uploads (lane 2)
+
+Chunk D of the 2026-09-24 upward harvest from icelandicstore (`main` @
+`4694289`), after chunk C on the same branch — D's stock-writing import needs
+C's audited writer. Survey: `company/ice-harvest-2026-09-24.md` §2 chunk D.
+Ported by reading ice's commits and applying them to the ENGINE's shapes; new
+files keep ice's names, the two readers ice keeps in `goodsReceipt/` and
+`salesReport/` (ice-only folders) moved under `server/services/productImport/`.
+
+**One reader for every product file** (ice `74858de` #249, `fa05a60` #300,
+`60544cd` #253). `POST /api/v1/admin/shop/products/import/parse-file` takes one
+multipart file (memory-only, 10 MB, CSRF like apply) and returns rows for the
+unchanged preview → apply pair, so classifying and writing still have one
+implementation. `parseFile.js` reads the export's own CSV (csv-parse — the
+browser's `utils/productCsv.js`, which tore a quoted line break into two rows,
+is deleted), a supplier .xlsx (`parseXlsx.js`, exceljs, every sheet, a banner
+row above the header skipped) and a generated PDF (`parsePdf.js`, pdf-parse
+2): a trade document puts OUR code behind a label ("Your material number",
+"EAN/UPC", "Vörunúmer"), so labels win over column guessing
+(`tradeLabels.js`). Columns come from the controller's `PRODUCT_CSV_COLUMNS`
+(the engine's nine export columns plus Slug) and the supplier synonyms in
+`headerMap.js`, cut to the engine's fields. The one rule stated out loud: an
+ORDER quantity (Magn, Qty, Order Quantity …) is never stock — it is reported
+as skipped, because stock writes are audited adjustments. pdf.js's worker is
+preloaded synchronously (`ensurePdfWorker`), so a first parse cannot poison
+every later one through pdf.js's memoised dynamic import (ice's pre-push
+"flake"); the engine runs Jest without `--experimental-vm-modules` and the
+PDF suites pass through the `createRequire` fallback.
+
+**Barcode is the fallback match key** (ice #249 + migration 102). SKU first
+(variant-first, unchanged), then barcode. **Migration 113 `113_variant_barcode`**
+adds `product_variants.barcode` (a size or colour has its own GTIN; products
+have had one since 048) and the two partial lookup indexes — ice's `102`, all
+IF NOT EXISTS, so a no-op on ice. Deliberately not unique: a barcode on two
+catalogue rows is refused as `ambiguousBarcode`, the same SKU or barcode twice
+in one file as `duplicateSku` / `duplicateBarcode` — never guessed. The admin
+variant grid now carries the barcode (`ProductVariant` COLUMNS / create /
+update) and `Product.resolveByCode` matches a variant's own barcode at step 1
+(the till scanner benefits).
+
+**Rows with a Variant cell create one product with its variants** (ice
+`29513b8` #302). Only with `create: true` (a checkbox in the import modal):
+unmatched rows whose Variant cell reads (`variantCell.js`, the ONE formatter
+and parser — the export now writes its Variant cell with it, in the product's
+axis order) group by Slug, else name (`variantGroups.js`, pure), and each group
+becomes ONE Draft product with its variants in one transaction
+(`Product.createWithVariants`), opening stock audited as `opening` with note
+`import`. Whole or not at all: an unreadable cell, a missing axis, a duplicate
+combination, a disagreeing name, an existing product of that name or slug, a
+taken barcode refuses every row of the product, and the preview lists why.
+Engine cuts: the parent carries a name only (ice's vendor / VAT / category /
+tags are ice-only columns) and every variant row needs BOTH prices, because the
+engine's products require `price_eur > 0` too. A row without a Variant cell
+that matches nothing stays unmatched — this import still never creates a
+single product (ice's single-row create path and its AI PDF reader are not
+taken).
+
+**The orders list exports a real Excel file** (ice `38aa1ca` #325, export half).
+`GET /orders/export.xlsx` builds the workbook on the server
+(`services/orderExport.js`, exceljs) with the list's own filter, typed number
+and date cells, a frozen auto-filtered header, and a 413 past
+`orderExport.limits.maxRows` rather than a silently short reconciliation
+sheet. It replaces a comma CSV built from the loaded page, which Icelandic-locale
+Excel opened as one column. Columns cut to the engine's orders (no Regla,
+company, store, kennitala, net/VAT — the engine's orders carry no VAT total).
+The sticky scrollbar half of #325 is lane 1's (chunk B).
+
+**Product images** (ice `82ef6f9` #240, `0bf10ad` #241, `c488e75` #242).
+`services/productImages.js` normalises every upload (EXIF auto-orient, long
+edge ≤ 2000 px, metadata stripped, same format) and proves it decodes — a file
+sharp cannot read is a localised 400 with nothing kept, where before it was
+stored and served as a broken image. The two Azure lessons are part of the
+port: rewrite from a BUFFER (no temp file renamed over a source libvips still
+holds — the Azure Files mount refuses it; the thumbnail is written from a
+buffer too), and no `mozjpeg` (musl libvips on node:alpine rejects it). A
+`<original>.thumb.webp` (192 px) is generated on the first request by a handler
+mounted after the products static in `server/app.js`, then served statically;
+a derivative is never a source (a URL chain cannot mint files); deleting an
+image deletes its thumbnail. The admin list and the product form's tiles load
+the thumbnail (`utils/imageUrl.js`, falling back to the original) with
+`object-fit: contain`, and the Images section of the product form accepts
+dropped files. `sharp` moves from devDependencies to dependencies. Ice's CSP
+`img-src blob:` is NOT taken: the engine's form uploads immediately and shows
+no pre-upload preview, so nothing needs it (tighten, don't loosen). Ice's
+press-room `.card.webp` and delivery-note print thumbnail are ice-only.
+
+**New dependencies**: `exceljs` 4.4.0 and `pdf-parse` 2.4.5, pinned exact, with
+ice's `overrides: { exceljs: { uuid: ^11.1.1 } }` (exceljs 4.4 pulls a uuid
+with a moderate advisory); `npm audit` reports 0 vulnerabilities.
+
+**Tests.** `tests/integration/adminProductImportFile.test.js` (new, 11): the
+export's CSV round-trips through the server reader with a quoted line break; a
+supplier .xlsx maps Icelandic headers and reports Magn as skipped; a PDF order
+reads labelled codes; unsupported / unreadable / missing file → 400,
+anonymous → 401; barcode-only rows update a product and a variant, audited as
+`import`; ambiguous and duplicate barcodes refused; SKU still wins; the
+variant-creating import (preview plans one product; apply creates a Draft with
+three variants, their barcode and audited opening stock; a second run refused
+as `groupExists`; a missing EUR price refuses the whole product).
+`adminOrderExport.test.js` (new, 4): typed cells, the filter, the 413 cap,
+401. `productImages.test.js` (new, 4): auto-orient + cap + stripped metadata; a
+non-decoding file → 400 and nothing kept; the thumbnail made, served and
+deleted with its image; a derivative is not a source. Unit, ported from ice:
+`productImportParseFile` (ice's 22-column table kept — the reader is table
+driven), `productImportVariantCell`, `productImportVariantGroups` (adapted: name
+the only parent field, both prices required), `parsePdfWorker` (one assertion
+widened: under the engine's Jest 30.4 the fallback loads the real worker),
+`imageUrl`. `adminProductImportExport.test.js`: the classify case no longer
+sends one SKU twice (that is now refused — a new case pins it).
+`e2e/cart-sold-out.spec.js` (new, 2): a planted stale basket line (sold out) and an over-quantity one are flagged, the checkout link becomes a disabled button, the checkout page repeats the gate, fixing the lines clears it; the section search keeps every letter typed in two bursts. Runs after chunk D: lint and `check:i18n` clean; `test:unit` 87 suites, 1697 passed, 1 skipped; full Jest 175 suites, 3731 passed, 2 skipped; full Playwright (E2E_PORT 3051 / 3052) 226 passed. The first full e2e run had one failure — the new search case opened the `/shop` landing, which has no search bar; it now opens `/shop/products` — and everything was re-run after that fix.
+
+**Copy.** The import modal's new strings (`adminProducts.import*`, the refusal
+reasons), `adminOrders.exportExcel`, `adminProducts.dropSkipped`, the server
+`errors.admin.import*` / `exportTooLarge` / `errors.upload.productImage.unreadable`
+and the `export.orders.*` sheet headers are Icelandic first (most are ice's),
+mirrored in English, and DRAFT.

@@ -101,3 +101,8 @@
 .prod-bulkedit__form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
 .prod-bulkedit__footer { display: flex; justify-content: flex-end; gap: var(--sp-2); }
 @media (max-width: 640px) { .prod-bulkedit__form { grid-template-columns: 1fr; } }
+
+/* Import: the create toggle and the refused-rows list (harvest-ice-d-2026-09-24). */
+.prod-import__create { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: 0.9rem; color: var(--text-secondary); }
+.prod-import__errors { margin: var(--sp-2) 0; padding-left: var(--sp-4); font-size: 0.85rem; color: var(--text-secondary); }
+.prod-import__errors li { margin: 2px 0; }

@@ -4,10 +4,10 @@ import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
-import { parseProductsCsv } from '../utils/productCsv.js';
+import { thumbUrl } from '../utils/imageUrl.js';
 import {
   adminExportProductsUrl, adminPreviewProductImport, adminApplyProductImport,
-  adminBulkProducts, adminProductAdjustments,
+  adminBulkProducts, adminProductAdjustments, adminParseProductImportFile,
 } from '../services/adminProducts.js';
 import { showToast } from '../components/Toast.js';
 
@@ -98,7 +98,7 @@ export class AdminProductsView {
               <td class="prod-select"><input type="checkbox" data-select="${_esc(p.id)}" ${this._selected.has(p.id) ? 'checked' : ''}
                     aria-label="${_esc(t('adminProducts.selectOne', { name: p.name }))}"/></td>
               <td>${p.images?.[0]?.url
-                ? `<img class="admin-shop__thumb" src="${_esc(p.images[0].url)}" alt=""/>`
+                ? `<img class="admin-shop__thumb" src="${_esc(thumbUrl(p.images[0].url))}" alt="" loading="lazy"/>`
                 : '<span class="admin-shop__thumb admin-shop__thumb--placeholder"></span>'}</td>
               <td><button type="button" class="prod-name" data-toggle="${_esc(p.id)}" aria-expanded="false"><span class="prod-name__chevron" aria-hidden="true">▸</span>${_esc(p.name)}</button></td>
               <td><code>${_esc(p.slug)}</code></td>
@@ -381,7 +381,7 @@ export class AdminProductsView {
     }
     list.innerHTML = product.images.map(img => `
       <div class="admin-shop__image-item" data-img-id="${_esc(img.id)}">
-        <img src="${_esc(img.url)}" alt=""/>
+        <img src="${_esc(thumbUrl(img.url))}" alt="" loading="lazy"/>
         <button type="button" class="admin-shop__image-del" data-img-id="${_esc(img.id)}">${t('admin.delete')}</button>
       </div>
     `).join('');
@@ -517,8 +517,12 @@ export class AdminProductsView {
         <div class="prod-import">
           <p class="admin-shop__hint">${t('adminProducts.importIntro')}</p>
           <label class="admin-shop__upload-btn">
-            <input type="file" accept=".csv,text/csv" id="prod-import-file"/>
+            <input type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,application/pdf" id="prod-import-file"/>
             ${t('adminProducts.importChooseFile')}
+          </label>
+          <label class="prod-import__create">
+            <input type="checkbox" id="prod-import-create"/>
+            ${t('adminProducts.importCreate')}
           </label>
           <p class="admin-shop__error" id="prod-import-error" role="alert"></p>
           <div id="prod-import-preview"></div>
@@ -532,32 +536,65 @@ export class AdminProductsView {
     const errorEl   = modal.querySelector('#prod-import-error');
     const previewEl = modal.querySelector('#prod-import-preview');
 
-    modal.querySelector('#prod-import-file').addEventListener('change', async (e) => {
+    // Every file is read on the SERVER (POST /products/import/parse-file —
+    // services/productImport, harvested from icelandicstore): the CSV this page
+    // exports, a supplier .xlsx, a generated PDF order or price list. The rows
+    // come back and go through the same preview → apply as before.
+    let parsed = null;
+    const createBox = modal.querySelector('#prod-import-create');
+    const preview = async () => {
+      if (!parsed) return;
       errorEl.textContent = '';
-      previewEl.innerHTML = '';
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      let text;
-      try { text = await file.text(); } catch { errorEl.textContent = t('adminProducts.importParseError'); return; }
-      const { rows, hasSku } = parseProductsCsv(text);
-      if (!hasSku)      { errorEl.textContent = t('adminProducts.importNoSkuCol'); return; }
-      if (!rows.length) { errorEl.textContent = t('adminProducts.importNoRows');   return; }
       previewEl.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.importPreviewing')}</p>`;
       try {
-        const { counts } = await adminPreviewProductImport(rows);
-        this._renderImportPreview(previewEl, counts, rows, close);
+        const result = await adminPreviewProductImport(parsed.rows, { create: createBox.checked });
+        this._renderImportPreview(previewEl, result, parsed, createBox.checked, close);
       } catch (err) {
         previewEl.innerHTML = '';
         errorEl.textContent = err.message;
       }
+    };
+    createBox.addEventListener('change', preview);
+    modal.querySelector('#prod-import-file').addEventListener('change', async (e) => {
+      errorEl.textContent = '';
+      previewEl.innerHTML = '';
+      parsed = null;
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      previewEl.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.importReading')}</p>`;
+      try {
+        parsed = await adminParseProductImportFile(file);
+      } catch (err) {
+        previewEl.innerHTML = '';
+        errorEl.textContent = err.message;
+        return;
+      }
+      await preview();
     });
   }
 
-  _renderImportPreview(previewEl, counts, rows, close) {
+  _renderImportPreview(previewEl, result, parsed, create, close) {
+    const { counts, rows, createProducts } = result;
     const label = (k) => `${counts[k] || 0} ${t('adminProducts.importStatus' + k.charAt(0).toUpperCase() + k.slice(1))}`;
-    const canApply = (counts.update || 0) > 0;
+    const canApply = (counts.update || 0) > 0 || (counts.create || 0) > 0;
+    const kinds = ['update', 'nochange', 'unmatched', 'error'].concat(create ? ['create'] : []);
+    const reason = (r) => {
+      const key = `adminProducts.importReason.${r.reason}`;
+      const text = t(key);
+      return text === key ? r.reason : text;
+    };
+    const errors = rows.filter(r => r.status === 'error').slice(0, 20);
+    const skipped = (parsed.orderQtyColumns || []).length
+      ? `<p class="admin-shop__hint">${_esc(t('adminProducts.importOrderQtySkipped', { cols: parsed.orderQtyColumns.join(', ') }))}</p>` : '';
+    const ignored = (parsed.ignored || []).length
+      ? `<p class="admin-shop__hint">${_esc(t('adminProducts.importIgnored', { cols: parsed.ignored.join(', ') }))}</p>` : '';
+    const truncated = parsed.truncated ? `<p class="admin-shop__hint">${t('adminProducts.importTruncated')}</p>` : '';
     previewEl.innerHTML = `
-      <p class="prod-import__summary">${['update', 'nochange', 'unmatched', 'error'].map(label).join(' · ')}</p>
+      <p class="admin-shop__hint">${_esc(t('adminProducts.importRead', { n: parsed.rows.length, source: String(parsed.source || '').toUpperCase() }))}</p>
+      ${skipped}${ignored}${truncated}
+      <p class="prod-import__summary">${kinds.map(label).join(' · ')}</p>
+      ${create && createProducts ? `<p class="admin-shop__hint">${_esc(t('adminProducts.importCreateProducts', { n: createProducts }))}</p>` : ''}
+      ${errors.length ? `<ul class="prod-import__errors">${errors.map(r => `<li><code>${_esc(r.sku || '—')}</code> — ${_esc(reason(r))}${r.errorField ? ` (${_esc(r.errorField)})` : ''}</li>`).join('')}</ul>` : ''}
       <div class="admin-shop__form-actions">
         <button type="button" class="admin-shop__primary-btn" id="prod-import-apply" ${canApply ? '' : 'disabled'}>${t('adminProducts.importApply')}</button>
       </div>
@@ -568,11 +605,12 @@ export class AdminProductsView {
       btn.disabled = true;
       statusEl.textContent = t('adminProducts.importApplying');
       try {
-        const res = await adminApplyProductImport(rows);
-        statusEl.textContent = t('adminProducts.importDone', { n: res.updated });
+        const res = await adminApplyProductImport(parsed.rows, { create });
+        statusEl.textContent = t('adminProducts.importDone', { n: res.updated })
+          + (res.created ? ' ' + t('adminProducts.importCreated', { n: res.created, v: res.createdVariants }) : '');
         this._detailCache.clear(); // detail panels are stale after bulk edits
         await this._load();
-        setTimeout(close, 1200);
+        setTimeout(close, 1500);
       } catch (err) {
         statusEl.textContent = err.message;
         btn.disabled = false;
@@ -918,10 +956,16 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
       });
     })();
 
-    modal.querySelector('#admin-product-image-input')?.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files || []);
-      e.target.value = '';
-      if (!files.length) return;
+    // Upload from the file picker, or from files dropped onto the Images section
+    // (drag-and-drop, harvested from icelandicstore #240). Non-image files in a
+    // drop are skipped and counted.
+    const uploadFiles = async (picked) => {
+      const files = picked.filter(f => /^image\/(jpeg|png|webp)$/.test(f.type));
+      const skipped = picked.length - files.length;
+      if (!files.length) {
+        if (skipped) errorEl.textContent = t('adminProducts.dropSkipped', { n: skipped });
+        return;
+      }
 
       const token  = await getCSRFToken();
       const total  = files.length;
@@ -957,9 +1001,46 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
         console.error('Refresh after upload failed:', err);
       }
 
-      errorEl.textContent = failed === 0
+      errorEl.textContent = (failed === 0
         ? t('adminProducts.uploadedAll', { n: total })
-        : t('adminProducts.uploadedPartial', { ok: total - failed, total, failed });
+        : t('adminProducts.uploadedPartial', { ok: total - failed, total, failed }))
+        + (skipped ? ' ' + t('adminProducts.dropSkipped', { n: skipped }) : '');
+    };
+
+    modal.querySelector('#admin-product-image-input')?.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      if (files.length) uploadFiles(files);
     });
+
+    const zone = modal.querySelector('.admin-shop__images');
+    if (zone) {
+      zone.classList.add('admin-shop__dropzone');
+      const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+      const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+      zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; swallow(e); zone.classList.add('is-dragover'); });
+      zone.addEventListener('dragover', (e) => {
+        if (!hasFiles(e)) return;
+        swallow(e);
+        e.dataTransfer.dropEffect = 'copy';
+        zone.classList.add('is-dragover');
+      });
+      zone.addEventListener('dragleave', (e) => {
+        // dragleave fires between the section's children too — only clear the
+        // highlight once the pointer has actually left it.
+        if (e.relatedTarget && zone.contains(e.relatedTarget)) return;
+        zone.classList.remove('is-dragover');
+      });
+      zone.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        swallow(e);
+        zone.classList.remove('is-dragover');
+        uploadFiles(Array.from(e.dataTransfer.files || []));
+      });
+      // A file dropped elsewhere on the open modal must not make the browser
+      // navigate to it and lose the form.
+      modal.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+      modal.addEventListener('drop', (e) => { if (hasFiles(e)) e.preventDefault(); });
+    }
   }
 }

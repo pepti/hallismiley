@@ -103,6 +103,46 @@
         "set_bin, mcp tag, vendor/product_category/pack_qty/tags bulk fields",
         "ad022b2 sales-report periods (optional, deferred)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-24",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@4694289",
+      "commits": [
+        "74858de (#249 .xlsx / PDF import, barcode match)",
+        "fa05a60 (#300 one parser for every product file, supplier axis columns)",
+        "60544cd (#253 pdf.js worker preload)",
+        "29513b8 (#302 grouped rows → one product with variants)",
+        "38aa1ca (#325 orders .xlsx export — the export half)",
+        "82ef6f9 (#240 image normalise, lazy thumbnails, drag-and-drop)",
+        "0bf10ad (#241 no mozjpeg on alpine)",
+        "c488e75 (#242 rewrite from a Buffer on Azure Files)"
+      ],
+      "branch": "harvest/ice-2026-09-24-cd",
+      "chunk": "D",
+      "features": [
+        "shop-catalog",
+        "orders",
+        "uploads-media"
+      ],
+      "migrations": {
+        "113_variant_barcode": "ice product_variants.barcode (catalogue columns) + 102_barcode_lookup_index (alias 102 in ice.js at graft; IF NOT EXISTS)"
+      },
+      "dependencies": {
+        "exceljs": "4.4.0",
+        "pdf-parse": "2.4.5",
+        "sharp": "moved to dependencies"
+      },
+      "trimmed": [
+        "goodsReceipt/parseXlsx + salesReport/parsePdf moved under productImport/ (ice-only folders); parsePdf documents mode (Invoice Merger) dropped",
+        "ice single-row product create, AI PDF extract (aiExtract/aiLimits), vendor/VAT/category/tags parent fields",
+        "orders export Regla/company/store/kennitala/net-VAT columns",
+        ".card.webp and delivery-note print thumbnail; CSP img-src blob: (no pre-upload preview in the engine form)",
+        "stickyHScroll (lane 1, chunk B)"
+      ]
     }
   ]
 }

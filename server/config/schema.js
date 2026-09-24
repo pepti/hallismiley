@@ -5495,6 +5495,35 @@ END; $$ LANGUAGE plpgsql`,
           AND (paid_at IS NOT NULL OR fulfillment_status IN ('fulfilled', 'delivered'))`,
     ],
   },
+  {
+    // A barcode per variant, and the lookups the product import matches on
+    // (harvest-ice-d-2026-09-24). A supplier's spreadsheet or order PDF carries
+    // OUR barcode (GTIN/EAN) and THEIR article number, never our SKU, so the
+    // import falls back to barcode when the SKU matches nothing — and a size or
+    // colour has its own GTIN, so the variant needs the column (products has had
+    // one since 048). Harvested from icelandicstore, whose databases hold the
+    // same DDL: product_variants.barcode came with ice's catalogue columns and
+    // the two indexes are ice 102_barcode_lookup_index. Every statement is
+    // IF NOT EXISTS, so on ice this entry is a no-op; ice's product file lists
+    // 102 as its alias at graft time.
+    //
+    // Deliberately NOT unique: the same barcode legitimately sits on two rows
+    // while a catalogue is being cleaned up, and a unique index would refuse
+    // the save. The import resolves the ambiguity instead — a barcode found on
+    // more than one row is refused ('ambiguous_barcode'), never guessed.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column; its variant SELECTs name their columns.
+    // Reference copy: server/migrations/113_variant_barcode.sql
+    name: '113_variant_barcode',
+    statements: [
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS barcode TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_products_barcode
+         ON products (barcode) WHERE barcode IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_barcode
+         ON product_variants (barcode) WHERE barcode IS NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

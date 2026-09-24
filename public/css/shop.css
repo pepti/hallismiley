@@ -1023,7 +1023,9 @@
   text-align: left; color: var(--text-primary); font-size: 14px;
 }
 .admin-shop__table th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 400; }
-.admin-shop__thumb { width: 48px; height: 48px; object-fit: cover; border: 1px solid var(--border-dim); display: block; }
+/* `contain`, not `cover`: product shots are rarely square and `cover` clipped them
+   (harvested from icelandicstore #240). */
+.admin-shop__thumb { width: 48px; height: 48px; object-fit: contain; background: var(--bg-elevated); border: 1px solid var(--border-dim); display: block; }
 .admin-shop__thumb--placeholder { background: var(--bg-elevated); }
 .admin-shop__link { background: transparent; border: 0; color: var(--gold); cursor: pointer; margin-right: 8px; font-family: inherit; }
 .admin-shop__link:hover { text-decoration: underline; }
@@ -1081,7 +1083,10 @@
   position: relative; aspect-ratio: 1/1; background: var(--bg-elevated);
   border: 1px solid var(--border-dim);
 }
-.admin-shop__image-item img { width: 100%; height: 100%; object-fit: cover; }
+.admin-shop__image-item img { width: 100%; height: 100%; object-fit: contain; background: var(--bg-elevated); }
+/* Drag-and-drop target: the whole Images section accepts dropped image files. */
+.admin-shop__dropzone { transition: background-color .12s, outline-color .12s; outline: 2px dashed transparent; outline-offset: -6px; }
+.admin-shop__dropzone.is-dragover { outline-color: var(--gold); background: var(--bg-elevated); }
 .admin-shop__image-del {
   position: absolute; bottom: 4px; right: 4px;
   background: rgba(0,0,0,0.8); color: var(--error); border: 0;

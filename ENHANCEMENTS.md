@@ -242,7 +242,10 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Effort.** M — needs a migration. **Risk.** Low. Expand-only, so invariant 14 is satisfied by construction.
 **Recommendation.** Do it with, or just after, #22 — a scanner that corrects stock wants the audit trail underneath it.
 
-### 24. Import wizards with a dry-run stage
+### 24. ◐ PARTLY DONE 2026-09-24 — Import wizards with a dry-run stage
+
+**Status.** The products half landed with the 2026-09-24 ice harvest (chunk D): the product import reads CSV, .xlsx and PDF on the server (`services/productImport`, `exceljs` + `pdf-parse`), matches on SKU then barcode, never reads an order quantity as stock, and can create a product with its variants from grouped rows — the dry run is the existing preview. Still open: the customer importer's column mapping, goods receipt and the invoice merger (Ísprjón-specific). [HISTORY](docs/HISTORY.md#harvest-ice-d-2026-09-24).
+
 
 **What.** icelandicstore's four-stage customer importer (ingest → map columns → preview → confirm), the invoice merger with fuzzy catalogue matching, the goods-receipt receive/reconcile flow, and `utils/parseSalesReport.js` — delimiter detection, quote-aware splitting, header-row detection that disqualifies numeric and banner rows, and bilingual field hints.
 **Why.** The product import here is CSV-only, parsed in the browser, 9 columns, and update-never-create. Every customer migration starts with someone else's spreadsheet.

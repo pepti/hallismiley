@@ -7,7 +7,7 @@
 const db = require('../config/database');
 const Inventory = require('./Inventory');
 
-const COLUMNS = 'id, product_id, sku, attributes, price_isk, price_eur, stock, bin, active, created_at, updated_at';
+const COLUMNS = 'id, product_id, sku, barcode, attributes, price_isk, price_eur, stock, bin, active, created_at, updated_at';
 
 class ProductVariant {
   // ── READ ──────────────────────────────────────────────────────────────────
@@ -70,14 +70,14 @@ class ProductVariant {
     const {
       product_id, sku, attributes,
       price_isk = null, price_eur = null,
-      stock = 0, bin = null, active = true,
+      stock = 0, bin = null, active = true, barcode = null,
     } = data;
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, bin, active)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+      `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, bin, active, barcode)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)
        RETURNING ${COLUMNS}`,
       [
         String(product_id), String(sku),
@@ -85,6 +85,7 @@ class ProductVariant {
         price_isk === null || price_isk === undefined ? null : Number(price_isk),
         price_eur === null || price_eur === undefined ? null : Number(price_eur),
         Number(stock), bin || null, Boolean(active),
+        barcode || null,
       ]
       );
       await Inventory.recordOpening(client, {
@@ -112,7 +113,7 @@ class ProductVariant {
   // product editor PATCHes one cell at a time, stock among them, and before
   // this each such edit was a blind absolute overwrite (ice #275).
   static async update(id, data, { userId = null, stockReason = 'correction', stockNote = null } = {}) {
-    const allowed = ['sku', 'price_isk', 'price_eur', 'bin', 'active'];
+    const allowed = ['sku', 'barcode', 'price_isk', 'price_eur', 'bin', 'active'];
     // No 'stock' here: it is not in `allowed`, so the loop below never sees it.
     const numeric = new Set(['price_isk', 'price_eur']);
     const bool    = new Set(['active']);
@@ -124,8 +125,8 @@ class ProductVariant {
       let v = data[f];
       if (numeric.has(f)) v = v === null ? null : Number(v);
       if (bool.has(f))    v = Boolean(v);
-      // Empty bin clears back to NULL (keeps the variant bin index sparse).
-      if (f === 'bin' && typeof v === 'string' && v.trim() === '') v = null;
+      // Empty bin / barcode clears back to NULL (keeps the partial indexes sparse).
+      if ((f === 'bin' || f === 'barcode') && typeof v === 'string' && v.trim() === '') v = null;
       params.push(v);
       sets.push(`${f} = $${params.length}`);
     }

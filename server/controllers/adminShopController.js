@@ -10,6 +10,8 @@ const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
 const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdfService');
 const { UPLOAD_ROOT } = require('../config/paths');
+const { normaliseUpload, thumbPathFor } = require('../services/productImages');
+const orderExport = require('../services/orderExport');
 const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
 const { submitLocalized }     = require('../services/indexNow');
@@ -47,10 +49,28 @@ function validateSlug(slug) {
 }
 
 // ── Products CSV export/import ───────────────────────────────────────────────
-// One canonical header. SKU is the import match key; BIN/Price/Stock/Active are
-// importable; Name/Variant/Barcode are export-only context (never written).
-const PRODUCT_CSV_HEADER = ['SKU', 'Name', 'Variant', 'Barcode', 'BIN', 'Price ISK', 'Price EUR', 'Stock', 'Active'];
-// Fields a CSV row may change — the same set for products and variants (both
+// One canonical column table (harvested from icelandicstore #249/#300/#302 —
+// harvest-ice-d-2026-09-24): [header, field, kind]. `key` = a match key (SKU,
+// then Barcode as the fallback — never written), `str`/`int`/`bool` = what an
+// update may change, `ctx`/`display` = context the variant-creating import
+// reads (Name, Variant, Slug). The export writes the first nine columns; every
+// uploaded file — the export's own CSV, a supplier .xlsx, a PDF order or price
+// list — is read SERVER-side by services/productImport/parseFile against this
+// table plus the supplier synonyms in headerMap.js.
+const PRODUCT_CSV_COLUMNS = [
+  ['SKU',       'sku',       'key'],
+  ['Name',      'name',      'ctx'],
+  ['Variant',   '__variant', 'display'],
+  ['Barcode',   'barcode',   'key'],
+  ['BIN',       'bin',       'str'],
+  ['Price ISK', 'price_isk', 'int'],
+  ['Price EUR', 'price_eur', 'int'],
+  ['Stock',     'stock',     'int'],
+  ['Active',    'active',    'bool'],
+  ['Slug',      'slug',      'display'],
+];
+const PRODUCT_CSV_HEADER = PRODUCT_CSV_COLUMNS.slice(0, 9).map(c => c[0]);
+// Fields a row may change — the same set for products and variants (both
 // models' update() accept all of these). A stock change is NOT a plain write:
 // the models move it through Inventory.setAbsolute, so each imported figure
 // lands in inventory_adjustments with reason 'import' and the admin who ran it
@@ -58,25 +78,37 @@ const PRODUCT_CSV_HEADER = ['SKU', 'Name', 'Variant', 'Barcode', 'BIN', 'Price I
 const PRODUCT_IMPORT_FIELDS = ['bin', 'price_isk', 'price_eur', 'stock', 'active'];
 const MAX_IMPORT_ROWS = 5000;
 
+const { parseProductImportFile, ProductImportParseError } = require('../services/productImport/parseFile');
+const { formatVariantCell } = require('../services/productImport/variantCell');
+const { buildVariantGroups, refuseGroup } = require('../services/productImport/variantGroups');
+const { foldSlug } = require('../utils/slug');
+
+// ProductImportParseError.reason → i18n key.
+const IMPORT_PARSE_MESSAGES = {
+  empty:              'errors.admin.importFileRequired',
+  unsupportedType:    'errors.admin.importUnsupportedFile',
+  unreadable:         'errors.admin.importUnreadableFile',
+  noText:             'errors.admin.importPdfNoText',
+  noIdentifierColumn: 'errors.admin.importNoIdentifierColumn',
+  noRows:             'errors.admin.importNoDataRows',
+};
+
 // Was a local copy that quoted correctly but did NOT neutralise leading
 // = + - @, so a product name or variant attribute beginning with one of those
 // became a live formula in the exported sheet. Now shared with the books exports.
 const { csvCell } = require('../utils/csv');
 
-function formatVariantAttrs(attrs) {
-  if (!attrs || typeof attrs !== 'object') return '';
-  return Object.entries(attrs).map(([k, val]) => `${k}: ${val}`).join(', ');
-}
-
 // Map a listForExport() row → the 9 CSV cells. Variant rows carry the variant's
 // own sku/bin/money (blank = inherits the product), product rows the product's.
+// The Variant cell is written by the ONE formatter the import parses back
+// (variantCell.js), in the product's axis order.
 function productExportCells(r) {
   const isVariant = r.variant_id != null;
   const val = (v) => (v == null ? '' : v);
   return [
     isVariant ? val(r.variant_sku) : val(r.product_sku),
     val(r.name),
-    isVariant ? formatVariantAttrs(r.attributes) : '',
+    isVariant ? formatVariantCell(r.attributes, Array.isArray(r.variant_axes) ? r.variant_axes : []) : '',
     val(r.barcode),
     isVariant ? val(r.variant_bin) : val(r.product_bin),
     isVariant ? val(r.variant_price_isk) : val(r.product_price_isk),
@@ -86,24 +118,26 @@ function productExportCells(r) {
   ];
 }
 
-// Normalise one client-parsed import row → { values } or { error: 'invalidValue' }.
+// Normalise one import row → { values } or { error: 'invalidValue', errorField }.
 function normalizeImportRow(row) {
   const out = {};
   for (const f of ['price_isk', 'price_eur', 'stock']) {
     if (row[f] == null || row[f] === '') continue;
-    const n = Number(row[f]);
+    // A supplier cell may read "1.234" or "1 234" (Icelandic thousands); a
+    // decimal comma is not a whole number and is refused below.
+    const n = Number(String(row[f]).replace(/[\s.](?=\d{3}(\D|$))/g, ''));
     // Prices must be > 0 (DB CHECK); stock may be 0. Flag up front so preview
     // classifies a bad value as an error rather than failing opaquely on UPDATE.
-    const invalid = !Number.isFinite(n) || (f === 'stock' ? n < 0 : n <= 0);
-    if (invalid) return { error: 'invalidValue' };
-    out[f] = f === 'stock' ? Math.trunc(n) : n;
+    const invalid = !Number.isFinite(n) || !Number.isInteger(n) || (f === 'stock' ? n < 0 : n <= 0);
+    if (invalid) return { error: 'invalidValue', errorField: f };
+    out[f] = n;
   }
   if (row.bin != null && String(row.bin).trim() !== '') out.bin = String(row.bin).trim();
   if (row.active != null && String(row.active).trim() !== '') {
     const s = String(row.active).trim().toLowerCase();
-    if (['true', '1', 'yes', 'active'].includes(s)) out.active = true;
-    else if (['false', '0', 'no', 'inactive'].includes(s)) out.active = false;
-    else return { error: 'invalidValue' };
+    if (['true', '1', 'yes', 'active', 'já', 'ja', 'virk'].includes(s)) out.active = true;
+    else if (['false', '0', 'no', 'inactive', 'nei', 'óvirk', 'draft'].includes(s)) out.active = false;
+    else return { error: 'invalidValue', errorField: 'active' };
   }
   return { values: out };
 }
@@ -120,22 +154,143 @@ function importChanges(values, current) {
   return changes;
 }
 
-// Classify every import row against the DB (shared by preview + apply), variant-first.
-async function classifyImportRows(rows) {
-  const skus  = rows.map(r => String(r.sku || '').trim()).filter(Boolean);
-  const bySku = await Product.findForImport(skus);
-  return rows.map((r) => {
-    const sku = String(r.sku || '').trim();
-    if (!sku) return { sku: '', status: 'error', reason: 'noSku' };
-    const match = bySku.get(sku);
-    if (!match) return { sku, status: 'unmatched' };
+// A generated slug for a new product: fold the name, take the next free suffix,
+// never a reserved section slug.
+async function freeSlug(name, taken) {
+  const base = (foldSlug(name) || 'product').slice(0, 72).replace(/-+$/, '') || 'product';
+  const used = new Set([...(await Product.slugsLike(base)), ...taken]);
+  let slug = base;
+  for (let i = 2; used.has(slug) || RESERVED_SHOP_SLUGS.has(slug); i += 1) slug = `${base}-${i}`;
+  taken.add(slug);
+  return slug;
+}
+
+// Classify every import row against the DB (shared by preview + apply).
+// Match order: SKU (variant-first), then Barcode as the FALLBACK key — a
+// supplier file carries our GTIN and their article number, never our SKU (ice
+// #249). A SKU or barcode twice in one file, or a barcode on two catalogue
+// rows, is refused, never guessed. With `create` on, unmatched rows that carry
+// a Variant cell ("size: M, color: Black") group into ONE new product per name
+// (or Slug) with those rows as its variants, created whole or not at all (ice
+// #302). An unmatched row without a Variant cell stays unmatched: this import
+// never creates single products.
+async function classifyImportRows(rows, { create = false } = {}) {
+  const count = (field) => {
+    const m = new Map();
+    for (const r of rows) {
+      const v = String(r?.[field] == null ? '' : r[field]).trim();
+      if (v) m.set(v, (m.get(v) || 0) + 1);
+    }
+    return m;
+  };
+  const skuCounts = count('sku');
+  const barcodeCounts = count('barcode');
+  const [bySku, byBarcode] = await Promise.all([
+    Product.findForImport([...skuCounts.keys()]),
+    Product.findForImportByBarcode([...barcodeCounts.keys()]),
+  ]);
+
+  const groupRows = [];
+  const results = rows.map((r, index) => {
+    const sku     = String(r?.sku == null ? '' : r.sku).trim();
+    const barcode = String(r?.barcode == null ? '' : r.barcode).trim();
+    const variant = String(r?.__variant == null ? '' : r.__variant).trim();
+    const label   = sku || barcode;
+    const groupable = create && variant && !(sku && bySku.has(sku));
+    // A grid cell refused here still joins its siblings, so the product is
+    // refused whole rather than created without it.
+    const defer = (error, fields = null) => {
+      groupRows.push({
+        index, sku: label, barcode, variant,
+        slug: String(r?.slug == null ? '' : r.slug).trim().toLowerCase(),
+        fields: fields || { name: r?.name == null ? undefined : String(r.name).trim() },
+        error,
+      });
+      return null;
+    };
+
+    if (!sku && !barcode) return groupable ? defer({ reason: 'noSku' }) : { sku: '', status: 'error', reason: 'noSku' };
+    if (sku && skuCounts.get(sku) > 1) {
+      return groupable ? defer({ reason: 'duplicateSku' }) : { sku, status: 'error', reason: 'duplicateSku' };
+    }
+    let match = sku ? bySku.get(sku) : undefined;
+    if (!match && barcode) {
+      if (barcodeCounts.get(barcode) > 1) {
+        return groupable ? defer({ reason: 'duplicateBarcode', errorField: 'barcode' })
+          : { sku: label, status: 'error', reason: 'duplicateBarcode' };
+      }
+      const hit = byBarcode.get(barcode);
+      if (hit && hit.ambiguous) return { sku: label, status: 'error', reason: 'ambiguousBarcode' };
+      // A NEW grid cell whose barcode is already another row's is a collision.
+      if (hit && groupable && sku) return defer({ reason: 'barcodeTaken', errorField: 'barcode' });
+      if (hit) match = hit;
+    }
+    if (!match) {
+      if (!groupable || !sku) return groupable ? defer({ reason: 'noSku' }) : { sku: label, status: 'unmatched' };
+      const norm = normalizeImportRow(r);
+      if (norm.error) return defer({ reason: norm.error, errorField: norm.errorField });
+      const name = r?.name == null ? '' : String(r.name).trim();
+      return defer(null, { ...norm.values, ...(name ? { name } : {}), ...(barcode ? { barcode } : {}) });
+    }
     const norm = normalizeImportRow(r);
-    if (norm.error) return { sku, status: 'error', reason: norm.error, kind: match.kind };
+    if (norm.error) return { sku: label, status: 'error', reason: norm.error, errorField: norm.errorField, kind: match.kind };
     const changes = importChanges(norm.values, match.current);
-    if (!Object.keys(changes).length) return { sku, status: 'nochange', kind: match.kind };
+    if (!Object.keys(changes).length) return { sku: label, status: 'nochange', kind: match.kind };
     const target = match.kind === 'variant' ? { variantId: match.variantId } : { productId: match.productId };
-    return { sku, status: 'update', kind: match.kind, changes, target };
+    return { sku: label, status: 'update', kind: match.kind, changes, target };
   });
+  if (!groupRows.length) return results;
+
+  // The groups: the pure grouper settles what the file alone decides; the
+  // catalogue checks (a product already at that slug or name, a barcode already
+  // on a row) come after and refuse the whole group — "add variants to an
+  // existing product" is not an import.
+  const { groups, byIndex } = buildVariantGroups(groupRows);
+  const okGroups = groups.filter(g => g.ok);
+  const [existing, barcodesInUse] = await Promise.all([
+    Product.findExistingForGroups({
+      slugs: okGroups.map(g => g.slugGiven).filter(Boolean),
+      names: okGroups.map(g => g.name).filter(Boolean),
+    }),
+    Product.findBarcodesInUse(okGroups.flatMap(g => g.variants.map(v => v.barcode).filter(Boolean))),
+  ]);
+  const usedBarcodes = new Set(barcodesInUse);
+  const takenSlugs = new Set();
+  for (const g of okGroups) {
+    if (g.slugGiven && !validateSlug(g.slugGiven)) { refuseGroup(g, byIndex, 'invalidValue', { errorField: 'slug' }); continue; }
+    if ((g.slugGiven && existing.slugs.has(g.slugGiven)) || existing.names.has(String(g.name).toLowerCase())) {
+      refuseGroup(g, byIndex, 'groupExists'); continue;
+    }
+    const taken = g.variants.find(v => v.barcode && usedBarcodes.has(v.barcode));
+    if (taken) { refuseGroup(g, byIndex, 'barcodeTaken', { index: taken.index, errorField: 'barcode' }); continue; }
+    g.slug = g.slugGiven && !takenSlugs.has(g.slugGiven) ? g.slugGiven : await freeSlug(g.name, takenSlugs);
+    takenSlugs.add(g.slug);
+  }
+  const REASON = { variant_invalid: 'variantInvalid', variant_ambiguous: 'variantInvalid', variant_price_required: 'priceRequired',
+    variant_axes_mismatch: 'axesMismatch', variant_duplicate: 'variantDuplicate', group_field_conflict: 'groupConflict',
+    create_missing_fields: 'nameRequired', group_refused: 'groupRefused' };
+  for (const gr of groupRows) {
+    const verdict = byIndex.get(gr.index);
+    const g = verdict.group;
+    const group = g ? { key: g.key, name: g.name, count: g.rows.length, axes: g.axes, ok: g.ok, slug: g.slug || null } : null;
+    if (!verdict.ok) {
+      results[gr.index] = { sku: gr.sku, status: 'error', reason: REASON[verdict.reason] || verdict.reason,
+        errorField: verdict.errorField || null, group };
+      continue;
+    }
+    results[gr.index] = { sku: gr.sku, status: 'create', group, _group: g };
+  }
+  return results;
+}
+
+// The client-facing shape of a classified row (never the model targets).
+function importRowView(c) {
+  return {
+    sku: c.sku, status: c.status, kind: c.kind || null,
+    reason: c.reason || null, errorField: c.errorField || null,
+    changes: c.changes ? Object.keys(c.changes) : null,
+    group: c.group ? { name: c.group.name, count: c.group.count, axes: c.group.axes, slug: c.group.slug } : null,
+  };
 }
 
 // Returns an error message if any section-redesign field is malformed,
@@ -471,6 +626,18 @@ const adminShopController = {
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.admin.noFileUploaded'), code: 400 });
 
+      // Auto-orient, cap the long edge, strip metadata — and prove the bytes
+      // decode (services/productImages.js, ice #240/#241/#242). The magic-byte
+      // check already ran; a file that sharp cannot decode would otherwise be
+      // stored and served as a broken <img>.
+      try {
+        await normaliseUpload(req.file.path, req.file.mimetype);
+      } catch (err) {
+        if (err.code !== 'UNREADABLE_IMAGE') throw err;
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: t(req.locale, 'errors.upload.productImage.unreadable'), code: 400 });
+      }
+
       const url = `/assets/products/${product.id}/${req.file.filename}`;
       const image = await Product.addImage(product.id, {
         url,
@@ -490,7 +657,13 @@ const adminShopController = {
         if (deleted.url && deleted.url.startsWith('/assets/products/')) {
           const rel = deleted.url.replace('/assets/', '');
           const abs = path.join(UPLOAD_ROOT, rel);
-          if (abs.startsWith(UPLOAD_ROOT)) fs.unlink(abs, () => {});
+          // Compare the RELATIVE path: a sibling like '/app/uploads-old/x' starts
+          // with '/app/uploads' too.
+          const relPath = path.relative(UPLOAD_ROOT, abs);
+          if (relPath && !relPath.startsWith('..') && !path.isAbsolute(relPath)) {
+            fs.unlink(abs, () => {});
+            fs.unlink(thumbPathFor(abs), () => {}); // the on-demand thumbnail, if one was ever made
+          }
         }
       } catch { /* non-fatal */ }
 
@@ -712,47 +885,119 @@ const adminShopController = {
     } catch (err) { next(err); }
   },
 
+  // POST /api/v1/admin/shop/products/import/parse-file (multipart, field `file`)
+  // → { source, rows, headers, ignored, orderQtyColumns, importableFields,
+  //     truncated }. The ONE reader for every product file — the export's own
+  //     CSV, a supplier .xlsx, a generated PDF order or price list (ice #249/#300).
+  // Memory-only, never stored; the rows go back through preview → apply.
+  async parseProductImportFile(req, res, next) {
+    try {
+      if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.admin.importFileRequired'), code: 400 });
+      let parsed;
+      try {
+        parsed = await parseProductImportFile(req.file, { columns: PRODUCT_CSV_COLUMNS, maxRows: MAX_IMPORT_ROWS });
+      } catch (err) {
+        if (!(err instanceof ProductImportParseError)) throw err;
+        // The reader's own error rides on `cause`; log it so an "unreadable"
+        // 400 leaves a trace, never the file's contents.
+        logger.warn({
+          reason: err.reason, filename: String(req.file.originalname || '').slice(0, 120),
+          mimetype: req.file.mimetype, size: req.file.size,
+          cause: err.cause ? { name: err.cause.name, message: err.cause.message } : null,
+        }, 'product import: file not readable');
+        return res.status(400).json({
+          error: t(req.locale, IMPORT_PARSE_MESSAGES[err.reason] || 'errors.admin.importUnreadableFile'),
+          code: 400, reason: err.reason,
+        });
+      }
+      return res.json(parsed);
+    } catch (err) { next(err); }
+  },
+
   // POST /api/v1/admin/shop/products/import/preview → classify rows (read-only).
+  // `create: true` also plans the variant-creating import (ice #302).
   async previewProductImport(req, res, next) {
     try {
       const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
       if (!rows) return res.status(400).json({ error: t(req.locale, 'errors.admin.importRowsRequired'), code: 400 });
       if (rows.length > MAX_IMPORT_ROWS) return res.status(400).json({ error: t(req.locale, 'errors.admin.importTooManyRows'), code: 400 });
-      const classified = await classifyImportRows(rows);
-      const counts = { update: 0, nochange: 0, unmatched: 0, error: 0 };
+      const classified = await classifyImportRows(rows, { create: req.body.create === true });
+      const counts = { update: 0, nochange: 0, unmatched: 0, error: 0, create: 0 };
       for (const c of classified) counts[c.status] = (counts[c.status] || 0) + 1;
-      return res.json({
-        counts,
-        rows: classified.map(c => ({
-          sku: c.sku, status: c.status, kind: c.kind || null,
-          reason: c.reason || null, changes: c.changes ? Object.keys(c.changes) : null,
-        })),
-      });
+      const products = new Set(classified.filter(c => c.status === 'create').map(c => c.group.key)).size;
+      return res.json({ counts, createProducts: products, rows: classified.map(importRowView) });
     } catch (err) { next(err); }
   },
 
-  // POST /api/v1/admin/shop/products/import/apply → apply updates, existing rows
-  // only (never create/delete). Stock moves are audited (reason 'import').
+  // POST /api/v1/admin/shop/products/import/apply → apply updates to existing
+  // rows, and (with `create: true`) create each planned product WITH its
+  // variants in one transaction. Stock moves are audited (reason 'import';
+  // opening stock 'opening'). Nothing is ever deleted.
   async applyProductImport(req, res, next) {
     try {
       const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
       if (!rows) return res.status(400).json({ error: t(req.locale, 'errors.admin.importRowsRequired'), code: 400 });
       if (rows.length > MAX_IMPORT_ROWS) return res.status(400).json({ error: t(req.locale, 'errors.admin.importTooManyRows'), code: 400 });
-      const classified = await classifyImportRows(rows);
-      let updated = 0, skipped = 0, failed = 0;
+      const classified = await classifyImportRows(rows, { create: req.body.create === true });
+      let updated = 0, skipped = 0, failed = 0, created = 0, createdVariants = 0;
+      const opts = { userId: actorId(req), stockReason: 'import' };
+      const groups = new Map();
       for (const c of classified) {
+        if (c.status === 'create') { groups.set(c._group.key, c._group); continue; }
         if (c.status !== 'update') { skipped += 1; continue; }
         try {
-          const opts = { userId: actorId(req), stockReason: 'import' };
           if (c.kind === 'variant') await ProductVariant.update(c.target.variantId, c.changes, opts);
           else await Product.update(c.target.productId, c.changes, opts);
           updated += 1;
         } catch (err) {
           failed += 1;
-          logger.warn({ err, sku: c.sku }, 'product CSV import: row update failed');
+          logger.warn({ err, sku: c.sku }, 'product import: row update failed');
         }
       }
-      return res.json({ updated, skipped, failed, total: rows.length });
+      for (const g of groups.values()) {
+        try {
+          const { variants } = await Product.createWithVariants(
+            { slug: g.slug, name: g.name, price_isk: g.parent.price_isk, price_eur: g.parent.price_eur,
+              axes: g.axes, active: g.parent.active },
+            g.variants, { userId: actorId(req) }
+          );
+          created += 1;
+          createdVariants += variants.length;
+        } catch (err) {
+          failed += g.rows.length;
+          logger.warn({ err: { message: err.message, code: err.code }, group: g.key }, 'product import: product create failed');
+        }
+      }
+      return res.json({ updated, created, createdVariants, skipped, failed, total: rows.length });
+    } catch (err) { next(err); }
+  },
+
+  // GET /api/v1/admin/shop/orders/export.xlsx — every order matching the list's
+  // filters (same query string as GET /orders, minus paging) as a real Excel
+  // workbook with typed cells (services/orderExport.js; ice #325). An export
+  // past the cap is refused (413), never truncated.
+  async exportOrders(req, res, next) {
+    try {
+      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const filter = {
+        status:            status            ? String(status) : null,
+        paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
+        fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
+        q:                 q                 ? String(q) : null,
+      };
+      const cap = orderExport.limits.maxRows;
+      const orders = await Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: cap + 1 });
+      if (orders.length > cap) {
+        return res.status(413).json({ error: t(req.locale, 'errors.admin.exportTooLarge', { n: cap }), code: 413 });
+      }
+      const { identity } = require('../config/identity');
+      const brand = (identity.brand && identity.brand.name) || '';
+      const wb = orderExport.buildOrdersWorkbook(orders, req.locale, { creator: brand });
+      const buf = await wb.xlsx.writeBuffer();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="orders-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(Buffer.from(buf));
     } catch (err) { next(err); }
   },
 

@@ -740,17 +740,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` |
 | Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js` |
 | Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order) |
-| Services | `server/services/stripeService.js`, `discountEngine.js`; `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js` |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/productCsv.js`, `availability.js` (the basket's sold-out gate) |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js` |
-| e2e | `e2e/admin-product-group.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112 |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`) |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
-| Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest; #24, #26 remain) |
+| Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
 **Rules that must hold**
 - Hidden, never deleted: `/shop` in `publicSurface.js`, every admin line in
@@ -782,6 +782,32 @@ company/                  gitignored: plans, decisions, logs, market-research st
   under the typist (`ShopFilters._syncSearchControls`).
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
+- **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
+  (multipart, memory-only, 10 MB, CSRF) reads the export's own CSV (csv-parse —
+  a quoted line break survives), a supplier .xlsx (exceljs) or a generated PDF
+  (pdf-parse; labels such as "Your material number" win over column guessing)
+  against `PRODUCT_CSV_COLUMNS` + the supplier synonyms in `headerMap.js`, and
+  hands the rows to the unchanged preview → apply. The browser parses nothing
+  (`utils/productCsv.js` is gone). pdf.js's worker is preloaded synchronously
+  (`parsePdf.ensurePdfWorker`) so a parse cannot fail on pdf.js's memoised
+  dynamic import.
+- **Match keys**: SKU (variant-first), then Barcode — products' own and, since
+  113, a variant's own. A barcode on two catalogue rows (`ambiguousBarcode`), a
+  SKU or barcode twice in one file (`duplicateSku` / `duplicateBarcode`) are
+  refused, never guessed; the index is deliberately NOT unique. An ORDER
+  quantity (Magn, Qty, Order Quantity …) is never read as stock — it is
+  reported as skipped; only a real Stock/Birgðir column writes stock, and that
+  write is audited (reason `import`).
+- **Creating from a file needs `create: true`** and only ever creates a product
+  WITH variants: rows with a Variant cell group by Slug, else name, into one
+  Draft product (Active only when every row says so), created whole or not at
+  all in one transaction (`Product.createWithVariants`, opening stock audited);
+  every variant row needs both prices; an existing name/slug or a taken barcode
+  refuses the group. A row without a Variant cell that matches nothing stays
+  unmatched.
+- **The orders list exports a real .xlsx** (`GET /orders/export.xlsx`, same
+  filter as the list, typed cells, frozen auto-filtered header); past
+  `orderExport.limits.maxRows` it is a 413, never truncated.
 - Product-schema `brand` still names Rekstrarkerfið on every SKU — a known
   post-R1 note, not a rule.
 - The 4 MB product-import body is parsed inside `adminShopRoutes.js`, after
@@ -789,7 +815,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 
@@ -1027,9 +1053,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Mounts | static `/assets/{news,party,projects,avatars,products,content,change-requests,brand,iceland}` in `server/app.js`; `UPLOAD_ROOT` boot guard |
 | Middleware | `server/middleware/upload.js`, `verifyImageBytes.js`, `sanitize.js`, `validate.js`; `server/utils/imageType.js`, `staticAsset.js` |
-| Services | `server/services/uploadVolumeAlert.js` |
+| Services | `server/services/uploadVolumeAlert.js`, `productImages.js` (normalise on upload, lazy `.thumb.webp`) |
 | Config | `server/config/paths.js` |
-| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
+| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`, `productImages.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
 | Migrations | 004, 016, 051 |
 | Features | [uploads-media](../features/uploads-media.md) |
 | Feature doc | `SECURE_SDLC.md` |
@@ -1044,6 +1070,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Brand assets carry the CORP (cross-origin resource policy) exemption
   [harvest-1](HISTORY.md#harvest-1). `avatarHint` must match the enforced 5 MB avatar limit [ui-kit](HISTORY.md#ui-kit).
 - Alert on volume, never block (domain 13).
+- **Product images are normalised on upload** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): EXIF auto-orient, long
+  edge ≤ 2000 px, metadata stripped, same format; bytes sharp cannot decode are
+  a localised 400 with nothing kept. Rewrite from a BUFFER, never a temp file
+  renamed over the source (the Azure Files mount refuses a rename over a file
+  libvips still holds), and no `mozjpeg` encoder option (musl libvips on alpine
+  rejects it). `<original>.thumb.webp` (192 px) is made on the first request by
+  the handler mounted after the products static, and served statically after;
+  a derivative is never a source; deleting an image deletes its thumbnail.
+  `sharp` is a runtime dependency since this.
 - `sanitizeBody` strips tags with the linear `stripTags()` — byte-identical to
   `/<[^>]*>/g`, which was quadratic on runs of `<` (100 kb blocked the event
   loop 2.3 s, before any limiter). Never reintroduce a backtracking regex on

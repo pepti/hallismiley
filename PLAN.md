@@ -121,7 +121,7 @@ chunk lands; add a HISTORY entry for the story.
   ([services-page](docs/HISTORY.md#services-page)), the two-step reminder's
   `mfaReminder.*` strings ([mfa-reminder-2026-09-23](docs/HISTORY.md#mfa-reminder-2026-09-23);
   i18n files, not an inline editor). He edits in place via the inline editors.
-- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #5, #13, #16, #17, #18, #22 (till), #23 done; #9, #10, #21, #25
+- `ENHANCEMENTS.md`: 26 proposals; #1, #2, #5, #13, #16, #17, #18, #22 (till), #23 done; #9, #10, #21, #24, #25
   partial; the rest need his sign-off before any implementation. #7 is
   roadmap item R6.
 - Publish the 14 seeded sales guides ([sales-staff](docs/HISTORY.md#sales-staff));
@@ -320,6 +320,22 @@ chunk lands; add a HISTORY entry for the story.
   `scan_volume` settings (a per-device switch instead), the pick / receive /
   inventory-check screens (ice-only), line discount and sequential order
   numbers (Halli's defaults).
+- Ice harvest lane 2, chunk D landed 2026-09-24 on the same branch
+  ([harvest-ice-d-2026-09-24](docs/HISTORY.md#harvest-ice-d-2026-09-24)): one
+  server-side reader for every product file (CSV, .xlsx, PDF), barcode as the
+  fallback match key (migration 113), the variant-creating import, the orders
+  list as .xlsx, product images normalised + lazy `.thumb.webp`. Open: (a)
+  migration 113 follows 112 — renumber both together if lane 1 lands a clash;
+  ice aliases 113 to its 102; (b) **the Azure half of the image port can only
+  be proved on a deployed instance** (Buffer writes on the Azure Files mount,
+  sharp on node:alpine) — check one JPEG and one PNG upload on the first
+  deploy; (c) the import's new strings and the `export.orders.*` headers are
+  DRAFT; (d) not taken: ice's single-row product create and its AI PDF reader,
+  the goods-receipt / invoice-merger / customer importers (ENHANCEMENTS #24
+  stays partly open), the sticky scrollbar (lane 1), the CSP `blob:` (no
+  pre-upload preview here); (e) new runtime dependencies `exceljs` 4.4.0,
+  `pdf-parse` 2.4.5 (exact) and `sharp` (moved from devDependencies) — the
+  Docker image grows by sharp's musl binaries.
 - Post-R1 notes: a public `/frettir` home for the news list; an `/skilmalar`
   slug for `/terms`; Product-schema `brand` on the hidden shop still says
   Rekstrarkerfið.
