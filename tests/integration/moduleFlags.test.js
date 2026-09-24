@@ -170,7 +170,8 @@ describe('preset vefur — the core + news', () => {
   test('the MCP environment_info tool reports the preset and the enabled set', async () => {
     await withEnv(VEFUR, async (_app, tools) => {
       const info = await tools.find((t) => t.name === 'environment_info').handler();
-      expect(info.modules).toEqual({ preset: 'vefur', enabled: ['news'] });
+      // R5b added the contract and the admin's switched-off list.
+      expect(info.modules).toEqual({ preset: 'vefur', enabled: ['news'], contract: ['news'], switched_off: [] });
     });
   });
 });

@@ -26,3 +26,23 @@ export async function updateGeneralSettings(patch) {
   if (!res.ok) throw new Error(data.error || 'Update failed');
   return data; // { settings }
 }
+
+// ── Module switches (/api/v1/admin/modules, R5b) ────────────────────────────
+// The contract (the instance's tier) is the ceiling; a contracted module can
+// be switched off and back on. Applies at once on the server.
+export async function getModules() {
+  const res  = await fetch('/api/v1/admin/modules', { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load modules');
+  return data; // { preset, modules: [{ id, contract, enabled }] }
+}
+
+export async function setModule(id, enabled) {
+  const res = await fetch(`/api/v1/admin/modules/${encodeURIComponent(id)}`, {
+    method: 'PATCH', credentials: 'include', headers: await _csrfHeaders(),
+    body: JSON.stringify({ enabled }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Update failed');
+  return data;
+}

@@ -66,12 +66,17 @@ async function handleToolsCall(req, params) {
 
   const started = Date.now();
   try {
-    const result = await tool.handler(args);
+    // The calling token rides along (R5b): write tools attribute and audit
+    // their change to its owner. Read tools ignore it.
+    const result = await tool.handler(args, { token: req.mcpToken });
     logger.info({ tool: name, tokenId: req.mcpToken.id, durationMs: Date.now() - started }, 'mcp.tool_call');
     return toolText(result);
   } catch (err) {
     logger.warn({ tool: name, tokenId: req.mcpToken.id, err: { message: err.message } }, 'mcp.tool_error');
-    return { ...toolText({ error: err.message || 'Tool failed' }), isError: true };
+    // Only a message the tool marked for the caller (err.expose — a refusal
+    // such as "not in this instance's contract") goes on the wire; anything
+    // else (a database error) stays in the log line above (R5b review).
+    return { ...toolText({ error: err.expose ? err.message : 'Tool failed' }), isError: true };
   }
 }
 

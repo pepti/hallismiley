@@ -56,6 +56,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-23 | [The seller area follows the 2FA switch; a dismissible two-step reminder](#mfa-reminder-2026-09-23) | Halli: sellers optional too, "but put a reminder somewhere, and a checkmark not to see the reminder again"; `sellerRoutes.js` rule 4 only under `required`; `mfa_reminder` on the session (`mfaPolicy.reminderCandidate`, never under `required`); migration 109 `users.mfa_reminder_dismissed_at` + `POST /auth/mfa-reminder/dismiss`; notice atop the admin shell and the seller area, ✕ per page load, the checkbox saves at once; e2e runs a second server under `required` for the enrolment spec; copy DRAFT |
 | 2026-09-24 | [Module switches — R4, the module-flag system (ENHANCEMENTS #5)](#module-flags-2026-09-24) | `modules.preset` (`all` · `vefur` · `verslun` · `rekstur`) + `modules.<id>.enabled` for shop, pos, books, news, projects, party, bio, salesOps; the catalogue `moduleCatalog.js` names what each owns; off = its APIs and uploads 404 before auth, its pages 404 with noindex and the default head, off nav/sitemap/sidebar/role editor; registry flags drive the feature gate; MCP `environment_info` reports the set; this instance stays `all`; no migration |
 | 2026-09-24 | [MCP phase 2a — OAuth 2.1 for the connector (R5a)](#mcp-oauth-2026-09-24) | claude.ai / Claude Desktop add `/api/v1/mcp` by URL: RFC 9728 + 8414 discovery, RFC 7591 registration (public clients), PKCE S256, admin consent on `/tengja/<id>` naming the redirect host, single-use codes, rotated refresh tokens with replay revocation, RFC 7009 revocation; migration 110; every call re-checks the owner is still an admin; the MCP server name reads the brand; no `mcp-remote` bridge any more |
+| 2026-09-24 | [MCP phase 2b — write tools (R5b)](#mcp-write-tools-2026-09-24) | `set_update_settings` (through the ONE admin write path, now `selfUpdateSettings.applyAdminSettings`), `set_module` (the admin's switches: a contracted module off and back on, at once, never beyond the contract; `app_settings` `modules.admin_off`, loaded at boot), `file_feature_request` (→ the `/admin/feedback` inbox); scope `write`; the same switches on a `/admin/general` card for a person; module readers made per-call; no migration |
 
 ---
 
@@ -2291,3 +2292,117 @@ natively in Icelandic, mirrored in English, and are DRAFT pending Halli.
 **Downstreams.** The flow arrives by merge with migration 110, which needs no
 alias. It is dark wherever `MCP_ENABLED` is unset. Each downstream's `APP_URL`
 must be set, because it is the issuer.
+
+<a id="mcp-write-tools-2026-09-24"></a>
+## 2026-09-24 — MCP phase 2b: write tools (R5b)
+
+This is the second half of R5, the "Manage" and "Build" steps of the AI
+operations loop (REKSTRARKERFI-PLAN §5). ENHANCEMENTS #13 kept write tools for
+a separate sign-off. Halli's "continue", after R5 had been recommended as the
+next item, is taken as that sign-off. Production still has none: the tools are
+scope `write`, and a stack's `MCP_ALLOWED_SCOPES` stays `read` until Halli sets
+it.
+
+**The three tools** (`server/mcp/tools/manage.js`) each go through the SAME
+service as the admin screen:
+- **`set_update_settings`** changes the mode (auto or manual), the channel
+  (stable or canary) and the maintenance window. Window fields are merged into
+  the current window. The route's rules moved into
+  `selfUpdateSettings.applyAdminSettings`, together with `validateWindow`, and
+  `PATCH /api/v1/system/settings` now calls that same function. So the tool and
+  the Updates screen share one write path, and a `managed` instance refuses
+  both.
+- **`set_module`** switches a module off, or back on.
+- **`file_feature_request`** takes a title, a description and an optional
+  page. It writes one change-request batch into `/admin/feedback`, the rows the
+  in-app widget writes. It is attributed to the token's owner, with
+  `page_label = 'Claude (MCP)'` and `user_agent = 'mcp:<token name>'`.
+
+Handlers now receive `{ token }`. Each write is audited to the token's owner
+through `securityLogger.adminAction`, never with the request's free text.
+
+**Module switches, layer 2.** R4's switches are the instance CONTRACT, from
+config/client.json and the env, resolved once at boot. R5b adds the admin's
+own layer, modelled on how self-update separates the contract from the admin's
+choice. `app_settings` `modules.admin_off` lists contracted modules the admin
+(or Claude) has switched off. It can only narrow the contract:
+`setModuleSwitch` refuses to turn on a module the contract leaves out, because
+that would hand out a tier nobody bought, and a stored list naming such a
+module is ignored at load.
+
+Making this take effect at once needed four readers changed to ask per call
+instead of reading values computed at load:
+- `config/modules.js` recomputes its state on every change (`isModuleEnabled`,
+  `isDisabledRoute`, `disabledAdminViews()`, `moduleGate`, the hand-off);
+- `publicSurface.publicNav()` / `legalRoutes()`, with `PUBLIC_NAV` and
+  `LEGAL_ROUTES` kept as getters for existing readers;
+- the sitemap's `staticRoutes()`;
+- the role editor's offered views.
+
+`server.js` loads layer 2 after the migrations; a failure keeps the contract.
+On a scaled-out deployment the other instances follow at their next boot.
+
+**For a person, not only Claude.** A "System modules" card on `/admin/general`
+(`/api/v1/admin/modules`, admin only, CSRF on the PATCH) lists every module
+with its contract state. It switches a contracted module on or off at once;
+modules outside the contract show a disabled box and "Ekki í samningi". So
+whatever Claude switched off, an admin can see it and switch it back. The card
+sits outside the page's draft-and-save form because a switch applies
+immediately. Its checkboxes take the theme's `--gold` accent instead of the
+browser's blue (the consent page's checkbox got the same fix). The preset
+badge is a translated label, not the raw id.
+
+**Found on the way.** The first tool version `require`d its services inside
+the handlers. A test that loaded a fresh app under another config (`vefur`, or
+a manual update mode) then reached the main registry's copies, which carried
+the default config, so two tests failed. The tools now require their services
+at load, and the rule is recorded in ARCHITECTURE §15.
+
+**Tests.**
+- `tests/integration/mcpWriteTools.test.js` (new, 13):
+  - the scope double-gate: listed only with a write token AND a write ceiling;
+    a read token or a read ceiling can neither list nor run the tools;
+  - `set_module`:
+    - off at once, then on again: API 404, page 404, the role editor and
+      `environment_info` agree;
+    - it survives a restart: a fresh app runs on the contract alone until
+      `loadAdminSwitches`;
+    - it never goes beyond the contract (`vefur` + books), and a stored list
+      naming a module outside the contract is ignored;
+    - an unknown id is refused;
+  - `set_update_settings`:
+    - it refuses a managed instance;
+    - on a manual instance, channel + mode + a merged window land in the rows
+      the Updates screen reads;
+    - bad days, a zero-length window and an empty patch are refused;
+  - `file_feature_request`: the row, its note and its attribution, plus the
+    length limits;
+  - `/api/v1/admin/modules`: the listing; off and on, agreeing with Claude's
+    view; 401/403 for non-admins; a non-boolean; the contract ceiling.
+- `e2e/admin-modules.spec.js` (new): an admin unticks Fréttir, `/api/v1/news`
+  404s, it survives a reload, and ticking it again brings it back. The spec
+  runs on the SECOND e2e server. The switch lives in the server's memory, and
+  `news-editor.spec.js` on the main server must never meet news switched off
+  mid-run. The first version raced the save: a checkbox reads checked before
+  its PATCH lands. It now waits for the box to be enabled again (the box is
+  disabled while a save is in flight).
+- Screenshotted on Glóð and Bjart.
+
+**Review** (invariant-reviewer, told not to run tests this time, because of the R5a lesson): PASS. Fixed before the merge:
+- **Two switches in flight could lose one** (Low-Medium). Each did a read-modify-write of one list from a copy in memory. Switches now run one at a time (a promise chain), and each re-reads the stored row with a row lock inside a transaction. That also fixes the next item. Tests: a concurrent Claude + admin-card pair both land; a list stored by another process is kept.
+- **A failed boot load followed by a switch** would have erased the stored switches. The re-read fixes it.
+- **`file_feature_request` now follows the change-request switch**, as the widget does (`changeRequestGate`): on a production stack it is refused unless `change_requests.enabled` is on. There is a test for it under `APP_ENV=production`.
+- **Tool errors:** the transport sends a tool's message only when the tool marked it `expose` (a refusal). Anything else, such as a database error, is sent as "Tool failed" and stays in the log.
+- **The inbox label** now carries the page Claude names (`Claude (MCP): /admin/books`), because the inbox shows the label.
+- **The `set_module` description** now says what "at once" means: on the server that handled the call, cached pages for a few minutes, and other instances at their next restart.
+
+Recorded, not changed:
+- the switches are logged to pino (`securityLogger`), not `staff_audit_log`, the same as self-update settings;
+- a rollback to the previous release ignores `modules.admin_off`, so switched-off modules come back (still within the contract);
+- the write-tool sign-off rests on Halli's "continue", and production stays read-only until he sets `MCP_ALLOWED_SCOPES`.
+
+Full runs before these fixes: Jest 3593 passed, with one expected failure (R4's pin of the old `environment_info` shape, now updated); Playwright 224 passed. After the fixes: full Jest 163 suites, 3597 passed, 1 skipped.
+
+**Copy.** `adminGeneral.modules*`, `adminGeneral.module.*` and
+`adminGeneral.preset.*` were written in Icelandic, mirrored in English, and are
+DRAFT. There is no migration.

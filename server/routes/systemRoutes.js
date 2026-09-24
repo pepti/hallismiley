@@ -23,11 +23,10 @@ const { requireView } = require('../auth/requireView');
 const { csrfProtect } = require('../middleware/csrf');
 const { buildInfo, isDevBuild, changes } = require('../config/version');
 const { applyUpdate, rollbackUpdate } = require('../services/updateApplier');
-const { getSelfUpdateSettings, isEnabled, ADMIN_MODES, CHANNELS, KEYS } = require('../services/selfUpdateSettings');
+const { getSelfUpdateSettings, isEnabled, applyAdminSettings } = require('../services/selfUpdateSettings');
 const { renderChangelog } = require('../services/changelogRender');
-const { nextWindowStart, DAY_KEYS } = require('../utils/maintenanceWindow');
+const { nextWindowStart } = require('../utils/maintenanceWindow');
 const SystemUpdate = require('../models/SystemUpdate');
-const Setting = require('../models/Setting');
 
 // GET /api/v1/system/changes → the changes this build carries, newest first.
 //
@@ -115,26 +114,8 @@ function nextWindowIso(settings) {
   return at ? at.toISOString() : null;
 }
 
-/** @returns {string|null} the reason it is invalid, or null when it is fine. */
-function validateWindow(win) {
-  if (!win || typeof win !== 'object' || Array.isArray(win)) return 'maintenanceWindow must be an object';
-  if (!Array.isArray(win.days) || !win.days.length) return 'maintenanceWindow.days must be a non-empty array';
-  if (win.days.length > 7 || !win.days.every(d => DAY_KEYS.includes(d))) {
-    return `maintenanceWindow.days must be day keys from ${DAY_KEYS.join(', ')}`;
-  }
-  for (const key of ['fromHour', 'toHour']) {
-    if (!Number.isInteger(win[key]) || win[key] < 0 || win[key] > 23) {
-      return `maintenanceWindow.${key} must be an integer between 0 and 23`;
-    }
-  }
-  // A zero-length window is the config that silently never fires; refusing it
-  // here is cheaper than explaining later why auto mode never did anything.
-  if (win.fromHour === win.toHour) return 'maintenanceWindow must not be zero-length';
-  if (typeof win.tz !== 'string' || !win.tz) return 'maintenanceWindow.tz is required';
-  try { new Intl.DateTimeFormat('en-US', { timeZone: win.tz }); }
-  catch { return 'maintenanceWindow.tz is not a recognised IANA time zone'; }
-  return null;
-}
+// validateWindow moved to services/selfUpdateSettings.js (R5b) with the rest of
+// the admin write path, so the MCP tool and this route share one rule set.
 
 // GET /api/v1/system/version → what this instance is, and where its updates
 // would come from. `manifestHost` rather than the full URL: the admin needs to
@@ -200,38 +181,9 @@ router.get('/updates', canRead, async (req, res, next) => {
 // 03:00, which is not something a delegated view holder should be able to do.
 router.patch('/settings', canWrite, csrfProtect, async (req, res, next) => {
   try {
-    const settings = await getSelfUpdateSettings();
-    if (settings.managed) {
-      return res.status(403).json({ error: 'Updates on this instance are managed by Orange Smiley', code: 403 });
-    }
-
-    const body = req.body || {};
-    const writes = [];
-
-    if (body.mode !== undefined) {
-      if (!ADMIN_MODES.includes(body.mode)) {
-        return res.status(400).json({ error: `mode must be one of ${ADMIN_MODES.join(', ')}`, code: 400 });
-      }
-      writes.push([KEYS.mode, body.mode]);
-    }
-
-    if (body.channel !== undefined) {
-      if (!CHANNELS.includes(body.channel)) {
-        return res.status(400).json({ error: `channel must be one of ${CHANNELS.join(', ')}`, code: 400 });
-      }
-      writes.push([KEYS.channel, body.channel]);
-    }
-
-    if (body.maintenanceWindow !== undefined) {
-      const invalid = validateWindow(body.maintenanceWindow);
-      if (invalid) return res.status(400).json({ error: invalid, code: 400 });
-      writes.push([KEYS.window, body.maintenanceWindow]);
-    }
-
-    if (!writes.length) return res.status(400).json({ error: 'Nothing to update', code: 400 });
-    for (const [key, value] of writes) await Setting.set(key, value);
-
-    const updated = await getSelfUpdateSettings();
+    const result = await applyAdminSettings(req.body || {});
+    if (!result.ok) return res.status(result.status).json({ error: result.error, code: result.status });
+    const updated = result.settings;
     return res.json({
       settings: {
         mode:              updated.mode,

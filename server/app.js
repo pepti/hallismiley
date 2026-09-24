@@ -620,6 +620,7 @@ app.use('/api/v1/admin/markadur', require('./routes/marketRoutes')); // must com
 app.use('/api/v1/admin/accounts', require('./routes/adminAccountRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/commission', require('./routes/adminCommissionRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/audit', require('./routes/adminAuditRoutes')); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/modules', require('./routes/adminModulesRoutes')); // R5b: the admin's module switches; before the catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 // Seller area (D-020): read-only, published copy; 404 unless INSTANCE_ROLE=public.

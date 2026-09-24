@@ -21,6 +21,11 @@ No instance of this repo has been deployed; every entry below is on `master`.
 
 ### 2026-09-24
 
+- MCP write tools (roadmap R5b): Claude can change the update channel, mode
+  and maintenance window, switch a module off and back on (within the
+  instance's contract), and file a feature request into the change-request
+  inbox. Write tools exist only where a stack allows `write`. The same module
+  switches are a card on `/admin/general`.
 - MCP connector over OAuth 2.1 (roadmap R5a): claude.ai and Claude Desktop
   add `<origin>/api/v1/mcp` as a custom connector with no token to paste; an
   admin approves the connection on `/tengja/<id>`. Discovery, dynamic client
