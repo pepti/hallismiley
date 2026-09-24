@@ -2,6 +2,10 @@
 // The auth_session cookie is httpOnly (set/cleared by the server only).
 // No tokens are stored in the browser — session state lives in the DB.
 
+import { DISABLED_ADMIN_VIEWS } from '../utils/modules.js';
+
+const DISABLED_VIEWS = new Set(DISABLED_ADMIN_VIEWS);
+
 let _user = null; // cached user info from last successful session check
 let _csrfToken = null;
 
@@ -38,6 +42,12 @@ export function isAdmin()         { return getRoles().includes('admin'); }
 // false and every admin call would 403 — this flag is how the SPA knows to walk
 // the person to the set-up panel instead of showing them a plain user's site.
 export function mfaEnrolmentRequired() { return !!_user?.mfa_enrolment_required; }
+// The other half, under the DEFAULT `optional`: a protected account without
+// two-step that has not ticked "don't show this again" gets a dismissible
+// reminder atop the admin shell and the seller area (components/mfaReminder.js).
+// The server decides — role, enrolment, mode and the per-account dismissal
+// (authController.roleFields, mfa-reminder-2026-09-23).
+export function mfaReminderDue() { return _user?.mfa_reminder === true; }
 // Editor = admin or moderator. Used to gate edit-mode UI for site content
 // (party page, news, projects) where moderators have full edit/delete rights.
 export function canEdit()         { return getRoles().some(r => r === 'admin' || r === 'moderator'); }
@@ -46,7 +56,12 @@ export function canEdit()         { return getRoles().some(r => r === 'admin' ||
 // The session payload carries the resolved admin-view id list ('*' = all).
 // These gate the admin sidebar + router for UX; the server enforces them too.
 export function getViews()        { return _user?.views || []; }
-export function canSeeView(id)    { const v = getViews(); return v.includes('*') || v.includes(id); }
+// A view of a module this instance does not have (R4, utils/modules.js) is
+// seen by nobody, admin included: the server 404s its API before auth.
+export function canSeeView(id)    {
+  if (DISABLED_VIEWS.has(id)) return false;
+  const v = getViews(); return v.includes('*') || v.includes(id);
+}
 export function hasAnyAdminView() { return getViews().length > 0; }
 // Holds every view (the admin role resolves to ['*']). The sidebar's
 // hidden-by-policy set (components/adminSurface.js) applies only to these
@@ -411,6 +426,21 @@ export async function totpDisable(password) {
   return data;
 }
 
+// "Don't show this again" on the two-step reminder. Stored per account on the
+// server, so it holds on every device. A silent cache merge, not an
+// authchange: the router re-navigates on authchange, which would rebuild the
+// admin screen the person is using just to drop a notice.
+export async function dismissMfaReminder() {
+  const headers = await _csrfHeaders();
+  const res = await fetch('/auth/mfa-reminder/dismiss', {
+    method: 'POST', credentials: 'include', headers, body: '{}',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Could not save');
+  updateCachedUser({ mfa_reminder: false }, { silent: true });
+  return data;
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
 export async function getSessions() {
@@ -489,6 +519,37 @@ export async function adminApproveUser(userId, action = 'approve') {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Update failed');
+  return data;
+}
+
+/** Turn another user's two-step verification off (admin; never your own).
+ *  A staff target needs the acting admin's own password: without it the
+ *  server answers 400 with reason 'password_required' (ice #396). */
+export async function adminResetTotp(userId, password) {
+  const headers = await _csrfHeaders();
+  const res = await fetch(`/api/v1/admin/users/${userId}/totp/reset`, {
+    method:      'POST',
+    credentials: 'include',
+    headers,
+    body:        JSON.stringify(password ? { password } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Request failed');
+    err.reason = data.reason || null;
+    throw err;
+  }
+  return data;
+}
+
+/** Replace a mailbox-less login's password; answers { username, password } once. */
+export async function adminNewPassword(userId) {
+  const headers = await _csrfHeaders();
+  const res = await fetch(`/api/v1/admin/users/${userId}/new-password`, {
+    method: 'POST', credentials: 'include', headers,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
 

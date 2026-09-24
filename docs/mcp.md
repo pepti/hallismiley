@@ -36,7 +36,10 @@ behind the normal TOTP-protected login (migration `088_mcp_tokens`). The
 plaintext (`mcp_…`) is shown exactly once; the instance keeps a sha256 hash.
 Because a token bypasses TOTP by design, it expires (90 days default), can be
 revoked with one click, and shows its `last used` time on the page.
-Revocation is immediate.
+Revocation is immediate. Demoting an admin, disabling one, or removing them
+from the admin role revokes every live token they own as well
+(`McpToken.revokeAllForUser`; harvested from icelandicstore #418, 2026-09-24),
+on top of the per-call owner check that already refused them.
 
 ## Connecting each client
 
@@ -44,8 +47,19 @@ Revocation is immediate.
   `claude mcp add --transport http orangesmiley-<env> <endpoint> --header "Authorization: Bearer mcp_…"`
   (the connector name is only the client-side label; it said
   `icelandicstore-<env>` until 2026-09-12).
-- **claude.ai / Claude Desktop** — custom connectors authenticate via OAuth,
-  which is **not built**. The 401s carry a plain `WWW-Authenticate: Bearer`
+- **claude.ai / Claude Desktop** — Settings → Connectors → *Add custom
+  connector*, URL `<origin>/api/v1/mcp`, nothing else. Since R5a (2026-09-24)
+  the instance is its own OAuth 2.1 server: Claude reads the discovery
+  documents, registers itself, and opens `/oauth/authorize` in the browser,
+  which lands on **`/tengja/<id>`** — sign in as an admin, check that the
+  "Sendir þig til baka á" host is `claude.ai` (or `localhost` for Claude
+  Code/Desktop), approve. Claude gets an access token (1 hour) and a refresh
+  token (30 days, rotated on every use); the connection shows on `/admin/mcp`
+  with an OAuth tag, and revoking it there ends both. Write access is granted
+  only when Claude asks for it, the admin ticks it AND the stack's
+  `MCP_ALLOWED_SCOPES` includes `write`.
+- *History:* until R5a custom connectors authenticated via OAuth,
+  which was **not built**. The 401s carry a plain `WWW-Authenticate: Bearer`
   and deliberately do NOT advertise an RFC 9728 `resource_metadata` URL
   (`server/middleware/mcpAuth.js:9-11` — advertising discovery with no
   `/.well-known` document behind it would make OAuth clients fail confusingly
@@ -66,6 +80,52 @@ deliberately NOT queryable yet — that needs its own sign-off (ENHANCEMENTS
 #13 note) — and customer/order/bookkeeping tools wait for a real need. The
 icelandicstore connector this was ported from ships fourteen commerce and
 finance tools besides `environment_info`; none of them exist here.
+
+## Write tools (R5b)
+
+Scope `write` — listed only for a token with `write` on a stack whose
+`MCP_ALLOWED_SCOPES` includes `write` (production: unset = read-only, so
+none of these exist there until Halli says so per stack).
+
+| Tool | Does | Refuses |
+|---|---|---|
+| `set_update_settings` | mode (auto/manual), channel (stable/canary), maintenance window (fields merged into the current one) — through the same `applyAdminSettings` as `/admin/updates` | a `managed` instance; bad days/hours/zone; a zero-length window; nothing to change |
+| `set_module` | switches a contracted module off, or back on, at once (`/admin/general` shows the same switches) | a module outside the contract; an unknown id |
+| `file_feature_request` | files a request into `/admin/feedback` (title + description, optional page), attributed to the token's owner | empty/too-long text (4000 chars in all) |
+
+`environment_info` reports `modules: { preset, enabled, contract, switched_off }`.
+
+## Catalogue write tools (harvest-ice-c-2026-09-24)
+
+Harvested from icelandicstore (#248/#250/#361), `server/mcp/tools/products.js`.
+Scope `write` AND each behind its OWN switch in `config/client.json`, all OFF
+by default (`mcp.write.productCreate` / `productUpdate` / `stock`, env
+`CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE` etc., re-read per call), AND the shop
+module on. orangesmiley.is keeps all three off.
+
+| Tool | Switch | Does | Refuses |
+|---|---|---|---|
+| `create_product` | `productCreate` | creates a product — ALWAYS a Draft (`active: false`) — slug from the name unless given; opening stock recorded as an `opening` adjustment | no name or price; a bad or taken slug |
+| `update_product` | `productUpdate` | changes the fields given on a product found by id or product-level SKU/barcode | stock (that is `set_stock`); unknown fields |
+| `set_stock` | `stock` | sets on hand of a product or variant (a SKU/barcode resolves variant first) through the audited writer: reason, `MCP: <note>` and the token owner on the `inventory_adjustments` row | a negative count; a variant product by id |
+
+## OAuth 2.1 (R5a)
+
+`server/mcp/oauth.js` holds the rules, `controllers/mcpOAuthController.js`
+the endpoints, migration `110_mcp_oauth` the clients and requests; tokens
+stay in `mcp_tokens` (kind `access`/`refresh`). Public clients only (PKCE
+S256, exact redirect URIs, https or loopback http); a replayed code or
+refresh token revokes every token that client holds for that admin; a
+refresh token is never accepted as a bearer credential. Every MCP call and
+token exchange re-checks that the owner is still an admin and not disabled
+(`server/mcp/owner.js`) — that applies to manual tokens too. Full rules:
+`docs/ARCHITECTURE.md` §15; the story: `docs/HISTORY.md#mcp-oauth-2026-09-24`.
+
+**Rolling back past R5a:** the previous release accepts any live token row as
+a bearer (no kind filter, no owner check), so revoke the OAuth tokens first:
+`UPDATE mcp_tokens SET revoked_at = NOW() WHERE kind IN ('access','refresh') AND revoked_at IS NULL`.
+Redirect hosts: `claude.ai` and `claude.com` by default;
+`MCP_OAUTH_REDIRECT_HOSTS` (comma list) replaces them for another client.
 
 ## Design notes (for maintainers)
 

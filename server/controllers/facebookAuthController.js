@@ -16,12 +16,15 @@
 //
 // Errors bubble back to /<locale>/#/?error=<code> so the SPA can render them.
 
+const logger = require('../logger');
+const { trackedFetch } = require('../observability/trackedFetch');
 const { query: dbQuery }           = require('../config/database');
 const { userIsAdminAnywhere } = require('../utils/adminRole');
 const { lucia }                    = require('../auth/lucia');
 const securityLogger               = require('../observability/securityLogger');
 const { loadArctic, isConfigured } = require('../auth/facebook');
 const { generateUniqueUsername, isSafeReturnTo } = require('../auth/oauthHelpers');
+const { isModuleEnabled } = require('../config/modules');
 
 const COOKIE_TTL_MS = 10 * 60 * 1000;
 const USERINFO_URL  = 'https://graph.facebook.com/me?fields=id,name,email';
@@ -104,13 +107,13 @@ async function callback(req, res, next) {
         ? tokens.accessToken()
         : tokens.accessToken;
 
-      const userinfoRes = await fetch(USERINFO_URL, {
+      const userinfoRes = await trackedFetch('Facebook userinfo', USERINFO_URL, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!userinfoRes.ok) throw new Error(`userinfo ${userinfoRes.status}`);
       profile = await userinfoRes.json();
     } catch (err) {
-      console.error('[facebook-oauth] token exchange failed:', err.message);
+      logger.error({ err }, '[facebook-oauth] token exchange failed');
       return redirectWithError(res, 'oauth_failed', req.locale);
     }
 
@@ -153,6 +156,10 @@ async function callback(req, res, next) {
     }
 
     // 3. Else new user — auto-generate a unique username.
+    // No public signup on this instance (the `signup` module, R2b): Facebook
+    // may sign in an EXISTING account, never create one.
+    if (!userId && !isModuleEnabled('signup')) return redirectWithError(res, 'signup_closed', req.locale);
+
     if (!userId) {
       const username = await generateUniqueUsername(email, profile.name);
       const { rows: ins } = await dbQuery(

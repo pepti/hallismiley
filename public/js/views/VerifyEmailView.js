@@ -1,6 +1,7 @@
 import { verifyEmail } from '../services/auth.js';
 import { t, href } from '../i18n/i18n.js';
 import { mountSceneBackdrop } from '../scenes/sceneHeader.js';
+import { moduleEnabled } from '../utils/modules.js';
 
 export class VerifyEmailView {
   constructor(queryString = '') {
@@ -55,8 +56,9 @@ export class VerifyEmailView {
     if (success) {
       actions.innerHTML = `<a href="${href('/login')}" class="btn btn--primary" data-route="/login">${t('auth.signIn')}</a>`;
     } else {
+      // No sign-up link where public signup is off (the `signup` module).
       actions.innerHTML = `
-        <a href="${href('/signup')}" class="btn btn--outline" data-route="/signup">${t('auth.signUp')}</a>
+        ${moduleEnabled('signup') ? `<a href="${href('/signup')}" class="btn btn--outline" data-route="/signup">${t('auth.signUp')}</a>` : ''}
         <a href="${href('/')}" class="btn btn--ghost" data-route="/" style="margin-left:8px">${t('notFound.goHome')}</a>
       `;
     }

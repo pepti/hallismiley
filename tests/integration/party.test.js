@@ -1,3 +1,9 @@
+// Party request-access creates pre-approved guests only while public signup
+// is on (the `signup` module, R2b): this suite switches it on for itself and
+// hands the environment back afterwards; the signup-off path has its own test.
+process.env.CLIENT_CONFIG_MODULES_SIGNUP_ENABLED = 'true';
+afterAll(() => { delete process.env.CLIENT_CONFIG_MODULES_SIGNUP_ENABLED; });
+
 const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
@@ -1228,6 +1234,24 @@ describe('Old invite endpoints return 410 Gone', () => {
 
 describe('Party access requests', () => {
   describe('POST /api/v1/party/request-access', () => {
+    test('with public signup switched off, a NEW guest is held for the owner\'s review — no account access, no magic link', async () => {
+      const modules = require('../../server/config/modules');
+      await modules.setModuleSwitch('signup', false);
+      try {
+        const res = await request(app).post('/api/v1/party/request-access').send({ name: 'Held Guest', email: 'held@example.com' });
+        expect(res.body).toEqual({ status: 'pending' });
+        const { rows } = await db.query(
+          `SELECT party_access, approval_status, magic_login_token_hash, approval_action_token_hash, password_hash
+             FROM users WHERE LOWER(email) = 'held@example.com'`);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ party_access: false, approval_status: 'pending', magic_login_token_hash: null, password_hash: null });
+        expect(rows[0].approval_action_token_hash).toBeTruthy(); // the owner's review link
+      } finally {
+        await modules.setModuleSwitch('signup', true);
+        await db.query(`DELETE FROM app_settings WHERE key = $1`, [modules.ADMIN_OFF_KEY]);
+      }
+    });
+
     test('new email creates a passwordless guest with instant access + magic token', async () => {
       const res = await request(app)
         .post('/api/v1/party/request-access')

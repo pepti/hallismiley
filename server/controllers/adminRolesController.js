@@ -4,8 +4,17 @@
 // from granting itself more access (privilege escalation).
 const Role = require('../models/Role');
 const UserRole = require('../models/UserRole');
+const McpToken = require('../models/McpToken');
 const { query: dbQuery, pool } = require('../config/database');
 const { GRANTABLE_VIEW_IDS } = require('../auth/adminViews');
+const { disabledAdminViews } = require('../config/modules');
+
+// The checkboxes the role editor offers: every grantable view of a module
+// this instance HAS (R4). Validation below still accepts the full list, so a
+// role that holds a view of a switched-off module saves unchanged — the grant
+// sleeps until the module is switched back on.
+// Per request: an admin may switch a module off at run time (R5b).
+const offeredViewIds = () => { const off = disabledAdminViews(); return GRANTABLE_VIEW_IDS.filter(id => !off.includes(id)); };
 const { t } = require('../i18n');
 // Role grants/revocations are staff actions (migration 098 staff_audit_log).
 // Best-effort here: these handlers are not one transaction with the grant.
@@ -28,7 +37,7 @@ const adminRolesController = {
   async list(req, res, next) {
     try {
       const roles = await Role.findAll();
-      return res.json({ roles, grantableViews: GRANTABLE_VIEW_IDS });
+      return res.json({ roles, grantableViews: offeredViewIds() });
     } catch (err) { next(err); }
   },
 
@@ -220,6 +229,11 @@ const adminRolesController = {
           ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: userId,
           summary: { role: name },
         });
+        // No longer an admin → their MCP tokens go too (ice #418; the per-call
+        // owner check in mcp/owner.js already refuses them).
+        if (name === 'admin') {
+          await McpToken.revokeAllForUser(userId).catch(() => 0);
+        }
         return res.status(204).send();
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});

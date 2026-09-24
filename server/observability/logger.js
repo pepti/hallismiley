@@ -17,8 +17,26 @@ function scrubUrl(url) {
   return url.replace(/([?&](?:token|code|state|verify|reset|secret|api[_-]?key|q)=)[^&#]*/gi, '$1[REDACTED]');
 }
 
+const LEVEL = process.env.LOG_LEVEL || 'info';
+
+// Production destination: stdout (the container log, kept only when an App
+// Service diagnostic setting streams it) PLUS a warn+ forwarder into
+// Application Insights `traces`/`exceptions`. The forwarder is a no-op without
+// APPLICATIONINSIGHTS_CONNECTION_STRING, so dev/CI/TEST-without-AI see plain
+// stdout exactly as before. Dev keeps pino-pretty (a transport, which pino
+// cannot combine with multistream in one call). Ported from icelandicstore
+// #254 (harvest-ice-f-2026-09-24; its LOGGING-AUDIT-2026-09-05.md §2.4a).
+function productionDestination() {
+  if (!process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) return process.stdout;
+  const { createAiLogStream } = require('./aiLogStream');
+  return pino.multistream([
+    { level: LEVEL,  stream: process.stdout },
+    { level: 'warn', stream: createAiLogStream() },
+  ]);
+}
+
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
+  level: LEVEL,
   // Suppress all output during tests to keep test output clean
   enabled: process.env.NODE_ENV !== 'test',
   // Redact sensitive fields before they reach the log sink
@@ -58,7 +76,7 @@ const logger = pino({
         },
       }
     : {}),
-});
+}, usePretty ? undefined : productionDestination());
 
 /**
  * Create a child logger bound to a specific HTTP request context.

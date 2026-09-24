@@ -4,7 +4,7 @@ name: {is: "Fréttir", en: News}
 domain: 12
 owner: engine
 status: hidden
-flag: null
+flag: modules.news.enabled
 paths:
   - server/routes/newsRoutes.js
   - server/controllers/newsController.js

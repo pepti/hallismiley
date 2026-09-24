@@ -5366,6 +5366,199 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE leads ADD COLUMN IF NOT EXISTS notify_error TEXT`,
     ],
   },
+  {
+    // The two-step REMINDER's "don't show this again", per account
+    // (mfa-reminder-2026-09-23). Under security.mfa.enrolment = optional a
+    // protected account without TOTP (mfaService.shouldEnrol) sees a small
+    // notice atop the admin shell and the seller area; ticking "Ekki sýna
+    // þetta aftur" stamps this column through POST /auth/mfa-reminder/dismiss,
+    // so the choice follows the account to every device. NULL = not
+    // dismissed. No existing per-user store fitted: admin_nav_config (053) is
+    // the admin sidebar's layout blob, `theme` a single id.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // it. Downstreams take it as-is — the engine owns `users`, no product
+    // adds its own columns there, so no alias or product entry is needed.
+    // Reference copy: server/migrations/109_user_mfa_reminder.sql
+    name: '109_user_mfa_reminder',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_reminder_dismissed_at TIMESTAMPTZ`,
+    ],
+  },
+  {
+    // OAuth 2.1 for the MCP connector (R5a, 2026-09-24 — ENHANCEMENTS #13's
+    // phase 2): claude.ai / Claude Desktop add the connector by URL, register
+    // themselves (RFC 7591), and an admin approves them on /tengja/<id>.
+    //   mcp_oauth_clients — dynamically registered PUBLIC clients (no secret;
+    //                       PKCE S256 is mandatory), exact redirect URIs.
+    //   mcp_oauth_codes   — one row per authorization request: pending until
+    //                       an admin approves (user_id + code_hash set) or
+    //                       denies it; single-use (consumed_at), 10 minutes.
+    // The tokens themselves stay in mcp_tokens (088 pre-shipped kind
+    // 'access'/'refresh', oauth_client_id and parent_id for exactly this).
+    //
+    // Additive (invariant 14): the previous release never reads these
+    // tables. Engine-owned, no product alias.
+    // Reference copy: server/migrations/110_mcp_oauth.sql
+    name: '110_mcp_oauth',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS mcp_oauth_clients (
+         client_id      TEXT PRIMARY KEY,
+         client_name    VARCHAR(200) NOT NULL,
+         redirect_uris  TEXT[] NOT NULL,
+         created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         last_used_at   TIMESTAMPTZ
+       )`,
+      `CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+         id              SERIAL PRIMARY KEY,
+         request_id      TEXT NOT NULL UNIQUE,
+         client_id       TEXT NOT NULL REFERENCES mcp_oauth_clients(client_id) ON DELETE CASCADE,
+         redirect_uri    TEXT NOT NULL,
+         code_challenge  TEXT NOT NULL,
+         scopes          TEXT[] NOT NULL DEFAULT '{read}',
+         state           TEXT,
+         resource        TEXT,
+         status          VARCHAR(10) NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'approved', 'denied')),
+         user_id         TEXT REFERENCES users(id) ON DELETE CASCADE,
+         code_hash       VARCHAR(64) UNIQUE,
+         token_id        INTEGER REFERENCES mcp_tokens(id) ON DELETE SET NULL,
+         expires_at      TIMESTAMPTZ NOT NULL,
+         consumed_at     TIMESTAMPTZ,
+         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_client ON mcp_oauth_codes(client_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_mcp_tokens_oauth_client ON mcp_tokens(oauth_client_id) WHERE oauth_client_id IS NOT NULL`,
+    ],
+  },
+  {
+    // Per-account admin layout preferences, harvested from icelandicstore
+    // (harvest-ice-b-2026-09-24). All four ride on the session payload like
+    // `theme`, so they follow the login to another browser:
+    //   page_widths       — { '<page key>' | '*': 'normal'|'wide'|'full' },
+    //                       the sidebar width icon (services/pageWidth.js);
+    //   page_width_motion — does the admin shell SLIDE to a new width
+    //                       ("Mjúk hreyfing"); TRUE = yes;
+    //   aside_widths      — { '<page key>' | '*': 'narrow'|'medium'|'wide' },
+    //                       the right-hand column of the admin detail pages;
+    //   cookie_consent    — the analytics-cookie answer on the account, so a
+    //                       signed-in user is not asked again elsewhere; NULL =
+    //                       never answered while signed in; "declined" wins.
+    //
+    // ONE engine migration equal to ice's FOUR — ice's product-migrations
+    // file lists them as aliases so its databases record this name without
+    // running it: '111_user_ui_prefs': ['125_user_page_widths',
+    // '127_user_page_width_motion', '128_user_cookie_consent',
+    // '135_user_aside_widths'] (the runner resolves an alias when ONE listed
+    // name is applied; ice has all four, and each statement here is IF NOT
+    // EXISTS, so even running it there is a no-op). Same column names, types
+    // and defaults as ice's.
+    //
+    // Expand-only (invariant 14): the previous release neither reads nor
+    // writes these columns.
+    // Reference copy: server/migrations/111_user_ui_prefs.sql
+    name: '111_user_ui_prefs',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS page_widths JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS page_width_motion BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS aside_widths JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS cookie_consent TEXT
+         CHECK (cookie_consent IN ('accepted', 'declined'))`,
+    ],
+  },
+  {
+    // On hand / Committed / Available, with every stock movement audited
+    // (harvest-ice-c-2026-09-24; ENHANCEMENTS #23). Harvested from
+    // icelandicstore, whose databases already hold the same DDL under FOUR
+    // names — ice 073_inventory_watch (the table), 075_inventory_adjustment_variant
+    // (product_variant_id), 101_inventory_three_numbers (order_id, the orders
+    // stamp, the order_items index) and 121_inventory_adjustment_token
+    // (client_token). Every statement is IF NOT EXISTS, so on an ice database
+    // this entry is a no-op; ice's product file lists those four as the aliases
+    // of this one at graft time (docs/MIGRATIONS.md).
+    //
+    //   inventory_adjustments — append-only: one row per stock movement, with
+    //     the actor, the reason and (for fulfil/unfulfil) the order. The ONE
+    //     writer is models/Inventory.js applyLines.
+    //   orders.stock_deducted_at — stamped in the same transaction that moves
+    //     on hand at fulfilment; NULL = the order still commits stock.
+    //
+    // NOT taken from ice: dropping the stock >= 0 CHECKs (the engine keeps
+    // them — no overselling, Halli 2026-09-24), products.made_to_order, the
+    // build_id column (ice's BOM builds) and the consignment exclusion.
+    //
+    // Backfill: in the release before this one the Stripe webhook decremented
+    // on hand AT PAYMENT, so every order that was ever paid has already had its
+    // stock taken, and a fulfilled one has left the building. Both are stamped
+    // settled, so neither is counted as committed nor deducted a second time
+    // when it is fulfilled. An unpaid, unfulfilled order took no stock and
+    // stays NULL (a pending order never commits — Inventory.OPEN_ORDER_SQL).
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the table or the column. One swap-window caveat, recorded in HISTORY: an
+    // order the OLD container marks paid after this backfill ran is decremented
+    // at payment by the old code and would be deducted again at fulfilment by
+    // the new — only a Stripe payment landing inside the few minutes of a swap.
+    // Reference copy: server/migrations/112_inventory_adjustments.sql
+    name: '112_inventory_adjustments',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS inventory_adjustments (
+         id                 TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         product_id         TEXT        NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+         previous_stock     INTEGER     NOT NULL,
+         new_stock          INTEGER     NOT NULL,
+         delta              INTEGER     NOT NULL,
+         reason             TEXT        NOT NULL DEFAULT 'correction',
+         note               TEXT,
+         user_id            TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS product_variant_id TEXT REFERENCES product_variants(id) ON DELETE CASCADE`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS order_id TEXT REFERENCES orders(id) ON DELETE SET NULL`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS client_token TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_product ON inventory_adjustments (product_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_variant ON inventory_adjustments (product_variant_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_order ON inventory_adjustments (order_id) WHERE order_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_inventory_adjustments_client_token
+         ON inventory_adjustments (client_token) WHERE client_token IS NOT NULL`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_deducted_at TIMESTAMPTZ`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_stock_open ON orders (id) WHERE stock_deducted_at IS NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id)`,
+      `UPDATE orders
+          SET stock_deducted_at = COALESCE(fulfilled_at, paid_at, created_at)
+        WHERE stock_deducted_at IS NULL
+          AND (paid_at IS NOT NULL OR fulfillment_status IN ('fulfilled', 'delivered'))`,
+    ],
+  },
+  {
+    // A barcode per variant, and the lookups the product import matches on
+    // (harvest-ice-d-2026-09-24). A supplier's spreadsheet or order PDF carries
+    // OUR barcode (GTIN/EAN) and THEIR article number, never our SKU, so the
+    // import falls back to barcode when the SKU matches nothing — and a size or
+    // colour has its own GTIN, so the variant needs the column (products has had
+    // one since 048). Harvested from icelandicstore, whose databases hold the
+    // same DDL: product_variants.barcode came with ice's catalogue columns and
+    // the two indexes are ice 102_barcode_lookup_index. Every statement is
+    // IF NOT EXISTS, so on ice this entry is a no-op; ice's product file lists
+    // 102 as its alias at graft time.
+    //
+    // Deliberately NOT unique: the same barcode legitimately sits on two rows
+    // while a catalogue is being cleaned up, and a unique index would refuse
+    // the save. The import resolves the ambiguity instead — a barcode found on
+    // more than one row is refused ('ambiguous_barcode'), never guessed.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column; its variant SELECTs name their columns.
+    // Reference copy: server/migrations/113_variant_barcode.sql
+    name: '113_variant_barcode',
+    statements: [
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS barcode TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_products_barcode
+         ON products (barcode) WHERE barcode IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_barcode
+         ON product_variants (barcode) WHERE barcode IS NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -561,3 +561,22 @@ describe('validatePasswordChange — PATCH /users/me/password', () => {
     expect(next).not.toHaveBeenCalled();
   });
 });
+
+
+// ── Email check is bounded (2026-09-23) ───────────────────────────────────────
+// EMAIL_RE backtracks quadratically on '.' runs; the anonymous signup route
+// reached it with a 100 kb address (3.5 s blocked). isEmail() checks the RFC
+// 5321 length first.
+describe('isEmail — length-bounded before the regex', () => {
+  const { _isEmail: isEmail } = require('../../server/middleware/validate');
+  test('accepts ordinary addresses and rejects malformed ones', () => {
+    expect(isEmail('a@b.is')).toBe(true);
+    expect(isEmail('not-an-email')).toBe(false);
+    expect(isEmail('a'.repeat(250) + '@b.is')).toBe(false); // 255 chars
+  });
+  test('a 99 000-dot attack string is rejected at once', () => {
+    const t = Date.now();
+    expect(isEmail('a@' + '.'.repeat(99000) + '@')).toBe(false);
+    expect(Date.now() - t).toBeLessThan(50);
+  });
+});

@@ -74,3 +74,6 @@
 .gs-savebar[hidden] { display: none; }
 .gs-savebar__msg { font-size: 13px; color: var(--text-secondary); }
 .gs-savebar__actions { display: flex; gap: 8px; }
+
+/* Module switches (R5b): the theme's accent, not the browser's default blue. */
+#gs-modules .gs-row__side input[type=checkbox] { accent-color: var(--gold); width: 18px; height: 18px; }

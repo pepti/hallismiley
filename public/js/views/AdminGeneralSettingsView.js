@@ -18,7 +18,7 @@
 // draft WITHOUT a full re-render (that would drop focus); the order-ID preview
 // updates in place. A full re-render happens only after save/discard.
 import { isAuthenticated, isAdmin } from '../services/auth.js';
-import { getGeneralSettings, updateGeneralSettings } from '../services/adminGeneralSettings.js';
+import { getGeneralSettings, updateGeneralSettings, getModules, setModule } from '../services/adminGeneralSettings.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
@@ -53,9 +53,11 @@ export class AdminGeneralSettingsView {
         <p class="gs-sub">${t('adminGeneral.subtitle')}</p>
       </div>
       <div id="gs-body"><div class="admin-loading">${t('form.loading')}</div></div>
+      <div id="gs-modules"></div>
     `;
     this._el = el;
     await this._load();
+    await this._loadModules();
     return renderAdminShell({ activePath: '/admin/general', content: el });
   }
 
@@ -131,6 +133,47 @@ export class AdminGeneralSettingsView {
 
     this._bind();
     this._recomputeDirty();
+  }
+
+  // ── Module switches (R5b) ───────────────────────────────────────────────────
+  // Their own card, outside the draft/save form above: a switch applies at
+  // once on the server (the same rule as the MCP `set_module` tool — the
+  // contract is the ceiling), so there is nothing to save or discard. The
+  // menus follow on the next page load.
+  async _loadModules() {
+    const host = this._el.querySelector('#gs-modules');
+    try {
+      this._modules = await getModules();
+    } catch (err) {
+      host.innerHTML = `<p class="admin-error">${escHtml(t('adminGeneral.modulesLoadError'))}: ${escHtml(err.message)}</p>`;
+      return;
+    }
+    this._renderModules();
+  }
+
+  _renderModules() {
+    const host = this._el.querySelector('#gs-modules');
+    const rows = this._modules.modules.map((m) => this._row({
+      title: t(`adminGeneral.module.${m.id}`),
+      help: m.contract ? '' : t('adminGeneral.modulesNotInContract'),
+      control: `<input type="checkbox" data-module="${escHtml(m.id)}" data-testid="module-${escHtml(m.id)}"
+        aria-label="${escHtml(t(`adminGeneral.module.${m.id}`))}" ${m.enabled ? 'checked' : ''} ${m.contract ? '' : 'disabled'}>`,
+    })).join('');
+    host.innerHTML = this._card(t('adminGeneral.modulesTitle'), t(`adminGeneral.preset.${this._modules.preset}`),
+      `<p class="gs-row__help">${escHtml(t('adminGeneral.modulesHelp'))}</p>${rows}`);
+    host.querySelectorAll('input[data-module]').forEach((box) => {
+      box.addEventListener('change', async () => {
+        box.disabled = true;
+        try {
+          this._modules = await setModule(box.dataset.module, box.checked);
+          showToast(t('adminGeneral.modulesSaved'), 'success');
+        } catch (err) {
+          box.checked = !box.checked;
+          showToast(t('adminGeneral.saveError') + ': ' + err.message, 'error', 6000);
+        }
+        this._renderModules();
+      });
+    });
   }
 
   // A section card.

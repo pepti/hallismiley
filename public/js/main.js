@@ -5,6 +5,8 @@ import { Router } from './router.js';
 import { showToast } from './components/Toast.js';
 import { installRateLimitGuard } from './api/rateLimitGuard.js';
 import { installSessionGuard } from './services/sessionGuard.js';
+import { initCookieConsent } from './services/cookieConsent.js';
+import { installBuildGuard } from './services/buildGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
 import { syncBodyClass as syncAmbienceClass } from './services/ambiencePrefs.js';
@@ -16,9 +18,15 @@ import {
 // including the one tryRestoreSession() may issue — is covered.
 installRateLimitGuard();
 installSessionGuard();
+// Notice a deploy while this tab is open and reload onto the new release at the
+// next navigation or refocus (services/buildGuard.js; icelandicstore #332).
+installBuildGuard();
 
 // ── 1. Restore session before anything renders ────────────────────────────────
 await tryRestoreSession();
+// The cookie banner waits for this: a signed-in user whose account already
+// holds an answer is never shown it (services/cookieConsent.js, migration 111).
+initCookieConsent();
 
 // ── 2. Determine and load the active locale ───────────────────────────────────
 // Priority: locale in the URL hash → user's saved preference → Icelandic.
@@ -125,6 +133,7 @@ document.body.appendChild(new ThemeSwitcher().render());
     account_disabled:         'auth.errors.accountDisabled',
     google_profile_invalid:   'auth.errors.googleProfileInvalid',
     google_not_configured:    'auth.errors.googleNotConfigured',
+    signup_closed:            'auth.errors.signupClosed',
     email_already_registered: 'auth.errors.emailAlreadyRegistered',
     facebook_profile_invalid: 'auth.errors.facebookProfileInvalid',
     admin_oauth_blocked:      'auth.errors.adminOauthBlocked',

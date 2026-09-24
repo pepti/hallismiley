@@ -19,14 +19,17 @@ see [`.env.example`](../.env.example); for the release channel see
 
 ## 1. What runs in CI (`.github/workflows/ci.yml`)
 
-Push and pull request to **`master`** (the long-lived branch; it said `main`
-until 2026-09-02 and CI had never run) plus a weekly cron. No `paths-ignore`:
-docs-only changes run the full workflow. Three independent jobs, each with its
-own `postgres:16-alpine` service, all on Node 24:
+Push and pull request to **`master`** / `main` plus a weekly cron. Every push
+runs the full workflow; a documentation-only PR skips it and
+`ci-skipped.yml` answers the three check names instead (running the unit tier,
+which tests the docs). All on Node 24 (details and the why: `docs/TESTING.md`
+→ "What CI actually runs"):
 
-1. `test` — `npm audit --audit-level=high`, lint, `check:i18n`, runner spec,
-   release-manifest schema, Jest with coverage.
-2. `e2e` — Playwright against a booted server.
+1. **Lint + Integration tests** — `lint` (audit, lint, `check:i18n`,
+   release-manifest schema), Jest in three parallel shards, and the aggregator
+   job of that name, which merges the coverage maps and enforces the floor
+   (since 2026-09-24, icelandicstore #356).
+2. `e2e` — Playwright against two booted servers.
 3. `docker` — image build, Trivy (`HIGH,CRITICAL`, unfixed ignored), boot
    smoke test with `UPLOAD_ROOT` and `DB_SSL=false` declared, readiness probe.
 
@@ -77,8 +80,12 @@ there** (`:latest`, `:<sha>`, `:sha-<sha>`; single-arch, `provenance: false`)
 → resolve the **digest** and print it with the image it replaces (the rollback
 target) in the run summary → **Trivy on that digest before the web app is
 pointed at it** → `webapps-deploy` with `registry/image@sha256:…` → `az webapp
-restart` → poll `/ready` until it answers from a process **younger than the
-swap** (the old container answers 200 too).
+restart` → poll `/ready` until it answers **as the shipped build**: its
+`X-App-Build` header must equal `sha256(<sha>)[:12]` (the old container answers
+200 too — ice measured ~80 s of that). An image too old to send the header is
+accepted only from a process **younger than the swap** (since 2026-09-24,
+icelandicstore #358/#394; `tests/integration/buildHeader.test.js` pins the
+formula to `server/config/version.js`).
 
 With no TEST stack, what stands between a commit and the live site is ci.yml
 (tests + boot smoke on the same commit) and the Trivy gate: **dispatch only a
@@ -94,6 +101,15 @@ deploy.yml: `RELEASE_STORAGE_ACCOUNT` and `RELEASE_CONTAINER` (the blob
 container that serves `stable.json` / `canary.json`), checked at the start
 unless `dry_run`. Rollout discipline is in the file header: promote to canary,
 soak on Orange Smiley's own instances 24–48 h, promote the SAME sha to stable.
+
+**The soak is checked, not trusted** (since 2026-09-24): a `stable` promote
+first requires every origin in the repository variable `CANARY_URLS`
+(space-separated, e.g. `https://ops.orangesmiley.is https://www.orangesmiley.is`)
+to answer `/ready` 200 with `X-App-Build` = `sha256(<sha>)[:12]` — a canary that
+never pulled the image, or rolled back, blocks the promote. Unset = skipped with
+a warning. `promote.yml` (and `deploy.yml`) are PRODUCT-owned (`.engine-paths`):
+an engine sync never overwrites a downstream's copy, so a product that wants
+this gate copies the step into its own `promote.yml`.
 
 The manifest's changelog section comes from `CHANGELOG.md` by `## [version]`
 heading (`scripts/build-manifest.js`), with the version from `package.json` —
@@ -132,9 +148,44 @@ Also set on any real instance:
 | `BOOKS_UPLOAD_ROOT` | the books' fylgiskjöl — point OUTSIDE the checkout on a backed-up disk |
 | `SELF_UPDATE_TRIGGER_URL` | the platform's deployment webhook; without it an update can be recorded but not applied |
 | `MCP_ENABLED` etc. | see `docs/mcp.md` |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | turns telemetry ON (dark without it — nothing loads the SDK). The `applicationinsights` SDK (2.9.8, exact pin) is started FIRST in `server.js`: incoming requests, `pg`/`http` dependencies, uncaught exceptions, performance counters; plus pino **warn and above** as `traces` / `exceptions` (`observability/aiLogStream.js`) and every outbound `fetch` — OAuth userinfo, the alert webhook, Anthropic, vedur.is, IndexNow, the release manifest — as a `dependencies` row (`observability/trackedFetch.js`). Copy it from the App Insights resource (orangesmiley.is: `orangesmiley-prod-ai`); **setting it is a deploy-visible change** — the first boot with it set starts sending (since 2026-09-24, icelandicstore #254) |
+| `APPLICATIONINSIGHTS_ROLE_NAME` | optional cloud-role name in the Application Map; default the App Service site name (`WEBSITE_SITE_NAME`), else the package name — set it when several instances share one App Insights resource and the site names do not say which is which |
 
 Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
 nothing reads them (the mail transport is Resend).
+
+### Anthropic authentication (workload identity, no stored secret)
+
+Every Claude call (today: auto-translate, `TRANSLATE_ENABLED`) authenticates
+through `server/services/anthropicAuth.js` (harvested from icelandicstore #326,
+2026-09-24). It ships **dark**: with nothing set, Claude features stay off.
+When **all** of `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` and
+`ANTHROPIC_WIF_AUDIENCE` are set, and the container has App Service's
+managed-identity endpoint (`IDENTITY_ENDPOINT`/`IDENTITY_HEADER`, injected
+automatically once the app has a system-assigned identity), the identity gets an
+Entra token for the audience and the Anthropic SDK exchanges it at
+`/v1/oauth/token` for a short-lived Anthropic token. No API key is read in that
+mode, even if `ANTHROPIC_API_KEY` is still set; otherwise the static key is the
+fallback. `ANTHROPIC_SERVICE_ACCOUNT_ID` / `ANTHROPIC_WORKSPACE_ID` are
+optional; token fetches are bounded by `ANTHROPIC_AUTH_TIMEOUT_MS` (10 s). At
+every boot the log says which mode is live: `[anthropic] workload identity OK`
+(or `FAILED` / `settings are incomplete`, at warn) after one cheap authenticated
+call, or `authenticating with the static API key`.
+
+- The federation rule matches ONE managed identity, and an identity belongs to
+  its slot: on a slotted app `ANTHROPIC_FEDERATION_RULE_ID` is a **sticky**
+  (`--slot-settings`) value, one rule per slot; the other settings are the same
+  on every slot.
+- Two issuer settings in the Anthropic console are load-bearing (ice's
+  switch-over, 2026-09-14): **maximum token lifetime 26 h** (App Service
+  identity tokens live 24 h with a back-dated `iat`; 24 h fails with
+  `jwt_lifetime_too_long`) and **JTI replay protection off** (App Service hands
+  out the same cached token for up to 24 h, so every hourly re-exchange would be
+  refused as a replay).
+- The app only ever logs an opaque 401; the reason is in the console's
+  Authentication events tab. The per-tenant ids (issuer, rules, service
+  account) are Orange Smiley's own and are set up when Halli turns Claude on for
+  an instance.
 
 **Canonical host = `APP_URL`'s host** (since 2026-09-12): in production
 `server/app.js` 301-redirects every request whose `Host` differs from the host
@@ -283,6 +334,7 @@ yearly books archive to media in Iceland is the compliance step, not a nicety.
 | Prometheus metrics | `GET /metrics` | `200 text/plain` with `Authorization: Bearer <METRICS_TOKEN>` |
 | Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — which it is on orangesmiley.is until the release host exists; read the `gitSha` from `/ready` logs or the deploy run summary instead) | `gitSha` = the dispatched SHA |
 | Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
+| Release on the wire | any response header; view-source of a page | `X-App-Build` = `sha256(<sha>)[:12]`; the shell's `<meta name="app-build">` says the same and its scripts/stylesheets load from `/js/_<that tag>/…` and `/css/_<that tag>/…` (cached a year; any other tag 404s). A build without `GIT_SHA` reports `unknown` and is served unstamped — fix the build-args, the site still works (since 2026-09-24, [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)) |
 
 ## 8. Rollback
 

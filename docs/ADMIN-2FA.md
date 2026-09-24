@@ -26,17 +26,48 @@ warns at boot and keeps the default. This repo's `config/client.json` spells out
 account's next request — an unenrolled admin who is signed in loses the admin
 area there and then and is sent to the panel; plan the switch with the admins.
 
-**The seller area is not governed by this switch.** `/api/v1/seller` rule 4
+**The seller area follows the switch too** (Halli, 2026-09-23; history
+`mfa-reminder-2026-09-23`). `/api/v1/seller` rule 4
 (`server/routes/sellerRoutes.js`) demands `totp_enabled` for every route except
-`GET /me`, and it predates the mandatory-enrolment harvest (D-020). So under
-`optional` a published seller signs in without a code but still has to enrol
-before the seller area shows leads, accounts or commission statements. If Halli
-wants the seller area optional too, the one-line change is to drop that
-`router.use((req, res, next) => { if (req.user.totp_enabled !== true) … })`
-guard — or make it `if (enrolmentRequired() && req.user.totp_enabled !== true)`
-with `enrolmentRequired` from `auth/mfaPolicy.js` — and update
-`tests/integration/sellerArea.test.js` ("/me works before 2FA; everything else
-needs it").
+`GET /me` **only under `required`** — it asks `enrolmentRequired()` from
+`auth/mfaPolicy.js` per request. Under `optional` a published seller reads their
+leads, accounts and commission statements with a password; `/me` reports
+`mfa_ready: true` ("the rest of the area answers this session"). Until that day
+the rule applied in both modes; it predates the mandatory-enrolment harvest
+(D-020). Pinned both ways in `tests/integration/sellerArea.test.js`.
+
+## The reminder under `optional`
+
+Halli, 2026-09-23: optional, "but put a reminder somewhere, and a checkmark not
+to see the reminder again".
+
+- **Who sees it**: an account `mfaService.shouldEnrol` recommends enrolment to
+  (a protected role — admin by role or role set, `accounts` holder, published
+  seller — without TOTP) that has not dismissed it, and only while the instance
+  is `optional` (`mfaPolicy.reminderCandidate`; under `required` the forced
+  flow applies instead). Every session payload carries `mfa_reminder`
+  (`authController.roleFields`, which reads the enrolment and the dismissal
+  from the row, not from whichever user object its caller had), so the SPA
+  decides without a request of its own. Enrolling makes it go away by itself.
+- **Where**: at the top of the admin shell's content pane, above every admin
+  screen (`renderAdminShell` in `components/AdminSidebar.js`), and at the top of
+  the seller area on the public instance (`SellerAreaView`). The component is
+  `public/js/components/mfaReminder.js`, styled in `public/css/mfa-reminder.css`
+  (tokens only). A labelled region: a short line, **Setja upp í Prófíl**
+  (`/profile?focus=2fa` — Prófíll scrolls to the Tveggja þátta staðfesting panel
+  and focuses its heading), the checkbox **Ekki sýna þetta aftur**, and ✕
+  (**Loka áminningu**).
+- **✕** hides it until the page is next loaded (in memory — moving between
+  admin screens does not bring it back, a reload does). Nothing is saved.
+- **Ticking the checkbox saves at once** and closes the notice with a toast
+  that says two-step lives on Prófíll. `POST /auth/mfa-reminder/dismiss`
+  (session, CSRF, 30 / 15 min per IP; the body is ignored, so it only ever
+  writes the caller's own row; idempotent — the first time is kept) stamps
+  `users.mfa_reminder_dismissed_at` (migration 109), so the choice holds on
+  every device. There is no "show it again" switch: the Prófíll panel is always
+  there. Turning two-step off later does not bring back a dismissed reminder.
+- The copy (`mfaReminder.*` in `public/js/i18n/is.json` / `en.json`) is DRAFT
+  until Halli approves it.
 
 The mandatory rule was written in rekstrarkerfid on 2026-09-18 (Öryggisvörður's
 review while fact-checking its /um-kerfid page, which promises "TOTP fyrir
@@ -64,8 +95,8 @@ A protected account **without** TOTP is not that yet:
     wildcard grant) withheld** in `requireView`, the one place views are
     resolved for a guard. The rest of the role's views still work.
   - a published seller's routes demand `totp_enabled` themselves
-    (`routes/sellerRoutes.js`, rule 4); the session payload still says the
-    seller owes enrolment.
+    (`routes/sellerRoutes.js`, rule 4 — under `required` only); the session
+    payload still says the seller owes enrolment.
   The shop router's private `requireAuth` (guest checkout) applies the same
   policy on the primary role.
 - The session payloads (`/auth/login`, `/auth/session`, `/auth/login/totp`)
@@ -110,9 +141,22 @@ in `config/client.json` (the identity seam, `server/config/identity.js`;
 enrolled earlier keeps the name the app stored at enrolment until the person
 turns two-step off and sets it up again.
 
+## An admin resets another account's two-step verification
+
+Since 2026-09-24 (harvested from icelandicstore #396) the running app has a
+way back for everyone but the last admin: **Admin → Notendur → Endurstilla
+2FA** (`POST /api/v1/admin/users/:id/totp/reset`, admin + CSRF). It runs the
+same teardown as the self-service turn-off (secret, recovery codes, replay
+marker) and ends every session the account holds; the password is untouched.
+Never your own account (that goes through the profile page, which re-asks the
+password). A STAFF account — admin, moderator, or any role that grants an
+admin view — needs the ACTING admin's own password as well, so a walk-up
+attacker at one admin's unlocked laptop cannot strip another's second factor.
+A plain customer account needs none.
+
 ## Break-glass: an admin has lost the phone AND the recovery codes
 
-Nothing in the running app can help — that is the point. The way back in is
+When no other admin can reset it (the section above), nothing in the running app can help — that is the point. The way back in is
 database access, a stronger credential than anything the web app accepts:
 
 ```bash
@@ -141,7 +185,7 @@ modes. `ADMIN_TOTP_EXEMPT` does not work in production either.
 |---|---|
 | `TOTP_ENC_KEY` | 32-byte key (base64 or hex) that encrypts TOTP secrets at rest. **Set it on every real instance** — see below. Malformed → the server refuses to boot. Unset → secrets stay in plaintext and production logs a warning at boot. |
 | `CLIENT_CONFIG_SECURITY_MFA_ENROLMENT` | `optional` (default) or `required` — overrides `security.mfa.enrolment` in `config/client.json` (above). Not a secret. |
-| `ADMIN_TOTP_EXEMPT` | Comma-separated usernames (or `*`) not forced to enrol — meaningful only under `required`. **Ignored when `NODE_ENV=production`** — which includes the Azure TEST stack; the server warns at boot if it finds it there. It exists for the Jest and Playwright suites (dozens of admin sign-ins a minute cannot pass TOTP's one-code-per-30-seconds replay guard) and for a developer's local database. The e2e server runs `required` (`playwright.config.js`, so `e2e/admin-totp-enrolment.spec.js` walks the mandatory rule in a browser) and still exempts `testadmin` and two per-spec admins by name; `tests/env.js` sets `*`, which no Jest suite needs under the `optional` default any more — it stays for a suite that switches to `required`. |
+| `ADMIN_TOTP_EXEMPT` | Comma-separated usernames (or `*`) not forced to enrol — meaningful only under `required`. **Ignored when `NODE_ENV=production`** — which includes the Azure TEST stack; the server warns at boot if it finds it there. It exists for the Jest and Playwright suites (dozens of admin sign-ins a minute cannot pass TOTP's one-code-per-30-seconds replay guard) and for a developer's local database. Playwright starts TWO servers on the same database (`playwright.config.js`, since mfa-reminder-2026-09-23): the main one runs the `optional` default (every spec, the reminder spec among them — nobody needs exempting there), and a second one on `E2E_PORT + 1` runs `required` for `e2e/admin-totp-enrolment.spec.js`, which walks the mandatory rule in a browser and exempts only `testadmin` by name; `tests/env.js` sets `*`, which no Jest suite needs under the `optional` default any more — it stays for a suite that switches to `required`. |
 
 Generate a key:
 
@@ -184,9 +228,12 @@ the boot log.
    reference to the web app's settings, restart. Check the boot log has no
    `TOTP_ENC_KEY is not set` warning.
 2. Make sure nobody has set `ADMIN_TOTP_EXEMPT` on the web app.
-3. Deploy. Migration `107` applies at boot.
+3. Deploy. Migrations `107` and `109` apply at boot.
 4. Under `required`, every protected account that has **not** enrolled is sent
    to the set-up panel at its next sign-in (or next page load, if signed in).
-   Under `optional` (the default) nobody is sent anywhere; ask the admins to
-   enrol from the profile page. Enrolled accounts notice nothing in either mode.
+   Under `optional` (the default) nobody is sent anywhere; each unenrolled
+   protected account sees the dismissible reminder above the admin area (or
+   the seller area) until it enrols or ticks "Ekki sýna þetta aftur" — ask the
+   admins to enrol from the profile page. Enrolled accounts notice nothing in
+   either mode.
 5. Have each admin confirm they saved their recovery codes.

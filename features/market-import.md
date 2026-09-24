@@ -4,7 +4,7 @@ name: {is: "Innlestur markaðsgagna", en: "Market data importer"}
 domain: 7
 owner: engine
 status: live
-flag: null
+flag: modules.salesOps.enabled
 paths:
   - server/scripts/market-import.js
   - tests/integration/marketImport.test.js

@@ -4,7 +4,7 @@ name: {is: "Viðskiptareikningar", en: "Customer accounts"}
 domain: 8
 owner: engine
 status: live
-flag: null
+flag: modules.salesOps.enabled
 paths:
   - server/routes/adminAccountRoutes.js
   - server/controllers/accountsController.js

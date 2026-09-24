@@ -4,7 +4,7 @@ name: {is: "Bókhaldsstillingar", en: "Books settings"}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - public/js/views/AdminBooksSettingsView.js
 migrations: []

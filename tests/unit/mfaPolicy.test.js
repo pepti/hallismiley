@@ -175,6 +175,35 @@ describe('security.mfa.enrolment = optional (the default, mfa-optional-2026-09-2
   });
 });
 
+// The two-step reminder's predicate (mfa-reminder-2026-09-23). The dismissal
+// column and the enrolment are read from the row by authController.roleFields
+// (tests/integration/mfaReminder.test.js); this pins who is a candidate.
+describe('reminderCandidate', () => {
+  test('under optional: a protected account without TOTP, by role, role set, view or seller snapshot', () => {
+    delete process.env.CLIENT_CONFIG_SECURITY_MFA_ENROLMENT;
+    expect(mfaPolicy.reminderCandidate(admin())).toBe(true);
+    expect(mfaPolicy.reminderCandidate(admin({ role: 'user' }), ['user', 'admin'])).toBe(true);
+    expect(mfaPolicy.reminderCandidate(admin({ role: 'solumadur', accounts_holder: true }), ['solumadur'])).toBe(true);
+    expect(mfaPolicy.reminderCandidate(admin({ role: 'user', seller_holder: true }), ['user'])).toBe(true);
+  });
+
+  test('never for an enrolled account or one without a protected role', () => {
+    delete process.env.CLIENT_CONFIG_SECURITY_MFA_ENROLMENT;
+    expect(mfaPolicy.reminderCandidate(admin({ totp_enabled: true }))).toBe(false);
+    expect(mfaPolicy.reminderCandidate(admin({ role: 'user' }), ['user'])).toBe(false);
+    expect(mfaPolicy.reminderCandidate(admin({ role: 'solufolk', accounts_holder: false }), ['solufolk'])).toBe(false);
+    expect(mfaPolicy.reminderCandidate(null)).toBe(false);
+  });
+
+  test('never under required — even for an exempt account the forced flow skips', () => {
+    REQUIRE();
+    process.env.ADMIN_TOTP_EXEMPT = '*';
+    expect(mfaPolicy.reminderCandidate(admin())).toBe(false);
+    delete process.env.ADMIN_TOTP_EXEMPT;
+    expect(mfaPolicy.reminderCandidate(admin())).toBe(false);
+  });
+});
+
 describe('secretBox', () => {
   test('round-trips, never repeats a ciphertext, and binds to its associated data', () => {
     const a = secretBox.seal('JBSWY3DPEHPK3PXP', 'user-1');

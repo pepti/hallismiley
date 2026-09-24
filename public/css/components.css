@@ -532,3 +532,101 @@
   .pd-video-grid    { grid-template-columns: 1fr; }
   .pd-photo-grid    { grid-template-columns: 1fr; }
 }
+
+/* ── Error dialog (every error toast lands here, centered, until OK;
+   components/ErrorDialog.js, harvested from icelandicstore #245) ── */
+.error-dialog-overlay { z-index: 1000; }   /* above the admin modals (999) so an error inside one is still seen */
+.error-dialog { max-width: 480px; border-left: 4px solid var(--error); }
+.error-dialog__title { color: var(--error); }
+.error-dialog__msg { color: var(--text-primary); font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; margin: 0 0 var(--sp-5); }
+.error-dialog__actions { display: flex; justify-content: flex-end; }
+
+/* reset.css strips `outline` from every input/select/textarea, and only the
+   .form-input:focus rule puts anything back (a border + glow) — which covers
+   text fields. Radios, checkboxes and selects had NO visible focus at all, so
+   a keyboard user lost their place on every form built from them (harvested
+   from icelandicstore #296). :focus-visible keeps it off mouse clicks. Text
+   inputs are deliberately NOT in this list: browsers treat them as always
+   focus-visible, so the ring would appear on every click on top of the border. */
+select:focus-visible,
+.form-select:focus-visible,
+input[type=radio]:focus-visible,
+input[type=checkbox]:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+/* ── Toast log (click-through history + Admin → Monitoring) ──
+   Ported from icelandicstore components.css in harvest-ice-f-2026-09-24: the
+   09-02 harvest brought ToastLog.js and the monitoring list but not these
+   rules, so both rendered unstyled. Tokens only (invariant 15); the engine has
+   no --info token, so info rows take the brown ramp (--gold). --warn is the
+   event_logs level eventLogOn5xx gives a 503 the server answered itself. */
+.toast-log-modal__body { max-height: 60vh; overflow-y: auto; }
+.toast-log { display: flex; flex-direction: column; gap: var(--sp-2); list-style: none; margin: 0; padding: 0; }
+.toast-log__item {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-dim);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+}
+.toast-log__item--success { border-left-color: var(--success); }
+.toast-log__item--error   { border-left-color: var(--error); }
+.toast-log__item--warn    { border-left-color: var(--warning); }
+.toast-log__item--info    { border-left-color: var(--gold); }
+.toast-log__time {
+  font-family: var(--font-mono); font-size: 0.75rem;
+  color: var(--text-muted); white-space: nowrap;
+}
+.toast-log__user {
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--text-secondary); white-space: nowrap;
+  max-width: 12ch; overflow: hidden; text-overflow: ellipsis;
+}
+.toast-log__user.is-anon { color: var(--text-muted); font-style: italic; }
+.toast-log__badge {
+  font-size: 0.62rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-muted); white-space: nowrap;
+}
+.toast-log__item--success .toast-log__badge { color: var(--success); }
+.toast-log__item--error   .toast-log__badge { color: var(--error); }
+.toast-log__item--warn    .toast-log__badge { color: var(--warning); }
+.toast-log__msg { color: var(--text-primary); overflow-wrap: anywhere; }
+.toast-log__empty {
+  padding: var(--sp-5) 0; text-align: center;
+  color: var(--text-muted); font-size: 0.9rem;
+}
+
+/* ── Update banner (services/buildGuard.js; icelandicstore #332/#333) ──
+   "A new release is out — save and reload." Top-centre, clear of the toasts and
+   the change-request button, below modals. Tokens only, so it reads on every
+   theme: body text on the surface, a warning rule to mark it. Centred by equal
+   insets + auto margins, not left:50% + translate: a shrink-to-fit box starting
+   at 50% can only use the right half of the viewport, so on a 390 px phone it
+   collapsed to ~237 px and five lines. */
+.update-banner {
+  position: fixed; top: calc(var(--nav-h, 64px) + var(--sp-2));
+  left: var(--sp-4); right: var(--sp-4);
+  margin-inline: auto;
+  width: fit-content;
+  z-index: 900;
+  display: flex; align-items: center; gap: var(--sp-3);
+  max-width: min(640px, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  font-size: 0.875rem;
+}
+.update-banner__msg { flex: 1; }
+.update-banner__reload { flex: none; }

@@ -10,6 +10,7 @@ import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import * as cart from '../services/cart.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
+import { mountAsideWidthControl } from '../components/AsideWidthControl.js';
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -127,6 +128,9 @@ export class AdminOrderDetailView {
       </div>
     `;
     this._bind();
+    // Side-column width (Mjór / Miðlungs / Breiður) from the icon on the
+    // column's top card, saved per account (ice #413). Re-mounted per render.
+    mountAsideWidthControl(this._el, { grid: '.ord-detail__grid', aside: '.ord-detail__side', head: 'h2' });
     // Staff notes about the customer (registered orders only). The component
     // renders nothing if the viewer lacks the 'customers' view (403).
     const notesHost = this._el.querySelector('#ord-notes-host');

@@ -4,7 +4,7 @@ name: {is: "Virðisaukaskattur", en: "VAT (VSK) returns"}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/services/bookkeeping/vatService.js
   - server/utils/vat.js

@@ -6,6 +6,7 @@ import { t, href, switchLocale, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
+import { realEmail } from '../utils/placeholderEmail.js';
 import { THEMES, swatchFor, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
@@ -14,6 +15,13 @@ const avatarPath = n => `/assets/avatars/avatar-${pad(n)}.svg`;
 const avatarPathByName = name => `/assets/avatars/${name}`;
 
 export class ProfileView {
+  // `?focus=2fa` — the two-step reminder's "set it up" link
+  // (components/mfaReminder.js) and the seller area's notice land here: the
+  // panel is scrolled into view and its heading focused.
+  constructor(qs) {
+    this._focus2fa = new URLSearchParams(qs || '').get('focus') === '2fa';
+  }
+
   // Called by the router when navigating away — drops the window-level
   // themechange listener bound in _bindTheme. _disposed matters because
   // _load() is deliberately not awaited by render(): leaving the page while
@@ -97,6 +105,15 @@ export class ProfileView {
           // Profile itself stays usable; the editors live at /admin/background too.
           // Intentionally silent — nothing here is load-bearing for the page.
         }
+      }
+
+      // `?focus=2fa`: last, because the admin editors above land ABOVE the
+      // 2FA panel after an await and would push it back out of view.
+      if (this._focus2fa && !this._disposed && !mfaEnrolmentRequired()) {
+        const section = el.querySelector('#totp-section');
+        const title = section?.querySelector('.profile-section__title');
+        section?.scrollIntoView({ block: 'center' });
+        if (title) { title.setAttribute('tabindex', '-1'); title.focus({ preventScroll: true }); }
       }
     } catch (err) {
       wrap.innerHTML = `<p class="profile-error">Failed to load profile: ${escHtml(err.message)}</p>`;
@@ -218,7 +235,9 @@ export class ProfileView {
     const roleBadge  = profile.role === 'admin'
       ? `<span class="badge badge--admin">${t('adminUsers.setRole')} — admin</span>`
       : `<span class="badge badge--user">${t('adminUsers.setRole')} — user</span>`;
-    const verified = profile.emailVerified
+    // A name-only login (no email, ice #397) has nothing to verify: no badge.
+    const verified = !realEmail(profile.email) ? ''
+      : profile.emailVerified
       ? `<span class="verified-badge">✓ ${t('adminUsers.verified')}</span>`
       : `<span class="unverified-badge">✗ ${t('adminUsers.unverified')}</span>`;
 
@@ -248,7 +267,7 @@ export class ProfileView {
             ${verified}
           </div>
           ${profile.displayName ? `<p class="profile-header__displayname">${escHtml(profile.displayName)}</p>` : ''}
-          <p class="profile-header__email">${escHtml(profile.email)}</p>
+          <p class="profile-header__email">${escHtml(realEmail(profile.email))}</p>
           <p class="profile-header__joined">${t('profile.memberSince')} ${formatDate(profile.createdAt)}</p>
         </div>
         <button class="btn btn--outline profile-edit-btn" id="profile-edit-btn" data-testid="edit-profile-btn">${t('profile.editProfile')}</button>

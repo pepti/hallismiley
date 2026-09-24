@@ -127,6 +127,11 @@ jobs:
             echo "- built at: ${{ steps.stamp.outputs.built_at }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The post-deploy check below falls back to "a process younger than the
+      # swap" for an image too old to send X-App-Build; this is that clock.
+      - name: Note when the swap began
+        run: echo "SWAP_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
@@ -141,6 +146,56 @@ jobs:
       # unavailability per deploy until we move to a tier with slots.
       - name: Force restart to activate new image
         run: az webapp restart --resource-group hallismiley-rg --name hallismiley-app
+
+      # Ported by hand from the engine's deploy.yml (engine-sync-4, 2026-09-24;
+      # engine HISTORY harvest-ice-f-2026-09-24 — this workflow is product-owned,
+      # so a sync never brings it). Until now this job ended at the restart and
+      # a deploy whose container never swapped still went green (2026-04-24).
+      # A 200 only counts from the image this run shipped: the old container
+      # answers /ready perfectly well for the image being replaced (icelandicstore
+      # measured ~80 s of that after a restart). Every response carries
+      # X-App-Build = first 12 hex of sha256(<git sha>) (server/config/version.js
+      # publicBuildTag; tests/integration/buildHeader.test.js pins the formula
+      # below to it) — the Dockerfile stamps the GIT_SHA build-arg passed above.
+      # An image too old to send the header falls back to the uptime rule: a
+      # process YOUNGER than the swap. /ready is exempt from the canonical-host
+      # redirect, so the azurewebsites.net hostname answers it directly.
+      - name: Post-deploy health check
+        run: |
+          set -uo pipefail
+          url="https://hallismiley-app.azurewebsites.net"
+          want="$(printf '%s' "$DEPLOY_SHA" | sha256sum | cut -c1-12)"
+          echo "Expecting X-App-Build: $want"
+          code="000"; uptime=""; got=""
+          for i in $(seq 1 60); do
+            hdr="$(mktemp)"
+            code=$(curl -s -D "$hdr" -o /tmp/ready.json -w '%{http_code}' "$url/ready" || true)
+            # '|| true' on every pipeline: while the container restarts /ready can
+            # answer with an EMPTY body and no header, and under pipefail one
+            # failed grep would end the check instead of retrying.
+            got="$(grep -i '^x-app-build:' "$hdr" | tail -1 | tr -d '\r' | awk '{print $2}' || true)"
+            if [ "$code" = "200" ]; then
+              uptime=$(jq -r '.uptime // empty' /tmp/ready.json 2>/dev/null || true)
+              age=$(( $(date +%s) - SWAP_STARTED_AT ))
+              if [ -n "$got" ] && [ "$got" != "dev" ] && [ "$got" != "unknown" ]; then
+                if [ "$got" = "$want" ]; then
+                  echo "/ready OK after ~$((i*5))s from the shipped build (X-App-Build $got)"
+                  cat /tmp/ready.json; exit 0
+                fi
+              elif printf '%s' "$uptime" | grep -Eq '^[0-9]+$' && [ "$uptime" -le "$age" ]; then
+                echo "/ready OK after ~$((i*5))s (no build tag to compare; process uptime ${uptime}s, swap began ${age}s ago)"
+                cat /tmp/ready.json; exit 0
+              fi
+            fi
+            sleep 5
+          done
+          if [ "$code" = "200" ]; then
+            echo "::error::$url/ready answers 200, but not as the shipped build (X-App-Build ${got:-<none>}, want $want; uptime ${uptime:-?}s) — the container swap never happened."
+          else
+            echo "::error::$url/ready never returned 200 (last HTTP $code)"
+          fi
+          cat /tmp/ready.json || true
+          exit 1
 
   # ── Failsafe: email halli@hallismiley.is when merged code does NOT go live ──
   # Two distinct "merged but not live" causes are covered:

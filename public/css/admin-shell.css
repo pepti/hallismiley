@@ -439,3 +439,175 @@
 /* The extra control costs ~28px of a 240px sidebar; tighten the edit-mode gap
    so Icelandic labels ("Vörumóttökur") don't ellipsis away. */
 .admin-sidebar__item--editing { gap: var(--sp-2); }
+
+/* ── Page width per account and page (harvested from icelandicstore #401–#407,
+   harvest-ice-b-2026-09-24) ─────────────────────────────────────────────────
+   The shell's default cap is 1280px (.admin-shell above) — Venjuleg, every admin
+   page's default. The small icon on the sidebar's Breyta row
+   (components/PageWidthControl.js) picks Breið (1920px) or Allur skjárinn per
+   page or for all pages, saved on the account (services/pageWidth.js,
+   users.page_widths, migration 111). The 640px breakpoint collapses all three. */
+.admin-shell--wide { max-width: 1920px; }
+.admin-shell--full { max-width: 100vw; }   /* not `none`: a length can be animated, `none` cannot */
+/* Mjúk hreyfing (on by default): the shell slides between widths instead of
+   jumping — within a page and from one page to the next (enterPageWidth).
+   Never for reduced-motion users. */
+.admin-shell--motion { transition: max-width 0.28s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell--motion { transition: none; }
+}
+
+/* The Breyta toggle (admins) and the page-width icon (everyone) share the top
+   row: Breyta left, the icon right. */
+.admin-sidebar__tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-height: 24px;
+  margin-top: calc(-1 * var(--sp-1));
+}
+.admin-sidebar__tools > .admin-sidebar__edit-toggle { align-self: center; margin-top: 0; }
+
+/* A set-once preference, so a quiet icon: the pencil's size and muted colour,
+   pushed to the right of the Breyta row. A dot marks a page that is off its
+   default. The popover borrows the row-tint popover's surface. */
+.admin-sidebar__width-btn,
+.cd-aside-width {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+.admin-sidebar__width-btn svg,
+.cd-aside-width svg { width: 14px; height: 14px; }
+.admin-sidebar__width-btn:hover,
+.cd-aside-width:hover { color: var(--text-primary); }
+.admin-sidebar__width-btn[aria-expanded="true"],
+.cd-aside-width[aria-expanded="true"] { color: var(--text-primary); background: var(--bg-hover); }
+.admin-sidebar__width-btn:focus-visible,
+.cd-aside-width:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.admin-sidebar__width-btn.is-custom::after,
+.cd-aside-width.is-custom::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  box-shadow: 0 0 0 1.5px var(--bg-surface);
+}
+.admin-sidebar__width-btn[aria-expanded="true"].is-custom::after,
+.cd-aside-width[aria-expanded="true"].is-custom::after { box-shadow: 0 0 0 1.5px var(--bg-hover); }
+.admin-sidebar__width-pop,
+.cd-aside-width-pop {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: var(--sp-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+.admin-sidebar__width-pop[hidden],
+.cd-aside-width-pop[hidden] { display: none; }
+.admin-sidebar__width-caption {
+  padding: var(--sp-2) var(--sp-3) var(--sp-1) calc(var(--sp-3) + 0.86rem + var(--sp-2));
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.admin-sidebar__width-pop [role^="menuitem"],
+.cd-aside-width-pop [role^="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.admin-sidebar__width-pop [role^="menuitem"]:hover,
+.cd-aside-width-pop [role^="menuitem"]:hover { background: var(--bg-hover); }
+.admin-sidebar__width-pop [role^="menuitem"]:focus-visible,
+.cd-aside-width-pop [role^="menuitem"]:focus-visible {
+  background: var(--bg-hover);
+  outline: 2px solid var(--text-primary);
+  outline-offset: -2px;
+}
+.admin-sidebar__width-tick { flex: 0 0 auto; width: 1em; visibility: hidden; }
+.admin-sidebar__width-mark { color: var(--text-muted); font-weight: 400; }
+.admin-sidebar__width-hint {
+  margin-left: auto;
+  padding-left: var(--sp-3);
+  font-size: 0.76rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.admin-sidebar__width-pop [role="menuitemradio"][aria-checked="true"],
+.cd-aside-width-pop [role="menuitemradio"][aria-checked="true"] { font-weight: 600; }
+/* "Nota á allar síður" (or its undo) — below a hairline. */
+.admin-sidebar__width-sep { height: 1px; margin: var(--sp-1) var(--sp-2); background: var(--border); }
+.admin-sidebar__width-pop [aria-checked="true"] .admin-sidebar__width-tick,
+.cd-aside-width-pop [aria-checked="true"] .admin-sidebar__width-tick { visibility: visible; }
+
+/* Side-column width on the admin detail pages (components/AsideWidthControl.js,
+   ice #413): the control adds .aside-grid + .aside-grid--<width> to the page's
+   two-column grid, which sets --aside-w; the page's grid reads it
+   (admin-orders.css .ord-detail__grid). Mjór 240 / Miðlungs 320 / Breiður 440. */
+.aside-grid--narrow { --aside-w: 240px; }
+.aside-grid--medium { --aside-w: 320px; }
+.aside-grid--wide   { --aside-w: 440px; }
+/* Slides with Mjúk hreyfing, but only once the page has painted at its own
+   width — never on the way in. */
+.admin-shell--motion .aside-grid--ready { transition: grid-template-columns 0.28s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell--motion .aside-grid--ready { transition: none; }
+}
+.aside-grid__col { position: relative; }
+.aside-grid__head { display: flex; align-items: center; gap: var(--sp-2); }
+
+/* Every width looks the same on a phone (the shell collapses at 640px), and the
+   Breyta toggle is hidden there too, so the whole row goes. */
+@media (max-width: 640px) {
+  .admin-sidebar__tools,
+  .admin-sidebar__width-pop,
+  .cd-aside-width,
+  .cd-aside-width-pop { display: none; }
+}
+
+/* A horizontal scrollbar that stays on screen for a wide admin table
+   (utils/stickyHScroll.js, ice #325): a mirror bar right after the wrap rides
+   the bottom of the viewport; the wrap's own bar is hidden while it shows. */
+.hscroll-sticky {
+  position: sticky; bottom: 0; z-index: 2;
+  overflow-x: auto; overflow-y: hidden;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-dim);
+}
+.hscroll-sticky__track { height: 1px; }
+.admin-table-wrap.has-sticky-hscroll { scrollbar-width: none; }
+.admin-table-wrap.has-sticky-hscroll::-webkit-scrollbar { display: none; }

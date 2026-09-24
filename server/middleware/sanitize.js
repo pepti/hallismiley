@@ -38,12 +38,31 @@ const RICH_TEXT_OPTIONS = {
   },
 };
 
+// Removes every `<…>` span exactly like `.replace(/<[^>]*>/g, '')`, in linear
+// time. That regex is QUADRATIC on a string of '<' with no '>' after them: at
+// each '<' the engine scans to the end looking for '>', fails, and retries from
+// the next '<' (100 kb of '<' blocked the event loop 2.3 s, 5 MB for about an
+// hour — and this runs on every JSON body before the rate limiters). Once no
+// '>' follows a '<', no later '<' can match either, so one pass suffices.
+// Do NOT "simplify" to /<[^<>]*>/: it is not equivalent ('<a<b>>' → '<a>').
+// tests/unit/sanitize.test.js fuzzes this against the regex.
+function stripTags(s) {
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const open = s.indexOf('<', pos);
+    if (open < 0) break;
+    const close = s.indexOf('>', open + 1);
+    if (close < 0) break;
+    out += s.slice(pos, open);
+    pos = close + 1;
+  }
+  return out + s.slice(pos);
+}
+
 function sanitizeString(value) {
   if (typeof value !== 'string') return value;
-  return value
-    .replace(/\0/g, '')                        // null bytes
-    .replace(/<[^>]*>/g, '')                   // HTML tags
-    .trim();
+  return stripTags(value.replace(/\0/g, '')).trim();   // null bytes, HTML tags
 }
 
 // Allowlist-based HTML sanitization for rich-text fields. Strips tags and
@@ -95,4 +114,4 @@ function sanitizeObject(obj) {
   return clean;
 }
 
-module.exports = { sanitizeBody };
+module.exports = { sanitizeBody, _stripTags: stripTags };

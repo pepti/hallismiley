@@ -21,6 +21,7 @@
 
 const { clientConfig } = require('../config/clientConfig');
 const Setting = require('../models/Setting');
+const { DAY_KEYS } = require('../utils/maintenanceWindow');
 
 const MODES        = ['managed', 'auto', 'manual'];
 // The modes an admin may put their own instance into. `managed` is not here:
@@ -99,6 +100,60 @@ async function getSelfUpdateSettings() {
   return effective;
 }
 
+/** A maintenance window as the admin sends it; an error string or null. */
+function validateWindow(win) {
+  if (!win || typeof win !== 'object' || Array.isArray(win)) return 'maintenanceWindow must be an object';
+  if (!Array.isArray(win.days) || !win.days.length) return 'maintenanceWindow.days must be a non-empty array';
+  if (win.days.length > 7 || !win.days.every(d => DAY_KEYS.includes(d))) {
+    return `maintenanceWindow.days must be day keys from ${DAY_KEYS.join(', ')}`;
+  }
+  for (const key of ['fromHour', 'toHour']) {
+    if (!Number.isInteger(win[key]) || win[key] < 0 || win[key] > 23) {
+      return `maintenanceWindow.${key} must be an integer between 0 and 23`;
+    }
+  }
+  // A zero-length window is the config that silently never fires; refusing it
+  // here is cheaper than explaining later why auto mode never did anything.
+  if (win.fromHour === win.toHour) return 'maintenanceWindow must not be zero-length';
+  if (typeof win.tz !== 'string' || !win.tz) return 'maintenanceWindow.tz is required';
+  try { new Intl.DateTimeFormat('en-US', { timeZone: win.tz }); }
+  catch { return 'maintenanceWindow.tz is not a recognised IANA time zone'; }
+  return null;
+}
+
+/**
+ * Apply an admin's choice — the ONE write path, shared by PATCH
+ * /api/v1/system/settings and the MCP `set_update_settings` tool (R5b), so
+ * the two can never disagree about what an admin may change. The contract
+ * rules above hold: a `managed` instance refuses everything, and only the
+ * admin modes / channels / a valid window are accepted.
+ * @param {{ mode?, channel?, maintenanceWindow? }} patch
+ * @returns {Promise<{ ok: true, settings } | { ok: false, status: number, error: string }>}
+ */
+async function applyAdminSettings(patch = {}) {
+  if (!isEnabled()) return { ok: false, status: 404, error: 'Not found' };
+  const current = await getSelfUpdateSettings();
+  if (current.managed) return { ok: false, status: 403, error: 'Updates on this instance are managed by Orange Smiley' };
+
+  const writes = [];
+  if (patch.mode !== undefined) {
+    if (!ADMIN_MODES.includes(patch.mode)) return { ok: false, status: 400, error: `mode must be one of ${ADMIN_MODES.join(', ')}` };
+    writes.push([KEYS.mode, patch.mode]);
+  }
+  if (patch.channel !== undefined) {
+    if (!CHANNELS.includes(patch.channel)) return { ok: false, status: 400, error: `channel must be one of ${CHANNELS.join(', ')}` };
+    writes.push([KEYS.channel, patch.channel]);
+  }
+  if (patch.maintenanceWindow !== undefined) {
+    const invalid = validateWindow(patch.maintenanceWindow);
+    if (invalid) return { ok: false, status: 400, error: invalid };
+    writes.push([KEYS.window, patch.maintenanceWindow]);
+  }
+  if (!writes.length) return { ok: false, status: 400, error: 'Nothing to update' };
+  for (const [key, value] of writes) await Setting.set(key, value);
+  return { ok: true, settings: await getSelfUpdateSettings() };
+}
+
 /** The manifest URL for a channel — `{channel}` is the only placeholder. */
 function manifestUrlFor(settings) {
   return settings.manifestUrl.replace(/\{channel\}/g, settings.channel);
@@ -113,4 +168,5 @@ function isAuto(mode) { return mode === 'auto'; }
 module.exports = {
   MODES, ADMIN_MODES, CHANNELS, KEYS,
   getSelfUpdateSettings, manifestUrlFor, canApply, isAuto, isManaged, isEnabled, contract,
+  validateWindow, applyAdminSettings,
 };

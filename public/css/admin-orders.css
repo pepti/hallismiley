@@ -56,7 +56,9 @@
 .ord-detail__date { color: var(--text-muted); margin: 4px 0 0; font-size: 14px; }
 .ord-detail__badges { display: flex; gap: 8px; }
 .ord-detail__grid {
-  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start;
+  /* --aside-w: the side column's width, picked per account (AsideWidthControl,
+     admin-shell.css .aside-grid--*); 320px = Miðlungs, the default. */
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--aside-w, 320px); gap: 24px; align-items: start;
 }
 @media (max-width: 760px) { .ord-detail__grid { grid-template-columns: 1fr; } }
 .ord-detail__card {

@@ -25,6 +25,10 @@ import { isAdmin, canSeeView, hasAllViews } from '../services/auth.js';
 import { getBuildInfo } from '../services/buildInfo.js';
 import { showToast } from './Toast.js';
 import { HIDDEN_ADMIN_VIEWS } from './adminSurface.js';
+import { renderMfaReminder } from './mfaReminder.js';
+// Page width per account and page (harvested from icelandicstore #401–#407).
+import { pageWidthKey, getPageWidth, enterPageWidth } from '../services/pageWidth.js';
+import { pageWidthButtonHtml, mountPageWidthControl } from './PageWidthControl.js';
 import {
   loadNavLayout, saveNavLayout, clearNavLayout, hydrateNavLayout, setNavRerender,
 } from './adminNavLayout.js';
@@ -442,15 +446,27 @@ function selectAllText(el) {
  *   activePath — locale-stripped path of the view (e.g. '/admin/shop/orders').
  *                Falsy → derived from the current URL.
  *   content    — the Element the view built (its existing root).
+ *   wide       — this page's own default width is `wide` (1920px) instead of
+ *                `normal` (1280px). No page uses it today (ice #406: Venjuleg
+ *                is every admin page's default).
+ *   widthKey   — the key the user's own width choice is saved under
+ *                (sidebar width icon → Síðubreidd, services/pageWidth.js). Defaults
+ *                to the router's matched pattern, else one derived from the URL.
  * Returns the shell Element; the caller returns this from render().
  */
-export function renderAdminShell({ activePath, content } = {}) {
+export function renderAdminShell({ activePath, content, wide = false, widthKey } = {}) {
   const path     = activePath || stripLocale(window.location.pathname);
   const activeId = pickActiveId(path);
   const canEdit  = isAdmin();
 
   const shell = document.createElement('div');
   shell.className = 'admin-shell';
+  const pageDefault = wide ? 'wide' : 'normal';
+  const key = widthKey || pageWidthKey(window.location.pathname);
+  if (key) shell.dataset.widthKey = key;
+  shell.dataset.widthDefault = pageDefault;
+  // Slides from the previous admin page's width when Mjúk hreyfing is on.
+  enterPageWidth(shell, getPageWidth(key, pageDefault));
   shell.innerHTML = `
     <button type="button" class="admin-shell__menu-btn" aria-controls="admin-sidebar" aria-expanded="false">
       <span class="admin-shell__menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -458,17 +474,26 @@ export function renderAdminShell({ activePath, content } = {}) {
     </button>
     <aside class="admin-sidebar" id="admin-sidebar" aria-label="${t('admin.sidebarLabel')}">
       <a class="admin-sidebar__back" href="${href('/')}" data-route="/"><span aria-hidden="true">←</span> ${t('admin.backToSite')}</a>
-      ${canEdit ? `<button type="button" class="admin-sidebar__edit-toggle" data-testid="admin-nav-edit-toggle" aria-pressed="false">
-        <span class="admin-sidebar__edit-toggle-icon" aria-hidden="true">${PENCIL}</span>
-        <span class="admin-sidebar__edit-toggle-label">${t('admin.navEdit.edit')}</span>
-      </button>` : ''}
+      ${(canEdit || key) ? `<div class="admin-sidebar__tools">
+        ${canEdit ? `<button type="button" class="admin-sidebar__edit-toggle" data-testid="admin-nav-edit-toggle" aria-pressed="false">
+          <span class="admin-sidebar__edit-toggle-icon" aria-hidden="true">${PENCIL}</span>
+          <span class="admin-sidebar__edit-toggle-label">${t('admin.navEdit.edit')}</span>
+        </button>` : ''}
+        ${key ? pageWidthButtonHtml() : ''}
+      </div>` : ''}
       <nav class="admin-sidebar__nav"></nav>
       <p class="admin-sidebar__build" data-testid="admin-build-stamp" hidden></p>
     </aside>
     <div class="admin-shell__content"></div>
   `;
 
-  if (content) shell.querySelector('.admin-shell__content').appendChild(content);
+  // The two-step reminder (mfa-reminder-2026-09-23) sits above every admin
+  // screen's own content — this is the one shell they all share. null when
+  // the session does not ask for it.
+  const contentEl = shell.querySelector('.admin-shell__content');
+  const reminder = renderMfaReminder();
+  if (reminder) contentEl.appendChild(reminder);
+  if (content) contentEl.appendChild(content);
 
   const aside   = shell.querySelector('.admin-sidebar');
   const navEl   = shell.querySelector('.admin-sidebar__nav');
@@ -491,6 +516,8 @@ export function renderAdminShell({ activePath, content } = {}) {
   tintPop.setAttribute('role', 'dialog');
   tintPop.hidden = true;
   aside.appendChild(tintPop);
+  // Page width (Síðubreidd) — the small icon on the Breyta row, every page.
+  mountPageWidthControl(shell, aside);
 
   const indicator = document.createElement('div');
   indicator.className = 'admin-sidebar__drop-indicator';

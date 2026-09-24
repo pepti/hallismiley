@@ -4,7 +4,7 @@ name: {is: "Endurspilun bókhalds", en: "Books replay"}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/services/bookkeeping/replay.js
   - server/services/bookkeeping/replayCase.js

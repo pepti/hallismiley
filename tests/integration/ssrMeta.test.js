@@ -185,7 +185,9 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
       test('a hidden detail route is de-indexed too', async () => {
         const res = await request(app).get(`${pathFor(ID.surface.hiddenRoutes[0])}/some-detail-slug`);
-        expect(res.status).toBe(200);
+        // No such row / no such route: a real 404 since harvest-ice-e-2026-09-24
+        // (spaStatus.test.js) — the shell and the noindex are unchanged.
+        expect([200, 404]).toContain(res.status);
         expect(res.text).toMatch(/<meta name="robots" content="noindex, nofollow"/);
       });
     });
@@ -217,9 +219,11 @@ describe('SSR meta-injection — SPA catch-all', () => {
     expect(res.text).toMatch(/rel="alternate" hreflang="x-default"/);
   });
 
-  test('unknown SPA route still serves the shell with generic meta (404 handled client-side)', async () => {
+  test('unknown SPA route still serves the shell with generic meta, with a real 404 status', async () => {
     const res = await request(app).get('/en/does-not-exist');
-    expect(res.status).toBe(200);
+    // 404 since harvest-ice-e-2026-09-24 (icelandicstore #399) — the body is
+    // still the shell, so the SPA renders NotFoundView (spaStatus.test.js).
+    expect(res.status).toBe(404);
     expect(res.text).toMatch(/<html lang="en"/);
     // Falls back to the home-tier meta — we just need a valid title.
     expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
@@ -276,20 +280,26 @@ describe('SSR meta-injection — SPA catch-all', () => {
   });
 
   // Tightness: the prefix must be the WHOLE first segment and must sit at the
-  // root. Anything else is an ordinary SPA route and still gets the shell —
-  // if one of these ever 404s as JSON, the exemption has grown too wide.
+  // root. Anything else is an ordinary path and still gets the shell (a 404
+  // status since harvest-ice-e — no SPA route matches these) — if one of these
+  // ever answers JSON, the exemption has grown too wide.
   test.each(['/assetsguide/intro', '/is/assets/yfirlit', '/is/css-tips'])(
     '%s is not treated as a static-asset path',
     async (path) => {
       const res = await request(app).get(path).set('Accept', 'text/html');
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(404);
       expect(res.headers['content-type']).toMatch(/text\/html/);
+      expect(res.text).toMatch(/<div id="app"><\/div>/);
     }
   );
 
+  // `public, no-cache` since harvest-ice-e-2026-09-24: the shell names its
+  // release (<meta name="app-build">), and a cached copy of the previous one
+  // made a reloaded tab see the mismatch again (icelandicstore #332). Edge
+  // caches still store it and revalidate by ETag.
   test('response carries cache headers for CDN/edge caching', async () => {
     const res = await request(app).get('/en/');
-    expect(res.headers['cache-control']).toMatch(/public.*max-age=300.*stale-while-revalidate/);
+    expect(res.headers['cache-control']).toBe('public, no-cache');
     expect(res.headers['vary']).toMatch(/Accept-Language/);
   });
 
@@ -312,13 +322,13 @@ describe('SSR meta-injection — SPA catch-all', () => {
 
   test('detail routes for missing news articles fall back to generic head without crashing', async () => {
     const res = await request(app).get('/en/news/this-slug-definitely-does-not-exist');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);   // a real 404 since harvest-ice-e-2026-09-24
     expect(res.text).toMatch(/<title id="ssr-title">[^<]+<\/title>/);
   });
 
   test('unknown product slug gracefully falls back to the shop defaults', async () => {
     const res = await request(app).get('/is/shop/not-a-real-product');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);   // a real 404 since harvest-ice-e-2026-09-24
     expect(res.text).toMatch(/<html lang="is"/);
   });
 
@@ -589,5 +599,125 @@ describe('business JSON-LD', () => {
   test('other business routes do not carry the service catalogue', async () => {
     const res = await request(app).get('/is/um-okkur');
     expect(res.text).not.toMatch(/"@type":"OfferCatalog"/);
+  });
+});
+
+// ── Admin copy is spliced in literally (2026-09-23) ──────────────────────────
+// Every html.replace in ssrMeta takes a replacer FUNCTION, never a template
+// string: in a replacement string `$&`, `` $` ``, `$'` and `$$` are patterns,
+// so saved copy containing them pasted the template prefix (the whole <head>)
+// into the page, or a `</script>` into the JSON-LD. The copy below carries all
+// four and must come out byte-for-byte (after esc()), with one of everything.
+
+describe('SSR — replacement patterns in saved copy stay literal', () => {
+  const db = require('../../server/config/database');
+  const PAYLOAD = "A $& B $` C $' D $$ E";
+  const ESCAPED = "A $&amp; B $` C $' D $$ E";
+  const SLUG = 'test-ssr-dollar-patterns';
+  // Paths and the locale the rows are written in come from the seam, so the
+  // cases hold in a downstream that locks a route to one language.
+  const lcFor = (route) => forcedLocaleFor(route) || LC;
+  // A product that re-describes `/` (identity.routes) builds its own home
+  // mirror; the engine's is exercised only where the engine owns `/`.
+  const testEngineHome = ID.routes && ID.routes['/'] ? test.skip : test;
+  const saved = [];
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+  // The page is still one page: the template's singletons appear once.
+  function expectOnePage(html) {
+    expect(html.match(/<!DOCTYPE html>/gi)).toHaveLength(1);
+    expect(html.match(/<head\b/gi)).toHaveLength(1);
+    expect(html.match(/<\/head>/gi)).toHaveLength(1);
+    expect(html.match(/<script src="\/js\/theme-boot\.js">/g)).toHaveLength(1);
+    expect(html.match(/<body\b/gi)).toHaveLength(1);
+    expect(html.match(/<div id="app">/g)).toHaveLength(1);
+  }
+
+  // Every JSON-LD block still parses — a `$'`/`` $` `` expansion inside one
+  // carries its own </script> and cuts it short.
+  // At least the Organization block is always there, so an empty match means
+  // the tail itself was lost.
+  function jsonLdBlocks(html) {
+    const blocks = (html.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) || [])
+      .map(b => JSON.parse(b.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '')));
+    expect(blocks.some(b => b['@type'] === 'Organization')).toBe(true);
+    return blocks;
+  }
+
+  async function upsertContent(key, locale, patch) {
+    const { rows } = await db.query(
+      'SELECT value FROM site_content WHERE key = $1 AND locale = $2', [key, locale]);
+    const value = rows[0] ? rows[0].value : null;
+    saved.push({ key, locale, value });
+    await db.query(
+      `INSERT INTO site_content (key, locale, value) VALUES ($1, $2, $3::jsonb)
+       ON CONFLICT (key, locale) DO UPDATE SET value = EXCLUDED.value`,
+      [key, locale, JSON.stringify({ ...(value || {}), ...patch })]
+    );
+  }
+
+  beforeAll(async () => {
+    await upsertContent('halli_bio', lcFor('/halli'), { meta_description: PAYLOAD });
+    await upsertContent('home_hero', lcFor('/'), { heading: PAYLOAD });
+    await db.query('DELETE FROM news_articles WHERE slug = $1', [SLUG]);
+    await db.query(
+      `INSERT INTO news_articles (title, slug, summary, body, published, published_at)
+       VALUES ($1, $2, $1, $3, TRUE, NOW())`,
+      [PAYLOAD, SLUG, `<p>${ESCAPED}</p>`]
+    );
+  });
+
+  afterAll(async () => {
+    await db.query('DELETE FROM news_articles WHERE slug = $1', [SLUG]);
+    for (const { key, locale, value } of saved.reverse()) {
+      if (value === null) {
+        await db.query('DELETE FROM site_content WHERE key = $1 AND locale = $2', [key, locale]);
+      } else {
+        await db.query(
+          'UPDATE site_content SET value = $3::jsonb WHERE key = $1 AND locale = $2',
+          [key, locale, JSON.stringify(value)]);
+      }
+    }
+  });
+
+  test('a site_content meta_description reaches the <head> tags literally', async () => {
+    const res = await request(app).get(pathFor('/halli'));
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`<meta name="description" content="${ESCAPED}" id="ssr-description" />`);
+    expect(res.text).toContain(`<meta property="og:description" content="${ESCAPED}" />`);
+    expectOnePage(res.text);
+    jsonLdBlocks(res.text);
+  });
+
+  // No login needed on this one: og:url is built from req.path, so the
+  // patterns in a URL reached the replacement string too (Öryggisvörður).
+  test('the request path reaches og:url and the canonical literally', async () => {
+    // (A backtick is percent-encoded by the client, so it never reaches here raw.)
+    const route = "/zz-$'-$&-$$";
+    const res = await request(app).get(`/${LC}${route}`);
+    const url = esc(`${process.env.APP_URL}/${LC}${route}`);
+    expect(res.text).toContain(`<meta property="og:url" content="${url}" />`);
+    expect(res.text).toMatch(new RegExp(`rel="canonical" href="${escRe(url)}"`));
+    expectOnePage(res.text);
+  });
+
+  testEngineHome('a site_content heading reaches the crawler mirror literally', async () => {
+    const res = await request(app).get(pathFor('/'));
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`<div id="crawler-content" hidden aria-hidden="true"><h1>${ESCAPED}</h1>`);
+    expectOnePage(res.text);
+    jsonLdBlocks(res.text);
+  });
+
+  test('a news article carries the copy through <title>, description, JSON-LD and the crawler mirror', async () => {
+    const res = await request(app).get(pathFor(`/news/${SLUG}`));
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(new RegExp(`<title id="ssr-title">${escRe(ESCAPED)}`));
+    expect(res.text).toContain(`<meta name="description" content="${ESCAPED}" id="ssr-description" />`);
+    expect(res.text).toContain(`<article><h1>${ESCAPED}</h1><p><em>${ESCAPED}</em></p><p>${ESCAPED}</p></article>`);
+    expectOnePage(res.text);
+    const article = jsonLdBlocks(res.text).find(b => b['@type'] === 'Article');
+    expect(article.headline).toBe(PAYLOAD);
+    expect(article.description).toBe(PAYLOAD);
   });
 });

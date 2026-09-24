@@ -17,6 +17,7 @@
 @import './admin-general-settings.css';
 @import './admin-updates.css';
 @import './barcode-scanner.css';
+@import './scan.css';
 @import './admin-collections.css';
 @import './admin-discounts.css';
 @import './admin-sales.css';
@@ -33,6 +34,7 @@
 @import './admin-markadur.css';
 @import './admin-accounts.css';
 @import './seller-area.css';
+@import './mfa-reminder.css';
 @import './admin-bookkeeping.css';
 @import './admin-shell.css';
 @import './admin-monitoring.css';

@@ -4,7 +4,7 @@ name: {is: Verkefni, en: "Projects portfolio"}
 domain: 12
 owner: engine
 status: hidden
-flag: null
+flag: modules.projects.enabled
 paths:
   - server/routes/projectRoutes.js
   - server/controllers/projectController.js

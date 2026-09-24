@@ -11,6 +11,10 @@ const Setting      = require('../models/Setting');
 const { query: dbQuery } = require('../config/database');
 // Inviting a person is a staff action (migration 098 staff_audit_log); best-effort.
 const staffAudit   = require('../services/staffAudit');
+// "Invite sent" means sent (ice #258) and name-only logins (ice #397),
+// harvested 2026-09-24.
+const { sendWelcomeInvite } = require('../utils/inviteSend');
+const { isPlaceholderEmail, realEmailSql } = require('../utils/placeholderEmail');
 
 const MAX_IMPORT_ROWS = 1000;
 // Bulk delete is bounded so one request can't fan out across the whole base.
@@ -46,7 +50,8 @@ const INVITE_CANDIDATES_WHERE = `
   AND disabled = FALSE
   AND party_access = FALSE
   AND magic_login_token_hash IS NULL
-  AND requested_at IS NULL`;
+  AND requested_at IS NULL
+  AND ${realEmailSql('email')}`;
 
 const INVITE_CANDIDATES_SQL = `
   SELECT id, email, display_name, preferred_locale
@@ -115,11 +120,53 @@ const adminCustomerController = {
     } catch (err) { next(err); }
   },
 
-  // POST /api/v1/admin/customers  { email, display_name?, phone? }
+  // POST /api/v1/admin/customers  { email?, display_name?, phone?, no_email? }
+  //
+  // With an email: a passwordless customer and the welcome invite (the same
+  // template and saved copy as the bulk "Send invites" run — never the
+  // password-reset mail, which reads as phishing to someone who never had an
+  // account). The answer says what ACTUALLY happened (utils/inviteSend, ice
+  // #258): `invited` only on a confirmed, un-redirected send; otherwise the
+  // set-password link comes back so the admin can pass it on, with
+  // `emailError` when the send failed.
+  //
+  // With `no_email: true` and a name (ice #397, Halli 2026-09-24 "logins
+  // without email allowed"): a name-only login — generated username, reserved
+  // <username>@noemail.invalid address that nothing ever mails, a generated
+  // password, approved at once. The password is in this response ONCE
+  // (no-store) and nowhere else: not stored in the clear, not logged, not in
+  // the audit line. A lost one is replaced (POST /admin/users/:id/new-password).
   async createCustomer(req, res, next) {
     try {
       const c = cleanRow(req.body || {});
-      if (!EMAIL_RE.test(c.email)) {
+      const noEmail = req.body?.no_email === true || req.body?.no_email === 'true';
+
+      if (noEmail) {
+        if (!c.display_name) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.nameRequired'), code: 400 });
+        }
+        let created;
+        try {
+          created = await Customer.create({ display_name: c.display_name, phone: c.phone, nameOnly: true });
+        } catch (err) {
+          if (err && err.code === '23505') {
+            return res.status(409).json({ error: t(req.locale, 'errors.admin.usernameTaken'), code: 409, reason: 'username_taken' });
+          }
+          throw err;
+        }
+        const { user, password } = created;
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'user.created_no_email', entityType: 'user', entityId: user.id,
+          summary: { username: user.username },
+        });
+        res.set('Cache-Control', 'no-store');
+        return res.status(201).json({
+          customer: { ...user, email: null }, noEmail: true, invited: false,
+          username: user.username, password,
+        });
+      }
+
+      if (!EMAIL_RE.test(c.email) || isPlaceholderEmail(c.email)) {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.emailInvalid'), code: 400 });
       }
       const existing = await Customer.findExistingEmails([c.email]);
@@ -132,24 +179,13 @@ const adminCustomerController = {
         summary: { username: user.username },
       });
 
-      // Invite = the existing password-reset flow as a "set your password" link.
-      let invited = false;
-      let resetUrl = null;
-      if (emailService.isConfigured()) {
-        try {
-          await emailService.sendPasswordResetEmail(c.email, resetToken, req.locale);
-          invited = true;
-          // Stamp invited_at so the bulk-invite run doesn't treat this account as
-          // never-invited and overwrite the reset token this email just carried.
-          await dbQuery(`UPDATE users SET invited_at = NOW() WHERE id = $1`, [user.id]);
-        } catch (err) {
-          logger.warn({ err }, 'customer invite email failed');
-        }
-      } else {
-        // No mail transport (dev/test) — hand the admin the link to pass on.
-        resetUrl = `/#/reset-password?token=${resetToken}`;
-      }
-      return res.status(201).json({ customer: user, invited, resetUrl });
+      // invited_at is stamped by sendWelcomeInvite only on a confirmed,
+      // un-redirected send; the link comes back whenever the mail did NOT
+      // reach the customer.
+      const sent = await sendWelcomeInvite({ user, token: resetToken, locale: req.locale, context: 'admin createCustomer' });
+      const invited = sent.emailed && !sent.redirected;
+      if (sent.resetUrl) res.set('Cache-Control', 'no-store');
+      return res.status(201).json({ customer: user, invited, ...sent });
     } catch (err) {
       if (err && err.code === '23505') {
         return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });

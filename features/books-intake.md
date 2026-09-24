@@ -4,7 +4,7 @@ name: {is: "Innhólf fylgiskjala", en: "Books intake queue"}
 domain: 9
 owner: engine
 status: live
-flag: null
+flag: modules.books.enabled
 paths:
   - server/services/bookkeeping/intakeService.js
   - server/services/bookkeeping/intakeShape.js

@@ -15,6 +15,19 @@ process.env.E2E_DATABASE_URL = E2E_DATABASE_URL;
 const PORT = process.env.E2E_PORT || '3000';
 const BASE_URL = `http://localhost:${PORT}`;
 
+// A SECOND server, same code and same database, running two-factor enrolment
+// in its MANDATORY mode (security.mfa.enrolment = required). The main server
+// runs the instance default, `optional` — what a real instance gets, and
+// what e2e/mfa-reminder.spec.js needs (the reminder exists only there). The
+// forced flow cannot share that server: the mode is per instance, and a
+// per-request switch would be a test backdoor in production code. So
+// e2e/admin-totp-enrolment.spec.js points at this one (test.use baseURL).
+// Port = E2E_REQUIRED_PORT, else E2E_PORT + 1 (3001 on CI). Exported so the
+// spec's worker reads the same value (mfa-reminder-2026-09-23).
+const REQUIRED_PORT = process.env.E2E_REQUIRED_PORT || String(Number(PORT) + 1);
+const REQUIRED_BASE_URL = `http://localhost:${REQUIRED_PORT}`;
+process.env.E2E_REQUIRED_BASE_URL = REQUIRED_BASE_URL;
+
 // Workers on CI = the runner's CPUs, not a fixed 4. This repo is private, so
 // GitHub gives it the 2-vCPU Linux runner, and that one machine also carries
 // Postgres and the Node server. Four Chromium workers on it did not finish the
@@ -25,6 +38,40 @@ const BASE_URL = `http://localhost:${PORT}`;
 // 7.3 min, 2 workers → 822 s in 7.0 min. Same wall clock, half the time each
 // test spends inside its budget. Locally the count stays 4.
 const CI_WORKERS = Math.max(1, Math.min(4, os.availableParallelism()));
+
+// The environment both e2e servers share (webServer below).
+const SERVER_ENV = {
+  // The dev server now hard-fails when CSRF_SECRET / NODE_ENV are unset
+  // (see server/server.js REQUIRED_ENV). Provide ephemeral defaults so
+  // both CI and local Playwright runs spin up cleanly. The secret here
+  // has no security meaning — it just signs CSRF tokens for the
+  // throwaway E2E server.
+  CSRF_SECRET: process.env.CSRF_SECRET || 'e2e-only-csrf-secret-do-not-use-in-prod',
+  // Always 'test' (NOT `process.env.NODE_ENV || 'test'`): the provision
+  // steps and the server must agree, and a shell with NODE_ENV=production
+  // exported would otherwise boot the e2e server in production mode.
+  NODE_ENV:    'test',
+  // The isolated per-branch database — the server must never fall back to
+  // the .env dev DATABASE_URL (that was the pre-harvest behaviour, and it
+  // meant every local e2e run wrote into the dev database).
+  DATABASE_URL: E2E_DATABASE_URL,
+  DB_SSL:       'false',
+  PORT,
+  // Must match the origin the browser actually uses, or every state-changing
+  // request fails CORS the moment E2E_PORT is set.
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || BASE_URL,
+  // Two-factor enrolment: the instance default, `optional`
+  // (security.mfa.enrolment; mfa-optional-2026-09-23), so every unenrolled
+  // admin here — testadmin included — is an admin and sees the two-step
+  // reminder atop /admin (mfa-reminder-2026-09-23). The MANDATORY mode
+  // runs on the second server below.
+  // Exercise the encrypted-at-rest path. 32 bytes, base64, e2e-only.
+  TOTP_ENC_KEY: 'ZTJlLW9ubHktdG90cC1rZXktMzItYnl0ZXMtbG9uZyE=',
+  // The MCP connector and its OAuth flow (R5a): e2e/mcp-oauth.spec.js walks
+  // the consent page in a browser. Read-only ceiling (MCP_ALLOWED_SCOPES
+  // unset), like a production stack.
+  MCP_ENABLED: 'true',
+};
 
 module.exports = defineConfig({
   testDir: './e2e',
@@ -62,52 +109,41 @@ module.exports = defineConfig({
   // prefix below. Playwright starts the webServer BEFORE globalSetup, so a
   // globalSetup that creates the database would be too late on a fresh
   // machine (ice #197).
-  webServer: {
+  webServer: [{
     command: 'node e2e/global-setup.js && node server/server.js',
     url: BASE_URL,
     timeout: 60_000,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: SERVER_ENV,
+  }, {
+    // The MANDATORY-enrolment server (see REQUIRED_PORT above). Starts after
+    // the first, which has provisioned and migrated the shared database;
+    // its own boot migrations are then no-ops under the advisory lock.
+    command: 'node server/server.js',
+    url: REQUIRED_BASE_URL,
+    timeout: 60_000,
+    reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
     env: {
-      // The dev server now hard-fails when CSRF_SECRET / NODE_ENV are unset
-      // (see server/server.js REQUIRED_ENV). Provide ephemeral defaults so
-      // both CI and local Playwright runs spin up cleanly. The secret here
-      // has no security meaning — it just signs CSRF tokens for the
-      // throwaway E2E server.
-      CSRF_SECRET: process.env.CSRF_SECRET || 'e2e-only-csrf-secret-do-not-use-in-prod',
-      // Always 'test' (NOT `process.env.NODE_ENV || 'test'`): the provision
-      // steps and the server must agree, and a shell with NODE_ENV=production
-      // exported would otherwise boot the e2e server in production mode.
-      NODE_ENV:    'test',
-      // The isolated per-branch database — the server must never fall back to
-      // the .env dev DATABASE_URL (that was the pre-harvest behaviour, and it
-      // meant every local e2e run wrote into the dev database).
-      DATABASE_URL: E2E_DATABASE_URL,
-      DB_SSL:       'false',
-      PORT,
-      // Must match the origin the browser actually uses, or every state-changing
-      // request fails CORS the moment E2E_PORT is set.
-      ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || BASE_URL,
-      // Two-factor enrolment is OPTIONAL on a real instance by default
-      // (security.mfa.enrolment, mfa-optional-2026-09-23). The e2e server runs
-      // the MANDATORY mode on purpose: one server serves every spec, and
-      // e2e/admin-totp-enrolment.spec.js walks the person's side of the
-      // `required` rule in a real browser. The optional default is pinned
-      // against the API in tests/integration/adminTotpEnforcement.test.js.
+      ...SERVER_ENV,
+      PORT: REQUIRED_PORT,
+      ALLOWED_ORIGINS: REQUIRED_BASE_URL,
       CLIENT_CONFIG_SECURITY_MFA_ENROLMENT: 'required',
+      // The shop-window setting (rekstrarkerfi.is, R2b): no public signup and
+      // no "Innskrá" in the nav — staff sign in at /login.
+      // e2e/signup-closed.spec.js walks it; every helper here signs in the way
+      // the SERVED identity says (e2e/helpers.js openSignIn).
+      CLIENT_CONFIG_MODULES_SIGNUP_ENABLED: 'false',
+      CLIENT_CONFIG_IDENTITY_SURFACE_NAV_SIGN_IN: 'false',
       // Under `required`, admins must enrol a second factor before they hold
-      // admin rights (server/auth/mfaPolicy.js). The shared `testadmin` signs in dozens of
-      // times a minute across four workers, which TOTP's replay guard (one code
-      // per 30-second step) cannot serve — so THAT account is exempt, by name,
-      // through a switch production ignores, and so are the two per-spec
-      // admins that drive the sidebar in edit mode (admin-nav-colors,
-      // admin-surface: an unenrolled admin never reaches /admin edit mode —
-      // 13 timeouts in CI on 2026-09-23). Every other admin is under the real
-      // rule; e2e/admin-totp-enrolment.spec.js walks `enroladmin` through it.
-      ADMIN_TOTP_EXEMPT: 'testadmin,e2ecolorsadmin,e2esurfaceadmin',
-      // Exercise the encrypted-at-rest path. 32 bytes, base64, e2e-only.
-      TOTP_ENC_KEY: 'ZTJlLW9ubHktdG90cC1rZXktMzItYnl0ZXMtbG9uZyE=',
+      // admin rights (server/auth/mfaPolicy.js). `testadmin` is exempt by
+      // name, through a switch production ignores, in case a spec on this
+      // server signs in as it; every other admin is under the real rule —
+      // e2e/admin-totp-enrolment.spec.js walks `enroladmin` through it.
+      ADMIN_TOTP_EXEMPT: 'testadmin',
     },
-  },
+  }],
 });
