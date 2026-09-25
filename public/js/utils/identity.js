@@ -21,12 +21,14 @@ import { isDisabledRoute } from './modules.js';
 // The site's own host, without a leading "www." — "orangesmiley.is",
 // "rekstrarkerfi.is". Read from the canonical link ssrMeta bakes from APP_URL
 // (the same origin server/i18n's {siteHost} uses), so a legal page names the
-// site it is on; the address bar is the fallback (no SSR, local dev).
+// site it is on; the address bar is the fallback (no SSR, local dev). No host
+// literal: every product serves the legal views. Callers substitute it with a
+// replacer function, never a replacement string ($-patterns).
 export function siteHost() {
   let host = '';
   try { host = new URL(document.getElementById('ssr-canonical')?.href || '').hostname; } catch { /* no canonical */ }
   if (!host && typeof location !== 'undefined') host = location.hostname;
-  return (host || 'orangesmiley.is').replace(/^www\./, '');
+  return host.replace(/^www\./, '');
 }
 
 export const IDENTITY_DEFAULTS = Object.freeze({

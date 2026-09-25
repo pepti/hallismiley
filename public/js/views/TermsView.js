@@ -119,7 +119,7 @@ export class TermsView {
           ${copy.sections.map(([heading, body]) => `
           <section class="legal-section">
             <h2>${heading}</h2>
-            ${body.replaceAll('{siteHost}', host)}
+            ${body.replaceAll('{siteHost}', () => host)}
           </section>`).join('')}
 
           <footer class="legal-footer-nav">
