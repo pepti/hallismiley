@@ -1,5 +1,6 @@
 import { t, href, getLocale } from '../i18n/i18n.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
+import { siteHost } from '../utils/identity.js';
 import { reopenCookieChoice } from '../services/cookieConsent.js';
 
 // Privacy policy for the public business site (/personuvernd).
@@ -36,10 +37,10 @@ import { reopenCookieChoice } from '../services/cookieConsent.js';
 
 const COPY = {
   is: {
-    updated: 'Síðast uppfært: 7. september 2026',
+    updated: 'Síðast uppfært: 25. september 2026',
     sections: [
       ['1. Ábyrgðaraðili', `
-        <p>Þessi vefur (<strong>orangesmiley.is</strong>) er rekinn af Orange Smiley ehf.,
+        <p>Þessi vefur (<strong>{siteHost}</strong>) er rekinn af Orange Smiley ehf.,
         Arnarhrauni 4, 220 Hafnarfirði (kt. 470826-1500, VSK-nr. 162561). Fyrirspurnir um
         persónuvernd: <span data-privacy-email></span></p>`],
       ['2. Tvö ólík hlutverk — lestu þetta fyrst', `
@@ -178,10 +179,10 @@ const COPY = {
     ],
   },
   en: {
-    updated: 'Last updated: 7 September 2026',
+    updated: 'Last updated: 25 September 2026',
     sections: [
       ['1. Who We Are', `
-        <p>This website (<strong>orangesmiley.is</strong>) is operated by Orange Smiley ehf.,
+        <p>This website (<strong>{siteHost}</strong>) is operated by Orange Smiley ehf.,
         Arnarhraun 4, 220 Hafnarfjörður, Iceland (reg. no. 470826-1500, VAT no. 162561). For
         privacy enquiries: <span data-privacy-email></span></p>`],
       ['2. Two Different Roles — Read This First', `
@@ -327,6 +328,7 @@ const COPY = {
 export class PrivacyView {
   async render() {
     const copy = COPY[getLocale()] || COPY.is;
+    const host = siteHost();
     const view = document.createElement('div');
     view.className = 'view';
     view.innerHTML = `
@@ -335,7 +337,7 @@ export class PrivacyView {
           ${copy.sections.map(([heading, body]) => `
           <section class="legal-section">
             <h2>${heading}</h2>
-            ${body}
+            ${body.replaceAll('{siteHost}', host)}
           </section>`).join('')}
 
           <footer class="legal-footer-nav">

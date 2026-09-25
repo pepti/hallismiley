@@ -352,7 +352,7 @@ chunk lands; add a HISTORY entry for the story.
   needs a deployed instance with `MCP_ENABLED=true` (production has it unset —
   Halli's call per stack); (c) downstreams inherit the flow by merge (their
   `APP_URL` must be set — it is the issuer); (d) the consent copy
-  (`connect.*`) was approved by Halli 2026-09-25; `mcp.oauth*` is still DRAFT; (e) no CORS on the OAuth endpoints —
+  (`connect.*`) was approved by Halli 2026-09-25; `mcp.oauth*` too (the same day); (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
 - Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
