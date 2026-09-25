@@ -347,19 +347,20 @@ chunk lands; add a HISTORY entry for the story.
   ([mcp-write-tools-2026-09-24](docs/HISTORY.md#mcp-write-tools-2026-09-24)). Open: (a) turning `write` on
   for a stack (`MCP_ALLOWED_SCOPES=read,write`) is Halli's call per stack; a
   module switch on a scaled-out deployment reaches the other instances at
-  their next boot; the `adminGeneral.module*` / `adminGeneral.preset.*` copy is
-  DRAFT; (b) connecting claude.ai for real
+  their next boot; the `adminGeneral.module*` / `adminGeneral.preset.*` copy was
+  approved by Halli 2026-09-25; (b) connecting claude.ai for real
   needs a deployed instance with `MCP_ENABLED=true` (production has it unset —
   Halli's call per stack); (c) downstreams inherit the flow by merge (their
   `APP_URL` must be set — it is the issuer); (d) the consent copy
-  (`connect.*`, `mcp.oauth*`) is DRAFT; (e) no CORS on the OAuth endpoints —
+  (`connect.*`) was approved by Halli 2026-09-25; `mcp.oauth*` is still DRAFT; (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
 - Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
   the engine half of rekstrarkerfid's R2b step 1. Open: rekstrarkerfid's next
   engine sync, then its own PR (config: signup off + `navSignIn` false; the
-  DRÖG footer line "Ertu í viðskiptum? Skráðu þig inn á þínu kerfi"); the
-  deploy is Halli's go; `auth.errors.signupClosed` copy is DRAFT.
+  footer line) — merged 2026-09-24 (orange-smiley/rekstrarkerfid#53); the
+  deploy is Halli's go; `auth.errors.signupClosed` copy was approved by Halli
+  2026-09-25.
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —
