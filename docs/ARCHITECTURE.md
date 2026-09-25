@@ -319,6 +319,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `routerLazyViews.test.js`. A module that cannot load goes to
   `recoverFromAssetFailure()` (reload onto a new release, else one reload,
   then `errors.pageLoadFailed`). `pageTitle` and module switches (R4) are unchanged.
+- **A legal page names the site it is on** ([legal-pages-site-host-2026-09-25](HISTORY.md#legal-pages-site-host-2026-09-25)):
+  `TermsView`/`PrivacyView` write `{siteHost}` and fill it from
+  `utils/identity.js` `siteHost()` (the canonical origin, APP_URL) — never a
+  host literal, since every product serves these views.
 - **The public IA is the product's** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `/`, then `identity.surface.nav` (ordered `{ route, labelKey }` entries;
   `/thjonusta`, `/um-okkur`, `/hafa-samband` here), then the legal pages —

@@ -64,6 +64,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Harvest from icelandicstore, chunk B — admin layout preferences, UI kit, theme hygiene](#harvest-ice-b-2026-09-24) | Migration 111 `users.page_widths`/`page_width_motion`/`aside_widths`/`cookie_consent` (= ice 125/127/128/135, aliased there); the sidebar page-width icon + Mjúk hreyfing; side-column width on the order page; the cookie banner follows the account and the theme; every error a centred dialog; sticky sideways scrollbar; the undefined-token test (21 engine references fixed); focus ring for radios/checkboxes/selects |
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 | 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
+| 2026-09-25 | [The legal pages name the site they are on; the images are the company's own](#legal-pages-site-host-2026-09-25) | `/terms` and `/personuvernd` took "orangesmiley.is" as a literal, so rekstrarkerfi.is would have said it was orangesmiley.is; the host now comes from the canonical origin (APP_URL) via `utils/identity.js` `siteHost()`; the terms credit the landscape images to Orange Smiley ehf. (iceland-v2), not to licensed photographers; both dated 25. september 2026; copy approved by Halli |
 
 ---
 
@@ -3228,3 +3229,39 @@ block scanning: `ScanInput`'s document-level listener still reads the next
 scan, and a scanner's Enter suffix also dismisses the dialog.
 This lane adds no SPA routes, so `router.js` `VIEWS` and `routePatterns.json`
 are unchanged.
+
+<a id="legal-pages-site-host-2026-09-25"></a>
+## 2026-09-25 — The legal pages name the site they are on; the images are the company's own
+
+Halli asked whether rekstrarkerfi.is/is/terms was up to date. It was not, in
+two ways:
+- **The live page was the old portfolio text** ("By accessing hallismiley.is",
+  "a personal portfolio showcasing the carpentry…"). rekstrarkerfid's last
+  deploy (22 Sept) predates the engine sync that brought the 2026-09-01
+  rewrite, so the next rk deploy replaces it anyway.
+- **The rewrite was written for this site only.** Section 1 of the terms, and
+  of the privacy policy, named the site as the literal "orangesmiley.is".
+  rekstrarkerfi.is takes both views from the engine, so it would have said it
+  was orangesmiley.is. And section 3 of the terms still said the landscape
+  photographs were published "under their authors' licences"; since
+  iceland-v2 (2026-09-22) they are Halli's own generations, credited to
+  Orange Smiley ehf.
+
+**What changed:**
+- `public/js/utils/identity.js` gains `siteHost()`: the host of the
+  canonical link ssrMeta bakes from APP_URL, without "www." (the same origin
+  the server's `{siteHost}` email parameter uses), with the address bar as
+  the fallback. Both legal views write `{siteHost}` in their copy and fill it
+  at render.
+- The terms' image sentence (DRÖG, approved by Halli 2026-09-25):
+  "Landslagsmyndirnar á vefnum eru gerðar af Orange Smiley ehf.; nánar í
+  myndaskránni." (EN: "The landscape images on this site are made by Orange
+  Smiley ehf.; details in the image credits.")
+- Both pages are dated 25. september 2026.
+- `e2e/legal-pages.spec.js` (new, 5): each legal page, in both locales,
+  names the canonical host; the terms credit the images to the company.
+
+Everything else in both pages was checked against both sites and still holds
+(company identity, prices indicative + a separate service agreement, the
+IP/contact/disclaimer/liability sections, Icelandic law, Héraðsdómur
+Reykjaness). No migration.
