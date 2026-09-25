@@ -344,7 +344,7 @@ chunk lands; add a HISTORY entry for the story.
   `environment_info`'s counts ignore the switches (low).
 - MCP OAuth landed 2026-09-24 ([mcp-oauth-2026-09-24](docs/HISTORY.md#mcp-oauth-2026-09-24)):
   roadmap R5a; R5b (write tools) landed the same day
-  ([mcp-write-tools-2026-09-24](docs/HISTORY.md#mcp-write-tools-2026-09-24)). Open: (a) turning `write` on
+  ([mcp-write-tools-2026-09-24](docs/HISTORY.md#mcp-write-tools-2026-09-24)); Halli confirmed the write tools 2026-09-25 ("yes continue mcp"). Open: (a) turning `write` on
   for a stack (`MCP_ALLOWED_SCOPES=read,write`) is Halli's call per stack; a
   module switch on a scaled-out deployment reaches the other instances at
   their next boot; the `adminGeneral.module*` / `adminGeneral.preset.*` copy was
