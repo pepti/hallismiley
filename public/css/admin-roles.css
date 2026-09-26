@@ -1,91 +1,123 @@
-/* Admin Roles — collapsible permission-group cards. Each role is a <details>
-   card; the body groups its view-access the same way as the sidebar nav. */
+/* Admin Roles — the roles × admin-screens grid (harvest 2 lane 3, 2026-09-26;
+   the pattern of icelandicstore #421's customer-roles grid), the name editor,
+   the sticky save bar, and the Members board. Tokens only (invariant 15): no
+   colour literal anywhere in this sheet. */
 
-.role-cards { display: flex; flex-direction: column; gap: var(--sp-3); }
-
-.role-card {
+/* ── Name editor (new / edit a role) ──────────────────────────────────────── */
+.role-editor {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--role-accent, var(--text-muted));
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius-md);
+  max-width: 560px;
+}
+.role-editor__title { margin: 0 0 var(--sp-3); font-size: 1.05rem; }
+.role-editor__title:focus { outline: none; }
+.role-editor__field { display: flex; flex-direction: column; gap: 4px; margin: 0 0 var(--sp-2); font-size: 0.85rem; color: var(--text-secondary); }
+.role-editor__note { margin: 0 0 var(--sp-3); font-size: 0.78rem; color: var(--text-muted); }
+.role-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.role-editor__actions .role-editor__note { margin: 0; flex: 1 1 220px; }
+.role-editor__spacer { flex: 1 1 auto; }
+
+/* ── The grid ─────────────────────────────────────────────────────────────── */
+.role-grid-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
-  overflow: hidden;
 }
-.role-card__summary {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  cursor: pointer;
-  list-style: none;
-}
-.role-card__summary::-webkit-details-marker { display: none; }
-.role-card__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #0a0a0a;
-  background: var(--role-accent, var(--text-muted));
-  border-radius: 50%;
-}
-.role-card__name { font-weight: 600; }
-.role-card__badge {
-  padding: 1px 6px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-}
-.role-card__chips { display: none; gap: 4px; flex-wrap: wrap; }
-.role-card__count {
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-@media (min-width: 720px) {
-  .role-card__chips { display: flex; }
-}
+.role-grid-wrap:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.role-grid { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.85rem; }
+.role-grid th, .role-grid td { border-bottom: 1px solid var(--border); }
+.role-grid tbody:last-child tr:last-child > * { border-bottom: none; }
 
-.role-chip {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 0.72rem;
-  color: var(--text-secondary);
+/* The screen-name column stays put while the roles scroll sideways. */
+.role-grid__sticky {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--bg-surface);
+  text-align: left;
+  border-right: 1px solid var(--border);
+}
+.role-grid__corner {
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted);
+  vertical-align: bottom;
+  min-width: 170px;
+}
+.role-view-h { padding: var(--sp-2) var(--sp-3); font-weight: 500; color: var(--text-primary); }
+.role-grid__group > th {
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted);
   background: var(--bg-base);
+}
+.role-grid__group > td { background: var(--bg-base); }
+
+.role-col {
+  position: relative;
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-2);
+  min-width: 118px;
+  text-align: center;
+  vertical-align: bottom;
+  border-left: 1px solid var(--border);
+}
+.role-col--editing { box-shadow: inset 0 -3px 0 var(--gold); }
+.role-col__name { display: block; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.role-col__meta { display: block; font-size: 0.7rem; font-weight: 400; color: var(--text-secondary); }
+.role-col__edit {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 28px; min-height: 28px;
+  padding: 0;
+  background: transparent; border: none; border-radius: var(--radius-sm, 6px);
+  color: var(--text-secondary);
+  font: inherit; font-size: 0.85rem; line-height: 1;
+  cursor: pointer;
+}
+.role-col__edit:hover, .role-col__edit:focus-visible { color: var(--text-primary); background: var(--bg-hover); }
+
+.role-cell { text-align: center; border-left: 1px solid var(--border); }
+.role-cell--dirty { background: var(--warning-dim); }
+/* A 44px hit area around each box (WCAG 2.5.5), the box itself stays small. */
+.role-cell__hit {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px; margin: 0 auto;
+  cursor: pointer;
+}
+.role-cell__hit input { width: 18px; height: 18px; accent-color: var(--gold); cursor: pointer; }
+.role-lock { font-weight: 700; color: var(--success); }
+.role-lock--off { color: var(--text-muted); }
+.role-lock sup { font-size: 0.6rem; color: var(--text-muted); margin-left: 1px; }
+.role-grid__note { margin: var(--sp-2) 0 0; font-size: 0.75rem; color: var(--text-muted); max-width: 72ch; }
+
+/* The phone role picker: shown only where the grid collapses to one column. */
+.role-narrow-pick { display: none; margin: 0 0 var(--sp-3); }
+.role-narrow-pick__label { display: block; margin: 0 0 4px; font-size: 0.8rem; color: var(--text-secondary); }
+@media (max-width: 600px) {
+  .role-narrow-pick { display: block; }
+  .role-hide-narrow { display: none; }
+  .role-grid__corner { min-width: 0; }
+  .role-col { min-width: 0; }
+}
+
+/* ── Sticky save bar (only while there are unsaved changes or errors) ─────── */
+.role-savebar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
-.role-chip--all { color: var(--gold); }
-.role-chip--more { color: var(--text-muted); }
-
-.role-card__body {
-  padding: 0 var(--sp-4) var(--sp-4);
-  border-top: 1px solid var(--border);
-}
-.role-card__desc { margin: var(--sp-3) 0; color: var(--text-secondary); }
-.role-card__group { margin: var(--sp-3) 0 0; }
-.role-card__group-title,
-.role-views__group-title {
-  margin: 0 0 var(--sp-1);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.role-card__group-views { display: flex; gap: 4px; flex-wrap: wrap; }
-.role-card__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
-
-/* Grouped checkboxes inside the create/edit modal. */
-.role-views__group { margin: 0 0 var(--sp-3); }
+.role-savebar[hidden] { display: none; }
+.role-savebar__text { flex: 1 1 240px; min-width: 0; }
+.role-savebar__msg { font-size: 0.85rem; color: var(--text-primary); }
+.role-savebar__errors { margin: var(--sp-1) 0 0; padding-left: 1.1em; font-size: 0.8rem; color: var(--error); }
+.role-savebar__errors:empty { display: none; }
+.role-savebar__actions { display: flex; gap: var(--sp-2); }
 
 /* ── Tabs (Roles | Members) ───────────────────────────────────────────────── */
 .role-tabs {
