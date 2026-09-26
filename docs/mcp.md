@@ -68,7 +68,7 @@ on top of the per-call owner check that already refused them.
 
 ## Tools (v1 — read-only, `server/mcp/tools/system.js`)
 
-Exactly two tools are registered on this instance:
+Two system tools answer on every instance (the sales tools below need the shop and the owner's views):
 
 | Tool | Scope | Answers |
 |---|---|---|
@@ -77,9 +77,30 @@ Exactly two tools are registered on this instance:
 
 Every response carries `_environment` (`server/mcp/envTag.js`). Leads are
 deliberately NOT queryable yet — that needs its own sign-off (ENHANCEMENTS
-#13 note) — and customer/order/bookkeeping tools wait for a real need. The
+#13 note) — and customer/bookkeeping tools wait for a real need (the order tools are the sales pair below). The
 icelandicstore connector this was ported from ships fourteen commerce and
 finance tools besides `environment_info`; none of them exist here.
+
+## Sales tools (read; harvest 2 lane 5, 2026-09-26)
+
+`server/mcp/tools/orders.js` — the engine's first order tools (icelandicstore
+has `sales_report` / `list_orders`). Scope `read`, the `shop` module, and a
+FOURTH gate: each names an admin `view`, and it is listed and callable only
+when the token's OWNER holds that view on this instance
+(`server/mcp/owner.js` `ownerViewAccess` — the admin home's rule: the role's
+views, minus a switched-off module's, minus the product's
+`identity.surface.hiddenAdminViews` for an all-views holder). **orangesmiley.is
+hides its shop from the admin nav, so neither tool is listed here**; a shop
+downstream (rekstrarkerfid, icelandicstore) gets both. A refusal reads like an
+unknown tool, as for the other gates.
+
+| Tool | View | Answers |
+|---|---|---|
+| `sales_report` | `sales` | the `/admin/sales` report for `from`/`to` (YYYY-MM-DD, INCLUSIVE; omitted → the last 30 days): paid orders by PAYMENT date, per currency (never summed across) `orders`, `revenue` (GROSS), `vat`, `revenue_net`, average order gross/net; the series and top products; with `compare_from`/`compare_to` the same KPIs as `kpisPrev`. Orders from before migration 121 carry an approximate VAT |
+| `recent_orders` | `orders` | newest first, `limit` 1–50 (default 10); `open_only` = the orders waiting to be fulfilled (the "Í dag" card's list): order number, placed/paid, the checkout's guest name or `registered`, currency, total (gross), `vat_total`, items, statuses |
+
+Neither returns a customer's e-mail, postal address, phone, the order note or
+a Stripe id.
 
 ## Write tools (R5b)
 
