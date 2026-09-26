@@ -20,6 +20,7 @@
 import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { getGeneralSettings, updateGeneralSettings, getModules, setModule, getDemoStatus, resetDemoData } from '../services/adminGeneralSettings.js';
 import { escHtml } from '../utils/escHtml.js';
+import { formatDateTime } from '../utils/format.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
@@ -149,7 +150,7 @@ export class AdminGeneralSettingsView {
       host.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>`;
       return;
     }
-    const when = (iso) => (iso ? new Date(iso).toLocaleString(document.documentElement.lang || 'is', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+    const when = (iso) => formatDateTime(iso); // app locale, Icelandic built by hand ('—' when unset)
     host.innerHTML = this._card(t('demo.adminTitle'), t('demo.adminBadge'), `
       <p class="gs-row__help">${escHtml(t('demo.adminHelp'))}</p>
       ${this._row({ title: t('demo.lastReset'), help: '', control: `<span data-testid="demo-last-reset">${escHtml(when(st.lastReset && st.lastReset.at))}</span>` })}
