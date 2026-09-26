@@ -283,7 +283,10 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   create path (ice's is not ported); (d) master (lane 6a's `118_goods_receipts`)
   is merged into the branch and its four product/variant foreign keys are in
   `repointSpec.js` (draft receipts locked like orders); lane 6c must add its own,
-  or merging switches itself off (`schema_drift`) and `productMerge.test.js` fails.
+  or merging switches itself off (`schema_drift`) and `productMerge.test.js` fails;
+  (e) the merge itself is **admin-only** (default taken: tighten, never loosen —
+  Halli may loosen it to the `products` view); the suggestions and the preview
+  stay on the `products` view.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

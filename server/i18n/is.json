@@ -423,6 +423,7 @@
   "errors.admin.mergeRefused": "Ekki er hægt að sameina þessar vörur eins og valið var — sjá ástæður",
   "errors.admin.mergeStale": "Vörurnar breyttust eftir forskoðunina — farðu aftur yfir sameininguna",
   "errors.admin.mergeBusy": "Einhver er að vinna í þessum vörum núna — reyndu aftur eftir smástund",
+  "errors.admin.mergeAdminOnly": "Aðeins stjórnandi getur sameinað vörur: ekki er hægt að afturkalla sameiningu.",
   "errors.admin.mergeUnavailable": "Sameining er óvirk þar til hún veit hvað á að gera við nýja töflu (skemabreyting)",
   "errors.admin.productMerged": "Þessi vara var sameinuð annarri vöru og er ekki lengur hægt að breyta henni",
   "errors.admin.importAiNotAvailable": "Lestur PDF-skráa með gervigreind er ekki virkur",

@@ -10,6 +10,7 @@ const ProductMerge = require('../models/ProductMerge');
 const Product = require('../models/Product');
 const mergeEngine = require('../services/productMerge/engine');
 const { t } = require('../i18n');
+const { hasRole } = require('../auth/roles');
 const logger = require('../logger');
 
 // A merge error → the standard envelope. Everything else goes to next().
@@ -58,7 +59,17 @@ module.exports = {
   },
 
   // POST /products/merge { master, ids, variant_map, expect } → the result.
+  // ADMIN ONLY (the tighten-never-loosen default, 2026-09-26; Halli may
+  // loosen): a merge cannot be undone except by a point-in-time restore, so
+  // the `products` view alone may see the suggestions and preview a plan, but
+  // only an administrator runs the transaction — checked on the session's role
+  // set, as the customer-email gate (adminCustomerController) does.
   async mergeProducts(req, res, next) {
+    if (!hasRole(req.user, 'admin')) {
+      return res.status(403).json({
+        error: t(req.locale, 'errors.admin.mergeAdminOnly'), code: 403, reason: 'merge_admin_only',
+      });
+    }
     try {
       const result = await mergeEngine.apply(req.body || {}, {
         userId: req.user ? req.user.id : null, requestId: req.requestId || null,

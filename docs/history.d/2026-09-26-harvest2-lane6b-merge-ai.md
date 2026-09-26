@@ -184,8 +184,15 @@ expand-only and idempotent, the general invariants hold. Findings:
 9. Nit: the merged-product guard runs before CSRF on writes. **Won't fix**:
    it only reads, behind requireAuth + the products view, and answers 409.
 10. Nit: merging is gated like product editing (`products` view), though it
-    cannot be undone. **Won't fix**: the scope Halli approved says
-    "staff-only (requireView products)"; making it admin-only is his call.
+    cannot be undone. **Fixed — the default taken (tighten, never loosen;
+    coordinator, 2026-09-26): the merge is ADMIN-ONLY. Halli may loosen.**
+    `POST /products/merge` checks `hasRole(req.user, 'admin')` on the
+    session's roles, the way lane 3's customer-email gate does, and answers
+    anyone else 403 `merge_admin_only` (`errors.admin.mergeAdminOnly`, DRAFT).
+    The suggestions and the preview stay on the `products` view; on the screen a
+    non-admin sees the candidates and the plan with Merge disabled and a hint
+    (`adminProductDuplicates.adminOnlyHint`, DRAFT). Test: products-view staff
+    200 on the suggestions and preview, 403 on the merge; admin 200.
 
 ### Tests
 

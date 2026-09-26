@@ -117,6 +117,8 @@
   font-size: 0.875rem;
 }
 .pdup-plan__actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-3); }
+/* Non-admins: why Merge is disabled (weight, not colour). */
+.pdup-hint--admin { color: var(--text-primary); font-weight: 600; }
 
 @media (max-width: 600px) {
   .pdup-group { padding: var(--sp-3); }

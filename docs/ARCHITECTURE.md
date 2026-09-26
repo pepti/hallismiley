@@ -1188,8 +1188,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
 - **Merging duplicate products is ONE transaction** ([harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26),
-  migration 120; `services/productMerge/engine.js`): staff with the `products`
-  view, CSRF, preview → apply with the preview's `expect` token (any change to a
+  migration 120; `services/productMerge/engine.js`): the suggestions and the
+  preview for staff with the `products` view, the merge itself ADMIN-ONLY
+  (`hasRole(req.user, 'admin')`, else 403 `merge_admin_only` — it cannot be
+  undone; Halli may loosen), CSRF, preview → apply with the preview's `expect` token (any change to a
   row the merge reads → 409 `stale_preview`). Locks follow the stock lock order
   — the orders that reference the products FOR UPDATE, then parent products,
   variants, level products FOR UPDATE, each sorted — under a 3 s

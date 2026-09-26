@@ -12,7 +12,7 @@
 //
 // Access: the `products` view (server-side gate on every route; this check is
 // UX only). Theme rule: tokens only (invariant 15) — see admin-product-merge.css.
-import { isAuthenticated, canSeeView } from '../services/auth.js';
+import { isAuthenticated, canSeeView, isAdmin } from '../services/auth.js';
 import { adminGetProductDuplicates, adminPreviewProductMerge, adminMergeProducts } from '../services/adminProducts.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href, getLocale } from '../i18n/i18n.js';
@@ -301,6 +301,9 @@ export class AdminProductDuplicatesView {
 
   _planHtml(idx, data) {
     const plan = data.plan;
+    // Merging is admin-only (server-gated); everyone with the products view
+    // sees the candidates and the plan, the button stays disabled for them.
+    const admin = isAdmin();
     const s = plan.summary || {};
     const parts = [
       s.mapped ? t('adminProductDuplicates.sumMapped', { n: s.mapped }) : '',
@@ -347,14 +350,16 @@ export class AdminProductDuplicatesView {
       </div>
       ${refusals}${warnings}
       <p class="pdup-hint">${escHtml(t('adminProductDuplicates.mergeHint'))}</p>
+      ${admin ? '' : `<p class="pdup-hint pdup-hint--admin" id="pdup-admin-hint-${idx}">${escHtml(t('adminProductDuplicates.adminOnlyHint'))}</p>`}
       <div class="pdup-plan__actions">
-        <button type="button" class="btn btn--primary" data-merge="${idx}"${plan.ok ? '' : ' disabled'}>${escHtml(t('adminProductDuplicates.mergeBtn'))}</button>
+        <button type="button" class="btn btn--primary" data-merge="${idx}"${plan.ok && admin ? '' : ' disabled'}${admin ? '' : ` aria-describedby="pdup-admin-hint-${idx}"`}>${escHtml(t('adminProductDuplicates.mergeBtn'))}</button>
       </div>`;
   }
 
   async _merge(idx) {
     const plan = this._plans.get(idx);
-    if (!plan || !plan.data.plan.ok) return;
+    // Admin only (the server's gate is the real one — 403 merge_admin_only).
+    if (!plan || !plan.data.plan.ok || !isAdmin()) return;
     const names = plan.data.sources.map(s => s.name).join(', ');
     if (!window.confirm(t('adminProductDuplicates.confirm', { sources: names, survivor: plan.data.master.name }))) return;
     const panel = this._el.querySelector(`#pdup-plan-${idx}`);

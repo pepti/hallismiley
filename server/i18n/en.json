@@ -423,6 +423,7 @@
   "errors.admin.mergeRefused": "These products cannot be merged as chosen — see the reasons",
   "errors.admin.mergeStale": "The products changed since the preview — review the merge again",
   "errors.admin.mergeBusy": "Someone is working on these products right now — try again in a moment",
+  "errors.admin.mergeAdminOnly": "Only an administrator can merge products: a merge cannot be undone.",
   "errors.admin.mergeUnavailable": "Merging is switched off until it knows what to do with a new table (schema drift)",
   "errors.admin.productMerged": "This product was merged into another product and can no longer be edited",
   "errors.admin.importAiNotAvailable": "Reading PDFs with AI is not switched on",

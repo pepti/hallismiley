@@ -1548,6 +1548,7 @@
   "adminProductDuplicates.reason.price_differs": "Verðin eru ólík — verð vörunnar sem haldið er gildir",
   "adminProductDuplicates.reason.price_kept_on_variant": "Línan heldur eigin verði á nýja afbrigðinu",
   "adminProductDuplicates.mergeHint": "Pantanalínur, myndir, söfn og lager flytjast á vöruna sem haldið er. Útgefnum reikningum er aldrei breytt. Ekki er hægt að afturkalla.",
+  "adminProductDuplicates.adminOnlyHint": "Aðeins stjórnandi getur sameinað. Þú getur farið yfir tillögurnar og forskoðað sameininguna.",
   "adminProductDuplicates.mergeBtn": "Sameina",
   "adminProductDuplicates.confirm": "Sameina {sources} í {survivor}? Það er ekki hægt að afturkalla.",
   "adminProductDuplicates.merged": "{sources} sameinuð í {survivor}.",

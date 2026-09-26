@@ -289,7 +289,7 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 
 **What.** (a) Duplicate suggestions (same barcode, same SKU, same name, colourway, similar name) and a merge that moves variants, stock (through `Inventory`, audited), images, collection links and order lines to the product kept, leaves issued invoices alone, and redirects the merged product's URL. (b) Claude reads a free-form supplier price list into create-only import rows, verified against the PDF's own text, priced by the admin's markup and EUR rate.
 **Why.** Every catalogue that came from an import has duplicates; and a supplier's price list is rarely a spreadsheet.
-**Effort.** L. **Risk.** Money/stock path (merge) and spend (AI) — both behind review, tests and, for the AI, a switch that is off.
+**Effort.** L. **Risk.** Money/stock path (merge) and spend (AI) — both behind review, tests and, for the AI, a switch that is off. The merge itself is **admin-only** (the default taken, since it cannot be undone; Halli may loosen it to the `products` view); the suggestions and the preview are on the `products` view.
 
 ### Reverse queue — this repo → icelandicstore and the base
 

@@ -1548,6 +1548,7 @@
   "adminProductDuplicates.reason.price_differs": "The prices differ — the price of the product you keep applies",
   "adminProductDuplicates.reason.price_kept_on_variant": "The row keeps its own price on the new variant",
   "adminProductDuplicates.mergeHint": "Order lines, images, collections and stock move to the product you keep. Issued invoices never change. There is no undo.",
+  "adminProductDuplicates.adminOnlyHint": "Only an administrator can run a merge. You can review the suggestions and preview the plan.",
   "adminProductDuplicates.mergeBtn": "Merge",
   "adminProductDuplicates.confirm": "Merge {sources} into {survivor}? This cannot be undone.",
   "adminProductDuplicates.merged": "Merged {sources} into {survivor}.",

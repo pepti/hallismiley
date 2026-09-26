@@ -105,6 +105,36 @@ describe('gate', () => {
   });
 });
 
+describe('the merge itself is admin-only (products-view staff may look and preview)', () => {
+  let staffCookie;
+  beforeAll(async () => {
+    await db.query(
+      `INSERT INTO roles (name, description, view_access, is_system) VALUES ('pm_products', 'productMerge test', '["products"]'::jsonb, FALSE)
+       ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`);
+    require('../../server/models/Role').invalidateCache();
+    await db.query(
+      `INSERT INTO users (id, email, username, role, approval_status, email_verified)
+       VALUES ('pm-staff-id', 'pm-staff@test.com', 'pmstaff', 'pm_products', 'approved', TRUE) ON CONFLICT (id) DO NOTHING`);
+    staffCookie = await getTestSessionCookie('pm-staff-id');
+  });
+
+  test('products-view staff: 200 on the suggestions and the preview, 403 merge_admin_only on the merge; admin: 200', async () => {
+    const m = await mkProduct('gate-m', { stock: 1 });
+    const s = await mkProduct('gate-s', { stock: 2 });
+    expect((await request(app).get('/api/v1/admin/shop/products/duplicates').set('Cookie', staffCookie)).status).toBe(200);
+    const p = await request(app).post('/api/v1/admin/shop/products/merge/preview').set('Cookie', staffCookie).send({ master: m.id, ids: [s.id] });
+    expect(p.status).toBe(200);
+    const denied = await request(app).post('/api/v1/admin/shop/products/merge').set('Cookie', staffCookie)
+      .send({ ...p.body.request, expect: p.body.expect });
+    expect(denied.status).toBe(403);
+    expect(denied.body).toMatchObject({ code: 403, reason: 'merge_admin_only', error: expect.any(String) });
+    expect((await Product.findById(s.id)).active).toBe(true);
+    const ok = await merge({ ...p.body.request, expect: p.body.expect });
+    expect(ok.status).toBe(200);
+    expect(ok.body.merged).toEqual([s.id]);
+  });
+});
+
 describe('suggestions', () => {
   test('a shared barcode forms one group with the evidence, and the request writes nothing', async () => {
     const a = await mkProduct('dup-a', { name: 'Lopapeysa Hekla', barcode: '5690000000015', stock: 2 });
