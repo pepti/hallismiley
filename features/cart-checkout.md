@@ -23,10 +23,12 @@ paths:
   - public/js/components/CurrencySelector.js
   - public/js/services/cart.js
   - public/js/utils/availability.js
+  - public/js/utils/colorLabels.js
   - public/css/shop.css
   - tests/integration/shop.test.js
   - tests/unit/shopFilters.test.js
   - tests/unit/availability.client.test.js
+  - tests/unit/colorLabels.client.test.js
   - e2e/cart-sold-out.spec.js
 migrations: []
 since: 2026-08-09

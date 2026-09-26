@@ -37,10 +37,16 @@ await loadLocale(initialLocale);
 
 // Translate the static chrome that ships in index.html (the skip link) — it
 // renders before any module runs, so its markup carries Icelandic defaults
-// and gets re-translated here once messages are in.
-for (const el of document.querySelectorAll('body > [data-i18n]')) {
-  el.textContent = t(el.dataset.i18n);
+// and gets re-translated here once messages are in — and again after every
+// language switch, which swaps the message table without a reload (ported from
+// icelandicstore #399: the skip link kept the first language's text).
+function translateStaticChrome() {
+  for (const el of document.querySelectorAll('body > [data-i18n]')) {
+    el.textContent = t(el.dataset.i18n);
+  }
 }
+translateStaticChrome();
+window.addEventListener('localechange', translateStaticChrome);
 
 // ── 3. Render NavBar + mount Router ──────────────────────────────────────────
 const navBar = new NavBar();

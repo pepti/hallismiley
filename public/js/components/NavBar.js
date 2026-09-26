@@ -28,7 +28,7 @@ export class NavBar {
   render() {
     const nav = document.createElement('nav');
     nav.className = 'lol-nav';
-    nav.setAttribute('aria-label', 'Main navigation');
+    nav.setAttribute('aria-label', t('nav.mainNavigation'));
     nav.innerHTML = this._navHtml();
 
     this._nav = nav;
@@ -63,6 +63,9 @@ export class NavBar {
     this._nav.querySelectorAll('[data-i18n-aria]').forEach(el => {
       el.setAttribute('aria-label', t(el.dataset.i18nAria));
     });
+    // querySelectorAll never returns the <nav> itself, so its own label is set
+    // here (ported from icelandicstore #399 — it was a hard-coded English literal).
+    this._nav.setAttribute('aria-label', t('nav.mainNavigation'));
     // Rebuild hrefs with new locale prefix
     this._nav.querySelectorAll('[data-route]').forEach(link => {
       if (link.tagName === 'A') link.href = navHref(link.dataset.route);
