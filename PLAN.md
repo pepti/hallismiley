@@ -635,6 +635,8 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
 - Still a decision, not code: MCP arguments pass through `sanitizeBody` and the
   global IP limit (moving the mount would exempt MCP from two protections).
 
+- **Harvest 2 lane 7a (2026-09-26)** — checkout settings (Admin → Greiðsla, hidden with the shop) and the time-limited site announcement (Admin → Tilkynning): [harvest2-lane7a](docs/history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26). **For Halli, per instance:** nothing changes until an admin saves — (a) turn the announcement on (heading, message, start/end) where a cutover needs one; (b) on a shop instance, set the alert list, the minimum, the delivery price and the field rules. Open: (a) the pause status — 503 per the brief, ice uses 403 for the SLO (`checkoutRules.ORDERING_PAUSED_STATUS`), Halli decides; (b) OWED: a migration storing company + kennitala on the order (`orders` has no column; they are validated and dropped today), then the admin order page and the owner alert show them; (c) the lane's strings are DRAFT (list in the fragment).
+
 **CI / deploy state**
 
 - GitHub Actions enabled since 2026-09-03 (two repo-level toggles); the

@@ -45,6 +45,8 @@ async function renderAllEmails(svc, sent) {
     ['partyInvite',       () => svc.sendPartyInviteEmail({ to, name: 'Anna', token: 'tok' })],
     ['partyWelcome',      () => svc.sendPartyWelcomeEmail({ user, partyInfo })],
     ['lead',              () => svc.sendLeadNotification({ submissionId: 'sub-1', name: 'Anna', email: to, message: 'Halló', company: 'Fyrirtæki', phone: '555', platform: 'Shopify' })],
+    // The owner's paid-order alert (harvest2-lane7a).
+    ['orderAlert',        () => svc.sendOrderOwnerAlert({ order: { ...order, id: 'ord-1' }, items, to: admins })],
   ];
   for (const [name, run] of cases) {
     const before = sent.length;

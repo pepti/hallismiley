@@ -667,6 +667,14 @@ app.use(express.static(path.join(__dirname, '../public'), {
 app.use('/auth',              authRoutes);
 app.use('/api/v1/projects',   projectRoutes);
 app.use('/api/v1/contact',    contactRoutes);
+// Checkout settings + the site announcement (harvest2-lane7a): admin writes
+// under the same writeLimiter as the rest of the back office.
+app.use(['/api/v1/admin/checkout-settings', '/api/v1/admin/announcement'], (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
 app.use('/api/v1/users',      userRoutes);
 app.use('/api/v1/analytics',  analyticsRoutes);
 app.use('/api/v1/change-requests', changeRequestRoutes);
@@ -680,6 +688,8 @@ app.use('/api/v1/admin', require('./auth/middleware').requireAuth, require('./au
 app.use('/api/v1/admin/shop', adminShopRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/analytics', analyticsAdminRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/general-settings', adminGeneralSettingsRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/checkout-settings', require('./routes/adminCheckoutSettingsRoutes')); // harvest2-lane7a; before the catch-all
+app.use('/api/v1/admin/announcement', require('./routes/adminAnnouncementRoutes')); // harvest2-lane7a; before the catch-all
 app.use('/api/v1/admin/discounts', adminDiscountRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/background', adminBackgroundRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/change-requests', adminChangeRequestRoutes); // must come before /api/v1/admin catch-all
@@ -702,6 +712,8 @@ app.use('/api/v1/admin/home', require('./routes/adminHomeRoutes')); // "Í dag":
 app.use('/api/v1/admin/demo', require('./routes/adminDemoRoutes')); // R2b: the demo instance's reset (404 unless DEMO_INSTANCE); before the catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
+// The site announcement, public read (harvest2-lane7a): the copy only while live.
+app.use('/api/v1/announcement', require('./routes/announcementRoutes'));
 // Seller area (D-020): read-only, published copy; 404 unless INSTANCE_ROLE=public.
 app.use('/api/v1/seller',     require('./routes/sellerRoutes'));
 // Client error beacon + admin event log (harvest 2026-08-22, ice #195). The
