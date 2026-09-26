@@ -106,8 +106,18 @@ test.describe('Roles grid on a phone', () => {
     await page.locator('.role-narrow-pick .combobox__opt').first().click();
     await expect(visibleCols).toHaveCount(1);
     await expect(page.locator('th.role-col:visible')).toHaveAttribute('data-role', 'admin');
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+    // Nothing on the page pokes past its own right edge either: a button that
+    // sticks out into the shell's padding scrolls the page sideways on CI's
+    // Linux rendering even when it still fits locally ("Nýtt hlutverk" did).
+    const poking = await page.locator('.admin-page').evaluate((pageEl) => {
+      const edge = pageEl.getBoundingClientRect().right + 0.5;
+      return [...pageEl.querySelectorAll('*')]
+        .filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.right > edge; })
+        .map((n) => `${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}.${String(n.className).trim().replace(/\s+/g, '.')}`);
+    });
+    expect(poking).toEqual([]);
   });
 });
 
