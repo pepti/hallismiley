@@ -268,6 +268,14 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
 **Effort.** S. **Risk.** Low.
 
+### 27. ✅ DONE 2026-09-26 (on its branch) — Merge duplicate products; AI reads a supplier PDF into the import (dark)
+
+**Status.** Approved 2026-09-26 (harvest 2) by Halli; built on `harvest2/lane6b-merge-ai` from icelandicstore `941cf51d` (#309/#311/#312/#315, #306/#314). Products → Duplicates suggests duplicates with their evidence and merges them in one transaction (engine migration 120, provisional number); "Read with AI" ships dark behind `PRODUCT_IMPORT_AI_ENABLED` — **switching it on costs money per page** (budgets and the cost note in `docs/DEPLOYMENT.md`). [history](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26).
+
+**What.** (a) Duplicate suggestions (same barcode, same SKU, same name, colourway, similar name) and a merge that moves variants, stock (through `Inventory`, audited), images, collection links and order lines to the product kept, leaves issued invoices alone, and redirects the merged product's URL. (b) Claude reads a free-form supplier price list into create-only import rows, verified against the PDF's own text, priced by the admin's markup and EUR rate.
+**Why.** Every catalogue that came from an import has duplicates; and a supplier's price list is rarely a spreadsheet.
+**Effort.** L. **Risk.** Money/stock path (merge) and spend (AI) — both behind review, tests and, for the AI, a switch that is off.
+
 ### Reverse queue — this repo → icelandicstore and the base
 
 Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.

@@ -69,5 +69,95 @@ foreign keys to products or variants. `assertCovers` makes merging refuse
 (503 `schema_drift`) and `productMerge.test.js` fails CI until `repointSpec.js`
 names a policy for each — whichever lane lands second adds it.
 
-**Tests.** `tests/integration/productMerge.test.js` (14), `tests/unit/productDedupe.test.js`
-(10), `tests/unit/productMergePlanner.test.js` (6).
+**Found on the screenshot pass, fixed.** The engine's
+`uniq_product_variants_attrs` index covers switched-off rows (ice's excludes
+archived ones), so a per-colour product's sizes moving onto a master that still
+holds that colour's switched-off rows would have hit the index as a 500. The
+planner refuses it by name (`attribute_collision_inactive`); the admin switches
+that row on and maps onto it.
+
+**The screen.** `AdminProductDuplicatesView.js` (`/admin/shop/products/duplicates`,
+a "Duplicates" button on the products list; the sidebar keeps Products lit):
+badges (weakest signal first), the evidence table with a "keep" radio per
+product, "Preview merge" → the server's plan with a target `<select>` per unit
+(re-planned on every change, the previous request aborted), refusals in
+`role=alert` with the unit rows `aria-invalid`, warnings, and "Merge" (enabled
+only on an ok plan, behind a confirm). A stale preview re-plans and says so.
+The heading takes focus once the view is mounted. Tokens only
+(`admin-product-merge.css`); tables scroll sideways at 375 px.
+
+### "Read with AI" in the product import (dark)
+
+**What shipped.** A supplier PDF the normal reader cannot read (or any PDF) can
+be read by Claude, a few pages at a time, into rows that go through the
+UNCHANGED preview → apply with `create: true`. Server:
+`services/productImport/aiExtract.js` (schema, prompt, echo sentinel, text-layer
+verification, derived variant SKUs — ice #314 A2) and `aiLimits.js` (the cost
+gate); `controllers/adminProductImportAiController.js`; routes
+`GET /products/import/ai-config` (always 200) and `POST /products/import/ai-extract`
+(CSRF → flag 404 → day budget 429 → multer → page caps 422 → `aiGate` slot
+429 → charge → read; 502 refunds; 499 when the client leaves, from
+`res.on('close')` → `AbortSignal`). Client: `components/ProductImportAi.js`
+(the modal's AI step: shown only when `/ai-config` says enabled and a PDF is
+picked, primary when the normal reader failed; progress per chunk; Stop; what
+could not be confirmed, per row and page; the pricing fields),
+`utils/aiPdfChunks.js` (ice's chunk loop, unchanged), `utils/importMarkup.js`,
+and pdf-lib.
+
+**Engine cuts and additions.**
+- **Budgets** are per request (10 pages), per file (40), per user per UTC day
+  (60) and per instance per UTC day (200) — the task asked for per file and per
+  day; ice had a per-user 15-minute window. In memory per container (a restart
+  forgets the day's count — documented as the cost note in `docs/DEPLOYMENT.md`).
+- **Model**: `PRODUCT_IMPORT_AI_MODEL`, else the engine's configured model —
+  `translator.getModel()` (now exported), which is `TRANSLATE_MODEL` or its
+  default. No model literal in the new code. ice used its vision model.
+- **No `visionCore`** in the engine: the structured-output call, the temperature
+  retry and the JSON salvage live in `aiExtract.js`, with its own client
+  (`anthropicAuth` + `fetchNamed('Anthropic messages (product import)')`, one
+  SDK retry, the timeout combined with the client's signal).
+- **Prices**: the engine's products need `price_isk` AND `price_eur`, and
+  its import has no cost column. A printed selling price fills `price_isk`; any
+  other price travels as `cost_isk` for the preview only. The pricing step has
+  the markup on cost (ice) AND an ISK-per-EUR rate (engine) — both typed by the
+  admin, both applied to the rows as read, both flag the row.
+- **Create-only** is enforced twice, as in ice: codes already ours are dropped
+  at read time, and `classifyImportRows` refuses any `__ai` row that matches a
+  product (`aiCreateOnly`).
+- **Not ported**: ice's single-row create path. The engine import creates only
+  products with variants, so AI lines without sizes/colours stay unmatched —
+  the AI step says so. The upload keeps the inline multer wrapper the
+  parse-file route uses; move both to lane 1a's `uploadSingle` when it lands
+  (ice's 499 for a multer "Request aborted" comes with it).
+- **pdf-lib 1.17.1** (MIT; its bundled pako is MIT/Zlib, tslib 0BSD) is an
+  exact-pinned devDependency, vendored verbatim as
+  `public/js/vendor/pdf-lib.esm.min.js` (523 KB, sha256 `72c052d9…d969` — the
+  same file ice vendors) with its licence beside it, loaded only when "Read with
+  AI" is pressed. `tests/unit/pdfLibVendor.test.js` fails when a bump leaves
+  the copy behind.
+
+**Not verified against the real API**: every test stubs the model
+(`aiExtract._setClientFactory`); no call reached Anthropic from this branch.
+
+### Tests
+
+Unit 53 new (`productDedupe` 10, `productMergePlanner` 7,
+`productImportAiExtract` 21, `aiPdfChunks.client` 7, `importMarkup.client` 6,
+`pdfLibVendor` 2); integration 25 new (`productMerge` 14 — gate, suggestions,
+refusals write nothing, simple→simple, variants→variants, 301s, frozen writes,
+retired-SKU resolution, MERGE_BUSY on a held order, a checkout holding the
+source's KEY SHARE commits first and its line is repointed, a checkout after the
+merge refused, the FK guard both ways; `adminProductImportAi` 11); e2e
+`admin-product-duplicates.spec.js` (plants a pair, previews, merges, checks the
+301 and the stock). `node server/scripts/migrate.js --plan` on a database at
+master's schema: only `120_product_merge` RUN.
+
+### DRAFT strings (Halli)
+
+All new EN/IS strings are DRAFT: `adminProducts.duplicates`,
+`adminProductDuplicates.*` (72: title, subtitle, signals, columns, roles,
+kinds, 19 refusal/warning reasons, merge/confirm/done/stale lines),
+`adminProducts.importReason.aiCreateOnly`, `adminProducts.importAi*` (29: the
+AI step, pricing fields, flags), and server-side `errors.admin.merge*`,
+`errors.admin.productMerged`, `errors.admin.importAi*`,
+`errors.shop.productMerged`.

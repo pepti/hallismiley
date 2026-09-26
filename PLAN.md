@@ -234,6 +234,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   product page's editable `vat_note` chrome still says 24 %; (d) the contact
   form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
   looser there.
+- Harvest 2 lane 6b (2026-09-26, branch `harvest2/lane6b-merge-ai`, not merged,
+  [harvest2-lane6b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)):
+  Products → Duplicates + a one-transaction product merge (engine migration
+  `120_product_merge`, provisional number — renumber at merge; ice aliases it
+  to its `112_product_merges`), and the AI PDF reader in the product import,
+  **dark**. Open: (a) **for Halli: turning "Read with AI" on
+  (`PRODUCT_IMPORT_AI_ENABLED=true` + Claude credentials) costs money per page
+  read** — the day caps in `docs/DEPLOYMENT.md` bound it, per container; (b) the
+  new Duplicates / AI strings are DRAFT (listed in the fragment); (c) AI lines
+  without sizes/colours stay unmatched — the engine import has no single-row
+  create path (ice's is not ported); (d) whichever of lanes 6a/6c lands after
+  this adds its new product/variant foreign keys to `repointSpec.js`, or merging
+  switches itself off (`schema_drift`) and `productMerge.test.js` fails.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
