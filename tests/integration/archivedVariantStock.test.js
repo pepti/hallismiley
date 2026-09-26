@@ -54,6 +54,24 @@ describe('receiving', () => {
   });
 });
 
+describe('a draft receipt whose matched variant is deleted later', () => {
+  test('finalise names the line (409 VARIANT_ARCHIVED), the line shows it, and nothing is received', async () => {
+    const other = await ProductVariant.create({ product_id: tee.id, sku: 'L6C-ARC-M', attributes: { size: 'M' } });
+    const receipt = await GoodsReceipt.create({ supplierName: 'L6c Archive Supplier' });
+    await GoodsReceipt.addLines(receipt.id, [{ sku: 'L6C-ARC-M', expectedQty: 2 }]);
+    const [line] = await GoodsReceipt.lines(receipt.id);
+    await db.query('UPDATE goods_receipt_lines SET received_qty = 2 WHERE id = $1', [line.id]);
+    // The line itself now names the variant, so DELETE archives it.
+    const del = await request(app).delete(`/api/v1/admin/shop/products/${tee.id}/variants/${other.id}`).set('Cookie', adminCookie);
+    expect(del.body).toMatchObject({ archived: true });
+    expect((await GoodsReceipt.lines(receipt.id))[0]).toMatchObject({ id: line.id, variant_archived: true });
+    const fin = await request(app).post(`/api/v1/admin/receiving/${receipt.id}/finalize`).set('Cookie', adminCookie).send({});
+    expect(fin.status).toBe(409);
+    expect(fin.body).toMatchObject({ reason: 'VARIANT_ARCHIVED', lineIds: [line.id] });
+    expect((await ProductVariant.findById(other.id)).stock).toBe(0);
+  });
+});
+
 describe('the stock count', () => {
   test('lookup and search give the live variant only', async () => {
     const look = await request(app).get(`/api/v1/admin/inventory/lookup?code=${SKU}`).set('Cookie', adminCookie);

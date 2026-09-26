@@ -305,6 +305,7 @@ const tools = [
       });
       if (!result.ok) {
         if (result.reason === 'conflict') fail('another change added one of these variants a moment ago — nothing was saved; read list_variants and try again');
+        if (result.reason === 'merged') fail(`product ${product.id} was merged into ${result.product.merged_into_id} — add the variants there`);
         if (result.reason === 'not_found') fail('product not found');
         const lines = variantAdd.describe(result.errors, 'en', product.variant_axes || []).map(e => e.message);
         fail(`nothing was created — ${lines.length} problem(s):\n${lines.join('\n')}`);

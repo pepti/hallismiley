@@ -578,6 +578,7 @@
   "errors.receiving.variantRequired": "Þessi kóði á við vöru með afbrigðum — skannaðu eða veldu afbrigðið.",
   "errors.receiving.scanNotFound": "Skönnunin fannst ekki á þessari móttöku.",
   "errors.receiving.incomplete": "{n} lína/línur eru ekki paraðar við okkar vörur. Paraðu eða slepptu þeim fyrst.",
+  "errors.receiving.variantArchived": "{n} lína/línur vísa á afbrigði sem var eytt eftir að þær voru paraðar. Paraðu þær við virkt afbrigði eða slepptu þeim fyrst.",
   "errors.receiving.tooManyLines": "Móttaka má mest hafa {max} línur.",
   "errors.receiving.supplierRequired": "Skráðu nafn birgjans (mest 200 stafir).",
   "errors.receiving.fieldTooLong": "Þessi reitur má mest vera {max} stafir.",

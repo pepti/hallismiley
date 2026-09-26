@@ -293,8 +293,8 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   "+ Add a colour"), the bulk variants route + MCP `add_variants` /
   `list_variants` (switch `mcp.write.variantCreate`, off), colour swatches that
   swap the photo, the delivery note as a pick list, and the lane 4a
-  `--gold-light` leftover. Provisional engine migration
-  `119_product_image_color` (renumber at merge). Open: (a) **the new
+  `--gold-light` leftover. Engine migration `119_product_image_color` (after
+  118, before 120). Open: (a) **the new
   `adminProducts.*`, `variants.*`, `shop.sortByCol`, `errors.variantAdd.*`,
   `validation.variant.*` strings are DRAFT** (Halli; listed in the fragment);
   (b) settled 2026-09-26 after merging lane 6b: merged products refuse

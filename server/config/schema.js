@@ -5781,8 +5781,8 @@ END; $$ LANGUAGE plpgsql`,
   {
     // Variants that work, and a colour per product photo (harvest 2 lane 6c,
     // 2026-09-26; ported from icelandicstore #194 = ice 099_variant_archive
-    // and #182/#265 = ice 096_product_image_color). PROVISIONAL number — the
-    // harvest renumbers at merge.
+    // and #182/#265 = ice 096_product_image_color). Numbered into the harvest
+    // order at the merge: after 118_goods_receipts, before 120_product_merge.
     //
     // 1. product_images.color — which variant colour a photo shows. The
     //    storefront resolves variant colours against it server-side

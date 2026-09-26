@@ -208,13 +208,14 @@ function plan(state, raw) {
     if (!foldGroups.has(k)) foldGroups.set(k, []);
     foldGroups.get(k).push({ id: String(v.id), sku: v.sku || null, exact: exactKey(axes, v.attributes || {}) });
   }
-  // The engine's unique (product_id, attributes) index covers switched-off rows
-  // too (ice's excludes archived ones), so a new or moved variant must not land
-  // on the attributes of a SWITCHED-OFF survivor row either — that is the row a
-  // colour's own product often replaced. Refused, never a 500 from the index:
-  // the admin switches that row on and maps onto it instead.
+  // The unique (product_id, attributes) index covers switched-off rows too —
+  // but not ARCHIVED ones (migration 119, like ice) — so a new or moved
+  // variant must not land on the attributes of a SWITCHED-OFF survivor row —
+  // that is the row a colour's own product often replaced. Refused, never a
+  // 500 from the index: the admin switches that row on and maps onto it
+  // instead. An archived row (deleted, kept for an order) blocks nothing.
   const inactiveKeys = new Map();
-  for (const v of (master.variants || []).filter(x => x.active === false)) {
+  for (const v of (master.variants || []).filter(x => x.active === false && !x.archived_at)) {
     const k = attrKey(axes, v.attributes || {});
     if (!inactiveKeys.has(k)) inactiveKeys.set(k, String(v.id));
   }

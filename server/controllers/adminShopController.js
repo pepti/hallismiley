@@ -860,6 +860,12 @@ const adminShopController = {
       if (!result.ok) {
         if (result.reason === 'not_found') return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
         if (result.reason === 'conflict') return res.status(409).json({ error: t(req.locale, 'errors.variantAdd.conflict'), code: 409 });
+        if (result.reason === 'merged') {
+          return res.status(409).json({
+            error: t(req.locale, 'errors.admin.productMerged'), code: 409,
+            reason: 'product_merged', movedTo: { id: result.product.merged_into_id },
+          });
+        }
         const axes = Array.isArray(result.product && result.product.variant_axes) ? result.product.variant_axes : [];
         const errors = variantAdd.describe(result.errors, req.locale, axes);
         return res.status(result.status).json({ error: errors.map(e => e.message).join('; '), code: result.status, errors });

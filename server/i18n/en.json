@@ -578,6 +578,7 @@
   "errors.receiving.variantRequired": "That code belongs to a product with variants — scan or choose the variant.",
   "errors.receiving.scanNotFound": "Scan not found on this receipt.",
   "errors.receiving.incomplete": "{n} line(s) are not matched to our items. Match or skip them first.",
+  "errors.receiving.variantArchived": "{n} line(s) point at a variant that was deleted after it was matched. Match them to a live variant or skip them first.",
   "errors.receiving.tooManyLines": "A receipt can have at most {max} lines.",
   "errors.receiving.supplierRequired": "Give the supplier's name (at most 200 characters).",
   "errors.receiving.fieldTooLong": "That field can be at most {max} characters.",

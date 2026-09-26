@@ -1,6 +1,6 @@
 -- 119_product_image_color — reference copy; the authoritative entry is in
--- server/config/schema.js. PROVISIONAL number (harvest 2 lane 6c; the harvest
--- renumbers at merge).
+-- server/config/schema.js. Harvest 2 lane 6c; after 118_goods_receipts, before
+-- 120_product_merge.
 --
 -- Ported from icelandicstore #182/#265 (ice 096_product_image_color) and #194
 -- (ice 099_variant_archive):

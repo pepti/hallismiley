@@ -5,8 +5,8 @@ Lane 6c of the approved "Harvest 2" programme (Halli, 2026-09-26): generic
 icelandicstore work on product variants, colour photos and the delivery note,
 ported into the engine from ice@941cf51d plus the two PRs merged on top of it
 the same day (#430 = 965014ee, #432 = d13c6553). Branch
-`harvest2/lane6c-variants`. Provisional engine migration
-**`119_product_image_color`** (the harvest renumbers at merge).
+`harvest2/lane6c-variants`. Engine migration **`119_product_image_color`**
+(numbered at the merges: after 118, before 120).
 
 ### What shipped
 
@@ -125,8 +125,11 @@ the editable-region focus outline uses `--accent-ink`.
 `tests/unit/themeTokenContrast.test.js` stays green.
 
 ### Engine deltas from ice (deliberate)
-- No product merges yet (lane 6b brings them): `variantAdd` has no merged-product
-  refusal and no merged-SKU check — add both when 6b lands.
+- Merged products (lane 6b, 120) are refused by `variantAdd` and the routes (see
+  "After merging master again"); ice's merged-SKU check (a code a merged
+  product used to carry counts as taken) is a deliberate won't-fix: the engine
+  never resolves codes through `product_merges.merged_sku`, and the merge
+  clears a source's own codes.
 - An ARCHIVED variant's SKU is free for the bulk writer too (ice counts archived
   SKUs as taken there); one rule with the single route, which item 1 requires.
 - Variant prices are the engine's VAT-inclusive `price_isk` / `price_eur`
@@ -233,6 +236,20 @@ rules, and pins the inline-edit controls to `--on-accent` / `--accent-hover`.
   again under its product lock (409 `product_merged` + `movedTo` on the route,
   a clear MCP error). `Product.findForImport` (6b's merged-aware version) reads
   live variants only.
+An archived variant left on a merged-away product keeps its stock figure
+(archiving leaves on hand as it stands; nothing counts, receives or lists it).
+A duplicate-URL photo left on the source keeps its colour there; the
+survivor's copy keeps its own (possibly empty) tag — cosmetic.
 Pinned in `tests/integration/productMerge.test.js`.
+
+Second review pass (invariant-reviewer on the delta: fbd325d, the two merge
+commits, the merge/variant integration): every invariant passes; no
+lock-order risk (`variantAdd`'s product FOR KEY SHARE conflicts with the
+merge's FOR UPDATE, no cycle); fulfilment unaffected by `refuseArchived`.
+Fixed: a draft receipt whose matched variant is archived later was refused
+at finalise as a bare "not found" — `finalize` now answers 409
+`VARIANT_ARCHIVED` with the `lineIds`, and `lines()` returns
+`variant_archived` (new DRAFT string `errors.receiving.variantArchived`).
+Fixed: the stale "provisional" wording and this fragment's merge notes.
 
 ### Still owed

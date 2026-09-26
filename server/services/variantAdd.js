@@ -25,9 +25,10 @@
 //     Product.resolveByCode answers to either column and one code must name
 //     one thing (the scanner, the import)
 //
-// Engine deltas from ice: no product merges (the merged-product refusal and
-// merged-SKU check are not taken — lane 6b brings merges; add them there);
-// an ARCHIVED variant's SKU is free here (migration 119 makes archiving free
+// A product merged away (migration 120, lane 6b) is frozen: refused up front
+// and again under the lock, like ice's refuseMergedProduct (the admin routes
+// refuse it too, in adminShopRoutes.js; this is the half MCP goes through).
+// Engine deltas from ice: an ARCHIVED variant's SKU is free here (migration 119 makes archiving free
 // the SKU for the one-variant route too — one rule for both paths); prices
 // are the engine's VAT-inclusive price_isk / price_eur overrides; the shelf is
 // written on the variant row (the engine has no bin-move audit table).
@@ -243,6 +244,8 @@ async function evaluate(q, product, input, active) {
 async function addVariants(productId, input, { userId = null, source = 'admin', active = true, dryRun = false } = {}) {
   const product = await Product.findById(String(productId));
   if (!product) return { ok: false, status: 404, reason: 'not_found' };
+  const mergedInto = await Product.mergedInto(product.id);
+  if (mergedInto) return { ok: false, status: 409, reason: 'merged', product: { ...product, merged_into_id: mergedInto } };
 
   const first = await evaluate(db, product, input, active);
   if (first.errors) return { ok: false, status: first.status, errors: first.errors, product };
@@ -265,9 +268,15 @@ async function addVariants(productId, input, { userId = null, source = 'admin', 
   try {
     await client.query('BEGIN');
     for (const k of keys) await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [k]);
+    // FOR KEY SHARE conflicts with the merge's FOR UPDATE on the product, so
+    // a merge cannot land between this read and the inserts.
     const { rows: [fresh] } = await client.query(
-      'SELECT variant_axes FROM products WHERE id = $1 FOR KEY SHARE', [product.id]);
+      'SELECT variant_axes, merged_into_id FROM products WHERE id = $1 FOR KEY SHARE', [product.id]);
     if (!fresh) { await client.query('ROLLBACK'); return { ok: false, status: 404, reason: 'not_found' }; }
+    if (fresh.merged_into_id) {
+      await client.query('ROLLBACK');
+      return { ok: false, status: 409, reason: 'merged', product: { ...product, merged_into_id: fresh.merged_into_id } };
+    }
     const again = await evaluate(client, { ...product, variant_axes: fresh.variant_axes }, input, active);
     if (again.errors) {
       await client.query('ROLLBACK');

@@ -1204,7 +1204,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `stockItems` / `variantRefs` / `searchItems` read live variants only, and
   `applyLines` refuses one under `refuseArchived` (every count, "Fix stock" and
   receipt batch) — never for order fulfilment, which must still move an
-  archived variant an order names.
+  archived variant an order names. A draft receipt line whose variant was
+  archived after the match makes finalise a 409 `VARIANT_ARCHIVED` naming the
+  `lineIds` (re-match or skip them).
 - **Many variants are added whole or not at all**: `services/variantAdd.js`
   behind `POST /products/:id/variants/bulk` (with `dry_run`) and MCP
   `add_variants`; every problem comes back in one answer, SKUs and barcodes
