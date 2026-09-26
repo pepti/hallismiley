@@ -22,7 +22,6 @@ paths:
   - server/utils/orderVat.js
   - server/utils/reportWindow.js
   - server/models/SalesReports.js
-  - server/models/StockOut.js
   - public/js/utils/dateRanges.js
   - tests/integration/orderVatSnapshot.test.js
   - tests/integration/adminSalesReport.test.js
@@ -39,5 +38,5 @@ Orders after checkout: the admin list with payment/fulfilment/tags (054) and bul
 
 **Rules**
 - The buyer's checkout note lives in `orders.notes` (migration 115, ice #213): trimmed and cut at 1000 characters by `Order.normaliseNote`, shown to staff on the admin order page, never in `COLUMNS` / the customer-facing payloads ([history](../docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)). The admin order page also shows the VAT per rate under the total (`utils/vat.js`).
-- The VAT inside an order is snapshotted at checkout (migration 121: `order_items.vat_rate`, `orders.vat_total`) by `server/utils/orderVat.js`, the core `invoiceService.buildLines` also runs — for an ISK order the snapshot equals the booked VAT. The sales report (`/admin/sales`) leads with net sales per currency, counts an order when PAID, compares with a preset's comparison window, and loads its insights and marketing sections as separate requests; the "Í dag" to-fulfil card and the order list's `?view=open` share `Order.ORDER_VIEWS.open`, the sold-out card and `?stock=out` share `models/StockOut.js` ([history](../docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)).
+- The VAT inside an order is snapshotted at checkout (migration 121: `order_items.vat_rate`, `orders.vat_total`) by `server/utils/orderVat.js`, the core `invoiceService.buildLines` also runs — for an ISK order the snapshot equals the booked VAT. The sales report (`/admin/sales`) leads with net sales per currency, counts an order when PAID, compares with a preset's comparison window, and loads its insights and marketing sections as separate requests; the "Í dag" to-fulfil card and the order list's `?view=open` share `Order.ORDER_VIEWS.open` (the sold-out card counts the Inventory Watch's `out` bucket — [history](../docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)).
 - Full rules: [../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface](../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface).

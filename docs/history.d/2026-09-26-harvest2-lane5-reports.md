@@ -59,15 +59,16 @@ computed inside the invoice.
    (either window) is a 400 `errors.admin.invalidDateRange`. The page now opens for any holder of
    the `sales` view (`canSeeView`), not only admins — the server was always the gate.
 3. **"Í dag" attention cards** (#417). The admin home already had orders to fulfil and open change
-   requests; added: **sold out** (`products` view; `models/StockOut.js` — active goods, not a
-   bookable service, Available ≤ 0 at product level, the list's own rollup) and **sign-ups
+   requests; added: **sold out** (`inventory` view; the Birgðavakt's `out` bucket — every stocked
+   unit whose Available is 0 or less, counted by the SAME `Inventory.watchRows` →
+   `buildWatchReport` the page renders; lane 6a, merged into this branch mid-lane) and **sign-ups
    awaiting approval** (`users` view; `utils/signupApproval.js`). Each to-do now links to its list
    FILTERED to exactly the rows counted: `/admin/shop/orders?view=open` (`Order.ORDER_VIEWS.open`,
-   which the card's count now uses too), `/admin/shop/products?stock=out`,
+   which the card's count now uses too), `/admin/inventory?status=out`,
    `/admin/users?status=pending`, `/admin/feedback?status=open`. `AdminOrdersView` keeps its filter
-   in the URL through the kit's `listState` (`?view=`, `?filter=`, `?q=`); the users, products and
-   change-request lists read `?status=` / `?stock=`, the first two with a chip back to the whole
-   list. A source that fails keeps its row: `{ failed: true, count: null }` from the server, "—"
+   in the URL through the kit's `listState` (`?view=`, `?filter=`, `?q=`); the users and
+   change-request lists read `?status=`, the users list with a chip back to the whole list (the
+   Birgðavakt already did). A source that fails keeps its row: `{ failed: true, count: null }` from the server, "—"
    and "Náðist ekki að lesa" on the page — never 0 (the VSK deadline, a number of days, is exempt).
    Each card only exists for a role holding its view, as every "Í dag" block. ice's backorder,
    Regla, Pressan cards have no engine counterpart.
@@ -101,10 +102,10 @@ við …", "Sala án VSK (ISK)", "Með VSK: …", "Meðalpöntun án VSK", "VSK"
 duration units, Afgreiðslutími / Nýir viðskiptavinir / Sofandi viðskiptavinir and their lines,
 Markaðssetning / Heimsóknir eftir leið (Beint · Leitarvélar · Samfélagsmiðlar · Tölvupóstur · Aðrir
 vefir) / Sala með afslætti / Herferðir and the campaign states (Virk · Á dagskrá · Lokið · Uppurin
-· Óvirk), the two failure lines; `adminHome.waiting.outOfStock.*` ("{n} vörur uppseldar"),
+· Óvirk), the two failure lines; `adminHome.waiting.outOfStock.*` ("{n} vörunúmer uppseld", "Opna Birgðavakt"),
 `.signups.*` ("{n} umsóknir bíða samþykkis", "elsta frá …"), `.tag.unread` ("Náðist ekki að
 lesa"); `adminOrders.viewOpen` ("Bíða afgreiðslu"), `adminUsers.onlyPending`,
-`adminUsers.clearFilter`, `adminProducts.onlySoldOut`; server `errors.admin.invalidDateRange`.
+`adminUsers.clearFilter`; server `errors.admin.invalidDateRange`.
 Removed (unused now): `adminSales.range7/30/90`, `adminSales.ordersPerDay`.
 
 **Measured.** See the lane report (test counts, screenshots on the three themes at desktop and
@@ -113,6 +114,5 @@ Removed (unused now): `adminSales.range7/30/90`, `adminSales.ordersPerDay`.
 **Owed / for Halli.** The invoice still reads each line's CURRENT product rate, not the new
 snapshot — making `createFromOrder` book `COALESCE(oi.vat_rate, p.vat_rate)` would pin the invoice
 to the rate the customer was quoted (a books-path change, not in this lane's scope). The
-product-level "sold out" rule differs from lane 6a's per-unit Birgðavakt; once 6a lands the card
-could link there instead. The report's hidden-shop product (this one) shows the sales page only to
-an explicit `sales` grant.
+marketing "visit" (a visitor-day from the daily token) is not a browser session; Halli may want
+the beacon to carry a real session id before the channel split is used for decisions.

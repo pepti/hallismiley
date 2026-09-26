@@ -280,9 +280,9 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `adminHome.waiting.*` and list-filter strings are DRAFT** (Halli; listed in
   the fragment); (b) the invoice still books each line at the product's
   CURRENT rate — reading the new `order_items.vat_rate` snapshot there is a
-  books-path decision for Halli/Bókari; (c) the sold-out card is product-level
-  (`models/StockOut.js`); once lane 6a's per-unit Birgðavakt lands, decide
-  whether the card links there.
+  books-path decision for Halli/Bókari; (c) the sold-out card counts the
+  Birgðavakt's `out` units (lane 6a, merged into this branch) and links to
+  `/admin/inventory?status=out`.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

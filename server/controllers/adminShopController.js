@@ -21,7 +21,6 @@ const logger                  = require('../logger');
 const { parseReportWindow }   = require('../utils/reportWindow');
 const { resolveViews }        = require('../auth/requireView');
 const SalesReports            = require('../models/SalesReports');
-const StockOut                = require('../models/StockOut');
 
 // EN → IS pairs for auto-translation on admin save.
 // Shop-redesign section fields (category, subcategory, duration_minutes,
@@ -382,19 +381,7 @@ const adminShopController = {
 
   async listProducts(req, res, next) {
     try {
-      // ?stock=out — the sold-out products (models/StockOut.js), the list the
-      // "Í dag" card links to; the card counts with the same definition.
-      let products;
-      if (req.query.stock === 'out') {
-        const ids = await StockOut.productIds();
-        const order = new Map(ids.map((id, i) => [String(id), i]));
-        products = ids.length
-          ? (await Product.findByIds(ids, { activeOnly: false }))
-            .sort((a, b) => order.get(String(a.id)) - order.get(String(b.id)))
-          : [];
-      } else {
-        products = await Product.findAll({ activeOnly: false, limit: 200 });
-      }
+      const products = await Product.findAll({ activeOnly: false, limit: 200 });
       if (products.length === 0) return res.json({ products: [] });
       const productIds = products.map(p => p.id);
       // Admin needs to see inactive variants too, so activeOnly: false.

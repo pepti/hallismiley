@@ -1,6 +1,7 @@
 // "Í dag" attention cards (harvest 2 lane 5; icelandicstore #417) against real
 // Postgres. The property: the number on a card IS the row count of the list its
-// link opens — orders to fulfil (?view=open), sold out (?stock=out), sign-ups
+// link opens — orders to fulfil (?view=open), sold out (the Birgðavakt's
+// ?status=out, harvest 2 lane 6a's Inventory Watch), sign-ups
 // awaiting approval (?status=pending), open change requests (?status=open) —
 // and a section that cannot be read keeps its row with no count, never 0.
 //
@@ -16,7 +17,7 @@ const {
 } = require('../helpers');
 
 const HOME = '/api/v1/admin/home';
-const VIEWS = ['dashboard', 'orders', 'products', 'users', 'feedback'];
+const VIEWS = ['dashboard', 'orders', 'inventory', 'users', 'feedback'];
 let cookie;
 let seq = 0;
 
@@ -74,8 +75,9 @@ test('every card counts exactly the rows its link opens', async () => {
   await order('paid', 'fulfilled');
   await order('pending', 'unfulfilled');
   await order('voided', 'unfulfilled');
-  // Stock: out (0), in stock, an inactive product at 0, a bookable service at 0,
-  // a variant product whose only active variant is at 0 (out).
+  // Stock (Inventory Watch units): out (0), in stock, an inactive product at 0,
+  // a bookable service at 0, a variant product whose only active variant is at
+  // 0 (that variant is out; the inactive one is not a unit).
   await product('att-out', 0);
   await product('att-in', 5);
   await product('att-inactive', 0, { active: false });
@@ -109,10 +111,13 @@ test('every card counts exactly the rows its link opens', async () => {
   expect(orders.body.orders).toHaveLength(2);
 
   const out = card(body, 'out_of_stock');
-  expect(out).toMatchObject({ count: 2, route: '/admin/shop/products?stock=out', view: 'products' });
-  const products = await request(app).get('/api/v1/admin/shop/products?stock=out').set('Cookie', cookie);
-  expect(products.body.products.map(p => p.slug).sort()).toEqual(['att-out', 'att-variants']);
-  expect(products.body.products.every(p => p.available <= 0)).toBe(true);
+  expect(out).toMatchObject({ count: 2, route: '/admin/inventory?status=out', view: 'inventory' });
+  // The page behind the link filters the watch report's items by status.
+  const watch = await request(app).get('/api/v1/admin/shop/reports/inventory').set('Cookie', cookie);
+  expect(watch.status).toBe(200);
+  const outRows = watch.body.report.items.filter(i => i.status === 'out');
+  expect(outRows).toHaveLength(2);
+  expect(outRows.map(i => i.name).sort()).toEqual(['Vara att-out', 'Vara att-variants']);
 
   const signups = card(body, 'signups_pending');
   expect(signups).toMatchObject({ count: 2, route: '/admin/users?status=pending', view: 'users' });

@@ -12,7 +12,6 @@ import {
 } from '../services/adminProducts.js';
 import { showToast } from '../components/Toast.js';
 import { dragHasFiles, dragHasUsableFile } from '../utils/dragFiles.js';
-import { readListState, syncListState } from '../utils/listState.js';
 
 // The image types the product-image upload takes: the drop filter and the
 // drag-time check share this pattern; the file input's accept lists the same.
@@ -41,13 +40,7 @@ function _esc(s) {
 }
 
 export class AdminProductsView {
-  constructor() {
-    this._view = null; this._products = []; this._detailCache = new Map(); this._selected = new Set();
-    // ?stock=out: the sold-out products — the list the "Í dag" card links to
-    // (models/StockOut.js on the server counts the card with the same rule;
-    // harvest 2 lane 5).
-    this._stock = readListState({ stock: '' }).stock === 'out' ? 'out' : '';
-  }
+  constructor() { this._view = null; this._products = []; this._detailCache = new Map(); this._selected = new Set(); }
 
   async render() {
     this._view = document.createElement('div');
@@ -63,8 +56,6 @@ export class AdminProductsView {
           </div>
         </header>
         <p class="admin-shop__hint">${t('adminProducts.priceHint')}</p>
-        ${this._stock ? `<p><span class="filter-chip" id="prod-stock-chip">${_esc(t('adminProducts.onlySoldOut'))}
-          <button type="button" class="filter-chip__clear" id="prod-stock-clear" aria-label="${_esc(t('adminUsers.clearFilter'))}">×</button></span></p>` : ''}
         <div class="prod-bulkbar" id="prod-bulkbar" hidden></div>
         <div id="admin-shop-body"><p>${t('form.loading')}</p></div>
       </div>
@@ -72,12 +63,6 @@ export class AdminProductsView {
     this._view.querySelector('#admin-new-product').addEventListener('click', () => this._showForm());
     this._view.querySelector('#admin-products-export').addEventListener('click', () => this._exportCsv());
     this._view.querySelector('#admin-products-import').addEventListener('click', () => this._openImportModal());
-    this._view.querySelector('#prod-stock-clear')?.addEventListener('click', () => {
-      this._stock = '';
-      this._view.querySelector('#prod-stock-chip')?.closest('p')?.remove();
-      syncListState(href('/admin/shop/products'), { stock: '' }, { stock: '' });
-      this._load();
-    });
 
     await this._load();
     return renderAdminShell({ activePath: '/admin/shop/products', content: this._view });
@@ -85,7 +70,7 @@ export class AdminProductsView {
 
   async _load() {
     try {
-      const res = await fetch(`/api/v1/admin/shop/products${this._stock ? '?stock=out' : ''}`, { credentials: 'include' });
+      const res = await fetch('/api/v1/admin/shop/products', { credentials: 'include' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load products');
       this._products = data.products || [];

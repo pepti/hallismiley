@@ -34,13 +34,13 @@ test('sold out and sign-ups link to exactly the filtered lists', () => {
   const html = renderHome({
     ...base,
     todo: [
-      { kind: 'out_of_stock', view: 'products', route: '/admin/shop/products?stock=out', count: 3, detail: { sample: ['Bolli', 'Diskur'] } },
+      { kind: 'out_of_stock', view: 'inventory', route: '/admin/inventory?status=out', count: 3, detail: { sample: ['Bolli', 'Diskur'] } },
       { kind: 'signups_pending', view: 'users', route: '/admin/users?status=pending', count: 2, detail: { oldestAt: '2026-09-20T10:00:00Z' } },
       { kind: 'orders_to_ship', view: 'orders', route: '/admin/shop/orders?view=open', count: 5, detail: {} },
       { kind: 'change_requests_open', view: 'feedback', route: '/admin/feedback?status=open', count: 1, detail: {} },
     ],
   });
-  expect(html).toContain('href="/is/admin/shop/products?stock=out"');
+  expect(html).toContain('href="/is/admin/inventory?status=out"');
   expect(html).toContain('href="/is/admin/users?status=pending"');
   expect(html).toContain('href="/is/admin/shop/orders?view=open"');
   expect(html).toContain('href="/is/admin/feedback?status=open"');

@@ -174,7 +174,7 @@ const TODO = {
   }),
   // Harvest 2 lane 5 (icelandicstore #417): sold-out goods and sign-ups
   // awaiting approval. Their links open the list filtered to exactly the rows
-  // counted (?stock=out, ?status=pending).
+  // counted (/admin/inventory?status=out, ?status=pending).
   out_of_stock: (i) => ({
     title: countedTitle(i.count, 'adminHome.waiting.outOfStock.one', 'adminHome.waiting.outOfStock.many'),
     detail: [(i.detail?.sample || []).join(', ')],

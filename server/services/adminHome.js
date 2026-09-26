@@ -25,7 +25,8 @@ const db = require('../config/database');
 const logger = require('../logger');
 const Bin = require('../models/Bin');
 const Order = require('../models/Order');
-const StockOut = require('../models/StockOut');
+const Inventory = require('../models/Inventory');
+const { buildWatchReport, WINDOW_DAYS: WATCH_WINDOW_DAYS } = require('../utils/inventoryStatus');
 const { PENDING_APPROVAL_SQL } = require('../utils/signupApproval');
 const Setting = require('../models/Setting');
 const vatService = require('./bookkeeping/vatService');
@@ -54,14 +55,14 @@ const TODO_ORDER = [
 // Where each counted to-do links, and the view it needs (harvest 2 lane 5,
 // icelandicstore #417): the list the work is done in, FILTERED to exactly the
 // rows the count counts — each source below and its list share one predicate
-// (Order.ORDER_VIEWS.open, models/StockOut.js, utils/signupApproval.js, the
-// change_requests status). A source that FAILS still gets its row, with no
+// (Order.ORDER_VIEWS.open, the Inventory Watch report, utils/signupApproval.js,
+// the change_requests status). A source that FAILS still gets its row, with no
 // count (the client shows "—", never 0) — except the VSK deadline, whose
 // number is days, not rows.
 const TODO_LINKS = {
   invoices_overdue: { view: 'ar', route: '/admin/books/ar', source: 'receivables' },
   orders_to_ship: { view: 'orders', route: '/admin/shop/orders?view=open', source: 'orders' },
-  out_of_stock: { view: 'products', route: '/admin/shop/products?stock=out', source: 'stockOut' },
+  out_of_stock: { view: 'inventory', route: '/admin/inventory?status=out', source: 'stockOut' },
   leads_new: { view: 'leads', route: '/admin/leads', source: 'leads' },
   signups_pending: { view: 'users', route: '/admin/users?status=pending', source: 'signups' },
   change_requests_open: { view: 'feedback', route: '/admin/feedback?status=open', source: 'changeRequests' },
@@ -198,15 +199,17 @@ async function changeRequestsSource() {
   return { count: rows[0].n, latest: rows[0].latest ? excerpt(rows[0].latest) : null };
 }
 
-// Sold out (models/StockOut.js): active goods whose Available is 0 or less.
-// A sample of names for the detail line, like the bins row.
+// Sold out: the Birgðavakt's (Inventory Watch, harvest 2 lane 6a) `out`
+// bucket — every stocked unit (a product without variants, or one active
+// variant) whose Available is 0 or less — computed by the SAME report the page
+// behind the link renders (Inventory.watchRows → buildWatchReport), so the
+// count is the row count of /admin/inventory?status=out. A sample of names
+// for the detail line, like the bins row.
 async function stockOutSource() {
-  const ids = await StockOut.productIds();
-  if (!ids.length) return { count: 0, sample: [] };
-  const { rows } = await db.query(
-    'SELECT name FROM products WHERE id = ANY($1::text[]) ORDER BY name LIMIT 2', [ids]
-  );
-  return { count: ids.length, sample: rows.map(r => r.name) };
+  const report = buildWatchReport(await Inventory.watchRows({ windowDays: WATCH_WINDOW_DAYS }),
+    { windowDays: WATCH_WINDOW_DAYS });
+  const names = [...new Set(report.items.filter(i => i.status === 'out').map(i => i.name))];
+  return { count: report.counts.out, sample: names.slice(0, 2) };
 }
 
 // Sign-ups awaiting an admin's approval (utils/signupApproval.js).
@@ -431,7 +434,7 @@ async function buildHome({ can, instanceLacks = () => false, isAdmin = false, us
   if (can('leads')) add('leads', ['todo.leads_new'], () => leadsSource());
   if (can('feedback')) add('changeRequests', ['todo.change_requests_open'], () => changeRequestsSource());
   if (can('bins')) add('bins', ['todo.bins_unshelved'], () => binsSource());
-  if (can('products')) add('stockOut', ['todo.out_of_stock'], () => stockOutSource());
+  if (can('inventory')) add('stockOut', ['todo.out_of_stock'], () => stockOutSource());
   if (can('users')) add('signups', ['todo.signups_pending'], () => signupsSource());
   const heldChannels = CHANNELS.filter(c => can(c.view));
   for (const c of heldChannels) add(`sales.${c.channel}`, ['figures.salesToday'], () => channelSource(c.channel, now));

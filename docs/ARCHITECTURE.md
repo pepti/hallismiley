@@ -399,7 +399,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   icelandicstore #417): `TODO_LINKS` in `services/adminHome.js` gives each
   counted kind its view and its FILTERED list — orders to fulfil →
   `/admin/shop/orders?view=open` (`Order.ORDER_VIEWS.open`), sold out →
-  `/admin/shop/products?stock=out` (`models/StockOut.js`, `products` view),
+  `/admin/inventory?status=out` (the Birgðavakt's `out` bucket, the SAME
+  `Inventory.watchRows` → `buildWatchReport` the page renders; `inventory` view),
   sign-ups awaiting approval → `/admin/users?status=pending`
   (`utils/signupApproval.js`, `users` view), open change requests →
   `/admin/feedback?status=open`; the count and the list share ONE predicate
@@ -1137,7 +1138,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` · `adminInventoryRoutes.js` → `/api/v1/admin/inventory` (+ `GET /api/v1/admin/shop/reports/inventory` in `adminShopRoutes.js`) · `adminReceivingRoutes.js` → `/api/v1/admin/receiving` |
 | Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js`, `adminInventoryController.js`, `adminReceivingController.js` |
-| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order, `applyBatch`), `GoodsReceipt.js`, `SalesReports.js` (the insights + marketing queries beside the sales report), `StockOut.js` (the one "sold out" definition) |
+| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order, `applyBatch`), `GoodsReceipt.js`, `SalesReports.js` (the insights + marketing queries beside the sales report) |
 | Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore — goods receiving reads the supplier file through it too); `server/services/pdfService.js` (the goods receipt PDF); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js`, `inventoryStatus.js` (Inventory Watch buckets), `orderVat.js` (the ONE order-VAT rule: the checkout snapshot and `invoiceService.buildLines`), `reportWindow.js` (the `?from&to` report window) |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js`, `AdminInventoryView.js`, `AdminStockCountView.js`, `AdminReceivingView.js`, `AdminReceivingDetailView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
@@ -1231,10 +1232,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - **An attention card counts exactly the rows its link opens**
   ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
   the order list's `?view=open` is `Order.ORDER_VIEWS.open`, the predicate the
-  "Í dag" card counts with; the product list's `?stock=out` and the card both
-  call `models/StockOut.js` (active goods, not a bookable service, Available
-  ≤ 0 at product level). The order list keeps its filter in the URL
-  (`utils/listState.js`).
+  "Í dag" card counts with; the sold-out card counts the Inventory Watch's
+  `out` units (`/admin/inventory?status=out`, the lane 6a report itself). The
+  order list keeps its filter in the URL (`utils/listState.js`).
 - A name two different products share gets the SKU chip on the card
   (`utils/duplicateNames.js`); rows of one product never collide.
 - "Needs action" order pills (not paid, not sent, partly sent) are the
