@@ -16,6 +16,9 @@
  * table is fine — the static entries are always present.
  */
 const request = require('supertest');
+// The public host (APP_URL's, pinned in tests/env.js): indexability is gated on
+// the request Host (server/utils/indexability.js) and supertest sends 127.0.0.1.
+const PUBLIC_HOST = new URL(process.env.APP_URL).host;
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
 const { lastmodKeys, invalidateLastmodCache } = require('../../server/routes/sitemapRoutes');
@@ -35,7 +38,7 @@ describe('GET /sitemap.xml', () => {
   let res;
 
   beforeAll(async () => {
-    res = await request(app).get('/sitemap.xml');
+    res = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
   });
 
   test('returns 200 with XML content-type', () => {
@@ -164,7 +167,7 @@ describe('GET /sitemap.xml — <lastmod>', () => {
     }
     await db.query('UPDATE site_content SET updated_at = NOW() WHERE key = ANY($1)', [keys]);
     invalidateLastmodCache();
-    const fresh = await request(app).get('/sitemap.xml');
+    const fresh = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
     const today = new Date().toISOString().slice(0, 10);
     expect(entryOf(fresh.text, locale, route)).toContain(`<lastmod>${today}</lastmod>`);
     if (unkeyed) {
@@ -179,14 +182,14 @@ describe('GET /sitemap.xml — <lastmod>', () => {
     const route = path || '/';
     const locale = forcedLocaleFor(route) || 'is';
     invalidateLastmodCache();
-    const a = await request(app).get('/sitemap.xml');
+    const a = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
     expect(entryOf(a.text, locale, route)).toMatch(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
     // A newer save does not show until the cache is dropped.
     await db.query('UPDATE site_content SET updated_at = NOW() - interval \'400 days\' WHERE key = ANY($1)', [keyed[1]]);
-    const b = await request(app).get('/sitemap.xml');
+    const b = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
     expect(entryOf(b.text, locale, route)).toBe(entryOf(a.text, locale, route));
     invalidateLastmodCache();
-    const c = await request(app).get('/sitemap.xml');
+    const c = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
     expect(entryOf(c.text, locale, route)).not.toBe(entryOf(a.text, locale, route));
     await db.query('UPDATE site_content SET updated_at = NOW() WHERE key = ANY($1)', [keyed[1]]);
   });

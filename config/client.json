@@ -45,6 +45,14 @@
       "areaServed": "Iceland",
       "knowsAbout": ["Web Development", "E-commerce", "Inventory Management", "Invoicing", "VAT Accounting", "Shopify Migration", "Node.js", "PostgreSQL"],
       "sameAs": []
+    },
+    "email": {
+      "$comment": "Transactional email (harvest 2 lane 2, 2026-09-26). logo = a file name under public/assets/brand/ (PNG/JPEG — mail clients do not render SVG), shown at logoWidth x logoHeight CSS px; logoWordmark = true when the image spells the brand name (it then stands alone and its alt text is the fallback), false for an emblem (the brand name is set as text beside it). The palette is derived at boot from the first LIGHT theme's tokens (server/utils/emailPalette.js); palette = optional role -> #hex overrides (page, card, panel, border, heading, text, muted, accent, button, onButton), every text colour still held to WCAG AA.",
+      "logo": "orangesmiley-emblem.png",
+      "logoWidth": 48,
+      "logoHeight": 48,
+      "logoWordmark": false,
+      "palette": {}
     }
   },
   "security": {

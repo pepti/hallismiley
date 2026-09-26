@@ -14,6 +14,7 @@
 const express = require('express');
 const { HIDDEN_PUBLIC_ROUTES, NOINDEX_ROUTES } = require('../config/publicSurface');
 const { SUPPORTED_LOCALES } = require('../config/i18n');
+const { isIndexableRequest } = require('../utils/indexability');
 
 const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
@@ -53,13 +54,23 @@ function buildRobots({ hidden = HIDDEN_PUBLIC_ROUTES, noindex = NOINDEX_ROUTES, 
 const router = express.Router();
 
 // A demo instance (config/demoInstance.js) is sample data: nothing on it is
-// for a crawler.
-const DEMO_ROBOTS = ['User-agent: *', 'Disallow: /', ''].join('\n');
+// for a crawler. Nor is a non-production instance, or any instance reached on
+// an infrastructure host (*.azurewebsites.net, localhost, a bare IP) —
+// utils/indexability.js, ported from icelandicstore #123 (harvest 2). The same
+// rule noindexes every page (ssrMeta) and empties the sitemap.
+const DISALLOW_ALL = 'User-agent: *\nDisallow: /\n';
+const DEMO_ROBOTS = DISALLOW_ALL;
 
 router.get('/robots.txt', (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
-  res.set('Cache-Control', 'public, max-age=3600');
-  res.status(200).send(require('../config/demoInstance').isDemoInstance() ? DEMO_ROBOTS : buildRobots());
+  // Short-lived, and keyed on the Host: a production stack answers on BOTH its
+  // custom domain and its Azure default hostname, and a shared cache keyed on
+  // the path alone could hand the public domain the Disallow meant for the
+  // Azure hostname (de-indexing the live site), or the reverse.
+  res.set('Cache-Control', 'public, max-age=300');
+  res.set('Vary', 'Host');
+  const shut = require('../config/demoInstance').isDemoInstance() || !isIndexableRequest(req);
+  res.status(200).send(shut ? DEMO_ROBOTS : buildRobots());
 });
 
-module.exports = { router, buildRobots };
+module.exports = { router, buildRobots, DISALLOW_ALL };

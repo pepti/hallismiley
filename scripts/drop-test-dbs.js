@@ -38,6 +38,7 @@ const { Pool } = require('pg');
 const {
   PRODUCT, LEGACY_PREFIX, resolveTestBaseUrl, adminDbUrl, scopedTestDbName, e2eTestDbName, slugify,
 } = require('../tests/workerDb');
+const { checkTarget } = require('../server/scripts/targetGuard');
 const sweep = require('../tests/lib/testDbSweep');
 const path = require('path');
 
@@ -94,6 +95,14 @@ async function waitForSessions(admin, pattern) {
 
 async function main() {
   const { url } = resolveTestBaseUrl();
+  // DROP DATABASE on a server it can reach: local host only (the shared
+  // destructive-script guard, server/scripts/targetGuard.js, harvest 2).
+  const target = checkTarget({ databaseUrl: url, env: process.env });
+  if (!target.ok) {
+    console.error(`[test:db:clean] refusing: ${target.reason}.`);
+    process.exitCode = 1;
+    return;
+  }
   const host = new URL(url).host;
   const admin = new Pool({ connectionString: adminDbUrl(url) });
   try {

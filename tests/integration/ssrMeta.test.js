@@ -9,6 +9,9 @@
  * only on what crawlers see in the <head>.
  */
 const request = require('supertest');
+// The public host (APP_URL's, pinned in tests/env.js): indexability is gated on
+// the request Host (server/utils/indexability.js) and supertest sends 127.0.0.1.
+const PUBLIC_HOST = new URL(process.env.APP_URL).host;
 const app     = require('../../server/app');
 // Everything brand-bearing is asserted against the product identity
 // (config/client.json via clientConfig), never a literal: the same suite runs
@@ -165,7 +168,7 @@ describe('SSR meta-injection — SPA catch-all', () => {
     test.each(indexable)(
       '%s stays indexable',
       async (path) => {
-        const res = await request(app).get(path);
+        const res = await request(app).get(path).set('Host', PUBLIC_HOST);
         expect(res.status).toBe(200);
         expect(res.text).toMatch(/<meta name="robots" content="index, follow"/);
       }

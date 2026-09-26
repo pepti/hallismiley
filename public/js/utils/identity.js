@@ -77,6 +77,15 @@ export const IDENTITY_DEFAULTS = Object.freeze({
     knowsAbout: Object.freeze(['Web Development', 'E-commerce', 'Inventory Management', 'Invoicing', 'VAT Accounting', 'Shopify Migration', 'Node.js', 'PostgreSQL']),
     sameAs: Object.freeze([]),
   }),
+  // Transactional email (harvest 2 lane 2): read server-side only
+  // (services/emailService.js); mirrored so the two copies stay equal.
+  email: Object.freeze({
+    logo: 'orangesmiley-emblem.png',
+    logoWidth: 48,
+    logoHeight: 48,
+    logoWordmark: false,
+    palette: Object.freeze({}),
+  }),
 });
 
 // A list default is either a list of strings or a list of records whose

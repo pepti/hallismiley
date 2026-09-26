@@ -1,17 +1,35 @@
-// Email service using Resend API.
-// Falls back to a no-op with a logged notice when RESEND_API_KEY is not set (dev/test mode).
+// Transactional email: one shell (emailShell), one choke point (deliver),
+// one transport behind it — Resend by default, Microsoft Graph sendMail when
+// EMAIL_TRANSPORT=graph (services/mailTransport.js, ice #173). Every sender
+// no-ops LOUDLY (error log + critical alert) when the selected transport is
+// not configured (dev/test), and production refuses to boot without it.
 const { Resend } = require('resend');
-const { t }      = require('../i18n');
+const mailTransport = require('./mailTransport');
+const { t, siteHost } = require('../i18n');
 // Every sender logs through pino (stack invariant 6; the last console.* calls
 // here were converted in harvest-ice-f-2026-09-24, and ESLint's no-console now
 // holds the line for all of server/).
 const logger     = require('../logger');
+// The instance's identity (config/client.json → clientConfig): the shell's
+// brand name, host, legal line, logo and the From display name all come from
+// here, so no product's name is spelled in engine code (harvest 2 lane 2).
+const { identity }         = require('../config/identity');
+const { loadEmailPalette }  = require('../utils/emailPalette');
 
-const APP_URL   = process.env.APP_URL || 'https://www.orangesmiley.is';
-// Production sends from the fleet domain (D-015: <slug>@mail.orangesmiley.is,
-// verified in Resend). Override with EMAIL_FROM.
-const FROM_ADDR = process.env.EMAIL_FROM || 'info@orangesmiley.is';
-const FROM      = `Orange Smiley <${FROM_ADDR}>`;
+// The canonical origin; its fallback is the engine's own (CLAUDE.md), and the
+// suites pin APP_URL in tests/env.js.
+const APP_URL   = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/+$/, '');
+// Production sends from the fleet domain (D-015: <slug>@mail.<fleet domain>,
+// verified in Resend). Override with EMAIL_FROM; unset, the product's own
+// public address (identity.organization.email).
+const FROM_ADDR = process.env.EMAIL_FROM || identity.organization.email;
+// The display name is the brand. Quoted when it carries an RFC 5322 special
+// ("Orange Smiley ehf." would), with any quote/backslash dropped.
+function fromHeader(name, addr) {
+  const clean = String(name).replace(/["\\\r\n]/g, '').trim();
+  return /[()<>[\]:;@,."]/.test(clean) ? `"${clean}" <${addr}>` : `${clean} <${addr}>`;
+}
+const FROM      = fromHeader(identity.brand.name, FROM_ADDR);
 // The sending domain has no inbox, so replies go to EMAIL_REPLY_TO (the
 // owner's mailbox) unless a message sets its own replyTo (lead notifications
 // reply to the enquirer).
@@ -62,18 +80,35 @@ function alertOnce(key, title, details) {
 }
 
 function transportNotConfigured(channel, details = {}) {
-  logger.error({ channel, ...details },
-    `email.${channel} NOT SENT — Resend transport not configured (RESEND_API_KEY)`);
-  alertOnce('transport', 'Email not sent — transport not configured', { channel, ...details });
+  const transport = mailTransport.transportName() || 'unknown';
+  const missing = mailTransport.missingSettings(process.env, FROM_ADDR);
+  logger.error({ channel, transport, missing, ...details },
+    `email.${channel} NOT SENT — ${transport} transport not configured (${missing.join(', ')})`);
+  alertOnce('transport', 'Email not sent — transport not configured', { channel, transport, missing, ...details });
 }
 
 function sendFailed(channel, detail) {
-  logger.error({ channel, detail }, 'email send FAILED (Resend)');
-  alertOnce('send:' + String(detail).slice(0, 40), 'Email send failed', { channel, detail });
+  const transport = mailTransport.transportName() || 'unknown';
+  logger.error({ channel, transport, detail }, `email send FAILED (${transport})`);
+  alertOnce('send:' + String(detail).slice(0, 40), 'Email send failed', { channel, transport, detail });
 }
 
-// The single choke point every sender goes through: allowlist rewrite,
-// bounded wait, loud failure. Returns Resend's { data, error } shape.
+// The transport behind deliver(): Resend (default) or Microsoft Graph when
+// EMAIL_TRANSPORT=graph (services/mailTransport.js — the one switch, and why
+// the Graph variables alone never flip it). Both answer Resend's
+// { data: { id }, error } shape; Graph's id is its minted client-request-id.
+function sendThroughTransport(msg, signal) {
+  const name = mailTransport.transportName();
+  if (name === 'graph') {
+    return mailTransport.sendViaGraph(msg, { fallbackSender: FROM_ADDR, signal, timeoutMs: EMAIL_TIMEOUT_MS });
+  }
+  if (name === 'resend') return getClient().emails.send(msg);
+  return Promise.resolve({ data: null, error: { message: mailTransport.missingSettings()[0] } });
+}
+
+// The single choke point every sender goes through: placeholder drop,
+// allowlist rewrite, Reply-To, bounded wait, loud failure. Returns Resend's
+// { data, error } shape whatever the transport.
 async function deliver(payload, channel = 'generic') {
   // A demo instance (config/demoInstance.js) sends nothing, whatever the env
   // holds: its recipients are sample data. `id: null` reads as "not sent".
@@ -88,34 +123,60 @@ async function deliver(payload, channel = 'generic') {
     return { data: { id: null }, error: null };
   }
   const msg = { ...payload, to: applyAllowlist(deliverable(payload.to)) };
+  // The allowlist is "every message goes ONLY to these addresses": a copy
+  // line would slip past it, so under the allowlist there is none.
+  if (ALLOWLIST.length) { delete msg.cc; delete msg.bcc; }
   if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
+  // ONE deadline per message: the same signal bounds everything the
+  // transport does for it (Graph: the token fetch, sendMail and the 401
+  // retry), and the race bounds a transport that takes no signal (the
+  // Resend SDK).
+  const deadline = new AbortController();
+  let timer;
+  const timedOut = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`);
+      deadline.abort(err);
+      reject(err);
+    }, EMAIL_TIMEOUT_MS);
+  });
   try {
-    const result = await Promise.race([
-      getClient().emails.send(msg),
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`)), EMAIL_TIMEOUT_MS)),
-    ]);
+    const result = await Promise.race([sendThroughTransport(msg, deadline.signal), timedOut]);
     if (result && result.error) sendFailed(channel, result.error.message || String(result.error));
     return result;
   } catch (err) {
     sendFailed(channel, err.message);
     return { data: null, error: { message: err.message } };
+  } finally {
+    // A settled send must not leave its timeout armed (it kept the process
+    // — and every Jest worker — alive for EMAIL_TIMEOUT_MS after the send).
+    clearTimeout(timer);
   }
 }
 
+// Is the SELECTED transport configured? Read per call, like the env it reads.
 function isConfigured() {
+  // A demo instance sends nothing, whatever the env holds (config/demoInstance.js).
   if (require('../config/demoInstance').isDemoInstance()) return false;
-  return !!process.env.RESEND_API_KEY;
+  return mailTransport.isTransportConfigured(process.env, FROM_ADDR);
 }
 
 // Basic transport-layer health check. DB-dependent checks (e.g. which admin
 // emails are verified) belong in the caller — this stays DB-free so the
 // emailService module stays reusable outside request context.
 function emailHealthCheck() {
+  const configured = isConfigured();
   return {
-    resendConfigured: !!process.env.RESEND_API_KEY,
-    fromAddressSet:   !!process.env.EMAIL_FROM,
-    fromAddress:      FROM_ADDR,
-    allowlistActive:  ALLOWLIST.length > 0,
+    transport:           mailTransport.transportName(),
+    transportConfigured: configured,
+    missingSettings:     mailTransport.missingSettings(process.env, FROM_ADDR),
+    // The pre-Graph name, still read by adminController.getEmailHealth
+    // (`healthy`) and PartyAdminView: it now means "the selected transport
+    // is configured", so a Graph instance does not report itself broken.
+    resendConfigured:    configured,
+    fromAddressSet:      !!process.env.EMAIL_FROM,
+    fromAddress:         FROM_ADDR,
+    allowlistActive:     ALLOWLIST.length > 0,
   };
 }
 
@@ -124,29 +185,100 @@ function getClient() {
 }
 
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
+//
+// Light, and the instance's own (ported from icelandicstore #179 + #190,
+// made instance-driven in harvest 2 lane 2, 2026-09-26). Every sender below
+// renders through emailShell() and paints with P, never a colour literal:
+//
+//   P.page / P.card / P.panel   surfaces (outer + footer band / the card and
+//                               its header / an inset box inside the card)
+//   P.border                    hairlines
+//   P.heading · P.text · P.muted  the ink ramp, darkest first — INVERTED from
+//                               the old dark shell, where brighter meant more
+//                               prominent (its #444 footer on #0d0d0d
+//                               measured 2.00:1 — under AA)
+//   P.accent                    links + accent emphasis (the text-safe accent)
+//   P.button / P.onButton       the filled call-to-action and its label
+//
+// P is derived at boot from this product's first LIGHT theme's tokens (plus
+// identity.email.palette overrides) by server/utils/emailPalette.js, which
+// also holds every text colour to WCAG AA on each surface it is painted on;
+// tests/unit/emailPalette.test.js measures the rendered mails. Values are
+// literal hex because mail clients do not resolve CSS custom properties.
+const EMAIL_PALETTE = loadEmailPalette(identity);
+const P    = EMAIL_PALETTE.palette;
+const FONT = EMAIL_PALETTE.font;
+for (const w of EMAIL_PALETTE.warnings) logger.warn({ theme: EMAIL_PALETTE.theme }, w);
+
+// The header: the logo from public/assets/brand/ (the CORP cross-origin
+// exemption in server/app.js lets a mail client on another origin load it),
+// as an ABSOLUTE URL — a mail client has no origin to resolve a relative one
+// against. Remote images are blocked by default in Outlook and, for unknown
+// senders, in Gmail, so the alt text is the brand name and the img tag
+// carries type styles: a blocked image still reads as the brand (#190).
+//   logoWordmark → the image spells the name: it stands alone, and the alt
+//                  text is set in the wordmark's type (18px bold);
+//   an emblem    → the brand name is set as text beside it.
+// The width/height ATTRIBUTES are for Outlook, which ignores the CSS ones.
+function emailHeader() {
+  const e    = identity.email;
+  const name = escapeHtml(identity.brand.name);
+  const host = escapeHtml(siteHost());
+  const src  = `${APP_URL}/assets/brand/${encodeURIComponent(e.logo)}`;
+  const hostLine = `<p style="margin:${e.logoWordmark ? '12px' : '2px'} 0 0;font-size:12px;color:${P.muted};letter-spacing:2px;text-transform:uppercase;">${host}</p>`;
+  const img = (fallbackPx) => `<img src="${src}" alt="${name}" width="${e.logoWidth}" height="${e.logoHeight}"
+                     style="display:block;width:${e.logoWidth}px;height:auto;border:0;outline:none;-ms-interpolation-mode:bicubic;
+                            font-family:${FONT};font-size:${fallbackPx}px;font-weight:700;color:${P.heading};text-decoration:none;"/>`;
+  if (e.logoWordmark) {
+    return `<a href="${APP_URL}" style="text-decoration:none;">
+                ${img(18)}
+              </a>
+              ${hostLine}`;
+  }
+  return `<table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="vertical-align:middle;padding:0 14px 0 0;">
+                    <a href="${APP_URL}" style="text-decoration:none;">${img(11)}</a>
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <p style="margin:0;font-size:22px;font-weight:700;color:${P.heading};letter-spacing:0.5px;">${name}</p>
+                    ${hostLine}
+                  </td>
+                </tr>
+              </table>`;
+}
 
 // `title` is escaped here for every sender: since 2026-09-12 the contact form
 // feeds a visitor-typed name into a subject, and "</title><…>" in a name must
 // not break out of the head of the HTML an admin's mail client renders.
 function emailShell(title, bodyHtml, locale = 'en') {
-  const footer = t(locale, 'email.footer', { appUrl: APP_URL });
+  // The footer link is underlined: accent ink on a light band with no
+  // underline reads as body text (#179).
+  const footer = t(locale, 'email.footer', {
+    appUrl: APP_URL,
+    linkStyle: `color:${P.accent};text-decoration:underline;`,
+  });
   return `<!DOCTYPE html>
 <html lang="${locale}">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- Light-only, declared: Apple Mail and Outlook auto-INVERT an undeclared
+       light email in dark mode, which would undo the palette (#179). -->
+  <meta name="color-scheme" content="light"/>
+  <meta name="supported-color-schemes" content="light"/>
   <title>${escapeHtml(title)}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#0a0a0a;font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0a;">
+<body style="margin:0;padding:0;background-color:${P.page};font-family:${FONT};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${P.page};">
     <tr>
       <td align="center" style="padding:40px 16px;">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#111111;border-radius:12px;overflow:hidden;border:1px solid #222;">
-          <!-- Header -->
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:${P.card};border-radius:12px;overflow:hidden;border:1px solid ${P.border};">
+          <!-- Header: a solid colour only, so the transparent logo never lands
+               on whatever an engine that drops a gradient shows through. -->
           <tr>
-            <td style="background:linear-gradient(135deg,#1a1a1a 0%,#0d0d0d 100%);padding:32px 40px;border-bottom:2px solid #c9a84c;">
-              <h1 style="margin:0;font-size:28px;font-weight:700;color:#c9a84c;letter-spacing:1px;">Orange Smiley</h1>
-              <p style="margin:4px 0 0;font-size:13px;color:#666;letter-spacing:2px;text-transform:uppercase;">orangesmiley.is</p>
+            <td style="background-color:${P.card};padding:28px 40px;border-bottom:1px solid ${P.border};">
+              ${emailHeader()}
             </td>
           </tr>
           <!-- Body -->
@@ -157,9 +289,12 @@ function emailShell(title, bodyHtml, locale = 'en') {
           </tr>
           <!-- Footer -->
           <tr>
-            <td style="padding:24px 40px;border-top:1px solid #222;background-color:#0d0d0d;">
-              <p style="margin:0;font-size:12px;color:#444;text-align:center;">
+            <td style="padding:24px 40px;border-top:1px solid ${P.border};background-color:${P.page};">
+              <p style="margin:0;font-size:12px;color:${P.muted};text-align:center;line-height:1.6;">
                 ${footer}
+              </p>
+              <p style="margin:8px 0 0;font-size:12px;color:${P.muted};text-align:center;">
+                ${escapeHtml(identity.brand.legalName)}
               </p>
             </td>
           </tr>
@@ -189,30 +324,30 @@ async function sendVerificationEmail(to, token, locale = 'en') {
 
   const subject = t(locale, 'email.verify.subject');
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${t(locale, 'email.verify.heading')}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:22px;color:${P.heading};">${t(locale, 'email.verify.heading')}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, 'email.verify.body')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${link}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.verify.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.verify.fallback')}<br/>
-      <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
+      <a href="${link}" style="color:${P.accent};word-break:break-all;">${link}</a>
     </p>
   `, locale);
 
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Verification email sent');
   return data.id;
@@ -233,33 +368,33 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
 
   const subject = t(locale, 'email.reset.subject');
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${t(locale, 'email.reset.heading')}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:22px;color:${P.heading};">${t(locale, 'email.reset.heading')}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, 'email.reset.body')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${link}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.reset.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0 0 16px;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0 0 16px;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.reset.fallback')}<br/>
-      <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
+      <a href="${link}" style="color:${P.accent};word-break:break-all;">${link}</a>
     </p>
-    <p style="margin:0;font-size:13px;color:#444;">
+    <p style="margin:0;font-size:13px;color:${P.muted};">
       ${t(locale, 'email.reset.noAction')}
     </p>
   `, locale);
 
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Password reset email sent');
   // Return the id, like sendWelcomeInviteEmail does (ice #258): this used to
@@ -273,7 +408,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
 // Builds the welcome-invite email HTML. Shared by the real send AND the admin
 // preview endpoint so what an admin previews is byte-identical to what ships.
 // subject/heading/body are already-resolved copy (admin override or i18n
-// default); the button / fallback / no-action lines + the dark shell stay fixed.
+// default); the button / fallback / no-action lines + the shell stay fixed.
 // `link` is the set-password URL — a real per-recipient token when sending, a
 // SAMPLE token when previewing (the caller decides; never a real token in a
 // preview). body is intentionally raw HTML (i18n default carries <strong>; admin
@@ -284,26 +419,26 @@ function buildInviteEmailHtml({ subject, heading, body, link, locale = 'en' }) {
   // emailShell escapes the <title> itself (2026-09-12); escaping here too
   // double-encoded an "&" in an invite subject. Heading is still escaped below.
   return emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:22px;color:${P.heading};">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${body}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${link}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.invite.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0 0 16px;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0 0 16px;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.invite.fallback')}<br/>
-      <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
+      <a href="${link}" style="color:${P.accent};word-break:break-all;">${link}</a>
     </p>
-    <p style="margin:0;font-size:13px;color:#444;">
+    <p style="margin:0;font-size:13px;color:${P.muted};">
       ${t(locale, 'email.invite.noAction')}
     </p>
   `, locale);
@@ -327,7 +462,7 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
     locale,
   });
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Welcome invite sent');
   return data?.id;
@@ -371,13 +506,13 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
   // owed for any physical items in the same order.
   const bookingBlockHtml = hasBookableItems ? `
     <table width="100%" cellpadding="0" cellspacing="0"
-           style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #2a2a2a;">
+           style="margin:0 0 28px;background-color:${P.panel};border-radius:8px;border:1px solid ${P.border};">
       <tr>
         <td style="padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:12px;color:#c9a84c;letter-spacing:1.5px;text-transform:uppercase;">
+          <p style="margin:0 0 4px;font-size:12px;color:${P.accent};letter-spacing:1.5px;text-transform:uppercase;">
             ${t(locale, 'email.order.bookingHeading')}
           </p>
-          <p style="margin:0;font-size:14px;color:#e0e0e0;line-height:1.6;">
+          <p style="margin:0;font-size:14px;color:${P.heading};line-height:1.6;">
             ${t(locale, 'email.order.bookingBody')}
           </p>
         </td>
@@ -386,10 +521,10 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
 
   const itemsHtml = items.map(it => `
     <tr>
-      <td style="padding:8px 0;color:#aaa;font-size:14px;">
+      <td style="padding:8px 0;color:${P.text};font-size:14px;">
         ${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}
       </td>
-      <td style="padding:8px 0;color:#e0e0e0;font-size:14px;text-align:right;">
+      <td style="padding:8px 0;color:${P.heading};font-size:14px;text-align:right;">
         ${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}
       </td>
     </tr>
@@ -406,53 +541,53 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
 
   const subject = t(locale, 'email.order.subject', { orderNumber: order.order_number });
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${t(locale, 'email.order.heading')}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:22px;color:${P.heading};">${t(locale, 'email.order.heading')}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, 'email.order.body', { orderNumber: escapeHtml(order.order_number) })}
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid ${P.border};">
       ${itemsHtml}
       <tr>
-        <td style="padding:12px 0 8px;color:#666;font-size:13px;border-top:1px solid #222;">${t(locale, 'email.order.subtotal')}</td>
-        <td style="padding:12px 0 8px;color:#aaa;font-size:13px;text-align:right;border-top:1px solid #222;">
+        <td style="padding:12px 0 8px;color:${P.muted};font-size:13px;border-top:1px solid ${P.border};">${t(locale, 'email.order.subtotal')}</td>
+        <td style="padding:12px 0 8px;color:${P.text};font-size:13px;text-align:right;border-top:1px solid ${P.border};">
           ${formatMoney(order.subtotal, order.currency, locale)}
         </td>
       </tr>
       <tr>
-        <td style="padding:4px 0;color:#666;font-size:13px;">${t(locale, 'email.order.shipping', { method: methodLabel })}</td>
-        <td style="padding:4px 0;color:#aaa;font-size:13px;text-align:right;">
+        <td style="padding:4px 0;color:${P.muted};font-size:13px;">${t(locale, 'email.order.shipping', { method: methodLabel })}</td>
+        <td style="padding:4px 0;color:${P.text};font-size:13px;text-align:right;">
           ${formatMoney(order.shipping, order.currency, locale)}
         </td>
       </tr>
       <tr>
-        <td style="padding:12px 0 0;color:#e0e0e0;font-size:16px;font-weight:600;border-top:1px solid #222;">${t(locale, 'email.order.total')}</td>
-        <td style="padding:12px 0 0;color:#c9a84c;font-size:16px;font-weight:600;text-align:right;border-top:1px solid #222;">
+        <td style="padding:12px 0 0;color:${P.heading};font-size:16px;font-weight:600;border-top:1px solid ${P.border};">${t(locale, 'email.order.total')}</td>
+        <td style="padding:12px 0 0;color:${P.accent};font-size:16px;font-weight:600;text-align:right;border-top:1px solid ${P.border};">
           ${formatMoney(order.total, order.currency, locale)}
         </td>
       </tr>
     </table>
-    <p style="margin:0 0 16px;font-size:12px;color:#555;">
+    <p style="margin:0 0 16px;font-size:12px;color:${P.muted};">
       ${t(locale, 'email.order.vatNote')}
     </p>
     ${bookingBlockHtml}
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${orderUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.order.viewButton')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.order.questions')}
     </p>
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ orderNumber: order.order_number, id: data.id }, '[EmailService] Order receipt sent');
 }
 
@@ -480,10 +615,10 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
 
   const itemRowsHtml = bookableItems.map(it => `
     <tr>
-      <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">
+      <td style="padding:8px 0;color:${P.heading};font-size:14px;">
         ${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}
       </td>
-      <td style="padding:8px 0;color:#aaa;font-size:14px;text-align:right;">
+      <td style="padding:8px 0;color:${P.text};font-size:14px;text-align:right;">
         ${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}
       </td>
     </tr>
@@ -497,29 +632,29 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
   });
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${bodyText}
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;border-bottom:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid ${P.border};border-bottom:1px solid ${P.border};">
       ${itemRowsHtml}
     </table>
-    <p style="margin:0 0 24px;font-size:13px;color:#888;line-height:1.6;">
+    <p style="margin:0 0 24px;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.bookingNotification.totalLabel')}:
-      <strong style="color:#c9a84c;">${formatMoney(order.total, order.currency, locale)}</strong>
+      <strong style="color:${P.accent};">${formatMoney(order.total, order.currency, locale)}</strong>
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${adminUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.bookingNotification.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.bookingNotification.footer')}
     </p>
   `, locale);
@@ -527,7 +662,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
   const { data, error } = await deliver({
     from: FROM, to: adminEmails, subject, html,
   });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ orderNumber: order.order_number, items: bookableItems.length, recipients: adminEmails.length, id: data.id }, '[EmailService] Booking notification sent');
 }
 
@@ -557,8 +692,8 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     const val = Array.isArray(a) ? a.map(escapeHtml).join(', ') : escapeHtml(String(a));
     return `
       <tr>
-        <td style="padding:8px 0;color:#666;font-size:13px;vertical-align:top;width:180px;">${escapeHtml(f.label || f.id)}</td>
-        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">${val}</td>
+        <td style="padding:8px 0;color:${P.muted};font-size:13px;vertical-align:top;width:180px;">${escapeHtml(f.label || f.id)}</td>
+        <td style="padding:8px 0;color:${P.heading};font-size:14px;">${val}</td>
       </tr>`;
   }).filter(Boolean).join('');
 
@@ -567,8 +702,8 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     const val = Array.isArray(v) ? v.map(escapeHtml).join(', ') : escapeHtml(String(v));
     return `
       <tr>
-        <td style="padding:8px 0;color:#666;font-size:13px;vertical-align:top;width:180px;">${escapeHtml(k)}</td>
-        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">${val}</td>
+        <td style="padding:8px 0;color:${P.muted};font-size:13px;vertical-align:top;width:180px;">${escapeHtml(k)}</td>
+        <td style="padding:8px 0;color:${P.heading};font-size:14px;">${val}</td>
       </tr>`;
   }).join('');
 
@@ -578,19 +713,19 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
     { name: escapeHtml(name), email: escapeHtml(user.email || '') });
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${bodyText}
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #222;">
-      ${answerRows || rawRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">${t(locale, 'email.rsvpNotification.noAnswers')}</td></tr>`}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid ${P.border};">
+      ${answerRows || rawRows || `<tr><td style="padding:8px 0;color:${P.muted};font-size:13px;">${t(locale, 'email.rsvpNotification.noAnswers')}</td></tr>`}
     </table>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${partyUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.rsvpNotification.button')}
           </a>
         </td>
@@ -601,7 +736,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
   const { data, error } = await deliver({
     from: FROM, to: adminEmails, subject, html,
   });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ userId: user.id, isUpdate, recipients: adminEmails.length, id: data.id }, '[EmailService] RSVP notification sent');
 }
 
@@ -630,8 +765,8 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
     const val = Array.isArray(a) ? a.map(escapeHtml).join(', ') : escapeHtml(String(a));
     return `
       <tr>
-        <td style="padding:8px 0;color:#666;font-size:13px;vertical-align:top;width:180px;">${escapeHtml(f.label || f.id)}</td>
-        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;">${val}</td>
+        <td style="padding:8px 0;color:${P.muted};font-size:13px;vertical-align:top;width:180px;">${escapeHtml(f.label || f.id)}</td>
+        <td style="padding:8px 0;color:${P.heading};font-size:14px;">${val}</td>
       </tr>`;
   }).filter(Boolean).join('');
 
@@ -650,59 +785,76 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
     { name: escapeHtml(name) });
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${bodyText}
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;">
-      ${answerRows || `<tr><td style="padding:8px 0;color:#666;font-size:13px;">${t(locale, 'email.rsvpConfirmation.noAnswers')}</td></tr>`}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid ${P.border};">
+      ${answerRows || `<tr><td style="padding:8px 0;color:${P.muted};font-size:13px;">${t(locale, 'email.rsvpConfirmation.noAnswers')}</td></tr>`}
     </table>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:${P.panel};border-radius:8px;border:1px solid ${P.border};">
       <tr>
         <td style="padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
-          <p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>
-          ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
-          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
-          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
+          <p style="margin:0 0 4px;font-size:12px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
+          <p style="margin:0 0 4px;font-size:17px;color:${P.accent};font-weight:600;">${partyDate}</p>
+          ${venueName    ? `<p style="margin:0;font-size:15px;color:${P.heading};">${venueName}</p>` : ''}
+          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:${P.muted};">${venueAddress}</p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:${P.accent};text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
         </td>
       </tr>
     </table>
-    <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">
+    <p style="margin:0 0 16px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, 'email.rsvpConfirmation.updateNote')}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${partyUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.rsvpConfirmation.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.rsvpConfirmation.closing')}
     </p>
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ userId: user.id, isUpdate, id: data.id }, '[EmailService] RSVP confirmation sent');
 }
 
 // ── Party announcement to going/maybe guests ──────────────────────────────────
 // Sends one email per recipient (not a single message with array `to`) — that
-// way each guest only sees their own address in the To: header. Resend's
-// default rate limit is 100 req/sec, well above any plausible guest list.
-// Body is the host's free-form message (optional); falls back to the i18n
+// way each guest only sees their own address in the To: header, a few at a
+// time (settleBounded below). Body is the host's free-form message (optional); falls back to the i18n
 // default copy. Recipients are { email, locale } — the host's free-form
 // subject/body go out as-typed to everyone, but the surrounding chrome
 // (heading, when-and-where labels, button, default intro/signoff) localizes
 // per guest (Icelandic by default). Returns { sent, failed } so the caller can
 // report partial failures (e.g. a single bounce shouldn't blank the whole
 // result).
+
+const PARTY_SEND_CONCURRENCY = 4;
+
+// Promise.allSettled over `items`, with at most `limit` calls of `fn` in
+// flight; results keep the input order.
+async function settleBounded(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      try { results[i] = { status: 'fulfilled', value: await fn(items[i], i) }; }
+      catch (reason) { results[i] = { status: 'rejected', reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   if (!Array.isArray(recipients) || recipients.length === 0) return { sent: 0, failed: 0 };
@@ -736,33 +888,33 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
     const bodyHtml = escapeHtml(introText).replace(/\n/g, '<br/>');
     const heading  = t(locale, 'email.partyAnnouncement.heading');
     const html = emailShell(finalSubject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(heading)}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#cccccc;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:22px;color:${P.heading};">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${bodyHtml}
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:${P.panel};border-radius:8px;border:1px solid ${P.border};">
       <tr>
         <td style="padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
-          ${partyDate    ? `<p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>` : ''}
-          ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
-          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
-          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
+          <p style="margin:0 0 4px;font-size:12px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
+          ${partyDate    ? `<p style="margin:0 0 4px;font-size:17px;color:${P.accent};font-weight:600;">${partyDate}</p>` : ''}
+          ${venueName    ? `<p style="margin:0;font-size:15px;color:${P.heading};">${venueName}</p>` : ''}
+          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:${P.muted};">${venueAddress}</p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:${P.accent};text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
         </td>
       </tr>
     </table>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${partyUrl}"
              style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.partyAnnouncement.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${escapeHtml(signoffText)}
     </p>
   `, locale);
@@ -774,17 +926,22 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   // Fan out one-by-one so no recipient sees another's address. Use
   // allSettled so one bounce doesn't abort the rest of the send. Accepts
   // legacy plain-string recipients (treated as Icelandic default).
-  const client = getClient();
-  const results = await Promise.allSettled(
-    recipients.map(r => {
-      const to = typeof r === 'string' ? r : r.email;
-      const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
-      return client.emails.send({ from: FROM, to, subject: finalSubject, html, ...(REPLY_TO && { replyTo: REPLY_TO }) });
-    })
-  );
+  // Through deliver(), like every other sender (it used to call the Resend
+  // client directly, which skipped EMAIL_ALLOWLIST and the placeholder drop,
+  // and would have ignored EMAIL_TRANSPORT) — harvest 2 lane 2. At most
+  // PARTY_SEND_CONCURRENCY in flight: an unbounded fan-out of a long guest
+  // list trips provider throttling (Exchange allows ~30 messages/minute per
+  // mailbox) and opens every socket at once.
+  const results = await settleBounded(recipients, PARTY_SEND_CONCURRENCY, (r) => {
+    const to = typeof r === 'string' ? r : r.email;
+    const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
+    return deliver({ from: FROM, to, subject: finalSubject, html }, 'party');
+  });
 
   let sent = 0, failed = 0;
   results.forEach((r, i) => {
+    // A placeholder-only guest is skipped by deliver() (id null): neither sent nor failed.
+    if (r.status === 'fulfilled' && !r.value.error && r.value.data && r.value.data.id === null) return;
     if (r.status === 'fulfilled' && !r.value.error) sent++;
     else {
       failed++;
@@ -820,39 +977,39 @@ async function sendPartyRequestNotification({ request, adminEmails, approveUrl, 
   const bodyKey  = granted ? 'email.partyRequest.body' : 'email.partyRequest.bodyManual';
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyRequest.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(t(locale, 'email.partyRequest.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, bodyKey)}
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;border-bottom:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid ${P.border};border-bottom:1px solid ${P.border};">
       <tr>
-        <td style="padding:10px 0;color:#666;font-size:13px;width:120px;">${t(locale, 'email.partyRequest.nameLabel')}</td>
-        <td style="padding:10px 0;color:#e0e0e0;font-size:14px;">${escapeHtml(request.name || '—')}</td>
+        <td style="padding:10px 0;color:${P.muted};font-size:13px;width:120px;">${t(locale, 'email.partyRequest.nameLabel')}</td>
+        <td style="padding:10px 0;color:${P.heading};font-size:14px;">${escapeHtml(request.name || '—')}</td>
       </tr>
       <tr>
-        <td style="padding:10px 0;color:#666;font-size:13px;border-top:1px solid #1a1a1a;">${t(locale, 'email.partyRequest.emailLabel')}</td>
-        <td style="padding:10px 0;color:#e0e0e0;font-size:14px;border-top:1px solid #1a1a1a;">${escapeHtml(request.email)}</td>
+        <td style="padding:10px 0;color:${P.muted};font-size:13px;border-top:1px solid ${P.border};">${t(locale, 'email.partyRequest.emailLabel')}</td>
+        <td style="padding:10px 0;color:${P.heading};font-size:14px;border-top:1px solid ${P.border};">${escapeHtml(request.email)}</td>
       </tr>
     </table>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${approveUrl}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.partyRequest.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.partyRequest.manage')}<br/>
-      <a href="${adminUrl}" style="color:#c9a84c;">${adminUrl}</a>
+      <a href="${adminUrl}" style="color:${P.accent};">${adminUrl}</a>
     </p>
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to: adminEmails, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ recipients: adminEmails.length, id: data.id }, '[EmailService] Party request notification sent');
 }
 
@@ -873,32 +1030,32 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
   const displayName = (name && name.trim()) || t(locale, 'email.partyInvite.fallbackName');
   const subject = t(locale, 'email.partyInvite.subject');
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 16px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyInvite.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:22px;color:${P.heading};">${escapeHtml(t(locale, 'email.partyInvite.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, 'email.partyInvite.body', { name: escapeHtml(displayName) })}
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${link}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.partyInvite.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0 0 24px;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0 0 24px;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.partyInvite.fallback')}<br/>
-      <a href="${link}" style="color:#c9a84c;word-break:break-all;">${link}</a>
+      <a href="${link}" style="color:${P.accent};word-break:break-all;">${link}</a>
     </p>
-    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+    <p style="margin:0;font-size:13px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.partyInvite.passwordNote')}
     </p>
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ id: data.id }, '[EmailService] Party invite email sent');
 }
 
@@ -947,14 +1104,14 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
           ? `https://www.google.com/maps/search/${encodeURIComponent(info.venue_address)}`
           : '');
   const whenWhereHtml = `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:${P.panel};border-radius:8px;border:1px solid ${P.border};">
       <tr>
         <td style="padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
-          ${partyDate    ? `<p style="margin:0 0 4px;font-size:17px;color:#c9a84c;font-weight:600;">${partyDate}</p>` : ''}
-          ${venueName    ? `<p style="margin:0;font-size:15px;color:#e0e0e0;">${venueName}</p>` : ''}
-          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:#888;">${venueAddress}</p>` : ''}
-          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:#c9a84c;text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
+          <p style="margin:0 0 4px;font-size:12px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${t(locale, 'email.rsvpConfirmation.whenWhere')}</p>
+          ${partyDate    ? `<p style="margin:0 0 4px;font-size:17px;color:${P.accent};font-weight:600;">${partyDate}</p>` : ''}
+          ${venueName    ? `<p style="margin:0;font-size:15px;color:${P.heading};">${venueName}</p>` : ''}
+          ${venueAddress ? `<p style="margin:4px 0 0;font-size:13px;color:${P.muted};">${venueAddress}</p>` : ''}
+          ${mapsLink     ? `<p style="margin:12px 0 0;font-size:13px;"><a href="${escapeHtml(mapsLink)}" style="color:${P.accent};text-decoration:none;">${t(locale, 'email.rsvpConfirmation.openMaps')}</a></p>` : ''}
         </td>
       </tr>
     </table>`;
@@ -967,13 +1124,13 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
       .filter(s => s && (s.time || s.event))
       .map(s => `
       <tr>
-        <td style="padding:8px 16px 8px 0;color:#c9a84c;font-size:14px;font-weight:600;white-space:nowrap;vertical-align:top;width:60px;">${escapeHtml(String(s.time || ''))}</td>
-        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;line-height:1.5;">${_escapeMultiline(s.event || '')}</td>
+        <td style="padding:8px 16px 8px 0;color:${P.accent};font-size:14px;font-weight:600;white-space:nowrap;vertical-align:top;width:60px;">${escapeHtml(String(s.time || ''))}</td>
+        <td style="padding:8px 0;color:${P.heading};font-size:14px;line-height:1.5;">${_escapeMultiline(s.event || '')}</td>
       </tr>`).join('');
     if (rows) {
       scheduleHtml = `
-    <h3 style="margin:0 0 12px;font-size:17px;color:#c9a84c;">${escapeHtml(t(locale, 'email.partyWelcome.scheduleHeading'))}</h3>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid #222;border-bottom:1px solid #222;">
+    <h3 style="margin:0 0 12px;font-size:17px;color:${P.accent};">${escapeHtml(t(locale, 'email.partyWelcome.scheduleHeading'))}</h3>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-top:1px solid ${P.border};border-bottom:1px solid ${P.border};">
       ${rows}
     </table>`;
     }
@@ -985,18 +1142,18 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
   if (details && (Array.isArray(details.hall) || Array.isArray(details.spa))) {
     const list = (items) => (Array.isArray(items) ? items : [])
       .filter(Boolean)
-      .map(item => `<li style="margin:0 0 6px;color:#aaa;font-size:14px;line-height:1.5;">${escapeHtml(String(item))}</li>`)
+      .map(item => `<li style="margin:0 0 6px;color:${P.text};font-size:14px;line-height:1.5;">${escapeHtml(String(item))}</li>`)
       .join('');
     const hallItems = list(details.hall);
     const spaItems  = list(details.spa);
     if (hallItems || spaItems) {
       venueDetailsHtml = `
-    <h3 style="margin:0 0 12px;font-size:17px;color:#c9a84c;">${escapeHtml(t(locale, 'email.partyWelcome.venueHeading'))}</h3>
+    <h3 style="margin:0 0 12px;font-size:17px;color:${P.accent};">${escapeHtml(t(locale, 'email.partyWelcome.venueHeading'))}</h3>
     ${hallItems ? `
-    <p style="margin:0 0 6px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.hallHeading'))}</p>
+    <p style="margin:0 0 6px;font-size:13px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.hallHeading'))}</p>
     <ul style="margin:0 0 16px;padding:0 0 0 20px;">${hallItems}</ul>` : ''}
     ${spaItems ? `
-    <p style="margin:0 0 6px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.spaHeading'))}</p>
+    <p style="margin:0 0 6px;font-size:13px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.spaHeading'))}</p>
     <ul style="margin:0 0 16px;padding:0 0 0 20px;">${spaItems}</ul>` : ''}
     <div style="margin:0 0 12px;"></div>`;
     }
@@ -1013,21 +1170,21 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
       .map(a => `
       <tr>
         <td style="padding:8px 0;">
-          <p style="margin:0;font-size:14px;color:#e0e0e0;font-weight:600;">${escapeHtml(String(a.name || ''))}</p>
-          ${a.description ? `<p style="margin:2px 0 0;font-size:13px;color:#888;line-height:1.5;">${_escapeMultiline(a.description)}</p>` : ''}
-          ${a.rules ? `<p style="margin:2px 0 0;font-size:12px;color:#666;line-height:1.5;">${escapeHtml(String(a.rulesLabel || ''))} ${_escapeMultiline(a.rules)}</p>` : ''}
+          <p style="margin:0;font-size:14px;color:${P.heading};font-weight:600;">${escapeHtml(String(a.name || ''))}</p>
+          ${a.description ? `<p style="margin:2px 0 0;font-size:13px;color:${P.muted};line-height:1.5;">${_escapeMultiline(a.description)}</p>` : ''}
+          ${a.rules ? `<p style="margin:2px 0 0;font-size:12px;color:${P.muted};line-height:1.5;">${escapeHtml(String(a.rulesLabel || ''))} ${_escapeMultiline(a.rules)}</p>` : ''}
         </td>
       </tr>`).join('');
     const daytimeRows = group(activities.daytime);
     const eveningRows = group(activities.evening);
     if (daytimeRows || eveningRows) {
       activitiesHtml = `
-    <h3 style="margin:0 0 12px;font-size:17px;color:#c9a84c;">${escapeHtml(t(locale, 'email.partyWelcome.activitiesHeading'))}</h3>
+    <h3 style="margin:0 0 12px;font-size:17px;color:${P.accent};">${escapeHtml(t(locale, 'email.partyWelcome.activitiesHeading'))}</h3>
     ${daytimeRows ? `
-    <p style="margin:0 0 4px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.daytimeHeading'))}</p>
+    <p style="margin:0 0 4px;font-size:13px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.daytimeHeading'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">${daytimeRows}</table>` : ''}
     ${eveningRows ? `
-    <p style="margin:0 0 4px;font-size:13px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.eveningHeading'))}</p>
+    <p style="margin:0 0 4px;font-size:13px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.eveningHeading'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">${eveningRows}</table>` : ''}
     <div style="margin:0 0 12px;"></div>`;
     }
@@ -1035,21 +1192,21 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
 
   // ── Good to know (fixed i18n copy) ──
   const goodToKnowItems = ['goodToKnow1', 'goodToKnow2', 'goodToKnow3', 'goodToKnow4']
-    .map(k => `<li style="margin:0 0 8px;color:#aaa;font-size:14px;line-height:1.5;">${t(locale, `email.partyWelcome.${k}`)}</li>`)
+    .map(k => `<li style="margin:0 0 8px;color:${P.text};font-size:14px;line-height:1.5;">${t(locale, `email.partyWelcome.${k}`)}</li>`)
     .join('');
   const goodToKnowHtml = `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:#0d0d0d;border-radius:8px;border:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background-color:${P.panel};border-radius:8px;border:1px solid ${P.border};">
       <tr>
         <td style="padding:20px 24px;">
-          <p style="margin:0 0 10px;font-size:12px;color:#666;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.goodToKnowHeading'))}</p>
+          <p style="margin:0 0 10px;font-size:12px;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(t(locale, 'email.partyWelcome.goodToKnowHeading'))}</p>
           <ul style="margin:0;padding:0 0 0 20px;">${goodToKnowItems}</ul>
         </td>
       </tr>
     </table>`;
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.partyWelcome.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(t(locale, 'email.partyWelcome.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">
       ${t(locale, 'email.partyWelcome.intro', { name: escapeHtml(name) })}
     </p>
     ${whenWhereHtml}
@@ -1059,22 +1216,22 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
     ${goodToKnowHtml}
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr>
-        <td style="background-color:#c9a84c;border-radius:8px;">
+        <td style="background-color:${P.button};border-radius:8px;">
           <a href="${partyUrl}"
              style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
-                    color:#0a0a0a;text-decoration:none;letter-spacing:0.5px;">
+                    color:${P.onButton};text-decoration:none;letter-spacing:0.5px;">
             ${t(locale, 'email.partyWelcome.button')}
           </a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;font-size:14px;color:#888;line-height:1.6;">
+    <p style="margin:0;font-size:14px;color:${P.muted};line-height:1.6;">
       ${t(locale, 'email.partyWelcome.closing')}
     </p>
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ userId: user.id, id: data.id }, '[EmailService] Party welcome email sent');
 }
 
@@ -1099,28 +1256,28 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
 
   const row = (label, value) => `
       <tr>
-        <td style="padding:10px 0;color:#666;font-size:13px;width:150px;border-top:1px solid #1a1a1a;">${escapeHtml(label)}</td>
-        <td style="padding:10px 0;color:#e0e0e0;font-size:14px;border-top:1px solid #1a1a1a;">${escapeHtml(value || '—')}</td>
+        <td style="padding:10px 0;color:${P.muted};font-size:13px;width:150px;border-top:1px solid ${P.border};">${escapeHtml(label)}</td>
+        <td style="padding:10px 0;color:${P.heading};font-size:14px;border-top:1px solid ${P.border};">${escapeHtml(value || '—')}</td>
       </tr>`;
 
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
-    <p style="margin:0 0 16px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
-    <p style="margin:0 0 24px;padding:10px 12px;background-color:#1a1a1a;border:1px solid #333;border-radius:6px;font-size:13px;color:#bbb;line-height:1.5;">${escapeHtml(t(locale, 'email.lead.provenance'))}</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid #222;">
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(t(locale, 'email.lead.heading'))}</h2>
+    <p style="margin:0 0 16px;font-size:15px;color:${P.text};line-height:1.6;">${escapeHtml(t(locale, 'email.lead.body'))}</p>
+    <p style="margin:0 0 24px;padding:10px 12px;background-color:${P.panel};border:1px solid ${P.border};border-radius:6px;font-size:13px;color:${P.text};line-height:1.5;">${escapeHtml(t(locale, 'email.lead.provenance'))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-bottom:1px solid ${P.border};">
       ${row(t(locale, 'email.lead.nameLabel'), name)}
       ${row(t(locale, 'email.lead.companyLabel'), company)}
       ${row(t(locale, 'email.lead.emailLabel'), email)}
       ${row(t(locale, 'email.lead.phoneLabel'), phone)}
       ${row(t(locale, 'email.lead.platformLabel'), platform)}
     </table>
-    <p style="margin:0 0 8px;font-size:13px;color:#666;">${escapeHtml(t(locale, 'email.lead.messageLabel'))}</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#e0e0e0;line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</p>
-    <p style="margin:0;font-size:12px;color:#555;">${escapeHtml(submissionId)}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:${P.muted};">${escapeHtml(t(locale, 'email.lead.messageLabel'))}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.heading};line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</p>
+    <p style="margin:0;font-size:12px;color:${P.muted};">${escapeHtml(submissionId)}</p>
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to, replyTo: email, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ submissionId, messageId: data.id }, 'lead notification sent');
   return true;
 }
