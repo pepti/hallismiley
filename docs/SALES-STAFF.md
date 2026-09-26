@@ -138,19 +138,36 @@ fails the whole file, so a half-imported week cannot happen.
   overwrites edited guides. So a revision of its text reaches rows that already
   exist only through a product migration in `server/config/product-migrations/os.js`
   that rewrites the same passages where no person has saved the guide
-  (`updated_by IS NULL`): 104 (2026-09-13) and `os_001_sales_guides_d001_pricing`
-  (2026-09-22). `tests/integration/salesGuidesD001.test.js` checks that the seed
-  and os_001 give the same text.
-- **Pricing in the guides is D-001's model** (`company/DECISIONS.md`, since
-  2026-09-22): a one-time build fee of 390 / 580 / 690 þ.kr. plus a service
-  contract of 19 / 29 / 39 þ.kr./mán carrying 5 / 10 / 20 verkeiningar a month
-  (Vefur / Verslun / Rekstur), all án VSK. Work is sized 1 / 5 / 20 einingar,
-  estimated before the customer confirms, with a notice at 80% and overage at a
-  fixed einingaverð. Where D-001 is silent (the einingaverð amount, whether
-  unused units carry over, the cost of moving up a tier) the guides say
-  "DRÖG — Halli staðfestir". The flat 39/59/79 þ.kr./mán subscription and "setup
-  fee waived on annual commitment" are retired. Every price stays DRÖG until
-  Halli confirms.
+  (`updated_by IS NULL`): 104 (2026-09-13), `os_001_sales_guides_d001_pricing`
+  (2026-09-22) and `os_003_sales_guides_d022_pricing` (2026-09-26).
+  `tests/integration/salesGuidesD001.test.js` and `salesGuidesD022.test.js`
+  check that the seed and the migrations give the same text, step by step
+  (first seed → os_001 → os_003 → today's seed).
+- **Pricing in the guides is D-022's model** (`company/DECISIONS.md`,
+  2026-09-26, amends D-001): a one-time build fee of 390 / 580 / 690 þ.kr. plus
+  a service contract of 29 / 59 / 89 þ.kr./mán carrying 2 / 3 / 5 verkeiningar
+  a month (Vefur / Verslun / Rekstur), all án VSK. Work is sized 1 / 5 / 20
+  einingar, estimated before the customer confirms, with a notice at 80% and
+  overage at the einingaverð of 6.000 kr. Hosting beyond the tier's pattern is
+  billed at Azure cost + 15 %; AI inside the customer's system is included up
+  to 2.000 kr./mán, then cost + 15 %. Where D-022 is silent (whether unused
+  units carry over, the cost of moving up a tier, how a Samstarf contract is
+  shaped) the guides say "DRÖG — Halli staðfestir" or leave it to the offer.
+  D-001's 19 / 29 / 39 with 5 / 10 / 20, the flat 39/59/79 þ.kr./mán
+  subscription and "setup fee waived on annual commitment" are retired. Every
+  price stays DRÖG until D-008's rule fires (the first signed contract).
+- **Samstarf, the fourth tier** (D-022): no listed price; the price is agreed
+  after a **free assessment** of the customer's business and of what we propose
+  to build. It is for customers who need a system built around their own
+  business (custom-system customers like customer #1). The tier guide
+  (`threpin-thrju`) tells a seller how to recognise one — a way of working no
+  standard system supports, many integrations, many or large custom needs from
+  the start, a move off a long-customised system, or no tier that clearly fits
+  — and to offer the free assessment instead of quoting a tier, never naming a
+  figure. `fyrsta-samtalid`, `tilbodsferlid`, `hvad-er-i-hverju-threpi`,
+  `hvad-thu-lofar-aldrei`, `ordalisti`, `kerfid-i-stuttu-mali` and
+  `velkomin-i-soluteymid` point to it. The Samstarf copy is DRAFT until Halli
+  approves it and publishes the guides.
 - **Demos happen on the demo instance `demo.rekstrarkerfi.is`** (D-020; being
   built): Kaffibrennslan Glóð sample data, reset nightly, one login per seller.
   The guides never send a seller to orangesmiley.is or the ops instance to demo.

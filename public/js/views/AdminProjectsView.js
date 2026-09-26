@@ -19,7 +19,9 @@ import { renderAdminShell } from '../components/AdminSidebar.js';
 
 export class AdminProjectsView {
   async render() {
-    if (!isAuthenticated() || !(canSeeView('dashboard') || canEdit())) {
+    // Its own view id since 2026-09-26 (a Vefur sidebar line); editors keep
+    // the board as before, since the projects API lets them write.
+    if (!isAuthenticated() || !(canSeeView('projects') || canEdit())) {
       navigateReplace(href('/'));
       return document.createTextNode('');
     }

@@ -326,14 +326,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
+| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/adminHomeRoutes.js` → `GET /api/v1/admin/home` (the "Í dag" read) · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
 | Models | `server/models/AdminNavConfig.js` |
-| Views | `public/js/views/AdminView.js` (the company overview at `/admin`), `AdminProjectsView.js` (unlisted `/admin/projects` board) |
-| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Combobox.js` (searchable free-text input), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
-| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `dragFiles.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
-| CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
-| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`, `combobox.client.test.js`, `stickyHScroll.client.test.js`, `dragFiles.client.test.js`, `adminPageTitle.client.test.js`; `tests/integration/pageWidth.test.js` |
-| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-combobox.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
+| Services | `server/services/adminHome.js` (the home's per-view sources, one `Promise.allSettled`; `homeAccess`), `adminHomeCache.js` (the per-viewer answer cache; `clearHomeCache()` from the leads erasure and retention paths) |
+| Views | `public/js/views/AdminView.js` ("Í dag", the admin home at `/admin`), `AdminProjectsView.js` (the `/admin/projects` board, a Vefur line since 2026-09-26) |
+| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js`, `Combobox.js` |
+| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js`, `dragFiles.js` |
+| CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-idag.css` (the home; `idag-*` only, tokens only), `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
+| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`, `adminHome.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`, `adminHomeCache.test.js`; `tests/integration/pageWidth.test.js`, `combobox.client.test.js`, `stickyHScroll.client.test.js`, `dragFiles.client.test.js`, `adminPageTitle.client.test.js` |
+| e2e | `e2e/admin.spec.js`, `admin-home.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js`, `admin-combobox.spec.js` |
 | Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
 | Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
@@ -365,16 +366,47 @@ company/                  gitignored: plans, decisions, logs, market-research st
   keys are stable; saved per-admin layouts keep their old placement until Reset
   [r1](HISTORY.md#r1), [admin-reshape](HISTORY.md#admin-reshape). The 12-tint row colours ride the
   existing `admin_nav_config` JSONB — no migration [base-sync](HISTORY.md#base-sync).
-- `AdminProjectsView` at unlisted `/admin/projects` is gated on the `dashboard`
-  view OR editor [admin-reshape](HISTORY.md#admin-reshape).
+- `AdminProjectsView` at `/admin/projects` is gated on its own `projects`
+  view (owned by the `projects` module) OR editor; a Vefur sidebar line since
+  the home replaced the overview that linked to it
+  [admin-reshape](HISTORY.md#admin-reshape), [admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26).
 - Every admin view carries `destroy()` and a stale-paint sequence guard;
   unmapped enum values print themselves rather than a confidently wrong label
   [review-099](HISTORY.md#review-099).
 - The client CSV writer tracks the server's `PLAIN_NUMBER` exemption
   (`tests/unit/csvClientParity.test.js`) [ui-kit](HISTORY.md#ui-kit).
-- Dashboard cards sit over EXISTING endpoints, each gated on the view its
-  endpoint demands; dashboard-less users are forwarded to their first visible
-  view ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
+- **The admin home is ONE role-gated endpoint** ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)):
+  `GET /api/v1/admin/home`, session + the `dashboard` view. Every block is
+  COMPUTED server-side only for a view the role holds — the views
+  `requireView.resolveViews` resolves (2FA-withheld), minus a switched-off
+  module's, minus (for a `'*'` holder only) the product's
+  `identity.surface.hiddenAdminViews`, the sidebar's rule. A key the role
+  cannot see is ABSENT from the JSON (never null, never 0); the client only
+  re-checks `canSeeView` before it links. Independent sources run in one
+  `Promise.allSettled`; a failing one drops its blocks, is logged, and the
+  answer is still 200 with `errors: [...]`. Amounts integer ISK, times ISO
+  UTC, no labels from the server (the words are `adminHome.*`). Setup (Fyrstu
+  skrefin) is admins only and derived, never stored; `null` once every step
+  is done. A 45 s per-viewer cache is allowed (the header prints "staðan kl.
+  HH:MM"), never polling: keyed on the viewer + resolved views + admin flag +
+  switched-off modules (`adminHomeCache.cacheKey`), never storing an answer
+  with `errors`, and cleared when a lead is erased or aged out (the feed
+  names enquirers). Dashboard-less roles are forwarded to their first
+  visible view, an editor with none to the projects board
+  ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
+- **Sales channels (`salesToday.byChannel`) — the rule is to confirm with
+  Bókari/Halli**: web = shop orders (ISK) paid today (`orders` view);
+  wholesale = invoices issued today NOT created from an order (`invoices`);
+  pos = till receipts rung up today (`pos`). A channel the instance has but
+  the role lacks is omitted, never zeroed, and the figure says `partial`.
+  **The sales totals are gated by the CHANNEL views** (`orders` /
+  `invoices` / `pos`) — each is the screen that already shows those
+  documents — **not by the `sales` report view** (decision I1, security
+  review 2026-09-26); holding `sales` alone shows no sales figure.
+  The comparison is the same weekday last week up to the same time of day.
+  Till sales are aggregated, never listed in the feed. Change requests have
+  only open/resolved: the home says "N opnar", never "waiting on you"
+  ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
 - Kit contract: `listState` uses `replaceState` only, never `pushState`; page
   size is NOT in the URL; `adminPager.PAGE_SIZES` tops out at 200 because
   `leadsController` clamps `limit` to [1,200]; `sortableTh` emits a real
@@ -420,7 +452,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   and its text stays selectable
   ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
 
-**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [harvest2-lane4a-2026-09-26](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)
+**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26) · [harvest2-lane4a-2026-09-26](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)
 
 ## 3. Public site — home, /thjonusta, /um-okkur, /hafa-samband, SSR meta, sitemap, SEO
 
@@ -432,9 +464,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization) |
 | Views | `public/js/views/HomeView.js`, `ThjonustaView.js`, `UmOkkurView.js`, `ContactView.js`, `PrivacyView.js`, `TermsView.js`, `NotFoundView.js`; `HalliView.js` serves the hidden `/about`/`/halli` (`AboutView.js` is dead — see Ownership notes) |
 | Components | `public/js/components/NavBar.js`, `navMenuCloser.js` (the one document-level account-menu closer) |
-| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
+| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js`; `public/js/utils/contactFormat.js` + its server twin `server/utils/contactFormat.js` (the phone + Icelandic postcode shapes; also used by `validate.js` and the checkout) |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`, `navMenuCloser.client.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`, `navMenuCloser.client.test.js`, `contactFormat.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017, 091, 092, os_002 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
@@ -493,6 +525,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the old product values). A contact-copy change ships with a product
   migration for the seeded rows; `contactContentOs002.test.js` checks the
   ContactView defaults and os_002 agree.
+- **One phone rule, one postcode rule, two twins** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  `server/utils/contactFormat.js` (`PHONE_RE`, `isValidZip`) and its ESM twin
+  are the only definitions; `validate.js` (signup/profile phone), the contact
+  form (`errors.contact.phoneInvalid`, still `{ errors: [...] }`) and the
+  checkout address import them. `tests/unit/contactFormat.test.js` runs both
+  through one corpus.
 - Homepage = the hallismiley composition: dark video hero, light site below;
   the media-hero surfaces are fixed dark on EVERY theme (`home.css`), which is
   how invariant 15 is met. A new hero clip gets a NEW filename (the `public/`
@@ -727,6 +765,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   both interpolations (`server/i18n/index.js`, `public/js/i18n/i18n.js`)
   pass a replacer function, so `$&`, `$'` and `$$` in a name or a config
   string are never expanded as replacement patterns.
+- **No English literal reaches a page through module state** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  a default-copy object is BUILT at render through `t()` (ProductView's
+  `defaultChrome()`), never a module-level object of literals — the locale table
+  is not loaded when a module is first evaluated. Label maps hold locale KEYS
+  (`utils/colorLabels.js`). Static chrome outside `#app` (the skip link, the nav
+  landmark's `aria-label`) is re-translated on `localechange`.
 - **Tests assert the visitor default, not Icelandic** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `tests/lib/locale.js` (`PUBLIC_DEFAULT_LOCALE`, `tx()`, `tClient()`,
   `localePrefix()`; `e2e/lib/locale.js` re-exports it) is where an engine
@@ -1022,9 +1066,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/salesGuides.js` |
 | Scripts | `server/scripts/seed-sales-guides.js` |
 | CSS | `public/css/admin-handbok.css` |
-| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js` |
+| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js`, `salesGuidesD022.test.js` |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
-| Migrations | 090, 104, os_001 |
+| Migrations | 090, 104, os_001, os_003 |
 | Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
@@ -1037,15 +1081,25 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `updated_by IS NULL` ([services-page](HISTORY.md#services-page)).
 - A text change in `seed-sales-guides.js` ships with a product migration that
   makes the same change to seeded rows (the seed is `ON CONFLICT DO NOTHING`);
-  os_001 moved the guides to D-001 pricing and the demo instance, and
-  `salesGuidesD001.test.js` checks seed and migration agree
-  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
-- Guide prices follow D-001 (build fee + service contract + verkeiningar) and
-  carry DRÖG; demos go to `demo.rekstrarkerfi.is`, never this site
-  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
+  os_001 moved the guides to D-001 pricing and the demo instance, os_003 to
+  D-022; `salesGuidesD001.test.js` and `salesGuidesD022.test.js` check seed
+  and migrations agree step by step, the first seed → os_001 → os_003 → today's
+  seed ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
+  [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+- Guide prices follow D-022 (amends D-001): build fee 390/580/690 þ.kr. +
+  service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð
+  6.000 kr., hosting and in-system AI beyond the included amount at cost +
+  15 %; all carry DRÖG. No D-001 contract figure (19/29/39, 5/10/20) may
+  reappear in a guide. Demos go to `demo.rekstrarkerfi.is`, never this site
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
+  [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+- Samstarf, the fourth tier, has no listed price anywhere in the handbook:
+  the guides tell a seller to offer the free assessment instead of quoting a
+  tier, and the Samstarf copy carries no figure. It is DRAFT until Halli
+  approves it ([handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 
@@ -1057,12 +1111,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL) |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`) |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
 | e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note) |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
@@ -1094,6 +1148,34 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Checkout `required` must be re-applied after `syncShipping()` ([ui-kit](HISTORY.md#ui-kit)).
 - The shop search box toggles its buttons with `[hidden]` and never repaints
   under the typist (`ShopFilters._syncSearchControls`).
+- **The VAT shown is the VAT the invoice books** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  the cart, the checkout and the admin order page print "Þar af VSK n%" per
+  rate UNDER the total (prices are VAT-inclusive), from `public/js/utils/vat.js`
+  — a twin of `server/utils/vat.js` and of `invoiceService.buildLines` (line at
+  its product's rate, shipping 24 %, a discount spread in proportion, an order
+  shipped abroad zero-rated on goods and shipping, a service keeps its rate).
+  `tests/unit/vatDisplay.client.test.js` holds all three together; change one,
+  change the others. Never a fixed "includes 24% VAT" sentence. The rate
+  reaches the browser in the public catalogue (`Product.publicCols`, both
+  locales) and on `Order.listItems`.
+- **The basket is re-priced from the catalogue on every cart/checkout load**
+  (`cart.syncPrices`, ice #343): the charge is the server's current price, so
+  the page shows it and says which lines moved. A payload without prices never
+  wipes a stored one. Cart lines carry `vatRate` + `isService`; a line stored
+  before they did gets them from the same sync.
+- **An Icelandic shipping address needs a three-digit postnúmer; abroad the
+  postcode is free text**; a phone, when given, matches the shared `PHONE_RE`
+  (`validate.validateCheckoutContact` on `POST /shop/checkout`, the client
+  twin in `CheckoutView`; `utils/contactFormat.js`).
+- **The buyer's order note is staff-only** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  `orders.notes` (migration 115) is written once, by `createCheckoutSession`
+  through `Order.createWithItems` (`Order.normaliseNote`: trimmed, cut at 1000
+  characters, blank → NULL), and read on the admin order page. It stays OUT
+  of `Order`'s `COLUMNS`, which back every customer-facing order payload.
+- A name two different products share gets the SKU chip on the card
+  (`utils/duplicateNames.js`); rows of one product never collide.
+- "Needs action" order pills (not paid, not sent, partly sent) are the
+  `--warning` ink on `--warning-dim`; no status pill carries a colour literal.
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
 - **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
@@ -1160,8 +1242,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Slug folding (ð/þ/æ/ö, `server/utils/slug.js` and its ESM twin
   `public/js/utils/slug.js`) applies on GENERATION only; stored slugs never change
   ([harvest-2](HISTORY.md#harvest-2)).
+- The projects board (`AdminProjectsView`, `/admin/projects`) is gated on the
+  `projects` admin view OR editor; the `projects` module owns that view, so
+  switching the module off removes it for everyone. Its Vefur sidebar line is
+  hidden from all-views holders on this product
+  (`identity.surface.hiddenAdminViews`, now in the engine defaults too); the
+  route stays live and the view grantable ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
 
-**History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2)
+**History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2) · [admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)
 
 ## 13. Monitoring — event logs, metrics, analytics
 

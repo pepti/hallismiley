@@ -514,12 +514,18 @@ describe('one customer: GET/PATCH /:id and POST /:id/invite', () => {
     const bad = [
       { email: 'not-an-email' }, { email: '' }, { email: 'x@noemail.invalid' }, { phone: 'abc' },
       { country: 'Iceland' }, { address1: 'x'.repeat(201) }, { zip: 'x'.repeat(21) },
+      // An Icelandic postnúmer is three digits (utils/contactFormat, as at checkout);
+      // a blank country means Iceland.
+      { zip: '1011', country: 'IS' }, { zip: 'AB1', country: '' },
     ];
     for (const body of bad) {
       const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie).send(body);
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(400);
     }
+    // A foreign postcode is free text.
+    expect((await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ zip: 'SW1A 1AA', country: 'GB' })).status).toBe(200);
   });
 
   test('PATCH to an email another login holds → 409, whatever the case', async () => {

@@ -24,6 +24,7 @@ const emailService = require('../services/emailService');
 // carries every invite and password reset.
 const { contactBudget } = require('../services/contactBudget');
 const EventLog       = require('../models/EventLog');
+const { isValidPhone } = require('../utils/contactFormat');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -66,6 +67,11 @@ async function submit(req, res, next) {
     // worth more than a perfectly filled form.
     if (company && (typeof company !== 'string' || company.trim().length > 150)) errors.push(t(req.locale, 'errors.contact.companyTooLong'));
     if (phone   && (typeof phone   !== 'string' || phone.trim().length   > 40))  errors.push(t(req.locale, 'errors.contact.phoneTooLong'));
+    // A phone of the wrong SHAPE ("call me", "12") is refused with the same rule
+    // every other phone field uses (utils/contactFormat.js, ported from
+    // icelandicstore #399) — the form points at the field before submitting, so
+    // a visitor fixes it rather than losing the enquiry. Blank stays fine.
+    else if (typeof phone === 'string' && phone.trim() && !isValidPhone(phone.trim())) errors.push(t(req.locale, 'errors.contact.phoneInvalid'));
 
     if (errors.length) {
       return res.status(400).json({ errors });

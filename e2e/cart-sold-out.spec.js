@@ -76,6 +76,45 @@ test.describe('Basket availability', () => {
     await expect(page.locator('a[data-testid="cart-checkout"]')).toBeVisible();
   });
 
+  // Harvest 2 lane 4b (ice #343 / #51 / #399): a stale basket price is replaced
+  // by the catalogue's and the page says so; the VAT inside the total is shown
+  // per rate, zero-rated when the order ships abroad; an Icelandic postcode
+  // must be three digits.
+  test('a stale price is re-priced and announced; VAT per rate; export is 0 %; the IS postcode rule', async ({ page }) => {
+    // An 11 % product: the rate must reach the page through the public
+    // catalogue payload (it once did not — Product.publicCols lacked vat_rate).
+    const pool = new Pool({ connectionString: e2eDatabaseUrl(), ssl: false });
+    try { await pool.query('UPDATE products SET vat_rate = 11 WHERE slug = $1', [FEW.slug]); }
+    finally { await pool.end(); }
+
+    await plant(page, [{ ...line(FEW, 1), priceIsk: 500 }]);
+    await expect(page.locator('[data-testid="cart-repriced"]')).toBeVisible();
+    await expect(page.locator('.shop-cart__cell--line')).toHaveText('990 kr.');
+    // 990 × 11/111 = 98.1 → 98 (server/utils/vat.js splitVatInclusive).
+    await expect(page.locator('[data-testid="cart-vat-11"]')).toContainText('98 kr.');
+    await expect(page.locator('[data-testid="cart-vat-24"]')).toHaveCount(0);
+
+    await page.goto('/is/checkout');
+    // Flat-rate shipping (2.500 kr.) is 24 %: 2500 × 24/124 = 483.9 → 484.
+    await expect(page.locator('[data-testid="checkout-vat-11"]')).toContainText('98 kr.');
+    await expect(page.locator('[data-testid="checkout-vat-24"]')).toContainText('484 kr.');
+    await page.selectOption('select[name="country"]', 'DK');
+    await expect(page.locator('[data-testid="checkout-vat-0"]')).toContainText('0 kr.');
+    await expect(page.locator('[data-testid="checkout-vat-export"]')).toBeVisible();
+
+    await page.selectOption('select[name="country"]', 'IS');
+    await page.fill('input[name="guest_email"]', 'e2e-vat@example.com');
+    await page.fill('input[name="guest_name"]', 'E2E Vat');
+    await page.fill('input[name="name"]', 'E2E Vat');
+    await page.fill('input[name="line1"]', 'Gata 1');
+    await page.fill('input[name="city"]', 'Reykjavík');
+    await page.fill('input[name="postal"]', '1');
+    await page.locator('[data-testid="checkout-submit"]').click();
+    // reportValidity() stopped the submit at the postcode; the page stays put.
+    expect(await page.locator('input[name="postal"]').evaluate(el => el.validity.valid)).toBe(false);
+    await expect(page).toHaveURL(/\/is\/checkout/);
+  });
+
   test('the shop search box keeps every typed character', async ({ page }) => {
     // The /shop landing has no search; a section page carries the filter bar.
     await page.goto('/is/shop/products');

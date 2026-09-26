@@ -51,7 +51,7 @@ export class AdminSalesView {
     try {
       const res  = await fetch('/api/v1/admin/shop/reports?days=' + this._days, { credentials: 'include' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load report');
+      if (!res.ok) throw new Error(data.error || t('adminSales.loadFailed'));
       this._paint(data.report);
     } catch (err) {
       body.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>`;

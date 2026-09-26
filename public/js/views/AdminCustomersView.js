@@ -249,6 +249,12 @@ export class AdminCustomersView {
         const v = String(fd.get(k) ?? '').trim();
         if (v !== String(c[k] || '')) patch[k] = v;
       }
+      // The postcode rule depends on the country (an Icelandic postnúmer is
+      // three digits), so the server checks them as a pair: send both.
+      if ('zip' in patch || 'country' in patch) {
+        patch.zip = String(fd.get('zip') ?? '').trim();
+        patch.country = String(fd.get('country') ?? '').trim();
+      }
       if (!Object.keys(patch).length) { close(); return; }
       const btn = form.querySelector('[type=submit]');
       btn.disabled = true;

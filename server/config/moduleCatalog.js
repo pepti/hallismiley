@@ -96,7 +96,7 @@ const MODULES = Object.freeze({
     routes: ['/verkefni', '/projects', '/admin/projects'],
     api: ['/api/v1/projects'],
     assets: ['/assets/projects'],
-    adminViews: [],
+    adminViews: ['projects'],
     features: ['projects'],
   },
   // The birthday-party pages (hallismiley's).
