@@ -1,0 +1,328 @@
+/* "Í dag" — the admin home at /admin (views/AdminView.js, 2026-09-26).
+   Ported from Hönnuður's mock (idag-mockup.src.html). Tokens only
+   (invariant 15): no colour literal anywhere below — every colour is a
+   var(--…) or a color-mix() of one. Imported next to admin-dashboard.css and
+   before themes.css. It adds idag-* classes only and restyles no existing
+   class (one deliberate exception, marked), so its place in the cascade
+   cannot change what the kit already paints. */
+
+.idag { container-type: inline-size; }
+
+/* Header: the kit's .admin-header, plus a status line under the title. */
+.idag-head__when {
+  margin: var(--sp-1) 0 0;
+  font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;
+}
+.idag-head__when time { font-variant-numeric: tabular-nums; }
+.idag-head__clear { color: var(--text-primary); font-weight: 600; }
+/* One quiet line when a block could not be fetched; the rest still render. */
+.idag-note { margin: 0 0 var(--sp-4); font-size: 0.85rem; color: var(--text-secondary); }
+
+/* ── Layout ────────────────────────────────────────────────────────────────
+   Narrow (the default): one column in reading order — setup, todo, tally,
+   recent. Wide (container ≥ 760px): main column + a 300px tally rail. A
+   container query, not a media query: the content width depends on whether
+   the 240px sidebar is open, so the viewport does not know it. */
+.idag-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+.idag-main { display: contents; }
+.idag-grid > .idag-main > .idag-todo-card { order: 1; }
+.idag-grid > .idag-tally                  { order: 2; }
+.idag-grid > .idag-main > .idag-feed-card { order: 3; }
+
+@container (min-width: 760px) {
+  .idag-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: var(--sp-6); }
+  .idag-grid--solo { grid-template-columns: minmax(0, 1fr); }
+  .idag-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+  .idag-grid > .idag-tally { position: sticky; top: calc(var(--nav-h) + var(--sp-5)); }
+  /* No main column (a role that sees figures only): the rail spreads its
+     figures across the width instead of a lone 300px strip. */
+  .idag-grid--solo > .idag-tally .idag-tally__list { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); column-gap: var(--sp-5); }
+}
+/* A short viewport: a sticky rail taller than the window would hide its own
+   lower figures, so it scrolls with the page. */
+@media (max-height: 759.98px) {
+  .idag-grid > .idag-tally { position: static; }
+}
+
+/* The two list blocks reuse .dash-card / .dash-card__head / __title. The kit's
+   140px min-height is for a card with one number in it; a list sizes itself.
+   (The one override of an existing class, scoped by the idag class.) */
+.idag-todo-card, .idag-feed-card { min-height: 0; }
+.idag-card__count {
+  font-size: 0.8rem; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+
+/* ── Bíður þín ────────────────────────────────────────────────────────────
+   One row per thing to do: the count and the title read as one phrase, the
+   detail says which, the action goes to the page that resolves it. Urgency is
+   carried by a word and a left rule, with the warning colour as
+   reinforcement — never colour alone (1.4.1). */
+.idag-todo { list-style: none; margin: 0 calc(-1 * var(--sp-5)); padding: 0; }
+.idag-todo__item {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  column-gap: var(--sp-4);
+  align-items: baseline;
+  padding: var(--sp-3) var(--sp-5) var(--sp-3) calc(var(--sp-5) - 3px);
+  border-left: 3px solid transparent;
+  border-top: 1px solid var(--border-light);
+  color: inherit; text-decoration: none;
+  transition: background var(--transition);
+}
+.idag-todo > li:first-child > .idag-todo__item { border-top-color: transparent; }
+.idag-todo__item:hover { background: var(--bg-hover); }
+/* On the hover wash the quiet line steps up a level, so it never dips under AA. */
+.idag-todo__item:is(:hover, :focus-visible) .idag-todo__detail,
+.idag-feed__item:is(:hover, :focus-visible) :is(.idag-feed__who, .idag-feed__meta) { color: var(--text-secondary); }
+.idag-todo__item:focus-visible { background: var(--bg-hover); outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.idag-todo__n {
+  font-family: var(--font-display);
+  font-size: 1.75rem; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-primary);
+}
+.idag-todo__body { min-width: 0; }
+.idag-todo__title { font-weight: 600; color: var(--text-primary); }
+.idag-todo__detail {
+  display: block; margin-top: 2px;
+  font-size: 0.85rem; color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.idag-todo__go { font-size: 0.85rem; color: var(--accent-ink); white-space: nowrap; }
+.idag-todo__item:hover .idag-todo__go { text-decoration: underline; }
+.idag-todo__tag {
+  display: inline-block; margin-left: var(--sp-2);
+  padding: 0 0.5rem; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+  vertical-align: 0.12em; white-space: nowrap;
+}
+/* warn = overdue or due within 3 days; soon = due within 14 days. */
+.idag-todo__item--warn { border-left-color: var(--warning); }
+.idag-todo__item--warn .idag-todo__n { color: var(--warning); }
+.idag-todo__item--warn .idag-todo__tag { background: var(--warning-dim); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--warning); }
+.idag-todo__item--soon .idag-todo__tag { background: var(--bg-hover); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border); }
+
+/* ── Staðan (the tally rail) ──────────────────────────────────────────────
+   Deliberately NOT a card: a ruled column on the page itself, like the end of
+   a till roll — a gold rule on top, dashed rules between figures. Each of the
+   four figures has its own form (hero number + channel split · count + state
+   list · amount + ageing bar · date leaf + amount), so no two read alike. */
+.idag-tally { border-top: 2px solid var(--gold); padding-top: var(--sp-3); }
+.idag-tally__title {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--font-display);
+  font-size: 0.85rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-primary);
+}
+.idag-tally__list { display: grid; grid-template-columns: minmax(0, 1fr); }
+.idag-fig {
+  display: block;
+  padding: var(--sp-4) 0;
+  border-top: 1px dashed var(--border);
+  color: inherit; text-decoration: none;
+}
+.idag-tally__list > .idag-fig:first-child { border-top-color: transparent; padding-top: var(--sp-2); }
+.idag-fig:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+a.idag-fig:hover .idag-fig__label { color: var(--text-primary); }
+.idag-fig__label {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2); column-gap: var(--sp-3);
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+/* Each half stays on one line; when both do not fit, the right-hand one
+   wraps below and keeps to the right. */
+.idag-fig__label > * { white-space: nowrap; }
+.idag-fig__label > :last-child:not(:first-child) { margin-left: auto; }
+.idag-fig__label time { font-family: var(--font-mono); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.idag-fig__value {
+  display: block; margin-top: var(--sp-1);
+  font-family: var(--font-mono); font-size: 1.3rem; line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.idag-fig__unit { margin-left: 0.3em; font-family: var(--font-sans); font-size: 0.62em; color: var(--text-secondary); }
+.idag-fig__note { display: block; margin-top: var(--sp-2); font-size: 0.82rem; color: var(--text-secondary); line-height: 1.45; }
+
+/* 1 · Sala í dag — the hero figure, display face, with the channel split. */
+.idag-fig--sales .idag-fig__value {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 2.3rem; line-height: 1.05; letter-spacing: -0.01em;
+}
+.idag-split { display: flex; gap: 2px; height: 10px; margin: var(--sp-3) 0 var(--sp-2); }
+.idag-split__seg { flex: 1 1 0; min-width: 6px; }
+/* Three channels, told apart by FILL PATTERN, not hue: solid, hatched, tint
+   with an outline. One ramp colour (palette discipline), and the legend below
+   carries the names and amounts anyway. */
+.idag-sw--web       { background: var(--gold); }
+.idag-sw--wholesale { background: repeating-linear-gradient(135deg, var(--gold) 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px var(--gold); }
+.idag-sw--pos       { background: color-mix(in srgb, var(--gold) 45%, transparent); box-shadow: inset 0 0 0 1px var(--gold); }
+.idag-legend { display: grid; gap: 2px; margin: 0; font-size: 0.82rem; }
+.idag-legend__row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); }
+.idag-legend__sw { width: 10px; height: 10px; }
+.idag-legend dt { color: var(--text-secondary); }
+.idag-legend dd { margin: 0; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.idag-fig__delta { color: var(--text-primary); font-weight: 600; }
+
+/* 2 · Opnar pantanir — a count beside its breakdown. */
+.idag-fig__row { display: flex; align-items: center; gap: var(--sp-4); margin-top: var(--sp-2); }
+.idag-fig__count {
+  font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--text-primary);
+  min-width: 2ch;
+}
+.idag-states { list-style: none; margin: 0; padding: 0 0 0 var(--sp-4); border-left: 1px solid var(--border-dim); font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; }
+.idag-states b { font-family: var(--font-mono); font-weight: 400; color: var(--text-primary); display: inline-block; min-width: 1.4em; }
+.idag-states li:first-child { color: var(--text-primary); font-weight: 600; }
+
+/* 3 · Útistandandi — amount + ageing bar; the overdue share is --warning. */
+.idag-aging { display: flex; gap: 2px; height: 6px; margin: var(--sp-3) 0 var(--sp-2); }
+.idag-aging__seg { flex: 1 1 0; min-width: 4px; }
+.idag-aging__seg--current { background: var(--border); }
+.idag-aging__seg--late    { background: color-mix(in srgb, var(--warning) 50%, transparent); box-shadow: inset 0 0 0 1px var(--warning); }
+.idag-aging__seg--later   { background: var(--warning); }
+.idag-fig__warn { color: var(--text-primary); font-weight: 600; }
+.idag-fig__warn::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px;
+  background: var(--warning); border-radius: 50%; vertical-align: 0.05em;
+}
+
+/* 4 · VSK — a calendar leaf beside the amount. */
+.idag-date {
+  flex: none; width: 54px; text-align: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;
+  background: var(--bg-surface);
+}
+.idag-date__m {
+  display: block; padding: 2px 0;
+  background: var(--bg-hover); color: var(--text-secondary);
+  font-size: 0.64rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.idag-date__d {
+  display: block; padding: 3px 0 5px;
+  font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; line-height: 1.1;
+  color: var(--text-primary);
+}
+.idag-fig--vat .idag-fig__value { margin-top: 0; }
+.idag-fig--vat .idag-fig__note { margin-top: 2px; }
+
+/* Tally between 520 and 760: a 2×2 with the sales figure across the top. */
+@container (min-width: 520px) and (max-width: 759.98px) {
+  .idag-tally__list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--sp-5); }
+  .idag-tally__list > .idag-fig--sales { grid-column: 1 / -1; }
+  .idag-tally__list > .idag-fig:nth-child(2) { border-top-color: var(--border); }
+}
+
+/* ── Nýjast ───────────────────────────────────────────────────────────────
+   A feed grouped by day; icon = the sidebar's own glyph for the source view,
+   the verb is in the text, the time and amount ride the right edge. */
+.idag-feed { list-style: none; margin: 0 calc(-1 * var(--sp-5)); padding: 0; }
+.idag-feed__day {
+  padding: var(--sp-3) var(--sp-5) var(--sp-1);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.idag-feed > .idag-feed__day:first-child { padding-top: 0; }
+.idag-feed__item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: var(--sp-1) var(--sp-3);
+  align-items: start;
+  padding: var(--sp-2) var(--sp-5);
+  color: inherit; text-decoration: none;
+  transition: background var(--transition);
+}
+a.idag-feed__item:hover { background: var(--bg-hover); }
+.idag-feed__item:focus-visible { background: var(--bg-hover); outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.idag-feed__icon { display: inline-flex; width: 18px; height: 18px; margin-top: 1px; color: var(--text-secondary); }
+.idag-feed__icon svg { width: 18px; height: 18px; }
+.idag-feed__what { font-size: 0.9rem; color: var(--text-primary); line-height: 1.4; overflow-wrap: anywhere; }
+.idag-feed__who { display: block; font-size: 0.82rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.idag-feed__meta {
+  text-align: right; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.55; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.idag-feed__amount { display: block; color: var(--text-secondary); }
+@container (max-width: 519.98px) {
+  .idag-feed__item { grid-template-columns: 18px minmax(0, 1fr); }
+  .idag-feed__meta { grid-column: 2; text-align: left; display: flex; gap: var(--sp-3); }
+  .idag-feed__amount { display: inline; }
+}
+
+/* ── Fyrstu skrefin ───────────────────────────────────────────────────────
+   Only on a new instance, until every step is done; then it is gone. The NEXT
+   step is the emphasised one (asymmetry by emphasis, not five equal tiles);
+   done steps drop to a quiet checked line. */
+.idag-setup {
+  display: grid; gap: var(--sp-4) var(--sp-6);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-top: 3px solid var(--gold);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+@container (min-width: 760px) { .idag-setup { grid-template-columns: 250px minmax(0, 1fr); } }
+.idag-setup__title {
+  margin: 0;
+  font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-primary);
+}
+.idag-setup__lead { margin: var(--sp-2) 0 var(--sp-4); font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; }
+.idag-progress { display: flex; gap: 4px; margin-bottom: var(--sp-2); }
+/* An empty step is an outlined box, a done step a filled one — shape, not just
+   colour. The outline is --text-secondary: --border measured 2.1 (under 3:1). */
+.idag-progress__seg { flex: 1 1 0; height: 6px; background: transparent; box-shadow: inset 0 0 0 1px var(--text-secondary); }
+.idag-progress__seg.is-done { background: var(--gold); box-shadow: none; }
+.idag-progress__text { margin: 0; font-size: 0.82rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.idag-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
+.idag-step {
+  display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: var(--sp-3); align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid transparent;
+}
+.idag-step__n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); text-align: right; }
+.idag-step__title { display: block; font-weight: 600; color: var(--text-primary); }
+.idag-step__hint { display: block; font-size: 0.82rem; color: var(--text-muted); }
+.idag-step__go { font-size: 0.85rem; color: var(--accent-ink); text-decoration: none; white-space: nowrap; }
+.idag-step__go:hover, .idag-step__go:focus-visible { text-decoration: underline; }
+.idag-step--done .idag-step__title { font-weight: 400; color: var(--text-secondary); }
+.idag-step--done .idag-step__hint { display: none; }
+.idag-step__check { font-size: 0.82rem; color: var(--text-secondary); white-space: nowrap; }
+.idag-step__check::before { content: '✓'; margin-right: 6px; color: var(--success); font-weight: 700; }
+.idag-step--next {
+  padding-block: var(--sp-3);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
+  border-left-color: var(--gold);
+}
+.idag-step--next .idag-step__n { color: var(--text-primary); font-weight: 700; }
+.idag-step--next .idag-step__title { font-size: 1.02rem; }
+/* muted on the gold wash measured 4.39 on Glóð — the next step's hint reads in secondary. */
+.idag-step--next .idag-step__hint { color: var(--text-secondary); }
+@container (max-width: 519.98px) {
+  .idag-step { grid-template-columns: 1.5rem minmax(0, 1fr); }
+  .idag-step__go, .idag-step__check, .idag-step .btn { grid-column: 2; justify-self: start; }
+}
+
+/* Loading: one skeleton per block type (the kit's bar; reduced motion is
+   honoured by admin-kit.css). */
+.idag-skel { display: grid; gap: var(--sp-3); }
+.idag-skel .admin-skeleton__bar:nth-child(2n) { width: 70%; }
+.idag-skel .admin-skeleton__bar:nth-child(3n) { width: 45%; }
+
+/* A phone: the header wraps, and the to-do's action link hides — the whole
+   row is the link, so the arrow is redundant there. */
+@media (max-width: 640px) {
+  .idag .admin-header { flex-wrap: wrap; gap: var(--sp-3); align-items: flex-start; }
+  .idag-todo__item { grid-template-columns: 2.4rem minmax(0, 1fr); column-gap: var(--sp-3); }
+  .idag-todo__go { display: none; }
+  .idag-todo__n { font-size: 1.5rem; }
+}

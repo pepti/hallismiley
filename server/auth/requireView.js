@@ -15,14 +15,23 @@ const { ALL } = require('./adminViews');
 const { heldRoles, hasRole, forbiddenMessage } = require('./roles');
 const { withholdViews } = require('./mfaPolicy');
 
+// The view list a guard decides on: the union across the role set, memoised
+// on req, with the 2FA-withheld views taken out. Exported so a handler that
+// computes per-view blocks (the admin home, routes/adminHomeRoutes.js) asks
+// the SAME question the guards ask — never a second resolver that could
+// disagree with them.
+async function resolveViews(req) {
+  if (!req._resolvedViews) {
+    req._resolvedViews = await Role.getViewsForRoles(heldRoles(req.user));
+  }
+  return withholdViews(req._resolvedViews, req.user.mfaEnrolmentRequired === true);
+}
+
 function requireView(viewId) {
   return async function viewGuard(req, res, next) {
     try {
       if (!req.user) return res.status(401).json({ error: 'Unauthorized', code: 401 });
-      if (!req._resolvedViews) {
-        req._resolvedViews = await Role.getViewsForRoles(heldRoles(req.user));
-      }
-      const views = withholdViews(req._resolvedViews, req.user.mfaEnrolmentRequired === true);
+      const views = await resolveViews(req);
       if (views.includes(ALL) || views.includes(viewId)) return next();
       return res.status(403).json({ error: forbiddenMessage(req), code: 403 });
     } catch (err) { next(err); }
@@ -41,13 +50,10 @@ async function requireStaff(req, res, next) {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized', code: 401 });
     if (hasRole(req.user, 'admin', 'moderator')) return next();
-    if (!req._resolvedViews) {
-      req._resolvedViews = await Role.getViewsForRoles(heldRoles(req.user));
-    }
-    const views = withholdViews(req._resolvedViews, req.user.mfaEnrolmentRequired === true);
+    const views = await resolveViews(req);
     if (views.length > 0) return next();
     return res.status(403).json({ error: forbiddenMessage(req), code: 403 });
   } catch (err) { next(err); }
 }
 
-module.exports = { requireView, requireStaff };
+module.exports = { requireView, requireStaff, resolveViews };

@@ -61,7 +61,7 @@ const ORANGE_SMILEY = {
       { route: '/hafa-samband', labelKey: 'nav.hafaSamband' },
     ],
     hiddenRoutes: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
-    hiddenAdminViews: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+    hiddenAdminViews: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
     navSignIn: true,
   },
   // The engine has no routes of its own beyond ROUTE_META (identity-seam-3).

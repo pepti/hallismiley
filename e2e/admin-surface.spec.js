@@ -3,7 +3,8 @@
 // (public/js/components/adminSurface.js), stay live at their URLs and
 // grantable to roles, and can be revealed per admin in edit mode. Plus the
 // /admin dashboard's move from the portfolio projects board to the company
-// overview (the board lives on, unlisted, at /admin/projects).
+// overview, and on to "Í dag" (2026-09-26; the board lives on at
+// /admin/projects, a Vefur sidebar line since then).
 //
 // The layout blob is per admin, and this spec writes it (reveal, Reset), so it
 // runs as its own admin (e2e/lib/accounts.js): on the shared `testadmin`,
@@ -118,15 +119,26 @@ test.describe('admin nav — hidden-by-policy retail lines', () => {
     await expect(page.locator('.admin-sidebar__group-title', { hasText: /^Verslun$/ })).toHaveCount(1);
   });
 
-  test('/admin is the company overview; the projects board lives at /admin/projects', async ({ page }) => {
-    await expect(page.locator('.dash-card').first()).toBeVisible();
+  // Since 2026-09-26 /admin is "Í dag" (the admin home, e2e/admin-home.spec.js
+  // covers its blocks); the board it replaced lives on at /admin/projects,
+  // now a Vefur sidebar line.
+  test('/admin is the admin home; the projects board lives at /admin/projects', async ({ page }) => {
+    await expect(page.locator('.idag .admin-title')).toBeVisible();
     await expect(page.locator('#add-project-btn')).toHaveCount(0);
-    // Cards resolve — no card is left on its loading line.
-    await expect(page.locator('.dash-card__loading')).toHaveCount(0, { timeout: 15_000 });
+    // The home resolves — no skeleton is left behind.
+    await expect(page.locator('.idag .admin-skeleton__bar')).toHaveCount(0, { timeout: 15_000 });
 
-    await gotoAndSettle(page, '/admin/projects');
+    // Through its sidebar line where the product shows it; by URL where the
+    // product hides it (identity.surface.hiddenAdminViews — the route stays live).
+    const line = page.locator('.admin-sidebar a[data-route="/admin/projects"]');
+    if (HIDDEN.includes('projects')) {
+      await expect(line).toHaveCount(0);
+      await gotoAndSettle(page, '/admin/projects');
+    } else {
+      await line.click();
+    }
     await expect(page.locator('#add-project-btn')).toBeVisible();
-    await expect(page.locator('.dash-card')).toHaveCount(0);
+    await expect(page.locator('.idag')).toHaveCount(0);
   });
 });
 
