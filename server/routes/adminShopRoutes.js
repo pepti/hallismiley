@@ -3,6 +3,8 @@ const multer  = require('multer');
 const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
+const productMerge             = require('../controllers/adminProductMergeController');
+const productImportAi          = require('../controllers/adminProductImportAiController');
 const adminInventory           = require('../controllers/adminInventoryController');
 const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
@@ -48,9 +50,29 @@ const productImportUpload = (req, res, next) => {
   });
 };
 router.post('/products/import/parse-file', csrfProtect, productImportUpload, adminShop.parseProductImportFile);
+// "Read with AI" (PRODUCT_IMPORT_AI_ENABLED, off by default; ice #306/#314 —
+// controllers/adminProductImportAiController). /ai-config is always 200.
+// /ai-extract is the PAID call: CSRF, then the flag (404), then today's page
+// budget (429), and only THEN multer, so a dark or spent endpoint never
+// buffers an upload. (Uses the same inline multer wrapper as parse-file; move
+// both to lane 1a's uploadSingle when it lands.)
+router.get('/products/import/ai-config', productImportAi.productImportAiConfig);
+router.post('/products/import/ai-extract', csrfProtect, productImportAi.requireProductImportAi,
+  productImportAi.requireAiPageBudget, productImportUpload, productImportAi.productImportAiExtract);
 router.post('/products/import/preview', ...importBody, adminShop.previewProductImport);
 router.post('/products/import/apply',   csrfProtect, ...importBody, adminShop.applyProductImport);
 router.post('/products/bulk',           csrfProtect, adminShop.bulkUpdateProducts);
+// Products → Duplicates and the merge (migration 120, ported from
+// icelandicstore #309/#311/#312/#315; controllers/adminProductMergeController).
+// Literal paths, so before /products/:id. The preview writes nothing but is a
+// POST with a body, so it carries CSRF like the merge.
+router.get('/products/duplicates',      productMerge.getProductDuplicates);
+router.post('/products/merge/preview',  csrfProtect, productMerge.previewProductMerge);
+router.post('/products/merge',          csrfProtect, productMerge.mergeProducts);
+// A merged product is frozen: every WRITE through its own id (the product, its
+// images, variants and collections) answers 409 product_merged + movedTo.
+router.use('/products/:id', (req, res, next) =>
+  (req.method === 'GET' || req.method === 'HEAD' ? next() : productMerge.refuseMergedProduct(req, res, next)));
 router.get('/products/:id',       adminShop.getProduct);
 router.get('/products/:id/adjustments', adminShop.productAdjustments);
 router.post('/products',          csrfProtect, adminShop.createProduct);

@@ -30,6 +30,7 @@ const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
 const Inventory = require('../models/Inventory');
+const ProductMerge = require('../models/ProductMerge');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 const { isHiddenRoute } = require('../config/publicSurface');
 const { clientAppEnv }  = require('../config/appEnv');
@@ -995,6 +996,17 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     // ── Detail page (news article / product / project) ─────────────────
     detailRow = await fetchDetailRow(detail);
     if (detailRow === LOOKUP_FAILED) { lookupFailed = true; detailRow = null; }
+    // A product merged into another (migration 120) moves permanently to the
+    // survivor's page: 301, never cached (the survivor may be switched off or
+    // merged again). The locale prefix and query string are kept.
+    if (!detailRow && !lookupFailed && detail.type === 'product') {
+      const moved = await ProductMerge.movedTo(detail.param).catch(() => null);
+      if (moved) {
+        const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+        res.setHeader('Cache-Control', 'no-store');
+        return res.redirect(301, req.path.replace(/\/shop\/[^/]+\/?$/, `/shop/${encodeURIComponent(moved.slug)}`) + qs);
+      }
+    }
     if (!detailRow) {
       // Not found — fall back to section defaults so the SPA can render
       // its own 404 and we still serve *something* sensible to crawlers.

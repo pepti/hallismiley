@@ -82,6 +82,7 @@
     "/checkout",
     "/orders",
     "/admin/shop/products",
+    "/admin/shop/products/duplicates",
     "/admin/shop/orders",
     "/admin/shop/orders/:id",
     "/admin/shop/collections",

@@ -6,7 +6,7 @@ Lane 5 of Harvest 2 (generic icelandicstore work up to `ice@941cf51d`, scope app
 presets + comparison + net sales), #417 (`30b1e14`, "Þarf athygli") and #419 (`f4baf2b`, the
 analyses under the chart), onto the ENGINE's report — which differs from ice's in two ways it
 keeps: a sale counts when it is PAID (`paid_at`), and money is per currency. One engine migration:
-`121_order_vat_snapshot` (provisional number; the coordinator renumbers at merge).
+`121_order_vat_snapshot` (the number confirmed by the coordinator; 119 is reserved for lane 6c).
 
 **Why.** The engine's `/admin/sales` offered 7/30/90 rolling days, gross revenue only, and a chart
 of order counts. Ice had rebuilt its dashboard around calendar periods, a comparison with the
