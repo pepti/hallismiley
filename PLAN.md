@@ -234,6 +234,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   product page's editable `vat_note` chrome still says 24 %; (d) the contact
   form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
   looser there.
+- Harvest 2 lane 5 (2026-09-26, branch `harvest2/lane5-reports`,
+  [harvest2-lane5-2026-09-26](docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  the sales report's period presets + comparison + net sales, insights and
+  marketing sections, the "Í dag" attention cards with filtered links, an order
+  VAT snapshot at checkout (engine migration `121_order_vat_snapshot`,
+  provisional number — renumber at merge; approximate backfill), MCP
+  `sales_report` / `recent_orders`. Open: (a) **the new `adminSales.*`,
+  `adminHome.waiting.*` and list-filter strings are DRAFT** (Halli; listed in
+  the fragment); (b) the invoice still books each line at the product's
+  CURRENT rate — reading the new `order_items.vat_rate` snapshot there is a
+  books-path decision for Halli/Bókari; (c) the sold-out card is product-level
+  (`models/StockOut.js`); once lane 6a's per-unit Birgðavakt lands, decide
+  whether the card links there.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

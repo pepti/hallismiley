@@ -268,6 +268,14 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
 **Effort.** S. **Risk.** Low.
 
+### 29. ✅ Approved 2026-09-26 (harvest 2) — Sales report periods, net sales, insights, marketing; "Í dag" attention cards; MCP sales tools
+
+**Status.** Approved by Halli 2026-09-26 (harvest 2) as lane 5 and built on branch `harvest2/lane5-reports` ([harvest2-lane5](docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)). Engine migration `121_order_vat_snapshot` (provisional number). All new strings DRAFT.
+
+**What.** From icelandicstore #414/#417/#419: eleven period presets with a comparison window and +/- % on every KPI; net sales ("Sala án VSK") as the headline from a VAT snapshot the checkout now writes with the invoice's own rule; fulfilment time, new and dormant customers; a marketing section (visits by channel, discounted sales, campaigns); "Í dag" cards for sold-out goods and sign-ups awaiting approval, every card linking to its list filtered to the rows it counts; read-only MCP `sales_report` / `recent_orders`, gated by the token owner's admin views.
+**Why.** The report showed gross revenue over 7/30/90 rolling days only; the business counts net, by calendar period, against the last one.
+**Effort.** M. **Risk.** Money path: the checkout writes the snapshot inside the order transaction (a refused rate leaves NULL, never a lost sale), and `buildLines` is pinned byte-for-byte to its pre-extraction output.
+
 ### Reverse queue — this repo → icelandicstore and the base
 
 Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.
